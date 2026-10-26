@@ -1621,6 +1621,21 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
   externalParentSpanId?: string;
+  /**
+   * Native span fields, stored in their own columns alongside `externalParentSpanId`.
+   * Producers set them where known; an unset field is stored as null and never
+   * derived from other span data.
+   */
+  /** Span id of the initial invocation a resumed execution continues (unset on the initial execution) */
+  resumedFromSpanId?: string;
+  /** Model identity for this span, where applicable */
+  model?: string;
+  /** Provider paired with `model` */
+  provider?: string;
+  /** How this execution ended, in the shared outcome contract; unset while it is still running */
+  outcome?: string;
+  /** Machine-readable cause of stopping, when the producer has one */
+  stopReason?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1942,6 +1957,12 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    * Only used for root spans without a parent.
    */
   externalParentSpanId?: string;
+  /** Native span fields to carry on the span; see {@link SpanData}. Restored by `rebuildSpan()`. */
+  resumedFromSpanId?: string;
+  model?: string;
+  provider?: string;
+  outcome?: string;
+  stopReason?: string;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created

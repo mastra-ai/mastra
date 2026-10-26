@@ -2521,6 +2521,57 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
       });
     }
 
+    describe('native span fields', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'initial-run',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+      };
+      const unset = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+      const readSpan = async (spanId: string) => {
+        const result = await storage.getSpan({ traceId: 'native-fields', spanId });
+        if (!result) throw new Error(`span ${spanId} was not stored`);
+        return result.span;
+      };
+
+      it('round-trips supplied values and reads unset ones as null', async () => {
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'native-fields', spanId: 'set', ...fields }),
+            makeSpan({ traceId: 'native-fields', spanId: 'unset', ...unset }),
+            // Records built by a core version that predates the fields leave them out.
+            makeSpan({ traceId: 'native-fields', spanId: 'missing' }),
+          ],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        expect(await readSpan('set')).toMatchObject(fields);
+        expect(await readSpan('unset')).toMatchObject(unset);
+        const missing = await readSpan('missing');
+        for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
+          expect(missing[key] ?? null).toBeNull();
+        }
+      });
+
+      it('keeps the values written at start when the ended write adds the outcome', async () => {
+        const started = { model: 'gpt-6.1-sol', provider: 'openai' };
+        await storage.createSpan({
+          span: makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', endedAt: null, ...started }),
+        });
+        await storage.batchCreateSpans({
+          records: [makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', ...started, outcome: 'success' })],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        const span = await readSpan('lifecycle');
+        expect(span).toMatchObject({ ...started, outcome: 'success' });
+        expect(span.stopReason ?? null).toBeNull();
+      });
+    });
+
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {
         await storage.createSpan({

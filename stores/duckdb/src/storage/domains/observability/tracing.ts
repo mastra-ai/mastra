@@ -61,6 +61,12 @@ const COLUMNS = [
   'isEvent',
   'endedAt',
   'timeToFirstChunkMs',
+  'externalParentSpanId',
+  'resumedFromSpanId',
+  'model',
+  'provider',
+  'outcome',
+  'stopReason',
   'experimentId',
   'entityType',
   'entityId',
@@ -175,7 +181,13 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('input')},
     ${argMaxNonNull('output')},
     ${argMaxNonNull('error')},
-    ${argMaxNonNull('requestContext')}
+    ${argMaxNonNull('requestContext')},
+    ${argMaxNonNull('externalParentSpanId')},
+    ${argMaxNonNull('resumedFromSpanId')},
+    ${argMaxNonNull('model')},
+    ${argMaxNonNull('provider')},
+    ${argMaxNonNull('outcome')},
+    ${argMaxNonNull('stopReason')}
   FROM span_events
 `;
 
@@ -412,6 +424,12 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
     endedAt: rowEndedAt(row),
+    externalParentSpanId: (row.externalParentSpanId as string) ?? null,
+    resumedFromSpanId: (row.resumedFromSpanId as string) ?? null,
+    model: (row.model as string) ?? null,
+    provider: (row.provider as string) ?? null,
+    outcome: (row.outcome as string) ?? null,
+    stopReason: (row.stopReason as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
@@ -634,6 +652,12 @@ interface SpanEventRow {
   isEvent: boolean | null;
   endedAt: Date | null;
   timeToFirstChunkMs: number | null;
+  externalParentSpanId: string | null;
+  resumedFromSpanId: string | null;
+  model: string | null;
+  provider: string | null;
+  outcome: string | null;
+  stopReason: string | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -716,6 +740,12 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.isEvent),
     v(row.endedAt),
     v(row.timeToFirstChunkMs),
+    v(row.externalParentSpanId),
+    v(row.resumedFromSpanId),
+    v(row.model),
+    v(row.provider),
+    v(row.outcome),
+    v(row.stopReason),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -767,6 +797,18 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
+/** Native span field columns, stored as supplied on both event rows (NULL when unset). */
+function nativeSpanFieldColumns(s: CreateSpanArgs['span']) {
+  return {
+    externalParentSpanId: s.externalParentSpanId ?? null,
+    resumedFromSpanId: s.resumedFromSpanId ?? null,
+    model: s.model ?? null,
+    provider: s.provider ?? null,
+    outcome: s.outcome ?? null,
+    stopReason: s.stopReason ?? null,
+  };
+}
+
 function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   // An ended non-event record also gets an 'end' row carrying the full payload,
   // and reconstruction takes the latest non-null value per column, so the start
@@ -785,6 +827,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
     timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
+    ...nativeSpanFieldColumns(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -841,6 +884,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
     timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
+    ...nativeSpanFieldColumns(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,

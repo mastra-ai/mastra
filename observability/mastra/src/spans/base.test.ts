@@ -592,6 +592,25 @@ describe('Span', () => {
 
       expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
     });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
   });
 
   describe('getExternalParentId', () => {

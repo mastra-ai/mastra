@@ -172,6 +172,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
 
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
   metadataSearch     Map(LowCardinality(String), String) DEFAULT map(),
@@ -250,6 +258,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -354,6 +370,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
   timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -1249,6 +1273,19 @@ export type MigrationEntry =
   | { kind: 'column'; table: string; name: string; sql: string }
   | { kind: 'index'; table: string; name: string; sql: string };
 
+/**
+ * Native span fields added after the first span tables shipped, with their
+ * column types. Present on span events, trace roots and trace branches.
+ */
+export const NATIVE_SPAN_FIELD_COLUMNS = [
+  ['externalParentSpanId', 'Nullable(String)'],
+  ['resumedFromSpanId', 'Nullable(String)'],
+  ['model', 'LowCardinality(Nullable(String))'],
+  ['provider', 'LowCardinality(Nullable(String))'],
+  ['outcome', 'LowCardinality(Nullable(String))'],
+  ['stopReason', 'LowCardinality(Nullable(String))'],
+] as const;
+
 const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
   kind: 'column',
   table,
@@ -1349,6 +1386,12 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_TRACE_ROOTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
   addColumn(TABLE_TRACE_BRANCHES, 'timeToFirstChunkMs', 'Nullable(Float64)'),
   addColumn(TABLE_SPAN_EVENTS, 'timeToFirstChunkMs', 'Nullable(Float64)'),
+  // Native span fields, same target-before-source order as above.
+  ...NATIVE_SPAN_FIELD_COLUMNS.flatMap(([column, type]) => [
+    addColumn(TABLE_TRACE_ROOTS, column, type),
+    addColumn(TABLE_TRACE_BRANCHES, column, type),
+    addColumn(TABLE_SPAN_EVENTS, column, type),
+  ]),
 ];
 
 /**

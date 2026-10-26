@@ -371,6 +371,16 @@ export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
  * when the column is genuinely missing. On Postgres 11+ the non-volatile
  * default does not rewrite the table, and the ALTER cascades to partitions.
  */
+/** Native span fields added to span events after the table first shipped; all nullable text. */
+export const NATIVE_SPAN_FIELD_COLUMNS = [
+  'externalParentSpanId',
+  'resumedFromSpanId',
+  'model',
+  'provider',
+  'outcome',
+  'stopReason',
+] as const;
+
 export function additiveColumns(schema: string): { table: string; column: string; ddl: string }[] {
   return [
     {
@@ -390,6 +400,11 @@ export function additiveColumns(schema: string): { table: string; column: string
       column: 'timeToFirstChunkMs',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "timeToFirstChunkMs" double precision`,
     },
+    ...NATIVE_SPAN_FIELD_COLUMNS.map(column => ({
+      table: TABLE_SPAN_EVENTS,
+      column,
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" text`,
+    })),
     {
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',

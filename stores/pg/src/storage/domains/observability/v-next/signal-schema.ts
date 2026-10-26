@@ -82,6 +82,13 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'startedAt', type: 'timestamptz' },
   { name: 'endedAt', type: 'timestamptz' },
   { name: 'timeToFirstChunkMs', type: 'double precision', nullable: true },
+  // Native span fields, stored as supplied (NULL when the producer set none).
+  { name: 'externalParentSpanId', type: 'text', nullable: true },
+  { name: 'resumedFromSpanId', type: 'text', nullable: true },
+  { name: 'model', type: 'text', nullable: true },
+  { name: 'provider', type: 'text', nullable: true },
+  { name: 'outcome', type: 'text', nullable: true },
+  { name: 'stopReason', type: 'text', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },

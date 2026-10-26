@@ -170,10 +170,18 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     traceId: span.traceId,
     spanId: span.id,
     // Mastra storage detects trace roots by a null parentSpanId, so only a Mastra
-    // parent belongs here. A span's externalParentSpanId is intentionally not
-    // persisted, so a run started under an external parent stays a trace root.
+    // parent belongs here. The external parent has its own column, so a run
+    // started under an external parent stays a trace root.
     parentSpanId: span.parentSpanId ?? null,
     name: span.name,
+
+    // Native span fields: stored as supplied, null when the span does not carry them.
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
 
     // Entity identification - from span
     entityType: span.entityType ?? null,
@@ -233,10 +241,29 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
   };
 }
 
+const NATIVE_SPAN_FIELDS = [
+  'externalParentSpanId',
+  'resumedFromSpanId',
+  'model',
+  'provider',
+  'outcome',
+  'stopReason',
+] as const;
+
+/** Native span fields the span carries. Unset ones stay off an update so an earlier write is never cleared. */
+function suppliedNativeSpanFields(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
+  const fields: Partial<UpdateSpanRecord> = {};
+  for (const field of NATIVE_SPAN_FIELDS) {
+    if (span[field] !== undefined) fields[field] = span[field];
+  }
+  return fields;
+}
+
 /** Convert an exported span to a partial UpdateSpanRecord */
 export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
   const timeToFirstChunkMs = getTimeToFirstChunkMs(span);
   return {
+    ...suppliedNativeSpanFields(span),
     name: span.name,
     scope: null,
     attributes: serializeSpanAttributes(span),

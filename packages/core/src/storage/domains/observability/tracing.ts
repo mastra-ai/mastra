@@ -151,6 +151,22 @@ export const spanRecordSchema = z
       .nullish()
       .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
 
+    // Native span fields. Copied from the exported span as supplied; a value the producer did not
+    // set is stored as null, never derived. `outcome` / `stopReason` values follow the shared
+    // outcome contract and are not validated here.
+    externalParentSpanId: z
+      .string()
+      .nullish()
+      .describe('Immediate parent span owned by an external tracing system; null when Mastra owns the parent'),
+    resumedFromSpanId: z
+      .string()
+      .nullish()
+      .describe('Span id of the initial invocation a resumed execution continues; null on the initial execution'),
+    model: z.string().nullish().describe('Model identity for this span, where applicable'),
+    provider: z.string().nullish().describe('Provider paired with model'),
+    outcome: z.string().nullish().describe('How this execution ended; null while it is still running'),
+    stopReason: z.string().nullish().describe('Machine-readable cause of stopping, when known'),
+
     // Database timestamps
     ...dbTimestamps,
   })

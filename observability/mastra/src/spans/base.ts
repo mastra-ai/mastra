@@ -223,6 +223,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
   public externalParentSpanId?: string;
+  /** Native span fields (see `SpanData`); carried as supplied and exported only when set */
+  public resumedFromSpanId?: string;
+  public model?: string;
+  public provider?: string;
+  public outcome?: string;
+  public stopReason?: string;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -316,6 +322,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
+    this.resumedFromSpanId = options.resumedFromSpanId;
+    this.model = options.model;
+    this.provider = options.provider;
+    this.outcome = options.outcome;
+    this.stopReason = options.stopReason;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -702,6 +713,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
+      ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
+      ...(this.model !== undefined ? { model: this.model } : {}),
+      ...(this.provider !== undefined ? { provider: this.provider } : {}),
+      ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
+      ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace

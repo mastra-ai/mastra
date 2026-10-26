@@ -306,10 +306,30 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string
 
+  /** Parent span owned by an external tracing system, such as an ambient OpenTelemetry span */
+  externalParentSpanId?: string
+
+  /** Span id of the initial invocation a resumed execution continues */
+  resumedFromSpanId?: string
+
+  /** Model and provider for this span, where applicable */
+  model?: string
+  provider?: string
+
+  /** How this execution ended, and the machine-readable cause of stopping */
+  outcome?: string
+  stopReason?: string
+
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean
 }
 ```
+
+### Native span fields
+
+`externalParentSpanId`, `resumedFromSpanId`, `model`, `provider`, `outcome` and `stopReason` are stored in their own columns by the ClickHouse, PostgreSQL and DuckDB observability stores, and by stores built on the shared span schema such as LibSQL. The storage exporters copy each field as the span supplies it. A field the span does not set is stored as `null`; no store derives a value from other span data.
+
+Existing databases get the columns when the store initializes. Rows written before the upgrade keep `null` in every new column.
 
 ## Span lifecycle events
 
