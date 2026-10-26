@@ -1810,16 +1810,27 @@ export class BackgroundTaskManager {
 
   /**
    * Called when a lease renewal loses its compare-and-set. Renewal normally
-   * fails because the task left `running` (it completed, failed, suspended or
-   * was cancelled), which needs no action. When the task is *still running under
-   * a different owner*, another worker has taken it over, so the local run is
-   * aborted to stop a superseded executor from doing further work. Its fenced
-   * terminal writes would be rejected anyway; aborting just stops the wasted run.
+   * fails because the task left `running` (it completed, failed or suspended),
+   * which needs no action. Two cases still have a local executor to stop:
+   * - The task was *cancelled*, possibly by another process whose `task.cancel`
+   *   event never reached this one. The local run is aborted the same way a
+   *   local `cancel()` aborts it, so it settles as cancelled.
+   * - The task is *still running under a different owner*: another worker has
+   *   taken it over. Its fenced terminal writes would be rejected anyway;
+   *   aborting just stops the wasted run.
    */
   async #abortSupersededRun(taskId: string): Promise<void> {
     try {
       const storage = await this.getStorage();
       const current = await storage.getTask(taskId);
+      if (current?.status === 'cancelled') {
+        const controller = this.activeAbortControllers.get(taskId);
+        if (!controller) return;
+        controller.abort(new Error('Task cancelled'));
+        this.activeAbortControllers.delete(taskId);
+        this.deregisterTaskContext(taskId);
+        return;
+      }
       if (current?.status !== 'running') return;
       if (current.ownerId === this.workerId || !current.ownerId) return;
       const controller = this.activeAbortControllers.get(taskId);
