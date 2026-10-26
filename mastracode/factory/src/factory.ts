@@ -98,6 +98,7 @@ import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
+import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
@@ -235,8 +236,10 @@ export interface MastraFactoryConfig {
    * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
    * A bare callback is also accepted and wrapped as a `provider: 'custom'`
-   * sandbox with no settings. Omitted → repository sandboxes are
-   * disabled.
+   * sandbox with no settings. Omitted with Platform credentials → the factory
+   * installs a `LocalFactorySandbox` under `mastra dev` and a
+   * `PlatformFactorySandbox` in built deployments. Omitted without Platform
+   * credentials → repository sandboxes are disabled.
    */
   sandbox?: MastraFactorySandboxOption;
   /** Browser automation provider for Factory agent sessions. */
@@ -361,6 +364,29 @@ function hasPlatformCredentials(): boolean {
   // into deployed projects; MASTRA_PLATFORM_SECRET_KEY is the org secret key
   // written by project scaffolding. Either enables the platform integrations.
   return Boolean(process.env.MASTRA_PLATFORM_ACCESS_TOKEN?.trim() || process.env.MASTRA_PLATFORM_SECRET_KEY?.trim());
+}
+
+/**
+ * The sandbox the factory installs when the host passes none and Platform
+ * credentials are present: a local sandbox under `mastra dev` (or
+ * NODE_ENV=development), so development never boots remote machines, and
+ * a Platform sandbox in built deployments. Without credentials, sandboxes
+ * stay disabled.
+ */
+async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
+  if (!hasPlatformCredentials()) return undefined;
+  if (process.env.MASTRA_DEV === 'true' || process.env.NODE_ENV === 'development') {
+    return new LocalFactorySandbox();
+  }
+  const missing = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'].filter(key => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    console.warn(
+      `MastraFactory: Platform credentials are set but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} missing, so no Platform sandbox was installed and repository sandboxes are disabled.`,
+    );
+    return undefined;
+  }
+  const { PlatformFactorySandbox } = await import('@mastra/platform-workspace');
+  return new PlatformFactorySandbox();
 }
 
 /**
@@ -640,7 +666,9 @@ export class MastraFactory {
 
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
-    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+    if (sandboxOption === undefined) {
+      sandboxConfig = await platformDefaultSandbox();
+    } else if (isFactorySandbox(sandboxOption)) {
       sandboxConfig = sandboxOption;
     } else if (typeof sandboxOption === 'function') {
       sandboxConfig = new CallbackFactorySandbox(sandboxOption);
