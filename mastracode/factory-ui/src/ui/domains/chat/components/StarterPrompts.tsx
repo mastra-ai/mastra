@@ -1,100 +1,68 @@
-import { Card } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { CalendarCheck, ClipboardList, GitPullRequestArrow, Inbox, LifeBuoy, Rocket } from 'lucide-react';
+import { ArrowRight, Bug, CalendarCheck, GitPullRequestArrow, Inbox, LifeBuoy, MessageSquareText } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import { useEffect } from 'react';
 
+import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
+import { useItemDecisions } from '../../factory/hooks/useBoardDecisions';
+import { starterPrompts } from '../../factory/starterPrompts';
+import type { StarterKind } from '../../factory/starterPrompts';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 
-const STARTER_PROMPTS = [
-  {
-    icon: GitPullRequestArrow,
-    iconClass: 'text-(--green-500) dark:text-(--green-400)',
-    title: 'Review what’s ready',
-    prompt: 'Fetch five PRs ready for review and start review sessions for all of them.',
-  },
-  {
-    icon: Inbox,
-    iconClass: 'text-(--orange-500) dark:text-(--orange-400)',
-    title: 'Triage new intake',
-    prompt: 'Triage everything that arrived since yesterday. Accept the obvious ones and flag the rest for me.',
-  },
-  {
-    icon: ClipboardList,
-    iconClass: 'text-(--amber-600) dark:text-(--amber-400)',
-    title: 'Plan the top bug',
-    prompt: 'Pick the highest-impact open bug and draft a plan.',
-  },
-  {
-    icon: CalendarCheck,
-    iconClass: 'text-(--purple-500) dark:text-(--purple-400)',
-    title: 'What shipped this week',
-    prompt: 'Summarize what shipped this week, what’s stuck, and who’s waiting on whom.',
-  },
-  {
-    icon: LifeBuoy,
-    iconClass: 'text-(--blue-500) dark:text-(--blue-400)',
-    title: 'Unblock what’s stuck',
-    prompt: 'Find failed runs and plans waiting on my approval. Retry what’s fixable and list the rest for me.',
-  },
-  {
-    icon: Rocket,
-    iconClass: 'text-(--pink-500) dark:text-(--pink-400)',
-    title: 'Close the loop on my PRs',
-    prompt: 'Check my open PRs. Address review comments and re-request review where it’s ready.',
-  },
-];
+const KIND_ICONS: Record<StarterKind, { icon: LucideIcon; className: string }> = {
+  unblock: { icon: LifeBuoy, className: 'text-(--blue-500) dark:text-(--blue-400)' },
+  feedback: { icon: MessageSquareText, className: 'text-(--pink-500) dark:text-(--pink-400)' },
+  review: { icon: GitPullRequestArrow, className: 'text-(--green-500) dark:text-(--green-400)' },
+  triage: { icon: Inbox, className: 'text-(--orange-500) dark:text-(--orange-400)' },
+  bug: { icon: Bug, className: 'text-(--amber-600) dark:text-(--amber-400)' },
+  shipped: { icon: CalendarCheck, className: 'text-(--purple-500) dark:text-(--purple-400)' },
+};
 
-// Outer corners of the six-card grid at one, two and three columns; inner corners stay tight.
-const CARD_CORNERS = [
-  'rounded-t-xl sm:rounded-tr-md',
-  'sm:rounded-tr-xl lg:rounded-tr-md',
-  'lg:rounded-tr-xl',
-  'lg:rounded-bl-xl',
-  'sm:rounded-bl-xl lg:rounded-bl-md',
-  'rounded-b-xl sm:rounded-bl-md',
-];
-
-export function StarterPrompts() {
+export function StarterPrompts({ factoryId }: { factoryId: string }) {
   const { setComposerPreview, submitComposer } = useChatCommands();
+  const cards = useWorkItemsQuery(factoryId).data ?? [];
+  const { effectByItem } = useItemDecisions(factoryId);
   // Unmounting under the pointer or focus fires no pointerleave/blur.
   useEffect(() => () => setComposerPreview(null), [setComposerPreview]);
 
+  const prompts = starterPrompts({ cards, effectByItem, now: new Date() });
+  if (prompts.length === 0) return null;
+
   return (
-    <ul
-      aria-label="Start from a prompt"
-      className="m-0 grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2 lg:grid-cols-3"
-    >
-      {STARTER_PROMPTS.map(({ icon: Icon, iconClass, title, prompt }, index) => (
-        <li key={title} className="flex">
-          <Card
-            as="button"
-            onPointerEnter={() => setComposerPreview(prompt)}
-            onPointerLeave={() => setComposerPreview(null)}
-            onFocus={() => setComposerPreview(prompt)}
-            onBlur={() => setComposerPreview(null)}
-            onClick={() => submitComposer(prompt)}
-            className={cn(
-              'w-full cursor-pointer rounded-md text-left [--elevation-raised:var(--elevation-soft)] hover:[--surface-rim:var(--border-strong)] active:scale-99',
-              surfaceRimFocus,
-              CARD_CORNERS[index],
-            )}
-          >
-            <span className="flex h-full flex-col gap-2 p-3">
-              <span className="flex items-center gap-2">
-                <Icon aria-hidden className={cn('size-4 shrink-0', iconClass)} />
-                <Txt as="span" variant="card-title" tone="ink">
-                  {title}
-                </Txt>
-              </span>
-              <Txt as="span" variant="body-sm" tone="muted" className="line-clamp-2">
-                {prompt}
+    <ul aria-label="Start from a prompt" className="divide-border m-0 flex list-none flex-col divide-y p-0">
+      {prompts.map(({ kind, title, detail, prompt }) => {
+        const { icon: Icon, className } = KIND_ICONS[kind];
+        return (
+          <li key={kind}>
+            <button
+              type="button"
+              onPointerEnter={() => setComposerPreview(prompt)}
+              onPointerLeave={() => setComposerPreview(null)}
+              onFocus={() => setComposerPreview(prompt)}
+              onBlur={() => setComposerPreview(null)}
+              onClick={() => submitComposer(prompt)}
+              className={cn(
+                'group flex w-full cursor-pointer items-center gap-3 rounded-md py-2.5 text-left',
+                focusRing,
+              )}
+            >
+              <Icon aria-hidden className={cn('size-4 shrink-0', className)} />
+              <Txt as="span" variant="body-sm" tone="ink" className="min-w-0 truncate">
+                {title}
               </Txt>
-            </span>
-          </Card>
-        </li>
-      ))}
+              <Txt as="span" variant="body-sm" tone="muted" className="min-w-0 flex-1 truncate max-sm:hidden">
+                {detail}
+              </Txt>
+              <ArrowRight
+                aria-hidden
+                className="text-muted-foreground ml-auto size-4 shrink-0 opacity-0 transition-opacity group-hover:opacity-100 group-focus-visible:opacity-100"
+              />
+            </button>
+          </li>
+        );
+      })}
     </ul>
   );
 }

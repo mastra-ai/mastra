@@ -43,8 +43,10 @@ describe('the new session page', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
   });
 
-  it('previews a starter prompt in the composer while it is hovered, gives my draft back after, and sends it on click', async () => {
-    const route = stubDraftRoute();
+  it('suggests triaging the cards waiting in Intake, previews that prompt while hovered, gives my draft back after, and sends it on click', async () => {
+    const route = stubDraftRoute({
+      workItems: [card('Login fails on Safari', ['intake']), card('Add dark mode', ['intake'])],
+    });
     const user = userEvent.setup();
     const { router, client } = renderDraft();
 
@@ -52,12 +54,12 @@ describe('the new session page', () => {
     await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, 'my own idea');
 
-    const starters = screen.getByRole('list', { name: 'Start from a prompt' });
-    const starter = within(starters).getByRole('button', { name: /^Triage new intake/ });
+    const starters = await screen.findByRole('list', { name: 'Start from a prompt' });
+    const starter = within(starters).getByRole('button', { name: /^Triage 2 cards in Intake/ });
     await user.hover(starter);
     const previewed = message.value;
-    expect(previewed).not.toBe('my own idea');
-    expect(starter).toHaveTextContent(previewed);
+    expect(previewed).toContain('Login fails on Safari');
+    expect(previewed).toContain('Add dark mode');
 
     await user.unhover(starter);
     expect(message).toHaveValue('my own idea');
@@ -76,8 +78,16 @@ describe('the new session page', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('gives the composer back empty when the cards vanish under the pointer and later return', async () => {
-    stubDraftRoute();
+  it('offers no prompt when nothing on the board waits on anyone', async () => {
+    stubDraftRoute({ workItems: [card('building', ['execute']), card('done', ['done'])] });
+    renderDraft();
+
+    expect(await screen.findByRole('region', { name: 'In flight' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Start from a prompt' })).not.toBeInTheDocument();
+  });
+
+  it('gives the composer back empty when the prompts vanish under the pointer and later return', async () => {
+    stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
     const user = userEvent.setup();
     const { client } = renderDraft();
     const answerProviders = (source: string) =>
@@ -89,7 +99,7 @@ describe('the new session page', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.hover(screen.getByRole('button', { name: /^Triage new intake/ }));
+    await user.hover(await screen.findByRole('button', { name: /^Triage 1 card in Intake/ }));
 
     answerProviders('none');
     await client.invalidateQueries({ queryKey: queryKeys.providers() });

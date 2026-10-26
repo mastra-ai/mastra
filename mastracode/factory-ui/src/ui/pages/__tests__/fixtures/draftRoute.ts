@@ -113,6 +113,9 @@ export function stubDraftRoute({
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () => HttpResponse.json({ workItems })),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
+      HttpResponse.json({ decisions: [] }),
+    ),
     http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
       HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
     ),

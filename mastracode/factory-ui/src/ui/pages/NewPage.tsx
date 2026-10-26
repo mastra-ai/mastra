@@ -131,7 +131,7 @@ function NewPageContent({
       </div>
       {startsFromPrompt && (
         <>
-          <StarterPrompts />
+          <StarterPrompts factoryId={activeFactory.id} />
           <InFlight factoryId={activeFactory.id} />
         </>
       )}
