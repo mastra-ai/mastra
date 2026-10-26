@@ -334,7 +334,6 @@ export class GithubPRPickerDialog extends Box implements Focusable, Filterable, 
     }
     if (kb.matches(keyData, 'tui.select.confirm')) {
       this.confirmSelection();
-      return;
     }
   }
 }
