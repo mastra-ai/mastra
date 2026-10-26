@@ -1,5 +1,80 @@
 # @mastra/playground-ui
 
+## 66.0.0-alpha.4
+
+### Minor Changes
+
+- Added quieter Notice and toast surfaces, with more control over Notice actions. ([#28357](https://github.com/mastra-ai/mastra/pull/28357))
+
+  - **Notice:** `actionPlacement="end"` puts the action beside the message, and `onDismiss` adds a close button. `Notice` also accepts native `div` props and a ref.
+  - **Toast:** surfaces match Notice, actions sit below the message, and long content scrolls inside the toast. `<Toaster variant="neutral">` keeps every tone on a gray surface with its semantic icon.
+  - **Promise toasts:** the loader turns into a check or an ×, and the dismiss timer starts only once the promise settles.
+
+  ```tsx
+  <Notice variant="info" actionPlacement="end" action={<Button>View setup</Button>} onDismiss={dismiss}>
+    Push to a linked branch to create your first deploy.
+  </Notice>
+  ```
+
+- Added explicit source units to `formatBytes` with opt-in automatic scaling. Existing byte-only calls keep their output. ([#28458](https://github.com/mastra-ai/mastra/pull/28458))
+
+  ```ts
+  import { formatBytes } from '@mastra/playground-ui/utils/number';
+
+  formatBytes(1536);
+  formatBytes(0.5, { unit: 'GB' });
+  formatBytes(0.5, { unit: 'GB', autoScale: true });
+  ```
+
+  These return `1.5 KB`, `0.5 GB`, and `512 MB`, respectively. A supplied unit stays fixed when `autoScale` is absent or false. Conversions retain the helper's binary 1024-based convention, not decimal SI units.
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@base-ui/react@^1.9.0` ↗︎](https://www.npmjs.com/package/@base-ui/react/v/1.9.0) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`@codemirror/autocomplete@^6.20.4` ↗︎](https://www.npmjs.com/package/@codemirror/autocomplete/v/6.20.4) (from `^6.20.3`, in `dependencies`)
+  - Updated dependency [`@codemirror/lang-markdown@^6.5.2` ↗︎](https://www.npmjs.com/package/@codemirror/lang-markdown/v/6.5.2) (from `^6.5.0`, in `dependencies`)
+  - Updated dependency [`@codemirror/language@^6.13.1` ↗︎](https://www.npmjs.com/package/@codemirror/language/v/6.13.1) (from `^6.12.4`, in `dependencies`)
+  - Updated dependency [`@codemirror/legacy-modes@^6.5.5` ↗︎](https://www.npmjs.com/package/@codemirror/legacy-modes/v/6.5.5) (from `^6.5.3`, in `dependencies`)
+  - Updated dependency [`@codemirror/merge@^6.12.3` ↗︎](https://www.npmjs.com/package/@codemirror/merge/v/6.12.3) (from `^6.12.2`, in `dependencies`)
+  - Updated dependency [`@codemirror/search@^6.7.2` ↗︎](https://www.npmjs.com/package/@codemirror/search/v/6.7.2) (from `^6.7.1`, in `dependencies`)
+  - Updated dependency [`@codemirror/state@^6.7.6` ↗︎](https://www.npmjs.com/package/@codemirror/state/v/6.7.6) (from `^6.7.1`, in `dependencies`)
+  - Updated dependency [`@codemirror/view@^6.43.15` ↗︎](https://www.npmjs.com/package/@codemirror/view/v/6.43.15) (from `^6.43.6`, in `dependencies`)
+  - Updated dependency [`@lezer/common@^1.5.4` ↗︎](https://www.npmjs.com/package/@lezer/common/v/1.5.4) (from `^1.5.2`, in `dependencies`)
+  - Updated dependency [`@lezer/highlight@^1.2.5` ↗︎](https://www.npmjs.com/package/@lezer/highlight/v/1.2.5) (from `^1.2.3`, in `dependencies`)
+  - Updated dependency [`@mcp-ui/client@^7.1.1` ↗︎](https://www.npmjs.com/package/@mcp-ui/client/v/7.1.1) (from `^7.1.0`, in `dependencies`)
+  - Updated dependency [`@radix-ui/react-visually-hidden@^1.2.13` ↗︎](https://www.npmjs.com/package/@radix-ui/react-visually-hidden/v/1.2.13) (from `^1.2.4`, in `dependencies`)
+  - Updated dependency [`@tailwindcss/typography@^0.5.20` ↗︎](https://www.npmjs.com/package/@tailwindcss/typography/v/0.5.20) (from `^0.5.19`, in `dependencies`)
+  - Updated dependency [`@tanstack/react-virtual@^3.14.22` ↗︎](https://www.npmjs.com/package/@tanstack/react-virtual/v/3.14.22) (from `^3.13.22`, in `dependencies`)
+  - Updated dependency [`@uiw/react-codemirror@^4.25.12` ↗︎](https://www.npmjs.com/package/@uiw/react-codemirror/v/4.25.12) (from `^4.25.11`, in `dependencies`)
+  - Updated dependency [`@xyflow/react@^12.12.0` ↗︎](https://www.npmjs.com/package/@xyflow/react/v/12.12.0) (from `^12.10.1`, in `dependencies`)
+  - Updated dependency [`mdast-util-to-markdown@^2.2.0` ↗︎](https://www.npmjs.com/package/mdast-util-to-markdown/v/2.2.0) (from `^2.1.2`, in `dependencies`)
+  - Updated dependency [`react-day-picker@^8.10.2` ↗︎](https://www.npmjs.com/package/react-day-picker/v/8.10.2) (from `^8.10.1`, in `dependencies`)
+  - Updated dependency [`react-hook-form@^7.91.0` ↗︎](https://www.npmjs.com/package/react-hook-form/v/7.91.0) (from `^7.81.0`, in `dependencies`)
+  - Updated dependency [`react-resizable-panels@^4.15.0` ↗︎](https://www.npmjs.com/package/react-resizable-panels/v/4.15.0) (from `^4.7.3`, in `dependencies`)
+  - Updated dependency [`remend@^1.4.0` ↗︎](https://www.npmjs.com/package/remend/v/1.4.0) (from `^1.3.0`, in `dependencies`)
+  - Updated dependency [`use-debounce@^10.1.1` ↗︎](https://www.npmjs.com/package/use-debounce/v/10.1.1) (from `^10.1.0`, in `dependencies`)
+  - Updated dependency [`zod@^3.25.76` ↗︎](https://www.npmjs.com/package/zod/v/3.25.76) (from `^3.25.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/sdk@^1.32.2` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/sdk/v/1.32.2) (from `^1.32.1`, in `devDependencies`)
+  - Updated dependency [`@tanstack/react-query@^5.104.5` ↗︎](https://www.npmjs.com/package/@tanstack/react-query/v/5.104.5) (from `^5.90.21`, in `devDependencies`)
+  - Updated dependency [`@testing-library/react@^16.3.3` ↗︎](https://www.npmjs.com/package/@testing-library/react/v/16.3.3) (from `^16.3.2`, in `devDependencies`)
+  - Updated dependency [`@testing-library/user-event@^14.6.8` ↗︎](https://www.npmjs.com/package/@testing-library/user-event/v/14.6.8) (from `^14.6.7`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/react@^19.3.0` ↗︎](https://www.npmjs.com/package/@types/react/v/19.3.0) (from `^19.2.14`, in `devDependencies`)
+  - Updated dependency [`@types/react-dom@^19.3.0` ↗︎](https://www.npmjs.com/package/@types/react-dom/v/19.3.0) (from `^19.2.3`, in `devDependencies`)
+  - Updated dependency [`eslint-plugin-storybook@^10.6.3` ↗︎](https://www.npmjs.com/package/eslint-plugin-storybook/v/10.6.3) (from `^10.6.0`, in `devDependencies`)
+  - Updated dependency [`jsdom@^30.1.3` ↗︎](https://www.npmjs.com/package/jsdom/v/30.1.3) (from `^30.1.1`, in `devDependencies`)
+  - Updated dependency [`msw@^2.15.0` ↗︎](https://www.npmjs.com/package/msw/v/2.15.0) (from `^2.12.11`, in `devDependencies`)
+  - Updated dependency [`react-router@^8.5.0` ↗︎](https://www.npmjs.com/package/react-router/v/8.5.0) (from `^8.0.0`, in `devDependencies`)
+  - Updated dependency [`tailwind-merge@^3.7.0` ↗︎](https://www.npmjs.com/package/tailwind-merge/v/3.7.0) (from `^3.5.0`, in `devDependencies`)
+  - Updated dependency [`vite@^8.3.5` ↗︎](https://www.npmjs.com/package/vite/v/8.3.5) (from `^8.0.0`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`c73d201`](https://github.com/mastra-ai/mastra/commit/c73d201c620760d9699901b2460f728a8ca19c1e), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`ffc663d`](https://github.com/mastra-ai/mastra/commit/ffc663d2ba4f9c301cbc03ca17c12e351f27330f), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`68f311e`](https://github.com/mastra-ai/mastra/commit/68f311e0dac06b2ff337727d8e72892f1d8d337f), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/client-js@1.57.0-alpha.4
+  - @mastra/core@1.80.0-alpha.4
+  - @mastra/memory@1.39.1-alpha.2
+  - @mastra/react@1.13.0-alpha.4
+  - @mastra/ai-sdk@1.11.2
+
 ## 66.0.0-alpha.3
 
 ### Minor Changes
