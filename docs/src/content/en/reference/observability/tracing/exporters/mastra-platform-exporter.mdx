@@ -21,7 +21,7 @@ Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform 
 
 ## Span previews
 
-`MastraPlatformExporter` automatically generates short input, output, and error previews using the same formatting as [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter#span-previews).
+`MastraPlatformExporter` automatically generates short, readable `inputPreview`, `outputPreview`, and `errorPreview` summaries based on the span type. Each preview contains up to 100 characters plus an ellipsis when truncated. Full payloads remain available separately.
 
 ## Constructor
 
