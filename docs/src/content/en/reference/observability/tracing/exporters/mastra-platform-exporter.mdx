@@ -21,11 +21,7 @@ Sends tracing spans, logs, metrics, scores, and feedback to the Mastra platform 
 
 ## Span previews
 
-`MastraPlatformExporter` generates `inputPreview`, `outputPreview`, and `errorPreview` with the same span-aware formatter as `MastraStorageExporter`, after output processing and exporter-specific formatting. See [span preview selection and empty-value behavior](/reference/observability/tracing/exporters/mastra-storage-exporter#span-previews).
-
-When the installed core version lacks the shared preview helpers, the exporter skips generation and sends existing preview fields and payloads unchanged.
-
-The generated strings are sent with the span payload. Platform ingestion must preserve supplied previews, including `""`, for storage and Platform views to agree. This exporter change doesn't backfill historical previews or change Platform query behavior.
+`MastraPlatformExporter` automatically generates short input, output, and error previews using the same formatting as [MastraStorageExporter](/reference/observability/tracing/exporters/mastra-storage-exporter#span-previews).
 
 ## Constructor
 
