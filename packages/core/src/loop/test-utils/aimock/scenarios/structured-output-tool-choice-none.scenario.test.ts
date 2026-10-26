@@ -39,7 +39,7 @@ function summarizeWorkflow() {
 describeForAllEngines('AIMock loop scenario: structured output with toolChoice none', engine => {
   const getMock = useLoopScenarioAimock();
 
-  async function run(options: Record<string, unknown>) {
+  async function createGeminiAgent() {
     const llm = getMock();
     const gemini = createGoogleGenerativeAI({
       apiKey: 'aimock-test-key',
@@ -50,11 +50,32 @@ describeForAllEngines('AIMock loop scenario: structured output with toolChoice n
       workflows: { summarizeWorkflow: summarizeWorkflow() },
       model: () => gemini('gemini-2.5-flash'),
     });
+    return { llm, agent };
+  }
+
+  async function run(options: Record<string, unknown>) {
+    const { llm, agent } = await createGeminiAgent();
     const result = await agent.stream('Return a short structured summary about exercise.', options);
     const output = isDurableEngineVariant(engine) ? result.output : result;
     await output.consumeStream();
     return { llm, output };
   }
+
+  it('sends no tool definitions from generate() when a step sets toolChoice none with a structured-output schema', async () => {
+    getMock().on({}, { content: JSON.stringify({ summary: 'Exercise keeps you healthy.' }) });
+    const { llm, agent } = await createGeminiAgent();
+
+    const output = await agent.generate('Return a short structured summary about exercise.', {
+      structuredOutput: { schema: z.object({ summary: z.string() }) },
+      prepareStep: () => ({ toolChoice: 'none' }),
+    });
+
+    expect(output.object).toEqual({ summary: 'Exercise keeps you healthy.' });
+    const [request] = llm.getRequests();
+    // durable/evented generate() still streams, so only the model route is engine-independent
+    expect(request!.path).toContain('/models/gemini-2.5-flash:');
+    expect(request!.body.tools ?? []).toEqual([]);
+  });
 
   it('sends no tool definitions when a step sets toolChoice none with a structured-output schema', async () => {
     getMock().on({}, { content: JSON.stringify({ summary: 'Exercise keeps you healthy.' }) });
