@@ -306,6 +306,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
           await this.turn.end().catch(() => {});
         }
         this.turn = this.engine.beginTurn({
+          abortSignal,
           threadId,
           resourceId,
           messageList,
@@ -452,8 +453,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
         // prepare() already counted the current unobserved window and resource context.
         const finalTotalPending = ctx.status.pendingTokens;
         try {
-          await runOMCommit(this.engine.buffering.getLockKey(threadId, resourceId), () =>
-            this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+          await runOMCommit(
+            this.engine.buffering.getLockKey(threadId, resourceId),
+            () => this.engine.getStorage().setPendingMessageTokens(turnRecord.id, finalTotalPending),
+            { abortSignal },
           );
           this.turn.patchRecord({ pendingMessageTokens: finalTotalPending });
         } catch {
@@ -563,9 +566,10 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
     // threshold. Activate buffered observations and observe what's left regardless of it; the
     // retry's input step then drops the observed messages from the prompt.
     const { threadId, resourceId } = context;
-    await this.engine.waitForBuffering(threadId, resourceId);
+    await this.engine.waitForBuffering(threadId, resourceId, undefined, args.abortSignal);
     const messages = getObservableMessages(messageList);
     const { activated } = await this.engine.activate({
+      abortSignal: args.abortSignal,
       threadId,
       resourceId,
       messages,
@@ -576,6 +580,7 @@ export class ObservationalMemoryProcessor implements Processor<'observational-me
       .getTokenCounter()
       .runWithModelContext(state.__omActorModelContext as TokenCounterModelContext | undefined, () =>
         this.engine.observe({
+          abortSignal: args.abortSignal,
           threadId,
           resourceId,
           messages: getObservableMessages(messageList),
