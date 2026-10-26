@@ -69,6 +69,11 @@ export class AgentsDSQL extends AgentsStorage {
   async init(): Promise<void> {
     await this.#db.createTable({ tableName: TABLE_AGENTS, schema: TABLE_SCHEMAS[TABLE_AGENTS] });
     await this.#db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS] });
+    await this.#db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: TABLE_SCHEMAS[TABLE_AGENT_VERSIONS],
+      ifNotExists: ['modelList'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }

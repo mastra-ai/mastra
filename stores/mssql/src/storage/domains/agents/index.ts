@@ -59,6 +59,11 @@ export class AgentsMSSQL extends AgentsStorage {
     }
     await this.db.createTable({ tableName: TABLE_AGENTS, schema: AGENTS_SCHEMA });
     await this.db.createTable({ tableName: TABLE_AGENT_VERSIONS, schema: AGENT_VERSIONS_SCHEMA });
+    await this.db.alterTable({
+      tableName: TABLE_AGENT_VERSIONS,
+      schema: AGENT_VERSIONS_SCHEMA,
+      ifNotExists: ['modelList'],
+    });
     await this.createDefaultIndexes();
     await this.createCustomIndexes();
   }
