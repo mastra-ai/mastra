@@ -38,18 +38,15 @@
   }
 }
 
-/* A floating card: a wide, faint drop and a lighter rim than `shadow-raised`, so
- * its edge reads as shadow rather than line. Set on a raised surface through
- * `--elevation-raised` and `--surface-rim`, which keeps its focus rim. */
+/* A floating card's drop: wider and fainter than `--elevation-raised`, which a
+ * raised surface swaps it in for, so the rim and focus rim stay as they are. */
 @layer base {
   :root {
-    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 20%), 0 12px 32px -12px oklch(0% 0 0deg / 60%);
-    --surface-rim-soft: var(--surface-rim);
+    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 16%), 0 12px 32px -12px oklch(0% 0 0deg / 45%);
   }
 
   html.light {
-    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 3%), 0 8px 24px -8px oklch(0% 0 0deg / 10%);
-    --surface-rim-soft: oklch(0% 0 0deg / 4%);
+    --elevation-soft: 0 1px 2px oklch(0% 0 0deg / 3%), 0 8px 24px -8px oklch(0% 0 0deg / 7%);
   }
 }
 

@@ -1,46 +1,46 @@
 import { Card } from '@mastra/playground-ui/components/Card';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { CalendarCheck, ClipboardList, GitPullRequestArrow, Inbox, LifeBuoy, Rocket } from 'lucide-react';
 import { useEffect } from 'react';
 
-import { stageIconClass } from '../../factory/components/BoardIcons';
 import { useChatCommands } from '../context/ChatCommandsProvider';
 
 const STARTER_PROMPTS = [
   {
     icon: GitPullRequestArrow,
-    stage: 'review',
+    iconClass: 'text-(--green-500) dark:text-(--green-400)',
     title: 'Review what’s ready',
     prompt: 'Fetch five PRs ready for review and start review sessions for all of them.',
   },
   {
     icon: Inbox,
-    stage: 'triage',
+    iconClass: 'text-(--orange-500) dark:text-(--orange-400)',
     title: 'Triage new intake',
     prompt: 'Triage everything that arrived since yesterday. Accept the obvious ones and flag the rest for me.',
   },
   {
     icon: ClipboardList,
-    stage: 'planning',
+    iconClass: 'text-(--amber-600) dark:text-(--amber-400)',
     title: 'Plan the top bug',
     prompt: 'Pick the highest-impact open bug and draft a plan.',
   },
   {
     icon: CalendarCheck,
-    stage: 'done',
+    iconClass: 'text-(--purple-500) dark:text-(--purple-400)',
     title: 'What shipped this week',
     prompt: 'Summarize what shipped this week, what’s stuck, and who’s waiting on whom.',
   },
   {
     icon: LifeBuoy,
-    stage: 'execute',
+    iconClass: 'text-(--blue-500) dark:text-(--blue-400)',
     title: 'Unblock what’s stuck',
     prompt: 'Find failed runs and plans waiting on my approval. Retry what’s fixable and list the rest for me.',
   },
   {
     icon: Rocket,
-    stage: 'review',
+    iconClass: 'text-(--pink-500) dark:text-(--pink-400)',
     title: 'Close the loop on my PRs',
     prompt: 'Check my open PRs. Address review comments and re-request review where it’s ready.',
   },
@@ -66,23 +66,24 @@ export function StarterPrompts() {
       aria-label="Start from a prompt"
       className="m-0 grid list-none grid-cols-1 gap-1 p-0 sm:grid-cols-2 lg:grid-cols-3"
     >
-      {STARTER_PROMPTS.map(({ icon: Icon, stage, title, prompt }, index) => (
+      {STARTER_PROMPTS.map(({ icon: Icon, iconClass, title, prompt }, index) => (
         <li key={title} className="flex">
           <Card
-            interactive
+            as="button"
             onPointerEnter={() => setComposerPreview(prompt)}
             onPointerLeave={() => setComposerPreview(null)}
             onFocus={() => setComposerPreview(prompt)}
             onBlur={() => setComposerPreview(null)}
             onClick={() => submitComposer(prompt)}
             className={cn(
-              'w-full rounded-md text-left [--elevation-raised:var(--elevation-soft)] [--surface-rim:var(--surface-rim-soft)]',
+              'w-full cursor-pointer rounded-md text-left [--elevation-raised:var(--elevation-soft)] hover:[--surface-rim:var(--border-strong)] active:scale-99',
+              surfaceRimFocus,
               CARD_CORNERS[index],
             )}
           >
             <span className="flex h-full flex-col gap-2 p-3">
               <span className="flex items-center gap-2">
-                <Icon aria-hidden className={cn('size-4 shrink-0', stageIconClass(stage))} />
+                <Icon aria-hidden className={cn('size-4 shrink-0', iconClass)} />
                 <Txt as="span" variant="card-title" tone="ink">
                   {title}
                 </Txt>

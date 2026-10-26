@@ -2,16 +2,14 @@ import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Bot, GitBranch } from 'lucide-react';
+import { Bot } from 'lucide-react';
 import { Link, useLocation, useParams } from 'react-router';
 
-import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
 import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
 import { useDefaultModelQuery } from '../../hooks/use-default-model';
 import { useProvidersQuery } from '../../hooks/use-providers';
-import { useUserSessionQuery } from '../../hooks/useWorkspaces';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import { isConnectedAt } from '../domains/settings/components/provider-credential';
 import { MODEL_DEFAULTS_LABELS } from '../domains/settings/components/models/routing/model-routes';
@@ -179,10 +177,7 @@ function DraftStart({
         <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
       )}
 
-      <div className="flex min-w-0 flex-col gap-2">
-        {activeFactory && <ComposerPanel composerVariant="textarea" />}
-        <FactoryContext activeFactory={activeFactory} />
-      </div>
+      {activeFactory && <ComposerPanel composerVariant="textarea" />}
     </section>
   );
 }
@@ -229,48 +224,5 @@ function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
         </Link>
       }
     />
-  );
-}
-
-function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
-  const { sessionId } = useParams<{ sessionId: string }>();
-  const sessionQuery = useUserSessionQuery(sessionId);
-  const repository = activeFactory?.repositories.find(
-    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
-  );
-  const projectPath = sessionQuery.data?.sessionId;
-  const gitBranch = repository?.gitBranch;
-  return (
-    <div className="text-muted-foreground flex max-w-full items-center gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="text-placeholder shrink-0" />
-        <Txt as="span" variant="column" title={activeFactory?.name} className="min-w-0 truncate">
-          {activeFactory?.name ?? 'Factory'}
-        </Txt>
-        {projectPath && (
-          <>
-            <Txt as="span" variant="caption" tone="faint" className="shrink-0">
-              ·
-            </Txt>
-            <Txt as="span" variant="caption" tone="faint" title={projectPath} className="min-w-0 truncate">
-              {projectPath}
-            </Txt>
-          </>
-        )}
-      </div>
-      {gitBranch && (
-        <>
-          <Txt as="span" variant="caption" tone="faint" aria-hidden className="shrink-0">
-            ·
-          </Txt>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="text-placeholder shrink-0" />
-            <Txt as="span" variant="caption" title={gitBranch} className="min-w-0 truncate">
-              {gitBranch}
-            </Txt>
-          </div>
-        </>
-      )}
-    </div>
   );
 }

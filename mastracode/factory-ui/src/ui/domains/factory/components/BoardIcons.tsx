@@ -189,10 +189,6 @@ export function stageIndicatorClass(stage: string): string {
   return TONE_CLASSES[stageToneFor(stage)].indicator;
 }
 
-export function stageIconClass(stage: string): string {
-  return TONE_CLASSES[stageToneFor(stage)].icon;
-}
-
 export function BoardStageIcon({
   stage,
   kind,
