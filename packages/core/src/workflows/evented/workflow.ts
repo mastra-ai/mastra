@@ -2773,10 +2773,9 @@ export class EventedRun<
 
     // Publish directly instead of relying on the abort handler: a handle created on another
     // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
-    try {
-      await this.publishCancel();
-    } finally {
-      this.abortController.abort();
-    }
+    // publishCancel() claims its once-guard synchronously, so the abort listener below won't publish again.
+    const published = this.publishCancel();
+    this.abortController.abort();
+    await published;
   }
 }
