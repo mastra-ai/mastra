@@ -54,8 +54,9 @@ const HTTP_REASON_PHRASE =
   /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|not acceptable|proxy authentication required|request timeout|conflict|gone|length required|precondition failed|(?:payload|content|request entity) too large|(?:request-)?uri too long|unsupported media type|(?:requested )?range not satisfiable|expectation failed|i'm a teapot|misdirected request|unprocessable (?:entity|content)|locked|failed dependency|too early|upgrade required|precondition required|too many requests|request header fields too large|unavailable for legal reasons|internal server error|not implemented|bad gateway|service unavailable|gateway timeout|http version not supported|variant also negotiates|insufficient storage|loop detected|not extended|network authentication required)\.?$/i;
 
 // A provider call saved before its status was kept says only the HTTP phrase; elsewhere a bare phrase names nobody.
-const PROVIDER_CALL_ERROR_NAME = /^(?:AI_)?APICallError$/;
+export const PROVIDER_CALL_ERROR_NAME = /^(?:AI_)?APICallError$/;
 const ACCESS_DENIED_PHRASE = /^(?:unauthorized|forbidden)\.?$/i;
+const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
 
 interface CollectedFacts {
   statusCode?: number;
@@ -187,6 +188,19 @@ function transientKindFromWording(evidence: string): ProviderFailureKind | undef
 export function providerErrorReason(error: unknown): string | undefined {
   const reason = innermostReason(error, 0);
   return reason === undefined || reason.length <= MAX_REASON_LENGTH ? reason : `${reason.slice(0, MAX_REASON_LENGTH)}…`;
+}
+
+export function providerRequestId(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const kept = readField(error, 'requestId');
+  if (typeof kept === 'string' && kept.trim()) return kept.trim();
+  const headers = readField(error, 'responseHeaders');
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  for (const header of REQUEST_ID_HEADERS) {
+    const value = readField(headers, header);
+    if (typeof value === 'string' && value.trim()) return value.trim();
+  }
+  return undefined;
 }
 
 function innermostReason(error: unknown, depth: number): string | undefined {

@@ -23,8 +23,19 @@ describe('describeRunError', () => {
   it.each([
     ['Error', 'Incorrect API key provided.', 'Provider access failed'],
     ['AI_APICallError', 'Your weekly limit has been reached, try again later', 'Provider quota exhausted'],
-  ])('%s %s → %s, fixed in the credential settings', (name, message, title) => {
-    expect(describeRunError({ name, message })).toMatchObject({ title, recovery: 'credentials' });
+  ])('%s %s → %s, quoting the provider and fixed in the credential settings', (name, message, title) => {
+    const description = describeRunError({ name, message });
+    expect(description).toMatchObject({ title, recovery: 'credentials' });
+    expect(description.message).toContain(message);
+  });
+
+  it('gives only the next step when the provider wrote nothing beyond the HTTP phrase', () => {
+    const unauthorized = { name: 'AI_APICallError', message: 'Unauthorized', statusCode: 401 };
+    expect(describeRunError(unauthorized)).toEqual({
+      title: 'Provider access failed',
+      message: 'Review the credentials and model access configured for this session.',
+      recovery: 'credentials',
+    });
   });
 
   it('offers the credential settings for a missing provider sign-in, matched on its wire name', () => {

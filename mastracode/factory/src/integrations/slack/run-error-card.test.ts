@@ -42,7 +42,7 @@ describe('slackRunErrorCard', () => {
   });
 
   it('links a refused model to the Slack session, where the model can be changed', () => {
-    const card = rendered(slackRunErrorCard(codexPlanRefusal(), slackRun(), PUBLIC_URL));
+    const card = rendered(slackRunErrorCard(codexPlanRefusal(), slackRun()));
 
     expect(card).toContain('Model not available');
     expect(card).toContain("The 'gpt-5.5' model is not supported when using Codex with a ChatGPT account.");
@@ -54,7 +54,7 @@ describe('slackRunErrorCard', () => {
     const error = new ProviderAuthRequiredError(
       "No usable openai credential is available for openai/gpt-5.5. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
     );
-    const card = rendered(slackRunErrorCard(error, slackRun(), PUBLIC_URL));
+    const card = rendered(slackRunErrorCard(error, slackRun()));
 
     expect(card).toContain('Provider sign-in required');
     expect(card).toContain('Add an organization credential');
@@ -62,8 +62,25 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/models`);
   });
 
+  it('keeps the provider’s sentence and request id on a quota failure, where Slack has no error details', () => {
+    const weeklyLimit = Object.assign(new Error('Bad Request'), {
+      name: 'AI_APICallError',
+      statusCode: 400,
+      responseBody: JSON.stringify({
+        error: { message: 'Your weekly limit has been reached. It resets Monday at 9:00 AM.' },
+      }),
+      responseHeaders: { 'request-id': 'req_abc' },
+    });
+    const card = rendered(slackRunErrorCard(weeklyLimit, slackRun()));
+
+    expect(card).toContain('Provider quota exhausted');
+    expect(card).toContain('It resets Monday at 9:00 AM.');
+    expect(card).toContain('Request id: req_abc');
+    expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/models`);
+  });
+
   it('opens the session for a failure nothing in settings fixes', () => {
-    const card = rendered(slackRunErrorCard(new Error('Request timed out.'), slackRun(), PUBLIC_URL));
+    const card = rendered(slackRunErrorCard(new Error('Request timed out.'), slackRun()));
 
     expect(card).toContain('Request timed out');
     expect(card).toContain('Open session');
@@ -71,11 +88,9 @@ describe('slackRunErrorCard', () => {
   });
 
   it('still explains the failure when the run has no session or no public URL', () => {
-    const withoutSession = rendered(
-      slackRunErrorCard(codexPlanRefusal(), { requestContext: new RequestContext() }, PUBLIC_URL),
-    );
+    const withoutSession = rendered(slackRunErrorCard(codexPlanRefusal(), { requestContext: new RequestContext() }));
     vi.stubEnv('MASTRACODE_PUBLIC_URL', '');
-    const withoutPublicUrl = rendered(slackRunErrorCard(codexPlanRefusal(), slackRun(), undefined));
+    const withoutPublicUrl = rendered(slackRunErrorCard(codexPlanRefusal(), slackRun()));
 
     for (const card of [withoutSession, withoutPublicUrl]) {
       expect(card).toContain('Model not available');

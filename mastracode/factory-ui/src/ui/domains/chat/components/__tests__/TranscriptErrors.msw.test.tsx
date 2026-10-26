@@ -1,18 +1,19 @@
 import type { MastraDBMessage } from '@mastra/client-js';
-import { screen } from '@testing-library/react';
+import { screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
-import { ChatModelsContext } from '../../context/ChatModelsContext';
+import { ChatModelsProvider } from '../../context/ChatModelsProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { initialTranscript, transcriptReducer } from '../../services/transcript';
+import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { TranscriptEntries } from '../Transcript';
 
 type LiveEvent = Extract<Parameters<typeof transcriptReducer>[1], { type: 'event' }>['event'];
@@ -31,8 +32,6 @@ function failedReply(
     content: { format: 2, parts: [{ type: 'error', error: { name, message, ...facts } }] },
   };
 }
-
-const setModel = vi.fn(async (_modelId: string) => {});
 
 function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
   const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
@@ -64,19 +63,11 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
               sessionId: 'session-1',
               resourceId: 'resource-1',
               modeId: 'build',
-              modelId: 'openai/gpt-5',
+              modelId: 'openai/gpt-5.5',
             },
           }}
         >
-          <ChatModelsContext.Provider
-            value={{
-              activeModelId: 'openai/gpt-5.5',
-              defaultModelId: undefined,
-              isLoading: false,
-              error: undefined,
-              setModel,
-            }}
-          >
+          <ChatModelsProvider>
             <ChatTranscriptContext.Provider
               value={{
                 ...api,
@@ -89,7 +80,7 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
             >
               <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
             </ChatTranscriptContext.Provider>
-          </ChatModelsContext.Provider>
+          </ChatModelsProvider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
     </MemoryRouter>
@@ -104,6 +95,9 @@ describe('chat run errors', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
       ),
     );
   });
@@ -151,7 +145,15 @@ describe('chat run errors', () => {
   });
 
   it('quotes a refused model and switches the session to another one from the card', async () => {
+    const modelSwitches: unknown[] = [];
     server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [
@@ -183,7 +185,7 @@ describe('chat run errors', () => {
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
 
-    expect(setModel).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.4');
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
 
   it('uses the same explanation for a live error event', () => {

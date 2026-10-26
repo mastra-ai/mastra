@@ -102,9 +102,10 @@ describe('SlackIntegration.channels', () => {
     const integration = new SlackIntegration({ signingSecret: 'secret' });
     const formatError = integration.channels(ctxWith()).adapters.slack.formatError;
 
-    const posted = formatError?.(new Error('Request timed out.'), {});
+    const badRequest = Object.assign(new Error('Bad Request'), { name: 'AI_APICallError', statusCode: 400 });
+    const posted = formatError?.(badRequest, {});
 
-    expect(JSON.stringify(posted)).toContain('Request timed out');
+    expect(JSON.stringify(posted)).toContain('Model request rejected');
   });
 
   it('keeps a caller-supplied error formatter', () => {

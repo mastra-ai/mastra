@@ -85,3 +85,8 @@ export function sessionLink({
   const workspaceSegment = isChatOnly ? 'channel' : encodeURIComponent(sessionId);
   return `${origin}/factories/${encodeURIComponent(factoryProjectId)}/workspaces/${workspaceSegment}/threads/${encodeURIComponent(threadId)}${isChatOnly ? sessionParam : ''}`;
 }
+
+export function modelSettingsLink(factoryProjectId: string): string | undefined {
+  const origin = process.env.MASTRACODE_PUBLIC_URL;
+  return origin ? `${origin}/factories/${encodeURIComponent(factoryProjectId)}/settings/models` : undefined;
+}
