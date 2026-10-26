@@ -46,15 +46,19 @@ class TemporalExecutionEngine {
     };
   }
 
-  // Date.now() in Workflow code is the Workflow Task time, which replay reads from history.
-  recordStep(stepResults, id, startedAt, output) {
-    stepResults[id] = output;
+  // Runs one timed entry and stores its output under `id`. Date.now() in Workflow code is the
+  // Workflow Task time, which replay reads from history.
+  async timed(stepResults, id, run) {
+    const startedAt = Date.now();
+    const out = await run();
+    stepResults[id] = out;
     if (this.stepMeta) {
       this.stepMeta[id] = {
         startedAt,
         endedAt: Date.now()
       };
     }
+    return out;
   }
   activityParams(inputData, extra = {}) {
     return {
@@ -70,40 +74,33 @@ class TemporalExecutionEngine {
           log.info('step', {
             stepId: entry.step.id
           });
-          const startedAt = Date.now();
-          const out = await this.activityHandle[entry.step.id](this.activityParams(inputData, {
+          return this.timed(stepResults, entry.step.id, () => this.activityHandle[entry.step.id](this.activityParams(inputData, {
             initData: this.initData
-          }));
-          this.recordStep(stepResults, entry.step.id, startedAt, out);
-          return out;
+          })));
         }
       case 'childWorkflow':
         {
           log.info('childWorkflow', {
             workflowType: entry.workflowType
           });
-          const startedAt = Date.now();
-          const childResult = await executeChild(entry.workflowType, {
-            args: [{
-              inputData,
-              ...this.executionContext
-            }]
+          return this.timed(stepResults, entry.id ?? entry.workflowType, async () => {
+            const childResult = await executeChild(entry.workflowType, {
+              args: [{
+                inputData,
+                ...this.executionContext
+              }]
+            });
+            return childResult?.result ?? childResult;
           });
-          const out = childResult?.result ?? childResult;
-          this.recordStep(stepResults, entry.workflowType, startedAt, out);
-          return out;
         }
       case 'mapping':
         {
           log.info('mapping', {
             mappingId: entry.id
           });
-          const startedAt = Date.now();
-          const out = await this.activityHandle[entry.id](this.activityParams(inputData, {
+          return this.timed(stepResults, entry.id, () => this.activityHandle[entry.id](this.activityParams(inputData, {
             initData: this.initData
-          }));
-          this.recordStep(stepResults, entry.id, startedAt, out);
-          return out;
+          })));
         }
       case 'sleep':
         {
@@ -149,12 +146,9 @@ class TemporalExecutionEngine {
           for (let i = 0; i < entry.steps.length; i++) {
             if (condResults[i]) {
               const stepId = entry.steps[i].step.id;
-              const startedAt = Date.now();
-              const res = await this.activityHandle[stepId](this.activityParams(inputData, {
+              out[stepId] = await this.timed(stepResults, stepId, () => this.activityHandle[stepId](this.activityParams(inputData, {
                 initData: this.initData
-              }));
-              out[stepId] = res;
-              this.recordStep(stepResults, stepId, startedAt, res);
+              })));
             }
           }
           return out;
@@ -167,11 +161,10 @@ class TemporalExecutionEngine {
           });
           let current = inputData;
           while (true) {
-            const startedAt = Date.now();
-            current = await this.activityHandle[entry.step.id](this.activityParams(current, {
+            const stepInput = current;
+            current = await this.timed(stepResults, entry.step.id, () => this.activityHandle[entry.step.id](this.activityParams(stepInput, {
               initData: this.initData
-            }));
-            this.recordStep(stepResults, entry.step.id, startedAt, current);
+            })));
             const shouldContinue = Boolean(await this.activityHandle[entry.serializedCondition.id](this.activityParams(current)));
             if (entry.loopType === 'dowhile' ? !shouldContinue : shouldContinue) {
               break;
@@ -192,7 +185,6 @@ class TemporalExecutionEngine {
             step: entry.step.id,
             concurrency
           });
-          const startedAt = Date.now();
           const results = new Array(items.length);
           let index = 0;
           const workers = Array.from({
@@ -208,9 +200,10 @@ class TemporalExecutionEngine {
               }));
             }
           });
-          await Promise.all(workers);
-          this.recordStep(stepResults, entry.step.id, startedAt, results);
-          return results;
+          return this.timed(stepResults, entry.step.id, async () => {
+            await Promise.all(workers);
+            return results;
+          });
         }
       default:
         return inputData;
@@ -236,7 +229,7 @@ function createWorkflow(workflowId, options) {
       },
       input: startArgs?.inputData,
       initialState: startArgs?.initialState,
-      recordStepMeta: startArgs?.recordStepMeta === true
+      recordStepMeta: startArgs?.recordStepMeta
     });
   };
   return Object.assign(workflow, {
@@ -249,10 +242,11 @@ function createWorkflow(workflowId, options) {
       });
       return workflow;
     },
-    thenWorkflow(workflowType) {
+    thenWorkflow(workflowType, id) {
       stepFlow.push({
         type: 'childWorkflow',
-        workflowType
+        workflowType,
+        id
       });
       return workflow;
     },

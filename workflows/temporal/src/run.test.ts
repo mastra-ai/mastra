@@ -126,6 +126,22 @@ describe('TemporalRun', () => {
     });
   });
 
+  it('does not ask for step times from startAsync()', async () => {
+    const start = vi.fn(async () => ({}));
+    const workflow = createWorkflow(
+      { id: 'test-workflow' },
+      { client: { workflow: { start } } as unknown as Client, taskQueue: 'test-queue' },
+    );
+    const run = await workflow.createRun({ runId: 'test-run' });
+
+    await run.startAsync({ inputData: { value: 5 } });
+
+    expect(start).toHaveBeenCalledWith(
+      'testWorkflow',
+      expect.objectContaining({ args: [expect.not.objectContaining({ recordStepMeta: expect.anything() })] }),
+    );
+  });
+
   it('keeps steps empty for a result from a Worker that records no step times', async () => {
     const schema = z.object({ value: z.number() });
     const start = vi.fn(async () => ({

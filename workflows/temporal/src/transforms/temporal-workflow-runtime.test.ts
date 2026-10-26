@@ -471,6 +471,20 @@ describe('temporal workflow runtime helper module', () => {
         'fetch-weather': { startedAt: 1_000, endedAt: 1_250 },
         'no-output': { startedAt: 1_250, endedAt: 1_300 },
       });
+
+      executeChild.mockResolvedValue({ result: { child: true } });
+      const nested = createWorkflow('parent-workflow')
+        .thenWorkflow('childWorkflow', 'child')
+        .parallel([{ type: 'childWorkflow', workflowType: 'otherWorkflow', id: 'other' }])
+        .commit();
+      vi.setSystemTime(2_000);
+      const nestedResult = await nested({ inputData: {}, recordStepMeta: true });
+      expect(executeChild).toHaveBeenCalledWith('childWorkflow', expect.anything());
+      expect(nestedResult.steps).toEqual({ child: { child: true }, other: { child: true } });
+      expect(nestedResult.stepMeta).toEqual({
+        child: { startedAt: 2_000, endedAt: 2_000 },
+        other: { startedAt: 2_000, endedAt: 2_000 },
+      });
     } finally {
       vi.useRealTimers();
     }

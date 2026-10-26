@@ -23,6 +23,8 @@ export type StepEntry = {
 export type ChildWorkflowEntry = {
   type: 'childWorkflow';
   workflowType: string;
+  /** The child's Mastra workflow id, used as its key in `steps`. Falls back to `workflowType`. */
+  id?: string;
 };
 
 export type ParallelEntry = StepEntry | ChildWorkflowEntry;
@@ -35,7 +37,7 @@ export type WorkflowRuntime = ((startArgs?: {
   recordStepMeta?: boolean;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
-  thenWorkflow(workflowType: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id?: string): WorkflowRuntime;
   map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
