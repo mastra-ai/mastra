@@ -13,14 +13,36 @@ export function createScreenshotTool(browser: AgentBrowser) {
     description:
       'Capture a screenshot of the current viewport as a visible PNG (set fullPage: true for full-page capture). Use snapshot when you only need text or interactive elements — screenshots are expensive. Use this when you need to visually inspect the page, e.g. evaluating images, product photos, layout, design, or colors.',
     inputSchema: screenshotInputSchema,
-    execute: async (input, { agent }) => {
+    execute: async (input, { agent, workspace }) => {
       const threadId = agent?.threadId;
       browser.setCurrentThread(threadId);
       await browser.ensureReady();
-      return await browser.screenshot(input, threadId);
+      const result = await browser.screenshot(input, threadId);
+      if (!input.path || !('base64' in result)) return result;
+
+      const filesystem = workspace?.filesystem;
+      if (!filesystem) {
+        return { ...result, saveError: 'There is no workspace filesystem to save the screenshot into.' };
+      }
+      try {
+        await filesystem.writeFile(input.path, Buffer.from(result.base64, 'base64'), {
+          recursive: true,
+          mimeType: 'image/png',
+        });
+        return { ...result, path: input.path };
+      } catch (error) {
+        return { ...result, saveError: error instanceof Error ? error.message : String(error) };
+      }
     },
     toModelOutput(output) {
-      const result = output as { base64?: string; title?: string; url?: string; message?: string };
+      const result = output as {
+        base64?: string;
+        title?: string;
+        url?: string;
+        message?: string;
+        path?: string;
+        saveError?: string;
+      };
 
       if (typeof result.base64 !== 'string') {
         return {
@@ -37,6 +59,10 @@ export function createScreenshotTool(browser: AgentBrowser) {
             mediaType: 'image/png',
             data: result.base64,
           },
+          ...(result.path ? [{ type: 'text' as const, text: `Saved to ${result.path}` }] : []),
+          ...(result.saveError
+            ? [{ type: 'text' as const, text: `Couldn't save the screenshot: ${result.saveError}` }]
+            : []),
         ],
       };
     },
