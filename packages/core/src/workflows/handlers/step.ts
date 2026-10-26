@@ -378,26 +378,48 @@ export async function executeStep(
           : wrapMastra(engine.mastra, { currentSpan: stepSpan })
         : undefined;
 
-      let completedNestedOutput: { found: boolean; value?: unknown } = { found: false };
+      let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
         // The nested workflow's own option: it can differ from this run's.
         const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
-        const nestedRun =
-          nestedStorageVersion === 2
-            ? (await workflowsStore?.loadWorkflowRunHeader({ workflowName: step.id, runId: persistedNestedRunId }))
-                ?.header
-            : await workflowsStore?.loadWorkflowSnapshot({
-                workflowName: step.id,
-                runId: persistedNestedRunId,
-                storageVersion: 1,
-              });
-        if (nestedRun?.status === 'success') {
-          completedNestedOutput = { found: true, value: nestedRun.result };
+        if (nestedStorageVersion === 2) {
+          const stored = await workflowsStore?.loadWorkflowRunHeader({
+            workflowName: step.id,
+            runId: persistedNestedRunId,
+          });
+          if (stored?.header.status === 'success') {
+            // The header alone has no state; read it only once the run is known to be finished.
+            const run = await workflowsStore?.loadWorkflowRun({
+              workflowName: step.id,
+              runId: persistedNestedRunId,
+              successfulSteps: 'summary',
+            });
+            completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
+          }
+        } else {
+          const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+            workflowName: step.id,
+            runId: persistedNestedRunId,
+            storageVersion: 1,
+          });
+          if (snapshot?.status === 'success') {
+            completedNestedOutput = { found: true, value: snapshot.result, state: snapshot.value };
+          }
         }
       }
 
       if (completedNestedOutput.found) {
+        // The finished run isn't run again, so its state changes are merged as its run would have.
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: completedNestedOutput.state,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        contextMutations.stateUpdate = stateData;
         if (engine.requiresDurableContextSerialization()) {
           contextMutations.requestContextUpdate = engine.serializeRequestContext(requestContext);
         }

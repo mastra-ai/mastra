@@ -1452,6 +1452,75 @@ describe('storage v2 nested runs', () => {
   });
 });
 
+describe('a re-driven nested step whose nested run already finished', () => {
+  /** A foreach over `inner`, which suspends, then appends twice once resumed. */
+  const build = (storageVersion: 1 | 2) => {
+    const inner = createWorkflow({
+      id: 'inner',
+      inputSchema: num,
+      outputSchema: num,
+      stateSchema: items,
+      options: { storageVersion },
+    })
+      .then(appendItem('inner-wait', { suspends: true }))
+      .then(appendItem('inner-b'))
+      .commit();
+    return createWorkflow({
+      id: 'outer',
+      inputSchema: z.array(num),
+      outputSchema: z.array(num),
+      stateSchema: items,
+      options: { storageVersion },
+    })
+      .foreach(inner)
+      .commit();
+  };
+
+  /** Writes of `outer` after `inner`'s success write never finish, as if the process died there. */
+  function dieAfterNestedSuccess(storage: InstanceType<typeof MockStore>) {
+    const store = storage.stores.workflows! as unknown as Record<string, (args: any) => Promise<unknown>>;
+    let innerDone = false;
+    let dying = true;
+    let died!: () => void;
+    const dead = new Promise<void>(resolve => (died = resolve));
+    for (const method of ['persistWorkflowSnapshot', 'writeWorkflowRunCheckpoint', 'appendWorkflowRunEntries']) {
+      const write = store[method]!.bind(store);
+      store[method] = async args => {
+        if (dying && innerDone && args.workflowName === 'outer') {
+          died();
+          return new Promise(() => {});
+        }
+        // v1 stores the snapshot object itself; copy it so later in-place edits don't show up stored.
+        await write(
+          method === 'persistWorkflowSnapshot' ? { ...args, snapshot: structuredClone(args.snapshot) } : args,
+        );
+        if (args.workflowName === 'inner' && (args.snapshot ?? args.header)?.status === 'success') innerDone = true;
+      };
+    }
+    return dead.then(() => (dying = false));
+  }
+
+  it.each([1, 2] as const)('keeps its state changes on v%s', async storageVersion => {
+    const storage = new MockStore();
+    const dying = build(storageVersion);
+    new Mastra({ logger: false, storage, workflows: { outer: dying } });
+    const run = await dying.createRun({ runId: 'run-1' });
+    expect((await run.start({ inputData: [{ n: 0 }], initialState: { items: [PAD] } })).status).toBe('suspended');
+    const dead = dieAfterNestedSuccess(storage);
+    void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+    await dead;
+
+    const outer = build(storageVersion);
+    new Mastra({ logger: false, storage, workflows: { outer } });
+    const result = await (await outer.createRun({ runId: 'run-1' })).restart({ outputOptions: { includeState: true } });
+
+    expect(result.status).toBe('success');
+    const state = { items: [PAD, 'inner-wait:0', 'inner-b:1'] };
+    expect(result.state).toEqual(state);
+    expect((await storedStates(storage, storageVersion))['outer/run-1']).toEqual({ status: 'success', state });
+  });
+});
+
 /** Records the step ids of each `loadWorkflowRunSteps` call. */
 function recordStepReads(storage: InstanceType<typeof MockStore>) {
   const store = storage.stores.workflows!;
