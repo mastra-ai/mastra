@@ -263,6 +263,22 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     expect(section('Attributes')).toBeTruthy();
   });
 
+  it('leaves out the empty output of a chunk that streamed nothing', () => {
+    // e.g. encrypted reasoning: the chunk opens and closes without any delta.
+    render(
+      renderView(
+        makeSpan({
+          spanId: 'span-empty-chunk',
+          spanType: SpanType.MODEL_CHUNK,
+          attributes: { chunkType: 'reasoning', sequenceNumber: 0 },
+          output: {},
+        }),
+      ),
+    );
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
   it('still shows an empty output for spans that are not processors', () => {
     render(renderView(makeSpan({ spanId: 'span-empty-output', output: {} })));
     expect(section('Output')).toBeTruthy();

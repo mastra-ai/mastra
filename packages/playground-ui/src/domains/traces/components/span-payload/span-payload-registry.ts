@@ -52,9 +52,14 @@ const isEmptyObject = (value: unknown) =>
 const isProcessorSpan = (span: SpanRecord) =>
   span.spanType === SpanType.PROCESSOR_RUN || describeProcessorPipeline(asCoreSpan(span)) !== undefined;
 
-/** The output to show, or `undefined` for a processor that returned nothing (stored as `{}`). */
+/**
+ * The output to show, or `undefined` when `{}` only means "nothing": a processor
+ * that returned nothing, or a chunk that streamed no content (e.g. encrypted reasoning).
+ */
 export function getSpanOutputPayload(span: SpanRecord): unknown {
-  if (isEmptyObject(span.output) && isProcessorSpan(span)) return undefined;
+  if (isEmptyObject(span.output) && (span.spanType === SpanType.MODEL_CHUNK || isProcessorSpan(span))) {
+    return undefined;
+  }
   return span.output;
 }
 
