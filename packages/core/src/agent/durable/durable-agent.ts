@@ -1623,7 +1623,9 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: wrapped.id,
           entityName: wrapped.name,
-          attributes: modelSpanAttributes(model),
+          // The rebound list keeps the persisted order, so its head is the
+          // candidate the recovered step tries first.
+          attributes: modelSpanAttributes(modelList?.[0]?.model ?? model),
           metadata: {
             runId,
             recovered: true,

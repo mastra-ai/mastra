@@ -4,6 +4,7 @@
  * mocked. AGENT_RUN names the model the run was configured with; each
  * MODEL_STEP names the model that step actually invoked.
  */
+import { MockLanguageModelV1 } from '@internal/ai-sdk-v4/test';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
@@ -357,5 +358,30 @@ describe.each<Engine>(['agent', 'durable', 'evented'])('%s: model on agent run a
     expect(runs.map(identity)).toEqual([acmeLarge, acmeLarge]);
     expect(stepsUnder(exporter, runs[0]!).map(identity)).toEqual([acmeLarge]);
     expect(stepsUnder(exporter, runs[1]!).map(identity)).toEqual([none]);
+  });
+});
+
+describe('legacy agent: model on the agent run span', () => {
+  it('a generateLegacy run names the v1 model it was configured with on the agent run', async () => {
+    const agent = new Agent({
+      id: 'legacy',
+      name: 'legacy',
+      instructions: 'x',
+      model: new MockLanguageModelV1({
+        provider: 'acme',
+        modelId: 'acme-v1',
+        doGenerate: async () => ({
+          text: 'ok',
+          finishReason: 'stop',
+          usage: { promptTokens: 1, completionTokens: 1 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        }),
+      }) as any,
+    });
+    const { exporter, target } = setup('agent', agent);
+    await target.generateLegacy('hi');
+    await settle(exporter);
+
+    expect(identity(spansOf(exporter, SpanType.AGENT_RUN)[0])).toEqual({ model: 'acme-v1', provider: 'acme' });
   });
 });
