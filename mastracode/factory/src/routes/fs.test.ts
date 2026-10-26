@@ -1056,10 +1056,9 @@ describe('workspace patches', () => {
           dir: repoDir!,
           branch: 'factory/issue-1',
           defaultBranch: 'main',
-          position: 1,
           setupStatus: 'ok',
         },
-        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', position: 2, setupStatus: 'ok' },
+        { slug: 'acme/docs', dir: docsDir!, branch: 'main', defaultBranch: 'main', setupStatus: 'ok' },
       ],
     });
     for (const dir of [repoDir!, docsDir!]) {
@@ -1126,12 +1125,11 @@ describe('workspace changes across environment repositories', () => {
     const session = makeSession({ baseBranch: 'main' });
     recordSessionEnvironment(session.sessionId, {
       workingDirectory: ROOT,
-      repositories: recorded.map((slug, index) => ({
+      repositories: recorded.map(slug => ({
         slug,
         dir: DIRS[slug as keyof typeof DIRS],
         branch: slug === 'acme/repo' ? 'factory/issue-1' : 'develop',
         defaultBranch: 'develop',
-        position: index + 1,
         setupStatus: 'ok' as const,
       })),
     });
