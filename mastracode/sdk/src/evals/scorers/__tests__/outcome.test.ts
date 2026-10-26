@@ -107,6 +107,12 @@ describe('Outcome Scorer', () => {
       expect(reason).toContain('Build/typecheck passed');
     });
 
+    it('does not treat exit-code text in successful command output as a failure', async () => {
+      const msgs = [makeMsg('assistant', [commandResult('pnpm build', 'case logged Exit code: 1 and passed')])];
+      const { reason } = await scorer.run({ input: agentInput, output: msgs, groundTruth: {} });
+      expect(reason).toContain('Build/typecheck passed');
+    });
+
     it('detects build failure from real execute_command output', async () => {
       const msgs = [
         makeMsg('assistant', [commandResult('pnpm build', 'stderr:\nBuild failed\n\nExit code: 1')]),

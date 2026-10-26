@@ -57,8 +57,13 @@ describe('classify-command', () => {
     });
 
     it('continues to extract exit codes from legacy string formats', () => {
-      expect(getExitCode('exited with code 0')).toBe(0);
+      expect(getExitCode('Process exited with code 0')).toBe(0);
       expect(getExitCode('exit code 1')).toBe(1);
+    });
+
+    it('does not treat command output containing exit-code text as the command status', () => {
+      expect(getExitCode('case logged Exit code: 1 and passed')).toBe(null);
+      expect(getExitCode('Exit code: 1\nbuild completed')).toBe(null);
     });
 
     it('returns null for missing/unknown', () => {

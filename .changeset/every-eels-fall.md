@@ -1,5 +1,6 @@
 ---
 '@mastra/code-sdk': patch
+'@mastra/core': patch
 ---
 
-Fixed Outcome scoring for real execute_command results, including markerless successes and colon-delimited signed failure exit codes.
+Fixed Outcome scoring so build and test results recognize successful and failed execute_command commands, and regression scoring detects failures after a prior pass.

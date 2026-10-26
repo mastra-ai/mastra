@@ -35,7 +35,7 @@ export function getExitCode(result: unknown): number | null {
   if (result == null) return null;
 
   if (typeof result === 'string') {
-    const exitMatch = result.match(/exit(?:ed)?\s+(?:with\s+)?(?:code\s*:?\s*)?(-?\d+)/i);
+    const exitMatch = result.match(/(?:^|\n)(?:exit code\s*:?|process exited with code)\s*(-?\d+)\s*$/i);
     if (exitMatch) return parseInt(exitMatch[1]!, 10);
     return null;
   }
