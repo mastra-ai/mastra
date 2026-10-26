@@ -1985,7 +1985,6 @@ export class EventedRun<
   }
 
   #cancelPublished = false;
-  #cancelPublishFailed = false;
 
   /**
    * Publish the workflow.cancel event that tells the event processor owning this run to stop it.
@@ -2004,10 +2003,8 @@ export class EventedRun<
           runId: this.runId,
         },
       });
-      this.#cancelPublishFailed = false;
     } catch (err) {
       this.#cancelPublished = false;
-      this.#cancelPublishFailed = true;
       throw err;
     }
   }
@@ -2754,8 +2751,16 @@ export class EventedRun<
   }
 
   async cancel() {
-    // Storage already reads `canceled` after a cancel whose publish failed, so let that retry through.
-    if (!this.#cancelPublishFailed && (await this.hasReachedTerminalStatus())) return;
+    if (await this.hasReachedTerminalStatus()) return;
+
+    // Publish directly instead of relying on the abort handler: a handle created on another
+    // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
+    // publishCancel() claims its once-guard synchronously, so the abort listener below won't publish again.
+    const published = this.publishCancel();
+    this.abortController.abort();
+    // Only mark the run canceled once the processor can see the cancel. If the publish fails, storage
+    // keeps the run's live status so a retry from any handle or instance is not treated as finished.
+    await published;
 
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -2770,12 +2775,5 @@ export class EventedRun<
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
     this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
-
-    // Publish directly instead of relying on the abort handler: a handle created on another
-    // instance (or via startAsync) never registered one, so abort() alone would reach no processor.
-    // publishCancel() claims its once-guard synchronously, so the abort listener below won't publish again.
-    const published = this.publishCancel();
-    this.abortController.abort();
-    await published;
   }
 }

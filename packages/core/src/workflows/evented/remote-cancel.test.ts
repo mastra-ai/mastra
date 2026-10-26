@@ -227,6 +227,48 @@ describe('evented workflow cancel from another instance', () => {
     expect(blocker.state.aborted).toBe(true);
   });
 
+  it('leaves the run cancelable from any instance when the workflow.cancel publish fails', async () => {
+    const storage = new MockStore();
+    const pubsub = new EventEmitterPubSub();
+    const blocker = createBlocker();
+    const ownerWorkflow = buildWorkflow('sequential', blocker);
+    const failingWorkflow = buildWorkflow('sequential', createBlocker());
+    const retryWorkflow = buildWorkflow('sequential', createBlocker());
+    const owner = new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: ownerWorkflow } });
+    new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: failingWorkflow } });
+    new Mastra({ logger: false, storage, pubsub, workflows: { [WORKFLOW_ID]: retryWorkflow } });
+    cleanups.push(() => owner.stopWorkers());
+    await owner.startWorkers();
+
+    const publish = pubsub.publish.bind(pubsub);
+    let failNextCancel = true;
+    vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+      if (failNextCancel && topic === 'workflows' && event.type === 'workflow.cancel') {
+        failNextCancel = false;
+        throw new Error('pubsub unavailable');
+      }
+      return publish(topic, event);
+    });
+
+    const run = await ownerWorkflow.createRun();
+    const resultPromise = run.start({ inputData: { count: 0 } });
+    await blocker.entered;
+
+    const failedRun = await failingWorkflow.createRun({ runId: run.runId });
+    await expect(failedRun.cancel()).rejects.toThrow('pubsub unavailable');
+    const workflowsStore = await storage.getStore('workflows');
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({ workflowName: WORKFLOW_ID, runId: run.runId });
+    expect(snapshot?.status).not.toBe('canceled');
+
+    // A fresh handle carries no memory of the failed attempt; storage must not report the run as finished.
+    const retryRun = await retryWorkflow.createRun({ runId: run.runId });
+    await retryRun.cancel();
+
+    const result = await withTimeout(resultPromise);
+    expect(result === 'timed out' ? result : result.status).toBe('canceled');
+    expect(blocker.state.aborted).toBe(true);
+  });
+
   it('publishes workflow.cancel once and settles watchers when a startAsync run is canceled', async () => {
     const storage = new MockStore();
     const pubsub = new EventEmitterPubSub();
