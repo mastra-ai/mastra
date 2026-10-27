@@ -296,8 +296,9 @@ export interface ToolBackgroundConfig {
   /**
    * How an eligible tool runs when the call carries no `_background` override.
    * - `'deferred'` (default): eligible calls run in the background.
-   * - `'foreground'`: eligible calls run inline unless the model explicitly
-   *   opts in via `_background` — eligibility only grants the *option*.
+   * - `'foreground'`: eligible calls run inline by default. When model overrides
+   *   are allowed, the model can opt in via `_background`; otherwise `_background`
+   *   is ignored and calls remain inline.
    */
   defaultDisposition?: 'foreground' | 'deferred';
   /** Override the manager's default timeout for this tool */

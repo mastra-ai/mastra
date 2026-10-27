@@ -57,7 +57,7 @@ Enabling the manager doesn't run anything in the background by itself. Tools bec
 1. **Tool-level config**: the tool itself declares it as background-eligible.
 1. **Agent-level config**: the agent declares which of its tools are background-eligible.
 
-Eligible tools default to `deferred` execution. Set `defaultDisposition: 'foreground'` at either layer when eligibility should only give the LLM the option to run a call in the background. The LLM can include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
+Eligible tools default to `deferred` execution. Set `defaultDisposition: 'foreground'` at either layer when eligibility should only give the LLM the option to run a call in the background. Unless model overrides are disabled, the LLM can include a `_background` field in the tool arguments to select `foreground`, `deferred`, or `awaited` execution for a specific call and override its timeout or retries.
 
 ### Tool-level
 
@@ -112,7 +112,7 @@ Set `tools: 'all'` to opt in every tool the agent has.
 
 ### LLM per-call override
 
-When a tool is registered on an agent that has background tasks enabled, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call. The model only includes what it wants to override, all fields in `_background` are optional. The override is stripped from the arguments before the tool runs.
+When an eligible tool allows model overrides, the model can include a `_background` field in the tool arguments to override the resolved configuration for that specific call. The model only includes what it wants to override, all fields in `_background` are optional. The override is stripped from the arguments before the tool runs.
 
 ```json
 {
@@ -131,9 +131,11 @@ For compatibility, `_background.enabled: true` selects `deferred`, and `_backgro
 
 The `_background` override only _modifies_ tools the developer has already opted in at the tool or agent layer. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
+Each eligible tool that accepts model overrides adds an optional `_background` object and four optional fields to its model-facing schema. Some providers limit the total number of optional parameters across tools. To omit these fields while keeping background execution enabled, set `allowModelOverride: false` in the tool's `background` configuration or its entry in `agent.backgroundTasks.tools`. The tool then uses its configured `defaultDisposition`, `timeoutMs`, and `maxRetries`; any `_background` supplied in a call is ignored. Agent-level `allowModelOverride` takes precedence over the tool-level setting.
+
 ### Resolution order
 
-When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
+When a tool call is dispatched, agent-level and tool-level settings determine eligibility and fallback values. For an eligible tool that allows model overrides, the LLM `_background` fields override the corresponding values for that call. Manager defaults fill timeout and retry values that remain unset. An `_background` field can't enable a tool that's not eligible.
 
 If the agent has `backgroundTasks.disabled: true`, every tool call runs synchronously regardless of the layers above.
 
