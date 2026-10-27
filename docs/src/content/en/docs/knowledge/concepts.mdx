@@ -1,6 +1,6 @@
 ---
 title: "Knowledge concepts"
-description: "Nodes, records, scopes, tags, read-only access, and pins in Mastra Knowledge."
+description: "Nodes, records, scopes, tags, read and write access, and pins in Mastra Knowledge."
 packages:
   - "@mastra/core"
 ---
@@ -15,7 +15,7 @@ Knowledge is experimental and can change without notice.
 
 ## Nodes and records
 
-A **node** is a named, described place in Knowledge, such as `pricing` or `onboarding`. A **record** is one short, dated fact stored under a node. Agents search records, read a node to see everything in it, and append new records.
+A **node** is a named, described place in Knowledge, such as `pricing` or `onboarding`. A **record** is one short, dated fact stored under a node. Agents search records, read a node to see everything in it, and add new records.
 
 Records and node descriptions have size limits, counted in tokens. See [limits](/docs/knowledge/limits).
 
@@ -46,32 +46,34 @@ const knowledge = new Knowledge({
 })
 ```
 
-Here a run that holds `org:acme` can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. The model reaches `team:acme:support` by passing `scope: ['team:acme:support']` to a Knowledge tool. The role in `access` sets how far an owner can go:
+Here a run that holds `org:acme` writable can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. The model reaches `team:acme:support` by passing `scope: ['team:acme:support']` to a Knowledge tool. The role in `access` sets what an owner can do:
 
 | Role | Can |
-|---|---|
+| - | - |
 | `readonly` | Search and read |
-| `append` | Read, plus create and append |
-| `edit` | All of the above, plus remove, update, rename, merge, and rescope |
+| `append` | Read, plus add records (`knowledge_record` op `add`) and create long-form nodes (`knowledge_node` op `write`) |
+| `edit` | All of the above, plus remove and rescope records, and update and merge nodes |
 | `owner` | Same as `edit` |
 
 A tool that needs a stronger role fails with `This run reaches "team:acme:support" with role append; this needs edit.` Owned scopes are only reached when the model names them in `scope`. A scope the run holds directly isn't limited by role.
 
 Ownership is checked each time a tool runs. A type you don't declare can be held but not owned, and a read-only tag never owns anything. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
 
-## Read-only scopes
+## Read and write access
 
-Give a run a tag as a string to allow reading and writing, or as `{ tag, access: 'read' }` to allow reading only:
+Scopes are read-only unless you mark them writable. Give a tag as a string to allow reading only, or as `{ scope, access: 'write' }` to allow writing too:
 
 ```typescript
 await agent.generate('What did the team decide?', {
-  scopes: [{ tag: 'org:acme', access: 'read' }, 'team:acme:director'],
+  scopes: ['org:acme', { scope: 'team:acme:director', access: 'write' }],
 })
 ```
 
-The same entries work in the agent's `scopes`. Read-only tags are searched by reads and left out of default writes. A write that names one fails with `"org:acme" is read-only for this run.` (or `are read-only` when it names several). The `resource:` and `thread:` tags can't be read-only. The `scope` argument the model passes to a tool is a plain list of tags.
+This run reads both scopes and writes only to `team:acme:director`. The same entries work in the agent's `scopes`. The `resource:` and `thread:` tags are the run's Memory identity and are always writable.
 
-The narrowest source wins, and a model never widens its access. A read-only tag never grants ownership of other scopes.
+Read-only tags are searched by reads and left out of default writes. A write that names one fails with `"org:acme" is read-only for this run.` (or `are read-only` when it names several). The `scope` argument the model passes to a tool is a plain list of tags.
+
+If the agent, the call, or the request context name the same tag with different access, read-only wins, and a model never widens its access. A read-only tag never grants ownership of other scopes.
 
 ## Pins
 

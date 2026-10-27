@@ -22,31 +22,33 @@ const code = await createMastraCode({
   knowledge: {
     instance: companyKnowledge,
     key: 'company',
-    scopes: [{ tag: 'org:acme', access: 'read' }, 'team:acme:support'],
+    scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }],
   },
 })
 ```
+
+Here every run reads `org:acme` and `team:acme:support` and writes only to `team:acme:support`. As everywhere else, a plain tag is read-only. See [read and write access](/docs/knowledge/concepts#read-and-write-access).
 
 Pass `knowledge: false` to turn Knowledge off, even when the environment variable is set.
 
 ## Session scopes
 
-Local sessions run as `org:local` only when you pass no scopes. Factory sessions always add `org:<org>` and `project:<project>` tags.
+Local sessions run as `org:local` only when you pass no scopes. Factory sessions always add `org:<org>` and `project:<project>` tags. The tags Mastra Code adds are writable. The tags you pass keep the access you gave them.
 
 If a Factory session has no organization, or a tag in `scopes` has the same type as one of those but a different value, the agent runs with only its `resource:` and `thread:` tags. Its writes are private to the run, and the `/knowledge` inspector reports Knowledge as unavailable.
 
 In a Factory session, Knowledge is stored under `project:<projectId>` together with `org:<orgId>`. Knowledge written earlier under `resource:<projectId>` no longer shows.
 
-By default the agent writes at all of its tags: org, project, its Memory resource, and the thread. Those records show only in that session's drill-down. To share a record with the whole project, have the agent write with `scope: ['org:<org>', 'project:<id>']`.
+By default the agent writes at all of its writable tags: org, project, its Memory resource, and the thread. Those records show only in that session's drill-down. To share a record with the whole project, have the agent write with `scope: ['org:<org>', 'project:<id>']`.
 
 ## Scopes per message
 
-A long-lived session can change what a run is allowed to see for each task. Pass `scopes` to `session.sendMessage`. Entries can be plain tags or `{ tag, access: 'read' }`:
+A long-lived session can change what a run is allowed to see for each task. Pass `scopes` to `session.sendMessage`. Entries take the same form as above: a plain tag is read-only, and `{ scope, access: 'write' }` is writable:
 
 ```typescript
 await session.sendMessage({
   content: 'Fix the login bug',
-  scopes: ['request:r25'],
+  scopes: [{ scope: 'request:r25', access: 'write' }],
 })
 ```
 
@@ -58,21 +60,14 @@ A run's scopes are fixed when it starts:
 
 A scoped message to a thread whose run is owned by another process doesn't wait. It rejects with "scopes don't cross processes". Messages without scopes are unaffected.
 
+`queueMessage`, `queueSignal`, `sendNotificationSignal`, and `steer` take `scopes` the same way. A queued message, steering message, or notification whose scopes differ from the running run's starts its own run after that one instead of joining it.
+
 ### Remote callers
 
-`@mastra/client-js` passes the same option: `client.getAgentController(id).session(sessionId).sendMessage({ content, scopes })`. The host accepts only tag types listed in the `allowedMessageScopeTypes` option of `AgentController`, and the default is none. For any other tag it answers 403 with `This host doesn't accept message scope "<tag>": allowed tag types are ...`.
-
-```typescript
-new AgentController({
-  // ...
-  allowedMessageScopeTypes: ['request'],
-})
-```
-
-`allowedMessageScopeTypes` allows a whole tag type, not particular values. A host that lists `request` lets any remote caller pick any value for it, such as `request:anything`. List only types that don't mark a tenant or access boundary, and never `org` or `team`. If a scope needs a trusted value, such as the org or project, set it from your app instead of accepting it from the caller.
-
-The Mastra Code remote Factory session forwards `scopes`, but the Factory doesn't set `allowedMessageScopeTypes`, so a remote Factory message with scopes is refused for now. The Factory still adds its own `org:` and `project:` tags on the server.
+Scopes are set in process only. Remote callers, through the agent controller HTTP routes or `@mastra/client-js`, can't send them, and the server drops `scopes` from a request body. To derive scopes from a request, give the agent a `scopes` function that reads trusted request context.
 
 ## Upgrading
 
 `experimental_subconscious` is removed. Attach Knowledge to the agent instead.
+
+Scope entries changed shape. A plain tag used to be writable and is now read-only. Mark tags the run should write to as `{ scope, access: 'write' }`. The old `{ tag, access: 'read' }` form is gone, because a plain tag already means read-only.
