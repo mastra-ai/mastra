@@ -1433,18 +1433,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       };
 
       /**
-       * The run was aborted. Like the default pipeline, which waits for a started tool
-       * before it emits `abort`, every eager call that has started is waited out,
-       * whether or not it observes its signal: abort is cooperative, and a tool that
-       * ignores it still does its side effect. Each outcome is then committed and
-       * streamed, so the aborted run records it. Work that never started is dropped.
+       * Keep outcomes returned during the run's bounded cancellation window.
+       * Calls still running at the deadline are recorded as incomplete; work that
+       * never started is dropped.
        */
       const settleEagerWorkOnAbort = async (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
         if (!eagerCoordinator) return;
-        eagerCoordinator.stop({ permanent: true });
-        await eagerCoordinator.settleRunning();
-        const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
-        if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
+        await eagerCoordinator.settleOnAbort();
         for (const chunk of await commitCarriedEagerWork(currentMessageId)) {
           if (chunk.type === 'tool-call') continue;
           safeEnqueue(controller, { ...chunk, runId, from: ChunkFrom.AGENT } as ChunkType<OUTPUT>);
@@ -1454,14 +1449,14 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
         // A caller abort stops further eager dispatch permanently. Work already running is
-        // left to finish: the abort exit waits it out and commits it. Registered once for
+        // given a bounded window to finish and be committed. Registered once for
         // the whole run rather than per iteration, so long loops do not pile up listeners.
         if (!eagerAbortListenerRegistered && runAbortSignal) {
           eagerAbortListenerRegistered = true;
           // `runAbortSignal` is owned by this run (see `workflows/stream.ts`), which unlinks
           // it from the caller's signal when the run ends, so this listener cannot outlive
           // the run even when the caller reuses one signal across many runs.
-          runAbortSignal.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), { once: true });
+          runAbortSignal.addEventListener('abort', () => void eagerCoordinator.settleOnAbort(), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.

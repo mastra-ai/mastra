@@ -10,7 +10,7 @@ import { EagerToolExecutionCoordinator } from './eager-tool-execution';
 
 /**
  * Retry and fallback reuse finished eager work rather than running it twice.
- * Caller cancellation stops waiting for running work and discards late results.
+ * Caller cancellation keeps work completed within a bounded grace period.
  */
 
 type StreamPart = Record<string, unknown>;
@@ -262,7 +262,7 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     expect(recordedResults(stream)).toContain('[redacted output-available]');
   });
 
-  it('discards a returned result when the caller aborts before it is recorded', async () => {
+  it('records a returned result when the caller aborts before it is recorded', async () => {
     const executions: string[] = [];
     const abortController = new AbortController();
     const returning = deferred();
@@ -288,8 +288,8 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     await drain(stream);
 
     expect(executions).toEqual(['a']);
-    expect(recordedResults(stream)).not.toContain('answered-a');
-    expect(recordedResults(stream)).toContain('"state":"call"');
+    expect(recordedResults(stream)).toContain('answered-a');
+    expect(recordedResults(stream)).toContain('"state":"result"');
     expect(await stream.finishReason).toBe('aborted');
   });
 

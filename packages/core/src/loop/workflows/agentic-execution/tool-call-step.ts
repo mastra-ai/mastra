@@ -1427,6 +1427,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           toolCallId: inputData.toolCallId,
           toolName: inputData.toolName,
           abortSignal,
+          settleSignal: isEagerExecution ? callerAbortSignal : undefined,
           // The tool asked to suspend or bail and then swallowed the throw. Its return value
           // is the return value of a call that was never supposed to complete here, so bail
           // before it is published: `onOutput` is a side effect the foreach will produce

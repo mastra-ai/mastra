@@ -1,5 +1,6 @@
 import type { IMastraLogger } from '../../../logger';
 import { ensureSerializable } from '../../../utils/safe-stringify';
+import { TOOL_ABORT_GRACE_MS } from '../tool-abort-grace';
 
 export type ExecuteToolOutcome =
   /** Execution completed. `result` is the serializable value engines should
@@ -55,6 +56,8 @@ export async function executeToolCall(deps: {
   toolCallId: string;
   toolName: string;
   abortSignal?: AbortSignal;
+  /** Eager attempts are cancelled immediately by their coordinator after the run's grace window. */
+  settleSignal?: AbortSignal;
   /** Engine wrapper around live execution (e.g. durable's `markRunActive`); returns a release fn. */
   acquireExecution?: () => () => void;
   /**
@@ -75,21 +78,23 @@ export async function executeToolCall(deps: {
   try {
     if (abortSignal?.aborted) throw aborted;
     const release = deps.acquireExecution?.();
+    const settleSignal = deps.settleSignal ?? abortSignal;
     let onAbort: (() => void) | undefined;
+    let timer: ReturnType<typeof setTimeout> | undefined;
     let rawResult: unknown;
     try {
-      rawResult = abortSignal
+      rawResult = settleSignal
         ? await new Promise<unknown>((resolve, reject) => {
-            // Preserve synchronous authorization/bailout errors from a tool
-            // that aborts itself before throwing, ahead of abort classification.
-            onAbort = () => queueMicrotask(() => reject(aborted));
-            abortSignal.addEventListener('abort', onAbort, { once: true });
-            if (abortSignal.aborted) {
+            onAbort = () => {
+              if (deps.settleSignal) queueMicrotask(() => reject(aborted));
+              else timer = setTimeout(() => reject(aborted), TOOL_ABORT_GRACE_MS);
+            };
+            settleSignal.addEventListener('abort', onAbort, { once: true });
+            if (settleSignal.aborted) {
               onAbort();
               return;
             }
-            // Attach both handlers even if cancellation wins. Late tool failures
-            // must be consumed, and late results must never reach output hooks.
+            // Consume abandoned rejections even after the grace window expires.
             Promise.resolve(tool.execute(deps.args, deps.toolOptions)).then(resolve, error => {
               executionError = error;
               reject(error);
@@ -97,7 +102,8 @@ export async function executeToolCall(deps: {
           })
         : await tool.execute(deps.args, deps.toolOptions);
     } finally {
-      if (onAbort) abortSignal?.removeEventListener('abort', onAbort);
+      if (onAbort) settleSignal?.removeEventListener('abort', onAbort);
+      if (timer) clearTimeout(timer);
       release?.();
     }
     deps.assertNotBailedOut?.();

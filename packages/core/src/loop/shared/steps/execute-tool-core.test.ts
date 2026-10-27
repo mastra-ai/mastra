@@ -1,5 +1,6 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { TOOL_ABORT_GRACE_MS } from '../tool-abort-grace';
 import { executeToolCall } from './execute-tool-core';
 
 function run(execute: () => unknown, onOutput?: (params: { output: unknown }) => void) {
@@ -52,6 +53,67 @@ describe('executeToolCall', () => {
     },
   );
 
+  it.each([true, false])('retains a result only inside the cancellation window (inside: %s)', async inside => {
+    vi.useFakeTimers();
+    const controller = new AbortController();
+    const execution = Promise.withResolvers<string>();
+    const onOutput = vi.fn();
+    const pending = executeToolCall({
+      tool: { execute: () => execution.promise, onOutput },
+      args: {},
+      toolOptions: {},
+      toolCallId: 'call-1',
+      toolName: 'notify',
+      abortSignal: controller.signal,
+    });
+    let settled = false;
+    void pending.then(() => {
+      settled = true;
+    });
+    try {
+      controller.abort();
+      await vi.advanceTimersByTimeAsync(TOOL_ABORT_GRACE_MS - 1);
+      expect(settled).toBe(false);
+      if (inside) {
+        execution.resolve('sent');
+        await expect(pending).resolves.toEqual({ status: 'success', result: 'sent', rawResult: 'sent' });
+        expect(onOutput).toHaveBeenCalledTimes(1);
+      } else {
+        await vi.advanceTimersByTimeAsync(1);
+        await expect(pending).resolves.toEqual({ status: 'aborted' });
+        execution.resolve('too late');
+        expect(onOutput).not.toHaveBeenCalled();
+      }
+      expect(vi.getTimerCount()).toBe(0);
+    } finally {
+      execution.resolve('cleanup');
+      vi.useRealTimers();
+      await pending;
+    }
+  });
+
+  it('leaves a failure during the cancellation window incomplete', async () => {
+    const controller = new AbortController();
+    const onOutput = vi.fn();
+    await expect(
+      executeToolCall({
+        tool: {
+          execute: async () => {
+            controller.abort();
+            throw new Error('cancelled work failed');
+          },
+          onOutput,
+        },
+        args: {},
+        toolOptions: {},
+        toolCallId: 'call-1',
+        toolName: 'notify',
+        abortSignal: controller.signal,
+      }),
+    ).resolves.toEqual({ status: 'aborted' });
+    expect(onOutput).not.toHaveBeenCalled();
+  });
+
   it('does not execute a tool whose signal is already aborted', async () => {
     const controller = new AbortController();
     controller.abort(Object.assign(new Error('not an authorization denial'), { name: 'FGADeniedError' }));
@@ -68,7 +130,7 @@ describe('executeToolCall', () => {
     expect(execute).not.toHaveBeenCalled();
   });
 
-  it('handles synchronous self-abort without publishing a successful result', async () => {
+  it('keeps a successful result returned during self-abort', async () => {
     const controller = new AbortController();
     const onOutput = vi.fn();
     const outcome = await executeToolCall({
@@ -85,8 +147,8 @@ describe('executeToolCall', () => {
       toolName: 'notify',
       abortSignal: controller.signal,
     });
-    expect(outcome).toEqual({ status: 'aborted' });
-    expect(onOutput).not.toHaveBeenCalled();
+    expect(outcome).toEqual({ status: 'success', result: 'late', rawResult: 'late' });
+    expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: 'late' }));
   });
 
   it.each(['FGA', 'bailout'])('preserves an immediately rejected %s error after self-abort', async kind => {

@@ -1,5 +1,6 @@
 import { isToolBackgroundEligible } from '../../../background-tasks/resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../../../background-tasks/types';
+import { TOOL_ABORT_GRACE_MS } from '../../shared/tool-abort-grace';
 
 type EagerToolResult = unknown;
 
@@ -83,6 +84,7 @@ const EAGER_SUSPENSION_INTENT = Symbol('eager-tool-suspension-intent');
 type RunningExecution = {
   controller: AbortController;
   releasePermit: () => void;
+  work?: CompletedEagerWork;
 };
 
 /**
@@ -150,6 +152,7 @@ export class EagerToolExecutionCoordinator {
   #dispatchSequence = 0;
   #stopped = false;
   #stoppedPermanently = false;
+  #abortSettlement?: Promise<void>;
 
   constructor(private readonly getConcurrency: () => number) {}
 
@@ -203,7 +206,11 @@ export class EagerToolExecutionCoordinator {
       const run = () => {
         this.#running++;
         holdsPermit = true;
-        this.#controllers.set(toolCallId, { controller, releasePermit });
+        this.#controllers.set(toolCallId, {
+          controller,
+          releasePermit,
+          work: call ? { toolCallId, ...call, sequence, incomplete: true } : undefined,
+        });
         const inFlight: Promise<unknown> = execute(controller.signal)
           .then(
             result => {
@@ -309,7 +316,8 @@ export class EagerToolExecutionCoordinator {
   stop({
     permanent = false,
     cancelRunning = false,
-  }: { permanent?: boolean; cancelRunning?: boolean } = {}): CompletedEagerWork[] {
+    keepIncomplete = false,
+  }: { permanent?: boolean; cancelRunning?: boolean; keepIncomplete?: boolean } = {}): CompletedEagerWork[] {
     this.#stopped = true;
     this.#stoppedPermanently ||= permanent;
     for (const queued of this.#queued.splice(0)) {
@@ -338,6 +346,7 @@ export class EagerToolExecutionCoordinator {
       // a controller map that still holds the executions being abandoned.
       this.#controllers.clear();
       for (const [toolCallId, running] of cancelled) {
+        if (keepIncomplete && running.work && this.#executions.has(toolCallId)) completed.push(running.work);
         // Deleting here is belt-and-braces at today's only call site, which opens a new
         // turn immediately after. It is the coordinator's own invariant: cancelled work
         // is never adoptable, whoever calls this and whatever they do next.
@@ -347,7 +356,23 @@ export class EagerToolExecutionCoordinator {
       }
     }
 
-    return completed;
+    return completed.sort((a, b) => a.sequence - b.sequence);
+  }
+
+  /** Start once at run abort, including when the foreach is already awaiting adoption. */
+  settleOnAbort(): Promise<void> {
+    this.#abortSettlement ??= (async () => {
+      this.stop({ permanent: true });
+      const deadline = new AbortController();
+      const timer = setTimeout(() => deadline.abort(), TOOL_ABORT_GRACE_MS);
+      try {
+        await this.settleRunning(deadline.signal);
+        this.carryDiscardedWork(this.stop({ permanent: true, cancelRunning: true, keepIncomplete: true }));
+      } finally {
+        clearTimeout(timer);
+      }
+    })();
+    return this.#abortSettlement;
   }
 
   /**

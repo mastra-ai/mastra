@@ -16,6 +16,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { MockMemory } from '../../../../memory/mock';
 import { createTool } from '../../../../tools';
 import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '../aimock-scenario';
 
@@ -116,6 +117,56 @@ describeForAllEngines(
           execution.resolve({ done: true });
           await scenario.catch(() => {});
         }
+      },
+    );
+
+    it.each(engine === 'normal' || engine === 'fs' ? [true, false] : [false])(
+      'keeps a result returned just after caller abort (eager: %s)',
+      async eager => {
+        const controller = new AbortController();
+        const memory = new MockMemory();
+        const threadId = `payment-${engine}-${eager}`;
+        const resourceId = 'payment-customer';
+        const { output, requests, chunks } = await runLoopScenario({
+          memory,
+          threadId,
+          resourceId,
+          engine,
+          llm: getMock(),
+          prompt: 'Complete the payment',
+          defaultOptions: { eagerToolExecution: eager },
+          abortSignal: controller.signal,
+          collectChunks: true,
+          tools: {
+            payment: createTool({
+              id: 'payment',
+              description: 'Complete the payment',
+              inputSchema: z.object({}),
+              execute: async () => {
+                controller.abort();
+                await new Promise(resolve => setTimeout(resolve, 20));
+                return { receipt: 'PAID_1488' };
+              },
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [{ id: 'call_payment', name: 'payment', arguments: {} }],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not reach here' });
+          },
+        });
+        expect(await output.finishReason).toBe('aborted');
+        expect(requests).toHaveLength(1);
+        expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
+        expect(chunks?.filter(chunk => chunk.type === 'tool-result')).toHaveLength(1);
+        expect(chunks!.findIndex(chunk => chunk.type === 'tool-result')).toBeLessThan(
+          chunks!.findIndex(chunk => chunk.type === 'abort'),
+        );
+        expect(JSON.stringify((await memory.recall({ threadId, resourceId })).messages)).toContain('PAID_1488');
       },
     );
 
