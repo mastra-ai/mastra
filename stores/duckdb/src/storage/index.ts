@@ -190,6 +190,10 @@ export class ObservabilityStorageDuckDB extends CoreObservabilityStorage {
     return delegate.init(...args);
   }
 
+  async close(): Promise<void> {
+    await this.db.close();
+  }
+
   async migrateSpans(
     ...args: Parameters<ObservabilityStoreImpl['migrateSpans']>
   ): ReturnType<ObservabilityStoreImpl['migrateSpans']> {
