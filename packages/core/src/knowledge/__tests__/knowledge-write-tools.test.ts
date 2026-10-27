@@ -740,6 +740,14 @@ describe('Knowledge write tools', () => {
     expect(await store.getNode(source.id)).toMatchObject({ mergedInto: target.id });
     expect(await store.resolveNode({ name: source.name, scope })).toMatchObject({ id: target.id });
 
+    // A merged node's id must not become the name of a new node, with or without kind.
+    for (const extra of [{}, { kind: 'project' }]) {
+      await expect(
+        tools.knowledge_record!.execute?.({ op: 'add', node: source.id, text: 'After merge.', ...extra }, {} as any),
+      ).rejects.toThrow(`was merged into ${target.id}`);
+    }
+    expect((await store.listNodes({ scope })).some(node => node.name === source.id)).toBe(false);
+
     const page = (await tools.knowledge_node!.execute?.(
       {
         op: 'write',

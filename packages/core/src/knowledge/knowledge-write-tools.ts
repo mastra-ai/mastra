@@ -263,7 +263,11 @@ export function createKnowledgeWriteTools(
     if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
     const store = await getStore(memory);
     const byId = await store.getNode(value.node);
-    if (byId && !byId.mergedInto) {
+    if (byId?.mergedInto) {
+      // A merged node's id names nothing writable; never let it fall through to create a node named by the id.
+      throw new Error(`Knowledge node "${value.node}" was merged into ${byId.mergedInto}; add the record there.`);
+    }
+    if (byId) {
       requireVisible(byId.scope, options, 'Knowledge node', 'append');
       const scope = resolveWriteScope(options, value.scope);
       const node = await ensureNodeCoversRecord(store, byId, scope);
