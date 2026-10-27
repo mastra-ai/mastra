@@ -20,7 +20,7 @@ import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '.
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import {
   connectGithub,
-  unavailableInstallMessage,
+  unavailableInstallNotice,
   INSTALL_ON_GITHUB_ORGANIZATION,
   manageGithubConnection,
 } from '../../workspaces/services/github';
@@ -110,21 +110,25 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
   );
   if (access) return <SettingsRow label={label} description={access} />;
   if (!status.enabled && !status.connected) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
-  const unavailableInstall = unavailableInstallMessage(status);
-  if (!status.connected && !showAvailable && !unavailableInstall) return null;
+  const notice = unavailableInstallNotice(status);
+  if (!status.connected && !showAvailable && !notice) return null;
   const accounts = status.installations
     .map(installation => installation.accountLogin || `Installation ${installation.installationId}`)
     .join(', ');
 
   return (
-    <SettingsRow label={label} description={[accounts, unavailableInstall].filter(Boolean).join(' · ') || undefined}>
+    <SettingsRow label={label} description={[accounts, notice?.message].filter(Boolean).join(' · ') || undefined}>
       {status.connected ? (
         <ConnectionManagementButton onClick={() => manageGithubConnection(baseUrl)}>
           Manage GitHub connection
         </ConnectionManagementButton>
+      ) : notice?.temporary ? (
+        <Button size="sm" icon={<RotateCcw />} disabled={query.isFetching} onClick={() => void query.refetch()}>
+          Retry
+        </Button>
       ) : (
         <Button size="sm" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
-          {unavailableInstall ? INSTALL_ON_GITHUB_ORGANIZATION : 'Connect GitHub'}
+          {notice ? INSTALL_ON_GITHUB_ORGANIZATION : 'Connect GitHub'}
         </Button>
       )}
     </SettingsRow>

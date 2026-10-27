@@ -5,7 +5,8 @@ import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
-import { fetchGithubStatus, unavailableInstallMessage } from '../services/github';
+import { githubStatusQueryOptions } from '../../../../hooks/useGithubStatus';
+import { unavailableInstallNotice } from '../services/github';
 
 const handledCallbackKeys = new Set<string>();
 const callbackParamNames = [
@@ -80,13 +81,11 @@ export function GitHubAppCallbackHandler() {
           'GitHub App installation requested. An organization owner needs to approve it before repositories appear here.',
         );
       } else if (installed) {
-        void queryClient
-          .fetchQuery({ queryKey: queryKeys.githubStatus(), queryFn: () => fetchGithubStatus(baseUrl) })
-          .then(status => {
-            const unavailableInstall = status.connected ? undefined : unavailableInstallMessage(status);
-            if (unavailableInstall) toast.warning(unavailableInstall, { duration: Infinity });
-            else toast.success('GitHub App installed');
-          });
+        void queryClient.fetchQuery(githubStatusQueryOptions(baseUrl)).then(status => {
+          const notice = status.connected ? undefined : unavailableInstallNotice(status);
+          if (!notice) toast.success('GitHub App installed');
+          else toast.warning(notice.message, notice.temporary ? undefined : { duration: Infinity });
+        });
       } else if (userAuthorized) {
         toast.success('GitHub account connected');
       } else if (errorMessage) {

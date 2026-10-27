@@ -5,6 +5,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
+import type { GithubStatus } from '../../services/github';
 import { VcsFactoryStep } from '../VcsFactoryStep';
 
 const connectedGithub = {
@@ -12,7 +13,7 @@ const connectedGithub = {
   connected: true,
   installations: [{ installationId: 7, accountLogin: 'octo', accountType: 'User' }],
   reason: 'ready',
-};
+} satisfies GithubStatus;
 
 const repo = {
   id: 99,
@@ -63,7 +64,7 @@ describe('VCS Factory step', () => {
         HttpResponse.json({
           ...connectedGithub,
           hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
-        }),
+        } satisfies GithubStatus),
       ),
     );
     const onSelectRepository = vi.fn();
@@ -91,7 +92,7 @@ describe('VCS Factory step', () => {
           installations: [],
           reason: 'personal_install_hidden',
           hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
-        }),
+        } satisfies GithubStatus),
       ),
     );
     const onConnect = vi.fn();
@@ -103,8 +104,7 @@ describe('VCS Factory step', () => {
         onSelectRepository={vi.fn()}
       />,
     );
-    expect(await screen.findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
-    await userEvent.click(screen.getByRole('button', { name: 'Install on a GitHub organization' }));
+    await userEvent.click(await screen.findByRole('button', { name: 'Install on a GitHub organization' }));
     expect(onConnect).toHaveBeenCalledOnce();
   });
 

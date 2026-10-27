@@ -78,7 +78,7 @@ export interface GithubStatus {
   /** Set when the platform withholds a personal GitHub account install because the platform org has other members. */
   hiddenPersonalInstallReason?: 'personal_install_requires_single_member_org' | null;
   /** Installations the platform lists but refuses to this platform org, with why. */
-  unusableInstallations?: Array<GithubInstallation & { unusableReason: GithubInstallationUnusableReason }>;
+  unusableInstallations?: Array<GithubInstallation & { unusableReason: string }>;
   /**
    * Whether the signed-in user has personally authorized the GitHub App, so
    * issues/PRs they originate are authored as them instead of the App bot.
@@ -155,23 +155,38 @@ export function connectGithub(baseUrl: string): void {
 
 export const INSTALL_ON_GITHUB_ORGANIZATION = 'Install on a GitHub organization';
 
-const UNUSABLE_INSTALL_REASONS: Record<GithubInstallationUnusableReason, string> = {
+const UNUSABLE_INSTALL_REASONS: Record<string, string> = {
   linker_not_organization_member: "can't be used: the member who linked it left this platform org.",
   linker_membership_unavailable: "can't be used right now: the linker's platform org membership couldn't be checked.",
   personal_installation_without_linker: "can't be used: no platform org member linked it.",
   installation_not_in_organization: "isn't linked to this platform org.",
   not_visible_to_user: "isn't available to you in this platform org.",
-};
+} satisfies Record<GithubInstallationUnusableReason, string>;
 
-export function unavailableInstallMessage(status: GithubStatus | undefined): string | undefined {
+export interface UnavailableInstallNotice {
+  message: string;
+  /** The platform could not decide right now; retrying may clear it, installing elsewhere will not. */
+  temporary: boolean;
+}
+
+export function unavailableInstallNotice(status: GithubStatus | undefined): UnavailableInstallNotice | undefined {
   if (status?.hiddenPersonalInstallReason) {
-    return status.connected
-      ? 'Your personal GitHub account install is hidden because this platform org has other members.'
-      : 'The GitHub App is installed on a personal GitHub account, hidden because this platform org has other members.';
+    return {
+      message: status.connected
+        ? 'A personal GitHub account install is hidden because this platform org has other members.'
+        : 'The GitHub App is installed on a personal GitHub account, hidden because this platform org has other members.',
+      temporary: false,
+    };
   }
   const unusable = status?.unusableInstallations?.[0];
   if (!unusable) return undefined;
-  return `The GitHub App on ${unusable.accountLogin ?? 'a GitHub account'} ${UNUSABLE_INSTALL_REASONS[unusable.unusableReason]}`;
+  const reason = Object.hasOwn(UNUSABLE_INSTALL_REASONS, unusable.unusableReason)
+    ? UNUSABLE_INSTALL_REASONS[unusable.unusableReason]
+    : "can't be used by this platform org.";
+  return {
+    message: `The GitHub App on ${unusable.accountLogin ?? 'a GitHub account'} ${reason}`,
+    temporary: unusable.unusableReason === 'linker_membership_unavailable',
+  };
 }
 
 /**

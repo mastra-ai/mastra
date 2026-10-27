@@ -6,6 +6,7 @@ import { afterEach, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
+import type { GithubStatus } from '../../services/github';
 import { CreateFactoryRepositoryRows } from '../create-factory/CreateFactoryRepositoryRows';
 
 afterEach(() => vi.restoreAllMocks());
@@ -81,6 +82,40 @@ it('calls onConnect for GitHub directly without any Platform redirect', async ()
   await userEvent.setup().click(github);
   expect(onConnect).toHaveBeenCalledOnce();
   expect(open).not.toHaveBeenCalledWith('https://projects.mastra.ai', expect.anything(), expect.anything());
+});
+
+it('offers installing on a GitHub organization when the only install is a hidden personal GitHub account install', async () => {
+  server.use(
+    http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+      HttpResponse.json({
+        enabled: true,
+        connected: false,
+        installations: [],
+        hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        reason: 'personal_install_hidden',
+      } satisfies GithubStatus),
+    ),
+    http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+      HttpResponse.json({ enabled: false, configured: false, reason: 'missing_config' }),
+    ),
+  );
+  const onConnect = vi.fn();
+
+  renderWithProviders(
+    <Command>
+      <CreateFactoryRepositoryRows
+        query=""
+        githubRedirecting={false}
+        onConnect={onConnect}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />
+    </Command>,
+  );
+
+  await userEvent.setup().click(await screen.findByRole('option', { name: /Install on a GitHub organization/ }));
+  expect(onConnect).toHaveBeenCalledOnce();
+  expect(screen.queryByRole('option', { name: /Connect GitHub/ })).not.toBeInTheDocument();
 });
 
 it('starts a Nango connect session when the user picks the GitLab row', async () => {

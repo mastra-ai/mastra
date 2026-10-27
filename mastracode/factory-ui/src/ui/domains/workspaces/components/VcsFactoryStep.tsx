@@ -13,8 +13,8 @@ import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { unavailableInstallMessage, INSTALL_ON_GITHUB_ORGANIZATION, isGitLabRepository } from '../services/github';
-import type { SourceControlRepository } from '../services/github';
+import { INSTALL_ON_GITHUB_ORGANIZATION, isGitLabRepository, unavailableInstallNotice } from '../services/github';
+import type { SourceControlRepository, UnavailableInstallNotice } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { GitLabIcon } from '../../../ui/icons';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
@@ -87,7 +87,7 @@ export function VcsFactoryStep({
   const debouncedQuery = useDebouncedValue(query, 750);
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
-  const unavailableInstall = unavailableInstallMessage(githubStatus.data);
+  const installNotice = unavailableInstallNotice(githubStatus.data);
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
   const selectedProvider = sourceControlView({ pinned: providerChoice, githubConnected: connected, gitlabConfigured });
@@ -117,11 +117,12 @@ export function VcsFactoryStep({
           githubUnavailable={
             githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
           }
-          githubUnavailableInstall={unavailableInstall}
+          githubInstallNotice={installNotice}
           gitlabConnected={gitlabConfigured}
           gitlabUnavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
           onChooseGithub={() => {
             if (connected) setProviderChoice('github');
+            else if (installNotice?.temporary) void githubStatus.refetch();
             else onConnect();
           }}
           onGitlabConnected={() => {
@@ -162,9 +163,9 @@ export function VcsFactoryStep({
               onPreviewRepository?.(undefined);
             }}
           />
-          {selectedProvider === 'github' && unavailableInstall && (
+          {selectedProvider === 'github' && installNotice && (
             <Txt as="p" variant="caption" tone="muted">
-              {unavailableInstall}
+              {installNotice.message}
             </Txt>
           )}
           {repositoryQuery.isError && (
@@ -234,7 +235,7 @@ function ProviderChoice({
   githubConnected,
   githubRedirecting,
   githubUnavailable,
-  githubUnavailableInstall,
+  githubInstallNotice,
   gitlabConnected,
   gitlabUnavailableReason,
   onChooseGithub,
@@ -245,7 +246,7 @@ function ProviderChoice({
   githubConnected: boolean;
   githubRedirecting: boolean;
   githubUnavailable: boolean;
-  githubUnavailableInstall?: string;
+  githubInstallNotice?: UnavailableInstallNotice;
   gitlabConnected: boolean;
   gitlabUnavailableReason?: GitLabUnavailableReason;
   onChooseGithub: () => void;
@@ -261,7 +262,7 @@ function ProviderChoice({
         description={
           githubUnavailable
             ? 'Unavailable for this deployment.'
-            : (githubUnavailableInstall ?? 'Repositories, branches, and pull requests.')
+            : (githubInstallNotice?.message ?? 'Repositories, branches, and pull requests.')
         }
         connected={githubConnected}
         action={
@@ -269,9 +270,11 @@ function ProviderChoice({
             {githubRedirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
             {githubConnected
               ? 'Continue with GitHub'
-              : githubUnavailableInstall
-                ? INSTALL_ON_GITHUB_ORGANIZATION
-                : 'Connect GitHub'}
+              : githubInstallNotice?.temporary
+                ? 'Retry GitHub'
+                : githubInstallNotice
+                  ? INSTALL_ON_GITHUB_ORGANIZATION
+                  : 'Connect GitHub'}
           </Button>
         }
       />

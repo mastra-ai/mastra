@@ -13,6 +13,7 @@ import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OnboardingPage } from '../../../../pages/OnboardingPage';
+import type { GithubStatus } from '../../services/github';
 import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
 function renderCallback(initialEntry: string) {
@@ -119,7 +120,7 @@ describe('GitHubAppCallbackHandler', () => {
           installations: [],
           reason: 'personal_install_hidden',
           hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
-        }),
+        } satisfies GithubStatus),
       ),
     );
     renderCallback('/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=123');

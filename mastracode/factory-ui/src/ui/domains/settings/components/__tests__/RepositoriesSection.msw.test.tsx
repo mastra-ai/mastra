@@ -6,6 +6,7 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import type { GithubStatus } from '../../../workspaces/services/github';
 import { RepositoriesSection } from '../RepositoriesSection';
 import { environmentPayload, environmentRepository } from './fixtures/environment';
 
@@ -299,6 +300,113 @@ describe('Repositories settings', () => {
     expect(await screen.findByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
     expect(screen.queryByText('GitLab repositories could not be loaded.')).not.toBeInTheDocument();
   });
+
+  it('keeps GitHub repositories addable when an unusable install sits beside a usable one', async () => {
+    const user = userEvent.setup();
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 1, accountLogin: 'acme', accountType: 'Organization' }],
+          unusableInstallations: [
+            {
+              installationId: 9,
+              accountLogin: 'ada',
+              accountType: 'User',
+              unusableReason: 'linker_not_organization_member',
+            },
+          ],
+          reason: 'ready',
+        } satisfies GithubStatus),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () =>
+        HttpResponse.json({
+          repos: [
+            {
+              id: 42,
+              fullName: 'acme/widget',
+              name: 'widget',
+              owner: 'acme',
+              defaultBranch: 'main',
+              private: true,
+              installationId: 1,
+              installationStorageId: 'inst-1',
+              sandboxProvider: 'custom',
+              sandboxWorkdir: '~/widget',
+            },
+          ],
+        }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+    expect(await screen.findByRole('button', { name: 'Add acme/widget' })).toBeEnabled();
+    expect(screen.getByText(/The GitHub App on ada/)).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Install on a GitHub organization' })).not.toBeInTheDocument();
+  });
+
+  it.each([
+    {
+      situation: 'a hidden personal GitHub account install',
+      status: {
+        hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        reason: 'personal_install_hidden',
+      },
+      action: 'Install on a GitHub organization',
+    },
+    {
+      situation: 'an install with a reason this build does not know',
+      status: {
+        unusableInstallations: [
+          {
+            installationId: 9,
+            accountLogin: 'ada',
+            accountType: 'User',
+            unusableReason: 'personal_installation_not_shared',
+          },
+        ],
+        reason: 'installations_unusable',
+      },
+      action: 'Install on a GitHub organization',
+    },
+    {
+      situation: 'an install whose linker membership could not be checked',
+      status: {
+        unusableInstallations: [
+          {
+            installationId: 9,
+            accountLogin: 'ada',
+            accountType: 'User',
+            unusableReason: 'linker_membership_unavailable',
+          },
+        ],
+        reason: 'installations_unusable',
+      },
+      action: 'Retry GitHub',
+    },
+  ] satisfies Array<{ situation: string; status: Partial<GithubStatus>; action: string }>)(
+    'given only $situation, the picker explains it and offers $action instead of the generic connect hint',
+    async ({ status, action }) => {
+      const user = userEvent.setup();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+          HttpResponse.json({ enabled: true, connected: false, installations: [], ...status } satisfies GithubStatus),
+        ),
+        http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+          HttpResponse.json({ enabled: false, configured: false, reason: 'missing_config' }),
+        ),
+      );
+
+      renderRepositoriesSettings();
+      await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+      const dialog = await screen.findByRole('dialog', { name: 'Add repository' });
+      expect(await within(dialog).findByRole('button', { name: action })).toBeEnabled();
+      expect(dialog).not.toHaveTextContent('undefined');
+      expect(within(dialog).queryByText(/Connect GitHub or GitLab|No source-control provider/)).not.toBeInTheDocument();
+    },
+  );
 
   it('excludes a checkout without unlinking it, then removes only the requested repository with safe retry', async () => {
     const user = userEvent.setup();

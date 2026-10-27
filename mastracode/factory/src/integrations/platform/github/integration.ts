@@ -85,20 +85,13 @@ type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | 
 
 type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
 
-type PlatformInstallationUnusableReason =
-  | 'installation_not_in_organization'
-  | 'not_visible_to_user'
-  | 'linker_not_organization_member'
-  | 'linker_membership_unavailable'
-  | 'personal_installation_without_linker';
-
 type PlatformGithubInstallation = {
   installationId: number;
   accountLogin: string;
   accountType: string;
   suspendedAt: string | null;
   usable: boolean;
-  unusableReason?: PlatformInstallationUnusableReason | null;
+  unusableReason?: string | null;
 };
 
 type PlatformGithubUserConnection = {
@@ -851,7 +844,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       installationId: number;
       accountLogin: string;
       accountType: string;
-      unusableReason: PlatformInstallationUnusableReason;
+      unusableReason: string;
     }>;
     hiddenPersonalInstallReason: PlatformHiddenPersonalInstallReason | null;
   }> {

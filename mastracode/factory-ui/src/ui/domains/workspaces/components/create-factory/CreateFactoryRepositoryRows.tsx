@@ -16,6 +16,7 @@ import { GitLabIcon } from '../../../../ui/icons';
 import { gitLabProjectRepository } from '../../../factory/services/gitlab';
 import type { GitLabRepository } from '../../../factory/services/gitlab';
 import type { GithubRepo, GithubStatus, SourceControlRepository } from '../../services/github';
+import { INSTALL_ON_GITHUB_ORGANIZATION, unavailableInstallNotice } from '../../services/github';
 import { CreateFactoryPaletteAlert, CreateFactoryPaletteMessage } from './CreateFactoryPalette';
 
 export interface CreateFactoryRepositoryRowsProps {
@@ -66,6 +67,7 @@ export function CreateFactoryRepositoryRows({
     return <SkeletonRows label="Loading repositories" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
   }
 
+  const installNotice = unavailableInstallNotice(githubStatus.data);
   const githubRows = !connected ? (
     (() => {
       const unavailable =
@@ -75,11 +77,19 @@ export function CreateFactoryRepositoryRows({
         <CommandGroup heading="GitHub">
           <CommandPaletteItem
             icon={githubRedirecting ? <Spinner size="sm" aria-label="Connecting to GitHub" /> : <GithubIcon />}
-            title={unavailable ? 'GitHub unavailable' : 'Connect GitHub'}
-            subtitle={connectionMessage(githubStatus.data)}
+            title={
+              unavailable
+                ? 'GitHub unavailable'
+                : installNotice?.temporary
+                  ? 'Retry GitHub'
+                  : installNotice
+                    ? INSTALL_ON_GITHUB_ORGANIZATION
+                    : 'Connect GitHub'
+            }
+            subtitle={installNotice?.message ?? connectionMessage(githubStatus.data)}
             value="connect-github"
             disabled={unavailable || githubRedirecting}
-            onSelect={onConnect}
+            onSelect={installNotice?.temporary ? () => void githubStatus.refetch() : onConnect}
           />
         </CommandGroup>
       );
@@ -91,7 +101,7 @@ export function CreateFactoryRepositoryRows({
         <CommandPaletteItem
           icon={<Settings2 />}
           title="Manage GitHub connection"
-          subtitle="Add installations or grant access to more repositories"
+          subtitle={installNotice?.message ?? 'Add installations or grant access to more repositories'}
           value="manage-github"
           onSelect={onManageConnection}
         />

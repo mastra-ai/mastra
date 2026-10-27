@@ -27,7 +27,7 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import {
   connectGithub,
-  unavailableInstallMessage,
+  unavailableInstallNotice,
   INSTALL_ON_GITHUB_ORGANIZATION,
   isGitLabRepository,
 } from '../services/github';
@@ -84,7 +84,7 @@ export function AddRepositoryPicker({
   const githubUnavailable = githubStatus.data?.reason === 'unavailable';
   const gitlabUnavailable = gitlabStatus.data?.reason === 'unavailable';
   const statusUnavailable = githubUnavailable || gitlabUnavailable;
-  const unavailableInstall = unavailableInstallMessage(githubStatus.data);
+  const installNotice = unavailableInstallNotice(githubStatus.data);
   const canSearch = githubConnected || gitlabConfigured;
   const waitingForSearch =
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
@@ -131,18 +131,28 @@ export function AddRepositoryPicker({
             onRetry={() => void githubStatus.refetch()}
           />
         )}
-        {unavailableInstall && (
+        {installNotice && (
           <Notice
             variant="info"
             action={
-              githubConnected ? undefined : (
+              githubConnected ? undefined : installNotice.temporary ? (
+                <Button
+                  size="sm"
+                  variant="ghost"
+                  icon={<RotateCcw />}
+                  disabled={githubStatus.isFetching}
+                  onClick={() => void githubStatus.refetch()}
+                >
+                  Retry GitHub
+                </Button>
+              ) : (
                 <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
                   {INSTALL_ON_GITHUB_ORGANIZATION}
                 </Button>
               )
             }
           >
-            {unavailableInstall}
+            {installNotice.message}
           </Notice>
         )}
         {gitlabUnavailable && (
@@ -190,7 +200,7 @@ export function AddRepositoryPicker({
               </Txt>
             )}
           </div>
-        ) : !error && !statusUnavailable && !unavailableInstall ? (
+        ) : !error && !statusUnavailable && !installNotice ? (
           <Txt as="p" variant="caption" tone="muted">
             {githubUnavailableMessage(githubStatus.data)}
           </Txt>
