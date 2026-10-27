@@ -10,6 +10,7 @@ import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
+import { MASTRA_RESOURCE_ID_KEY, RequestContext } from '../../../request-context';
 import { InMemoryStore } from '../../../storage';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
@@ -125,6 +126,22 @@ describe('Agent streams option', () => {
     expect(durable.cache).toBeNull();
     // The inner agent never publishes on its own; its wrapper does.
     expect(agent.__getStreamBus()).toBeUndefined();
+  });
+
+  it('keeps the run owner while the run is replayable and drops it once the topic is cleared', async () => {
+    const pubsub = new RecordingPubSub();
+    const agent = makeAgent({ streams: { cleanupTimeoutMs: 200 } });
+    new Mastra({ agents: { agent }, pubsub, logger: false });
+
+    const output = await agent.stream('Say hello.', {
+      requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-1']]),
+    });
+    await output.consumeStream();
+    await waitForFinish(pubsub, output.runId);
+
+    // Finished but still replayable: observers must still be authorizable.
+    expect(agent.__getRunOwner(output.runId)).toEqual({ resourceId: 'user-1', threadId: undefined });
+    await vi.waitFor(() => expect(agent.__getRunOwner(output.runId)).toBeUndefined(), { timeout: 2000 });
   });
 
   describe('observe', () => {

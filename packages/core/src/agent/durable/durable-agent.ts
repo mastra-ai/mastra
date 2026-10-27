@@ -933,6 +933,16 @@ export class DurableAgent<
   }
 
   /**
+   * Owner of a run this process still tracks (until its auto-cleanup clears
+   * the replay history), or undefined.
+   * @internal
+   */
+  override __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    if (!this.#runRegistry.has(runId)) return undefined;
+    return { ...this.#runRegistry.getMemoryInfo(runId) };
+  }
+
+  /**
    * Mark `runId` as being recovered by this process, and return the release.
    * A second `recover()` of the same run in this process fails fast instead
    * of contending for the claim. Across processes the run's execution claim

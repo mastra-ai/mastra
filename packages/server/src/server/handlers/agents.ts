@@ -1,3 +1,4 @@
+import type { Mastra } from '@mastra/core';
 import { Agent, isDurableAgentLike } from '@mastra/core/agent';
 import type {
   AgentEditorConfig,
@@ -295,6 +296,7 @@ type ResumableStreamsAgent = {
   hasResumableStreams?: () => boolean;
   __getStreamBus?: () => { pubsub: PubSub } | undefined;
   __getPublishedRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
+  __getRunOwner?: (runId: string) => { resourceId?: string; threadId?: string } | undefined;
 };
 
 /** Whether the agent publishes its runs, so a closed HTTP reader can detach instead of aborting. */
@@ -2319,6 +2321,117 @@ export const QUEUE_AGENT_SIGNAL_ROUTE = createRoute({
   },
 });
 
+/**
+ * Authorizes a request against a durable run through its workflow rows: the
+ * caller must own the run, the run must belong to `agent`, and the caller must
+ * have `permission` on its thread. Throws 403 when access is denied.
+ * Returns 'missing' when no row exists and 'unverified' when the run has not
+ * checkpointed its input yet, so ownership cannot be confirmed.
+ */
+async function authorizeDurableRun({
+  mastra,
+  agent,
+  runId,
+  requestContext,
+  permission,
+}: {
+  mastra: Mastra;
+  agent: DurableAgentLike;
+  runId: string;
+  requestContext: RequestContext;
+  permission: string;
+}): Promise<'ok' | 'missing' | 'unverified'> {
+  const workflows = await mastra.getStorage()?.getStore('workflows');
+  const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
+  if (!run) return 'missing';
+  await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
+  const ownershipSchema = z.object({
+    context: z.object({
+      input: z.object({
+        agentId: z.string(),
+        state: z.object({ threadId: z.string().optional() }).optional(),
+      }),
+    }),
+  });
+  let parsed = ownershipSchema.safeParse(typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot);
+  if (!parsed.success) {
+    // Active local runs may not checkpoint the outer input until the segment finishes.
+    const execution = await workflows?.getWorkflowRunById({
+      workflowName: getDurableLoopWorkflowName(agent).replace(
+        DurableStepIds.AGENTIC_LOOP,
+        DurableStepIds.AGENTIC_EXECUTION,
+      ),
+      runId,
+    });
+    await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
+    parsed = ownershipSchema.safeParse(
+      typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
+    );
+  }
+  // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
+  if (!parsed.success) return 'unverified';
+  if (parsed.data.context.input.agentId !== agent.id) {
+    throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
+  }
+  const threadId = parsed.data.context.input.state?.threadId;
+  if (threadId) {
+    const memory = await agent.getMemory({ requestContext });
+    const thread = await memory?.getThreadById({ threadId });
+    await enforceThreadAccess({
+      mastra,
+      requestContext,
+      threadId,
+      thread,
+      effectiveResourceId: getContextResourceId(requestContext),
+      permission,
+    });
+  }
+  return 'ok';
+}
+
+/**
+ * Authorizes observing a run: the caller must own it and have read access to
+ * its thread. Uses the owner the agent tracks for runs whose replay history is
+ * held in this process, then the workflow rows of a durable run. Throws 404
+ * when the run cannot be found or verified.
+ */
+async function authorizeRunObservation({
+  mastra,
+  agent,
+  runId,
+  requestContext,
+}: {
+  mastra: Mastra;
+  agent: Agent<any, any, any, any>;
+  runId: string;
+  requestContext: RequestContext;
+}): Promise<void> {
+  const getOwner = (agent as unknown as ResumableStreamsAgent).__getRunOwner;
+  const owner = typeof getOwner === 'function' ? getOwner.call(agent, runId) : undefined;
+  if (owner) {
+    await validateRunOwnership(owner, getContextResourceId(requestContext), mastra);
+    if (owner.threadId) {
+      const memory = await agent.getMemory({ requestContext });
+      const thread = await memory?.getThreadById({ threadId: owner.threadId });
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: owner.threadId,
+        thread,
+        effectiveResourceId: getContextResourceId(requestContext),
+        permission: MastraFGAPermissions.MEMORY_READ,
+      });
+    }
+    return;
+  }
+  const access = isDurableAgentLike(agent)
+    ? await authorizeDurableRun({ mastra, agent, runId, requestContext, permission: MastraFGAPermissions.MEMORY_READ })
+    : 'missing';
+  if (access !== 'ok') {
+    throw new HTTPException(404, { message: 'Run not found' });
+  }
+}
+
 export const ABORT_AGENT_RUN_ROUTE = createRoute({
   method: 'POST',
   path: '/agents/:agentId/runs/:runId/abort',
@@ -2362,53 +2475,14 @@ export const ABORT_AGENT_RUN_ROUTE = createRoute({
         }
         return { aborted: agent.abortRunStream(runId) };
       }
-      const workflows = await mastra.getStorage()?.getStore('workflows');
-      const run = await workflows?.getWorkflowRunById({ workflowName: getDurableLoopWorkflowName(agent), runId });
-      if (!run) return { aborted: false };
-      await validateRunOwnership(run, getContextResourceId(requestContext), mastra, requestContext);
-      const ownershipSchema = z.object({
-        context: z.object({
-          input: z.object({
-            agentId: z.string(),
-            state: z.object({ threadId: z.string().optional() }).optional(),
-          }),
-        }),
+      const access = await authorizeDurableRun({
+        mastra,
+        agent,
+        runId,
+        requestContext,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
       });
-      let parsed = ownershipSchema.safeParse(
-        typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot,
-      );
-      if (!parsed.success) {
-        // Active local runs may not checkpoint the outer input until the segment finishes.
-        const execution = await workflows?.getWorkflowRunById({
-          workflowName: getDurableLoopWorkflowName(agent).replace(
-            DurableStepIds.AGENTIC_LOOP,
-            DurableStepIds.AGENTIC_EXECUTION,
-          ),
-          runId,
-        });
-        await validateRunOwnership(execution, getContextResourceId(requestContext), mastra, requestContext);
-        parsed = ownershipSchema.safeParse(
-          typeof execution?.snapshot === 'string' ? JSON.parse(execution.snapshot) : execution?.snapshot,
-        );
-      }
-      // Stop can arrive before either workflow has checkpointed its input. Do not cancel an unverified run.
-      if (!parsed.success) return { aborted: false };
-      if (parsed.data.context.input.agentId !== agent.id) {
-        throw new HTTPException(403, { message: 'Access denied: run does not belong to this agent' });
-      }
-      const threadId = parsed.data.context.input.state?.threadId;
-      if (threadId) {
-        const memory = await agent.getMemory({ requestContext });
-        const thread = await memory?.getThreadById({ threadId });
-        await enforceThreadAccess({
-          mastra,
-          requestContext,
-          threadId,
-          thread,
-          effectiveResourceId: getContextResourceId(requestContext),
-          permission: MastraFGAPermissions.MEMORY_WRITE,
-        });
-      }
+      if (access !== 'ok') return { aborted: false };
       return { aborted: await agent.abortRunStream(runId) };
     } catch (error) {
       return handleError(error, 'error aborting agent run');
@@ -2772,12 +2846,13 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
     'Reconnect to an existing agent stream to receive missed events. Supports position-based resume with offset for efficient reconnection.',
   tags: ['Agents', 'Streaming'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, runId, offset, abortSignal }) => {
+  handler: async ({ mastra, agentId, runId, offset, abortSignal, requestContext }) => {
     try {
       // Verify agent exists and get its pubsub for stream subscription.
       // Durable agents have their own CachingPubSub instance separate from mastra.pubsub,
       // so we must subscribe to the agent's pubsub to receive the correct stream events.
       const agent = await getAgentFromSystem({ mastra, agentId });
+      await authorizeRunObservation({ mastra, agent, runId, requestContext });
       const durableAgent = isDurableAgentLike(agent) ? (agent as DurableAgentLike) : undefined;
       // Plain agents with resumable streams publish on their own stream bus.
       const pubsub = durableAgent?.pubsub ?? getAgentStreamPubSub(agent) ?? mastra.pubsub;

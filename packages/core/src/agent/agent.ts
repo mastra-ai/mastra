@@ -931,6 +931,8 @@ export class Agent<
   #streamBus?: AgentStreamBus;
   /** Published runs executing in this process, with the owner the abort route checks. */
   #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
+  // Owners of runs whose stream topic still holds replay history (running, suspended, or finished but not yet cleared).
+  #runOwners = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   /**
    * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
    * when `durable: true` is set on the config but the agent is not attached
@@ -1747,9 +1749,25 @@ export class Agent<
       onEnd: () => {
         if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
       },
+      onCleared: () => {
+        if (this.#runOwners.get(runId)?.publisher === publisher) this.#runOwners.delete(runId);
+      },
     });
-    this.#publishedRuns.set(runId, { publisher, resourceId: owner.resourceId, threadId: owner.threadId });
+    const entry = { publisher, resourceId: owner.resourceId, threadId: owner.threadId };
+    this.#publishedRuns.set(runId, entry);
+    this.#runOwners.set(runId, entry);
     return publisher;
+  }
+
+  /**
+   * Owner of a run whose stream topic this process still holds (running,
+   * suspended, or finished within the cleanup window), or undefined. Lets the
+   * server authorize observing a run.
+   * @internal
+   */
+  __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    const run = this.#runOwners.get(runId);
+    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
   }
 
   /**

@@ -46,6 +46,8 @@ export interface CreateAgentStreamPublisherOptions {
   abortSignal?: AbortSignal;
   /** Called once when the run stops publishing (finished, failed, or suspended). */
   onEnd?: () => void;
+  /** Called once the finished run's topic is cleared, i.e. when its replay history is gone. */
+  onCleared?: () => void;
 }
 
 /**
@@ -66,6 +68,7 @@ export function createAgentStreamPublisher({
   logger,
   abortSignal: callerSignal,
   onEnd,
+  onCleared,
 }: CreateAgentStreamPublisherOptions): AgentStreamPublisher {
   const controller = new AbortController();
   const abort = (reason?: unknown) => {
@@ -111,6 +114,7 @@ export function createAgentStreamPublisher({
   const scheduleCleanup = () => {
     const timer = scheduleStreamCleanup(cleanupTimeoutMs, () => {
       void pubsub.clearTopic(AGENT_STREAM_TOPIC(runId)).catch(() => {});
+      onCleared?.();
     });
     timer?.unref?.();
   };
