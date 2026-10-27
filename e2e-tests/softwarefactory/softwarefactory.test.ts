@@ -92,11 +92,12 @@ describe('factory templates', () => {
   });
 
   describe.each(TEMPLATES)('%s', name => {
-    it('seeds .env with commented placeholders only', async () => {
+    it('seeds .env with a generated encryption key and no empty values', async () => {
       const env = await readFile(join(scaffoldDirs[name], '.env'), 'utf8');
+      const key = /^FACTORY_CREDENTIAL_ENCRYPTION_KEY=(.+)$/m.exec(env)?.[1];
+      expect(Buffer.from(key ?? '', 'base64')).toHaveLength(32);
       // An active empty `KEY=` loads as the empty string and poisons
       // `process.env.X ?? default` fallbacks.
-      expect(env).toMatch(/^# FACTORY_CREDENTIAL_ENCRYPTION_KEY=/m);
       expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=\s*$/m);
     });
 
@@ -142,7 +143,7 @@ describe('factory templates', () => {
           PORT: String(port),
           MASTRACODE_PUBLIC_URL: `http://localhost:${port}`,
           DATABASE_URL: 'postgres://factory:factory@localhost:54330/factory',
-          FACTORY_CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString('base64'),
+          // FACTORY_CREDENTIAL_ENCRYPTION_KEY comes from the scaffolded .env.
           // Placeholder credentials: the server only contacts WorkOS and
           // GitHub when a user signs in or a webhook arrives.
           WORKOS_API_KEY: 'sk_test_e2e',
