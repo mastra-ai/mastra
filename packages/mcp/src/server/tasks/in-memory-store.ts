@@ -8,7 +8,7 @@ import type {
   MCPTaskInputResponses,
   MCPTaskStatus,
 } from '../../shared/tasks';
-import { taskKeyOf, toListing } from './store';
+import { principalKeyOf, taskKeyOf, toListing } from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
@@ -146,7 +146,9 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     this.#sweep();
     const listings = [...this.#tasks.values()]
       .reverse()
-      .map(record => toListing(record.taskKey, record.principal, record.context, this.#detailed(record)));
+      .map(record =>
+        toListing(record.taskKey, principalKeyOf(record.principal), record.context, this.#detailed(record)),
+      );
     return limit === undefined ? listings : listings.slice(0, limit);
   }
 

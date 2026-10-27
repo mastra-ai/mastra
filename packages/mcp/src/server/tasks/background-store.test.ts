@@ -8,7 +8,13 @@ import type { MCPTaskWork } from './store';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
-const envelope: BackgroundTaskEnvelope = { v: 1, principal: 'alice', ttlMs: 60_000, recover: false, usedInputKeys: [] };
+const envelope: BackgroundTaskEnvelope = {
+  v: 1,
+  principalKey: 'alice-key',
+  ttlMs: 60_000,
+  recover: false,
+  usedInputKeys: [],
+};
 
 function row(overrides: Partial<BackgroundTask>): BackgroundTask {
   return {

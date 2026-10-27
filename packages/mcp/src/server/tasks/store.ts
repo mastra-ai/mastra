@@ -18,6 +18,11 @@ export function taskKeyOf(taskId: string): string {
   return createHash('sha256').update(taskId).digest('base64url');
 }
 
+/** How a principal is stored and shown. Principals can carry user and subject ids, so only their hash is kept. */
+export function principalKeyOf(principal: string): string {
+  return createHash('sha256').update(principal).digest('base64url');
+}
+
 /**
  * What {@link MCPTaskStore.create} durably records.
  *
@@ -134,8 +139,8 @@ export type MCPTaskWork = (attempt: MCPTaskAttempt) => Promise<MCPTaskAttemptOut
  */
 export interface MCPTaskListing {
   taskKey: string;
-  /** The principal that created the task. Admin views must not show it unhashed. */
-  principal: string;
+  /** The principal that created the task, hashed with {@link principalKeyOf}. */
+  principalKey: string;
   /** The `context` given to `create`. */
   context?: Record<string, unknown>;
   status: MCPTaskStatus;
@@ -185,13 +190,13 @@ export function isMCPTaskStoreAdmin(store: MCPTaskStore): store is MCPTaskStore 
 /** Projects a detailed task onto a listing. */
 export function toListing(
   taskKey: string,
-  principal: string,
+  principalKey: string,
   context: Record<string, unknown> | undefined,
   task: MCPDetailedTask,
 ): MCPTaskListing {
   return {
     taskKey,
-    principal,
+    principalKey,
     ...(context && { context }),
     status: task.status,
     ...(task.statusMessage !== undefined && { statusMessage: task.statusMessage }),

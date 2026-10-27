@@ -3,7 +3,7 @@ import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it } from 'vitest';
 import { BackgroundTaskMCPTaskStore } from './background-store';
 import { InMemoryMCPTaskStore } from './in-memory-store';
-import { taskKeyOf } from './store';
+import { principalKeyOf, taskKeyOf } from './store';
 import type { MCPTaskStore, MCPTaskStoreAdmin, MCPTaskWork } from './store';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
@@ -87,14 +87,15 @@ describe.each(stores)('%s admin view', (_name, make) => {
     );
 
     const listed = await store.list();
-    expect(listed.map(task => [task.taskKey, task.principal, task.context?.toolName, task.status])).toEqual([
-      [taskKeyOf(waiting), 'bob', 'wait', 'working'],
-      [taskKeyOf(asking), 'alice', 'ask', 'input_required'],
+    expect(listed.map(task => [task.taskKey, task.principalKey, task.context?.toolName, task.status])).toEqual([
+      [taskKeyOf(waiting), principalKeyOf('bob'), 'wait', 'working'],
+      [taskKeyOf(asking), principalKeyOf('alice'), 'ask', 'input_required'],
     ]);
     expect(listed[1]).toMatchObject({ ttlMs: 60_000, inputRequests: { approve: { method: 'elicitation/create' } } });
     const serialized = JSON.stringify(listed);
     expect(serialized).not.toContain(asking);
     expect(serialized).not.toContain(waiting);
+    expect(serialized).not.toMatch(/"(alice|bob)"/);
     expect(await store.list({ limit: 1 })).toHaveLength(1);
   });
 

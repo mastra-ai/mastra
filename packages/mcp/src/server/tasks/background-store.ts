@@ -4,7 +4,7 @@ import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createTaskId, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
-import { taskKeyOf, toListing } from './store';
+import { principalKeyOf, taskKeyOf, toListing } from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
@@ -17,7 +17,7 @@ import type {
   MCPTaskWork,
 } from './store';
 
-export { taskKeyOf } from './store';
+export { principalKeyOf, taskKeyOf } from './store';
 
 /** What the store needs from a task's `context`: which tool it runs. */
 export interface BackgroundToolTaskContext extends Record<string, unknown> {
@@ -39,7 +39,8 @@ export interface BackgroundTaskMCPTaskStoreOptions {
 /** The MCP side of a task, kept in the row's `metadata`. */
 export interface BackgroundTaskEnvelope {
   v: 1;
-  principal: string;
+  /** The caller's principal, hashed with {@link principalKeyOf}. */
+  principalKey: string;
   ttlMs: number | null;
   pollIntervalMs?: number;
   recover: boolean;
@@ -87,7 +88,7 @@ function isTerminalRow(row: BackgroundTask): boolean {
 
 function envelopeOf(row: BackgroundTask): BackgroundTaskEnvelope | undefined {
   const metadata = row.metadata as Partial<BackgroundTaskEnvelope> | undefined;
-  return metadata?.v === ENVELOPE_VERSION && typeof metadata.principal === 'string'
+  return metadata?.v === ENVELOPE_VERSION && typeof metadata.principalKey === 'string'
     ? (metadata as BackgroundTaskEnvelope)
     : undefined;
 }
@@ -248,9 +249,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     const taskId = createTaskId();
     const taskKey = taskKeyOf(taskId);
     const recover = this.#recoverFor(context.toolName);
+    const principalKey = principalKeyOf(params.principal);
     const envelope: BackgroundTaskEnvelope = {
       v: ENVELOPE_VERSION,
-      principal: params.principal,
+      principalKey,
       ttlMs: params.ttlMs,
       ...(params.pollIntervalMs !== undefined && { pollIntervalMs: params.pollIntervalMs }),
       recover,
@@ -284,7 +286,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
           toolCallId: taskKey,
           args: args as unknown as Record<string, unknown>,
           agentId: this.#owner,
-          resourceId: `${this.#owner}:${params.principal}`,
+          resourceId: `${this.#owner}:${principalKey}`,
           timeoutMs: params.ttlMs === null ? MAX_TIMEOUT_MS : Math.min(Math.max(params.ttlMs, 1), MAX_TIMEOUT_MS),
           maxRetries: recover ? 1 : 0,
           expiresAt: params.ttlMs === null ? NEVER : new Date(createdAt + params.ttlMs),
@@ -365,7 +367,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
       const envelope = envelopeOf(row);
       if (!envelope || isForgotten(row, now)) continue;
       const { context } = row.args as unknown as RowArgs;
-      listings.push(toListing(row.toolCallId, envelope.principal, context, projectTask(row, envelope, '', now)));
+      listings.push(toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now)));
     }
     return listings;
   }
@@ -592,15 +594,16 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     taskKey: string,
     access?: MCPTaskAccess,
   ): Promise<{ row: BackgroundTask; envelope: BackgroundTaskEnvelope } | undefined> {
+    const principalKey = access && principalKeyOf(access.principal);
     const { tasks } = await this.#manager.listTasks({
       agentId: this.#owner,
-      ...(access && { resourceId: `${this.#owner}:${access.principal}` }),
+      ...(principalKey !== undefined && { resourceId: `${this.#owner}:${principalKey}` }),
       toolCallId: taskKey,
       perPage: 1,
     });
     const row = tasks[0];
     const envelope = row && envelopeOf(row);
-    if (!row || !envelope || (access && envelope.principal !== access.principal)) return undefined;
+    if (!row || !envelope || (principalKey !== undefined && envelope.principalKey !== principalKey)) return undefined;
     if (isForgotten(row, Date.now())) return undefined;
     return { row, envelope };
   }

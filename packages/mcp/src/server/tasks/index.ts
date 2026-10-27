@@ -1,4 +1,4 @@
-export { isMCPTaskStoreAdmin, taskKeyOf } from './store';
+export { isMCPTaskStoreAdmin, principalKeyOf, taskKeyOf } from './store';
 export type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,

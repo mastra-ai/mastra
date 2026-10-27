@@ -1,4 +1,3 @@
-import { createHash } from 'node:crypto';
 import type {
   MCPServerTaskSummary,
   MCPServerTaskSurfaceInfo,
@@ -9,11 +8,6 @@ import type { MCPToolType } from '@mastra/core/tools';
 import type { ResolvedTasksConfig } from './config';
 import { isMCPTaskStoreAdmin } from './store';
 import type { MCPTaskListing, MCPTaskStoreAdmin } from './store';
-
-/** Studio shows principals only as this hash: they can identify a user. */
-export function principalKeyOf(principal: string): string {
-  return createHash('sha256').update(principal).digest('base64url');
-}
 
 /** The tools served as tasks, as Studio shows them. */
 export function listTaskSurfaces(
@@ -84,7 +78,7 @@ function toSummary(listing: MCPTaskListing): MCPServerTaskSummary {
     ...(listing.ttlMs !== null && {
       expiresAt: new Date(new Date(listing.createdAt).getTime() + listing.ttlMs).toISOString(),
     }),
-    principalKey: principalKeyOf(listing.principal),
+    principalKey: listing.principalKey,
     ...(listing.inputRequests && { inputRequests: listing.inputRequests }),
     ...(listing.result && { result: listing.result }),
     ...(listing.error && { error: listing.error }),
