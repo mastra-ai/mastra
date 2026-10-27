@@ -241,7 +241,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
       <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
         <CodeMirror
           value={errorString || resultCode}
-          editable={true}
+          editable
           theme={theme}
           extensions={[jsonLanguage, codeFoldGutter]}
           basicSetup={{ foldGutter: false }}

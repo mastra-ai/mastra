@@ -98,7 +98,7 @@ function getEmbeddings(data: number[], dimensions: [number, number, number], mas
       if (masks[batchIndex]![tokenIndex] === 0n) continue;
       tokenCount++;
       for (let dimension = 0; dimension < hiddenSize; dimension++) {
-        embedding[dimension] = embedding[dimension]! + data[start + tokenIndex * hiddenSize + dimension]!;
+        embedding[dimension]! += data[start + tokenIndex * hiddenSize + dimension]!;
       }
     }
     return embedding.map(value => value / Math.max(tokenCount, 1));

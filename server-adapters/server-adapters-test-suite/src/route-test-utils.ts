@@ -285,7 +285,7 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodNull') return null;
   if (typeName === 'ZodUndefined') return undefined;
   if (typeName === 'ZodDate') return new Date();
-  if (typeName === 'ZodBigInt') return BigInt(0);
+  if (typeName === 'ZodBigInt') return 0n;
 
   if (typeName === 'ZodLiteral') {
     if ('_zod' in schema) {
