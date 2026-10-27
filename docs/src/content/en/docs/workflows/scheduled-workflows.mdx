@@ -115,13 +115,13 @@ A workflow's header includes a **Schedules** action when the workflow has at lea
 
 ### Trigger history
 
-Every fire records a trigger row with the run id, scheduled time, actual fire time, and publish status. The schedule detail page joins each trigger to the corresponding workflow run and shows:
+The scheduler attempts to record a trigger row with the run ID, scheduled time, actual fire time, and publish status. A publisher crash after claiming an occurrence or after publication is accepted can leave no trigger row. The schedule detail page joins recorded triggers to the corresponding workflow runs and shows:
 
 - The run's status (`running`, `success`, `failed`, `suspended`, `canceled`) as a badge.
 - The run's start time and duration.
 - A link to the run's full graph view at `/workflows/:workflowId/graph/:runId`.
 - A `pending` badge for triggers whose run record hasn't been written yet, due to a race between trigger publish and run snapshot.
-- A `publish failed` badge with the publish error when the scheduler couldn't enqueue the run at all.
+- A `publish failed` badge with the publish error when publication rejects. The outcome is unknown: the transport may have accepted the event before returning the error.
 
 Triggers in a non-terminal state cause the panel to poll every five seconds until they reach a terminal state. The list paginates, so long-running schedules don't load thousands of rows up front.
 
