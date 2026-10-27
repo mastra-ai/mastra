@@ -536,9 +536,29 @@ export interface MCPServerTaskSummary {
  * There is no MCP protocol equivalent of `list`.
  * @experimental
  */
+export interface MCPServerTasksListParams {
+  limit?: number;
+  /** `nextCursor` from the previous page. */
+  cursor?: string;
+  status?: MCPServerTaskStatus;
+  surface?: string;
+  /** Only tasks created by this principal, as its {@link MCPServerTaskSummary.principalKey}. */
+  principalKey?: string;
+  /** Only the task with this {@link MCPServerTaskSummary.taskKey}. */
+  taskKey?: string;
+}
+
+/**
+ * Lists, cancels and answers a server's MCP tasks in-process, for Studio. Cancel and answer
+ * run through the same task-store code as `tasks/cancel` and `tasks/update`.
+ * There is no MCP protocol equivalent of `list`.
+ * @experimental
+ */
 export interface MCPServerTasksInspector {
-  /** Most recently created first. */
-  list(params?: { limit?: number }): Promise<{ tasks: MCPServerTaskSummary[] }>;
+  /** Most recently created first. `nextCursor` is set when more tasks match. */
+  list(params?: MCPServerTasksListParams): Promise<{ tasks: MCPServerTaskSummary[]; nextCursor?: string }>;
+  /** Finds a task by its MCP task id, which is hashed before the lookup and never kept. */
+  find(taskId: string): Promise<MCPServerTaskSummary | undefined>;
   /** Resolves `false` for an unknown, expired or already finished task. */
   cancel(taskKey: string): Promise<boolean>;
   /** Resolves `false` for an unknown or expired task, or one not waiting for these inputs. */

@@ -6,7 +6,7 @@ import type {
 } from '@mastra/core/mcp';
 import type { MCPToolType } from '@mastra/core/tools';
 import type { ResolvedTasksConfig } from './config';
-import { isMCPTaskStoreAdmin } from './store';
+import { isMCPTaskStoreAdmin, taskKeyOf } from './store';
 import type { MCPTaskListing, MCPTaskStoreAdmin } from './store';
 
 /** The tools served as tasks, as Studio shows them. */
@@ -54,8 +54,12 @@ export function createTasksInspector(admin: () => Promise<MCPTaskStoreAdmin | un
   };
   return {
     async list(params = {}) {
-      const listings = await (await required()).list({ limit: params.limit });
-      return { tasks: listings.map(toSummary) };
+      const { listings, nextCursor } = await (await required()).list(params);
+      return { tasks: listings.map(toSummary), ...(nextCursor && { nextCursor }) };
+    },
+    async find(taskId) {
+      const { listings } = await (await required()).list({ taskKey: taskKeyOf(taskId), limit: 1 });
+      return listings[0] && toSummary(listings[0]);
     },
     async cancel(taskKey) {
       return (await (await required()).cancelByKey(taskKey)) === 'done';

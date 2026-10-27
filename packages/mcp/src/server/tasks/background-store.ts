@@ -4,13 +4,23 @@ import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createTaskId, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
-import { principalKeyOf, taskKeyOf, toListing } from './store';
+import {
+  decodeTaskListCursor,
+  isPastTaskListCursor,
+  matchesTaskListOptions,
+  nextTaskListCursor,
+  principalKeyOf,
+  taskKeyOf,
+  toListing,
+} from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
   MCPTaskAttempt,
   MCPTaskCreateParams,
   MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
   MCPTaskRunOptions,
   MCPTaskStore,
   MCPTaskStoreAdmin,
@@ -353,30 +363,44 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
   }
 
   /** Lists this server's tasks across principals, most recently created first. */
-  async list({ limit = 50 }: { limit?: number } = {}): Promise<MCPTaskListing[]> {
+  async list(options: MCPTaskListOptions = {}): Promise<MCPTaskListPage> {
     this.#startSweeping();
+    const limit = options.limit ?? 50;
+    const cursor = decodeTaskListCursor(options.cursor);
     const now = Date.now();
-    const listings: MCPTaskListing[] = [];
-    // Rows that aren't tasks any more (forgotten, or unreadable) are skipped, so a page can come
-    // back short; keep reading until `limit` tasks are found or the rows run out.
-    for (let page = 0; listings.length < limit; page++) {
+    const matching: MCPTaskListing[] = [];
+    // Surface, client and key are row columns, so storage filters them. Status is filtered here:
+    // a row's status isn't the task's (an expired running row is a failed task). Skipped rows can
+    // leave a page short, so keep reading until one task more than `limit` is found or rows run out.
+    for (let page = 0; matching.length <= limit; page++) {
       const { tasks } = await this.#manager.listTasks({
         agentId: this.#owner,
+        ...(options.surface && { toolName: this.#rowToolName(options.surface) }),
+        ...(options.principalKey && { resourceId: `${this.#owner}:${options.principalKey}` }),
+        ...(options.taskKey && { toolCallId: options.taskKey }),
+        // `toDate` is exclusive; tasks created in the cursor's millisecond are sorted out below.
+        ...(cursor && { toDate: new Date(Date.parse(cursor.before) + 1) }),
         orderBy: 'createdAt',
         orderDirection: 'desc',
         page,
-        perPage: limit,
+        perPage: limit + 1,
       });
       for (const row of tasks) {
         const envelope = envelopeOf(row);
         if (!envelope || isForgotten(row, now)) continue;
         const { context } = row.args as unknown as RowArgs;
-        listings.push(toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now)));
-        if (listings.length === limit) break;
+        const listing = toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now));
+        if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
+        matching.push(listing);
+        if (matching.length > limit) break;
       }
-      if (tasks.length < limit) break;
+      if (tasks.length <= limit) break;
     }
-    return listings;
+    const listings = matching.slice(0, limit);
+    return {
+      listings,
+      ...(matching.length > limit && { nextCursor: nextTaskListCursor(listings, cursor) }),
+    };
   }
 
   updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome> {

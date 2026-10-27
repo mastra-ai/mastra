@@ -15,7 +15,7 @@ import {
   isTerminalTask,
   useAnswerMcpServerTask,
   useCancelMcpServerTask,
-  useMcpServerTasks,
+  useMcpServerTask,
 } from '../../hooks/use-mcp-server-tasks';
 import { shortTaskKey, useTaskDrawerParam } from '../../hooks/use-task-drawer-param';
 import { McpTaskStatusBadge } from './mcp-task-status-badge';
@@ -24,8 +24,7 @@ import { toZodInputSchema } from '@/domains/tools/utils/to-zod-input-schema';
 /** The side drawer a task opens in, driven by `?task=`. */
 export function McpTaskDrawer({ serverId }: { serverId: string }) {
   const { taskKey, close } = useTaskDrawerParam();
-  const { data } = useMcpServerTasks(serverId, { enabled: taskKey !== undefined });
-  const task = data?.tasks.find(candidate => candidate.taskKey === taskKey);
+  const { data: task, isSuccess } = useMcpServerTask(serverId, taskKey);
 
   return (
     <DataPanel open={taskKey !== undefined} onClose={close} title={task?.surface ?? 'Task'}>
@@ -44,7 +43,7 @@ export function McpTaskDrawer({ serverId }: { serverId: string }) {
         {task ? (
           <McpTaskDrawerBody key={task.taskKey} serverId={serverId} task={task} />
         ) : (
-          data && <Txt tone="muted">This task is no longer listed.</Txt>
+          isSuccess && <Txt tone="muted">This task is no longer listed.</Txt>
         )}
       </DataPanel.Content>
     </DataPanel>

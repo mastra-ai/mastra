@@ -3641,11 +3641,31 @@ export const API_ROUTE_METADATA = {
       "serverId"
     ],
     "queryParams": [
-      "limit"
+      "client",
+      "cursor",
+      "limit",
+      "status",
+      "surface"
     ],
     "bodyParams": [],
     "hasQuery": true,
     "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/find": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/find",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "taskId"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
     "responseShape": {
       "kind": "single"
     }

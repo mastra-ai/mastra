@@ -155,7 +155,7 @@ describe('BackgroundTaskMCPTaskStore', () => {
       await storage.updateTask(row.id, { metadata });
     }
 
-    const listed = await store.list({ limit: 2 });
+    const { listings: listed } = await store.list({ limit: 2 });
 
     expect(listed.map(listing => listing.taskKey)).toEqual([keys[1], keys[0]]);
     store.close();

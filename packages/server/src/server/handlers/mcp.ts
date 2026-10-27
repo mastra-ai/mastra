@@ -9,6 +9,7 @@ import type {
   MCPToolExecutionResultV2,
   ServerInfo,
 } from '@mastra/core/mcp';
+import type { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   mcpServerDetailPathParams,
@@ -38,6 +39,8 @@ import {
   DEFAULT_MCP_SERVER_TASKS_LIMIT,
   listMcpServerTasksQuerySchema,
   listMcpServerTasksResponseSchema,
+  findMcpServerTaskBodySchema,
+  findMcpServerTaskResponseSchema,
   answerMcpServerTaskBodySchema,
   mcpServerTaskActionResponseSchema,
 } from '../schemas/mcp';
@@ -683,25 +686,66 @@ export const LIST_MCP_SERVER_TASKS_ROUTE = createRoute({
     mastra,
     serverId,
     limit,
+    cursor,
+    status,
+    surface,
+    client,
+    key,
     requestContext,
-  }: ServerContext & { serverId: string; limit?: number }) => {
+  }: ServerContext & { serverId: string } & z.infer<typeof listMcpServerTasksQuerySchema>) => {
     const server = getEventsServer(mastra, serverId);
     const info = typeof server.getTasksInfo === 'function' ? server.getTasksInfo() : undefined;
-    if (!info?.enabled) return { surfaces: [], tasks: [], hasMore: false };
-    const base = { surfaces: info.surfaces, hasMore: false };
+    if (!info?.enabled) return { surfaces: [], tasks: [] };
+    const base = { surfaces: info.surfaces };
     if (getContextResourceId(requestContext) !== undefined) {
       return { ...base, unavailable: 'resource_scoped' as const, tasks: [] };
     }
     const inspector = getTasksInspector(server, requestContext);
     if (!inspector) return { ...base, unavailable: 'not_listable' as const, tasks: [] };
-    const max = limit ?? DEFAULT_MCP_SERVER_TASKS_LIMIT;
     try {
-      // One extra task tells whether there are more than `max`.
-      const { tasks } = await inspector.list({ limit: max + 1 });
-      return { ...base, tasks: tasks.slice(0, max), hasMore: tasks.length > max };
+      const { tasks, nextCursor } = await inspector.list({
+        limit: limit ?? DEFAULT_MCP_SERVER_TASKS_LIMIT,
+        cursor,
+        status,
+        surface,
+        principalKey: client,
+        taskKey: key,
+      });
+      return { ...base, tasks, ...(nextCursor && { nextCursor }) };
     } catch (error) {
       throw toTasksHttpError(error, mastra, `list ${serverId}`);
     }
+  },
+});
+
+export const FIND_MCP_SERVER_TASK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/tasks/find',
+  responseType: 'json',
+  pathParamSchema: mcpServerIdPathParams,
+  bodySchema: findMcpServerTaskBodySchema,
+  responseSchema: findMcpServerTaskResponseSchema,
+  summary: 'Find an MCP server task by task id',
+  description:
+    'Finds a task by its MCP task id, as a client sees it. The id is hashed before the lookup and is not kept or returned (experimental)',
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    serverId,
+    taskId,
+    requestContext,
+  }: ServerContext & { serverId: string; taskId: string }) => {
+    const inspector = getTasksInspector(getEventsServer(mastra, serverId), requestContext);
+    if (!inspector) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    let task: Awaited<ReturnType<MCPServerTasksInspector['find']>>;
+    try {
+      task = await inspector.find(taskId);
+    } catch (error) {
+      throw toTasksHttpError(error, mastra, `find ${serverId}`);
+    }
+    if (!task) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    return { task };
   },
 });
 

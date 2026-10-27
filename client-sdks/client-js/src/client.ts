@@ -984,14 +984,33 @@ export class MastraClient extends BaseResource {
    * (experimental). `unavailable` says why `tasks` is empty for a store that can't be listed
    * or a resource-scoped caller.
    * @param serverId - The ID of the MCP server.
-   * @param params - Optional `limit` on the number of tasks.
+   * @param params - Optional `limit`, `status`, `surface` and `client` (a listed `principalKey`)
+   *   filters, and the `cursor` from the previous page's `nextCursor`.
    */
   public getMcpServerTasks(
     serverId: PathParams<'GET /mcp/:serverId/tasks'>['serverId'],
     params: QueryParams<'GET /mcp/:serverId/tasks'> = {},
   ): Promise<RouteResponse<'GET /mcp/:serverId/tasks'>> {
-    const query = params.limit === undefined ? '' : `?limit=${params.limit}`;
+    const searchParams = new URLSearchParams();
+    for (const [name, value] of Object.entries(params)) {
+      if (value !== undefined) searchParams.set(name, String(value));
+    }
+    const query = searchParams.size ? `?${searchParams}` : '';
     return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks${query}`);
+  }
+
+  /**
+   * Finds an MCP server task by its MCP task id, as a client sees it (experimental). The server
+   * hashes the id before the lookup; it is sent in the body so it stays out of URLs and logs.
+   * Rejects with 404 for an unknown task.
+   * @param serverId - The ID of the MCP server.
+   * @param taskId - The MCP task id.
+   */
+  public findMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/find'>['serverId'],
+    taskId: Body<'POST /mcp/:serverId/tasks/find'>['taskId'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/find'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/find`, { method: 'POST', body: { taskId } });
   }
 
   /**

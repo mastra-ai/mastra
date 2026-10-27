@@ -3,6 +3,8 @@ export type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
   MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
   MCPTaskStoreAdmin,
   MCPTaskAttempt,
   MCPTaskAttemptOutcome,

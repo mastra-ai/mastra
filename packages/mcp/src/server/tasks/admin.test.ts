@@ -86,7 +86,8 @@ describe.each(stores)('%s admin view', (_name, make) => {
       task => task?.status === 'input_required',
     );
 
-    const listed = await store.list();
+    const { listings: listed, nextCursor } = await store.list();
+    expect(nextCursor).toBeUndefined();
     expect(listed.map(task => [task.taskKey, task.principalKey, task.context?.toolName, task.status])).toEqual([
       [taskKeyOf(waiting), principalKeyOf('bob'), 'wait', 'working'],
       [taskKeyOf(asking), principalKeyOf('alice'), 'ask', 'input_required'],
@@ -96,7 +97,54 @@ describe.each(stores)('%s admin view', (_name, make) => {
     expect(serialized).not.toContain(asking);
     expect(serialized).not.toContain(waiting);
     expect(serialized).not.toMatch(/"(alice|bob)"/);
-    expect(await store.list({ limit: 1 })).toHaveLength(1);
+    expect((await store.list({ limit: 1 })).listings).toHaveLength(1);
+  });
+
+  it('filters by status, surface, client and key', async () => {
+    store = await make();
+    const asking = await start('ask', 'alice');
+    await sleep(5);
+    const waiting = await start('wait', 'bob');
+    await sleep(5);
+    const alsoWaiting = await start('wait', 'alice');
+    await until(
+      () => store!.get(asking, { principal: 'alice' }),
+      task => task?.status === 'input_required',
+    );
+    const keys = async (options: Parameters<Store['list']>[0]) =>
+      (await store!.list(options)).listings.map(listing => listing.taskKey);
+
+    expect(await keys({ status: 'input_required' })).toEqual([taskKeyOf(asking)]);
+    expect(await keys({ surface: 'wait' })).toEqual([taskKeyOf(alsoWaiting), taskKeyOf(waiting)]);
+    expect(await keys({ principalKey: principalKeyOf('alice') })).toEqual([taskKeyOf(alsoWaiting), taskKeyOf(asking)]);
+    expect(await keys({ principalKey: principalKeyOf('alice'), surface: 'wait' })).toEqual([taskKeyOf(alsoWaiting)]);
+    expect(await keys({ taskKey: taskKeyOf(waiting) })).toEqual([taskKeyOf(waiting)]);
+    expect(await keys({ status: 'completed' })).toEqual([]);
+  });
+
+  it('pages through every task once with the cursor', async () => {
+    store = await make();
+    const ids: string[] = [];
+    for (let i = 0; i < 5; i++) ids.push(await start('wait', i % 2 ? 'bob' : 'alice'));
+
+    const seen: string[] = [];
+    let cursor: string | undefined;
+    let pages = 0;
+    do {
+      const page = await store.list({ limit: 2, cursor });
+      seen.push(...page.listings.map(listing => listing.taskKey));
+      cursor = page.nextCursor;
+      pages++;
+    } while (cursor && pages < 10);
+
+    expect(pages).toBe(3);
+    expect(seen).toHaveLength(5);
+    expect(new Set(seen)).toEqual(new Set(ids.map(taskKeyOf)));
+    // Filters keep applying on later pages.
+    const first = await store.list({ limit: 1, principalKey: principalKeyOf('bob') });
+    const second = await store.list({ limit: 1, principalKey: principalKeyOf('bob'), cursor: first.nextCursor });
+    expect(second.listings.map(listing => listing.principalKey)).toEqual([principalKeyOf('bob')]);
+    expect(second.nextCursor).toBeUndefined();
   });
 
   it('answers by key through the same path as tasks/update, once', async () => {

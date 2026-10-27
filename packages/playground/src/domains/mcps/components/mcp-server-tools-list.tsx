@@ -8,7 +8,7 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
-import { useMcpServerTasks } from '../hooks/use-mcp-server-tasks';
+import { useMcpServerTaskSurfaces } from '../hooks/use-mcp-server-tasks';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 
 const COLUMNS = 'auto minmax(0, 1fr) auto';
@@ -86,8 +86,8 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
   const [search, setSearch] = useState('');
   const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
   const { Link, paths } = useLinkComponent();
-  const { data: tasks } = useMcpServerTasks(server.id, { enabled: Boolean(server.tasks_capability) });
-  const surfaces = useMemo(() => new Map(tasks?.surfaces.map(surface => [surface.name, surface])), [tasks]);
+  const { data: taskSurfaces } = useMcpServerTaskSurfaces(server.id, { enabled: Boolean(server.tasks_capability) });
+  const surfaces = useMemo(() => new Map(taskSurfaces?.map(surface => [surface.name, surface])), [taskSurfaces]);
   const showTasks = Boolean(server.tasks_capability);
   const columns = showTasks ? COLUMNS_WITH_TASKS : COLUMNS;
 

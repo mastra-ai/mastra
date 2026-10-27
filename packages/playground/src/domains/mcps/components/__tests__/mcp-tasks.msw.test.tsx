@@ -7,10 +7,13 @@ import { McpTaskDrawer } from '../mcp-task-drawer/mcp-task-drawer';
 import { MCPDetail } from '../MCPDetail';
 import { v2Server } from './fixtures/mcp-servers';
 import {
+  bobFailedTask,
+  bobKey,
   cancelledTask,
   completedTask,
   failedTask,
   inputTask,
+  manyTasks,
   reportTools,
   samplingTask,
   taskList,
@@ -24,17 +27,41 @@ import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const TASKS_URL = `${TEST_BASE_URL}/api/mcp/reports/tasks`;
 
+/**
+ * Serves `tasks` like the list route: filters by status, surface, client and key, and pages
+ * 50 at a time with the offset as the cursor. `onList` sees each request's query.
+ */
+const listTasks = (tasks: () => McpServerTask[], onList?: (query: URLSearchParams) => void) =>
+  http.get(TASKS_URL, ({ request }) => {
+    const query = new URL(request.url).searchParams;
+    onList?.(query);
+    const matches = (value: string, wanted: string | null) => wanted === null || value === wanted;
+    const matching = tasks().filter(
+      task =>
+        matches(task.status, query.get('status')) &&
+        matches(task.surface, query.get('surface')) &&
+        matches(task.principalKey, query.get('client')) &&
+        matches(task.taskKey, query.get('key')),
+    );
+    const start = Number(query.get('cursor') ?? 0);
+    const limit = Number(query.get('limit') ?? 50);
+    const end = start + limit;
+    return HttpResponse.json(taskList(matching.slice(start, end), end < matching.length ? String(end) : undefined));
+  });
+
 const useTasks = (...tasks: McpServerTask[]) =>
   server.use(
     http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
-    http.get(TASKS_URL, () => HttpResponse.json(taskList(tasks))),
+    listTasks(() => tasks),
   );
 
-const renderDetail = (detailServer = tasksServer) =>
+const renderDetail = (detailServer = tasksServer, initialEntry = '/mcps/reports') =>
   renderWithProviders(
     <TestLinkProvider>
       <MCPDetail isLoading={false} server={detailServer} />
+      <McpTaskDrawer serverId="reports" />
     </TestLinkProvider>,
+    { router: { initialEntries: [initialEntry] } },
   );
 
 const renderDrawer = (taskKey: string) =>
@@ -102,29 +129,114 @@ describe('MCPDetail tasks section', () => {
           .getByRole('link', { name: /slow_report task workingK/ })
           .getAttribute('href'),
       ).toBe('/mcps/reports?task=workingKey0001');
+      expect(within(section).getAllByRole('button', { name: /Show only tasks from client/ })).toHaveLength(5);
     });
   });
 
-  describe('when the server has more tasks than were listed', () => {
-    it('says only the most recent are shown', async () => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
-        http.get(TASKS_URL, () => HttpResponse.json(taskList([workingTask, completedTask], true))),
-      );
+  describe('when the server has more tasks than one page', () => {
+    it('loads the older ones on request', async () => {
+      useTasks(...manyTasks(51));
       renderDetail();
 
-      expect(await within(await tasksSection()).findByText('Showing the 2 most recent tasks.')).not.toBeNull();
+      const section = await tasksSection();
+      expect(await within(section).findByText('Showing the 50 most recent tasks.')).not.toBeNull();
+      expect(within(section).queryByRole('link', { name: /pagedKey000050/ })).toBeNull();
+
+      fireEvent.click(within(section).getByRole('button', { name: 'Load more' }));
+
+      await waitFor(() =>
+        expect(within(section).getAllByRole('link', { name: /slow_report task pagedKey/ })).toHaveLength(51),
+      );
+      expect(within(section).queryByRole('button', { name: 'Load more' })).toBeNull();
     });
   });
 
   describe('when every task was listed', () => {
-    it('does not say the list was cut short', async () => {
+    it('offers no more to load', async () => {
       useTasks(workingTask, completedTask);
       renderDetail();
 
       const section = await tasksSection();
       await within(section).findByRole('link', { name: /slow_report task workingK/ });
-      expect(within(section).queryByText(/most recent tasks/)).toBeNull();
+      expect(within(section).queryByRole('button', { name: 'Load more' })).toBeNull();
+      expect(within(section).queryByText(/most recent/)).toBeNull();
+    });
+  });
+
+  describe('when the URL filters by status', () => {
+    it('asks the server for those tasks only', async () => {
+      const onList = vi.fn<(query: URLSearchParams) => void>();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
+        listTasks(() => [workingTask, failedTask, bobFailedTask], onList),
+      );
+      renderDetail(tasksServer, '/mcps/reports?status=failed');
+
+      const section = await tasksSection();
+      await waitFor(() => expect(within(section).getAllByRole('link', { name: /task / })).toHaveLength(2));
+      expect(within(section).queryByText('working')).toBeNull();
+      expect(onList.mock.calls.some(([query]) => query.get('status') === 'failed' && !query.has('limit'))).toBe(true);
+      expect(within(section).getByRole('group', { name: 'Task filters' }).textContent).toContain('failed');
+    });
+  });
+
+  describe('when a client is picked from a row', () => {
+    it("lists only that client's tasks", async () => {
+      useTasks(workingTask, failedTask, bobFailedTask);
+      renderDetail();
+
+      const section = await tasksSection();
+      fireEvent.click(
+        await within(section).findByRole('button', { name: `Show only tasks from client ${bobKey.slice(0, 8)}…` }),
+      );
+
+      await waitFor(() => expect(within(section).getAllByRole('link', { name: /task / })).toHaveLength(1));
+      expect(within(section).getByRole('link', { name: /slow_report task bobFaile/ })).not.toBeNull();
+      expect(within(section).getByRole('group', { name: 'Task filters' }).textContent).toContain(
+        `${bobKey.slice(0, 8)}…`,
+      );
+    });
+  });
+
+  describe('when the filters match nothing', () => {
+    it('says no task matches', async () => {
+      useTasks(workingTask);
+      renderDetail(tasksServer, '/mcps/reports?status=cancelled');
+
+      expect(await within(await tasksSection()).findByText('No tasks match these filters')).not.toBeNull();
+    });
+  });
+
+  describe('when a task is looked up by its MCP task id', () => {
+    it('sends the id in the body and opens the task it finds', async () => {
+      useTasks(inputTask);
+      const onFind = vi.fn<(body: unknown, url: string) => void>();
+      server.use(
+        http.post(`${TASKS_URL}/find`, async ({ request }) => {
+          onFind(await request.json(), request.url);
+          return HttpResponse.json({ task: inputTask });
+        }),
+      );
+      renderDetail();
+
+      const section = await tasksSection();
+      fireEvent.change(within(section).getByLabelText('MCP task id'), { target: { value: ' raw-mcp-task-id ' } });
+      fireEvent.click(within(section).getByRole('button', { name: 'Find' }));
+
+      expect(await screen.findByRole('region', { name: 'Input request approve' })).not.toBeNull();
+      expect(onFind).toHaveBeenCalledWith({ taskId: 'raw-mcp-task-id' }, `${TASKS_URL}/find`);
+    });
+
+    it('says when no task has that id', async () => {
+      useTasks(inputTask);
+      server.use(http.post(`${TASKS_URL}/find`, () => HttpResponse.json({ error: 'Task not found' }, { status: 404 })));
+      renderDetail();
+
+      const section = await tasksSection();
+      fireEvent.change(within(section).getByLabelText('MCP task id'), { target: { value: 'nope' } });
+      fireEvent.click(within(section).getByRole('button', { name: 'Find' }));
+
+      expect(await within(section).findByText('No task with that id.')).not.toBeNull();
     });
   });
 
@@ -170,7 +282,7 @@ describe('MCPDetail tasks section', () => {
       let current: McpServerTask = workingTask;
       server.use(
         http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
-        http.get(TASKS_URL, () => HttpResponse.json(taskList([current]))),
+        listTasks(() => [current]),
       );
       renderDetail();
 

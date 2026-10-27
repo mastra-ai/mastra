@@ -36,6 +36,10 @@ export const surfaces: McpServerTaskSurface[] = [
 
 const createdAt = '2026-10-27T12:00:00.000Z';
 
+/** Hashed client keys, as the server lists them. */
+export const aliceKey = 'cHJpbmNpcGFsLWFsaWNl';
+export const bobKey = 'Ym9iLXByaW5jaXBhbC1r';
+
 const base = (
   taskKey: string,
   surface: string,
@@ -45,7 +49,7 @@ const base = (
   createdAt,
   lastUpdatedAt: createdAt,
   expiresAt: '2026-10-27T12:01:00.000Z',
-  principalKey: 'cHJpbmNpcGFsLWFsaWNl',
+  principalKey: aliceKey,
 });
 
 export const workingTask: McpServerTask = { ...base('workingKey0001', 'slow_report'), status: 'working' };
@@ -88,12 +92,27 @@ export const failedTask: McpServerTask = {
 
 export const cancelledTask: McpServerTask = { ...base('cancelledKey01', 'slow_report'), status: 'cancelled' };
 
-export const taskList = (tasks: McpServerTask[], hasMore = false): McpServerTaskListResponse => ({
+/** A task another client started, which failed. */
+export const bobFailedTask: McpServerTask = {
+  ...base('bobFailedKey01', 'slow_report'),
+  principalKey: bobKey,
+  status: 'failed',
+  error: { code: -32603, message: 'upstream timed out' },
+};
+
+/** `count` working tasks, newest first, for paging. */
+export const manyTasks = (count: number): McpServerTask[] =>
+  Array.from({ length: count }, (_, index) => ({
+    ...base(`pagedKey${String(index).padStart(6, '0')}`, 'slow_report'),
+    status: 'completed',
+  }));
+
+export const taskList = (tasks: McpServerTask[], nextCursor?: string): McpServerTaskListResponse => ({
   surfaces,
   tasks,
-  hasMore,
+  ...(nextCursor && { nextCursor }),
 });
 
 export const unavailableTaskList = (
   unavailable: NonNullable<McpServerTaskListResponse['unavailable']>,
-): McpServerTaskListResponse => ({ surfaces, unavailable, tasks: [], hasMore: false });
+): McpServerTaskListResponse => ({ surfaces, unavailable, tasks: [] });

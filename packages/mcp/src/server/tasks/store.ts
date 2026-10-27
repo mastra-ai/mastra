@@ -156,6 +156,82 @@ export interface MCPTaskListing {
 }
 
 /**
+ * Filters for {@link MCPTaskStoreAdmin.list}. Every filter narrows the result.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPTaskListOptions {
+  /** At most this many tasks. Default 50. */
+  limit?: number;
+  /** `nextCursor` of the previous page. */
+  cursor?: string;
+  status?: MCPTaskStatus;
+  /** The tool, workflow or agent name the task runs (`context.toolName`). */
+  surface?: string;
+  principalKey?: string;
+  taskKey?: string;
+}
+
+/** @experimental SEP-2663 extension; API may change. */
+export interface MCPTaskListPage {
+  listings: MCPTaskListing[];
+  nextCursor?: string;
+}
+
+/**
+ * Pages lists by creation time. The cursor holds the last listed creation time and the keys
+ * already listed at that time, so tasks created in the same millisecond are neither lost nor repeated.
+ */
+interface TaskListCursor {
+  before: string;
+  seen: string[];
+}
+
+export function decodeTaskListCursor(cursor: string | undefined): TaskListCursor | undefined {
+  if (!cursor) return undefined;
+  try {
+    const parsed = JSON.parse(Buffer.from(cursor, 'base64url').toString('utf8')) as Partial<TaskListCursor>;
+    if (typeof parsed.before === 'string' && !Number.isNaN(Date.parse(parsed.before)) && Array.isArray(parsed.seen)) {
+      return { before: parsed.before, seen: parsed.seen.filter(key => typeof key === 'string') };
+    }
+  } catch {
+    // An unreadable cursor lists from the start.
+  }
+  return undefined;
+}
+
+/** Whether a task comes after the cursor in newest-first order. */
+export function isPastTaskListCursor(listing: MCPTaskListing, cursor: TaskListCursor | undefined): boolean {
+  if (!cursor) return true;
+  const created = Date.parse(listing.createdAt);
+  const before = Date.parse(cursor.before);
+  return created < before || (created === before && !cursor.seen.includes(listing.taskKey));
+}
+
+/** The cursor for the page after `listings`, newest first. */
+export function nextTaskListCursor(
+  listings: MCPTaskListing[],
+  previous: TaskListCursor | undefined,
+): string | undefined {
+  const last = listings.at(-1);
+  if (!last) return undefined;
+  const before = Date.parse(last.createdAt);
+  const seen = listings.filter(listing => Date.parse(listing.createdAt) === before).map(listing => listing.taskKey);
+  if (previous && Date.parse(previous.before) === before) seen.push(...previous.seen);
+  const cursor: TaskListCursor = { before: new Date(before).toISOString(), seen };
+  return Buffer.from(JSON.stringify(cursor)).toString('base64url');
+}
+
+/** Whether a listing matches the filters a store could not apply while reading. */
+export function matchesTaskListOptions(listing: MCPTaskListing, options: MCPTaskListOptions): boolean {
+  if (options.status && listing.status !== options.status) return false;
+  if (options.surface && listing.context?.toolName !== options.surface) return false;
+  if (options.principalKey && listing.principalKey !== options.principalKey) return false;
+  if (options.taskKey && listing.taskKey !== options.taskKey) return false;
+  return true;
+}
+
+/**
  * What an admin action on a task did: `not_found` for an unknown or expired task, `ignored` when the
  * task was found but nothing changed (already finished, or not waiting for those inputs).
  *
@@ -171,8 +247,8 @@ export type MCPTaskAdminOutcome = 'done' | 'ignored' | 'not_found';
  * @experimental SEP-2663 extension; API may change.
  */
 export interface MCPTaskStoreAdmin {
-  /** Most recently created first. */
-  list(options?: { limit?: number }): Promise<MCPTaskListing[]>;
+  /** Most recently created first. `nextCursor` is set when more tasks match. */
+  list(options?: MCPTaskListOptions): Promise<MCPTaskListPage>;
   updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome>;
   cancelByKey(taskKey: string): Promise<MCPTaskAdminOutcome>;
 }

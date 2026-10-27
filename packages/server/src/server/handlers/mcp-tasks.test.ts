@@ -12,12 +12,15 @@ import { describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
 import {
   answerMcpServerTaskBodySchema,
+  findMcpServerTaskBodySchema,
+  findMcpServerTaskResponseSchema,
   listMcpServerTasksQuerySchema,
   listMcpServerTasksResponseSchema,
 } from '../schemas/mcp';
 import {
   ANSWER_MCP_SERVER_TASK_ROUTE,
   CANCEL_MCP_SERVER_TASK_ROUTE,
+  FIND_MCP_SERVER_TASK_ROUTE,
   GET_MCP_SERVER_DETAIL_ROUTE,
   LIST_MCP_SERVERS_ROUTE,
   LIST_MCP_SERVER_TASKS_ROUTE,
@@ -52,6 +55,7 @@ function fakeInspector() {
   const open = new Set(['key-1']);
   return {
     list: vi.fn<MCPServerTasksInspector['list']>(async () => ({ tasks: [waiting] })),
+    find: vi.fn<MCPServerTasksInspector['find']>(async taskId => (taskId === 'raw-task-id' ? waiting : undefined)),
     cancel: vi.fn<MCPServerTasksInspector['cancel']>(async key => open.delete(key)),
     answer: vi.fn<MCPServerTasksInspector['answer']>(async key => open.delete(key)),
   };
@@ -120,25 +124,50 @@ describe('MCP task routes', () => {
 
       const result = await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks', limit: 10 });
 
-      expect(inspector.list).toHaveBeenCalledWith({ limit: 11 });
+      expect(inspector.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 10 }));
       expect(listMcpServerTasksResponseSchema.parse(result)).toEqual({
         surfaces: tasksInfo.surfaces,
         tasks: [waiting],
-        hasMore: false,
       });
     });
 
-    it('lists the 50 most recent tasks by default and says when there are more', async () => {
+    it('lists 50 tasks by default and passes the next page cursor on', async () => {
       const inspector = fakeInspector();
-      const many = Array.from({ length: 51 }, (_, index) => ({ ...waiting, taskKey: `key-${index}` }));
-      inspector.list.mockResolvedValueOnce({ tasks: many });
+      inspector.list.mockResolvedValueOnce({ tasks: [waiting], nextCursor: 'page-2' });
       const { mastra } = makeMastra(makeServer(inspector));
 
       const result = await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks' });
 
-      expect(inspector.list).toHaveBeenCalledWith({ limit: 51 });
-      expect(result.tasks.map(task => task.taskKey)).toEqual(many.slice(0, 50).map(task => task.taskKey));
-      expect(result.hasMore).toBe(true);
+      expect(inspector.list).toHaveBeenCalledWith(expect.objectContaining({ limit: 50 }));
+      expect(result.nextCursor).toBe('page-2');
+    });
+
+    it('hands the filters and cursor to the store, with the client as its principal key', async () => {
+      const inspector = fakeInspector();
+      const { mastra } = makeMastra(makeServer(inspector));
+      const query = listMcpServerTasksQuerySchema.parse({
+        status: 'failed',
+        surface: 'slow_report',
+        client: 'principal-hash',
+        key: 'key-1',
+        cursor: 'page-2',
+        limit: '20',
+      });
+
+      await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks', ...query });
+
+      expect(inspector.list).toHaveBeenCalledWith({
+        limit: 20,
+        cursor: 'page-2',
+        status: 'failed',
+        surface: 'slow_report',
+        principalKey: 'principal-hash',
+        taskKey: 'key-1',
+      });
+    });
+
+    it('rejects an unknown status filter', () => {
+      expect(listMcpServerTasksQuerySchema.safeParse({ status: 'running' }).success).toBe(false);
     });
 
     it('rejects a limit above 200', () => {
@@ -157,7 +186,6 @@ describe('MCP task routes', () => {
         surfaces: tasksInfo.surfaces,
         unavailable: 'resource_scoped',
         tasks: [],
-        hasMore: false,
       });
       expect(inspector.list).not.toHaveBeenCalled();
       expect(server.getTasksInspector).not.toHaveBeenCalled();
@@ -182,7 +210,6 @@ describe('MCP task routes', () => {
       expect(await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks' })).toEqual({
         surfaces: [],
         tasks: [],
-        hasMore: false,
       });
       expect(await status(LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'nope' }))).toBe(404);
     });
@@ -200,8 +227,43 @@ describe('MCP task routes', () => {
 
     it('drops fields outside the summary shape, so a raw task id or principal never leaves', () => {
       const leaky = { ...waiting, taskId: 'raw-task-id', principal: 'client:sub:alice', token: 'alice-token' };
-      const parsed = listMcpServerTasksResponseSchema.parse({ surfaces: [], tasks: [leaky], hasMore: false });
+      const parsed = listMcpServerTasksResponseSchema.parse({ surfaces: [], tasks: [leaky] });
       expect(JSON.stringify(parsed)).not.toMatch(/raw-task-id|client:sub:alice|alice-token/);
+    });
+  });
+
+  describe('FIND_MCP_SERVER_TASK_ROUTE', () => {
+    it('finds a task by its raw MCP task id and returns only the summary', async () => {
+      const inspector = fakeInspector();
+      const { mastra } = makeMastra(makeServer(inspector));
+
+      const result = await FIND_MCP_SERVER_TASK_ROUTE.handler({
+        ...context(mastra),
+        serverId: 'tasks',
+        taskId: 'raw-task-id',
+      });
+
+      expect(inspector.find).toHaveBeenCalledWith('raw-task-id');
+      expect(findMcpServerTaskResponseSchema.parse(result)).toEqual({ task: waiting });
+      expect(JSON.stringify(result)).not.toContain('raw-task-id');
+    });
+
+    it('404s for an unknown id, a scoped caller, and a store that cannot be listed', async () => {
+      const inspector = fakeInspector();
+      const { mastra } = makeMastra(makeServer(inspector));
+      const find = (m: Mastra, taskId: string, resourceId?: string) =>
+        status(FIND_MCP_SERVER_TASK_ROUTE.handler({ ...context(m, resourceId), serverId: 'tasks', taskId }));
+
+      expect(await find(mastra, 'nope')).toBe(404);
+      expect(await find(mastra, 'raw-task-id', 'user-1')).toBe(404);
+      expect(inspector.find).toHaveBeenCalledTimes(1);
+      expect(await find(makeMastra(makeServer(undefined)).mastra, 'raw-task-id')).toBe(404);
+    });
+
+    it('takes the task id in the body, never the URL', () => {
+      expect(FIND_MCP_SERVER_TASK_ROUTE.method).toBe('POST');
+      expect(FIND_MCP_SERVER_TASK_ROUTE.path).not.toContain(':taskId');
+      expect(findMcpServerTaskBodySchema.safeParse({ taskId: '' }).success).toBe(false);
     });
   });
 

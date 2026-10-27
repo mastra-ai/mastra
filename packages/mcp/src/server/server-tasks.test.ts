@@ -524,6 +524,13 @@ describe.each([
     await waitFor(await requester('bob'), hanging, 'cancelled');
     expect(await inspector.cancel(bySurface.hang!.taskKey)).toBe(false);
     expect(await inspector.cancel(hanging)).toBe(false);
+
+    // A raw task id finds its task (hashed before the lookup); a task key or unknown id finds nothing.
+    expect(await inspector.find(asking)).toMatchObject({ taskKey: bySurface.approve!.taskKey, status: 'completed' });
+    expect(await inspector.find(bySurface.approve!.taskKey)).toBeUndefined();
+    expect(await inspector.find('not-a-task')).toBeUndefined();
+    const { tasks: bobs } = await inspector.list({ principalKey: bySurface.hang!.principalKey });
+    expect(bobs.map(task => task.surface)).toEqual(['hang']);
   });
 
   it('reports a custom store without the admin view as not listable', async () => {

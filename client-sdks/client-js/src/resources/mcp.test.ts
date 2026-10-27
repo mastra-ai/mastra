@@ -259,7 +259,7 @@ describe('MCP Server Registry Client Methods', () => {
     const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
 
     it('lists tasks with getMcpServerTasks(), passing limit only when given', async () => {
-      const listed = { required: false, surfaces: [], tasks: [] };
+      const listed = { surfaces: [], tasks: [] };
       mockFetchResponse(listed);
       expect(await client.getMcpServerTasks('my server')).toEqual(listed);
       expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/my%20server/tasks`);
@@ -267,6 +267,33 @@ describe('MCP Server Registry Client Methods', () => {
       mockFetchResponse(listed);
       await client.getMcpServerTasks('tasks', { limit: 20 });
       expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks?limit=20`);
+    });
+
+    it('passes filters and the page cursor as query parameters', async () => {
+      mockFetchResponse({ surfaces: [], tasks: [] });
+      await client.getMcpServerTasks('tasks', {
+        status: 'failed',
+        surface: 'slow_report',
+        client: 'a/b+c',
+        cursor: 'p2',
+      });
+      const url = new URL(lastCall()[0]);
+      expect(Object.fromEntries(url.searchParams)).toEqual({
+        status: 'failed',
+        surface: 'slow_report',
+        client: 'a/b+c',
+        cursor: 'p2',
+      });
+    });
+
+    it('finds a task by MCP task id with findMcpServerTask(), sending the id in the body', async () => {
+      mockFetchResponse({ task: { taskKey: 'key-1' } });
+      await client.findMcpServerTask('tasks', 'raw-task-id');
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/find`);
+      expect(url).not.toContain('raw-task-id');
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ taskId: 'raw-task-id' });
     });
 
     it('cancels by key with cancelMcpServerTask(), encoding the key', async () => {

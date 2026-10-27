@@ -8,7 +8,15 @@ import type {
   MCPTaskInputResponses,
   MCPTaskStatus,
 } from '../../shared/tasks';
-import { principalKeyOf, taskKeyOf, toListing } from './store';
+import {
+  decodeTaskListCursor,
+  isPastTaskListCursor,
+  matchesTaskListOptions,
+  nextTaskListCursor,
+  principalKeyOf,
+  taskKeyOf,
+  toListing,
+} from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
@@ -16,6 +24,8 @@ import type {
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
   MCPTaskListing,
+  MCPTaskListOptions,
+  MCPTaskListPage,
   MCPTaskRunOptions,
   MCPTaskStore,
   MCPTaskStoreAdmin,
@@ -142,14 +152,28 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     return this.#cancel(taskKeyOf(taskId), access) !== 'not_found';
   }
 
-  async list({ limit }: { limit?: number } = {}): Promise<MCPTaskListing[]> {
+  async list(options: MCPTaskListOptions = {}): Promise<MCPTaskListPage> {
     this.#sweep();
-    const listings = [...this.#tasks.values()]
-      .reverse()
-      .map(record =>
-        toListing(record.taskKey, principalKeyOf(record.principal), record.context, this.#detailed(record)),
+    const limit = options.limit ?? 50;
+    const cursor = decodeTaskListCursor(options.cursor);
+    const matching: MCPTaskListing[] = [];
+    for (const record of [...this.#tasks.values()].reverse()) {
+      if (options.taskKey && record.taskKey !== options.taskKey) continue;
+      const listing = toListing(
+        record.taskKey,
+        principalKeyOf(record.principal),
+        record.context,
+        this.#detailed(record),
       );
-    return limit === undefined ? listings : listings.slice(0, limit);
+      if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
+      matching.push(listing);
+      if (matching.length > limit) break;
+    }
+    const listings = matching.slice(0, limit);
+    return {
+      listings,
+      ...(matching.length > limit && { nextCursor: nextTaskListCursor(listings, cursor) }),
+    };
   }
 
   async updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome> {

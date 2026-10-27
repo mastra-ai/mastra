@@ -228,12 +228,26 @@ export const mcpServerTaskPathParams = z.object({
 /** Tasks listed when the caller doesn't ask for a number. */
 export const DEFAULT_MCP_SERVER_TASKS_LIMIT = 50;
 
+const mcpServerTaskStatusSchema = z.enum(['working', 'input_required', 'completed', 'failed', 'cancelled']);
+
 export const listMcpServerTasksQuerySchema = z.object({
   /** How many of the most recent tasks to list; defaults to 50, at most 200. */
   limit: z.coerce.number().int().min(1).max(200).optional(),
+  /** `nextCursor` of the previous page. */
+  cursor: z.string().min(1).optional(),
+  status: mcpServerTaskStatusSchema.optional(),
+  /** The tool, workflow or agent name. */
+  surface: z.string().min(1).optional(),
+  /** A client key (`principalKey`) as listed. */
+  client: z.string().min(1).optional(),
+  /** A task key as listed, to read one task. */
+  key: z.string().min(1).optional(),
 });
 
-const mcpServerTaskStatusSchema = z.enum(['working', 'input_required', 'completed', 'failed', 'cancelled']);
+/** The raw MCP task id goes in the body so it never lands in URLs or access logs. */
+export const findMcpServerTaskBodySchema = z.object({
+  taskId: z.string().min(1).max(512),
+});
 
 export const mcpServerTaskSurfaceSchema = z.object({
   name: z.string(),
@@ -268,11 +282,13 @@ export const listMcpServerTasksResponseSchema = z.object({
    * caller is scoped to a resource, which has no mapping to MCP principals.
    */
   unavailable: z.enum(['not_listable', 'resource_scoped']).optional(),
-  /** The most recent tasks first, at most `limit`. */
+  /** The most recent matching tasks first, at most `limit`. */
   tasks: z.array(mcpServerTaskSummarySchema),
-  /** Whether older tasks exist beyond `tasks`. */
-  hasMore: z.boolean(),
+  /** Pass as `cursor` for the next page; absent when no older task matches. */
+  nextCursor: z.string().optional(),
 });
+
+export const findMcpServerTaskResponseSchema = z.object({ task: mcpServerTaskSummarySchema });
 
 export const answerMcpServerTaskBodySchema = z.object({
   inputResponses: z.record(z.string(), jsonObjectSchema),
