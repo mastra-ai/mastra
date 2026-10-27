@@ -153,6 +153,11 @@ describe('MastraJwtAuth', () => {
       });
     });
 
+    it('maps the role claim by default', () => {
+      const auth = new MastraJwtAuth({ secret: SECRET });
+      expect(auth.toMastraUser({ sub: 'user-1', role: 'admin' })).toMatchObject({ id: 'user-1', role: 'admin' });
+    });
+
     it('uses a custom mapUser when provided', () => {
       const auth = new MastraJwtAuth({
         secret: SECRET,

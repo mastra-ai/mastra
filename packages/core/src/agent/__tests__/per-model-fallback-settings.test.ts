@@ -2,7 +2,7 @@ import { APICallError } from '@internal/ai-sdk-v5';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { describe, expect, it } from 'vitest';
 import type { Processor } from '../../processors';
-import { RequestContext } from '../../request-context';
+import { MASTRA_NORMALIZED_USER_KEY, RequestContext } from '../../request-context';
 import { Agent } from '../agent';
 
 function createRecordingStreamModel(modelId: string, responseText: string) {
@@ -98,6 +98,30 @@ describe('Per-fallback-entry settings', () => {
         await agent.stream('Hello', { requestContext })
       ).text;
       expect(primary.doStreamCalls[0]?.temperature).toBe(0.1);
+    });
+
+    it('should pass the authenticated user to function-form modelSettings', async () => {
+      const primary = createRecordingStreamModel('user-settings', 'ok');
+      const requestContext = new RequestContext();
+      requestContext.set(MASTRA_NORMALIZED_USER_KEY, { id: 'user-1', role: 'admin' });
+
+      const agent = new Agent({
+        id: 'user-modelSettings',
+        name: 'User ModelSettings Test',
+        instructions: 'You are a test agent',
+        model: [
+          {
+            model: primary,
+            maxRetries: 0,
+            modelSettings: ({ user }) => (user?.role === 'admin' ? { temperature: 0.2 } : { temperature: 0.8 }),
+          },
+        ],
+      });
+
+      await (
+        await agent.stream('Hello', { requestContext })
+      ).text;
+      expect(primary.doStreamCalls[0]?.temperature).toBe(0.2);
     });
   });
 

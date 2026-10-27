@@ -57,9 +57,11 @@ export class MastraAuthSupabase extends MastraAuthProvider<User> {
   /**
    * Normalize the Supabase user; display name and avatar live in
    * `user_metadata`, which the default normalization does not inspect.
+   * Supabase's `role` is the Postgres role (e.g. `authenticated`), not an
+   * application role, so it is dropped to let RBAC supply the role instead.
    */
   override toMastraUser(user: User): MastraUser {
-    const normalized = normalizeMastraUser(user);
+    const { role: _postgresRole, ...normalized } = normalizeMastraUser(user);
     const metadata = (user.user_metadata ?? {}) as Record<string, unknown>;
     const pick = (value: unknown): string | undefined =>
       typeof value === 'string' && value.trim() ? value : undefined;

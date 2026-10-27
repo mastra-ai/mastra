@@ -25,6 +25,7 @@ function defaultMapUser(payload: JwtUser): User | null {
     email: str(payload.email),
     name: str(payload.name),
     avatarUrl: str(payload.avatarUrl) || str(payload.avatar_url) || str(payload.picture),
+    role: str(payload.role),
   };
 }
 

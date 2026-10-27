@@ -1,5 +1,6 @@
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import type { MastraAuthConfig } from '@mastra/core/server';
+import { CompositeAuth, MastraAuthProvider } from '@mastra/core/server';
 import { describe, expect, it, vi } from 'vitest';
 
 import { MASTRA_AUTH_MODE_KEY, MASTRA_NORMALIZED_USER_KEY, MASTRA_USER_KEY } from '../constants';
@@ -973,6 +974,41 @@ describe('auth helpers', () => {
 
       expect(result.action).toBe('next');
       expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toBeUndefined();
+    });
+
+    it("uses the winning CompositeAuth provider's toMastraUser and still maps its resource id", async () => {
+      class RejectingAuth extends MastraAuthProvider<{ id: string }> {
+        async authenticateToken() {
+          return null;
+        }
+        async authorizeUser() {
+          return true;
+        }
+      }
+      class WrappedAuth extends MastraAuthProvider<{ account: { key: string } }> {
+        mapUserToResourceId = (user: { account: { key: string } }) => `resource-${user.account.key}`;
+        async authenticateToken() {
+          return { account: { key: 'k-1' } };
+        }
+        async authorizeUser() {
+          return true;
+        }
+        override toMastraUser(user: { account: { key: string } }) {
+          return { id: user.account.key, role: 'member' };
+        }
+      }
+
+      const requestContext = createRequestContext();
+      const result = await coreAuthMiddleware({
+        ...baseCtx,
+        mastra: mockMastra(),
+        authConfig: new CompositeAuth([new RejectingAuth(), new WrappedAuth()]),
+        requestContext,
+      });
+
+      expect(result.action).toBe('next');
+      expect(requestContext.get(MASTRA_NORMALIZED_USER_KEY)).toEqual({ id: 'k-1', role: 'member' });
+      expect(requestContext.get(MASTRA_RESOURCE_ID_KEY)).toBe('resource-k-1');
     });
   });
 

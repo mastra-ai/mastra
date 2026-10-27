@@ -1027,7 +1027,9 @@ export class AgentController<TState = {}> {
     if (sessionWorkspace) return sessionWorkspace;
     if (typeof this.workspace !== 'function') return this.workspace ?? undefined;
     const ctx = await this.buildRequestContext(session, requestContext);
-    return (await this.workspace({ requestContext: ctx, mastra: this.getMastra() })) ?? undefined;
+    return (
+      (await resolveDynamicArgument(this.workspace, { requestContext: ctx, mastra: this.getMastra() })) ?? undefined
+    );
   }
 
   /**

@@ -179,7 +179,7 @@ export const supportAgent = new Agent({
 })
 ```
 
-`user` is `undefined` when the request is unauthenticated or no auth provider is configured. The normalized shape is produced by the auth provider's `toMastraUser()` method, which you can [override on custom providers](/docs/auth/custom-auth-provider). The raw provider-specific user object remains available with `requestContext.get('mastra__user')`.
+`user` is `undefined` when the request is unauthenticated or no auth provider is configured. It's populated by the Mastra server's auth middleware, so requests handled by an MCP server's own OAuth flow don't set it. The normalized shape is produced by the auth provider's `toMastraUser()` method, which you can [override on custom providers](/docs/auth/custom-auth-provider). The raw provider-specific user object remains available with `requestContext.get('mastra__user')`. is produced by the auth provider's `toMastraUser()` method, which you can [override on custom providers](/docs/auth/custom-auth-provider). The raw provider-specific user object remains available with `requestContext.get('mastra__user')`.
 
 ### Dynamic instructions
 

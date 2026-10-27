@@ -12,7 +12,7 @@ import type { DynamicArgument, MastraUser } from '../types';
  * provider is configured, or the stored value is malformed.
  */
 export function getRequestUser(requestContext: RequestContext<any>): MastraUser | undefined {
-  const user = requestContext.getRaw(MASTRA_NORMALIZED_USER_KEY);
+  const user = requestContext?.getRaw(MASTRA_NORMALIZED_USER_KEY);
   if (user && typeof user === 'object' && typeof (user as MastraUser).id === 'string') {
     return user as MastraUser;
   }
