@@ -14,7 +14,6 @@ import {
 import { ScorerLabel } from './comparison-metric-list';
 import type { ComparisonMetric } from './comparison-metric-list';
 import { ScoreReasonHoverCard } from './score-reason-hover-card';
-import { ComputedTag } from '@/domains/observability/components/computed-tag';
 
 export interface ItemMetricScore {
   scorerId: string;
@@ -25,8 +24,6 @@ export interface ItemMetricScore {
   label?: ReactNode;
   /** Explanation from the scorer, shown in a hover card next to the value. */
   reason?: string | null;
-  /** Categorical label from the scorer, shown as a tag next to the value. */
-  scoreLabel?: string | null;
 }
 
 export interface ItemMetricsParams {
@@ -122,16 +119,14 @@ export function itemMetrics({
       id: `scorer:${score.scorerId}`,
       icon: <ScorersIcon />,
       label: score.label ?? <ScorerLabel scorerId={score.scorerId} />,
-      value:
-        score.reason?.trim() || score.scoreLabel ? (
-          <span className="flex items-center gap-1.5">
-            {formatScore(score.value)}
-            {score.scoreLabel && <ComputedTag value={score.scoreLabel} className="shrink-0" />}
-            {score.reason?.trim() && <ScoreReasonHoverCard scorerId={score.scorerId} reason={score.reason} />}
-          </span>
-        ) : (
-          formatScore(score.value)
-        ),
+      value: score.reason?.trim() ? (
+        <span className="flex items-center gap-1.5">
+          {formatScore(score.value)}
+          <ScoreReasonHoverCard scorerId={score.scorerId} reason={score.reason} />
+        </span>
+      ) : (
+        formatScore(score.value)
+      ),
       rawValue: score.value,
       delta: score.delta ?? null,
     })),

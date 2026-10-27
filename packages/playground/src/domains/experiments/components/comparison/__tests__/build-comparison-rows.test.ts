@@ -55,19 +55,14 @@ describe('buildComparisonRows', () => {
       expect(contender.output).toEqual({ answer: 'Paris, France' });
     });
 
-    it('exposes scores with their scorer reason and label', () => {
+    it('exposes scores with their scorer reason', () => {
       const [baseline, contender] = rows()[0].sides;
 
       expect(baseline.scores).toEqual([
-        { scorerId: 'accuracy', value: 0.5, reason: 'Missing the country', label: 'partial' },
-        { scorerId: 'relevancy', value: 0.9, reason: null, label: null },
+        { scorerId: 'accuracy', value: 0.5, reason: 'Missing the country' },
+        { scorerId: 'relevancy', value: 0.9, reason: null },
       ]);
-      expect(contender.scores[0]).toEqual({
-        scorerId: 'accuracy',
-        value: 0.9,
-        reason: 'Complete answer',
-        label: 'exact',
-      });
+      expect(contender.scores[0]).toEqual({ scorerId: 'accuracy', value: 0.9, reason: 'Complete answer' });
     });
 
     it('computes the baseline to contender delta per scorer on the contender side', () => {
@@ -118,7 +113,7 @@ describe('buildComparisonRows', () => {
       const [, , challenger] = threeWayRows()[0].sides;
 
       expect(challenger.comment).toBe('Challenger matches the baseline');
-      expect(challenger.scores[0]).toEqual({ scorerId: 'accuracy', value: 0.6, reason: 'Close enough', label: null });
+      expect(challenger.scores[0]).toEqual({ scorerId: 'accuracy', value: 0.6, reason: 'Close enough' });
     });
   });
 
@@ -174,8 +169,8 @@ describe('buildComparisonRows', () => {
       expect(built).toHaveLength(3);
       expect(baseline.output).toEqual({ answer: 'Paris' });
       expect(baseline.scores).toEqual([
-        { scorerId: 'accuracy', value: 0.5, reason: null, label: null },
-        { scorerId: 'relevancy', value: 0.9, reason: null, label: null },
+        { scorerId: 'accuracy', value: 0.5, reason: null },
+        { scorerId: 'relevancy', value: 0.9, reason: null },
       ]);
       expect(baseline.metadata).toBeNull();
     });

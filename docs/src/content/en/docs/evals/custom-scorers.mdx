@@ -235,7 +235,7 @@ const glutenCheckerScorer = createScorer({...})
 
 **Prompt Objects:** See the [`createScorer`](/reference/evals/create-scorer) API reference for details on using prompt objects with generateScore, including required `calculateScore` function.
 
-**Categorical labels:** Return `{ score, label }` instead of a number when the scorer grades into categories such as `failing`, `adequate`, or `exemplary`. The label is stored next to the score and Studio counts labels per scorer in [experiments](/docs/evals/experiments#categorical-scores), so a single failing result isn't hidden by the average.
+**Categorical labels:** Return `{ score, label }` instead of a number when the scorer grades into categories such as `failing`, `adequate`, or `exemplary`. The label is stored next to the score and returned on each [experiment](/docs/evals/experiments#categorical-scores) item result, so a single failing result isn't hidden by the average.
 
 **Data Flow:** The score is available to generateReason as the `score` parameter
 

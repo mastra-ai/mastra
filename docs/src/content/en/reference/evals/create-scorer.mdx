@@ -487,7 +487,7 @@ Function: `({ run, results }) => number`
 />
 
 Returns: `number | { score: number; label?: string }`\
-The method must return a numerical score. Return `{ score, label }` to attach a categorical label (for example `'failing'`) next to the number. The label is stored with the score as `label` and shown in Studio; `generateReason` still receives the number as `score`.
+The method must return a numerical score. Return `{ score, label }` to attach a categorical label (for example `'failing'`) next to the number. The label is stored with the score as `label`; `generateReason` still receives the number as `score`.
 
 **Prompt Object Mode:**
 

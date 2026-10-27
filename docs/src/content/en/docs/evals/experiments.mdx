@@ -77,7 +77,7 @@ If every item must meet a requirement, check each item's score against it. For a
 
 ### Categorical scores
 
-A scorer can return a category next to its number by returning `{ score, label }` from `generateScore`. The label is stored with the score, returned on each item's `scores`, and Studio shows it per item and counts the labels per scorer next to the average, so one `failing` result stays visible in a run that averages `0.83`.
+A scorer can return a category next to its number by returning `{ score, label }` from `generateScore`. The label is stored with the score and returned on each item's `scores`, so you can count categories yourself and one `failing` result stays visible in a run that averages `0.83`.
 
 ```typescript title="src/mastra/scorers/safety-grade.ts"
 import { createScorer } from '@mastra/core/evals'

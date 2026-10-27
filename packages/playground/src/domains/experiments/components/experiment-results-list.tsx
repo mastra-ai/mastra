@@ -65,7 +65,7 @@ export type ExperimentResultsListProps<T extends ExperimentResultsListItem> = {
   onResultClick: (resultId: string) => void;
   columns: ExperimentResultsListColumn[];
   /** Structurally narrowed to what the scorer cells read, so `ClientScoreRowData[]` fits. */
-  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason' | 'label'>>>;
+  scoresByItemId?: Record<string, Array<Pick<ClientScoreRowData, 'scorerId' | 'score' | 'reason'>>>;
   scorerIds?: string[];
   setEndOfListElement?: (element: HTMLDivElement | null) => void;
   isFetchingNextPage?: boolean;
@@ -257,7 +257,6 @@ export function ExperimentResultsList<T extends ExperimentResultsListItem>({
                       className="flex items-center gap-1.5 text-muted-foreground tabular-nums"
                     >
                       {score != null ? score.score.toFixed(3) : '-'}
-                      {score?.label && <ComputedTag value={score.label} className="shrink-0" />}
                       {reason && <ScoreReasonHoverCard scorerId={scorerId} reason={reason} nested />}
                     </DataList.Cell>
                   );

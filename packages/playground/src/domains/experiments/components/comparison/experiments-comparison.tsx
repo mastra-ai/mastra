@@ -13,7 +13,6 @@ import {
 import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import { useMemo, useState } from 'react';
 import type { CSSProperties, MouseEvent } from 'react';
-import { countScoreLabels } from '../../utils/score-labels';
 import { buildComparisonRows, sideDurationMs } from './build-comparison-rows';
 import type { ComparisonRow } from './build-comparison-rows';
 import { ComparisonItemPanel } from './comparison-item-panel';
@@ -149,15 +148,14 @@ export function ExperimentsComparison({
     const scorerIds = [
       ...new Set(rows.flatMap(row => row.sides.flatMap(side => side.scores.map(s => s.scorerId)))),
     ].sort();
-    return experimentIds.map((_, index) => {
-      const labelCounts = countScoreLabels(rows.flatMap(row => row.sides[index]?.scores ?? []));
-      return scorerIds.map(scorerId => {
+    return experimentIds.map((_, index) =>
+      scorerIds.map(scorerId => {
         const value = average(rows, index, scorerId);
         const baseline = average(rows, 0, scorerId);
         const delta = index > 0 && value != null && baseline != null ? value - baseline : null;
-        return { scorerId, average: value, delta, labelCounts: labelCounts[scorerId] };
-      });
-    });
+        return { scorerId, average: value, delta };
+      }),
+    );
   }, [rows, experimentIds]);
 
   const metrics = useMemo(

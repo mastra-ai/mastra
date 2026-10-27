@@ -191,16 +191,16 @@ export const contenderScoreRows = [
 /** Scorer runs, grouped by dataset item id like `useScoresByExperimentId` returns them. */
 export const baselineScores: ScoresByItemId = {
   'item-a': [
-    { scorerId: 'accuracy', reason: 'Missing the country', label: 'partial' },
+    { scorerId: 'accuracy', reason: 'Missing the country' },
     { scorerId: 'relevancy', reason: null },
   ],
-  'item-b': [{ scorerId: 'accuracy', reason: 'Exact match', label: 'exact' }],
-  'item-c': [{ scorerId: 'accuracy', reason: null, label: 'partial' }],
+  'item-b': [{ scorerId: 'accuracy', reason: 'Exact match' }],
+  'item-c': [{ scorerId: 'accuracy', reason: null }],
 };
 
 export const contenderScores: ScoresByItemId = {
   'item-a': [
-    { scorerId: 'accuracy', reason: 'Complete answer', label: 'exact' },
+    { scorerId: 'accuracy', reason: 'Complete answer' },
     { scorerId: 'relevancy', reason: null },
   ],
 };

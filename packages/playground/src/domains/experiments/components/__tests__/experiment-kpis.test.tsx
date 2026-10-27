@@ -1,4 +1,4 @@
-import type { ClientScoreRowData, DatasetExperiment } from '@mastra/client-js';
+import type { DatasetExperiment } from '@mastra/client-js';
 import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { cleanup, screen } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -22,7 +22,7 @@ const fullMetrics: ExperimentMetrics = {
   agentRuns: 42,
 };
 
-const scoresResponse = (scores: Array<Pick<ClientScoreRowData, 'entityId' | 'scorerId' | 'score' | 'label'>>) =>
+const scoresResponse = (scores: Array<{ entityId: string; scorerId: string; score: number }>) =>
   HttpResponse.json({ scores, pagination: { total: scores.length, page: 0, perPage: 100, hasMore: false } });
 
 const renderKpis = (experiment: DatasetExperiment, metrics?: ExperimentKpisProps['metrics']) =>
@@ -63,48 +63,6 @@ describe('ExperimentKpis', () => {
     expect(screen.queryByText('0.750')).toBeNull();
 
     await waitForMutationsIdle(queryClient);
-  });
-
-  it('shows no label distribution when no score carries a label', async () => {
-    const { queryClient } = renderKpis(completedExperiment);
-
-    expect(await screen.findByText('0.833')).toBeDefined();
-    expect(screen.queryByTestId('score-label-distribution')).toBeNull();
-
-    await waitForMutationsIdle(queryClient);
-  });
-
-  describe('when a scorer labels its scores', () => {
-    beforeEach(() => {
-      server.use(
-        http.get(`${TEST_BASE_URL}/api/scores/run/:experimentId`, () =>
-          scoresResponse([
-            { entityId: 'item-1', scorerId: 'safety-grade', score: 0, label: 'failing' },
-            { entityId: 'item-2', scorerId: 'safety-grade', score: 1, label: 'exemplary' },
-            { entityId: 'item-3', scorerId: 'safety-grade', score: 1, label: 'exemplary' },
-            { entityId: 'item-1', scorerId: 'toxicity', score: 1 },
-          ]),
-        ),
-      );
-    });
-
-    it('lists how many items got each label, most frequent first, under the KPI cards', async () => {
-      const { queryClient } = renderKpis(completedExperiment);
-
-      const distribution = await screen.findByTestId('score-label-distribution');
-      expect(distribution.textContent).toBe('safety-grade: exemplary 2 · failing 1');
-
-      await waitForMutationsIdle(queryClient);
-    });
-
-    it('keeps the average score card', async () => {
-      const { queryClient } = renderKpis(completedExperiment);
-
-      expect(await screen.findByText('0.750')).toBeDefined();
-      expect(screen.getByText('Avg score')).toBeDefined();
-
-      await waitForMutationsIdle(queryClient);
-    });
   });
 
   it('leaves the item count to the breadcrumb', async () => {

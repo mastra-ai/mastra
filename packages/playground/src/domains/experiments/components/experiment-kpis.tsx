@@ -1,6 +1,5 @@
 import type { DatasetExperiment } from '@mastra/client-js';
 import { MetricsCardGroup } from '@mastra/playground-ui/components/MetricsCardGroup';
-import { Txt } from '@mastra/playground-ui/components/Txt';
 import { KpiCard } from '@mastra/playground-ui/domains/metrics/components';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { formatDuration } from '@mastra/playground-ui/utils/duration';
@@ -9,9 +8,7 @@ import { useExperimentsItemUsage } from '@mastra/react/hooks/experiments';
 import type { ExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { CoinsIcon, GaugeIcon, HashIcon, TimerIcon } from 'lucide-react';
 import { useMemo } from 'react';
-import { countScoreLabels } from '../utils/score-labels';
 import { formatCostValue, formatTokenCount, totalTokens } from './comparison/comparison-metric-format';
-import { ScoreLabelCounts } from './score-label-counts';
 
 export interface ExperimentKpisProps {
   experiment: DatasetExperiment;
@@ -47,11 +44,6 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
     if (scores.length === 0) return null;
     return scores.reduce((sum, score) => sum + score.score, 0) / scores.length;
   }, [scoresByItemId]);
-  // Per-scorer label distribution; empty for numeric-only scorers, which then look as before.
-  const labelCountsByScorer = useMemo(
-    () => Object.entries(countScoreLabels(Object.values(scoresByItemId ?? {}).flat())),
-    [scoresByItemId],
-  );
 
   const startedAt = experiment.startedAt ?? experiment.createdAt;
   const duration = (() => {
@@ -76,44 +68,33 @@ export function ExperimentKpis({ experiment, metrics }: ExperimentKpisProps) {
   })();
 
   return (
-    <>
-      <MetricsCardGroup>
-        {metrics?.isEnabled && (
-          <KpiCard
-            label="Total cost"
-            icon={CoinsIcon}
-            value={usage?.estimatedCost === undefined ? '—' : formatCostValue(usage.estimatedCost, usage.costUnit)}
-            detail="estimated"
-            isLoading={isUsageLoading}
-          />
-        )}
-        <KpiCard label="Run duration" icon={TimerIcon} value={duration} detail={runDurationDetail} />
-        {metrics?.isEnabled && (
-          <KpiCard
-            label="Total tokens"
-            icon={HashIcon}
-            value={tokens === undefined ? '—' : formatTokenCount(tokens)}
-            detail={tokensDetail}
-            isLoading={isUsageLoading}
-          />
-        )}
+    <MetricsCardGroup>
+      {metrics?.isEnabled && (
         <KpiCard
-          label="Avg score"
-          icon={GaugeIcon}
-          value={avgScore == null ? '—' : avgScore.toFixed(3)}
-          detail={avgScore == null ? 'no scores' : 'across all scorers'}
-          isLoading={avgScore === undefined}
+          label="Total cost"
+          icon={CoinsIcon}
+          value={usage?.estimatedCost === undefined ? '—' : formatCostValue(usage.estimatedCost, usage.costUnit)}
+          detail="estimated"
+          isLoading={isUsageLoading}
         />
-      </MetricsCardGroup>
-      {labelCountsByScorer.length > 0 && (
-        <div className="flex flex-wrap gap-x-4 gap-y-1 text-muted-foreground" data-testid="score-label-distribution">
-          {labelCountsByScorer.map(([scorerId, counts]) => (
-            <Txt key={scorerId} as="span" variant="caption">
-              {scorerId}: <ScoreLabelCounts counts={counts} />
-            </Txt>
-          ))}
-        </div>
       )}
-    </>
+      <KpiCard label="Run duration" icon={TimerIcon} value={duration} detail={runDurationDetail} />
+      {metrics?.isEnabled && (
+        <KpiCard
+          label="Total tokens"
+          icon={HashIcon}
+          value={tokens === undefined ? '—' : formatTokenCount(tokens)}
+          detail={tokensDetail}
+          isLoading={isUsageLoading}
+        />
+      )}
+      <KpiCard
+        label="Avg score"
+        icon={GaugeIcon}
+        value={avgScore == null ? '—' : avgScore.toFixed(3)}
+        detail={avgScore == null ? 'no scores' : 'across all scorers'}
+        isLoading={avgScore === undefined}
+      />
+    </MetricsCardGroup>
   );
 }
