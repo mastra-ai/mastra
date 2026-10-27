@@ -1,4 +1,5 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
+import { useState } from 'react';
 
 import { BoardFilterOptions } from './BoardFilterOptions';
 import { SearchableBoardFilterContent } from './SearchableBoardFilterContent';
@@ -16,18 +17,31 @@ export function BoardFilterSubmenu({
   selected: readonly string[];
   onChange: (values: string[]) => void;
 }) {
+  const [searchKey, setSearchKey] = useState(0);
   const options = boardFilterOptions(field, selected);
   if (options.length === 0) return null;
   const Icon = field.icon;
+  const searchable = options.length > SEARCHABLE_OPTION_COUNT;
 
   return (
-    <DropdownMenu.Sub>
+    <DropdownMenu.Sub
+      onOpenChange={open => {
+        // Search state sits above the popup portal, so each open needs a fresh instance.
+        if (open && searchable) setSearchKey(key => key + 1);
+      }}
+    >
       <DropdownMenu.SubTrigger hint={selected.length > 0 ? boardFilterSummary(field, selected) : undefined}>
         {Icon && <Icon aria-hidden />}
         <span>{field.label}</span>
       </DropdownMenu.SubTrigger>
-      {options.length > SEARCHABLE_OPTION_COUNT ? (
-        <SearchableBoardFilterContent label={field.label} options={options} selected={selected} onChange={onChange} />
+      {searchable ? (
+        <SearchableBoardFilterContent
+          key={searchKey}
+          label={field.label}
+          options={options}
+          selected={selected}
+          onChange={onChange}
+        />
       ) : (
         <DropdownMenu.SubContent>
           <BoardFilterOptions options={options} selected={selected} onChange={onChange} />
