@@ -576,17 +576,23 @@ await output.text
 cleanup()
 ```
 
-`recover()` throws instead of recovering a run that isn't orphaned:
+Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Enabling persistence after a crash can't reconstruct a missing checkpoint.
+
+Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
+
+`recover()` throws for unavailable checkpoints and runs that aren't orphaned:
 
 | Error ID | Thrown when |
 | - | - |
+| `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` | The loop row is still `pending` without a workflow input. No restartable checkpoint is available. No recovered execution starts, and any acquired recovery claim is released. |
 | `DURABLE_AGENT_RUN_ACTIVE` | Another execution holds the run, and `force` isn't set. |
 | `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY` | This process is executing the run. `force` doesn't override this. |
 | `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS` | This process is already recovering the run. |
 | `DURABLE_AGENT_RECOVER_RUN_SUSPENDED` | The run is suspended. Continue it with `resume()`. |
+| `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE` | The snapshot isn't restartable and isn't suspended. |
 | `DURABLE_AGENT_EXECUTION_CONFLICT` | With `force`, another execution claimed the run during the takeover. |
 
-The server's `POST /agents/:agentId/recover` route returns these errors as `409 Conflict`.
+The server's `POST /agents/:agentId/recover` route returns ownership, already-in-progress, suspended-run, and inactive-run conflicts as `409 Conflict`. An unavailable checkpoint returns `500 Internal Server Error`.
 
 <PropertiesTable
   content={[
