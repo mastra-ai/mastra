@@ -26,7 +26,7 @@ const NODE_MODULES = `${sep}node_modules${sep}`;
  * extracted config lives in `.mastra/output` and can't see the package's own `node_modules` (e.g. pnpm isolated
  * installs). The app's own imports keep resolving by name.
  */
-function typescriptSourcesResolver(entryFile: string): Plugin {
+export function typescriptSourcesResolver(entryFile: string): Plugin {
   const appPackageJson = pkg.up({ cwd: dirname(entryFile) });
   const appDir = appPackageJson ? dirname(appPackageJson) : dirname(entryFile);
   // App files keep the entry's path, files resolved by node-resolve are real paths
@@ -42,8 +42,8 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
   const resolve = typeof resolveHook === 'function' ? resolveHook : resolveHook.handler;
 
   return {
-    ...resolver,
     name: 'typescript-sources-resolver',
+    buildStart: resolver.buildStart,
     async resolveId(id, importer, options) {
       if (!importer || !isBareModuleSpecifier(id)) {
         return null;
@@ -58,7 +58,12 @@ function typescriptSourcesResolver(entryFile: string): Plugin {
         return resolved.id;
       }
 
-      return isInlinedSource(importer) ? { id: pathToFileURL(resolved.id).href, external: true } : null;
+      if (isInlinedSource(importer)) {
+        return { id: pathToFileURL(resolved.id).href, external: true };
+      }
+
+      // Keep installed dependencies outside the option-extraction graph.
+      return resolved.id.includes(NODE_MODULES) ? { id, external: true } : null;
     },
   };
 }
