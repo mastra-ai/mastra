@@ -43,6 +43,16 @@ function scripted(outcomes: Array<MCPDetailedTask | Error>, overrides: Partial<T
 }
 
 describe('waitForTask during a server outage', () => {
+  it('reports the created task and each later status change once', async () => {
+    const working = { ...created, statusMessage: 'still going' } as MCPDetailedTask;
+    const { port, options } = scripted([working, working, completed]);
+    const statuses: string[] = [];
+
+    await waitForTask(port, created, { ...options, onStatus: task => statuses.push(task.status) });
+
+    expect(statuses).toEqual(['working', 'completed']);
+  });
+
   it('keeps polling through a run of connection failures and backs off', async () => {
     const { port, options, sleeps } = scripted([...Array.from({ length: 8 }, refused), completed]);
 

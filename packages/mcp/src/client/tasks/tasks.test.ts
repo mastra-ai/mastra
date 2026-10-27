@@ -75,6 +75,32 @@ describe('MCPClient with MCP Tasks', () => {
     expect(update.params.inputResponses).toEqual({ approve: { action: 'accept', content: { ok: true } } });
   });
 
+  it('writes the MCP task id and each status change to the tool output stream', async () => {
+    const { call } = await connect({
+      tasks: true,
+      inputRequests: async () => ({ action: 'accept', content: { ok: true } }),
+    });
+    const writes: unknown[] = [];
+    const writer = { write: async (data: unknown) => void writes.push(data) };
+
+    await call('confirm', {}, { writer });
+
+    const taskId = server!.requests.find(request => request.method === 'tasks/get')!.params.taskId;
+    const statuses = writes.map(write => (write as { status: string }).status);
+    expect(writes[0]).toEqual({
+      type: 'mcp-task',
+      taskId,
+      status: 'working',
+      createdAt: expect.any(String),
+      serverName: 'reports',
+    });
+    expect(statuses).toContain('input_required');
+    expect(statuses.at(-1)).toBe('completed');
+    // One write per change, not per poll.
+    expect(statuses.every((status, index) => status !== statuses[index - 1])).toBe(true);
+    expect(writes.every(write => (write as { taskId: string }).taskId === taskId)).toBe(true);
+  });
+
   it('fails a task needing input when no inputRequests handler is configured', async () => {
     const { call } = await connect();
 

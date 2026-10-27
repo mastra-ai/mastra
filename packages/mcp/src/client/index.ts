@@ -7,6 +7,7 @@ export type {
   MCPClientInfo,
   MCPClientProtocolVersion,
   MCPClientTasksOptions,
+  MCPTaskProgress,
   MCPInputRequest,
   MCPInputRequestHandler,
   MCPServerImplementation,

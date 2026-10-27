@@ -84,6 +84,7 @@ import type {
   MCPClientProtocolVersion,
   MCPClientTasksOptions,
   MCPServerImplementation,
+  MCPTaskProgress,
   RequireToolApproval,
   SerializableMCPToolDefinition,
 } from './types';
@@ -1710,6 +1711,7 @@ export class InternalMastraMCPClient extends MastraBase {
             abortSignal?: AbortSignal;
             _meta?: Record<string, unknown>;
             tracingContext?: TracingContext;
+            writer?: { write(data: unknown): Promise<void> };
           },
         ) => {
           // A hydrated tool was rebuilt from cache without ever opening a connection, so the
@@ -1749,7 +1751,7 @@ export class InternalMastraMCPClient extends MastraBase {
               this.log('debug', `Tool ${tool.name} continues as MCP task ${task.taskId}`);
               // Agents with background tasks run this executor off the agent loop (see
               // `taskToolBackgroundConfig`), so waiting here doesn't block the agent.
-              return finishToolCall(await this.awaitToolTask(tool.name, task, context?.abortSignal));
+              return finishToolCall(await this.awaitToolTask(tool.name, task, context?.abortSignal, context?.writer));
             };
 
             const finishToolCall = async (res: CallToolResult) => {
@@ -1881,8 +1883,21 @@ export class InternalMastraMCPClient extends MastraBase {
     toolName: string,
     task: MCPTask,
     signal: AbortSignal | undefined,
+    writer?: { write(data: unknown): Promise<void> },
   ): Promise<CallToolResult> {
     const details = { toolName, serverName: this.name, taskId: task.taskId };
+    // Studio's tool-call card shows the MCP task (id, status, elapsed time) from these progress
+    // writes. They are live only: tool progress isn't saved with the conversation.
+    const onStatus = (current: MCPTask) => {
+      const progress: MCPTaskProgress = {
+        type: 'mcp-task',
+        taskId: current.taskId,
+        status: current.status,
+        createdAt: current.createdAt,
+        serverName: this.name,
+      };
+      void writer?.write(progress).catch(() => {});
+    };
     const fail = (id: Uppercase<string>, text: string, cause?: unknown) =>
       new MastraError({ id, domain: ErrorDomain.MCP, category: ErrorCategory.THIRD_PARTY, text, details }, cause);
 
@@ -1902,6 +1917,7 @@ export class InternalMastraMCPClient extends MastraBase {
           inputRequests: this.serverConfig.inputRequests,
           pollIntervalMs: this.taskOptions?.pollIntervalMs,
           maxWaitMs: this.taskOptions?.maxWaitMs,
+          onStatus,
         },
       );
     } catch (error) {

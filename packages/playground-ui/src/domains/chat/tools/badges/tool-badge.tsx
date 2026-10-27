@@ -1,4 +1,6 @@
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
+import { McpTaskChip } from './mcp-task-chip';
+import { useMcpTaskProgress } from './use-mcp-task-progress';
 import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
 import { SectionLabel } from '@/domains/chat/components/section-label';
@@ -70,6 +72,8 @@ export const ToolBadge = ({
     toolOutput.length > 0 ||
     needsApproval;
 
+  const mcpTask = useMcpTaskProgress(result, status);
+
   const bgEntry =
     (metadata?.mode === 'stream' || metadata?.mode === 'generate') && metadata?.backgroundTasks
       ? metadata.backgroundTasks[toolCallId]
@@ -97,8 +101,11 @@ export const ToolBadge = ({
             selectionReason={selectionReason || ''}
             input={agentNetworkInput as string | Record<string, unknown> | undefined}
           />
-        ) : bgEntry?.taskId && bgEntry?.startedAt ? (
-          <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />
+        ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
+          <>
+            {mcpTask && <McpTaskChip task={mcpTask} />}
+            {bgEntry?.taskId && bgEntry?.startedAt && <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />}
+          </>
         ) : null
       }
       initialCollapsed={!(toolApprovalMetadata ?? suspendPayload)}
