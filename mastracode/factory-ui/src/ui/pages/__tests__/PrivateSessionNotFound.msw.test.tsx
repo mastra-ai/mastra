@@ -78,7 +78,9 @@ describe('opening a session the viewer cannot see', () => {
 
     await userEvent.click(await screen.findByRole('button', { name: 'Start a new session' }));
 
-    expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`));
+    await waitFor(() =>
+      expect(router.state.location.pathname).toMatch(new RegExp(`^/factories/${FACTORY_ID}/user/new/[0-9a-f-]{36}$`)),
+    );
   });
 
   it('explains other failures and offers only a retry', async () => {

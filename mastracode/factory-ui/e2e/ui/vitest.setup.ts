@@ -1,6 +1,6 @@
 import * as matchers from '@testing-library/jest-dom/matchers';
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 
 // Extend Vitest's `expect` with jest-dom matchers explicitly. We avoid the
@@ -8,6 +8,9 @@ import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 // nested store layout, that module re-imports `vitest` from its own install
 // path and fails to resolve it.
 expect.extend(matchers);
+
+// Cold lazy routes include Vite's first module transform in the DOM wait.
+configure({ asyncUtilTimeout: 5_000 });
 
 import { server } from './msw-server';
 

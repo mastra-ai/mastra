@@ -18,7 +18,7 @@ import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-rou
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
-import { RootGuards } from './domains/auth/components/RootGuards';
+import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
@@ -29,15 +29,14 @@ import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreate
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
-// Keep the boards eager. Secondary pages load after their route guards allow
-// them, with the loading boundary inside the app shell so the sidebar stays.
+// Keep the boards eager. These secondary pages load after their route guards
+// allow them, with the loading boundary inside the app shell so the sidebar stays.
 const KnowledgePage = lazyPage(() =>
   import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })),
 );
 const CreateFactoryPage = lazyPage(() =>
   import('./pages/CreateFactoryPage').then(module => ({ default: module.CreateFactoryPage })),
 );
-const NewPage = lazyPage(() => import('./pages/NewPage').then(module => ({ default: module.NewPage })));
 const OnboardingPage = lazyPage(() =>
   import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
 );
@@ -47,7 +46,19 @@ const SlackConnectionPage = lazyPage(() =>
 );
 const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
 const SignInPage = lazyPage(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
-const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => ({ default: module.ThreadPage })));
+
+// Resolve chat modules before committing navigation so the session providers
+// and page mount together. Mounting the page later can re-fetch failed queries
+// that the shared provider has already resolved (for example, a private session).
+async function loadNewPage() {
+  const { NewPage } = await import('./pages/NewPage');
+  return { Component: NewPage };
+}
+
+async function loadThreadPage() {
+  const { ThreadPage } = await import('./pages/ThreadPage');
+  return { Component: ThreadPage };
+}
 
 function lazyPage(load: () => Promise<{ default: ComponentType }>) {
   const Page = lazy(load);
@@ -157,6 +168,7 @@ export function createAppRoutes(): RouteObject[] {
     {
       path: '/',
       element: <RootGuards />,
+      hydrateFallbackElement: <AuthPendingSkeleton label="Loading page" />,
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
@@ -168,11 +180,11 @@ export function createAppRoutes(): RouteObject[] {
               element: <AppLayout />,
               children: [
                 { index: true, element: <FactoryHomeRedirect /> },
-                { path: 'workspaces/:sessionId', element: <NewPage /> },
-                { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
-                { path: 'user/new/:draftSessionId', element: <NewPage /> },
-                { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'new', element: <NewPage /> },
+                { path: 'workspaces/:sessionId', lazy: loadNewPage },
+                { path: 'workspaces/:sessionId/threads/:threadId', lazy: loadThreadPage },
+                { path: 'user/new/:draftSessionId', lazy: loadNewPage },
+                { path: 'user/threads/:threadId', lazy: loadThreadPage },
+                { path: 'new', lazy: loadNewPage },
                 { path: 'new-factory', element: <CreateFactoryPage /> },
                 { path: 'work', element: <WorkBoardPage /> },
                 { path: 'review', element: <ReviewBoardPage /> },
