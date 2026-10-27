@@ -2,7 +2,7 @@
 '@mastra/libsql': minor
 ---
 
-Added support for the experimental workflow `storageVersion: 2` option. Runs of workflows that set it are stored as a run header plus one row per step, and each write saves only the steps that changed instead of rewriting the whole run. This keeps writes small for long-running workflows and loops.
+Added support for the experimental workflow `storageVersion: 2` option. Runs of workflows that set it are stored as a run header plus one row per step, and each write saves only what changed instead of rewriting the whole run: the steps that changed, and the changes to the workflow state. A nested workflow run stores its state as changes to its parent's. This keeps writes small for long-running workflows and loops.
 
 ```ts
 const workflow = createWorkflow({
