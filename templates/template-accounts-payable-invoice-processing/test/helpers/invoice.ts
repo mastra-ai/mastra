@@ -2,7 +2,7 @@ import type { ExtractedInvoice, UnsignedInvoiceWorkflowInput } from '../../src/m
 
 export function invoiceInput(overrides: Partial<ExtractedInvoice> = {}): UnsignedInvoiceWorkflowInput {
   return {
-    rawDocumentRef: { id: 'fixture-invoice', mimeType: 'image/jpeg', source: 'image' },
+    rawDocumentRef: { requiresHumanReview: false, id: 'fixture-invoice', mimeType: 'image/jpeg', source: 'image' },
     extractedResult: {
       invoiceNumber: 'AP-TEST-1001',
       vendorName: 'AP Sandbox Vendor',

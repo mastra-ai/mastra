@@ -158,7 +158,7 @@ describe('QuickBooks provider', () => {
       const receipt = await provider.postBill?.({
         idempotencyKey: `ap-${digest}`,
         invoice: {
-          document: { id: 'invoice', mimeType: 'image/jpeg', source: 'image' },
+          document: { requiresHumanReview: false, id: 'invoice', mimeType: 'image/jpeg', source: 'image' },
           invoiceNumber: 'ACME-1001',
           vendorName: 'Acme Supplies',
           vendorTaxId: null,
@@ -254,7 +254,12 @@ describe('QuickBooks provider', () => {
         },
       });
       const unsignedInput = {
-        rawDocumentRef: { id: 'qbo-workflow', mimeType: 'image/jpeg' as const, source: 'image' as const },
+        rawDocumentRef: {
+          requiresHumanReview: false,
+          id: 'qbo-workflow',
+          mimeType: 'image/jpeg' as const,
+          source: 'image' as const,
+        },
         extractedResult: {
           invoiceNumber: 'INV-1001',
           vendorName: 'Acme Supplies',

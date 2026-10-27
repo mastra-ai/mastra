@@ -455,3 +455,21 @@ it('retains the posted Bill receipt when local history persistence fails', async
     await test.close();
   }
 });
+
+// PR #28532, CodeRabbit 4383787310: model-provided references do not prove attachment provenance.
+it('requires explicit human approval for tool-submitted invoice fields below the amount threshold', async () => {
+  for (const approved of [true, false]) {
+    const test = await scenario();
+    try {
+      const pending = await test.run({ tool: true });
+      assert.equal(pending.approvalPending, true);
+      assert.ok(pending.reasons?.some(reason => reason.code === 'DOCUMENT_REVIEW_REQUIRED'));
+      assert.equal((await test.state()).bills.length, 0);
+      const resumed = await test.run({ runId: pending.runId, approved });
+      assert.equal(resumed.result?.executionStatus, approved ? 'posted' : 'rejected');
+      assert.equal((await test.state()).bills.length, approved ? 1 : 0);
+    } finally {
+      await test.close();
+    }
+  }
+});

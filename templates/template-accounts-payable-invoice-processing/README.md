@@ -1,6 +1,6 @@
 # Accounts Payable Invoice Processing
 
-Turn an invoice into a verified AP decision from one Mastra Studio message. The agent reads a PDF, PNG, or JPEG, checks the extracted fields against accounting data, and either posts the bill, asks for approval, or returns the reasons it needs review.
+Turn an invoice into an AP review decision from one Mastra Studio message. The agent reads a PDF, PNG, or JPEG, checks the extracted fields against accounting data, and asks for approval before posting or returns the reasons it needs review.
 
 ## Why we built this
 
@@ -35,7 +35,7 @@ Real invoices are inconsistent, and production AP work spans several systems. We
 
 ## Try it out
 
-- Enable the sandbox screening bypass while keeping posting disabled, then submit a matching invoice at or below the approval threshold. Expect `posting_unavailable` without a Bill. Enable posting as described in Prerequisites and resubmit; look for `posted` under **Expenses & bills → Bills** in QuickBooks.
+- Enable the sandbox screening bypass while keeping posting disabled, then submit a matching invoice at or below the approval threshold. Expect `approval_required`. Approve using its run ID and expect `posting_unavailable` without a Bill. Enable posting as described in Prerequisites, resubmit, and approve the new run; look for `posted` under **Expenses & bills → Bills** in QuickBooks.
 - Submit a matching invoice above the threshold. It pauses with `approval_required`. Review the evidence, then send `Approve invoice run <runId>. Comment: Reviewed in Studio.` using the returned `runId`. Only that explicit decision resumes posting.
 - Suspend a different invoice, then send `Reject invoice run <runId>. Comment: Amount needs correction.` Check that it returns `rejected` and no Bill is created.
 - Reattach an invoice already posted. Duplicate detection routes it to review. Restart the application and repeat to check against the Bills loaded from QuickBooks.
@@ -56,7 +56,7 @@ Posting uses the MCP's `create-bill` tool with the configured expense accounts, 
 
 ## Policy
 
-Monetary settings use integer minor units: `100000` represents USD 1,000 for a USD invoice. Only totals strictly above `AP_APPROVAL_THRESHOLD_MINOR` require approval. `AP_AMOUNT_TOLERANCE_MINOR` controls PO amount differences; `AP_LOW_CONFIDENCE_THRESHOLD` controls extraction review. Missing confidence, inconsistent dates or totals, unavailable providers, potential duplicates, inactive vendors, and missing or mismatched POs prevent automatic posting.
+Monetary settings use integer minor units: `100000` represents USD 1,000 for a USD invoice. Every invoice submitted by the agent requires human approval: its document reference and extracted fields do not prove attachment provenance. Review the original attachment before approving. Trusted server integrations may explicitly set `rawDocumentRef.requiresHumanReview=false` only after applying their own document verification; the agent tool cannot set this flag. For those integrations, totals strictly above `AP_APPROVAL_THRESHOLD_MINOR` still require approval. `AP_AMOUNT_TOLERANCE_MINOR` controls PO amount differences; `AP_LOW_CONFIDENCE_THRESHOLD` controls extraction review. Missing confidence, inconsistent dates or totals, unavailable providers, potential duplicates, inactive vendors, and missing or mismatched POs prevent automatic posting.
 
 Conversation memory does not count as approval. Approval evidence uses the reviewer label `mastra-studio`. Add your application's authentication and reviewer identity before exposing approval actions outside a trusted local Studio session.
 

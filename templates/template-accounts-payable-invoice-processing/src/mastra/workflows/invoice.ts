@@ -41,7 +41,7 @@ const normalizeStep = createStep({
   outputSchema: NormalizedInvoiceSchema,
   execute: async ({ inputData }) => {
     if (!isTrustedSubmission(inputData)) {
-      throw new Error('Invoice processing requires a server-validated document submission');
+      throw new Error('Invoice processing requires a server-issued invoice submission');
     }
     return normalizeInvoice(inputData);
   },

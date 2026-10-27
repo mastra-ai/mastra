@@ -83,7 +83,7 @@ const runtime: InvoiceRuntime = {
 };
 
 const normalized = normalizeInvoice({
-  rawDocumentRef: { id: 'invoice', mimeType: 'image/jpeg', source: 'image' },
+  rawDocumentRef: { requiresHumanReview: false, id: 'invoice', mimeType: 'image/jpeg', source: 'image' },
   extractedResult: invoice,
   submissionSignature: '0'.repeat(64),
 });

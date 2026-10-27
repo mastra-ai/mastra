@@ -93,6 +93,7 @@ const submitInvoice = createTool({
       return buildExtractionReviewResult(checked.issues);
     }
     const document = {
+      requiresHumanReview: true,
       id: documentId,
       mimeType: source === 'PDF' ? 'application/pdf' : 'image/jpeg',
       source,

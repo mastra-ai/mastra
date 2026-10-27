@@ -16,7 +16,7 @@ export function makePolicyRouting(runtime: InvoiceRuntime) {
     );
     const disposition = exception
       ? exceptionDisposition[exception]
-      : state.invoice.totalMinor > runtime.policy.approvalThresholdMinor
+      : state.invoice.document.requiresHumanReview || state.invoice.totalMinor > runtime.policy.approvalThresholdMinor
         ? 'approval_required'
         : 'auto_post';
 
@@ -25,14 +25,26 @@ export function makePolicyRouting(runtime: InvoiceRuntime) {
         step: 'policy',
         outcome: 'pass',
         reasons: [
-          {
-            code: 'APPROVAL_THRESHOLD_EXCEEDED',
-            message: 'Invoice total exceeds the configured approval threshold',
-            evidence: {
-              totalMinor: state.invoice.totalMinor,
-              approvalThresholdMinor: runtime.policy.approvalThresholdMinor,
-            },
-          },
+          ...(state.invoice.document.requiresHumanReview
+            ? [
+                {
+                  code: 'DOCUMENT_REVIEW_REQUIRED',
+                  message: 'Review the original invoice and extracted fields; the attachment reference is unverified',
+                },
+              ]
+            : []),
+          ...(state.invoice.totalMinor > runtime.policy.approvalThresholdMinor
+            ? [
+                {
+                  code: 'APPROVAL_THRESHOLD_EXCEEDED',
+                  message: 'Invoice total exceeds the configured approval threshold',
+                  evidence: {
+                    totalMinor: state.invoice.totalMinor,
+                    approvalThresholdMinor: runtime.policy.approvalThresholdMinor,
+                  },
+                },
+              ]
+            : []),
         ],
       });
 

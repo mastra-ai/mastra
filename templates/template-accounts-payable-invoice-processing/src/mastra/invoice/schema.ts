@@ -118,6 +118,7 @@ export const InvoiceDraftSchema = z.object({
 export type InvoiceDraft = z.infer<typeof InvoiceDraftSchema>;
 
 const DocumentRefSchema = z.object({
+  requiresHumanReview: z.boolean().default(true),
   id: z.string(),
   mimeType: z.enum(['application/pdf', 'image/png', 'image/jpeg']),
   source: z.enum(['PDF', 'image']).default('PDF'),
@@ -262,6 +263,8 @@ export const PostingRequestSchema = z
         code: z.ZodIssueCode.custom,
         message: 'Posting requires approval or an explicit not-required decision',
       });
+    if (value.invoice.document.requiresHumanReview && value.approval.status !== 'approved')
+      context.addIssue({ code: 'custom', message: 'Unverified document references require explicit human approval' });
     if (value.idempotencyKey !== `ap-${value.approval.invoiceDigest}`)
       context.addIssue({
         code: z.ZodIssueCode.custom,
