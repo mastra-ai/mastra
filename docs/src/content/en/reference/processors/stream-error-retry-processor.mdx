@@ -142,8 +142,9 @@ export const agent = new Agent({
       },
       {
         name: 'matchers',
-        type: 'StreamErrorRetryMatcher[]',
-        description: 'Additional functions that identify provider-specific retryable stream errors.',
+        type: 'StreamErrorRetryMatcherEntry[]',
+        description:
+          'Additional matchers that identify provider-specific retryable stream errors. Each entry is either a predicate `(error) => boolean` or a config object `{ match, maxRetries?, delayMs?, onRetry? }`. When a config entry is the first matcher to match an error, its `maxRetries` and `delayMs` replace the processor-level values (omitted fields fall back to them), and its `onRetry` callback runs before each retry.',
         isOptional: true,
         defaultValue: '[]',
       },

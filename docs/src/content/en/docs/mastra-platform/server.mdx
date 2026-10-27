@@ -45,8 +45,8 @@ Server deploy provisions hosted storage automatically. If you override storage w
     The command runs `mastra build` and uploads its artifact, then builds and deploys a Docker image. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
 
     :::note
-    Environment variables from `.env`, `.env.local`, and `.env.production` are included automatically. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
-    Review and sanitize these files before first deploy to avoid uploading development-only or personal secrets.
+    The CLI uploads environment variables from one env file in your project. If there is a single `.env` or `.env.*` file, it uses that file. If there are several, it asks which one to use (defaulting to `.env.production`). In non-interactive runs (`--yes` or CI), pass `--env-file <file>` when several exist. On the first deploy, these seed the project if no env vars are set yet. After that, manage env vars through the web dashboard.
+    Review and sanitize the selected file before first deploy to avoid uploading development-only or personal secrets.
     :::
 
     See the [CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags.
@@ -139,7 +139,7 @@ With the **Persistent Server add-on** enabled, the service stays awake even with
 
 ## CI/CD
 
-Automate deployments from GitHub Actions, GitLab CI, or any CI provider. After your first interactive deploy, CI/CD needs two things: an API token and the `.mastra-project.json` file committed to your repository.
+Automate deployments from GitHub Actions, GitLab CI, or any CI provider. After your first interactive deploy, CI/CD needs an API token, your organization and project IDs, and the `.mastra-project.json` file committed to your repository.
 
 :::tip
 If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/github) gives you push-to-deploy without writing a workflow file. Use the CLI-based CI/CD flow below when you need GitLab, another CI provider, or custom build steps before deploy.
@@ -163,7 +163,11 @@ If your code lives on GitHub, the [GitHub integration](/docs/mastra-platform/git
   </StepItem>
 
   <StepItem>
-    Ensure your `.mastra-project.json` file is committed to the repository. The CLI reads the `organizationId` and `projectId` from this file to target the correct project during CI deploys.
+    Ensure your `.mastra-project.json` file is committed to the repository.
+  </StepItem>
+
+  <StepItem>
+    Add `MASTRA_ORG_ID` and `MASTRA_PROJECT_ID` to your CI provider, using the `organizationId` and `projectId` values from `.mastra-project.json`. When `MASTRA_API_TOKEN` is set, `mastra deploy` runs headless and fails if either variable is missing.
   </StepItem>
 </Steps>
 
@@ -202,6 +206,8 @@ jobs:
         run: npx mastra deploy --yes
         env:
           MASTRA_API_TOKEN: ${{ secrets.MASTRA_API_TOKEN }}
+          MASTRA_ORG_ID: ${{ secrets.MASTRA_ORG_ID }}
+          MASTRA_PROJECT_ID: ${{ secrets.MASTRA_PROJECT_ID }}
 ```
 
 Adjust the `paths` filter and `working-directory` if your Mastra project is in a subdirectory (e.g. a monorepo).
@@ -222,14 +228,14 @@ deploy:
     - npx mastra deploy --yes
 ```
 
-Add `MASTRA_API_TOKEN` as a CI/CD variable in **Settings → CI/CD → Variables**.
+Add `MASTRA_API_TOKEN`, `MASTRA_ORG_ID`, and `MASTRA_PROJECT_ID` as CI/CD variables in **Settings → CI/CD → Variables**.
 
 ### Other CI providers
 
 Any CI system that runs Node.js and shell commands works with Mastra:
 
 1. Install dependencies.
-1. Set `MASTRA_API_TOKEN` as an environment variable.
+1. Set `MASTRA_API_TOKEN`, `MASTRA_ORG_ID`, and `MASTRA_PROJECT_ID` as environment variables.
 1. Run `mastra deploy --yes`.
 
 ### Verify the deploy
@@ -257,7 +263,7 @@ The following example adds a verification step to a GitHub Actions workflow:
 
 ### Override project config with environment variables
 
-The CLI reads `organizationId` and `projectId` from `.mastra-project.json` by default. To override these values (e.g. deploying to a different project from the same repository), set the following environment variables:
+For interactive deploys, the CLI reads `organizationId` and `projectId` from `.mastra-project.json` by default. When `MASTRA_API_TOKEN` is set, both variables below are required. To override these values (e.g. deploying to a different project from the same repository), set the following environment variables:
 
 | Variable | Description |
 | - | - |
