@@ -178,7 +178,7 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 }
 ```
 
-If no `id` can be derived from the user object, the normalized user is omitted and callbacks receive `user: undefined`; the raw user object remains available on the request context.
+If no `id` can be derived from the user object, the normalized user is omitted and callbacks receive `user: undefined`. The raw user object remains available on the request context.
 
 ## Configuration options
 

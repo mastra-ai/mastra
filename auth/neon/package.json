@@ -30,7 +30,7 @@
     "jose": "^6.2.12"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.0.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
