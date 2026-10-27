@@ -375,6 +375,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'suspended') {
+            capabilities.onRunSuspended?.();
             agentSpan?.end({
               endTree: true,
               output: {

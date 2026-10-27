@@ -553,7 +553,7 @@ describeForAllEngines(
         ? engine === 'inngest'
           ? (['hidden', 'client', 'reprocessed', 'held', 'held-next-step'] as const)
           : (['hidden', 'client', 'reprocessed', 'held', 'held-next-step', 'unpublished'] as const)
-        : (['client', 'held', 'held-next-step'] as const),
+        : (['hidden', 'client', 'held', 'held-next-step'] as const),
     )('restores only emitted results after approval (%s lookup)', async kind => {
       // Publishing the lookup result fails once; the rest goes through.
       let failedPublish = false;
@@ -672,8 +672,11 @@ describeForAllEngines(
         }
         await expect.poll(() => finish).toBeDefined();
         if (kind === 'unpublished') expect(failedPublish).toBe(true);
-        expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(expected);
-        expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual(
+        // The plain Agent reports results in emission order, and a held result is emitted at the end of the
+        // resumed stream; durable engines move it back to its call's place.
+        const inOrder = (ids: string[]) => (kind === 'held' && !isDurableEngineVariant(engine) ? [...ids].sort() : ids);
+        expect(inOrder(finish!.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual(expected);
+        expect(inOrder(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId)))).toEqual(
           expected,
         );
       } finally {
