@@ -33,6 +33,7 @@
     "gpt-6-luna",
     "gpt-6-sol",
     "gpt-6.1-sol",
+    "gpt-6.1-terra",
     "gpt-daybreak-blue-latest",
     "gpt-daybreak-red-latest",
     "gpt-image-1",
@@ -95,6 +96,7 @@
     "gpt-6-luna",
     "gpt-6-sol",
     "gpt-6.1-sol",
+    "gpt-6.1-terra",
     "gpt-daybreak-blue-latest",
     "gpt-daybreak-red-latest",
     "o1",
@@ -105,19 +107,37 @@
     "o4-mini"
   ],
   "reasoning": {
-    "gpt-5-mini": [
+    "o3-mini": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-realtime-2.1": [
+    "gpt-5.3-codex": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-5.5": [
+    "o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-daybreak-blue-latest": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-5.4-nano": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
@@ -129,34 +149,40 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5-pro": [
-      {
-        "type": "effort",
-        "values": ["high"]
-      }
-    ],
     "gpt-5.4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "o1-pro": [
+    "o3-pro": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.4-pro": [
+      {
+        "type": "effort",
+        "values": ["medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6-astra": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-6.1-terra": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "gpt-5.2-pro": [
@@ -171,19 +197,19 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "gpt-5.4-pro": [
+    "o1-pro": [
       {
         "type": "effort",
-        "values": ["medium", "high", "xhigh"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-6-sol": [
+    "gpt-5.6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "o3-mini": [
+    "o1": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -195,25 +221,25 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "gpt-5.4-mini": [
+    "gpt-5-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["high"]
       }
     ],
-    "gpt-5.4-nano": [
+    "gpt-5-nano": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-5.6": [
+    "gpt-5": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-daybreak-blue-latest": [
+    "gpt-6-luna": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
@@ -225,49 +251,31 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "o1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-6-astra": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "gpt-5.3-codex": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "gpt-daybreak-red-latest": [
+    "gpt-5.6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5-nano": [
+    "gpt-realtime-2.1": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-5-mini": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "o3-pro": [
+    "gpt-5.6-luna": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-6-luna": [
+    "gpt-6-sol": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
@@ -285,16 +293,16 @@
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "gpt-5.6-luna": [
+    "gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "gpt-daybreak-red-latest": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }

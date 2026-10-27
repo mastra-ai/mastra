@@ -26,22 +26,10 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "nvidia/GLM-5.3-Flash-NVFP4": [
+    "meta-models/Muse-Spark-Open-816B-A42B": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "Qwen/Qwen3.8-2.4T-A95B": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "zai-org/GLM-5.3": [
@@ -56,10 +44,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
+    "Qwen/Qwen3.8-2.4T-A95B": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "medium", "xhigh"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nvidia/GLM-5.3-Flash-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

@@ -1644,6 +1644,11 @@ export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
   isInternal?: boolean;
   /**
+   * Version of the span's own entity: declared for it, or inherited from a parent of the same entity.
+   * Omitted when it only inherited another entity's version through `metadata.entityVersionId`.
+   */
+  entityVersionId?: string;
+  /**
    * Entity of the nearest ancestor span that is not internal or excluded. Omitted when there is none.
    * Independent of `includeInternalSpans`, so it can skip the span `parentSpanId` points to.
    */

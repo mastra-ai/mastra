@@ -464,32 +464,43 @@ describe('bundled Factory skill assets', () => {
     // The skill carries two marked blocks: the abbreviated pending summary and
     // the final handoff contract. Scope the field assertions to the final one
     // (the marked block that introduces the narrative sections) so a field
-    // present only in the pending table cannot satisfy them.
-    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('### Understanding'));
+    // present only in the pending summary cannot satisfy them.
+    const markerIndex = triage.lastIndexOf('<!-- mastra-factory-triage -->', triage.indexOf('| Type'));
     const handoff = triage.slice(markerIndex);
-    // The verdict is a markdown table, so each field is a bolded cell label
-    // rather than a `**Field:**` prose lead-in.
-    const typeIndex = handoff.indexOf('**Type**');
-    const routeIndex = handoff.indexOf('**Route**');
-    const severityIndex = handoff.indexOf('**Severity**');
+    // A ratings table with a real header row leads, then the plain summary,
+    // the next step, and collapsed rating reasons, root cause, reproduction
+    // and assumptions; only open questions stay expanded.
+    const headerIndex = handoff.search(/^\| Type +\| Severity +\| Confidence +\| Effort +\| Impact +\| Route +\|$/m);
+    const typeIndex = handoff.indexOf('| <Type>');
+    const severityIndex = handoff.indexOf('<Severity>');
+    const routeIndex = handoff.indexOf('<Route>');
+    const summaryIndex = handoff.indexOf('### Summary');
+    const nextStepIndex = handoff.indexOf('**Next step:**');
+    const ratingsIndex = handoff.indexOf('<strong>Why these ratings</strong>');
     const confidenceIndex = handoff.indexOf('**Confidence**');
     const effortIndex = handoff.indexOf('**Effort**');
     const impactIndex = handoff.indexOf('**Impact**');
-    const nextStepIndex = handoff.indexOf('**Next step**');
-    const understandingIndex = handoff.indexOf('### Understanding');
-    const assumptionsIndex = handoff.indexOf('### Assumptions');
+    const rootCauseIndex = handoff.indexOf('<strong>Root cause</strong>');
+    const reproductionIndex = handoff.indexOf('<strong>Reproduction</strong>');
+    const assumptionsIndex = handoff.indexOf('<strong>Assumptions</strong>');
     const questionsIndex = handoff.indexOf('### Open questions');
 
+    // GitHub renders an empty header row as a blank band above the table.
+    expect(triage).not.toMatch(/^\|\s+\|\s+\|$/m);
     expect(markerIndex).toBeGreaterThanOrEqual(0);
-    expect(typeIndex).toBeGreaterThan(0);
-    expect(routeIndex).toBeGreaterThan(typeIndex);
-    expect(severityIndex).toBeGreaterThan(routeIndex);
-    expect(confidenceIndex).toBeGreaterThan(severityIndex);
+    expect(headerIndex).toBeGreaterThan(0);
+    expect(typeIndex).toBeGreaterThan(headerIndex);
+    expect(severityIndex).toBeGreaterThan(typeIndex);
+    expect(routeIndex).toBeGreaterThan(severityIndex);
+    expect(summaryIndex).toBeGreaterThan(routeIndex);
+    expect(nextStepIndex).toBeGreaterThan(summaryIndex);
+    expect(ratingsIndex).toBeGreaterThan(nextStepIndex);
+    expect(confidenceIndex).toBeGreaterThan(ratingsIndex);
     expect(effortIndex).toBeGreaterThan(confidenceIndex);
     expect(impactIndex).toBeGreaterThan(effortIndex);
-    expect(nextStepIndex).toBeGreaterThan(impactIndex);
-    expect(understandingIndex).toBeGreaterThan(nextStepIndex);
-    expect(assumptionsIndex).toBeGreaterThan(understandingIndex);
+    expect(rootCauseIndex).toBeGreaterThan(impactIndex);
+    expect(reproductionIndex).toBeGreaterThan(rootCauseIndex);
+    expect(assumptionsIndex).toBeGreaterThan(reproductionIndex);
     expect(questionsIndex).toBeGreaterThan(assumptionsIndex);
     expect(triage).toContain('Severity guide:');
     expect(triage).toContain('Effort guide:');
@@ -513,12 +524,27 @@ describe('bundled Factory skill assets', () => {
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
-    for (const label of ['effort:low', 'effort:medium', 'effort:high', 'impact:low', 'impact:medium', 'impact:high']) {
+    for (const label of [
+      'effort:low',
+      'effort:medium',
+      'effort:high',
+      'impact:low',
+      'impact:medium',
+      'impact:high',
+      'severity:critical',
+      'severity:high',
+      'severity:medium',
+      'severity:low',
+    ]) {
       expect(triage).toContain(label);
     }
-    expect(triage).toContain('Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.');
+    expect(triage).toContain(
+      'Add the selected `effort:<level>`, `impact:<level>`, and `severity:<level>` labels from the handoff.',
+    );
+    expect(triage).toContain('gh label create "severity:<level>"');
     expect(triage).toContain('Remove only conflicting alternatives from these explicit labels');
     expect(triage).toContain('On every initial run and refresh, keep exactly the selected effort label');
+    expect(triage).toContain('exactly the selected severity label. Confidence is never a label.');
     expect(triage).toContain('Do not add, remove, or derive any `trio-*` labels');
     expect(triage).toContain('gh label create "$LABEL" --repo mastra-ai/mastra');
     expect(triage).toContain(

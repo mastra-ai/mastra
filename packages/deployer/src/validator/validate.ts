@@ -106,6 +106,7 @@ globalThis.__dirname = dirname(__filename);
     {
       env: {
         ...process.env,
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string coercion at the child-process environment boundary.
         MODULE_MAP: `${moduleResolveMapLocation}`,
         STUBBED_EXTERNALS: JSON.stringify(stubbedExternals),
       },

@@ -1,5 +1,15 @@
 # @mastra/slack
 
+## 1.8.0-alpha.1
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@chat-adapter/slack@^4.43.0` ↗︎](https://www.npmjs.com/package/@chat-adapter/slack/v/4.43.0) (from `^4.37.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `^22.20.5`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0-alpha.4
+
 ## 1.8.0-alpha.0
 
 ### Minor Changes

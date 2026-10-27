@@ -46,6 +46,7 @@ import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
+  hasPendingDeferredNotifications,
   NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
 } from '../notifications/workflow';
 import type {
@@ -964,9 +965,8 @@ export class Mastra<
    */
   #schedulerRequested = false;
   /**
-   * Set once `__ensureNotificationDispatchReady()` has upserted the dispatcher
-   * schedule row and requested the scheduler. Makes repeated deferred
-   * notification creates free after the first one.
+   * Set once `__ensureNotificationDispatchReady()` has requested the
+   * scheduler in this process, so later deferrals only verify the row.
    */
   #notificationDispatchReady = false;
   /**
@@ -2431,6 +2431,10 @@ export class Mastra<
     }
 
     await this.#registerFsAgentSchedules(schedulesStore, allRows);
+
+    // A running scheduler sleeps until its earliest fire; re-arm it for rows
+    // registered after it started. No-op before it starts.
+    this.#findSchedulerWorker()?.scheduler?.wake();
   }
 
   /**
@@ -6061,7 +6065,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe for cross-process scheduler wakes. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -6078,6 +6082,9 @@ export class Mastra<
         // here would race that loop and start the scheduler twice.
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
+          // A running scheduler sleeps until its earliest fire; the new or
+          // changed schedule may be due sooner.
+          this.#findSchedulerWorker()?.scheduler?.wake();
         }
         await ack?.();
       } catch (err) {
@@ -6091,7 +6098,8 @@ export class Mastra<
     try {
       // Wake events are transient hints; the awaited boot probe below is the
       // durable recovery path. Starting from latest avoids replaying retained
-      // wakes and starting the scheduler when no schedule rows remain.
+      // wakes and starting the scheduler when no schedule rows remain. The
+      // subscription stays wired while the scheduler runs, to re-arm it.
       await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
     } catch (err) {
       // Allow a later startWorkers() call to retry a transient subscribe error.
@@ -6120,10 +6128,16 @@ export class Mastra<
       if (!schedulesStore) return;
 
       const rows = await schedulesStore.listSchedules();
-      // A leftover dispatcher row must not wake the scheduler when dispatch
-      // has since been disabled — nothing would consume it.
-      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
-      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      let hasWork = rows.some(row => row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      // A leftover dispatcher row is only work while deferred notifications
+      // are pending. Otherwise its once-a-minute cron would keep the scheduler
+      // polling storage forever, and nothing would consume it when dispatch
+      // has since been disabled.
+      const dispatchEnabled = this.#notificationDispatchConfig?.enabled !== false;
+      if (!hasWork && dispatchEnabled && rows.some(row => row.id === NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) {
+        const notifications = await this.#storage.getStore('notifications');
+        hasWork = notifications ? await hasPendingDeferredNotifications(notifications) : false;
+      }
       if (hasWork) this.#schedulerRequested = true;
     } catch (err) {
       this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
@@ -6137,13 +6151,17 @@ export class Mastra<
    * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
    * processes that publish notifications without running workers locally.
    *
+   * The row is read on every call rather than memoized: the dispatcher deletes
+   * it once nothing is pending (`__releaseNotificationDispatchIfIdle()`),
+   * possibly from another process, and the next deferral must re-arm it.
+   *
    * @internal
    */
   async __ensureNotificationDispatchReady(): Promise<void> {
-    if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
     if (!this.#storage) return;
 
+    let created = false;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
@@ -6153,6 +6171,7 @@ export class Mastra<
       if (!existing) {
         try {
           await schedulesStore.createSchedule(desired);
+          created = true;
         } catch (err) {
           // Another instance may have created the row concurrently — only
           // rethrow if it's still missing.
@@ -6172,18 +6191,52 @@ export class Mastra<
         }
       }
     } catch (err) {
-      // Leave #notificationDispatchReady unset so the next deferred
-      // notification retries the upsert.
+      // The next deferred notification retries the upsert.
       this.#logger?.warn?.('Failed to ensure notification dispatch schedule', err as any);
       return;
     }
 
+    // Request the scheduler once per process, and wake schedulers everywhere
+    // whenever the row is (re)created.
+    if (this.#notificationDispatchReady && !created) return;
     this.#notificationDispatchReady = true;
     this.#schedulerRequested = true;
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
     await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+  }
+
+  /**
+   * Called by the dispatcher after each pass. When no deferred notification is
+   * pending, deletes the dispatcher schedule row so its cron stops firing and
+   * an idle app stops polling storage. The next deferral re-creates it.
+   *
+   * @internal
+   */
+  async __releaseNotificationDispatchIfIdle(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const [schedulesStore, notifications] = await Promise.all([
+        this.#storage.getStore('schedules'),
+        this.#storage.getStore('notifications'),
+      ]);
+      if (!schedulesStore || !notifications) return;
+      if (await hasPendingDeferredNotifications(notifications)) return;
+
+      await schedulesStore.deleteSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      this.#notificationDispatchReady = false;
+
+      // A deferral elsewhere may have written its record and seen the row
+      // just before the delete. It won't re-create the row, so re-check after
+      // deleting and re-arm on its behalf.
+      if (await hasPendingDeferredNotifications(notifications)) {
+        await this.__ensureNotificationDispatchReady();
+      }
+    } catch (err) {
+      // Leaving the row in place only costs extra dispatch passes.
+      this.#logger?.warn?.('Failed to release idle notification dispatch schedule', err as any);
+    }
   }
 
   /**
@@ -6244,9 +6297,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -7106,7 +7156,11 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A filter-selected scheduler is dedicated: keep it polling like an
+        // explicitly enabled one, since it may share no pubsub with producers.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
@@ -7205,11 +7259,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 

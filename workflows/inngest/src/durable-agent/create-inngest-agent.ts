@@ -39,12 +39,14 @@
 import type { Agent, AgentExecutionOptions, StructuredOutputOptions } from '@mastra/core/agent';
 import {
   AGENT_STREAM_TOPIC,
-  DurableStepIds,
+  AgentStreamEventTypes,
   agentThreadStreamRuntime,
+  applyReservedMemoryContextKeys,
   prepareForDurableExecution,
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
+  emitAbortEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
   getRunStreamSlot,
@@ -55,8 +57,13 @@ import {
   publishAbortRequest,
   normalizeResumeGenerateArgs,
   validateModelTimeoutSettings,
+  DurableStepIds,
 } from '@mastra/core/agent/durable';
-import type { AgentStepFinishEventData, AgentSuspendedEventData } from '@mastra/core/agent/durable';
+import type {
+  AgentStepFinishEventData,
+  AgentSuspendedEventData,
+  DurableToolCallInput,
+} from '@mastra/core/agent/durable';
 import type { MessageListInput } from '@mastra/core/agent/message-list';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import { InMemoryServerCache } from '@mastra/core/cache';
@@ -64,6 +71,7 @@ import type { MastraServerCache } from '@mastra/core/cache';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
+import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -76,7 +84,7 @@ import type {
 } from '@mastra/core/stream';
 import type { CoreTool } from '@mastra/core/tools';
 import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
-import type { ShouldPersistSnapshotFn, Workflow } from '@mastra/core/workflows';
+import type { ShouldPersistSnapshotFn, Workflow, WorkflowRunState } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
 
@@ -508,18 +516,24 @@ export interface InngestAgent<TOutput = undefined> {
    *
    * @param runId - The run ID to observe
    * @param options.offset - Resume from this event index (0-based). If omitted, replays all events.
+   * @param options.idleTimeoutMs - End the observation after this much silence, unless `isAlive` reports the run is still live.
+   * @param options.isAlive - Liveness probe consulted when `idleTimeoutMs` elapses.
    */
   observe(
     runId: string,
     options?: {
       offset?: number;
+      idleTimeoutMs?: number;
+      isAlive?: () => boolean | Promise<boolean>;
       onChunk?: (chunk: ChunkType<TOutput>) => void | Promise<void>;
       onStepFinish?: (result: AgentStepFinishEventData & { runId: string }) => void | Promise<void>;
       onFinish?: MastraOnFinishCallback<TOutput>;
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string }>;
+  ): Promise<
+    Omit<InngestAgentStreamResult<TOutput>, 'threadId' | 'resourceId'> & { runId: string; detach: () => void }
+  >;
 
   /**
    * Not supported. Inngest owns durability for this agent (see the `retries`
@@ -831,6 +845,158 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
   }
 
   /**
+   * Whether nothing will publish to the run again, so an observer can close.
+   * Mirrors core `DurableAgent.#isObservationComplete`, minus run fencing and
+   * execution leases, which the Inngest engine does not use.
+   */
+  async function isObservationComplete(runId: string): Promise<boolean> {
+    try {
+      const history = await getPubsub().getHistory(AGENT_STREAM_TOPIC(runId), 0);
+      const latest = history.at(-1);
+      if (latest) {
+        const type = latest.type === AgentStreamEventTypes.CHUNK ? latest.data?.type : latest.type;
+        return type === 'finish' || type === 'error' || type === 'abort';
+      }
+      if (getRunRegistryEntry(runId, mastra)) return false;
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return true;
+      for (const workflowName of [InngestDurableStepIds.AGENTIC_LOOP, InngestDurableStepIds.AGENTIC_EXECUTION]) {
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ runId, workflowName });
+        if (!snapshot) continue;
+        // Unknown statuses stay observable, including suspension.
+        if (!['success', 'failed', 'tripwire', 'canceled', 'bailed', 'skipped'].includes(snapshot.status)) {
+          return false;
+        }
+      }
+      return true;
+    } catch {
+      // Unavailable lifecycle evidence cannot prove that the producer is gone.
+      return false;
+    }
+  }
+
+  /**
+   * A run parked on a suspension has no prepared run in this process, so a
+   * fenced resume is the first point where it is known it can never continue.
+   * Delete its still-suspended snapshot rows and publish the abort terminal so
+   * observers attached to the parked run close. Mirrors core
+   * `DurableAgent.#deleteFencedSuspendedRun`.
+   */
+  async function deleteFencedSuspendedRun(runId: string): Promise<void> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await workflowsStore?.loadWorkflowSnapshot({
+        runId,
+        workflowName: InngestDurableStepIds.AGENTIC_LOOP,
+      });
+      if (snapshot?.status !== 'suspended') return;
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
+      await emitAbortEvent(getPubsub(), runId, { steps: [], text: '' });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to delete snapshot of aborted suspended Inngest run', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Arm the run-level execution budget (`modelSettings.timeout.totalMs`) for
+   * one execution session (stream or resume) and compose it into the registry
+   * entry's `abortSignal`, which co-located durable steps read. At the
+   * deadline the run is reported failed: the stream gets one
+   * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
+   * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
+   * Returns the timer teardown; a no-op when no budget is configured.
+   */
+  function armTotalTimeout(
+    entry: { abortSignal?: AbortSignal },
+    abortController: AbortController,
+    runId: string,
+    timeoutMs: number | undefined,
+  ): () => void {
+    const totalTimeout = createTimeoutAbortSignal({
+      parentSignal: abortController.signal,
+      timeoutMs,
+      timeoutType: 'total',
+      // Steps already holding `entry.abortSignal` must still see a later abort().
+      detachParentOnCleanup: false,
+    });
+    entry.abortSignal = totalTimeout.signal;
+    void totalTimeout.timeoutPromise?.catch(async error => {
+      if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      await emitError(runId, error);
+      await deleteRunSnapshots(runId);
+    });
+    return totalTimeout.cleanup;
+  }
+
+  async function deleteRunSnapshots(runId: string): Promise<void> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_LOOP });
+      await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: InngestDurableStepIds.AGENTIC_EXECUTION });
+    } catch (error) {
+      mastra?.getLogger?.()?.warn?.('Failed to delete Inngest durable agent snapshot rows', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+    }
+  }
+
+  /**
+   * Record a new run as `running` before Inngest starts it. The engine only
+   * persists suspended and terminal snapshots, so without this row a run
+   * mid-execution is unknown to storage and `POST /agents/:agentId/runs/:runId/abort`
+   * cannot verify who owns it. The row carries only the ownership fields the
+   * route checks; the engine overwrites it once the run suspends or finishes.
+   * Returns whether a row was written, so a failed trigger can remove it.
+   */
+  async function persistRunningSnapshot(runId: string, workflowInput: any): Promise<boolean> {
+    try {
+      const workflowsStore = await mastra?.getStorage()?.getStore('workflows');
+      if (!workflowsStore) return false;
+      const workflowName = InngestDurableStepIds.AGENTIC_LOOP;
+      // Never replace a suspended or terminal row a reused runId already has.
+      if (await workflowsStore.loadWorkflowSnapshot({ workflowName, runId })) return false;
+      const threadId: string | undefined = workflowInput.state?.threadId;
+      const resourceId: string | undefined = workflowInput.state?.resourceId;
+      const context = {} as WorkflowRunState['context'];
+      context.input = { agentId: workflowInput.agentId, state: { threadId, resourceId } };
+      await workflowsStore.persistWorkflowSnapshot({
+        workflowName,
+        runId,
+        resourceId,
+        snapshot: {
+          runId,
+          status: 'running',
+          value: {},
+          context,
+          serializedStepGraph: [],
+          activePaths: [],
+          activeStepsPath: {},
+          suspendedPaths: {},
+          resumeLabels: {},
+          waitingPaths: {},
+          timestamp: Date.now(),
+        },
+      });
+      return true;
+    } catch (error) {
+      // The run can still execute; only the run-scoped abort route loses sight of it.
+      mastra?.getLogger?.()?.warn?.('Failed to persist running Inngest durable agent snapshot', {
+        agentId,
+        runId,
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return false;
+    }
+  }
+
+  /**
    * Tool calls and text from before the suspension, seeded into the resumed stream
    * so its `toolCalls` and `text` include them without replaying their chunks.
    * Mirrors core `DurableAgent.#loadSuspendedIteration`. The outer suspension can persist
@@ -1092,6 +1258,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     },
 
     async stream(messages, streamOptions): Promise<InngestAgentStreamResult<TOutput>> {
+      // Reserved request-context keys win over `memory` options, as in core.
+      streamOptions = applyReservedMemoryContextKeys(streamOptions);
       // Delegate to the idle-loop wrapper when `untilIdle` is set.
       if (streamOptions?.untilIdle) {
         const { untilIdle, ...rest } = streamOptions;
@@ -1141,10 +1309,17 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         ? forwardExternalAbort(streamOptions.abortSignal, abortController, runId)
         : undefined;
       registryEntry.abortController = abortController;
-      registryEntry.abortSignal = abortController.signal;
+      const clearTotalTimeout = armTotalTimeout(
+        registryEntry,
+        abortController,
+        runId,
+        callbackOptions.modelSettings?.timeout?.totalMs,
+      );
 
       // 1b. Register non-serializable state on the global run registry so
-      // workflow steps running in the same process can recover it.
+      // workflow steps running in the same process can recover it. The finish step processes
+      // into this MessageList, which the stream below reads for its final messages (as core does).
+      registryEntry.messageList = preparation.messageList;
       globalRunRegistry.set(runId, registryEntry);
 
       // 2. The AGENT_RUN and MODEL_GENERATION spans were already opened by the
@@ -1157,9 +1332,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Track cleanup state and global registry entry lifecycle.
       let cleanedUp = false;
       const finalizeGlobalRegistry = () => {
+        clearTotalTimeout();
         if (cleanedUp) return;
         cleanedUp = true;
         stopForwardingAbort?.();
+        // A run stopped by its deadline keeps executing until its in-flight step
+        // returns. Keep its entry, whose signal is aborted, so the next
+        // co-located step stops instead of calling the model again; the
+        // registry TTL evicts it.
+        if (isMastraTimeoutError(registryEntry.abortSignal?.reason)) return;
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1181,6 +1362,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId,
         resourceId,
         structuredOutput: registryEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        messageList: registryEntry.messageList,
+        outputProcessors: registryEntry.outputProcessors,
+        processorStates: registryEntry.processorStates,
+        requestContext: registryEntry.requestContext,
         onChunk: chunk => {
           // A parked segment is resumable; its observer's signal must not abort the next segment.
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
@@ -1201,7 +1386,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             finalizeGlobalRegistry();
           }
         },
-        onSuspended: callbackOptions.onSuspended,
+        onSuspended: async data => {
+          // A suspension ends this execution session; resume() arms its own budget.
+          clearTotalTimeout();
+          await callbackOptions.onSuspended?.(data);
+        },
         onAbort: async data => {
           try {
             await (callbackOptions.onAbort as ((event: any) => void | Promise<void>) | undefined)?.(data);
@@ -1238,7 +1427,14 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             from: ChunkFrom.AGENT,
             payload: { id: workflowInput.agentId, messageId },
           });
-          return triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+          // Written before the trigger so it can never land after the engine's terminal row.
+          const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
+          try {
+            await triggerWorkflow(runId, workflowInput, tracingOptions, streamOptions?.actor);
+          } catch (error) {
+            if (persistedRunning) await deleteRunSnapshots(runId);
+            throw error;
+          }
         })
         .catch(async error => {
           await emitError(runId, error);
@@ -1296,6 +1492,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async resume(runId, resumeData, resumeOptions): Promise<InngestAgentStreamResult<TOutput>> {
       if (agentThreadStreamRuntime.isResumeFenced(runId, agent.getPubSub())) {
+        await deleteFencedSuspendedRun(runId);
         throw new MastraError({
           id: 'AGENT_RESUME_ABORTED_RUN',
           domain: ErrorDomain.AGENT,
@@ -1468,14 +1665,34 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         globalRunRegistry.set(runId, existingEntry);
       }
       existingEntry.abortController = abortController;
-      existingEntry.abortSignal = abortController.signal;
+      // Steps and stream-side processors on this segment see the merged
+      // context, as core `DurableAgent.resume` does.
+      existingEntry.requestContext = callbackOptions.requestContext;
+      // Re-arm the run-level budget for the resumed session, as core does: a
+      // budget on the resume call wins, otherwise the original run's budget from
+      // its registry entry (warm) or persisted workflow input (cold).
+      const clearTotalTimeout = armTotalTimeout(
+        existingEntry,
+        abortController,
+        runId,
+        callbackOptions.modelSettings?.timeout?.totalMs ??
+          existingRegistryEntry?.timeoutTotalMs ??
+          (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input?.options?.modelSettings?.timeout
+            ?.totalMs,
+      );
 
       // A warm resume reuses the tools built for the first request, which close
-      // over that request's tool hooks. Rebuild them with this call's hooks and
-      // swap in only entries still holding a request-built tool, so tools a
-      // processor added or replaced are kept, and rebuild processor-added tools
-      // for this call's request context (matches core DurableAgent.resume).
-      if (existingRegistryEntry && resumeOptions?.hooks) {
+      // over that request's request context and tool hooks (#25960). Rebuild them
+      // for this call and swap in only entries still holding a request-built tool,
+      // so tools a processor added or replaced are kept, and rebuild
+      // processor-added tools for this call's request context (matches core
+      // DurableAgent.resume). Runs after loadSuspendedIteration, which can reject,
+      // so a rejected resume leaves the parked run's tools untouched.
+      if (
+        existingRegistryEntry &&
+        !existingRegistryEntry.isPlaceholder &&
+        (resumeOptions?.requestContext || resumeOptions?.hooks)
+      ) {
         try {
           const snapshotMemoryInfo = (await resumableSnapshot.catch(() => undefined))?.snapshot?.context?.input
             ?.messageListState?.memoryInfo as { threadId?: string; resourceId?: string } | undefined;
@@ -1493,7 +1710,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             // Resume options carry no delegation, so execOptions.delegation is only the
             // agent default; the first call parked its own delegation on the entry.
             delegation: existingRegistryEntry.delegation ?? execOptions.delegation,
-            hooks: resumeOptions.hooks,
+            hooks: resumeOptions.hooks ?? execOptions.hooks,
             methodType: resumeOptions.closeOnSuspend ? 'generate' : 'stream',
             backgroundTaskEnabled: Boolean(existingRegistryEntry.backgroundTaskManager),
             backgroundTaskPolicy: execOptions.backgroundTaskPolicy,
@@ -1531,9 +1748,15 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // (finish/error/abort/cleanup) always tear down the registry entry.
       let resumeCleanedUp = false;
       const finalizeResumeRegistry = () => {
+        clearTotalTimeout();
         if (resumeCleanedUp) return;
         resumeCleanedUp = true;
         stopForwardingAbort?.();
+        // A run stopped by its deadline keeps executing until its in-flight step
+        // returns. Keep its entry, whose signal is aborted, so the next
+        // co-located step stops instead of calling the model again; the
+        // registry TTL evicts it.
+        if (isMastraTimeoutError(existingEntry.abortSignal?.reason)) return;
         deleteRunRegistryEntry(runId, mastra);
       };
 
@@ -1564,6 +1787,10 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         threadId: resumeOptions?.threadId,
         resourceId: resumeOptions?.resourceId,
         structuredOutput: existingEntry.structuredOutput as StructuredOutputOptions<TOutput> | undefined,
+        messageList: existingEntry.messageList,
+        outputProcessors: existingEntry.outputProcessors,
+        processorStates: existingEntry.processorStates,
+        requestContext: callbackOptions.requestContext,
         onChunk: chunk => {
           resumedChunkSeen = true;
           if (chunk.type === 'tool-call-approval' || chunk.type === 'tool-call-suspended') stopForwardingAbort?.();
@@ -1586,6 +1813,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         onSuspended: async data => {
           if (!resumedChunkSeen) return;
+          clearTotalTimeout();
           try {
             await callbackOptions.onSuspended?.(data);
           } finally {
@@ -1774,11 +2002,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
 
     async observe(runId, observeOptions) {
       // Create the stream subscription with offset support
-      const {
-        output,
-        cleanup: streamCleanup,
-        ready,
-      } = createDurableAgentStream<TOutput>({
+      const stream = createDurableAgentStream<TOutput>({
         pubsub: getPubsub(),
         runId,
         messageId: crypto.randomUUID(),
@@ -1788,6 +2012,8 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
           version: 'v3',
         },
         offset: observeOptions?.offset,
+        idleTimeoutMs: observeOptions?.idleTimeoutMs,
+        isAlive: observeOptions?.isAlive,
         structuredOutput: getRunRegistryEntry(runId, mastra)?.structuredOutput as
           | StructuredOutputOptions<TOutput>
           | undefined,
@@ -1797,15 +2023,59 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         onError: observeOptions?.onError,
         onSuspended: observeOptions?.onSuspended,
       });
+      const { output, cleanup: streamCleanup, ready, detach } = stream;
 
-      await ready;
+      // As in core `DurableAgent.observe()`: this output belongs to this
+      // observer alone, so a consumer that stops reading fullStream detaches
+      // the pubsub subscription instead of leaving it open.
+      const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
+      Object.defineProperty(output, 'fullStream', {
+        configurable: true,
+        get() {
+          const reader = (baseFullStream.call(output) as ReadableStream<ChunkType<TOutput>>).getReader();
+          return new ReadableStream<ChunkType<TOutput>>({
+            async pull(controller) {
+              let result: Awaited<ReturnType<typeof reader.read>>;
+              try {
+                result = await reader.read();
+              } catch (error) {
+                detach();
+                throw error;
+              }
+              if (result.done) {
+                detach();
+                controller.close();
+              } else {
+                controller.enqueue(result.value);
+              }
+            },
+            cancel(reason) {
+              detach();
+              return reader.cancel(reason);
+            },
+          });
+        },
+      });
 
-      // `observe()` does not own the run, but it can still stop it: closing the
-      // local subscription and publishing an abort request, which reaches the
-      // worker actually executing it.
+      // Reconcile only after subscribing, so a completion racing attachment is
+      // not lost: close at once when nothing will publish to the run again.
+      try {
+        await ready;
+        await stream.waitForEventDelivery();
+        const reconciledVersion = stream.activityVersion;
+        if ((await isObservationComplete(runId)) && stream.activityVersion === reconciledVersion) detach();
+      } catch (error) {
+        detach();
+        throw error;
+      }
+
+      // `observe()` does not own the run, but it can still stop it by publishing
+      // an abort request, which reaches the worker actually executing it. The
+      // observation stays open until the run publishes its abort finish.
       const abort = async (_reason?: unknown) => {
-        streamCleanup();
         await requestRemoteAbort(runId);
+        // Release a run parked on a suspension, as the stream abort does.
+        if (agentThreadStreamRuntime.isRunParked(runId, agent.getPubSub())) agent.abortRunStream(runId);
       };
 
       return {
@@ -1815,6 +2085,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         },
         runId,
         cleanup: streamCleanup,
+        detach,
         abort,
       };
     },

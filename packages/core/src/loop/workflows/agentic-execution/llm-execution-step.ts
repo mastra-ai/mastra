@@ -3,9 +3,10 @@ import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import type { StructuredOutputOptions } from '../../../agent';
+import type { Agent, StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
+import { startRunStep } from '../../../agent/run-lease-fence';
 import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
@@ -184,6 +185,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   processorStates?: Map<string, ProcessorState>;
   agentId?: string;
+  agent?: Agent<any, any, any, any>;
   processorRetryCount?: number;
   outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
   requestContext?: RequestContext;
@@ -542,6 +544,7 @@ async function processOutputStream<OUTPUT = undefined>({
   outputProcessors,
   processorStates,
   agentId,
+  agent,
   processorRetryCount,
   outputWriter,
   requestContext,
@@ -568,6 +571,7 @@ async function processOutputStream<OUTPUT = undefined>({
       outputProcessors: outputProcessors ?? [],
       logger: logger || new ConsoleLogger({ level: 'error' }),
       agentName: agentId || 'unknown',
+      agent,
       processorStates,
     });
     return toolResultProcessorRunner;
@@ -1249,6 +1253,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   hasConfiguredErrorProcessors,
   logger,
   agentId,
+  agent,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -1555,6 +1560,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         agentId,
         logger,
       });
+      // A run that loses its thread lease while a request streams lets the request finish before it stops.
+      let settleRequest = () => {};
       const execution = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
@@ -1572,6 +1579,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
         materializeFailedAttempt = undefined;
+        settleRequest();
+        settleRequest = startRunStep(options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1689,6 +1698,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent,
             processorStates,
           });
 
@@ -1926,6 +1936,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
         const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
@@ -2096,6 +2107,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             fn: () =>
               execute({
                 runId,
+                // The request failed: a run that lost its lease meanwhile stops now instead of retrying it. Nothing
+                // runs while the retry waits, so a lease lost during that wait stops the run too.
+                onRequestFailed: () => settleRequest(),
+                onRequestRetry: () => {
+                  settleRequest = startRunStep(options?.abortSignal);
+                },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,
                 inputMessages,
@@ -2192,6 +2209,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // Stream processors run per step, so their spans belong under the step span.
             tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
+            agent,
             requestContext,
             abortSignal: options?.abortSignal,
           },
@@ -2256,6 +2274,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors,
             processorStates,
             agentId,
+            agent,
             processorRetryCount: inputData.processorRetryCount,
             outputWriter,
             requestContext,
@@ -2635,6 +2654,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -2713,6 +2733,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // The response has streamed: a run whose lease was lost meanwhile stops here, before another step.
+        settleRequest();
         // Handle abort detected via signal check in processOutputStream (loop broke early).
         // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
         // so this handles the case where processOutputStream completed normally via `break`.
@@ -2743,7 +2765,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           if (terminalInputStepFailure && error === terminalInputStepFailure.error) return;
           if (!interruption.signal.aborted) throw error;
         })
-        .finally(() => stopListening?.());
+        .finally(() => {
+          settleRequest();
+          stopListening?.();
+        });
 
       if (!execution && terminalInputStepFailure) {
         const error = getErrorFromUnknown(terminalInputStepFailure.error, {
@@ -2916,6 +2941,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
@@ -3094,6 +3120,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -3166,6 +3193,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 

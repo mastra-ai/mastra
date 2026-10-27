@@ -171,7 +171,7 @@ describe('@mastra/temporal transform exports', () => {
     `);
     expect(workflowOutput).toContain('const fetchWeatherWorkflow =');
     expect(workflowOutput).toContain('const weatherWorkflow =');
-    expect(workflowOutput).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(workflowOutput).toContain('.thenWorkflow("fetchWeatherWorkflow", "fetch-weather")');
     expect(workflowOutput).not.toContain('.then("subWorkflow")');
   });
 

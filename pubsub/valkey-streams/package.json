@@ -1,6 +1,6 @@
 {
   "name": "@mastra/valkey-streams",
-  "version": "0.5.7-alpha.0",
+  "version": "0.5.7-alpha.1",
   "description": "Mastra Valkey Streams PubSub integration",
   "license": "Apache-2.0",
   "type": "module",

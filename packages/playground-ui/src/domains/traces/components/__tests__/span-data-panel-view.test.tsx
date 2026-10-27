@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
@@ -20,8 +21,10 @@ describe('SpanDataPanelView — header summary', () => {
 
     expect(screen.getByLabelText(/^Started at/)).toBeTruthy();
     expect(screen.queryByLabelText(/^Ended at/)).toBeNull();
-    // Same `X.XXX s` format as the timeline timing column.
-    expect(screen.getByLabelText(/^Duration/).textContent).toBe('1.000 s');
+    // Compact like the trace header right above it; the exact value is in the tooltip.
+    const duration = screen.getByLabelText(/^Duration/);
+    expect(duration.textContent).toBe('1s');
+    expect(duration.getAttribute('aria-label')).toBe('Duration 1.000 s');
     expect(screen.queryByText('Started')).toBeNull();
     expect(screen.queryByText('Ended')).toBeNull();
     expect(screen.queryByText('Duration')).toBeNull();
@@ -37,13 +40,24 @@ describe('SpanDataPanelView — header summary', () => {
     }
   });
 
-  it('shows the run id truncated to 8 characters in the header', () => {
+  it('shows the run id between the span id and the timing, labelled and truncated like the span id', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+
     render(<SpanDataPanelView {...baseProps} span={{ ...spanFixture, runId: 'run-abcdefghijklmnop' }} />);
 
-    const runId = screen.getByLabelText('Run Id run-abcdefghijklmnop');
-    expect(runId.textContent).toContain('run-abcd');
-    expect(runId.textContent).not.toContain('run-abcdefghijklmnop');
-    expect(screen.queryByText('Run Id')).toBeNull();
+    const runId = screen.getByRole('button', { name: 'run-ab' });
+    expect(runId.parentElement?.textContent).toBe('Run idrun-ab');
+    expect(screen.queryByText('#')).toBeNull();
+
+    const spanId = screen.getByRole('heading', { name: /^Span / });
+    const timing = screen.getByRole('list');
+    expect(spanId.compareDocumentPosition(runId) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    expect(runId.compareDocumentPosition(timing) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+
+    fireEvent.click(runId);
+    expect(writeText).toHaveBeenCalledWith('run-abcdefghijklmnop');
+    expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
   });
 });
 
@@ -91,6 +105,48 @@ describe('SpanDataPanelView — span id in the header', () => {
     fireEvent.click(screen.getByRole('button', { name: 'span-1' }));
     expect(writeText).toHaveBeenCalledWith('span-1');
     expect((await screen.findByRole('tooltip')).textContent).toBe('Copied to clipboard');
+  });
+});
+
+describe('SpanDataPanelView — model call summary', () => {
+  const modelSpan = {
+    ...spanFixture,
+    spanType: SpanType.MODEL_GENERATION,
+    startedAt: new Date('2026-10-26T11:28:14.930Z'),
+    endedAt: new Date('2026-10-26T11:28:20.504Z'),
+    attributes: {
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      finishReason: 'stop',
+      completionStartTime: '2026-10-26T11:28:16.376Z',
+      usage: {
+        inputTokens: 6606,
+        outputTokens: 365,
+        inputDetails: { cacheRead: 5632, cacheWrite: 0, text: 974 },
+        outputDetails: { reasoning: 256, text: 109 },
+      },
+    },
+  };
+
+  const valueOf = (label: string) => screen.getByText(label).nextElementSibling?.textContent;
+
+  it('lists the model, how it finished, its timings and its tokens as one key/value list', () => {
+    render(<SpanDataPanelView {...baseProps} span={modelSpan} />);
+
+    expect(valueOf('Model')).toBe('openai/gpt-5-mini');
+    expect(screen.getByRole('img', { name: 'openai logo' })).toBeTruthy();
+    expect(valueOf('Finish reason')).toBe('stop');
+    expect(valueOf('First token')).toBe('1.45s');
+    expect(valueOf('Speed')).toBe('88 tok/s');
+    expect(valueOf('Input tokens')).toBe('6,606 (5,632 cached · 974 text)');
+    expect(valueOf('Output tokens')).toBe('365 (256 reasoning · 109 text)');
+  });
+
+  it('drops the input vs output split and the zero counts', () => {
+    render(<SpanDataPanelView {...baseProps} span={modelSpan} />);
+
+    expect(screen.queryByText(/Input vs/)).toBeNull();
+    expect(screen.queryByText(/cache write/i)).toBeNull();
   });
 });
 

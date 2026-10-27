@@ -332,10 +332,10 @@ class StreamOutputAccumulator {
           this.finalizeToolArgs(state);
         }
         state.providerMetadata = chunk.payload.providerMetadata || state.providerMetadata;
-        return;
+        break;
       }
       default:
-        return;
+        break;
     }
   }
 
@@ -393,9 +393,7 @@ class StreamOutputAccumulator {
     }
     try {
       state.args = JSON.parse(state.argDeltas.join(''));
-    } catch {
-      return;
-    }
+    } catch {}
   }
 
   private appendTextDelta(text: string): void {
