@@ -13,12 +13,7 @@ import { useSessionDeletion } from '../hooks/useSessionDeletion';
 import { useSessionFilters } from '../hooks/useSessionFilters';
 import { useSessionListRows } from '../hooks/useSessionListRows';
 import { useSessionListView } from '../hooks/useSessionListView';
-import {
-  SESSION_STATUS_OPTIONS,
-  SESSION_UPDATED_OPTIONS,
-  filterSessionRows,
-  sessionOwnerOptions,
-} from '../services/sessionFilters';
+import { filterSessionRows } from '../services/sessionFilters';
 import {
   collapsedRowsKeepingActive,
   groupSessionRows,
@@ -27,12 +22,18 @@ import {
 } from '../services/sessionGroups';
 import type { SessionGroupContext } from '../services/sessionGroups';
 import { pullRequestMergeTargets } from '../services/sessionRows';
-import { SESSION_SORT_OPTIONS, compareSessionRows } from '../services/sessionSort';
+import { compareSessionRows } from '../services/sessionSort';
 import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
+import {
+  SESSION_SORT_MENU_OPTIONS,
+  SESSION_STATUS_MENU_OPTIONS,
+  SESSION_UPDATED_MENU_OPTIONS,
+  sessionOwnerMenuOptions,
+} from './sessionPropertyOptions';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
@@ -91,28 +92,28 @@ export function SessionsSection() {
             <DropdownMenu.RadioSub
               label="Sort"
               icon={<ArrowUpDown aria-hidden />}
-              options={SESSION_SORT_OPTIONS}
+              options={SESSION_SORT_MENU_OPTIONS}
               value={view.sort}
               onValueChange={sort => updateView({ sort })}
             />
             <DropdownMenu.RadioSub
               label="Owner"
               icon={<UserRound aria-hidden />}
-              options={sessionOwnerOptions(rows, viewerUserId)}
+              options={sessionOwnerMenuOptions(rows, viewerUserId)}
               value={filters.owner}
               onValueChange={owner => changeFilters({ owner })}
             />
             <DropdownMenu.RadioSub
               label="Status"
               icon={<CircleDashed aria-hidden />}
-              options={SESSION_STATUS_OPTIONS}
+              options={SESSION_STATUS_MENU_OPTIONS}
               value={filters.status}
               onValueChange={status => changeFilters({ status })}
             />
             <DropdownMenu.RadioSub
               label="Updated"
               icon={<Clock aria-hidden />}
-              options={SESSION_UPDATED_OPTIONS}
+              options={SESSION_UPDATED_MENU_OPTIONS}
               value={filters.updated}
               onValueChange={updated => changeFilters({ updated })}
             />

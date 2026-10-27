@@ -28,12 +28,13 @@ type MenuScrollAreaProps = {
  * The root and viewport take the popup's `max-height` (`inherit`), so a popup capped by
  * `menuPopupClass` or by a call site's `max-h-*` scrolls at that height. `h-full` lets the
  * body fill a popup whose height is set outright (Select aligned with its trigger).
+ * Flex shrinking also keeps the viewport within the space left by a fixed popup header.
  */
 export function MenuScrollArea({ menu, size = 'default', viewportRender, children }: MenuScrollAreaProps) {
   return (
-    <ScrollArea className="h-full max-h-[inherit]">
+    <ScrollArea className="flex h-full min-h-0 max-h-[inherit] flex-col">
       {/* Keeps a row scrolled into view by the keyboard clear of the 2rem edge fade. */}
-      <ScrollAreaViewport className="max-h-[inherit] scroll-py-8" render={viewportRender}>
+      <ScrollAreaViewport className="min-h-0 max-h-[inherit] scroll-py-8" render={viewportRender}>
         {/* A one-column grid stacks rows like a block, and lets a row share a cell with another
             (Tabs' overflow menu lays each tab's close button over its row). `minmax(0,1fr)` keeps
             long rows truncating instead of widening the popup. */}

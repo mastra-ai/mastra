@@ -32,7 +32,7 @@ function OptionItems({ options, selected, onChange }: OptionListProps) {
   ));
 }
 
-function SearchableOptionItems({ label, options, selected, onChange }: OptionListProps & { label: string }) {
+function SearchableOptionContent({ label, options, selected, onChange }: OptionListProps & { label: string }) {
   const [query, setQuery] = useState('');
   const [pickedOnOpen] = useState(() => new Set(selected));
   const searchRef = useRef<HTMLInputElement>(null);
@@ -62,27 +62,31 @@ function SearchableOptionItems({ label, options, selected, onChange }: OptionLis
   };
 
   return (
-    <div className="contents" onKeyDownCapture={keepTypingInSearch}>
-      <div className={`${menuSearchClasses.container} bg-card sticky -top-1 z-10`}>
-        <SearchIcon className={menuSearchClasses.icon} aria-hidden />
-        <input
-          ref={searchRef}
-          type="text"
-          value={query}
-          onChange={event => setQuery(event.target.value)}
-          placeholder="Search…"
-          aria-label={`Search ${label.toLowerCase()}`}
-          className={menuSearchClasses.input}
-          autoFocus
-          {...passwordManagerOptOutProps}
-        />
-      </div>
+    <DropdownMenu.SubContent
+      onKeyDownCapture={keepTypingInSearch}
+      header={
+        <div className={menuSearchClasses.header}>
+          <SearchIcon className={menuSearchClasses.icon} aria-hidden />
+          <input
+            ref={searchRef}
+            type="text"
+            value={query}
+            onChange={event => setQuery(event.target.value)}
+            placeholder="Search…"
+            aria-label={`Search ${label.toLowerCase()}`}
+            className={menuSearchClasses.input}
+            autoFocus
+            {...passwordManagerOptOutProps}
+          />
+        </div>
+      }
+    >
       {ordered.length === 0 ? (
         <div className={menuEmptyClass}>No matches</div>
       ) : (
         <OptionItems options={ordered} selected={selected} onChange={onChange} />
       )}
-    </div>
+    </DropdownMenu.SubContent>
   );
 }
 
@@ -105,13 +109,13 @@ export function BoardFilterSubmenu({
         {Icon && <Icon aria-hidden />}
         <span>{field.label}</span>
       </DropdownMenu.SubTrigger>
-      <DropdownMenu.SubContent>
-        {options.length > SEARCHABLE_OPTION_COUNT ? (
-          <SearchableOptionItems label={field.label} options={options} selected={selected} onChange={onChange} />
-        ) : (
+      {options.length > SEARCHABLE_OPTION_COUNT ? (
+        <SearchableOptionContent label={field.label} options={options} selected={selected} onChange={onChange} />
+      ) : (
+        <DropdownMenu.SubContent>
           <OptionItems options={options} selected={selected} onChange={onChange} />
-        )}
-      </DropdownMenu.SubContent>
+        </DropdownMenu.SubContent>
+      )}
     </DropdownMenu.Sub>
   );
 }
