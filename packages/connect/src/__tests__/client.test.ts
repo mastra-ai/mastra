@@ -189,6 +189,31 @@ describe('listProjectConnections', () => {
       expect((error as Error).message).toContain('[REDACTED]');
     }
   });
+
+  it.each(['', '   '])('fails closed on a blank project id (%j) before calling the platform', async projectId => {
+    const fetchMock = vi.fn();
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(listProjectConnections(client, projectId)).rejects.toMatchObject({ code: 'missing_project_id' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+});
+
+describe('blank connection ids fail closed before calling the platform', () => {
+  it.each(['', '  '])('getConnectionContext(%j)', async connectionId => {
+    const fetchMock = vi.fn();
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(getConnectionContext(client, connectionId)).rejects.toMatchObject({ code: 'missing_connection_id' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
+
+  it.each(['', '  '])('proxyRequestWithResponse(%j)', async connectionId => {
+    const fetchMock = vi.fn();
+    const client = makeClient(fetchMock, { baseUrl: 'https://example.test' });
+    await expect(
+      proxyRequestWithResponse(client, connectionId, { method: 'GET', path: 'items' }),
+    ).rejects.toMatchObject({ code: 'missing_connection_id' });
+    expect(fetchMock).not.toHaveBeenCalled();
+  });
 });
 
 describe('listIntegrations', () => {

@@ -1,0 +1,204 @@
+---
+title: 'Reference: Platform client | Connect'
+description: 'API reference for the @mastra/connect platform client: list a project''s connections and call providers through the guarded connection proxy, for custom Knowledge importers and other background services.'
+packages:
+  - '@mastra/connect'
+---
+
+# Platform client
+
+The platform client gives code outside an agent, such as a custom Knowledge importer, the same access to a project's connections that [`tools()`](/reference/connect/tools) uses. Every provider call goes through the platform's connection proxy: the platform injects the provider credential, so your code never handles it.
+
+```typescript
+import { listProjectConnections, proxyRequest, resolveClient } from '@mastra/connect'
+
+const client = resolveClient({ projectId: 'proj_123' })
+const connections = await listProjectConnections(client, 'proj_123')
+const wiki = connections.find(
+  connection => connection.integrationId === 'notion' && connection.status === 'active',
+)
+
+if (wiki) {
+  const results = await proxyRequest(client, wiki.id, {
+    method: 'POST',
+    path: 'v1/search',
+    body: {},
+  })
+}
+```
+
+Prefer this client over [`credential()`](/reference/connect/credential), which returns raw credentials and bypasses the proxy's guardrails.
+
+## Required context
+
+The client fails closed and throws before making any request when the context it needs is missing.
+
+| Context | Source | When missing |
+| - | - | - |
+| Platform access token | `accessToken`, or `MASTRA_PLATFORM_ACCESS_TOKEN` / `MASTRA_PLATFORM_SECRET_KEY`. Use a project service token for background work. | `resolveClient()` throws `missing_access_token` |
+| Project | The `projectId` argument of `listProjectConnections()`. Pass it explicitly. Don't derive it from untrusted input. | Throws `missing_project_id` |
+| Connection | The `connectionId` argument of `getConnectionContext()`, `proxyRequest()` and `proxyRequestWithResponse()`. Use an ID returned by `listProjectConnections()` for the same project. | Throws `missing_connection_id` |
+| Organization | `orgId`, or `MASTRA_ORG_ID`. Sent as `x-organization-id` when set. | Optional; omitted from the request |
+
+The platform authorizes every request against the token.
+
+## resolveClient()
+
+Builds a client from options and environment variables.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'options',
+    type: 'ConnectClientOptions',
+    description:
+      "accessToken, orgId, projectId, resourceId, baseUrl and fetch. Each falls back to its environment variable (MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_ORG_ID, MASTRA_PROJECT_ID, MASTRA_INTEGRATIONS_API_URL). Pass resourceId only to include one end user's connections alongside the project-wide ones.",
+    isOptional: true,
+  },
+]}
+/>
+
+Returns: `ResolvedClient`.
+
+## listProjectConnections()
+
+Lists the project's connections. Filter by `integrationId` and `status === 'active'` before using one.
+
+<PropertiesTable
+  content={[
+  { name: 'client', type: 'ResolvedClient', description: 'Client from resolveClient().' },
+  { name: 'projectId', type: 'string', description: 'Project whose connections to list.' },
+]}
+/>
+
+Returns: `Promise<ProjectConnection[]>`, each with `id`, `integrationId`, `status`, `accountLabel` and `resourceId`.
+
+## getConnectionContext()
+
+Returns a connection's non-secret configuration, such as a provider site or subdomain chosen at connect time.
+
+<PropertiesTable
+  content={[
+  { name: 'client', type: 'ResolvedClient', description: 'Client from resolveClient().' },
+  { name: 'connectionId', type: 'string', description: 'Connection to read.' },
+]}
+/>
+
+Returns: `Promise<ConnectionContext>`, `{ connection_config: Record<string, unknown> | null; metadata: Record<string, unknown> | null }`.
+
+## proxyRequest() and proxyRequestWithResponse()
+
+Send a request to the provider through the connection proxy. `proxyRequest()` returns the parsed body. `proxyRequestWithResponse()` also returns the HTTP `status` and `headers`, for providers whose contract depends on them.
+
+<PropertiesTable
+  content={[
+  { name: 'client', type: 'ResolvedClient', description: 'Client from resolveClient().' },
+  { name: 'connectionId', type: 'string', description: 'Connection to call through.' },
+  {
+    name: 'options',
+    type: 'ProxyRequestOptions',
+    description:
+      'method, provider-relative path, query, headers, body, baseUrlOverride and responseType. Paths with dot segments are rejected. Authorization headers are dropped: the platform supplies the credential. baseUrlOverride must be an https URL the platform allows for the connection.',
+  },
+]}
+/>
+
+Returns: `Promise<unknown>` or `Promise<ProxyResponse>` (`{ data, status, headers }`). Non-2xx responses throw.
+
+## Telling provider errors from platform errors
+
+A failed request throws `MastraConnectError`. The `code` says who answered:
+
+| Code | Meaning |
+| - | - |
+| `connection_not_found` | The platform has no such connection for this token. Says nothing about the provider's data. |
+| `unauthorized` | The platform rejected the token (401/403). |
+| `proxy_error` | The provider answered with a non-2xx status, available on `error.status`. Also used for other platform failures. |
+
+This matters for importers that remove knowledge when an item is deleted upstream. List and search APIs usually leave deleted items out, so an item missing from a list proves nothing. Look the item up and remove its knowledge only when the provider returns that item in an explicit deleted, trashed or archived state.
+
+Remove nothing on anything else:
+
+- A provider 404 or 403 (`proxy_error` with that `status`) is ambiguous: the item may be gone, or only hidden from this connection. Keep the knowledge and carry on.
+- A platform error (`connection_not_found`, `unauthorized`) or a network error says nothing about the item. Let the run fail.
+
+## Example: a custom Knowledge importer
+
+One importer per active connection, writing into one explicit scope. Removing imported knowledge needs `owner` authority on that scope.
+
+```typescript
+import { Knowledge } from '@mastra/core/knowledge'
+import type { KnowledgeImporterDefinition } from '@mastra/core/knowledge'
+import {
+  MastraConnectError,
+  listProjectConnections,
+  proxyRequestWithResponse,
+  resolveClient,
+} from '@mastra/connect'
+
+async function wikiImporters(
+  projectId: string,
+  scope: string,
+): Promise<KnowledgeImporterDefinition[]> {
+  const client = resolveClient({ projectId })
+  const connections = await listProjectConnections(client, projectId)
+
+  return connections
+    .filter(
+      connection => connection.integrationId === 'acme-wiki' && connection.status === 'active',
+    )
+    .map(connection => ({
+      id: `acme-wiki:${connection.id}`,
+      access: { [scope]: 'owner' },
+      triggers: { webhook: { bindings: [{ source: `acme-wiki:${connection.id}`, scope }] } },
+      handler: async ctx => {
+        const importer = await ctx.importer()
+        const { data } = await proxyRequestWithResponse(client, connection.id, {
+          method: 'GET',
+          path: 'pages',
+        })
+        const seen = new Set<string>()
+        for (const page of (data as { pages: { id: string; title: string; body: string }[] })
+          .pages) {
+          const address = `acme-wiki:page:${page.id}`
+          seen.add(address)
+          const node = await importer.upsertNode(address, {
+            name: page.title,
+            metadata: { pageId: page.id },
+          })
+          if (!(await node.listKnowledge()).some(record => record.text === page.body)) {
+            await node.appendKnowledge({ text: page.body })
+          }
+        }
+        for (const node of await importer.listNodes()) {
+          if (seen.has(node.node.address)) continue
+          const pageId = String(node.node.metadata?.pageId)
+          let page: { id?: string; status?: string }
+          try {
+            ;({ data: page } = await proxyRequestWithResponse(client, connection.id, {
+              method: 'GET',
+              path: `pages/${encodeURIComponent(pageId)}`,
+            }))
+          } catch (error) {
+            // A provider 404/403 is ambiguous: keep the knowledge. Platform and network errors fail the run.
+            if (
+              error instanceof MastraConnectError &&
+              error.code === 'proxy_error' &&
+              [403, 404].includes(error.status ?? 0)
+            )
+              continue
+            throw error
+          }
+          // Only the provider's explicit deleted state removes the page's knowledge.
+          if (page.id === pageId && page.status === 'deleted') {
+            for (const record of await node.listKnowledge()) await node.removeKnowledge(record.id)
+          }
+        }
+      },
+    }))
+}
+
+const knowledge = new Knowledge({ importers: await wikiImporters('proj_123', 'project:docs') })
+```
+
+The node stays when its records are removed. Only the knowledge imported from the deleted item goes.
