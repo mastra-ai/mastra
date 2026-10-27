@@ -73,7 +73,7 @@ One edge: on the default engine, `map-final-output` publishes `finish` before it
 | `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE`           | The snapshot is not restartable and is not suspended.                                                                                                                                                | left out before recovery                       |
 | `DURABLE_AGENT_RECOVER_AGENT_MISMATCH`           | The run belongs to another agent.                                                                                                                                                                    | `failed`                                       |
 
-The server maps ownership conflicts, suspended runs, and `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE` to HTTP 409. `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` returns HTTP 500 because missing persistence can leave the run permanently unrecoverable.
+The server maps ownership conflicts, `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS`, suspended runs, and `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE` to HTTP 409. `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` returns HTTP 500 because missing persistence can leave the run permanently unrecoverable.
 
 `recoverActiveRuns()` leaves out runs that finished or suspended between discovery and their turn. With an explicit `runId`, it applies the same rules: a run that is not `running` is not attempted.
 
