@@ -61,7 +61,17 @@ The scheduler only polls storage once a schedule exists. At boot, a process with
 
 When a schedule is created at runtime, Mastra publishes a wake event on the PubSub backend. Any process running the default worker set starts its scheduler in response, which is how a standalone worker discovers schedules created by the API process. This requires both processes to share the same PubSub backend.
 
-To poll from startup regardless of whether schedules exist (for example, when your processes don't share a PubSub backend), set `scheduler: { enabled: true }` on the worker or run it with `MASTRA_WORKERS=scheduler`.
+To start the scheduler regardless of whether schedules exist (for example, when your processes don't share a PubSub backend), set `scheduler: { enabled: true }` on the worker or run it with `MASTRA_WORKERS=scheduler`.
+
+Once running, the scheduler sleeps until the next schedule is due and checks storage at least once per `scheduler.tickIntervalMs`, which defaults to one hour. Wake events cut that sleep short. Without a shared PubSub backend, the worker doesn't receive wake events, so a schedule created by another process can take up to `tickIntervalMs` to be picked up. Lower it if you need faster pickup:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core/mastra'
+
+export const mastra = new Mastra({
+  scheduler: { enabled: true, tickIntervalMs: 60_000 },
+})
+```
 
 **Don't run more than one scheduler instance.** Multiple schedulers polling the same storage would fire duplicate events for the same schedule.
 

@@ -38,11 +38,10 @@ const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
  *  5. Records the trigger in the schedule's history.
  *
  * Between ticks it sleeps until the earliest active `nextFireAt`, capped at
- * `tickIntervalMs`. With no active schedules it doesn't touch storage until a
- * `SCHEDULER_WAKE_TOPIC` event arrives, so idle deployments let serverless
- * databases suspend. A scheduler with `enabled: true` keeps checking at
- * `tickIntervalMs` instead, since it may not share a pubsub with the
- * processes that create schedules.
+ * `tickIntervalMs` (one storage check per cap when nothing is active), so
+ * idle deployments let serverless databases suspend. A
+ * `SCHEDULER_WAKE_TOPIC` event re-checks storage immediately; the cap covers
+ * schedules written by processes that don't share this scheduler's pubsub.
  *
  * The scheduler does **not** execute workflows. The existing
  * `WorkflowEventProcessor` consumes `workflow.start` events and runs them.
@@ -167,8 +166,8 @@ export class Scheduler extends MastraBase {
 
   /**
    * Re-check storage now, as a wake event would. No-op unless running.
-   * Mastra calls this directly when publishing the wake event fails, so an
-   * idle in-process scheduler still picks up the change.
+   * Mastra calls this directly when publishing the wake event fails, so a
+   * sleeping in-process scheduler still picks up the change before its cap.
    */
   wake(): void {
     if (!this.#started || this.#stopping) return;
@@ -219,7 +218,7 @@ export class Scheduler extends MastraBase {
   async #armNextTick(): Promise<void> {
     if (!this.#started || this.#stopping) return;
 
-    let delay: number | null;
+    let delay: number;
     if (this.#wakePending) {
       this.#wakePending = false;
       delay = 0;
@@ -232,7 +231,6 @@ export class Scheduler extends MastraBase {
       this.#wakePending = false;
       delay = 0;
     }
-    if (delay === null) return;
 
     this.#clearTimer();
     this.#timerHandle = setTimeout(
@@ -255,9 +253,9 @@ export class Scheduler extends MastraBase {
   }
 
   /**
-   * Milliseconds until the next tick, or `null` to stay idle until a wake.
+   * Milliseconds until the next tick.
    */
-  async #nextTickDelay(): Promise<number | null> {
+  async #nextTickDelay(): Promise<number> {
     const maxSleep = this.#config.tickIntervalMs;
     const retryDelay = Math.min(DUE_RETRY_DELAY_MS, maxSleep);
 
@@ -269,14 +267,9 @@ export class Scheduler extends MastraBase {
       return retryDelay;
     }
 
-    if (nextFireAt === null) {
-      // Idle until a wake arrives, so serverless databases can suspend. An
-      // explicitly enabled scheduler may run in a process that never receives
-      // wakes (no shared pubsub), and without a wake subscription nothing would
-      // restart the loop, so both keep checking at the cap.
-      if (this.#wakeSubscription && this.#config.enabled !== true) return null;
-      return maxSleep;
-    }
+    // Nothing active: still check at the cap, because a process that doesn't
+    // share our pubsub can write a schedule without waking us.
+    if (nextFireAt === null) return maxSleep;
 
     const untilDue = nextFireAt - Date.now();
     if (untilDue <= 0) return retryDelay;

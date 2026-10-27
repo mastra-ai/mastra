@@ -6057,8 +6057,8 @@ export class Mastra<
       await this.#pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: scheduleId, data: {} });
     } catch (err) {
       this.#logger?.warn?.('Failed to publish scheduler wake event', err as any);
-      // An idle scheduler arms no timer, so without the event it would never
-      // see the change. Wake this process's scheduler directly.
+      // Without the event a sleeping scheduler wouldn't see the change until
+      // its tickIntervalMs cap. Wake this process's scheduler directly.
       this.#findSchedulerWorker()?.scheduler?.wake();
     }
   }
@@ -7108,12 +7108,7 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        // A MASTRA_WORKERS=scheduler process is an explicit opt-in, so treat it
-        // like scheduler.enabled: it keeps checking storage while idle in case
-        // it doesn't share a pubsub with the processes creating schedules.
-        const sw = new SchedulerWorker(
-          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
-        );
+        const sw = new SchedulerWorker(this.#schedulerConfig);
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }

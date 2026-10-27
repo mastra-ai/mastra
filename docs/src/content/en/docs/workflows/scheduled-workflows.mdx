@@ -166,7 +166,7 @@ Removing a schedule entry from a workflow's `schedule` array deletes its row on 
 
 ## Deployment topology
 
-The built-in scheduler uses a `setInterval` tick loop to poll the schedules table and claim due rows. It dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.
+The built-in scheduler sleeps until the earliest active schedule is due, then claims due rows from the schedules table. It checks storage at least once per `scheduler.tickIntervalMs` (default one hour), and creating, updating, or resuming a schedule wakes it early. It dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.
 
 ### Long-lived host (recommended)
 

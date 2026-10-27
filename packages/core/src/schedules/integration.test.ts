@@ -465,7 +465,7 @@ describe('Agent schedules — scheduler integration', () => {
       await expect(schedulesStore.getSchedule(created.id)).resolves.not.toBeNull();
     });
 
-    it('fires a new schedule on an idle scheduler when publishing the wake fails', async () => {
+    it('fires a new schedule on a sleeping scheduler when publishing the wake fails', async () => {
       const pubsub = new EventEmitterPubSub();
       const storage = new MockStore();
       const schedulesStore = (await storage.getStore('schedules'))!;
@@ -477,17 +477,15 @@ describe('Agent schedules — scheduler integration', () => {
           pubsub,
           agents: { 'beat-idle': agent },
           notifications: { dispatch: { enabled: false } },
-          scheduler: { tickIntervalMs: 200 },
         }),
       );
 
       await mastra.startWorkers();
-      const far = await mastra.schedules.create({ cron: '0 0 1 1 *', prompt: 'ping', agentId: agent.id });
+      // A yearly schedule leaves the scheduler sleeping for the 1-hour cap.
+      await mastra.schedules.create({ cron: '0 0 1 1 *', prompt: 'ping', agentId: agent.id });
       await waitForScheduler(mastra);
-      await mastra.schedules.delete(far.id);
-      // Let the capped timer fire once and find nothing active, so the
-      // scheduler goes idle with no timer armed.
-      await new Promise(resolve => setTimeout(resolve, 400));
+      // Let the warm-up tick finish and arm the long timer.
+      await new Promise(resolve => setTimeout(resolve, 200));
 
       const publish = pubsub.publish.bind(pubsub);
       vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {

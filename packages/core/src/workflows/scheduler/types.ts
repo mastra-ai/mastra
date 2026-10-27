@@ -71,12 +71,11 @@ export type SchedulerConfig = {
    */
   enabled?: boolean;
   /**
-   * Maximum time in ms the scheduler sleeps between storage checks while
-   * active schedules exist. Between checks it wakes at the earliest
-   * `nextFireAt`, or sooner on a scheduler wake event. With no active
-   * schedules it doesn't check storage until a wake event arrives, unless
-   * `enabled` is true, in which case it keeps checking at this interval so
-   * processes without a shared pubsub still pick up new schedules.
+   * Maximum time in ms the scheduler sleeps between storage checks. It
+   * wakes at the earliest active `nextFireAt`, or sooner on a scheduler wake
+   * event, and checks at least once per interval even with no active
+   * schedules. A schedule created by a process that doesn't share this
+   * scheduler's pubsub can take up to this long to be picked up.
    * Defaults to 3_600_000 (1 hour).
    */
   tickIntervalMs?: number;

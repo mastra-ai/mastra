@@ -621,48 +621,40 @@ describe('Scheduler', () => {
       }
     });
 
-    it('does not touch storage while there are no active schedules', async () => {
+    it('sleeps for tickIntervalMs while there are no active schedules', async () => {
       const { store } = makeStore();
       await addFutureSchedule(store, 'sched-paused', Date.now() + 60_000, 'paused');
-      const listDue = vi.spyOn(store, 'listDueSchedules');
       const timers = spyTimerDelays();
-      const scheduler = new Scheduler({
-        schedulesStore: store,
-        pubsub: new EventEmitterPubSub(),
-        config: { tickIntervalMs: 50 },
-      });
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub: new EventEmitterPubSub() });
 
       try {
         await scheduler.start();
-        await new Promise(resolve => setTimeout(resolve, 300));
-        // Only the warm-up tick; no timer was armed.
-        expect(listDue).toHaveBeenCalledTimes(1);
-        expect(timers.delays()).toEqual([]);
-        expect(scheduler.isRunning).toBe(true);
+        expect(timers.delays()).toEqual([3_600_000]);
       } finally {
         await scheduler.stop();
         timers.restore();
       }
     });
 
-    it('keeps checking at tickIntervalMs while idle when explicitly enabled', async () => {
+    it('picks up a schedule written without a wake event once idle', async () => {
+      // Another process that doesn't share our pubsub writes the row directly.
       const { store } = makeStore();
-      const listDue = vi.spyOn(store, 'listDueSchedules');
-      const scheduler = new Scheduler({
-        schedulesStore: store,
-        pubsub: new EventEmitterPubSub(),
-        config: { enabled: true, tickIntervalMs: 50 },
-      });
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      await addFutureSchedule(store, 'sched-paused', Date.now() + 60_000, 'paused');
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { tickIntervalMs: 50 } });
 
       try {
         await scheduler.start();
-        await waitFor(() => listDue.mock.calls.length >= 3);
+        await addFutureSchedule(store, 'sched-direct', Date.now() - 1_000);
+        await waitFor(() => events.length === 1);
+        expect(events[0]!.runId).toMatch(/^sched_sched-direct_/);
       } finally {
         await scheduler.stop();
       }
     });
 
-    it('wakes from idle on a scheduler wake event and fires the new schedule', async () => {
+    it('wakes before the cap on a scheduler wake event and fires the new schedule', async () => {
       const { store } = makeStore();
       const pubsub = new EventEmitterPubSub();
       const { events } = captureWorkflowsTopic(pubsub);
@@ -1350,7 +1342,7 @@ describe('Scheduler', () => {
     const scheduler = new Scheduler({
       schedulesStore: store,
       pubsub,
-      config: { enabled: true, tickIntervalMs: undefined, batchSize: undefined },
+      config: { tickIntervalMs: undefined, batchSize: undefined },
     });
 
     const listDue = vi.spyOn(store, 'listDueSchedules');
@@ -1364,7 +1356,7 @@ describe('Scheduler', () => {
     expect(batchArg).toBe(100);
 
     // tickIntervalMs should fall back to 3_600_000 (the default), not undefined.
-    // With enabled: true and no active schedules it sleeps for the full cap.
+    // With no active schedules it sleeps for the full cap.
     expect(stSpy.mock.calls.map(([, ms]) => ms)).toContain(3_600_000);
 
     await scheduler.stop();
