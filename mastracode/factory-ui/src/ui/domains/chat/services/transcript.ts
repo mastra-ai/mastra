@@ -173,7 +173,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         ],
       };
     case 'mergeWindow': {
-      const merged = mergeServerWindow(state, action.messages);
+      const merged = dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages);
       // `pending` is otherwise cleared only by live stream events. When the
       // stream missed the run (dropped, or the tab was hidden), the refetched
       // window is what brings the reply in, so it has to clear `pending` too.
@@ -541,6 +541,60 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   return { ...reconciled, entries };
 }
 
+function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const savedByTurn = savedErrorsByTurn(state.entries, messages);
+  if (savedByTurn.size === 0) return state;
+
+  const entries: TimelineEntry[] = [];
+  let turn = -1;
+  for (const [index, entry] of state.entries.entries()) {
+    if (opensTurn(entry)) turn = index;
+    if (entry.kind === 'notice' && isSavedError(savedByTurn.get(turn), entry.error)) continue;
+    entries.push(entry);
+  }
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+function savedErrorsByTurn(
+  entries: TimelineEntry[],
+  messages: MastraDBMessage[],
+): Map<number, MastraErrorPart['error'][]> {
+  const byTurn = new Map<number, MastraErrorPart['error'][]>();
+  if (!messages.some(message => message.content.parts.some(part => part.type === 'error'))) return byTurn;
+
+  let turn = -1;
+  for (const message of messages) {
+    if (toMessageEntry(message).message.role === 'user') {
+      turn = indexOfTurnOpener(entries, message);
+      continue;
+    }
+    if (turn === -1) continue;
+    const errors = message.content.parts.flatMap(part => (part.type === 'error' ? [part.error] : []));
+    if (errors.length > 0) byTurn.set(turn, [...(byTurn.get(turn) ?? []), ...errors]);
+  }
+  return byTurn;
+}
+
+function indexOfTurnOpener(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const index = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
+  if (index !== -1) return index;
+  const texts = new Set(drawableTexts(message));
+  const copy = (entry: TimelineEntry) => isUnclaimedOptimisticCopy(entry, texts);
+  const first = entries.findIndex(copy);
+  return first === entries.findLastIndex(copy) ? first : -1;
+}
+
+function opensTurn(entry: TimelineEntry): boolean {
+  return entry.kind === 'message' && entry.message.role === 'user';
+}
+
+function isSavedError(saved: MastraErrorPart['error'][] | undefined, error: NoticeEntry['error']): boolean {
+  if (!saved || !error) return false;
+  return saved.some(part => part.name === error.name && part.message === error.message);
+}
+
 // SSE uses one assistant message per run; storage uses one per step.
 function claimOnScreenEntries(
   entries: TimelineEntry[],
@@ -856,13 +910,16 @@ function upsertMessage(
 // A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
 function indexOfUnclaimedOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): number {
   const texts = new Set(drawableTexts(message));
-  return entries.findIndex(
-    entry =>
-      entry.kind === 'message' &&
-      entry.message.role === 'user' &&
-      entry.id.startsWith('local-') &&
-      entry.message.id === entry.id &&
-      drawableTexts(entry.message).some(text => texts.has(text)),
+  return entries.findIndex(entry => isUnclaimedOptimisticCopy(entry, texts));
+}
+
+function isUnclaimedOptimisticCopy(entry: TimelineEntry, texts: Set<string>): boolean {
+  return (
+    entry.kind === 'message' &&
+    entry.message.role === 'user' &&
+    entry.id.startsWith('local-') &&
+    entry.message.id === entry.id &&
+    drawableTexts(entry.message).some(text => texts.has(text))
   );
 }
 

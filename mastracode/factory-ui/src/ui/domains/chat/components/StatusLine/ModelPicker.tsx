@@ -59,24 +59,18 @@ function canSwitchModel({
 
 function useModelSwitch() {
   const chatSession = useChatSessionContext();
-  const { activeModelId, defaultModelId, setModel } = useChatModels();
+  const { activeModelId, defaultModelId, pendingModelId, setModel } = useChatModels();
   const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const [pendingModelId, setPendingModelId] = useState<string>();
 
   const selectedModelId = pendingModelId ?? activeModelId;
   const busy = Boolean(pendingModelId);
 
   const pickModel = (modelId: string) => {
     if (busy || modelId === activeModelId) return;
-    setPendingModelId(modelId);
-    void setModel(modelId).then(
-      () => setPendingModelId(undefined),
-      (cause: unknown) => {
-        setPendingModelId(undefined);
-        toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
-      },
-    );
+    void setModel(modelId).catch((cause: unknown) => {
+      toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
+    });
   };
 
   return {

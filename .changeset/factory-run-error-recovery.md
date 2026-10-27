@@ -11,3 +11,4 @@ Failed runs now say what went wrong and link to the fix, in the web chat and in 
 - A Slack failure with nothing to change links to its session.
 - A rejected request shows the provider's own reason when it gave one, and says plainly when it gave none.
 - A reloaded thread explains a failure the same way the live run did, and every web failure keeps copyable diagnostics under **Error details**.
+- A failed run shows one error card on the web, instead of the live card plus the saved copy that arrived when the run ended.

@@ -29,12 +29,35 @@ describe('describeRunError', () => {
     expect(description.message).toContain(message);
   });
 
-  it('gives only the next step when the provider wrote nothing beyond the HTTP phrase', () => {
-    const unauthorized = { name: 'AI_APICallError', message: 'Unauthorized', statusCode: 401 };
-    expect(describeRunError(unauthorized)).toEqual({
+  it.each([
+    ['the HTTP phrase', { name: 'AI_APICallError', message: 'Unauthorized', statusCode: 401 }],
+    [
+      'a gateway page',
+      {
+        name: 'AI_APICallError',
+        message: 'Forbidden',
+        statusCode: 403,
+        responseBody: '<!DOCTYPE html><html><title>Attention Required!</title></html>',
+      },
+    ],
+  ])('gives only the next step when the provider wrote nothing beyond %s', (_source, rejected) => {
+    expect(describeRunError(rejected)).toEqual({
       title: 'Provider access failed',
       message: 'Review the credentials and model access configured for this session.',
       recovery: 'credentials',
+    });
+  });
+
+  it('quotes a plain-text body the provider sent instead of JSON', () => {
+    const textBody = {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 400,
+      responseBody: 'Invalid schema for function search.',
+    };
+    expect(describeRunError(textBody)).toEqual({
+      title: 'Model request rejected',
+      message: 'Invalid schema for function search.',
     });
   });
 

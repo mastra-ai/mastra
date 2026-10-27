@@ -57,6 +57,7 @@ const HTTP_REASON_PHRASE =
 export const PROVIDER_CALL_ERROR_NAME = /^(?:AI_)?APICallError$/;
 const ACCESS_DENIED_PHRASE = /^(?:unauthorized|forbidden)\.?$/i;
 const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
+const MARKUP_OR_JSON = /^\s*[[{<]/;
 
 interface CollectedFacts {
   statusCode?: number;
@@ -191,16 +192,21 @@ export function providerErrorReason(error: unknown): string | undefined {
 }
 
 export function providerRequestId(error: unknown): string | undefined {
-  if (typeof error !== 'object' || error === null) return undefined;
+  return requestIdWithin(error, 0);
+}
+
+function requestIdWithin(error: unknown, depth: number): string | undefined {
+  if (depth > MAX_OBJECT_DEPTH || typeof error !== 'object' || error === null) return undefined;
   const kept = readField(error, 'requestId');
   if (typeof kept === 'string' && kept.trim()) return kept.trim();
   const headers = readField(error, 'responseHeaders');
-  if (typeof headers !== 'object' || headers === null) return undefined;
-  for (const header of REQUEST_ID_HEADERS) {
-    const value = readField(headers, header);
-    if (typeof value === 'string' && value.trim()) return value.trim();
+  if (typeof headers === 'object' && headers !== null) {
+    for (const header of REQUEST_ID_HEADERS) {
+      const value = readField(headers, header);
+      if (typeof value === 'string' && value.trim()) return value.trim();
+    }
   }
-  return undefined;
+  return requestIdWithin(readField(error, 'cause'), depth + 1);
 }
 
 function innermostReason(error: unknown, depth: number): string | undefined {
@@ -222,7 +228,7 @@ function innermostReason(error: unknown, depth: number): string | undefined {
     if (nested) return nested;
   }
   const body = readField(error, 'responseBody');
-  const bodyReason = typeof body === 'string' ? innermostReason(parseJsonObject(body), depth) : undefined;
+  const bodyReason = typeof body === 'string' ? bodyExplanation(body, depth) : undefined;
   if (bodyReason) return bodyReason;
   const causeReason = reasonBehindCause(readField(error, 'cause'), depth + 1);
   if (causeReason) return causeReason;
@@ -230,13 +236,24 @@ function innermostReason(error: unknown, depth: number): string | undefined {
   return typeof message === 'string' ? innermostReason(message, depth) : undefined;
 }
 
-// Walks wrapping causes to the first that holds a provider's HTTP response; any other cause stays out of history.
+function bodyExplanation(body: string, depth: number): string | undefined {
+  const parsed = parseJsonObject(body);
+  if (parsed !== undefined) return innermostReason(parsed, depth);
+  return MARKUP_OR_JSON.test(body) ? undefined : innermostReason(body, depth);
+}
+
+// Walks wrapping causes to the first the provider produced, an HTTP response or a stream error frame; any other cause stays out of history.
 function reasonBehindCause(cause: unknown, depth: number): string | undefined {
   if (depth > MAX_OBJECT_DEPTH || typeof cause !== 'object' || cause === null) return undefined;
-  if (carriesProviderResponse(cause)) return innermostReason(cause, depth);
+  if (producedByProvider(cause)) return innermostReason(cause, depth);
   return reasonBehindCause(readField(cause, 'cause'), depth + 1);
 }
 
-function carriesProviderResponse(value: object): boolean {
-  return typeof readField(value, 'statusCode') === 'number' || typeof readField(value, 'responseBody') === 'string';
+function producedByProvider(value: object): boolean {
+  const type = readField(value, 'type');
+  return (
+    typeof readField(value, 'statusCode') === 'number' ||
+    typeof readField(value, 'responseBody') === 'string' ||
+    (typeof type === 'string' && ENVELOPE_TYPES.has(type))
+  );
 }

@@ -79,6 +79,39 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/models`);
   });
 
+  it('explains a raw stream error frame the channel could only wrap', () => {
+    const frame = {
+      type: 'error',
+      error: {
+        type: 'invalid_request_error',
+        code: 'invalid_prompt',
+        message: 'Invalid value for parameter timeout.',
+      },
+    };
+    const card = rendered(slackRunErrorCard(new Error('[object Object]', { cause: frame }), slackRun()));
+
+    expect(card).toContain('Model request rejected');
+    expect(card).toContain('Invalid value for parameter timeout.');
+    expect(card).not.toContain('[object Object]');
+  });
+
+  it('keeps the request id of a provider failure the channel wrapped', () => {
+    const serializedCallError = {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 400,
+      responseBody: JSON.stringify({ error: { message: 'Invalid schema for function search.' } }),
+      responseHeaders: { 'request-id': 'req_123' },
+    };
+    const wrapped = new Error('Bad Request (HTTP 400): Invalid schema for function search.', {
+      cause: serializedCallError,
+    });
+    const card = rendered(slackRunErrorCard(wrapped, slackRun()));
+
+    expect(card).toContain('Invalid schema for function search.');
+    expect(card).toContain('Request id: req_123');
+  });
+
   it('opens the session for a failure nothing in settings fixes', () => {
     const card = rendered(slackRunErrorCard(new Error('Request timed out.'), slackRun()));
 

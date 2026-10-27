@@ -641,22 +641,23 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
 }
 
 type WireError = Extract<JsonReadyAgentControllerEvent, { type: 'error' }>['error'];
-type ProviderCallError = Error & { statusCode?: unknown; responseBody?: unknown; responseHeaders?: unknown };
 
 const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
 const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
 
 /** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError(error: ProviderCallError): WireError {
+function toWireError(error: Error): WireError {
   const wire: WireError = { name: error.name, message: error.message };
-  if (typeof error.statusCode === 'number' && Number.isInteger(error.statusCode)) wire.statusCode = error.statusCode;
-  if (typeof error.responseBody === 'string' && error.responseBody.trim()) {
+  const statusCode = readField(error, 'statusCode');
+  if (typeof statusCode === 'number' && Number.isInteger(statusCode)) wire.statusCode = statusCode;
+  const responseBody = readField(error, 'responseBody');
+  if (typeof responseBody === 'string' && responseBody.trim()) {
     wire.responseBody =
-      error.responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
-        ? `${error.responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
-        : error.responseBody;
+      responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
+        ? `${responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
+        : responseBody;
   }
-  const requestId = readRequestId(error.responseHeaders);
+  const requestId = readRequestId(readField(error, 'responseHeaders'));
   if (requestId) wire.requestId = requestId;
   return wire;
 }
@@ -664,10 +665,18 @@ function toWireError(error: ProviderCallError): WireError {
 function readRequestId(headers: unknown): string | undefined {
   if (!headers || typeof headers !== 'object') return undefined;
   for (const header of REQUEST_ID_HEADERS) {
-    const value = (headers as Record<string, unknown>)[header];
+    const value = readField(headers, header);
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+function readField(source: object, field: string): unknown {
+  try {
+    return (source as Record<string, unknown>)[field];
+  } catch {
+    return undefined;
+  }
 }
 
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
