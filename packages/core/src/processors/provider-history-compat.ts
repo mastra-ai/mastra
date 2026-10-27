@@ -426,7 +426,8 @@ export const stripForeignProviderExecutedTools: CompatRule = {
     for (const message of prompt) {
       if (message.role === 'assistant') {
         const content = message.content.filter(
-          part => part.type !== 'tool-call' || !foreignToolCallIds.has(part.toolCallId),
+          part =>
+            (part.type !== 'tool-call' && part.type !== 'tool-result') || !foreignToolCallIds.has(part.toolCallId),
         );
         if (content.length > 0) rewritten.push({ ...message, content });
         continue;
