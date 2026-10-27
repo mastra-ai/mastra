@@ -44,6 +44,12 @@ export interface InMemoryMCPTaskStoreOptions {
   expiredRetentionMs?: number;
   /** Clock, for tests. Default `Date.now`. */
   now?: () => number;
+  /**
+   * Called with a task's context when it is cancelled or expires before finishing, even while no
+   * attempt runs (e.g. while it waits for input). Stops whatever the task stands for outside the
+   * store, such as a suspended workflow run. Errors are ignored; report them from the hook.
+   */
+  onCancel?: (context: Record<string, unknown>) => void | Promise<void>;
 }
 
 interface PendingInput {
@@ -88,10 +94,12 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   readonly #tasks = new Map<string, TaskRecord>();
   readonly #now: () => number;
   readonly #expiredRetentionMs: number;
+  readonly #onCancel: InMemoryMCPTaskStoreOptions['onCancel'];
 
   constructor(options: InMemoryMCPTaskStoreOptions = {}) {
     this.#now = options.now ?? Date.now;
     this.#expiredRetentionMs = options.expiredRetentionMs ?? DEFAULT_EXPIRED_RETENTION_MS;
+    this.#onCancel = options.onCancel;
   }
 
   async create(params: MCPTaskCreateParams): Promise<MCPTask> {
@@ -143,7 +151,10 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
   async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
     const record = this.#lookup(taskId, access);
     if (!record) return false;
-    if (!isTerminalTaskStatus(record.status)) this.#finish(record, 'cancelled', new Error('Task was cancelled'));
+    if (!isTerminalTaskStatus(record.status)) {
+      this.#finish(record, 'cancelled', new Error('Task was cancelled'));
+      this.#notifyCancel(record);
+    }
     return true;
   }
 
@@ -300,8 +311,18 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     if (!isTerminalTaskStatus(record.status)) {
       record.error = { code: TASKS_ERROR_CODES.InternalError, message: 'Task expired before it finished' };
       this.#finish(record, 'failed', new Error('Task expired'));
+      this.#notifyCancel(record);
     }
     record.purgeAt = this.#now() + this.#expiredRetentionMs;
+  }
+
+  #notifyCancel(record: TaskRecord): void {
+    const onCancel = this.#onCancel;
+    const context = record.context;
+    if (!onCancel || !context) return;
+    void Promise.resolve()
+      .then(() => onCancel(context))
+      .catch(() => {});
   }
 
   #transition(record: TaskRecord, status: MCPTaskStatus): void {

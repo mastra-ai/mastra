@@ -1,9 +1,9 @@
 ---
-title: "Reference: MCPServer | Tools and MCP"
-description: "The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server."
+title: 'Reference: MCPServer | Tools and MCP'
+description: 'The MCPServer class provides the functionality to expose your existing Mastra tools and Agents as a Model Context Protocol (MCP) server.'
 packages:
-  - "@mastra/core"
-  - "@mastra/mcp"
+  - '@mastra/core'
+  - '@mastra/mcp'
 ---
 
 # MCPServer
@@ -894,7 +894,7 @@ If the available prompts change, your server can notify listening clients.
 Call this method when the list of available prompts has changed (e.g., a prompt was added or removed). This will send a `notifications/prompts/list_changed` message to listening clients, prompting them to re-fetch the list of prompts.
 
 ```typescript oxfmt:false
-await serverWithPrompts.prompts.notifyListChanged()
+await serverWithPrompts.prompts.notifyListChanged();
 ```
 
 ### Best practices for Prompt Handling
@@ -1960,7 +1960,7 @@ Tasks implement SEP-2663, the `io.modelcontextprotocol/tasks` MCP extension. Thi
 
 :::
 
-The `tasks` option lets a tool answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one tool can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
+The `tasks` option lets a tool, a workflow (`run_*`) or an agent (`ask_*`) answer `tools/call` with a task instead of a result. The client gets a task handle at once and polls `tasks/get` until the task finishes. The result outlives the request and isn't limited by HTTP timeouts. When at least one of them can answer with a task, the server advertises the extension and answers `tasks/get`, `tasks/update` and `tasks/cancel` over both stdio and Streamable HTTP. Without a `tasks` option, it does neither.
 
 Only clients that declare the extension on a request get a task. Every other client gets a synchronous answer, unless the tool is listed in `required`.
 
@@ -2001,7 +2001,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: "'off'",
     description:
-      'Mode for tools not listed in `tools`, including tools added later with `toolActions.add()`. Agent (`ask_*`) and workflow (`run_*`) tools always answer synchronously.',
+      'Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`, including tools added later with `toolActions.add()`.',
   },
   {
     name: 'tools',
@@ -2015,7 +2015,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     type: 'string[]',
     isOptional: true,
     description:
-      "Tools that only run as tasks. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be a tool served as a task.",
+      "Tools that only run as tasks, by the name clients call: a tool's key, `run_<workflow>` or `ask_<agent>`. A client that didn't declare the extension gets error `-32021` instead of a synchronous answer. Each name must be served as a task.",
   },
   {
     name: 'ttlMs',
@@ -2031,7 +2031,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: 'false',
     description:
-      'Whether a task whose server stopped mid-run runs `execute` again from the start on another instance. Only applies to tasks kept in Mastra storage. See [Recovery after a crash](#recovery-after-a-crash).',
+      'Whether a tool or agent task whose server stopped mid-run runs again from the start on another instance. Only applies to tasks kept in Mastra storage. Workflow tasks ignore it, see [Workflow tasks](#workflow-tasks). See [Recovery after a crash](#recovery-after-a-crash).',
   },
   {
     name: 'store',
@@ -2049,15 +2049,17 @@ The server creates the task before it answers, so a `tasks/get` sent right after
   },
   {
     name: 'workflows',
-    type: 'never',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs? }>",
     isOptional: true,
-    description: 'Not supported yet. Setting it throws when the server is created.',
+    description:
+      "Mode per workflow key, for its `run_<key>` tool. A key that isn't one of the server's `workflows` throws when the server is created. See [Workflow tasks](#workflow-tasks).",
   },
   {
     name: 'agents',
-    type: 'never',
+    type: "Record<string, 'off' | 'auto' | 'always' | { mode; syncWindowMs?; ttlMs?; recover? }>",
     isOptional: true,
-    description: 'Not supported yet. Setting it throws when the server is created.',
+    description:
+      "Mode per agent key, for its `ask_<key>` tool. A key that isn't one of the server's `agents` throws when the server is created. See [Agent tasks](#agent-tasks).",
   },
 ]}
 />
@@ -2087,6 +2089,38 @@ Task runs are rebuilt from what the task stored when it was created. This keeps 
 - `tasks/cancel` aborts the tool's `abortSignal` and the task ends `cancelled`. Stopping is up to the tool. A result it returns afterwards is discarded.
 - A tool that throws completes the task with `isError: true` and the serialized error, as a synchronous call answers.
 - A task ends `failed` only when the server can't run it, for example when its TTL expires.
+
+### Workflow tasks
+
+A `run_<key>` task follows one workflow run. The run starts once, under the `tools/call` that creates the task, with a run id of its own. The task id is never the run id.
+
+```typescript
+const server = new MCPServer({
+  id: 'reports',
+  name: 'Reports',
+  version: '1.0.0',
+  workflows: { nightly },
+  tasks: {
+    workflows: { nightly: { mode: 'auto', syncWindowMs: 1000 } },
+  },
+})
+```
+
+- A run that ends `success` or `bailed` completes the task with the same text a synchronous call answers: `status`, `input`, `steps` and `result`.
+- A run that ends `failed`, `tripwire` or `canceled` completes the task with `isError: true` and the error message. A synchronous call answers a failed run without `isError`.
+- In `'auto'` mode, a run that suspends within `syncWindowMs` continues as a task, so it can ask for input.
+- A step that suspends moves the task to `input_required`, with a form built from the step's `resumeSchema` and its suspend payload as the message. The server asks for one suspended step at a time. `tasks/update` resumes the run with the answer as `resumeData`. Resuming needs Mastra storage.
+- A run is resumed at most once per suspension. If it was already resumed, for example from Studio or by another instance, the task follows that run instead.
+- A step whose `resumeSchema` can't be shown as a form, such as one with nested objects, leaves the task `working`. Resume the run another way, for example from Studio, and the task follows it.
+- Declining the input request, `tasks/cancel`, and TTL expiry cancel the run, including a run waiting for input. With a `store` passed in `tasks`, a run waiting for input is only cancelled if that store calls `onCancel`.
+
+When the server running a workflow task stops, Mastra's [workflow recovery](/reference/core/mastra-class) continues the run on the next instance that starts, and the task follows it there. This needs `recovery.workflows` left at `'auto'`. With `'off'`, the task stays `working` until its TTL expires. The step that was running when the server stopped runs again, so keep steps safe to repeat. A task whose run was never saved, or whose follower stops a second time, ends `failed`.
+
+### Agent tasks
+
+An `ask_<key>` task runs the agent's `generate()` as the task's work, like a tool task: `tasks/cancel` aborts the agent's `abortSignal`, an error completes the task with `isError: true`, and `recover` applies.
+
+An agent that pauses for tool approval or other input completes the task with `isError: true`. Tasks can't answer an agent's approval requests yet.
 
 ### Tasks across instances
 

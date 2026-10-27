@@ -1,5 +1,6 @@
 import { appendFileSync, existsSync, readFileSync } from 'node:fs';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import type { AuthInfo } from '@modelcontextprotocol/server';
 import { z } from 'zod/v4';
 
@@ -58,4 +59,46 @@ export function makeHang() {
       return 'stopped';
     },
   });
+}
+
+/** The steps `nightly` ran, in order, across processes. */
+export function stepsIn(stepsFile: string): string[] {
+  return existsSync(stepsFile) ? readFileSync(stepsFile, 'utf8').split('\n').filter(Boolean) : [];
+}
+
+/**
+ * A nightly job: `fetch` (a side effect), then `crunch`, which hangs on its first run (its process
+ * is killed) and finishes on any later one. Records every step it starts in `stepsFile`.
+ */
+export function makeNightly(stepsFile: string) {
+  return createWorkflow({
+    id: 'nightly',
+    description: 'Fetches the day, then crunches it',
+    inputSchema: z.object({ day: z.string() }),
+    outputSchema: z.object({ summary: z.string() }),
+  })
+    .then(
+      createStep({
+        id: 'fetch',
+        inputSchema: z.object({ day: z.string() }),
+        outputSchema: z.object({ day: z.string() }),
+        execute: async ({ inputData }) => {
+          appendFileSync(stepsFile, 'fetch\n');
+          return inputData;
+        },
+      }),
+    )
+    .then(
+      createStep({
+        id: 'crunch',
+        inputSchema: z.object({ day: z.string() }),
+        outputSchema: z.object({ summary: z.string() }),
+        execute: async ({ inputData }) => {
+          appendFileSync(stepsFile, 'crunch\n');
+          if (stepsIn(stepsFile).filter(step => step === 'crunch').length === 1) await new Promise(() => {});
+          return { summary: `crunched ${inputData.day}` };
+        },
+      }),
+    )
+    .commit();
 }

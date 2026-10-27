@@ -29,6 +29,14 @@ export interface MCPServerToolTaskConfig {
 }
 
 /**
+ * How one workflow's `run_<key>` tool is served as a task. There is no `recover`: a task whose
+ * server restarted re-attaches to its workflow run, which core's workflow recovery continues.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export type MCPServerWorkflowTaskConfig = Omit<MCPServerToolTaskConfig, 'recover'>;
+
+/**
  * What `tasks.authorize` receives on every `tasks/get`, `tasks/update` and `tasks/cancel`.
  *
  * @experimental SEP-2663 extension; API may change.
@@ -47,25 +55,31 @@ export interface MCPServerTaskAuthorizeContext {
  * @experimental SEP-2663 extension; API may change.
  */
 export interface MCPServerTasksOptions {
-  /** Mode for tools not listed in `tools`. Default `'off'`. */
+  /** Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`. Default `'off'`. */
   default?: MCPServerTaskMode;
   /** Per-tool mode, keyed by tool name. */
   tools?: Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
-  /** Tasks for workflows are not supported yet. */
-  workflows?: never;
-  /** Tasks for agents are not supported yet. */
-  agents?: never;
   /**
-   * Tools that only run as tasks: a client that did not declare the Tasks extension gets a -32021
-   * error instead of a synchronous answer.
+   * Per-workflow mode, keyed by the server's `workflows` key; applies to its `run_<key>` tool. A
+   * workflow task follows its workflow run: a suspended step asks the client for input, and
+   * cancelling the task cancels the run.
+   */
+  workflows?: Record<string, MCPServerTaskMode | MCPServerWorkflowTaskConfig>;
+  /** Per-agent mode, keyed by the server's `agents` key; applies to its `ask_<key>` tool. */
+  agents?: Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
+  /**
+   * Tools that only run as tasks, by the name clients call them (`run_<workflow>` and
+   * `ask_<agent>` for workflows and agents): a client that did not declare the Tasks extension
+   * gets a -32021 error instead of a synchronous answer.
    */
   required?: string[];
   /** How long a task is kept from creation, in ms; `null` keeps it until the server closes. Default 24 hours. */
   ttlMs?: number | null;
   /**
-   * Whether a task whose server crashed or restarted mid-attempt runs the tool again from the start.
-   * Only applies to stores that outlive a process (Mastra background tasks). Only turn this on for
-   * idempotent tools: `execute` may run twice. When off, such a task fails as lost. Default `false`.
+   * Whether a task whose server crashed or restarted mid-attempt runs the tool or agent again from
+   * the start. Only applies to stores that outlive a process (Mastra background tasks). Only turn
+   * this on for idempotent tools: `execute` may run twice. When off, such a task fails as lost.
+   * Workflow tasks ignore it: they always re-attach to their run. Default `false`.
    */
   recover?: boolean;
   /**
@@ -131,17 +145,19 @@ function assertBoolean(owner: string, value: unknown): void {
   }
 }
 
-/** Validates `tasks` against the configured tools. Throws on anything a server could not serve. */
+/** The keys a server serves, for checking `tasks` against. */
+export interface TasksConfigSurfaces {
+  tools: readonly string[];
+  workflows?: readonly string[];
+  agents?: readonly string[];
+}
+
+/** Validates `tasks` against the configured tools, workflows and agents. Throws on anything a server could not serve. */
 export function resolveTasksConfig(
   options: MCPServerTasksOptions | undefined,
-  toolNames: readonly string[],
+  surfaces: TasksConfigSurfaces,
 ): ResolvedTasksConfig {
   const config = options ?? {};
-  // TODO(MCP Tasks PR 4): serve workflows (`run_*`) as tasks.
-  if (config.workflows !== undefined) throw invalid('tasks.workflows is not supported yet.');
-  // TODO(MCP Tasks PR 5): serve agents (`ask_*`) as tasks.
-  if (config.agents !== undefined) throw invalid('tasks.agents is not supported yet.');
-
   const defaultMode = config.default ?? 'off';
   assertMode('tasks.default', defaultMode);
   assertDuration('tasks.ttlMs', config.ttlMs);
@@ -149,42 +165,86 @@ export function resolveTasksConfig(
   assertBoolean('tasks.recover', config.recover);
   const recover = config.recover ?? false;
 
-  const known = new Set(toolNames);
-  const perTool = new Map<string, ResolvedToolTaskMode>();
-  for (const [name, entry] of Object.entries(config.tools ?? {})) {
-    if (!known.has(name)) throw invalid(`tasks.tools names "${name}", which is not one of this server's tools.`);
-    const tool = typeof entry === 'string' ? { mode: entry } : entry;
-    assertMode(`tasks.tools.${name}`, tool.mode);
-    assertDuration(`tasks.tools.${name}.syncWindowMs`, tool.syncWindowMs);
-    assertDuration(`tasks.tools.${name}.ttlMs`, tool.ttlMs);
-    assertBoolean(`tasks.tools.${name}.recover`, tool.recover);
-    perTool.set(name, {
-      mode: tool.mode,
-      syncWindowMs: tool.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
-      ttlMs: tool.ttlMs === undefined ? ttlMs : tool.ttlMs,
-      recover: tool.recover ?? recover,
-    });
-  }
+  /** Resolves one surface's per-key entries, keyed by the tool name each key is exposed as. */
+  const resolveSurface = (
+    option: 'tools' | 'workflows' | 'agents',
+    keys: readonly string[],
+    exposedAs: (key: string) => string,
+    surfaceRecover: (entry: MCPServerToolTaskConfig) => boolean,
+  ) => {
+    const known = new Set(keys);
+    const resolved = new Map<string, ResolvedToolTaskMode>();
+    const entries = (config[option] ?? {}) as Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
+    const noun = option.slice(0, -1);
+    for (const [key, entry] of Object.entries(entries)) {
+      if (!known.has(key))
+        throw invalid(`tasks.${option} names "${key}", which is not one of this server's ${option}.`);
+      const surface = typeof entry === 'string' ? { mode: entry } : entry;
+      const owner = `tasks.${option}.${key}`;
+      assertMode(owner, surface.mode);
+      assertDuration(`${owner}.syncWindowMs`, surface.syncWindowMs);
+      assertDuration(`${owner}.ttlMs`, surface.ttlMs);
+      if (option === 'workflows' && 'recover' in surface) {
+        throw invalid(`${owner}.recover is not a ${noun} option: a workflow task always re-attaches to its run.`);
+      }
+      assertBoolean(`${owner}.recover`, surface.recover);
+      resolved.set(exposedAs(key), {
+        mode: surface.mode,
+        syncWindowMs: surface.syncWindowMs ?? DEFAULT_SYNC_WINDOW_MS,
+        ttlMs: surface.ttlMs === undefined ? ttlMs : surface.ttlMs,
+        recover: surfaceRecover(surface),
+      });
+    }
+    return resolved;
+  };
+  const perTool = resolveSurface(
+    'tools',
+    surfaces.tools,
+    key => key,
+    tool => tool.recover ?? recover,
+  );
+  // Re-attaching never runs a step again (core's workflow recovery continues the run), so it is always safe.
+  const perWorkflow = resolveSurface(
+    'workflows',
+    surfaces.workflows ?? [],
+    key => `run_${key}`,
+    () => true,
+  );
+  const perAgent = resolveSurface(
+    'agents',
+    surfaces.agents ?? [],
+    key => `ask_${key}`,
+    agent => agent.recover ?? recover,
+  );
+
   const fallback: ResolvedToolTaskMode = {
     mode: defaultMode,
     syncWindowMs: DEFAULT_SYNC_WINDOW_MS,
     ttlMs,
     recover,
   };
-  const off: ResolvedToolTaskMode = { ...fallback, mode: 'off' };
-  const modeFor = (name: string, toolType: MCPToolType | undefined) =>
-    // Agent and workflow tools stay synchronous until they are served as tasks of their own.
-    toolType ? off : (perTool.get(name) ?? fallback);
+  const modeFor = (name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode => {
+    if (toolType === 'workflow') return perWorkflow.get(name) ?? { ...fallback, recover: true };
+    if (toolType === 'agent') return perAgent.get(name) ?? fallback;
+    return perTool.get(name) ?? fallback;
+  };
 
+  const exposed = new Map<string, MCPToolType | undefined>([
+    ...surfaces.tools.map(name => [name, undefined] as const),
+    ...(surfaces.workflows ?? []).map(key => [`run_${key}`, 'workflow'] as const),
+    ...(surfaces.agents ?? []).map(key => [`ask_${key}`, 'agent'] as const),
+  ]);
   const required = new Set(config.required ?? []);
   for (const name of required) {
-    if (!known.has(name)) throw invalid(`tasks.required names "${name}", which is not one of this server's tools.`);
-    if (modeFor(name, undefined).mode === 'off') {
+    if (!exposed.has(name)) throw invalid(`tasks.required names "${name}", which is not one of this server's tools.`);
+    if (modeFor(name, exposed.get(name)).mode === 'off') {
       throw invalid(`tasks.required names "${name}", which is not served as a task.`);
     }
   }
 
-  const enabled = defaultMode !== 'off' || [...perTool.values()].some(tool => tool.mode !== 'off');
+  const enabled =
+    defaultMode !== 'off' ||
+    [...perTool.values(), ...perWorkflow.values(), ...perAgent.values()].some(surface => surface.mode !== 'off');
   return {
     enabled,
     store: config.store,

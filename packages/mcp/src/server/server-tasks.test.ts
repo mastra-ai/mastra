@@ -478,7 +478,7 @@ describe.each([
     await vi.waitFor(() => expect(probe.aborted).toEqual(['expiring']));
   });
 
-  it('keeps workflow tools synchronous even when every tool defaults to tasks', async () => {
+  it('keeps a workflow tool synchronous when its own mode is off, whatever the default', async () => {
     const workflow = createWorkflow({
       id: 'doubler',
       description: 'Doubles a number',
@@ -494,7 +494,7 @@ describe.each([
         }),
       )
       .commit();
-    await start({ default: 'always' }, { workflows: { doubler: workflow } });
+    await start({ default: 'always', workflows: { doubler: 'off' } }, { workflows: { doubler: workflow } });
     const response = await call('run_doubler', { n: 21 });
     expect(response.result.resultType).not.toBe('task');
     expect(JSON.stringify(response.result)).toContain('42');
@@ -506,8 +506,9 @@ describe.each([
     const make = (tasks: unknown) => () =>
       new MCPServer({ name: 'Bad', version: '1.0.0', tools, tasks: tasks as MCPServerConfig['tasks'] });
     expect(make({ tools: { nope: 'always' } })).toThrow(/not one of this server's tools/);
-    expect(make({ workflows: {} })).toThrow(/tasks.workflows is not supported yet/);
-    expect(make({ agents: {} })).toThrow(/tasks.agents is not supported yet/);
+    expect(make({ workflows: { nope: 'always' } })).toThrow(/not one of this server's workflows/);
+    expect(make({ agents: { nope: 'always' } })).toThrow(/not one of this server's agents/);
+    expect(make({ required: ['run_nope'] })).toThrow(/not one of this server's tools/);
     expect(make({ tools: { echo: 'off' }, required: ['echo'] })).toThrow(/not served as a task/);
     expect(make({ tools: { echo: 'sometimes' } })).toThrow(/unknown task mode/);
     expect(make({ tools: { echo: { mode: 'auto', syncWindowMs: -1 } } })).toThrow(/non-negative integer/);
@@ -519,12 +520,12 @@ describe.each([
 
   it('resolves recover per tool, falling back to tasks.recover and then false', () => {
     const tools = Object.keys(makeTools({ runs: [], aborted: [], authInfos: [], contexts: [] }));
-    const plain = resolveTasksConfig({ default: 'always' }, tools);
+    const plain = resolveTasksConfig({ default: 'always' }, { tools });
     expect(plain.modeFor('echo', undefined).recover).toBe(false);
 
     const config = resolveTasksConfig(
       { default: 'always', recover: true, tools: { echo: { mode: 'always', recover: false }, quick: 'auto' } },
-      tools,
+      { tools },
     );
     expect(config.modeFor('echo', undefined).recover).toBe(false);
     expect(config.modeFor('quick', undefined).recover).toBe(true);

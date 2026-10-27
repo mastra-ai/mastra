@@ -9,6 +9,7 @@ import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { LibSQLStore } from '@mastra/libsql';
 import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -16,7 +17,7 @@ import { z } from 'zod/v4';
 import { TaskRequester } from '../client/tasks/requester';
 import { tasksCapabilityEntry } from '../shared/tasks';
 import type { MCPDetailedTask } from '../shared/tasks';
-import { authFor, makeCrashy, runsIn } from './__tests__/background-tasks.mock';
+import { authFor, makeCrashy, makeNightly, runsIn, stepsIn } from './__tests__/background-tasks.mock';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
 import { MCPServer } from './server';
 import type { MCPServerConfig } from './server';
@@ -35,6 +36,42 @@ class User {
 
 interface Probe {
   runs: Array<{ tool: string; resumeData: unknown }>;
+}
+
+/** A release: `prepare` (a side effect), then `ask` who approves. Records every step start in `probe`. */
+function makeApproval(probe: Probe) {
+  return createWorkflow({
+    id: 'approval',
+    description: 'Prepares a release, then asks who approves it',
+    inputSchema: z.object({ release: z.string() }),
+    outputSchema: z.object({ outcome: z.string() }),
+  })
+    .then(
+      createStep({
+        id: 'prepare',
+        inputSchema: z.object({ release: z.string() }),
+        outputSchema: z.object({ release: z.string() }),
+        execute: async ({ inputData }) => {
+          probe.runs.push({ tool: 'prepare', resumeData: undefined });
+          return inputData;
+        },
+      }),
+    )
+    .then(
+      createStep({
+        id: 'ask',
+        inputSchema: z.object({ release: z.string() }),
+        outputSchema: z.object({ outcome: z.string() }),
+        suspendSchema: z.object({ message: z.string() }),
+        resumeSchema: z.object({ approver: z.string() }),
+        execute: async ({ inputData, resumeData, suspend }) => {
+          probe.runs.push({ tool: 'ask', resumeData });
+          if (!resumeData) return suspend({ message: `Who approves ${inputData.release}?` });
+          return { outcome: `${inputData.release} approved by ${resumeData.approver}` };
+        },
+      }),
+    )
+    .commit();
 }
 
 function makeTools(probe: Probe, counterFile: string) {
@@ -729,5 +766,112 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await waitFor(await requester(a.url), taskId, 'completed');
     expect(await rows(a.mastra)).toEqual([]);
     store.close();
+  });
+
+  describe('workflow tasks', () => {
+    const tasks = { workflows: { approval: 'always' as const, nightly: 'always' as const } };
+    const workflowInstance = () =>
+      instance(tasks, {
+        extra: { workflows: { approval: makeApproval(probe), nightly: makeNightly(`${counterFile}.nightly`) } },
+      });
+    const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
+
+    async function onlyRun(mastra: Mastra, key: string) {
+      const workflow = mastra.getWorkflow(key);
+      const { runs, total } = await workflow.listWorkflowRuns();
+      expect(total).toBe(1);
+      return (await workflow.getWorkflowRunById(runs[0]!.runId))!;
+    }
+
+    it('asks on one instance for a run another started, and resumes that run once with the answer', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_approval', { release: 'v2' });
+      const onB = await requester(b.url);
+      const waiting = await waitFor(onB, taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests ?? {});
+      await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+
+      const done = await waitFor(await requester(a.url), taskId, 'completed');
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v2 approved by bob' },
+      });
+      expect(stepRuns('prepare')).toHaveLength(1);
+      expect(stepRuns('ask').map(run => run.resumeData)).toEqual([undefined, { approver: 'bob' }]);
+      expect((await onlyRun(b.mastra, 'approval')).status).toBe('success');
+    });
+
+    it('resumes the run once when two instances take the same answer at once', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const onA = await requester(a.url);
+      const onB = await requester(b.url);
+      const taskId = await call(a.url, 'run_approval', { release: 'v3' });
+      const [key] = Object.keys((await waitFor(onA, taskId, 'input_required')).inputRequests ?? {});
+      const answer = { [key!]: { action: 'accept' as const, content: { approver: 'bob' } } };
+      await Promise.allSettled([onA.update(taskId, answer), onB.update(taskId, answer)]);
+
+      const done = await waitFor(onA, taskId, 'completed');
+      // The losing resume follows the winner's run instead of failing the task.
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v3 approved by bob' },
+      });
+      expect(stepRuns('ask').map(run => run.resumeData)).toEqual([undefined, { approver: 'bob' }]);
+      expect(stepRuns('prepare')).toHaveLength(1);
+    });
+
+    it('follows a run resumed outside MCP instead of resuming it again when the answer arrives', async () => {
+      const a = await workflowInstance();
+      const onA = await requester(a.url);
+      const taskId = await call(a.url, 'run_approval', { release: 'v5' });
+      const [key] = Object.keys((await waitFor(onA, taskId, 'input_required')).inputRequests ?? {});
+      // Someone answers in Studio first.
+      const { runs } = await a.mastra.getWorkflow('approval').listWorkflowRuns();
+      const run = await a.mastra.getWorkflow('approval').createRun({ runId: runs[0]!.runId });
+      await run.resume({ step: 'ask', resumeData: { approver: 'studio' } });
+
+      await onA.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      const done = await waitFor(onA, taskId, 'completed');
+      expect(done.result).toMatchObject({ isError: false });
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { outcome: 'v5 approved by studio' },
+      });
+      expect(stepRuns('ask').map(r => r.resumeData)).toEqual([undefined, { approver: 'studio' }]);
+    });
+
+    it('cancels a run waiting for input from the instance that did not start it', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_approval', { release: 'v4' });
+      const onB = await requester(b.url);
+      await waitFor(onB, taskId, 'input_required');
+      await onB.cancel(taskId);
+      expect((await onB.get(taskId)).status).toBe('cancelled');
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'approval')).status).toBe('canceled'));
+    });
+
+    it('completes a run whose server died mid-step once workflow recovery continues it, without running it twice', async () => {
+      const stepsFile = `${counterFile}.nightly`;
+      const dying = await child(false);
+      const taskId = await call(dying.url, 'run_nightly', { day: 'monday' });
+      await until(() => stepsIn(stepsFile).includes('crunch'));
+      dying.process.kill('SIGKILL');
+
+      // The next instance boots like a deployed server: Mastra recovers the workflow runs it finds.
+      const survivor = await workflowInstance();
+      void survivor.mastra.restartAllActiveWorkflowRuns();
+      const done = await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect(JSON.parse((done.result as any).content[0].text)).toMatchObject({
+        status: 'success',
+        result: { summary: 'crunched monday' },
+      });
+      expect((await onlyRun(survivor.mastra, 'nightly')).status).toBe('success');
+      // `fetch` finished before the crash and is not run again; the interrupted step runs again.
+      expect(stepsIn(stepsFile)).toEqual(['fetch', 'crunch', 'crunch']);
+    }, 90_000);
   });
 });

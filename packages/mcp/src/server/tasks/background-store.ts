@@ -27,6 +27,12 @@ export interface BackgroundTaskMCPTaskStoreOptions {
   workFor: (context: BackgroundToolTaskContext) => MCPTaskWork;
   /** Whether a crashed attempt of this tool runs again. */
   recoverFor: (toolName: string) => boolean;
+  /**
+   * Called with a task's context when it is cancelled or expires before finishing, on whichever
+   * instance does so, even while no attempt runs (e.g. while it waits for input). Stops whatever
+   * the task stands for outside the store, such as a suspended workflow run.
+   */
+  onCancel?: (context: BackgroundToolTaskContext) => void | Promise<void>;
   /** Read on every log, since Mastra sets the server's logger after registering it. */
   logger?: () => IMastraLogger;
 }
@@ -190,6 +196,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    */
   readonly #firstAttempts = new Map<string, (reason: unknown) => void>();
   readonly #executors = new Set<string>();
+  readonly #onCancel: BackgroundTaskMCPTaskStoreOptions['onCancel'];
   #sweepTimer?: ReturnType<typeof setInterval>;
   #sweeping?: Promise<void>;
 
@@ -198,6 +205,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#owner = `mcp-server:${options.serverId}`;
     this.#workFor = options.workFor;
     this.#recoverFor = options.recoverFor;
+    this.#onCancel = options.onCancel;
     this.#getLogger = options.logger;
   }
 
@@ -395,8 +403,18 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         this.#getLogger?.().warn('Could not cancel MCP task', { error });
       }
       this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
+      await this.#notifyCancel(found.row);
     }
     return true;
+  }
+
+  async #notifyCancel(row: BackgroundTask): Promise<void> {
+    if (!this.#onCancel) return;
+    try {
+      await this.#onCancel((row.args as unknown as RowArgs).context);
+    } catch (error) {
+      this.#getLogger?.().warn('Could not stop what a cancelled MCP task stands for', { error });
+    }
   }
 
   #abortFirstAttempt(rowId: string, reason: Error): void {
@@ -480,6 +498,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   async #expire(storage: BackgroundTasksStorage, row: BackgroundTask): Promise<void> {
     await this.#manager.cancel(row.id);
     this.#abortFirstAttempt(row.id, new Error(TASK_EXPIRED_MESSAGE));
+    await this.#notifyCancel(row);
     await storage.updateTask(
       row.id,
       {
