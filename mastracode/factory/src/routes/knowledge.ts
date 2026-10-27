@@ -25,6 +25,7 @@ import {
 import type { Context } from 'hono';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import type { ImportedLinkReport } from './knowledge-imported-links.js';
 import { importedGraphTargets } from './knowledge-imported-links.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
@@ -170,6 +171,8 @@ export interface KnowledgeGraphPayload {
   unresolvedCapped: { count: number; names: string[] };
   pinCensus: { resource: number; thread: number | null };
   version: string | null;
+  /** Disclosure for the importer-metadata relationship projection. */
+  importedLinks: ImportedLinkReport;
 }
 
 export interface KnowledgeNodeRecordPayload {
@@ -1462,7 +1465,11 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             recordWindow.length = this.#limits.maxRecords;
           }
           const resolver = await WikilinkResolver.create(store, contentNodes, this.#limits.maxFallbackLookups);
-          const importedTargets = await importedGraphTargets(store, contentNodes, recordWindow);
+          const { targets: importedTargets, report: importedLinks } = await importedGraphTargets(
+            store,
+            contentNodes,
+            recordWindow,
+          );
           const edges: KnowledgeGraphEdge[] = scopeNodeId
             ? directMembers.map(node => ({
                 id: `contains:${selected.id}:${node.id}`,
@@ -1621,6 +1628,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
               thread: view.view === 'thread' ? pinnedRecords.filter(value => value.rung === 'thread').length : null,
             },
             version: activity[0]?.id ?? null,
+            importedLinks,
           };
           return c.json(payload);
         },
