@@ -35,11 +35,13 @@ To run only the processors you configure, with none of the defaults merged in, s
 
 ## How it works
 
-The processor checks the error and its cause chain for:
+The processor checks the error and its cause chain, in this order, for:
 
-- Provider retry metadata: `isRetryable === true`
-- Built-in OpenAI Responses stream error matching
 - Matcher results: Any configured matcher that returns `true`
+- Built-in OpenAI Responses stream error matching
+- Provider retry metadata: `isRetryable === true`
+
+The first match decides the retry policy, so a configured matcher's `maxRetries`, `delayMs` and `onRetry` apply even when the built-in matcher would also match.
 
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
 

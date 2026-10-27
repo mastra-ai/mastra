@@ -167,8 +167,9 @@ function normalizeEntry(entry: StreamErrorRetryMatcherEntry): StreamErrorRetryMa
 
 /**
  * Walk the error cause chain and return the policy of the first matching
- * entry, or `undefined` when no matcher fires. Explicit matchers take
- * precedence over provider `isRetryable` metadata, and first-match wins.
+ * entry, or `undefined` when no matcher fires. Configured matchers run before
+ * the built-in ones, every matcher before provider `isRetryable` metadata, and
+ * first-match wins.
  */
 function findMatchingPolicy(error: unknown, entries: StreamErrorRetryMatcherConfig[]): MatchedPolicy | undefined {
   const visited = new WeakSet<object>();
@@ -209,7 +210,7 @@ export class StreamErrorRetryProcessor implements Processor<'stream-error-retry-
   constructor(options: StreamErrorRetryProcessorOptions = {}) {
     this.#maxRetries = options.maxRetries ?? DEFAULT_MAX_RETRIES;
     const defaultEntries: StreamErrorRetryMatcherConfig[] = DEFAULT_MATCHERS.map(m => ({ match: m }));
-    this.#entries = [...defaultEntries, ...(options.matchers ?? []).map(normalizeEntry)];
+    this.#entries = [...(options.matchers ?? []).map(normalizeEntry), ...defaultEntries];
     this.#retryUnknownErrors = options.retryUnknownErrors ?? false;
     this.#delayMs = options.delayMs;
     this.#maxRetryAfterMs = clampDelayMs(options.maxRetryAfterMs ?? DEFAULT_MAX_RETRY_AFTER_MS);

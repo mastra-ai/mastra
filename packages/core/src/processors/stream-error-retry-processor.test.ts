@@ -563,6 +563,18 @@ describe('StreamErrorRetryProcessor', () => {
       expect(onRetry).toHaveBeenCalledWith({ ...args, delayMs: 0 });
     });
 
+    it('applies a configured matcher policy when the built-in matcher also matches', async () => {
+      const onRetry = vi.fn();
+      const frame = { type: 'error', error: { type: 'server_error', message: 'Internal Server Error' } };
+      const args = makeArgs({ error: frame, retryCount: 1 });
+      const processor = new StreamErrorRetryProcessor({
+        matchers: [{ match: candidate => candidate === frame, maxRetries: 3, onRetry }],
+      });
+
+      await expect(processor.processAPIError(args)).resolves.toEqual({ retry: true });
+      expect(onRetry).toHaveBeenCalledWith({ ...args, delayMs: 0 });
+    });
+
     it('falls back to processor-level defaults when per-matcher policy omits fields', async () => {
       const processor = new StreamErrorRetryProcessor({
         maxRetries: 2,

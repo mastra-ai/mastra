@@ -517,7 +517,7 @@ describe('providerErrorFacts', () => {
           cause: responsesServerErrorFrame,
         }),
       ),
-    ).toEqual({ codes: ['upstream_failure', 'internal_error', 'server_error'] });
+    ).toEqual({ codes: ['upstream_failure', 'internal_error', 'server_error'], reason: 'An internal error occurred.' });
   });
 
   it('keeps the body sentence as the reason when the message is only an HTTP phrase', () => {
@@ -555,6 +555,15 @@ describe('providerErrorFacts', () => {
     const { reason } = providerErrorFacts(apiError(400, 'Bad Request', JSON.stringify({ error: { message: essay } })));
 
     expect(reason).toBe(`${essay.slice(0, MAX_PERSISTED_RESPONSE_BODY_LENGTH)}…`);
+  });
+
+  it('keeps the detail of an error no provider wrote out of history', () => {
+    const databaseError = Object.assign(new Error('duplicate key value violates unique constraint "users_email_key"'), {
+      code: '23505',
+      detail: 'Key (email)=(ada@example.com) already exists.',
+    });
+
+    expect(providerErrorFacts(databaseError)).toEqual({ codes: ['23505'] });
   });
 
   it('returns no keys for an error without provider facts', () => {

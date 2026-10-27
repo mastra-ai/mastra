@@ -204,11 +204,21 @@ export function providerErrorFacts(error: unknown): ProviderErrorFacts {
   if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
   const codes = [...new Set(facts.codes)];
   if (codes.length > 0) result.codes = codes;
-  const message = typeof error === 'object' && error !== null ? readField(error, 'message') : error;
-  const reason = innermostReason(error, 0);
-  if (reason !== undefined && reason !== (typeof message === 'string' ? message.trim() : undefined))
-    result.reason = capPersistedText(reason);
+  const reason = reasonToPersist(error);
+  if (reason !== undefined) result.reason = capPersistedText(reason);
   return result;
+}
+
+function reasonToPersist(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const reason = producedByProvider(error)
+    ? innermostReason(error, 0)
+    : reasonBehindCause(readField(error, 'cause'), 1);
+  const alreadySaved = ['message', 'responseBody'].some(field => {
+    const saved = readField(error, field);
+    return typeof saved === 'string' && saved.trim() === reason;
+  });
+  return alreadySaved ? undefined : reason;
 }
 
 /** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
