@@ -67,8 +67,25 @@ export abstract class MastraModelInput extends MastraBase {
           const stream = await createStream();
           attachModelStreamTransport(outputStream, readModelStreamTransport(stream));
 
+          // AI SDK providers report call warnings on the `stream-start` part, not on the
+          // doStream result. Collect them into the same array handed to onResult so the
+          // step result (built after the stream drains) carries them.
+          const warnings = stream.warnings ?? [];
+          const modelStream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>> = stream.warnings
+            ? stream.stream
+            : stream.stream.pipeThrough(
+                new TransformStream({
+                  transform(chunk, chunkController) {
+                    if (chunk?.type === 'stream-start' && Array.isArray(chunk.warnings)) {
+                      warnings.push(...chunk.warnings);
+                    }
+                    chunkController.enqueue(chunk);
+                  },
+                }),
+              );
+
           const initialChunks = onResult({
-            warnings: stream.warnings,
+            warnings,
             request: stream.request,
             rawResponse: stream.rawResponse || stream.response || {},
           });
@@ -80,7 +97,7 @@ export abstract class MastraModelInput extends MastraBase {
 
           await self.transform({
             runId,
-            stream: stream.stream,
+            stream: modelStream,
             controller,
           });
 

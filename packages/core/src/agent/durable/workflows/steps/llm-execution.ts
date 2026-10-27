@@ -367,6 +367,14 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
 
+      const modelMetadataOf = (m: { modelId: string; specificationVersion: string; provider: string }) => ({
+        modelId: m.modelId,
+        modelVersion: m.specificationVersion,
+        modelProvider: m.provider,
+      });
+      // The last model a call was attempted with, reported on a failed step like the regular agent does.
+      let attemptedModelMetadata: ReturnType<typeof modelMetadataOf> | undefined;
+
       // Emit error + step-finish chunks and return a bail response. This
       // mirrors the regular agent which sets stepResult.reason = 'error' and
       // emits a deferred error chunk rather than crashing the loop. Used by
@@ -406,9 +414,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               runId,
               from: ChunkFrom.AGENT,
               payload: {
-                stepResult: { reason: 'error', isContinued: false },
+                stepResult: { reason: 'error', warnings: [], isContinued: false },
                 output: { usage },
-                metadata: {},
+                metadata: attemptedModelMetadata ? { modelMetadata: attemptedModelMetadata } : {},
               },
             });
           }
@@ -1072,6 +1080,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // non-durable path today (not exposed through AgentExecutionOptions),
             // so durable also relies on the MessageList defaults here. If those
             // ever become user-facing they should be plumbed in identically.
+            attemptedModelMetadata = modelMetadataOf(currentModel);
             const messageListPromptArgs = await buildLlmPromptArgs({
               model: currentModel,
               skipUnavailableAttachments,
@@ -2045,16 +2054,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     // The rewritten provider 'finish' chunk carries no response metadata;
-                    // add it so onStepFinish/onFinish report the provider's response id
-                    // and model, as the regular agent does.
+                    // add it so onStepFinish/onFinish and the step's request/response report
+                    // what the regular agent's step-finish carries.
                     const { id, timestamp, modelId } = responseMetadata;
                     deferredStepFinishChunk = {
                       ...clientChunk,
                       payload: {
                         ...clientChunk.payload,
+                        stepResult: { ...clientChunk.payload?.stepResult, warnings },
                         metadata: {
                           ...(id !== undefined ? { id } : {}),
                           ...(timestamp !== undefined ? { timestamp } : {}),
+                          modelMetadata: modelMetadataOf(currentModel),
+                          headers: rawResponse?.headers,
                           ...clientChunk.payload?.metadata,
                           modelId: clientChunk.payload?.metadata?.modelId || modelId || model.modelId,
                         },

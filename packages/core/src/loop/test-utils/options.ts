@@ -823,7 +823,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",
@@ -1257,7 +1257,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",
@@ -1640,7 +1640,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "stop",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",
@@ -3616,7 +3616,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "abort",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",
@@ -4009,7 +4009,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": true,
                   "reason": "tool-calls",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",
@@ -4190,7 +4190,7 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
                 "stepResult": {
                   "isContinued": false,
                   "reason": "abort",
-                  "warnings": undefined,
+                  "warnings": [],
                 },
               },
               "runId": "test-run-id",

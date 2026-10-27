@@ -36,7 +36,6 @@ import type {
   ParitySnapshot,
 } from '../../../loop/test-utils/aimock/parity';
 import {
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   aborted,
   deferred,
   expectEngineParity,
@@ -168,10 +167,6 @@ async function runT36(variant: StreamedVariant): Promise<{
         memory,
       });
     },
-    differences:
-      variant === 'error'
-        ? { durable: FAILED_STEP_WARNINGS_DIFFERENCE, evented: FAILED_STEP_WARNINGS_DIFFERENCE }
-        : undefined,
     run: async (handle: EngineHandle) => {
       const state = states.get(handle.engine)!;
       const controller = new AbortController();

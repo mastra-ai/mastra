@@ -1567,7 +1567,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
               // We can preserve finish metadata from whichever shape the upstream SDK emitted,
               // but we cannot reconstruct providerMetadata if the provider omitted it entirely.
-              const finalProviderMetadata = chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata;
+              // Durable finish chunks carry no model metadata; the last step's step-finish
+              // already recorded the provider's metadata.
+              const finalProviderMetadata =
+                chunk.payload.metadata?.providerMetadata ??
+                chunk.payload.providerMetadata ??
+                (chunk.payload.metadata ? undefined : self.#bufferedSteps.at(-1)?.providerMetadata);
 
               // Retain the step providerMetadata so output-step processors can
               // read it (e.g. to attribute a Bedrock guardrail content-filter

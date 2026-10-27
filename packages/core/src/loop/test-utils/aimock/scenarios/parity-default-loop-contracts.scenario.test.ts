@@ -289,7 +289,7 @@ describeParity('default-loop-contracts parity', target => {
       expect(turn.streamedText).toBe('');
       expect(hookCalls.get(engine), `${engine}: the iteration hook was consulted once`).toHaveLength(1);
       expect(stepFinishStepResults(turn), `${engine}: the stopping step did not continue`).toEqual([
-        { isContinued: false, reason: 'tool-calls' },
+        { isContinued: false, reason: 'tool-calls', warnings: [] },
       ]);
     }
 
@@ -317,8 +317,8 @@ describeParity('default-loop-contracts parity', target => {
       expect(hookCalls.get(engine), `${engine}: the iteration hook was consulted twice`).toHaveLength(2);
       expect(hookCalls.get(engine)?.[1]?.text, `${engine}: the hook saw the second iteration's text`).toBe('MORE');
       expect(stepFinishStepResults(turn), `${engine}: feedback continued only the first iteration`).toEqual([
-        { isContinued: true, reason: 'stop' },
-        { isContinued: false, reason: 'stop' },
+        { isContinued: true, reason: 'stop', warnings: [] },
+        { isContinued: false, reason: 'stop', warnings: [] },
       ]);
     }
 

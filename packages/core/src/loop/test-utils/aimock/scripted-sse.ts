@@ -1,4 +1,5 @@
 import type { IncomingMessage, ServerResponse } from 'node:http';
+import { createAnthropic } from '@ai-sdk/anthropic-v6';
 import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import type { Mountable } from '@copilotkit/aimock';
@@ -32,22 +33,24 @@ export class ScriptedSSE implements Mountable {
 }
 
 /**
- * Starts an LLMock with scripted Gemini (`/gemini`) and OpenAI Responses
- * (`/openai`) endpoints for the enclosing describe block.
+ * Starts an LLMock with scripted Gemini (`/gemini`), OpenAI Responses
+ * (`/openai`) and Anthropic Messages (`/anthropic`) endpoints for the
+ * enclosing describe block.
  */
 export function useScriptedProviders() {
   const gemini = new ScriptedSSE(':streamGenerateContent');
   const openai = new ScriptedSSE('/responses');
-  const llm = new LLMock({ port: 0 }).mount('/gemini', gemini).mount('/openai', openai);
+  const anthropic = new ScriptedSSE('/messages');
+  const llm = new LLMock({ port: 0 }).mount('/gemini', gemini).mount('/openai', openai).mount('/anthropic', anthropic);
 
   beforeAll(async () => {
     await llm.start();
   });
   afterEach(() => {
-    gemini.responses = [];
-    gemini.requests = [];
-    openai.responses = [];
-    openai.requests = [];
+    for (const endpoint of [gemini, openai, anthropic]) {
+      endpoint.responses = [];
+      endpoint.requests = [];
+    }
   });
   afterAll(async () => {
     await llm.stop();
@@ -57,9 +60,12 @@ export function useScriptedProviders() {
     llm,
     gemini,
     openai,
+    anthropic,
     geminiModel: () =>
       createGoogleGenerativeAI({ apiKey: 'aimock', baseURL: `${llm.url}/gemini/v1beta` })('gemini-2.5-flash'),
     openaiModel: () => createOpenAI({ apiKey: 'aimock', baseURL: `${llm.url}/openai` }).responses('gpt-5'),
+    anthropicModel: () =>
+      createAnthropic({ apiKey: 'aimock', baseURL: `${llm.url}/anthropic/v1` })('claude-sonnet-4-5'),
   };
 }
 
