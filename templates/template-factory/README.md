@@ -51,7 +51,7 @@ Choose authentication, storage, and sandboxes independently. Model providers and
 
 The server requires `DATABASE_URL`, a PostgreSQL database with pgvector. Deployments to Mastra platform receive it from the project's attached database.
 
-With `MASTRA_PLATFORM_SECRET_KEY` (or `MASTRA_PLATFORM_ACCESS_TOKEN`) set, `npm run dev` runs agent commands in local sandboxes on your machine, and deployments use Mastra platform sandboxes, which also need `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. To pick a sandbox yourself, pass `sandbox` to `MastraFactory` in `src/mastra/index.ts`, for example `new LocalFactorySandbox()` from `@mastra/factory`.
+`npm run dev` runs agent commands in local sandboxes on your machine, and deployments use Mastra platform sandboxes, which need `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. To use a different sandbox provider, change `sandbox` in `src/mastra/index.ts`.
 
 ## Deploy
 
