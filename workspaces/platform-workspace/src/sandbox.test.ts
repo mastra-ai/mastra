@@ -4012,10 +4012,22 @@ describe('PlatformSandbox.getPortUrl', () => {
     vi.unstubAllEnvs();
   });
 
+  const previewCookie = {
+    name: '__mastra_preview',
+    value: 'signed',
+    domain: 'sbx_1.preview.test',
+    path: '/',
+    expires: 1782435660,
+    httpOnly: true,
+    secure: true,
+    sameSite: 'Lax',
+  };
+
   function startedSandbox(
     grant: Response = json({
       url: 'https://3000.sbx_1.preview.test/__mastra/grant?g=abc',
       expiresAt: '2026-06-26T00:01:00.000Z',
+      cookie: previewCookie,
     }),
   ) {
     const fetchMock = vi
@@ -4031,13 +4043,14 @@ describe('PlatformSandbox.getPortUrl', () => {
     return { sandbox, fetchMock };
   }
 
-  it("returns the port's address to share and a one-time sign-in link", async () => {
+  it("returns the port's address to share, a one-time sign-in link and the preview cookie", async () => {
     const { sandbox, fetchMock } = startedSandbox();
     await sandbox._start();
 
     await expect(sandbox.getPortUrl(3000)).resolves.toEqual({
       url: 'https://3000.sbx_1.preview.test/',
       signInUrl: 'https://3000.sbx_1.preview.test/__mastra/grant?g=abc',
+      cookie: previewCookie,
     });
     const [url, init] = fetchMock.mock.calls[1]!;
     expect(String(url)).toBe('https://proxy.test/v1/e2b/projects/proj_123/sandbox/sbx_1/preview-grants');

@@ -12,10 +12,20 @@ export interface FactorySandboxToolDependencies {
   resetSandbox: (input: RecreateSessionSandboxInput) => Promise<'reset' | 'not-found' | 'not-here'>;
   /** The session's running sandbox, if this process has one. */
   findSandbox: (input: RecreateSessionSandboxInput) => Promise<object | undefined>;
+  /** The browser session agents drive, when Factory has one. */
+  browser?: object;
 }
 
 interface PortUrlSandbox {
-  getPortUrl(port: number): Promise<{ url: string; signInUrl: string }>;
+  getPortUrl(port: number): Promise<{ url: string; cookie: object }>;
+}
+
+interface CookieBrowser {
+  setCookies(cookies: object[], threadId: string): Promise<void>;
+}
+
+function canSetCookies(browser: object | undefined): browser is CookieBrowser {
+  return typeof (browser as Partial<CookieBrowser> | undefined)?.setCookies === 'function';
 }
 
 function hasPortUrl(sandbox: object): sandbox is PortUrlSandbox {
@@ -60,24 +70,28 @@ export function createFactorySandboxTools(
   const portUrl = createTool({
     id: 'factory_sandbox_port_url',
     description: [
-      'Get links that open a port in your sandbox in a browser, so you or the person you are working with can see a server you started there (a dev server, a preview, an API).',
+      'Get the link that opens a port in your sandbox in a browser, so you or the person you are working with can see a server you started there (a dev server, a preview, an API).',
       'Start the server first and bind it to 0.0.0.0, not 127.0.0.1.',
-      '`url` is the link to share: it only opens for people signed in with access to this sandbox, and it does not expire.',
-      '`signInUrl` is only for your own browser tool, which cannot sign in. It works once and expires after a minute. Never share it or post it anywhere.',
-      'A browser signed in to one port can reach every port of this sandbox, so a page can call an API on another port.',
+      'The link only opens for people signed in with access to this sandbox and does not expire, so you can share it.',
+      'It also lets your own browser tool open every port of this sandbox for the next hour. If your browser later lands on a sign-in page, call this again.',
     ].join(' '),
     inputSchema: z
       .object({
         port: z.number().int().min(1).max(65_535).describe('The port the server listens on inside the sandbox.'),
       })
       .strict(),
-    execute: async ({ port }) => {
+    execute: async ({ port }, context) => {
       const sourceControl = await deps.sessions.getSourceControlBySessionId(scope.sessionId);
       const sandbox =
         sourceControl && (await deps.findSandbox({ sourceControl, orgId: scope.orgId, sessionId: scope.sessionId }));
       if (!sandbox) throw new Error('This session has no sandbox running yet. Run a command to start one.');
       if (!hasPortUrl(sandbox)) throw new Error("This session's sandbox can't expose ports.");
-      return sandbox.getPortUrl(port);
+      const { url, cookie } = await sandbox.getPortUrl(port);
+      // The browser tool can't sign in, so it gets the preview cookie directly.
+      // The cookie never goes back to the model.
+      const threadId = context?.agent?.threadId;
+      if (threadId && canSetCookies(deps.browser)) await deps.browser.setCookies([cookie], threadId);
+      return { url };
     },
   });
 

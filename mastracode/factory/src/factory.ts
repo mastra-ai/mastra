@@ -1689,6 +1689,7 @@ export class MastraFactory {
                         if (!session || session.orgId !== orgId) return undefined;
                         return peekSessionSandbox(session.id)?.sandbox;
                       },
+                      browser: this.#config.browser,
                     }),
                   );
                 }
