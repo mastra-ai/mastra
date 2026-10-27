@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Forward the workflow step writer to tools used with `createStep(tool)` so progress events reach workflow and agent streams.
+Progress events from tools used with `createStep(tool)` now reach workflow and agent streams by forwarding the step writer.
