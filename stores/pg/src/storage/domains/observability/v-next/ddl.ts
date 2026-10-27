@@ -377,6 +377,8 @@ export const ADDED_SPAN_COLUMNS = [
   ['provider', 'text'],
   ['outcome', 'text'],
   ['stopReason', 'text'],
+  ['timeToFirstTokenMs', 'double precision'],
+  ['errorCount', 'integer'],
 ] as const;
 
 /**

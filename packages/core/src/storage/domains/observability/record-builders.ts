@@ -182,6 +182,8 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     provider: span.provider ?? null,
     outcome: span.outcome ?? null,
     stopReason: span.stopReason ?? null,
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
 
     // Entity identification - from span
     entityType: span.entityType ?? null,
@@ -249,6 +251,8 @@ const SUPPLIED_SPAN_COLUMNS = [
   'provider',
   'outcome',
   'stopReason',
+  'timeToFirstTokenMs',
+  'errorCount',
   'inputPreview',
   'outputPreview',
   'errorPreview',

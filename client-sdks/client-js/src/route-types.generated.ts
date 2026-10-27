@@ -3532,6 +3532,10 @@ type Shared_Type_61 = {
   outcome?: (string | null) | undefined;
   /** Machine-readable cause of stopping, when known */
   stopReason?: (string | null) | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3661,6 +3665,10 @@ type Shared_Type_63 = {
   outcome?: (string | null) | undefined;
   /** Machine-readable cause of stopping, when known */
   stopReason?: (string | null) | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */

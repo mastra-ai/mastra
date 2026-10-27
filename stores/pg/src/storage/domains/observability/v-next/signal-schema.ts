@@ -1,4 +1,13 @@
-type ColumnType = 'bigserial' | 'boolean' | 'double precision' | 'jsonb' | 'text' | 'text[]' | 'timestamptz' | 'xid8';
+type ColumnType =
+  | 'bigserial'
+  | 'boolean'
+  | 'double precision'
+  | 'integer'
+  | 'jsonb'
+  | 'text'
+  | 'text[]'
+  | 'timestamptz'
+  | 'xid8';
 
 interface SignalColumn {
   name: string;
@@ -89,6 +98,8 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'provider', type: 'text', nullable: true },
   { name: 'outcome', type: 'text', nullable: true },
   { name: 'stopReason', type: 'text', nullable: true },
+  { name: 'timeToFirstTokenMs', type: 'double precision', nullable: true },
+  { name: 'errorCount', type: 'integer', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },

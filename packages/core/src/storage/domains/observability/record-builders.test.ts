@@ -61,6 +61,8 @@ describe('record-builders', () => {
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
       };
       const absent = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
 

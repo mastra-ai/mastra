@@ -415,6 +415,8 @@ describe('MastraPlatformExporter', () => {
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
       };
       await exporter.exportTracingEvent({
         type: TracingEventType.SPAN_ENDED,

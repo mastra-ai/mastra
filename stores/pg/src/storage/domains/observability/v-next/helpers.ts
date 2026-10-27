@@ -47,6 +47,12 @@ const PROMOTED_KEYS = new Set([
   'serviceName',
 ]);
 
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
+
 function nullableString(value: unknown): string | null {
   if (typeof value === 'string') return value === '' ? null : value;
   if (value == null) return null;
@@ -280,6 +286,8 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     provider: span.provider ?? null,
     outcome: span.outcome ?? null,
     stopReason: span.stopReason ?? null,
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata as Record<string, unknown> | null),
     metadataRaw: jsonField(metadata),
@@ -331,6 +339,8 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
     outcome: nullableString(row.outcome),
     stopReason: nullableString(row.stopReason),
+    timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+    errorCount: nullableNumber(row.errorCount),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,

@@ -1635,6 +1635,10 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   outcome?: string;
   /** Machine-readable cause of stopping, when the producer has one */
   stopReason?: string;
+  /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
+  timeToFirstTokenMs?: number;
+  /** Errors in this span and all nested spans, filled at export; the live span does not carry it */
+  errorCount?: number;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**

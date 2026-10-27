@@ -166,6 +166,11 @@ export const spanRecordSchema = z
     provider: z.string().nullish().describe('Provider paired with model'),
     outcome: z.string().nullish().describe('How this execution ended; null while it is still running'),
     stopReason: z.string().nullish().describe('Machine-readable cause of stopping, when known'),
+    timeToFirstTokenMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from the model call to the first token received; null when unknown'),
+    errorCount: z.number().int().nullish().describe('Errors in this span and all nested spans; null when unknown'),
 
     // Database timestamps
     ...dbTimestamps,

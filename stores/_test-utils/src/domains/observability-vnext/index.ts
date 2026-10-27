@@ -2529,6 +2529,8 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
       };
       const unset = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
       // Read through getTrace: it collapses a span's start and end rows the same

@@ -320,6 +320,12 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   outcome?: string
   stopReason?: string
 
+  /** Milliseconds from the model call to the first token received */
+  timeToFirstTokenMs?: number
+
+  /** Errors in this span and all nested spans */
+  errorCount?: number
+
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean
 }

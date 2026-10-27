@@ -6463,6 +6463,8 @@ LIMIT 1`,
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
       };
       const columns = Object.keys(fields);
       const startedAt = new Date('2026-01-01T00:00:00Z');
