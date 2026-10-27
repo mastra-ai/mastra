@@ -2079,6 +2079,8 @@ By default, Mastra collects telemetry about your project, including your OS, Mas
 
 When a server started with `mastra dev`, `mastra start`, or a `mastra build` output has observability configured, Mastra counts the input and output tokens each model call uses in that server process. Every 15 minutes, and once more when the server shuts down, it sends a `mastra_model_token_usage_v2` event per provider and model used since the previous report. If no model calls finished since then, nothing is sent. Each event contains the tokens used since the previous report, the report window's start and end times, the reason for the report (`interval` or `shutdown`), the command (`dev`, `start`, or `server` when the build output runs directly), and `NODE_ENV`. No prompts, responses, or other message content is sent. You can read the [model usage telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/model-usage-telemetry.ts) to check what's collected.
 
+Servers built with the Vercel, Netlify, or Cloudflare deployer can be frozen or replaced between requests, so they report per request instead. After a response finishes, including a streamed response, the server sends a `mastra_model_token_usage_v2` event per provider and model with the tokens that request used. These events have the reason `request` and a `runtime` of `vercel`, `netlify`, or `cloudflare`. The platform's `waitUntil` keeps the function running until the events are sent. Requests that don't call a model send nothing.
+
 For compatibility with older analysis, servers also send the earlier `mastra_model_token_usage` event at startup. It reads token totals from observability storage and sends the usage added since a cursor saved in `~/.mastra/usage-telemetry.json`. You can read the [startup usage telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/usage-telemetry.ts) to check what's collected.
 
 At server startup, Mastra sends a project-surface snapshot with component counts, feature flags, and the coarse storage backend category, but no component names or component identifiers. You can read the [feature telemetry source code](https://github.com/mastra-ai/mastra/blob/main/packages/core/src/telemetry/feature-telemetry.ts) to check what's collected.
@@ -2090,15 +2092,19 @@ The server events `mastra_feature_usage`, `mastra_model_token_usage`, and `mastr
 
 When no UUID-shaped Platform ID is available, `project_id2` uses the first 16 hexadecimal characters of the SHA-256 hash of the normalized Git `origin` remote. Normalization keeps the lowercase host and repository path, excluding the scheme, credentials, port, query, fragment, trailing slashes, and `.git` suffix. Equivalent SSH and HTTPS remotes produce the same identifier. Remotes with the same host and path share an identifier even if different ports or SSH users refer to different repositories. Local filesystem remotes aren't used. Git discovery runs asynchronously and is cached for the process, including when unavailable. If neither source is available, `project_id2` is omitted.
 
-These server events aren't anonymous: a Platform ID links them to that project, and a known repository URL can be normalized and hashed to match Git-derived events. Hashing the Git identity avoids sending the raw repository URL or credentials, but doesn't prevent correlation with public or otherwise known repositories.
+Servers built with the Vercel, Netlify, or Cloudflare deployer don't read `MASTRA_PROJECT_ID` or run Git at runtime. On Vercel, `project_id2` is the first 16 hexadecimal characters of the SHA-256 hash of `VERCEL_PROJECT_ID`, and on Netlify, of `SITE_ID`. Cloudflare Workers don't expose a project identifier, so `mastra build` with the Cloudflare deployer reads the normalized Git `origin` and the Worker sends its hash, the same identifier a long-running server built from that repository sends. On these platforms every deployment runs from the same working directory, so `project_id` doesn't distinguish projects.
+
+These server events aren't anonymous: a Platform ID links them to that project, and a known repository URL, Vercel project ID, or Netlify site ID can be hashed to match these events. Hashing avoids sending the raw repository URL, credentials, or platform IDs, but doesn't prevent correlation with known values.
 
 The Studio UI also collects anonymous browser-side usage analytics, such as page views and UI interactions. You can read the [source code](https://github.com/mastra-ai/mastra/blob/main/packages/playground/src/lib/analytics.tsx) to check what's collected. Setting `MASTRA_TELEMETRY_DISABLED` disables this too: the value is injected into the served page, so it applies to `mastra dev` and self-hosted builds alike.
 
-You can opt out of CLI, server, and Studio usage analytics by setting this environment variable before starting Mastra. When disabled, server telemetry doesn't look up the Git remote or send either project identifier:
+You can opt out of CLI, server, and Studio usage analytics by setting this environment variable before starting Mastra. When disabled, server telemetry doesn't look up the Git remote, including during `mastra build`, or send either project identifier:
 
 ```bash
 MASTRA_TELEMETRY_DISABLED=1
 ```
+
+On Vercel, Netlify, and Cloudflare, set it as an environment variable of the deployment. On Cloudflare, add it to the `vars` option of `CloudflareDeployer` or as a variable of the Worker.
 
 You can also set this while using other `mastra` commands:
 

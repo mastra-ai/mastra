@@ -9,11 +9,22 @@ const { capture, captureImmediate, PostHog } = vi.hoisted(() => {
   return { capture, captureImmediate, PostHog };
 });
 
+const { execFile } = vi.hoisted(() => ({
+  execFile: vi.fn((_file: string, _args: string[], _options: unknown, callback: (error: Error) => void) =>
+    callback(new Error('git unavailable')),
+  ),
+}));
+
 vi.mock('posthog-node', () => ({ PostHog }));
+vi.mock('node:child_process', () => ({ execFile }));
 
 import type { Mastra } from '../mastra';
 import type { CostContext, ObservabilityExporter, ObservabilityInstance } from '../observability';
-import { startModelUsageTelemetry, MODEL_USAGE_TELEMETRY_EVENT } from './model-usage-telemetry';
+import {
+  startModelUsageTelemetry,
+  startServerlessModelUsageTelemetry,
+  MODEL_USAGE_TELEMETRY_EVENT,
+} from './model-usage-telemetry';
 import { hashTelemetryValue, resetEETelemetryForTests } from './posthog';
 
 const PLATFORM_PROJECT_ID = '550e8400-e29b-41d4-a716-446655440000';
@@ -119,6 +130,7 @@ describe('startModelUsageTelemetry', () => {
         output_tokens: 3,
       }),
     ]);
+    expect(reportedProperties()[0]).not.toHaveProperty('runtime');
     expect(capture).not.toHaveBeenCalled();
   });
 
@@ -257,5 +269,151 @@ describe('startModelUsageTelemetry', () => {
     instance.emitTokens(100, 20);
     await expect(instance.shutdown()).resolves.toBeUndefined();
     expect(captureImmediate).toHaveBeenCalledTimes(1);
+  });
+});
+
+describe('startServerlessModelUsageTelemetry', () => {
+  const originalEnv = { ...process.env };
+
+  beforeEach(() => {
+    vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval', 'setTimeout', 'clearTimeout', 'Date'] });
+    vi.setSystemTime(new Date('2026-10-14T00:00:00.000Z'));
+    delete process.env['MASTRA_TELEMETRY_DISABLED'];
+    delete process.env['MASTRA_CLI_DISTINCT_ID'];
+    delete process.env['MASTRA_PROJECT_ID'];
+    process.env['MASTRA_PROJECT_ROOT'] = PROJECT_ROOT;
+    captureImmediate.mockReset().mockResolvedValue(undefined);
+    execFile.mockClear();
+    resetEETelemetryForTests();
+  });
+
+  afterEach(() => {
+    vi.useRealTimers();
+    process.env = { ...originalEnv };
+    resetEETelemetryForTests();
+  });
+
+  it('reports the usage counted so far when asked, with the runtime and hashed project key', async () => {
+    const instance = new FakeInstance();
+    const reporter = startServerlessModelUsageTelemetry(makeMastra(instance), {
+      runtime: 'vercel',
+      projectKey: 'prj_abc123',
+    });
+
+    instance.emitTokens(100, 20);
+    instance.emitTokens(7, 3, 'anthropic', 'claude-sonnet-4-5');
+    vi.setSystemTime(new Date('2026-10-14T00:00:02.000Z'));
+    await reporter!.report();
+
+    expect(reportedProperties()).toEqual([
+      expect.objectContaining({
+        provider: 'openai',
+        model: 'gpt-4o-mini',
+        input_tokens: 100,
+        output_tokens: 20,
+        command: 'server',
+        project_id: hashTelemetryValue(PROJECT_ROOT).slice(0, 16),
+        project_id2: hashTelemetryValue('prj_abc123').slice(0, 16),
+        window_start: '2026-10-14T00:00:00.000Z',
+        window_end: '2026-10-14T00:00:02.000Z',
+        report_reason: 'request',
+        runtime: 'vercel',
+      }),
+      expect.objectContaining({ provider: 'anthropic', input_tokens: 7, output_tokens: 3, runtime: 'vercel' }),
+    ]);
+    expect(JSON.stringify(reportedEvents())).not.toContain('prj_abc123');
+    // Serverless servers have no Git checkout, so no lookup is attempted.
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('reports each token once across overlapping requests, in contiguous windows', async () => {
+    const instance = new FakeInstance();
+    const reporter = startServerlessModelUsageTelemetry(makeMastra(instance), { runtime: 'netlify' })!;
+
+    instance.emitTokens(100, 20);
+    const first = reporter.report();
+    instance.emitTokens(40, 4);
+    const second = reporter.report();
+    // A request that used no model while another's usage was already reported sends nothing.
+    const third = reporter.report();
+    await Promise.all([first, second, third]);
+
+    const [firstReport, secondReport] = reportedProperties();
+    expect(reportedProperties()).toHaveLength(2);
+    expect(firstReport).toEqual(expect.objectContaining({ input_tokens: 100, output_tokens: 20 }));
+    expect(secondReport).toEqual(expect.objectContaining({ input_tokens: 40, output_tokens: 4 }));
+    expect(secondReport.window_start).toBe(firstReport.window_end);
+  });
+
+  it('resolves report() only once the events are sent', async () => {
+    let deliver!: () => void;
+    captureImmediate.mockReturnValueOnce(new Promise<void>(resolve => (deliver = resolve)));
+    const instance = new FakeInstance();
+    const reporter = startServerlessModelUsageTelemetry(makeMastra(instance), { runtime: 'cloudflare' })!;
+
+    instance.emitTokens(100, 20);
+    let settled = false;
+    const report = reporter.report().then(() => {
+      settled = true;
+    });
+    await vi.advanceTimersByTimeAsync(1_000);
+    expect(settled).toBe(false);
+
+    deliver();
+    await report;
+    expect(settled).toBe(true);
+  });
+
+  it('runs no timer and leaves project_id2 out without a project key', async () => {
+    const instance = new FakeInstance();
+    const reporter = startServerlessModelUsageTelemetry(makeMastra(instance), {
+      runtime: 'cloudflare',
+      projectKey: ' ',
+    });
+
+    expect(vi.getTimerCount()).toBe(0);
+    instance.emitTokens(100, 20);
+    await vi.advanceTimersByTimeAsync(60 * 60 * 1000);
+    expect(captureImmediate).not.toHaveBeenCalled();
+
+    await reporter!.report();
+    expect(reportedProperties()[0]).not.toHaveProperty('project_id2');
+    expect(execFile).not.toHaveBeenCalled();
+  });
+
+  it('reports what is left when Mastra shuts down', async () => {
+    const instance = new FakeInstance();
+    startServerlessModelUsageTelemetry(makeMastra(instance), { runtime: 'vercel' });
+
+    instance.emitTokens(100, 20);
+    await instance.shutdown();
+
+    expect(reportedProperties()).toEqual([
+      expect.objectContaining({ input_tokens: 100, report_reason: 'shutdown', runtime: 'vercel' }),
+    ]);
+  });
+
+  it('returns no reporter when telemetry is disabled, observability is missing, or usage is already counted', () => {
+    const instance = new FakeInstance();
+    const mastra = makeMastra(instance);
+    expect(startServerlessModelUsageTelemetry(mastra, { runtime: 'vercel' })).toBeDefined();
+    expect(startServerlessModelUsageTelemetry(mastra, { runtime: 'vercel' })).toBeUndefined();
+    expect(instance.exporters).toHaveLength(1);
+
+    expect(startServerlessModelUsageTelemetry(makeMastra(), { runtime: 'vercel' })).toBeUndefined();
+
+    process.env['MASTRA_TELEMETRY_DISABLED'] = 'true';
+    const disabled = new FakeInstance();
+    expect(startServerlessModelUsageTelemetry(makeMastra(disabled), { runtime: 'vercel' })).toBeUndefined();
+    expect(disabled.exporters).toHaveLength(0);
+  });
+
+  it('never lets a delivery failure escape report()', async () => {
+    captureImmediate.mockRejectedValue(new Error('posthog unavailable'));
+    const instance = new FakeInstance();
+    const reporter = startServerlessModelUsageTelemetry(makeMastra(instance), { runtime: 'vercel' })!;
+
+    instance.emitTokens(100, 20);
+    await expect(reporter.report()).resolves.toBeUndefined();
   });
 });

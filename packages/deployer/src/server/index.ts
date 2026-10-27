@@ -38,6 +38,9 @@ import { rootHandler } from './handlers/root';
 import type { ServerBundleOptions } from './types';
 import { welcomeHtml } from './welcome';
 
+export { withModelUsageTelemetry } from './model-usage-telemetry';
+export type { ModelUsageTelemetryOptions } from './model-usage-telemetry';
+
 // Get studio path from env or default to ./studio relative to cwd
 const getStudioPath = () => {
   if (process.env.MASTRA_STUDIO_PATH) {

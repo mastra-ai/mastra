@@ -1,6 +1,6 @@
 import { execFile } from 'node:child_process';
 import { z } from 'zod/v4';
-import { hashTelemetryValue } from './posthog';
+import { hashTelemetryValue, isTelemetryEnabled } from './posthog';
 
 export interface ServerTelemetryContext {
   projectId: string;
@@ -31,14 +31,25 @@ function normalizeGitRemote(remote: string): string | undefined {
   }
 }
 
-async function computeGitProjectId2(): Promise<string | undefined> {
+/**
+ * Returns the project's Git `origin` normalized to lowercase `host/path`, so SSH, HTTPS,
+ * credentials, and ports all map to one repository identity. Resolves to `undefined` without
+ * running Git when telemetry is disabled, and when Git, the origin, or a remote repository
+ * identity isn't available. Never rejects.
+ */
+export async function getGitRepositoryIdentity(
+  cwd: string = process.env.MASTRA_PROJECT_ROOT || process.cwd(),
+): Promise<string | undefined> {
+  if (!isTelemetryEnabled()) {
+    return undefined;
+  }
   try {
     const remote = await new Promise<string>((resolve, reject) => {
       execFile(
         'git',
         ['remote', 'get-url', 'origin'],
         {
-          cwd: process.env.MASTRA_PROJECT_ROOT || process.cwd(),
+          cwd,
           encoding: 'utf-8',
           timeout: 2000,
           maxBuffer: 4096,
@@ -49,12 +60,21 @@ async function computeGitProjectId2(): Promise<string | undefined> {
         },
       );
     });
-    const normalizedRemote = normalizeGitRemote(remote.trim());
-    return normalizedRemote ? hashTelemetryValue(normalizedRemote).slice(0, 16) : undefined;
+    return normalizeGitRemote(remote.trim());
   } catch {
-    // Missing git, an unavailable origin, or a timeout means no secondary id.
+    // Missing git, an unavailable origin, or a timeout means no repository identity.
     return undefined;
   }
+}
+
+/** The 16-hex-character `project_id2` form sent for a non-Platform project identity. */
+export function hashProjectIdentity(identity: string): string {
+  return hashTelemetryValue(identity).slice(0, 16);
+}
+
+async function computeGitProjectId2(): Promise<string | undefined> {
+  const identity = await getGitRepositoryIdentity();
+  return identity ? hashProjectIdentity(identity) : undefined;
 }
 
 /**
@@ -70,12 +90,19 @@ async function resolveProjectId2(): Promise<string | undefined> {
   return cachedGitProjectId2;
 }
 
-export async function getServerTelemetryContext(): Promise<ServerTelemetryContext> {
+/** The server telemetry context without `projectId2`, for callers that resolve it themselves. */
+export function getServerTelemetryBaseContext(): Omit<ServerTelemetryContext, 'projectId2'> {
   return {
     projectId: hashTelemetryValue(process.env.MASTRA_PROJECT_ROOT || process.cwd()).slice(0, 16),
     distinctId: process.env.MASTRA_CLI_DISTINCT_ID || undefined,
     command: process.env.MASTRA_TELEMETRY_COMMAND || 'server',
     nodeEnv: process.env.NODE_ENV || 'development',
+  };
+}
+
+export async function getServerTelemetryContext(): Promise<ServerTelemetryContext> {
+  return {
+    ...getServerTelemetryBaseContext(),
     projectId2: await resolveProjectId2(),
   };
 }

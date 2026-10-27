@@ -198,7 +198,7 @@ export class NetlifyDeployer extends Deployer {
     return `
     import { handle } from 'hono/netlify'
     import { mastra } from '#mastra';
-    import { createHonoServer, getToolExports } from '#server';
+    import { createHonoServer, getToolExports, withModelUsageTelemetry } from '#server';
     import { tools } from '#tools';
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
 
@@ -208,7 +208,20 @@ export class NetlifyDeployer extends Deployer {
 
     const app = await createHonoServer(mastra, { tools: getToolExports(tools) });
 
-    export default handle(app)
+    // Reports the model tokens each request used once its response finishes (respects
+    // MASTRA_TELEMETRY_DISABLED). hono/netlify passes the function context as env.context.
+    const server = {
+      fetch: await withModelUsageTelemetry(mastra, app.fetch, {
+        runtime: 'netlify',
+        projectKey: process.env.SITE_ID,
+        getWaitUntil: (_request, env) => {
+          const context = env?.context;
+          return context?.waitUntil ? promise => context.waitUntil(promise) : undefined;
+        },
+      }),
+    };
+
+    export default handle(server)
 `;
   }
 

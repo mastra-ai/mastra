@@ -267,7 +267,11 @@ throw new Error('@opentelemetry/api is not installed');
     await writeFile(jsoncFilePath, jsonc);
   }
 
-  private getEntry(): string {
+  /**
+   * @param projectKey The project's normalized Git repository identity, read at build time
+   * because Workers expose no project identifier at runtime. Only its hash is reported.
+   */
+  private getEntry(projectKey?: string): string {
     return `
     import '#polyfills';
     import { scoreTracesWorkflow } from '@mastra/core/evals/scoreTraces';
@@ -276,7 +280,7 @@ throw new Error('@opentelemetry/api is not installed');
       fetch: async (request, env, context) => {
         const { mastra } = await import('#mastra');
         const { tools } = await import('#tools');
-        const {createHonoServer, getToolExports} = await import('#server');
+        const {createHonoServer, getToolExports, withModelUsageTelemetry} = await import('#server');
         const _mastra = mastra();
 
         if (_mastra.getStorage()) {
@@ -284,7 +288,15 @@ throw new Error('@opentelemetry/api is not installed');
         }
 
         const app = await createHonoServer(_mastra, { tools: getToolExports(tools), browserStream: false });
-        return app.fetch(request, env, context);
+
+        // Reports the model tokens this request used once its response finishes (respects
+        // MASTRA_TELEMETRY_DISABLED), kept alive with the request's waitUntil.
+        const fetch = await withModelUsageTelemetry(_mastra, app.fetch, {
+          runtime: 'cloudflare',
+          projectKey: ${projectKey ? JSON.stringify(projectKey) : 'undefined'},
+          getWaitUntil: (_request, _env, ctx) => (ctx?.waitUntil ? promise => ctx.waitUntil(promise) : undefined),
+        });
+        return fetch(request, env, context);
       }
     }
 `;
@@ -350,7 +362,16 @@ try {
     outputDirectory: string,
     { toolsPaths, projectRoot }: { toolsPaths: (string | string[])[]; projectRoot: string },
   ): Promise<void> {
-    return this._bundle(this.getEntry(), entryFile, { outputDirectory, projectRoot, enableEsmShim: false }, toolsPaths);
+    // Older @mastra/core versions don't export it, hence the optional call.
+    const projectKey = await import('@mastra/core/telemetry')
+      .then(({ getGitRepositoryIdentity }) => getGitRepositoryIdentity?.(projectRoot))
+      .catch(() => undefined);
+    return this._bundle(
+      this.getEntry(projectKey),
+      entryFile,
+      { outputDirectory, projectRoot, enableEsmShim: false },
+      toolsPaths,
+    );
   }
 
   async deploy(): Promise<void> {

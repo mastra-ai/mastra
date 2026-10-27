@@ -96,7 +96,10 @@ it('rejects broad queries over large histories while allowing narrow queries and
   ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   const narrow = await storage.queryThreads(
     planThreadRowsQuery(
-      { timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } }, page: { limit: 100 } },
+      {
+        timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } },
+        page: { limit: 100 },
+      },
       { scope: { organizationId: 'large' } },
     ),
   );

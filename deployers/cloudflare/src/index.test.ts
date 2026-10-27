@@ -3,6 +3,12 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
 
+const { getGitRepositoryIdentity } = vi.hoisted(() => ({
+  getGitRepositoryIdentity: vi.fn<(cwd?: string) => Promise<string | undefined>>(),
+}));
+
+vi.mock('@mastra/core/telemetry', () => ({ getGitRepositoryIdentity }));
+
 import { CloudflareDeployer } from './index.js';
 
 describe('CloudflareDeployer', () => {
@@ -40,6 +46,40 @@ describe('CloudflareDeployer', () => {
 
       // @ts-expect-error - accessing protected property for testing
       expect(deployer.platform).toBe('browser');
+    });
+  });
+
+  describe('model usage telemetry entry', () => {
+    async function bundledEntry() {
+      deployer = new CloudflareDeployer({ name: 'test-worker' });
+      // @ts-expect-error - spying on the protected bundler to capture the generated entry
+      const bundle = vi.spyOn(deployer, '_bundle').mockResolvedValue(undefined);
+      await deployer.bundle('/project/src/mastra/index.ts', '/project/.mastra', {
+        toolsPaths: [],
+        projectRoot: '/project',
+      });
+      return bundle.mock.calls[0]![0] as string;
+    }
+
+    it("wraps the Worker's fetch with usage reporting keyed by the build's Git repository", async () => {
+      getGitRepositoryIdentity.mockResolvedValue('github.com/acme/"agents"');
+
+      const entry = await bundledEntry();
+
+      expect(getGitRepositoryIdentity).toHaveBeenCalledWith('/project');
+      expect(entry).toContain('withModelUsageTelemetry(_mastra, app.fetch');
+      expect(entry).toContain(`runtime: 'cloudflare'`);
+      expect(entry).toContain(`projectKey: ${JSON.stringify('github.com/acme/"agents"')},`);
+      expect(entry).toContain('ctx.waitUntil(promise)');
+      expect(entry).toContain('return fetch(request, env, context);');
+    });
+
+    it('leaves the project key out when the build has no Git repository identity', async () => {
+      getGitRepositoryIdentity.mockResolvedValue(undefined);
+      expect(await bundledEntry()).toContain('projectKey: undefined,');
+
+      getGitRepositoryIdentity.mockRejectedValue(new Error('unexpected'));
+      expect(await bundledEntry()).toContain('projectKey: undefined,');
     });
   });
 
