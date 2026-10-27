@@ -71,20 +71,6 @@ console.log(second.text)
 
 If your Mastra instance already has storage, you can leave `storage` out of `Memory` and it uses that.
 
-:::note[Storage support]
-
-OM works with `@mastra/pg`, `@mastra/libsql`, `@mastra/mysql`, `@mastra/mongodb`, `@mastra/convex`, `@mastra/oracledb`, and `InMemoryStore` from `@mastra/core/storage` (for tests). With any other storage adapter, OM is turned off without a warning, and stored message history doesn't load either: OM replaces the history loader, so nothing takes its place.
-
-:::
-
-:::warning[Send only the new message]
-
-When a client application talks to an agent with OM, send **only the new message**, not the whole conversation. OM loads the thread from storage, so the client's copy is redundant, and its timestamps can conflict with the stored ones and reorder messages. Mastra filters echoed history out before loading stored messages, preferring the stored copy when message IDs match.
-
-If you build the request yourself and need it processed exactly as sent, set `retainFullInput: true` in `memory.options` for that call, or in the `Memory` options for every call. Stored history still loads underneath, and every input message that isn't already stored is saved to the thread, including few-shot examples. For an AI SDK example, see [Using Mastra Memory](/integrations/agentic-ui/ai-sdk-ui#using-mastra-memory).
-
-:::
-
 ## How it works
 
 Every time an agent responds, it reads a context window holding its system prompt, recent messages and any injected context. The more raw history it carries, the worse it performs, and most of those tokens are no longer needed to stay on task. OM compresses that history.
@@ -129,7 +115,7 @@ With the default settings, the context window grows and shrinks in a cycle:
 1. **Repeat**: history grows back toward 30,000 and shrinks again. Each cycle adds a little to the observation log.
 1. **Observations reach 40,000**: the Reflector rewrites the log into a smaller one.
 
-Thresholds mark when work starts. History can run past 30,000 tokens when background observation falls behind. At `observation.blockAfter` (default `1.2`, or 36,000 tokens) the agent waits for a synchronous observation. See [when buffering falls behind](/docs/memory/observational-memory-advanced#when-buffering-falls-behind).
+Thresholds mark when work starts. History can run past 30,000 tokens when background observation falls behind. At `observation.blockAfter` (default `1.2`, or 36,000 tokens) the agent waits for a synchronous observation. See [when buffering falls behind](/reference/memory/observational-memory#when-buffering-falls-behind).
 
 Token counts are local `tokenx` estimates. The provider's own count is often higher, especially with attachments.
 
@@ -281,7 +267,7 @@ To observe synchronously instead, set `observation.bufferTokens: false`. That tu
 
 `shareTokenBudget: true` lets message history borrow the unused part of the observation budget, so up to about 70,000 tokens of messages stay before observation starts while the log is small. It requires `observation.bufferTokens: false`. See [shared token budget](/reference/memory/observational-memory#shared-token-budget).
 
-To activate observations early when a prompt cache expires or the provider changes, see [early activation](/docs/memory/observational-memory-advanced#early-activation).
+To activate observations early when a prompt cache expires or the provider changes, see [early activation](/reference/memory/observational-memory#early-activation).
 
 ## Threads and cross-thread memory
 
@@ -349,23 +335,118 @@ Resource scope shares one observation record across all of a resource's threads.
 
 Switching to thread scope doesn't migrate resource-scoped observations. Each thread uses its own thread-scoped record if it has one, or starts empty, and messages already observed under resource scope aren't observed again. Keep facts that must carry over in resource-scoped working memory.
 
-## Troubleshooting
+## Extractors
 
-**OM never observes.** Check that your storage adapter is in the [supported list](#quickstart). Any other adapter turns OM off without a warning. Then check the thread really passed `observation.messageTokens`: Studio's **Memory** tab shows the token counts.
+Extractors persist specific values alongside observations. The built-in current task, suggested response and thread title use the same pipeline. This example extracts a small user profile:
 
-**`OBSERVATIONAL_MEMORY_THREAD_ID_REQUIRED`.** The call had no thread. Pass `memory: { resource, thread }` to `generate()` or `stream()`.
+```typescript title="src/mastra/agents/assistant.ts"
+import { Agent } from '@mastra/core/agent'
+import { Extractor, Memory } from '@mastra/memory'
+import { z } from 'zod'
 
-**The Observer call fails on an attachment.** This happens when the Observer model doesn't accept that input type. Set `observation.observeAttachments` to `false` or to the MIME types it accepts. See [attachments and text-only Observers](#attachments-and-text-only-observers).
+const memory = new Memory({
+  options: {
+    observationalMemory: {
+      observation: {
+        extract: [
+          new Extractor({
+            name: 'User profile',
+            instructions: 'Extract stable user profile facts that should be remembered.',
+            schema: z.object({
+              preferredName: z.string().optional(),
+              timezone: z.string().optional(),
+              tools: z.array(z.string()).optional(),
+            }),
+          }),
+        ],
+      },
+    },
+  },
+})
 
-**A warning about resource scope.** Remove `scope: 'resource'`. See [resource scope (deprecated)](#resource-scope-deprecated).
+export const assistant = new Agent({
+  id: 'assistant',
+  name: 'Assistant',
+  instructions: 'You are a helpful assistant.',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
+  memory,
+})
+```
 
-**Message history settings seem ignored.** OM manages message history itself, so `lastMessages` has no effect when OM is on. Use `observation.messageTokens` and `observation.bufferActivation` to control how much raw history stays.
+An extractor with a `schema` runs as a follow-up structured-output request. Without a schema it's an inline string extractor, emitted directly in the Observer or Reflector response:
 
-To watch OM work, open [Studio](/docs/studio/overview) and select an agent with OM. The **Memory** tab shows token progress toward each threshold, the active observation log and earlier records, and background observation and reflection status as they run.
+```typescript
+new Extractor({
+  name: 'Mood',
+  instructions: 'Extract the user mood as a short phrase.',
+})
+```
+
+By default the extractor sees its last value on later runs. Set `includePreviousExtraction: false` to hide it:
+
+```typescript
+new Extractor({
+  name: 'Latest blocker',
+  instructions: 'Extract any blockers the agent is running into.',
+  includePreviousExtraction: false,
+})
+```
+
+`instructions` and `schema` can be functions when they depend on runtime context, such as the memory instance or request context:
+
+```typescript
+new Extractor({
+  name: 'Workspace summary',
+  instructions: ({ memory }) =>
+    memory ? 'Extract workspace facts for this memory instance.' : 'Extract workspace facts.',
+})
+```
+
+Use `onExtracted` to normalize a value before it's persisted:
+
+```typescript
+new Extractor({
+  name: 'Project status',
+  instructions: 'Extract the current project status.',
+  schema: z.string(),
+  onExtracted: ({ current }) => current.trim().toLowerCase(),
+})
+```
+
+`onExtracted` also receives `previous` and `sendSignal`, so it can tell the agent when a value changes. The hook runs on every extraction, so compare `previous` with `current` before sending a signal; otherwise each observation sends another one.
+
+A failed extractor is reported in OM markers and doesn't drop values from extractors that succeeded. See the [Extractor API](/reference/memory/observational-memory#extractor-api) for the full shape.
+
+### Read extracted values from a stream
+
+Extractor results arrive when OM completes an observation or reflection. Read both completion data parts from the stream:
+
+```typescript title="src/run.ts"
+const stream = await agent.stream('Remember that I prefer dark mode.', {
+  memory: { resource: 'user-123', thread: 'conversation-123' },
+})
+
+for await (const chunk of stream.fullStream) {
+  if (chunk.type === 'data-om-observation-end' || chunk.type === 'data-om-buffering-end') {
+    const { operationType, extractedValues = {}, extractionFailures = [] } = chunk.data
+
+    for (const [slug, value] of Object.entries(extractedValues)) {
+      console.log(`${operationType} extractor ${slug}:`, value)
+    }
+
+    for (const failure of extractionFailures) {
+      console.error(`Extractor ${failure.slug} failed:`, failure.error)
+    }
+  }
+}
+```
+
+`extractedValues` is keyed by each extractor's slug. Both fields are optional.
+
+`data-om-observation-end` reports a synchronous completion. `data-om-buffering-end` reports finished background work: its extractor values are persisted at once, but the buffered observations stay inactive until activation. `operationType` says whether the work was an observation or a reflection. See [`data-om-observation-end`](/reference/memory/observational-memory#data-om-observation-end) and [`data-om-buffering-end`](/reference/memory/observational-memory#data-om-buffering-end) for the payloads.
 
 ## Related
 
-- [Observational Memory: advanced configuration](/docs/memory/observational-memory-advanced)
 - [Observational Memory reference](/reference/memory/observational-memory)
 - [Memory overview](/docs/memory/overview)
 - [Multi-user threads](/docs/memory/multi-user-threads): how OM attributes facts to individual users in a shared thread
