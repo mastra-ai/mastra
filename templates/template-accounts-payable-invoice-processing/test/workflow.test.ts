@@ -108,6 +108,7 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         httpStatus?: number;
         registeredTools?: string[];
         results?: Array<{ status: string; error?: { message?: string } }>;
+        resumePayload?: { approved: boolean; reviewerId: string; invoiceDigest: string };
         suspendPayload?: Record<
           string,
           {
@@ -644,6 +645,31 @@ it('refuses forged intermediate steps even when invoked directly by the worker',
     await test.close();
   }
 });
+
+// CodeRabbit review 5661249404: a checkpointed human decision must survive a process crash.
+it.each([true, false])(
+  'recovers a checkpointed human decision after the approving process dies: %s',
+  async approved => {
+    const test = await scenario();
+    try {
+      const pending = await test.run({ tool: true });
+      const checkpoint = await test.run({ runId: pending.runId, approved, crashAfterApprovalCheckpoint: true });
+      assert.equal(checkpoint.status, 'approval_checkpointed');
+      assert.equal(checkpoint.resumePayload?.approved, approved);
+      assert.equal(checkpoint.resumePayload?.reviewerId, 'human-reviewer');
+      assert.equal(checkpoint.resumePayload?.invoiceDigest, pending.invoiceDigest);
+      assert.equal((await test.state()).bills.length, 0);
+      const recovered = await test.run({ runId: pending.runId, restart: true });
+      assert.equal(recovered.status, 'success');
+      assert.equal(recovered.result?.executionStatus, approved ? 'posted' : 'rejected');
+      assert.equal(recovered.result?.approval.reviewerId, 'human-reviewer');
+      assert.equal(recovered.result?.approval.invoiceDigest, pending.invoiceDigest);
+      assert.equal((await test.state()).bills.length, approved ? 1 : 0);
+    } finally {
+      await test.close();
+    }
+  },
+);
 
 // CodeRabbit 4384033309: invalid proof must not consume a human's pending approval.
 it.each(['forged', 'incomplete'])(

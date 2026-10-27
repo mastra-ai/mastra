@@ -47,7 +47,33 @@ try {
     },
   });
   const run = await workflow.createRun(operation.runId ? { runId: operation.runId } : {});
+  if (operation.crashAfterApprovalCheckpoint) {
+    const workflows = await storage.getStore('workflows');
+    if (!workflows) throw new Error('Missing workflow storage');
+    const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+    workflows.persistWorkflowSnapshot = async checkpoint => {
+      // Fault injection after a real committed LibSQL write, before the resumed step executes.
+      await persist(checkpoint);
+      const step = checkpoint.snapshot.context['approve-invoice'];
+      if (step?.status === 'running' && step.resumePayload) {
+        process.stdout.write(
+          '\nAP_RESULT:' +
+            JSON.stringify({ runId: run.runId, status: 'approval_checkpointed', resumePayload: step.resumePayload }) +
+            '\n',
+          () => process.exit(0),
+        );
+        await new Promise(() => {});
+      }
+    };
+  }
   const unsignedInput = invoiceInput(operation.invoice);
+  if (operation.restart) {
+    // A killed process cannot release its real ownership lease; wait until recovery is safe.
+    const ownership = await (await storage.getStore('workflows'))?.getRunOwnership({ runId: run.runId });
+    const remaining = (ownership?.leaseExpiresAt?.getTime() ?? 0) - Date.now();
+    if (remaining > 20_000) throw new Error('Unexpectedly long workflow ownership lease');
+    if (remaining > 0) await new Promise(resolve => setTimeout(resolve, remaining + 25));
+  }
   if (operation.stepAttack) {
     const state = await workflow.getWorkflowRunById(operation.sourceRunId);
     const assessmentStep = state?.steps?.['assess-invoice'];
@@ -182,12 +208,14 @@ try {
           },
         )
       : operation.runId
-        ? operation.unsafeResume
-          ? await run.resume({
-              step: 'approve-invoice',
-              resumeData: operation.unsafeResume,
-            })
-          : await approveThroughHttp()
+        ? operation.restart
+          ? await run.restart()
+          : operation.unsafeResume
+            ? await run.resume({
+                step: 'approve-invoice',
+                resumeData: operation.unsafeResume,
+              })
+            : await approveThroughHttp()
         : await run.start({
             inputData: {
               ...unsignedInput,

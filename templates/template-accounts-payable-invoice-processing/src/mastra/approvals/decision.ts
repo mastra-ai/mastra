@@ -1,7 +1,10 @@
 import { createHmac, randomBytes, timingSafeEqual } from 'node:crypto';
 import { z } from 'zod';
 
-const secret = randomBytes(32);
+const configuredSigningKey = process.env.AP_WORKFLOW_SIGNING_KEY?.trim();
+const secret = configuredSigningKey
+  ? createHmac('sha256', configuredSigningKey).update('ap-human-approval-v1').digest()
+  : randomBytes(32);
 const DecisionPayloadSchema = z.object({
   runId: z.string().trim().min(1).max(200),
   invoiceDigest: z.string().regex(/^[a-f0-9]{64}$/),
