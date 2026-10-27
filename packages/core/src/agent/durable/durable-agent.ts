@@ -1506,6 +1506,25 @@ export class DurableAgent<
     }
 
     const wrapped = this.#wrappedAgent as Agent<string, any, TOutput>;
+    const persistedCompletion = workflowInput.options?.isTaskComplete;
+    const defaultCompletion = persistedCompletion
+      ? (await wrapped.getDefaultOptions({ requestContext }))?.isTaskComplete
+      : undefined;
+    // Only rebind the live default policy when its scorers match this run's
+    // serialized shadow; per-call scorers cannot be restored after a crash.
+    const isTaskComplete =
+      persistedCompletion &&
+      defaultCompletion?.scorers?.length &&
+      JSON.stringify(defaultCompletion.scorers.map(s => s.name).filter(Boolean)) ===
+        JSON.stringify(persistedCompletion.scorerNames ?? [])
+        ? {
+            ...defaultCompletion,
+            strategy: persistedCompletion.strategy,
+            timeout: persistedCompletion.timeout,
+            parallel: persistedCompletion.parallel,
+            suppressFeedback: persistedCompletion.suppressFeedback,
+          }
+        : undefined;
     let model;
     try {
       model = await wrapped.getModel({ requestContext });
@@ -1688,6 +1707,7 @@ export class DurableAgent<
       // warm resume after recovery keeps returning scoringData without the
       // caller re-passing the option.
       returnScorerData: workflowInput.options?.returnScorerData,
+      isTaskComplete,
       mastra: this.#mastra,
       // The live model below makes resolveRuntimeDependencies skip its rebuild,
       // so processor hooks only get the agent if it is stored here.

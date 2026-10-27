@@ -453,6 +453,96 @@ async function recoverFrom(
 }
 
 describe('DurableAgent crash recovery', () => {
+  it('reapplies defaultOptions.isTaskComplete after restarting during a tool call', async () => {
+    const runId = 'recover-task-completion';
+    const scorerCalls: Array<{ generation: number; answer: string }> = [];
+    const modelAnswers: string[] = [];
+    const scenario = createRestartScenario({
+      kind: 'durable',
+      runId,
+      storageMode: 'serializing',
+      timeoutMs: RECOVERY_TIMEOUT_MS,
+      hold: {
+        workflowName: DurableStepIds.AGENTIC_EXECUTION,
+        when: snapshot => snapshot.status === 'running' && activeStepIds(snapshot).includes(DurableStepIds.TOOL_CALL),
+      },
+      build: ({ core, generation }) =>
+        new core.Agent({
+          id: 'recover-task-completion-agent',
+          name: 'Recover task completion agent',
+          instructions: 'Look up the answer before replying.',
+          model: new MockLanguageModelV2({
+            doStream: async ({ prompt }) => {
+              const hasToolResult = prompt.some(message => message.role === 'tool');
+              const feedback = JSON.stringify(prompt).includes('Completion Check Results');
+              const answer = feedback ? 'CONFIRMED' : 'DRAFT';
+              if (hasToolResult) modelAnswers.push(answer);
+              const parts = hasToolResult
+                ? [
+                    ...streamStart(answer),
+                    { type: 'text-start', id: 'text-1' },
+                    { type: 'text-delta', id: 'text-1', delta: answer },
+                    { type: 'text-end', id: 'text-1' },
+                    finish('stop', completeUsage),
+                  ]
+                : [
+                    ...streamStart('call-0'),
+                    { type: 'tool-call', toolCallId: 'call-0', toolName: 'lookup', input: '{}' },
+                    finish('tool-calls', completeUsage),
+                  ];
+              return {
+                stream: convertArrayToReadableStream(parts as any[]),
+                rawCall: { rawPrompt: null, rawSettings: {} },
+              };
+            },
+          }),
+          tools: {
+            lookup: core.createTool({
+              id: 'lookup',
+              description: 'Look up the answer',
+              inputSchema: z.object({}),
+              execute: async () => ({ ok: true }),
+            }),
+          },
+          defaultOptions: {
+            maxSteps: 5,
+            isTaskComplete: {
+              scorers: [
+                {
+                  id: 'answer-check',
+                  name: 'Answer check',
+                  run: async ({ output }: { output: string }) => {
+                    scorerCalls.push({ generation, answer: output });
+                    return { score: output === 'CONFIRMED' ? 1 : 0, reason: 'Confirm the answer' };
+                  },
+                } as any,
+              ],
+            },
+          },
+        }),
+    });
+    const original = await scenario.start(async ({ agent }) =>
+      consumeText(await agent.stream('Find the answer', { runId })),
+    );
+    try {
+      await original.held;
+      const checkpoint = await original.checkpoint();
+      const recovered = await scenario.restart(checkpoint);
+      expect(recovered.executionError).toBeUndefined();
+      expect(recovered.streamErrors).toEqual([]);
+      expect(recovered.text).toBe('CONFIRMED');
+      expect(recovered.chunkTypes.filter(type => type === 'is-task-complete')).toHaveLength(2);
+      expect(scorerCalls).toEqual([
+        { generation: 2, answer: 'DRAFT' },
+        { generation: 2, answer: 'CONFIRMED' },
+      ]);
+      expect(modelAnswers).toEqual(['DRAFT', 'CONFIRMED']);
+    } finally {
+      original.releaseHold();
+      await scenario.stop();
+    }
+  }, 30_000);
+
   it.each(['before-finish', 'after-finish', 'after-scorers'] as const)(
     'finishes genuine evented recovery %s without repeating saved effects (COR-1354)',
     async boundary => {
