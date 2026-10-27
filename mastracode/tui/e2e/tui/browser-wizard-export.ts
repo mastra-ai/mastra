@@ -53,17 +53,17 @@ export const browserWizardExportScenario = {
     await runtime.waitForScreenText(/Project:\s+mastra/i, terminal);
 
     terminal.submit('/browser');
-    await runtime.waitForScreenText(/Enable browser automation\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Enable browser automation/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Select browser provider:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Select browser provider/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/Run in headless mode\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Run in headless mode/i, terminal, 8_000);
     terminal.write('\r');
 
-    await runtime.waitForScreenText(/How do you want to launch the browser\?/i, terminal, 8_000);
+    await runtime.waitForScreenText(/How do you want to launch the browser/i, terminal, 8_000);
     terminal.write('\x1b[B\x1b[B');
     terminal.write('\r');
 

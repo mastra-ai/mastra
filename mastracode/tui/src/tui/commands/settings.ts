@@ -302,7 +302,7 @@ export async function handleSettingsCommand(ctx: SlashCommandContext): Promise<v
       },
     });
 
-    showModalOverlay(ctx.state.ui, settings);
+    showModalOverlay(ctx.state.ui, settings, { title: 'Settings' });
     settings.focused = true;
   });
 }

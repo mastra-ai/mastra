@@ -2,16 +2,26 @@ import type { McE2eTerminal } from './types.js';
 
 const ARROW_DOWN = '\x1b[B';
 /** Settings and select lists mark the highlighted row with this cursor. */
-// Overlays can be drawn over other rows, so only require indentation before
+// Pop-ups can be drawn over other rows, so only require indentation before
 // the cursor and a label after it (which skips trailing "Manage →"). The
 // indentation skips the prompt and sent messages, whose "→" sits in column 1.
 const CURSOR_LINE = /\s{2,}→\s+\S/;
+/** Menus in the prompt's place draw their rows in column 1, inside the prompt panel. */
+const SLOT_CURSOR_LINE = /^\s?→\s+\S/;
+
+/** The rows of the last shaded panel on screen: the prompt, or the menu open in its place. */
+function promptPanelRows(lines: string[]): string[] {
+  const top = lines.findLastIndex(line => /^▄+\s*$/.test(line));
+  if (top < 0) return [];
+  const bottom = lines.findIndex((line, index) => index > top && /^▀+\s*$/.test(line));
+  return lines.slice(top + 1, bottom < 0 ? undefined : bottom);
+}
 
 function highlightedRow(terminal: McE2eTerminal): string | undefined {
+  const lines = terminal.serialize().view.split('\n');
   return (
-    terminal
-      .serialize()
-      .view.split('\n')
+    promptPanelRows(lines).find(line => SLOT_CURSOR_LINE.test(line)) ??
+    lines
       .find(line => CURSOR_LINE.test(line))
       // An overlay row drawn over a shaded panel's edge keeps the edge glyphs on either side of it.
       ?.replace(/^[▄▀]+|[▄▀]+\s*$/g, '')

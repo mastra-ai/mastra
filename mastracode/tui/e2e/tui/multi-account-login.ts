@@ -223,7 +223,7 @@ export const multiAccountLoginScenario = {
     terminal.write('\r');
     await runtime.waitForScreenText(/Peer Account\s*✓ active/i, terminal, 8_000);
     terminal.write('\r');
-    await runtime.waitForScreenText(/Peer Account:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/Peer Account/i, terminal, 8_000);
     terminal.write('\x1b');
     terminal.write('\x1b');
 

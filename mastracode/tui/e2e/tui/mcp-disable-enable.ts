@@ -157,7 +157,7 @@ export const mcpDisableEnableScenario = {
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 10_000);
     await runtime.waitForScreenText(
-      /disable_target \[http\] connected · enabled in this project \(global default: disabled\)/i,
+      /disable_target\s+\S+ connected · enabled in this project \(global default: disabled\) \[http\]/i,
       terminal,
       10_000,
     );

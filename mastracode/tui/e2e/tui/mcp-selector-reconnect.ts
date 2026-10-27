@@ -98,13 +98,13 @@ export const mcpSelectorReconnectScenario = {
     terminal.write('\x15');
     terminal.submit('/mcp');
     await runtime.waitForScreenText(/Manage MCP servers/i, terminal, 8_000);
-    await runtime.waitForScreenText(/selector_retry \[http\] failed/i, terminal, 8_000);
+    await runtime.waitForScreenText(/selector_retry\s+\S+ failed \[http\]/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Reconnect/i, terminal, 8_000);
     terminal.write('\x1b[B');
     terminal.write('\x1b[B');
     terminal.write('\r');
-    await runtime.waitForScreenText(/selector_retry \[http\] connected.*1 tools/i, terminal, 15_000);
+    await runtime.waitForScreenText(/selector_retry\s+\S+ connected \[http\].*1 tools/i, terminal, 15_000);
     terminal.write('\x1b');
     await runtime.waitForScreenTextAbsent(/Manage MCP servers/i, terminal, 8_000);
 
@@ -119,9 +119,9 @@ export const mcpSelectorReconnectScenario = {
     );
 
     terminal.submit('/mcp');
-    await runtime.waitForScreenText(/selector_retry \[http\] connected/i, terminal, 8_000);
+    await runtime.waitForScreenText(/selector_retry\s+\S+ connected \[http\]/i, terminal, 8_000);
     terminal.write('r');
-    await runtime.waitForScreenText(/selector_reload \[http\] connected.*1 tools/i, terminal, 15_000);
+    await runtime.waitForScreenText(/selector_reload\s+\S+ connected \[http\].*1 tools/i, terminal, 15_000);
     runtime.printScreen('mcp selector reload after status', terminal);
     terminal.keyCtrlC();
   },
