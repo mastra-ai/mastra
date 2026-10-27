@@ -36,7 +36,7 @@ export interface SourcePickerGroup {
   items: SourcePickerItem[];
 }
 
-interface SourcePickerProps {
+export interface SourcePickerProps {
   label: string;
   addLabel: string;
   itemIcon?: ReactNode;
@@ -47,10 +47,26 @@ interface SourcePickerProps {
   error?: string;
   onRetry?: () => void;
   onToggleItem: (id: string) => Promise<void>;
+  itemDescription?: (id: string) => string | undefined;
+  itemActions?: (item: SourcePickerItem) => ReactNode;
+  addControl?: (item: SourcePickerItem, focusSearch: () => void) => ReactNode;
 }
 
 export function SourcePicker(props: SourcePickerProps) {
-  const { label, addLabel, itemIcon, groups, selectedIds, pending, loading, error, onRetry, onToggleItem } = props;
+  const {
+    label,
+    addLabel,
+    itemIcon,
+    groups,
+    selectedIds,
+    pending,
+    loading,
+    error,
+    onRetry,
+    onToggleItem,
+    itemDescription,
+    itemActions,
+  } = props;
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
@@ -72,39 +88,49 @@ export function SourcePicker(props: SourcePickerProps) {
           <ul className="divide-border border-border divide-y border-b">
             {selected.map(id => {
               const group = groups.find(candidate => candidate.items.some(item => item.id === id));
-              const item = group?.items.find(candidate => candidate.id === id);
-              const context = [groups.length > 1 ? group?.label : undefined, item?.hint].filter(Boolean).join(' · ');
+              const item: SourcePickerItem = group?.items.find(candidate => candidate.id === id) ?? { id, label: id };
+              const context = [groups.length > 1 ? group?.label : undefined, item.hint].filter(Boolean).join(' · ');
+              const description = itemDescription?.(id);
               return (
-                <li key={id} className={cn(settingsRowLayout, 'flex items-center')}>
-                  {itemIcon && (
-                    <span className="shrink-0" aria-hidden>
-                      {itemIcon}
-                    </span>
-                  )}
-                  <div className="flex min-w-0 flex-1 flex-col">
-                    <Txt as="span" variant="caption" className="wrap-anywhere">
-                      {item?.label ?? id}
-                    </Txt>
-                    {context && (
-                      <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
-                        {context}
-                      </Txt>
+                <li key={id} className={cn(settingsRowLayout, 'flex flex-wrap items-center')}>
+                  <div className="flex min-w-0 flex-1 basis-48 items-center gap-2">
+                    {itemIcon && (
+                      <span className="shrink-0" aria-hidden>
+                        {itemIcon}
+                      </span>
                     )}
+                    <div className="flex min-w-0 flex-1 flex-col">
+                      <Txt as="span" variant="caption" className="wrap-anywhere">
+                        {item.label}
+                      </Txt>
+                      {context && (
+                        <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
+                          {context}
+                        </Txt>
+                      )}
+                      {description && (
+                        <Txt as="p" variant="meta" tone="muted" className="wrap-anywhere">
+                          {description}
+                        </Txt>
+                      )}
+                    </div>
                   </div>
-                  <Button
-                    size="sm"
-                    variant="ghost"
-                    icon={<Trash2 />}
-                    className="shrink-0"
-                    aria-label={`Remove ${item?.label ?? id}`}
-                    disabled={pending || item?.disabled}
-                    onClick={async () => {
-                      await onToggleItem(id);
-                      requestAnimationFrame(() => trigger.current?.focus());
-                    }}
-                  >
-                    Remove
-                  </Button>
+                  <div className="ml-auto flex shrink-0 items-center gap-2">
+                    {itemActions?.(item)}
+                    <Button
+                      size="sm"
+                      variant="ghost"
+                      icon={<Trash2 />}
+                      aria-label={`Remove ${item.label}`}
+                      disabled={pending || item.disabled}
+                      onClick={async () => {
+                        await onToggleItem(id);
+                        requestAnimationFrame(() => trigger.current?.focus());
+                      }}
+                    >
+                      Remove
+                    </Button>
+                  </div>
                 </li>
               );
             })}
@@ -153,6 +179,7 @@ function SourcePickerDrawer({
   error,
   onRetry,
   onToggleItem,
+  addControl,
   trigger,
   savingIndicator,
 }: SourcePickerProps & {
@@ -222,15 +249,19 @@ function SourcePickerDrawer({
                   )}
                   {group.items.map(item => (
                     <SettingsRow key={`${group.id}:${item.id}`} label={item.label} description={item.hint}>
-                      <Checkbox
-                        checked={false}
-                        aria-label={item.label}
-                        disabled={pending || item.disabled}
-                        onCheckedChange={() => {
-                          onToggleItem(item.id);
-                          searchInput.current?.focus();
-                        }}
-                      />
+                      {addControl ? (
+                        addControl(item, () => searchInput.current?.focus())
+                      ) : (
+                        <Checkbox
+                          checked={false}
+                          aria-label={item.label}
+                          disabled={pending || item.disabled}
+                          onCheckedChange={() => {
+                            onToggleItem(item.id);
+                            searchInput.current?.focus();
+                          }}
+                        />
+                      )}
                     </SettingsRow>
                   ))}
                 </Fragment>
