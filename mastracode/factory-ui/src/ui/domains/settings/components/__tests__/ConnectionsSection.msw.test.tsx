@@ -160,6 +160,57 @@ describe('Connections settings', () => {
     expect(screen.queryByText('GitHub account')).not.toBeInTheDocument();
   });
 
+  it('given only a hidden personal GitHub account install, when connections render, then the organization row explains it and offers a GitHub organization install', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          reason: 'personal_install_hidden',
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        } satisfies GithubStatus),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () =>
+        HttpResponse.json({ configured: false, reviewerConfigured: false }),
+      ),
+    );
+    renderConnections();
+
+    const organization = screen.getByRole('region', { name: 'Organization connections' });
+    expect(await within(organization).findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
+    expect(within(organization).getByRole('button', { name: 'Install on a GitHub organization' })).toBeInTheDocument();
+  });
+
+  it('given a personal GitHub account install whose linker left the platform org, when connections render, then the organization row says why and offers a GitHub organization install', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          unusableInstallations: [
+            {
+              installationId: 9,
+              accountLogin: 'ada',
+              accountType: 'User',
+              unusableReason: 'linker_not_organization_member',
+            },
+          ],
+          reason: 'installations_unusable',
+        } satisfies GithubStatus),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () =>
+        HttpResponse.json({ configured: false, reviewerConfigured: false }),
+      ),
+    );
+    renderConnections();
+
+    const organization = screen.getByRole('region', { name: 'Organization connections' });
+    expect(await within(organization).findByText(/left this platform org/)).toBeInTheDocument();
+    expect(within(organization).getByRole('button', { name: 'Install on a GitHub organization' })).toBeInTheDocument();
+  });
+
   it.each(['gitlab', 'jira'] as const)(
     'keeps every %s account reconnectable and adds accounts only after disclosure',
     async provider => {

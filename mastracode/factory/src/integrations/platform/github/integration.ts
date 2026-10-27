@@ -83,12 +83,22 @@ import type { PlatformGithubEventStorage } from './event-worker.js';
 
 type GithubActor = { login: string; avatarUrl: string | null; htmlUrl: string | null } | null;
 
+type PlatformHiddenPersonalInstallReason = 'personal_install_requires_single_member_org';
+
+type PlatformInstallationUnusableReason =
+  | 'installation_not_in_organization'
+  | 'not_visible_to_user'
+  | 'linker_not_organization_member'
+  | 'linker_membership_unavailable'
+  | 'personal_installation_without_linker';
+
 type PlatformGithubInstallation = {
   installationId: number;
   accountLogin: string;
   accountType: string;
   suspendedAt: string | null;
   usable: boolean;
+  unusableReason?: PlatformInstallationUnusableReason | null;
 };
 
 type PlatformGithubUserConnection = {
@@ -718,10 +728,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           });
         }
 
-        const [installations, userConnection] = await Promise.all([
-          this.#syncInstallations(tenant.orgId, tenant.userId),
-          this.#fetchUserConnection(tenant.userId),
-        ]);
+        const [{ installations, unusableInstallations, hiddenPersonalInstallReason }, userConnection] =
+          await Promise.all([
+            this.#syncInstallations(tenant.orgId, tenant.userId),
+            this.#fetchUserConnection(tenant.userId),
+          ]);
         return c.json({
           enabled: true,
           sandboxEnabled: !!ctx.sandbox,
@@ -731,9 +742,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             accountLogin: installation.accountName,
             accountType: installation.accountType,
           })),
+          unusableInstallations,
+          hiddenPersonalInstallReason,
           userConnected: userConnection.connected,
           userGithubUsername: userConnection.githubUsername,
-          reason: installations.length > 0 ? 'ready' : 'not_connected',
+          reason:
+            installations.length > 0
+              ? 'ready'
+              : hiddenPersonalInstallReason
+                ? 'personal_install_hidden'
+                : unusableInstallations.length > 0
+                  ? 'installations_unusable'
+                  : 'not_connected',
           diagnostics: this.diagnostics(),
         });
       },
@@ -822,15 +842,27 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
-  async #syncInstallations(orgId: string, userId: string): Promise<SourceControlInstallation[]> {
-    const result = await this.#client.request<{ installations: PlatformGithubInstallation[] }>(
-      'GET',
-      `${API_PREFIX}/github-app/installations`,
-    );
+  async #syncInstallations(
+    orgId: string,
+    userId: string,
+  ): Promise<{
+    installations: SourceControlInstallation[];
+    unusableInstallations: Array<{
+      installationId: number;
+      accountLogin: string;
+      accountType: string;
+      unusableReason: PlatformInstallationUnusableReason;
+    }>;
+    hiddenPersonalInstallReason: PlatformHiddenPersonalInstallReason | null;
+  }> {
+    const result = await this.#client.request<{
+      installations: PlatformGithubInstallation[];
+      hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
+    }>('GET', `${API_PREFIX}/github-app/installations`);
     const usableInstallations = result.installations.filter(
       installation => installation.usable && !installation.suspendedAt,
     );
-    return Promise.all(
+    const installations = await Promise.all(
       usableInstallations.map(installation =>
         this.versionControl.registerInstallation({
           orgId,
@@ -843,6 +875,23 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
+    const unusableInstallations = result.installations.flatMap(({ unusableReason, ...installation }) =>
+      unusableReason && !installation.usable
+        ? [
+            {
+              installationId: installation.installationId,
+              accountLogin: installation.accountLogin,
+              accountType: installation.accountType,
+              unusableReason,
+            },
+          ]
+        : [],
+    );
+    return {
+      installations,
+      unusableInstallations,
+      hiddenPersonalInstallReason: result.hiddenPersonalInstallReason ?? null,
+    };
   }
 
   workers(ctx: IntegrationContext): MastraWorker[] {

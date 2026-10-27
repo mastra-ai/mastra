@@ -13,7 +13,7 @@ import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { isGitLabRepository } from '../services/github';
+import { unavailableInstallMessage, INSTALL_ON_GITHUB_ORGANIZATION, isGitLabRepository } from '../services/github';
 import type { SourceControlRepository } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { GitLabIcon } from '../../../ui/icons';
@@ -87,6 +87,7 @@ export function VcsFactoryStep({
   const debouncedQuery = useDebouncedValue(query, 750);
   const githubStatus = useGithubStatusQuery();
   const connected = githubStatus.data?.connected === true;
+  const unavailableInstall = unavailableInstallMessage(githubStatus.data);
   const gitlabStatus = useGitLabStatusQuery();
   const gitlabConfigured = Boolean(gitlabStatus.data?.enabled && gitlabStatus.data.configured);
   const selectedProvider = sourceControlView({ pinned: providerChoice, githubConnected: connected, gitlabConfigured });
@@ -116,6 +117,7 @@ export function VcsFactoryStep({
           githubUnavailable={
             githubStatus.data?.reason === 'organization_required' || githubStatus.data?.reason === 'missing_config'
           }
+          githubUnavailableInstall={unavailableInstall}
           gitlabConnected={gitlabConfigured}
           gitlabUnavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
           onChooseGithub={() => {
@@ -160,6 +162,11 @@ export function VcsFactoryStep({
               onPreviewRepository?.(undefined);
             }}
           />
+          {selectedProvider === 'github' && unavailableInstall && (
+            <Txt as="p" variant="caption" tone="muted">
+              {unavailableInstall}
+            </Txt>
+          )}
           {repositoryQuery.isError && (
             <RepositoryError message={repositoryQuery.error.message} onRetry={() => void repositoryQuery.refetch()} />
           )}
@@ -227,6 +234,7 @@ function ProviderChoice({
   githubConnected,
   githubRedirecting,
   githubUnavailable,
+  githubUnavailableInstall,
   gitlabConnected,
   gitlabUnavailableReason,
   onChooseGithub,
@@ -237,6 +245,7 @@ function ProviderChoice({
   githubConnected: boolean;
   githubRedirecting: boolean;
   githubUnavailable: boolean;
+  githubUnavailableInstall?: string;
   gitlabConnected: boolean;
   gitlabUnavailableReason?: GitLabUnavailableReason;
   onChooseGithub: () => void;
@@ -250,13 +259,19 @@ function ProviderChoice({
         name="GitHub"
         icon={<GithubIcon />}
         description={
-          githubUnavailable ? 'Unavailable for this deployment.' : 'Repositories, branches, and pull requests.'
+          githubUnavailable
+            ? 'Unavailable for this deployment.'
+            : (githubUnavailableInstall ?? 'Repositories, branches, and pull requests.')
         }
         connected={githubConnected}
         action={
           <Button variant="default" disabled={githubRedirecting || githubUnavailable} onClick={onChooseGithub}>
             {githubRedirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
-            {githubConnected ? 'Continue with GitHub' : 'Connect GitHub'}
+            {githubConnected
+              ? 'Continue with GitHub'
+              : githubUnavailableInstall
+                ? INSTALL_ON_GITHUB_ORGANIZATION
+                : 'Connect GitHub'}
           </Button>
         }
       />

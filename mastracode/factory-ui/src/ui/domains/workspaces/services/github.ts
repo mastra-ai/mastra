@@ -24,6 +24,13 @@ export interface GithubInstallation {
   accountType: string | null;
 }
 
+export type GithubInstallationUnusableReason =
+  | 'installation_not_in_organization'
+  | 'not_visible_to_user'
+  | 'linker_not_organization_member'
+  | 'linker_membership_unavailable'
+  | 'personal_installation_without_linker';
+
 /**
  * Reason the GitHub feature is in its current state. Every value but
  * `unavailable` comes from the server; `unavailable` is set by the browser
@@ -36,6 +43,8 @@ export type GithubStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
+  | 'personal_install_hidden'
+  | 'installations_unusable'
   | 'ready'
   | 'unavailable';
 
@@ -66,6 +75,10 @@ export interface GithubStatus {
   organizationRequired?: boolean;
   /** Machine-readable reason for the current state; see {@link GithubStatusReason}. */
   reason?: GithubStatusReason;
+  /** Set when the platform withholds a personal GitHub account install because the platform org has other members. */
+  hiddenPersonalInstallReason?: 'personal_install_requires_single_member_org' | null;
+  /** Installations the platform lists but refuses to this platform org, with why. */
+  unusableInstallations?: Array<GithubInstallation & { unusableReason: GithubInstallationUnusableReason }>;
   /**
    * Whether the signed-in user has personally authorized the GitHub App, so
    * issues/PRs they originate are authored as them instead of the App bot.
@@ -138,6 +151,27 @@ function currentPageRedirectTo(): string {
 /** Begin the GitHub App install/connect flow (full-page redirect). */
 export function connectGithub(baseUrl: string): void {
   window.location.assign(`${baseUrl}/auth/github/connect?redirectTo=${currentPageRedirectTo()}`);
+}
+
+export const INSTALL_ON_GITHUB_ORGANIZATION = 'Install on a GitHub organization';
+
+const UNUSABLE_INSTALL_REASONS: Record<GithubInstallationUnusableReason, string> = {
+  linker_not_organization_member: "can't be used: the member who linked it left this platform org.",
+  linker_membership_unavailable: "can't be used right now: the linker's platform org membership couldn't be checked.",
+  personal_installation_without_linker: "can't be used: no platform org member linked it.",
+  installation_not_in_organization: "isn't linked to this platform org.",
+  not_visible_to_user: "isn't available to you in this platform org.",
+};
+
+export function unavailableInstallMessage(status: GithubStatus | undefined): string | undefined {
+  if (status?.hiddenPersonalInstallReason) {
+    return status.connected
+      ? 'Your personal GitHub account install is hidden because this platform org has other members.'
+      : 'The GitHub App is installed on a personal GitHub account, hidden because this platform org has other members.';
+  }
+  const unusable = status?.unusableInstallations?.[0];
+  if (!unusable) return undefined;
+  return `The GitHub App on ${unusable.accountLogin ?? 'a GitHub account'} ${UNUSABLE_INSTALL_REASONS[unusable.unusableReason]}`;
 }
 
 /**

@@ -6,10 +6,12 @@
  */
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
 import { screen, waitFor } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { renderWithProviders } from '../../../../../../e2e/ui/render';
+import { server } from '../../../../../../e2e/ui/msw-server';
+import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { OnboardingPage } from '../../../../pages/OnboardingPage';
 import { GitHubAppCallbackHandler } from '../GitHubAppCallbackHandler';
 
@@ -106,6 +108,24 @@ describe('GitHubAppCallbackHandler', () => {
     renderCallback('/factories/fp-1/settings/repositories?github_app_error=something_new');
 
     expect(await screen.findByText('GitHub connection failed')).toBeInTheDocument();
+  });
+
+  it('given the install landed on a personal GitHub account the platform hides, when the settings page renders, then it explains instead of reporting success', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          reason: 'personal_install_hidden',
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        }),
+      ),
+    );
+    renderCallback('/factories/fp-1/settings/repositories?github_app_installed=true&installation_id=123');
+
+    expect(await screen.findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
+    expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
   });
 });
 

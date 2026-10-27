@@ -18,7 +18,12 @@ import { MASTRA_PROJECTS_URL } from '../../factory/services/gitlab';
 import { connectLinear } from '../../factory/services/linear';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
-import { connectGithub, manageGithubConnection } from '../../workspaces/services/github';
+import {
+  connectGithub,
+  unavailableInstallMessage,
+  INSTALL_ON_GITHUB_ORGANIZATION,
+  manageGithubConnection,
+} from '../../workspaces/services/github';
 import { isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { IntegrationLabel } from './IntegrationLabel';
 import { connectionName, ProviderConnectControl } from './PlatformProviderConnections';
@@ -105,24 +110,21 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
   );
   if (access) return <SettingsRow label={label} description={access} />;
   if (!status.enabled && !status.connected) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
-  if (!status.connected && !showAvailable) return null;
+  const unavailableInstall = unavailableInstallMessage(status);
+  if (!status.connected && !showAvailable && !unavailableInstall) return null;
+  const accounts = status.installations
+    .map(installation => installation.accountLogin || `Installation ${installation.installationId}`)
+    .join(', ');
 
   return (
-    <SettingsRow
-      label={label}
-      description={
-        status.installations
-          .map(installation => installation.accountLogin || `Installation ${installation.installationId}`)
-          .join(', ') || undefined
-      }
-    >
+    <SettingsRow label={label} description={[accounts, unavailableInstall].filter(Boolean).join(' · ') || undefined}>
       {status.connected ? (
         <ConnectionManagementButton onClick={() => manageGithubConnection(baseUrl)}>
           Manage GitHub connection
         </ConnectionManagementButton>
       ) : (
         <Button size="sm" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
-          Connect GitHub
+          {unavailableInstall ? INSTALL_ON_GITHUB_ORGANIZATION : 'Connect GitHub'}
         </Button>
       )}
     </SettingsRow>

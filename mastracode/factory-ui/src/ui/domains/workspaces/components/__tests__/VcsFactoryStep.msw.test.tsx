@@ -57,6 +57,57 @@ describe('VCS Factory step', () => {
     expect(screen.getByRole('button', { name: 'Continue' })).toBeDisabled();
   });
 
+  it('given a hidden personal install beside a usable install, when the step renders, then repositories stay selectable with a note', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          ...connectedGithub,
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        }),
+      ),
+    );
+    const onSelectRepository = vi.fn();
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={vi.fn()}
+        onManageConnection={vi.fn()}
+        onSelectRepository={onSelectRepository}
+      />,
+    );
+    const user = userEvent.setup();
+    await user.click(await screen.findByText('octo/hello'));
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+    expect(onSelectRepository).toHaveBeenCalledExactlyOnceWith(repo);
+    expect(screen.getByText(/personal GitHub account install is hidden/)).toBeInTheDocument();
+  });
+
+  it('given only a hidden personal install, when the step renders, then it explains and offers installing on a GitHub organization', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          reason: 'personal_install_hidden',
+          hiddenPersonalInstallReason: 'personal_install_requires_single_member_org',
+        }),
+      ),
+    );
+    const onConnect = vi.fn();
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={onConnect}
+        onManageConnection={vi.fn()}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+    expect(await screen.findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Install on a GitHub organization' }));
+    expect(onConnect).toHaveBeenCalledOnce();
+  });
+
   it('debounces repository searches before requesting filtered results', async () => {
     const queries: string[] = [];
     server.use(
