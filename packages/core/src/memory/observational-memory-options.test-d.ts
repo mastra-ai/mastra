@@ -1,8 +1,5 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type {
-  ObservationalMemoryObservationConfig,
-  SerializedObservationalMemoryObservationConfig,
-} from './types';
+import type { ObservationalMemoryObservationConfig, SerializedObservationalMemoryObservationConfig } from './types';
 
 describe('observeAttachments option type', () => {
   it('accepts a MIME allowlist, matching the runtime default', () => {

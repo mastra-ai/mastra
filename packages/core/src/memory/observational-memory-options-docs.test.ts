@@ -17,12 +17,13 @@ function documentedDefault(interfaceName: string, property: string): string {
 }
 
 describe('Observational Memory option JSDoc defaults', () => {
-  it.each(['ObservationalMemoryObservationConfig', 'ObservationalMemoryReflectionConfig', 'ObservationalMemoryOptions'])(
-    "%s.model documents the real default, 'auto'",
-    name => {
-      expect(documentedDefault(name, 'model')).toMatch(/^'auto'/);
-    },
-  );
+  it.each([
+    'ObservationalMemoryObservationConfig',
+    'ObservationalMemoryReflectionConfig',
+    'ObservationalMemoryOptions',
+  ])("%s.model documents the real default, 'auto'", name => {
+    expect(documentedDefault(name, 'model')).toMatch(/^'auto'/);
+  });
 
   it('documents the observeAttachments allowlist default', () => {
     expect(documentedDefault('ObservationalMemoryObservationConfig', 'observeAttachments')).toBe(
