@@ -255,8 +255,8 @@ class BooleanSubmenu extends MenuList {
     labels?: BooleanSubmenuLabels,
   ) {
     const items: SelectItem[] = [
-      { value: 'on', label: `${labels?.onLabel ?? 'On'}`, description: labels?.onDescription ?? '' },
-      { value: 'off', label: `${labels?.offLabel ?? 'Off'}`, description: labels?.offDescription ?? '' },
+      { value: 'on', label: labels?.onLabel ?? 'On', description: labels?.onDescription ?? '' },
+      { value: 'off', label: labels?.offLabel ?? 'Off', description: labels?.offDescription ?? '' },
     ];
     super(items, items.length);
 

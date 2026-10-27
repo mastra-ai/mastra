@@ -260,7 +260,7 @@ export class SettingsComponent extends Container implements Focusable, MenuChrom
           new SelectSubmenu(
             notificationModes.map(m => ({
               value: m.value,
-              label: `${m.label}`,
+              label: m.label,
               description: m.desc,
             })),
             config.notifications,
@@ -309,7 +309,7 @@ export class SettingsComponent extends Container implements Focusable, MenuChrom
           new SelectSubmenu(
             thinkingLevels.map(l => ({
               value: l.value,
-              label: `${l.label}`,
+              label: l.label,
               description: l.desc,
             })),
             config.thinkingLevel,
@@ -358,7 +358,7 @@ export class SettingsComponent extends Container implements Focusable, MenuChrom
           new SelectSubmenu(
             [0, 1, 2, 4, 8].map(lines => ({
               value: String(lines),
-              label: `${previewLinesLabel(lines)}`,
+              label: previewLinesLabel(lines),
               description:
                 lines === 0
                   ? 'Hide tool previews and shell output'

@@ -436,12 +436,12 @@ async function askCustomPackEditTarget(
       },
     ];
     if (pack.models.memory !== 'auto') {
-      items.push({ value: 'memory-auto', label: `${chalk.hex(mastra.pink)('Use Auto memory model')}` });
+      items.push({ value: 'memory-auto', label: chalk.hex(mastra.pink)('Use Auto memory model') });
     }
     if (pack.models.memory) {
-      items.push({ value: 'memory-clear', label: `${theme.fg('warning', 'Clear memory model (use /om settings)')}` });
+      items.push({ value: 'memory-clear', label: theme.fg('warning', 'Clear memory model (use /om settings)') });
     }
-    items.push({ value: 'save', label: `${theme.fg('success', 'Save')}` });
+    items.push({ value: 'save', label: theme.fg('success', 'Save') });
 
     const selectList = new MenuList(items, items.length);
 
@@ -1043,7 +1043,7 @@ async function askFallbackTarget(
     items.unshift({
       value: '__clear__',
       label: 'Clear fallback',
-      description: `${theme.fg('dim', 'Stop hopping away from this pack')}`,
+      description: theme.fg('dim', 'Stop hopping away from this pack'),
     });
   }
 
@@ -1302,7 +1302,7 @@ export async function handleModelsPackCommand(ctx: SlashCommandContext): Promise
   items.push({
     value: '__import__',
     label: 'Import Pack',
-    description: `${theme.fg('dim', 'Paste a shared pack config')}`,
+    description: theme.fg('dim', 'Paste a shared pack config'),
   });
 
   return new Promise<void>(resolve => {
