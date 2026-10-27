@@ -5274,7 +5274,11 @@ export class DurableAgent<
           (event.type === AgentStreamEventTypes.ITERATION_START || event.type === AgentStreamEventTypes.STEP_START) &&
           event.stepIndex === stepIndex,
       );
-      const latestGeneration = starts.at(-1)?.generation;
+      const latestGeneration = starts.reduce<number | undefined>(
+        (latest, event) =>
+          typeof event.generation === 'number' ? Math.max(latest ?? event.generation, event.generation) : latest,
+        undefined,
+      );
       return (
         starts.find(
           event => event.type === AgentStreamEventTypes.ITERATION_START && event.generation === latestGeneration,
@@ -5309,7 +5313,10 @@ export class DurableAgent<
       // Subscription can replay a newer claim than the snapshot above. Refresh
       // before the first replayed event; live events and later deliveries stay synchronous.
       const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
-        if (!history.length || (event.index !== undefined && event.index >= history.length && !refreshedFilter)) {
+        if (
+          event.index === undefined ||
+          (!offset && (!history.length || (event.index >= history.length && !refreshedFilter)))
+        ) {
           return initialFilter(event);
         }
         if (currentFilter) return currentFilter(event);

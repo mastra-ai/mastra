@@ -763,6 +763,52 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       },
     );
 
+    it.skipIf(backend === 'lease')(
+      'uses the highest generation when a stale step start arrives after its successor',
+      async () => {
+        const storage = createStorage(backend);
+        const memory = new MockMemory({ storage });
+        const cache = new InMemoryServerCache();
+        const original = gatedModel('original answer');
+        const agentA = buildAgent({ model: original.model, storage, memory, cache });
+        const started = await agentA.stream('What is the answer?', { memory: { thread: THREAD, resource: RESOURCE } });
+        const { runId } = started;
+        const originalStream = collect(started.fullStream);
+        await original.entered;
+        await waitForCheckpoint(storage, runId);
+        const originalGeneration = ExecutionFence.getLocalActive(runId)!.generation!;
+
+        // A prior takeover already started this iteration; its predecessor publishes a late start.
+        // The next recovery must select the highest generation, not the last appended start.
+        const successorStart = (await (agentA.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+        for (const generation of [originalGeneration + 1, originalGeneration]) {
+          await agentA.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            type: AgentStreamEventTypes.ITERATION_START,
+            runId,
+            data: {},
+            stepIndex: 0,
+            generation,
+            producedAt: Date.now(),
+          });
+        }
+
+        globalRunRegistry.clear();
+        __resetExecutionFencesForTests();
+        const recovering = gatedModel('recovered answer');
+        const agentB = buildAgent({ model: recovering.model, storage, memory, cache });
+        const recovered = await agentB.recover(runId, { force: true });
+        const claims = await (agentB.pubsub as CachingPubSub).getHistory(AGENT_STREAM_TOPIC(runId), 0);
+        const claim = claims.findLast(event => event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED);
+        expect((claim?.data as { supersededFrom?: number })?.supersededFrom).toBe(successorStart);
+        original.release();
+        recovering.release();
+        await drain(recovered.fullStream);
+        await originalStream.stop();
+        started.cleanup();
+        recovered.cleanup();
+      },
+    );
+
     it('shutdown() stops an execution still running at the drain deadline without writing, and releases the run so the next boot recovers it without force', async () => {
       const storage = createStorage(backend);
       const memory = new MockMemory({ storage });

@@ -290,6 +290,36 @@ describe('observe() from an offset', () => {
     await transport.close();
   });
 
+  it('filters a superseded tail when an offset observer attaches as a takeover is announced', async () => {
+    const { durable, pubsub, transport, workflows } = await observedAgent();
+    const runId = 'offset-claim-during-attachment';
+    const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+    const recovered = await workflows.claimRunOwnership({ runId, ownerId: 'recovered', leaseMs: 30_000, force: true });
+    await runInRunFenceScope(scopeAt(runId, lost.record!.generation), () =>
+      emitChunkEvent(pubsub, runId, textChunk('before offset')),
+    );
+    const offset = (await pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)).length;
+    const subscribe = pubsub.subscribeFromOffset.bind(pubsub);
+    vi.spyOn(pubsub, 'subscribeFromOffset').mockImplementationOnce(async (topic, from, cb) => {
+      await runInRunFenceScope(scopeAt(runId, lost.record!.generation), async () => {
+        await emitIterationStartEvent(pubsub, runId, 0);
+        await emitChunkEvent(pubsub, runId, textChunk('abandoned'));
+      });
+      await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, offset);
+      await runInRunFenceScope(scopeAt(runId, recovered.record!.generation), async () => {
+        await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+        await emitFinishEvent(pubsub, runId, finishData);
+      });
+      return subscribe(topic, from, cb);
+    });
+
+    const chunks: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, { offset }, event => chunks.push(event));
+    expect(texts(chunks.map(event => event.data))).toEqual(['replayed']);
+    await unsubscribe();
+    await transport.close();
+  });
+
   it("follows the run's current claim when the takeover marker lies before the offset", async () => {
     const { durable, pubsub, transport, workflows } = await observedAgent();
     const runId = 'observed-run';
