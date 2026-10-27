@@ -115,6 +115,7 @@ describe('ACP runtime factory', () => {
           permissionRules: { categories: {}, tools: { ask_user: 'deny' } },
         },
         disabledTools: ['ask_user'],
+        subagents: [],
         mcpServers: {
           local: { command: '/mcp', args: ['serve'], env: { TEST_VALUE: 'example' }, cwd: '/project/subdirectory' },
           remote: { url: 'https://example.com/mcp', headers: { 'X-Test': 'example' } },

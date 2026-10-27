@@ -45,6 +45,7 @@ export async function createAcpSession(
     disableHooks: false,
     // Project environment files must not mutate other ACP sessions.
     disableEnvFile: true,
+    subagents: [],
   });
   const settings = loadSettings();
   let cleanupPromise: Promise<void> | undefined;

@@ -243,7 +243,7 @@ export async function runMCCli(
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
-    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
+    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor, subagents: [] });
     const { controller, session, mcpManager } = boot;
 
     const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());
