@@ -345,9 +345,24 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     const started = deferred();
     const release = deferred();
     const finished = deferred();
+    const processedResults: unknown[] = [];
+    let streamedResults = 0;
     const agent = new Agent({
       id: 'eager-abort-agent',
       name: 'Eager abort agent',
+      outputProcessors: [
+        {
+          id: 'inspect-carried-cancellation',
+          processToolResult: ({ result, messageList }) => {
+            processedResults.push(result);
+            return messageList;
+          },
+          processOutputStream: ({ part }) => {
+            if (part.type === 'tool-result') streamedResults++;
+            return part;
+          },
+        },
+      ],
       instructions: 'Call tool-a.',
       model: new MockLanguageModelV2({
         doStream: async ({ abortSignal }) =>
@@ -398,10 +413,15 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
       await expect.poll(() => drained, { timeout: 1_000 }).toBe(true);
       expect(executions).toEqual(['a']);
       expect(types.filter(type => type === 'abort')).toHaveLength(1);
-      expect(types).not.toContain('tool-result');
+      expect(types.filter(type => type === 'tool-result')).toHaveLength(1);
       expect(types).not.toContain('tool-error');
       expect(recordedResults(stream)).not.toContain('answered-a');
-      expect(recordedResults(stream)).toContain('"state":"call"');
+      expect(recordedResults(stream)).toContain('"state":"result"');
+      expect(recordedResults(stream)).toContain('The tool may still be running and its effects are unknown.');
+      expect(processedResults).toEqual([
+        'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.',
+      ]);
+      expect(streamedResults).toBe(1);
       const history = recordedResults(stream);
       const chunkCount = types.length;
       release.resolve();
@@ -415,9 +435,7 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     }
   });
 
-  it('keeps a call that stopped on the abort in the saved thread as incomplete', async () => {
-    // The default pipeline leaves a started call that observed the abort in history as
-    // incomplete. Eager dispatch must too: the tool ran up to the abort.
+  it('records a cancellation notice for a call that stopped on abort in the saved thread', async () => {
     const executions: string[] = [];
     const abortController = new AbortController();
     const started = deferred();
@@ -478,7 +496,8 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     const { messages } = await memory.recall({ threadId: 'thread-abort', resourceId: 'resource-abort' });
     const saved = JSON.stringify(messages);
     expect(saved).toContain('"toolCallId":"call-a"');
-    expect(saved).toContain('"state":"call"');
+    expect(saved).toContain('"state":"result"');
+    expect(saved).toContain('The tool may still be running and its effects are unknown.');
   });
 
   it('does not leave abort listeners on a caller signal reused across runs', async () => {
@@ -617,8 +636,9 @@ describe('eager tool dispatch — result reuse and caller cancellation', () => {
     // The abort ends the wait, so no error processor may act on the dead attempt.
     expect(apiErrorCalls).toBe(0);
     expect(types).toContain('abort');
-    expect(types).not.toContain('tool-result');
+    expect(types.filter(type => type === 'tool-result')).toHaveLength(1);
     expect(types).not.toContain('tool-error');
+    expect(recordedResults(stream)).toContain('The tool may still be running and its effects are unknown.');
     expect(recordedResults(stream)).not.toContain('answered-a');
     expect(attempts).toBe(1);
     expect(executions).toEqual(['a']);

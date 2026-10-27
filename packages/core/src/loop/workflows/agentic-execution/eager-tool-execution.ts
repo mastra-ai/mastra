@@ -1,6 +1,6 @@
 import { isToolBackgroundEligible } from '../../../background-tasks/resolve-config';
 import type { AgentBackgroundConfig, ToolBackgroundConfig } from '../../../background-tasks/types';
-import { TOOL_ABORT_GRACE_MS } from '../../shared/tool-abort-grace';
+import { TOOL_ABORT_GRACE_MS, TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 
 type EagerToolResult = unknown;
 
@@ -220,16 +220,15 @@ export class EagerToolExecutionCoordinator {
               // The step resolves an envelope rather than the tool's value, and it resolves
               // rather than rejects on failure: `{ result, ...call }` when the tool returned,
               // `{ error, ...call }` when it threw, `{ aborted: true, ...call }` when it was
-              // cancelled. A result or an error is committed as what it is. An abort is kept
-              // as an incomplete call: the tool started, so the saved thread must show it,
-              // but it has no outcome to show the next model. Unwrap here so the caller
-              // holds the tool's own output.
+              // cancelled. A result or an error is committed as what it is. An abort gets
+              // a cancellation notice so the next model knows the tool's effects are unknown.
+              // Unwrap here so the caller holds the tool's own output.
               const envelope = result as { result?: unknown; error?: unknown; aborted?: boolean } | undefined;
               const settled = !!envelope && typeof envelope === 'object';
               const outcome = !settled
                 ? undefined
                 : envelope.aborted
-                  ? { incomplete: true as const }
+                  ? { result: TOOL_ABORT_NOTICE }
                   : 'error' in envelope
                     ? { error: envelope.error }
                     : 'result' in envelope

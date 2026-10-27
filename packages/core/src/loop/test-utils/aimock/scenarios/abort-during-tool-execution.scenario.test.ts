@@ -25,18 +25,35 @@ describeForAllEngines(
   engine => {
     const getMock = useLoopScenarioAimock();
 
-    it.each(['resolve', 'reject'] as const)(
-      'ends an aborted run before an uncooperative tool can %s',
-      async lateOutcome => {
+    it.each(
+      (['resolve', 'reject'] as const).flatMap(lateOutcome =>
+        (engine === 'normal' || engine === 'fs' ? [true, false] : [false]).map(eager => ({ lateOutcome, eager })),
+      ),
+    )(
+      'ends an aborted run before an uncooperative tool can $lateOutcome (eager: $eager)',
+      async ({ lateOutcome, eager }) => {
         const controller = new AbortController();
+        const memory = new MockMemory();
+        const threadId = `cancelled-tool-${engine}-${lateOutcome}`;
+        const resourceId = 'cancelled-tool-customer';
+        const notice =
+          'Tool execution was aborted while running. The tool may still be running and its effects are unknown. Check its status before retrying.';
         const started = Promise.withResolvers<void>();
         const execution = Promise.withResolvers<{ done: boolean }>();
         let toolFinished = false;
         let outputs = 0;
+        let mappedOutputs = 0;
+        const processedNotices: unknown[] = [];
+        let streamedNotices = 0;
         const tool = createTool({
           id: 'uncooperative',
           description: 'Waits for external work that ignores cancellation',
           inputSchema: z.object({}),
+          outputSchema: z.object({ done: z.boolean() }),
+          toModelOutput: output => {
+            mappedOutputs++;
+            return { type: 'text', value: JSON.stringify(output) };
+          },
           execute: async () => {
             started.resolve();
             try {
@@ -53,7 +70,24 @@ describeForAllEngines(
           engine,
           llm: getMock(),
           prompt: 'Wait for external work',
+          defaultOptions: { eagerToolExecution: eager },
+          memory,
+          threadId,
+          resourceId,
           tools: { uncooperative: tool },
+          outputProcessors: [
+            {
+              id: 'inspect-cancellation-notice',
+              processToolResult: ({ result, messageList }) => {
+                processedNotices.push(result);
+                return messageList;
+              },
+              processOutputStream: ({ part }) => {
+                if (part.type === 'tool-result') streamedNotices++;
+                return part;
+              },
+            },
+          ],
           abortSignal: controller.signal,
           collectChunks: true,
           fixtures: llm => {
@@ -80,12 +114,17 @@ describeForAllEngines(
           await started.promise;
           controller.abort();
           await expect.poll(() => settled, { timeout: 5_000 }).toBe(true);
-          const { output, requests, chunks, mastra } = await scenario;
+          const { output, requests, chunks, mastra, agent } = await scenario;
           expect(toolFinished).toBe(false);
           expect(requests).toHaveLength(1);
           expect(await output.finishReason).toBe('aborted');
           expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
-          expect(chunks?.filter(chunk => chunk.type === 'tool-result' || chunk.type === 'tool-error')).toHaveLength(0);
+          const results = chunks?.filter(chunk => chunk.type === 'tool-result');
+          expect(results).toHaveLength(1);
+          expect(results?.[0]?.payload).toMatchObject({ toolCallId: 'call_uncooperative', result: notice });
+          expect(chunks?.filter(chunk => chunk.type === 'tool-error')).toHaveLength(0);
+          const savedBefore = (await memory.recall({ threadId, resourceId })).messages;
+          expect(JSON.stringify(savedBefore)).toContain(notice);
           const store = await mastra.getStorage()!.getStore('workflows');
           const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
           const prefix = engine === 'inngest' ? 'inngest:' : '';
@@ -110,8 +149,22 @@ describeForAllEngines(
           else execution.reject(new Error('external work failed after abort'));
           await expect.poll(() => toolFinished).toBe(true);
           expect(outputs).toBe(0);
+          expect(mappedOutputs).toBe(0);
+          expect(processedNotices).toEqual([notice]);
+          expect(streamedNotices).toBe(1);
           expect(chunks).toHaveLength(chunkCount!);
           expect(getMock().getRequests()).toHaveLength(1);
+          expect((await memory.recall({ threadId, resourceId })).messages).toEqual(savedBefore);
+          await agent.generate('What happened to the external work?', {
+            memory: { thread: threadId, resource: resourceId },
+            maxSteps: 1,
+          });
+          const nextMessages = getMock().getRequests()[1]!.body!.messages;
+          expect(nextMessages).toEqual(
+            expect.arrayContaining([
+              expect.objectContaining({ role: 'tool', tool_call_id: 'call_uncooperative', content: notice }),
+            ]),
+          );
         } finally {
           controller.abort();
           execution.resolve({ done: true });
@@ -119,6 +172,60 @@ describeForAllEngines(
         }
       },
     );
+
+    it('keeps cancellation terminal when another tool has already failed', async () => {
+      const controller = new AbortController();
+      const { output, requests, chunks } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Run both operations',
+        defaultOptions: { eagerToolExecution: false, toolCallConcurrency: 1 },
+        abortSignal: controller.signal,
+        collectChunks: true,
+        tools: {
+          failure: createTool({
+            id: 'failure',
+            description: 'Fails before the other tool starts',
+            inputSchema: z.object({}),
+            execute: async () => {
+              throw new Error('operation failed before cancellation');
+            },
+          }),
+          cancelled: createTool({
+            id: 'cancelled',
+            description: 'Cancels the run and ignores the signal',
+            inputSchema: z.object({}),
+            execute: async () => {
+              controller.abort();
+              return new Promise<never>(() => {});
+            },
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                { id: 'call_failure', name: 'failure', arguments: {} },
+                { id: 'call_cancelled', name: 'cancelled', arguments: {} },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not retry after cancellation' });
+        },
+      });
+      expect(requests).toHaveLength(1);
+      expect(await output.finishReason).toBe('aborted');
+      expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
+      expect(chunks?.filter(chunk => chunk.type === 'tool-result')).toEqual([
+        expect.objectContaining({
+          payload: expect.objectContaining({
+            toolCallId: 'call_cancelled',
+            result: expect.stringContaining('The tool may still be running'),
+          }),
+        }),
+      ]);
+    });
 
     it.each(engine === 'normal' || engine === 'fs' ? [true, false] : [false])(
       'keeps a result returned just after caller abort (eager: %s)',

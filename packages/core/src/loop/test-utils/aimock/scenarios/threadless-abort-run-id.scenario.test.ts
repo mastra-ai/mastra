@@ -71,7 +71,8 @@ describeForAllEngines(
           expect(toolFinished).toBe(cooperative);
           expect(chunks.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
           if (!cooperative) {
-            expect(chunks.filter(chunk => chunk.type === 'tool-result' || chunk.type === 'tool-error')).toHaveLength(0);
+            expect(chunks.filter(chunk => chunk.type === 'tool-result')).toHaveLength(1);
+            expect(chunks.filter(chunk => chunk.type === 'tool-error')).toHaveLength(0);
           }
           expect(onAbort).toHaveBeenCalledTimes(1);
           expect(llm.getRequests()).toHaveLength(1);

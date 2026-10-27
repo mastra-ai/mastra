@@ -51,6 +51,7 @@ import { applyBackgroundToolResult } from '../../shared/steps/background-task-re
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
+import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import { dehydrateStreamState } from '../../suspended-stream-state';
 import type { OuterLLMRun } from '../../types';
@@ -1451,7 +1452,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           logger,
         });
         if (outcome.status === 'aborted') {
-          return { aborted: true, ...inputData };
+          return { ...inputData, aborted: true, result: TOOL_ABORT_NOTICE };
         }
         if (outcome.status === 'error') {
           return { error: serializeToolError(outcome.error), ...inputData };

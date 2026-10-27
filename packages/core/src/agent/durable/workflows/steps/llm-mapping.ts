@@ -184,11 +184,9 @@ export function createDurableLLMMappingStep() {
             throw mappingError;
           }
 
-          // An aborted call was cancelled mid-flight, not completed: recording it
-          // would fake-complete the call (`result: undefined` reads as success on
-          // resume), so leave the invocation incomplete. Mirrors the non-durable
-          // llm-mapping-step's aborted exclusion.
-          if (toolResult.aborted) {
+          // Only executed calls carry a cancellation notice. An aborted call with
+          // no result must not be recorded as a fabricated successful output.
+          if (toolResult.aborted && toolResult.result === undefined) {
             continue;
           }
 
@@ -247,6 +245,7 @@ export function createDurableLLMMappingStep() {
             | undefined;
           if (
             !toolResult.error &&
+            !toolResult.aborted &&
             toolResult.result != null &&
             !toolResult.providerExecuted &&
             !toolResult.modelOutputComputed
