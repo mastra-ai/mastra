@@ -17,23 +17,23 @@ The routes that feed it are **off by default**. Until you enable them, the Knowl
 Register the Knowledge routes explicitly:
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter';
+import { Mastra } from '@mastra/core'
+import { KNOWLEDGE_ROUTES } from '@mastra/server/server-adapter'
 
 export const mastra = new Mastra({
   server: { apiRoutes: [...KNOWLEDGE_ROUTES] },
-});
+})
 ```
 
 They mount under your configured API prefix (`/api/knowledge` by default) and are gated by the `knowledge:read` permission.
 
-| Route                                        | Returns                                 |
-| -------------------------------------------- | --------------------------------------- |
-| `GET /knowledge`                             | The Knowledge instances you can read    |
-| `GET /knowledge/:knowledgeKey/graph`         | A bounded graph window for a scope      |
+| Route | Returns |
+| - | - |
+| `GET /knowledge` | The Knowledge instances you can read |
+| `GET /knowledge/:knowledgeKey/graph` | A bounded graph window for a scope |
 | `GET /knowledge/:knowledgeKey/nodes/:nodeId` | One node with its records and pin state |
-| `GET /knowledge/:knowledgeKey/search`        | Name search within a scope              |
-| `GET /knowledge/:knowledgeKey/activity`      | Recent activity within a scope          |
+| `GET /knowledge/:knowledgeKey/search` | Name search within a scope |
+| `GET /knowledge/:knowledgeKey/activity` | Recent activity within a scope |
 
 ## How scope works
 
@@ -44,8 +44,8 @@ If the viewer's tags exceed what a caller should be allowed to hold, bind them p
 Set it in `server.auth.authorize`, which runs after the caller is authenticated and receives the framework context. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
 
 ```typescript
-import { Mastra } from '@mastra/core';
-import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_SCOPE_KEY } from '@mastra/server/server-adapter';
+import { Mastra } from '@mastra/core'
+import { KNOWLEDGE_ROUTES, MASTRA_KNOWLEDGE_SCOPE_KEY } from '@mastra/server/server-adapter'
 
 export const mastra = new Mastra({
   server: {
@@ -54,16 +54,16 @@ export const mastra = new Mastra({
       authenticateToken: async token => verifyToken(token),
       authorize: async (path, _method, user, context) => {
         if (path.startsWith('/api/knowledge')) {
-          const tags = tagsFor(user);
+          const tags = tagsFor(user)
           // Refuse rather than leave the key unset: an unset key means unbound.
-          if (!Array.isArray(tags)) return false;
-          context.get('requestContext').set(MASTRA_KNOWLEDGE_SCOPE_KEY, tags);
+          if (!Array.isArray(tags)) return false
+          context.get('requestContext').set(MASTRA_KNOWLEDGE_SCOPE_KEY, tags)
         }
-        return true;
+        return true
       },
     },
   },
-});
+})
 ```
 
 If you configure `studio.auth`, Studio requests use it **instead of** `server.auth`, so `server.auth.authorize` never runs for them and nothing is bound. Put the same `authorize` in `studio.auth` (or in both) so the binding applies to whichever config the request uses.
