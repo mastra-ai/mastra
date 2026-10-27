@@ -507,17 +507,52 @@ export class CouchbaseVector extends MastraVector {
   }
 
   async deleteVectors({ indexName, filter, ids }: DeleteVectorsParams): Promise<void> {
-    throw new MastraError({
-      id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
-      text: 'deleteVectors is not yet implemented for Couchbase vector store',
-      domain: ErrorDomain.STORAGE,
-      category: ErrorCategory.SYSTEM,
-      details: {
-        indexName,
-        ...(filter && { filter: JSON.stringify(filter) }),
-        ...(ids && { idsCount: ids.length }),
-      },
-    });
+    if (ids && filter) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'MUTUALLY_EXCLUSIVE'),
+        text: 'ids and filter are mutually exclusive',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (filter) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'NOT_SUPPORTED'),
+        text: 'Couchbase deleteVectors filter-based deletion is not supported; provide ids instead',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName, filter: JSON.stringify(filter) },
+      });
+    }
+
+    if (!ids) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'MISSING_CRITERIA'),
+        text: 'Provide ids or filter to deleteVectors',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
+
+    if (ids.length === 0) return;
+
+    try {
+      const collection = await this.getCollection();
+      await Promise.all(ids.map(id => collection.remove(id)));
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { indexName, idsCount: ids.length },
+        },
+        error,
+      );
+    }
   }
 
   async disconnect() {

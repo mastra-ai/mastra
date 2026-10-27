@@ -81,10 +81,12 @@ const mockScopeSearchFn = vi.hoisted(() =>
 );
 
 const mockCollectionUpsertFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
+const mockCollectionRemoveFn = vi.hoisted(() => vi.fn().mockResolvedValue({}));
 const getMockCollection = vi.hoisted(() =>
   vi.fn().mockReturnValue({
     collection_name: test_collectionName,
     upsert: mockCollectionUpsertFn,
+    remove: mockCollectionRemoveFn,
   }),
 );
 const getMockScope = vi.hoisted(() =>
@@ -132,6 +134,7 @@ vi.mock('couchbase', () => {
 
 function clearAllMocks() {
   mockCollectionUpsertFn.mockClear();
+  mockCollectionRemoveFn.mockClear();
   getMockCollection.mockClear();
   getMockScope.mockClear();
   getMockBucket.mockClear();
@@ -490,6 +493,48 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockCollectionUpsertFn).toHaveResolvedTimes(3);
       expect(vectorIds).toHaveLength(3);
       expect(vectorIds).toEqual(testVectorIds);
+    });
+
+    it('should delete multiple vectors by ID', async () => {
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_2');
+    });
+
+    it('should not remove any documents for an empty ID list', async () => {
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: [] });
+
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject filter-based deletion without removing documents', async () => {
+      await expect(
+        couchbase_client.deleteVectors({ indexName: test_indexName, filter: { label: 'x-axis' } }),
+      ).rejects.toThrow('filter-based deletion is not supported');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject missing deletion criteria without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName })).rejects.toThrow(
+        'Provide ids or filter',
+      );
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should reject ids and filter together without removing documents', async () => {
+      await expect(
+        couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'], filter: { label: 'x-axis' } }),
+      ).rejects.toThrow('mutually exclusive');
+      expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should propagate failed KV removals', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new Error('KV removal failed'));
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['test_id_1'] })).rejects.toThrow(
+        'KV removal failed',
+      );
     });
 
     it('should throw error for invalid vector dimension', async () => {

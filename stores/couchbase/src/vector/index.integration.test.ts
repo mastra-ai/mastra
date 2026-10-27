@@ -528,6 +528,16 @@ describe('Integration Testing CouchbaseVector', async () => {
         expect(error).toBeInstanceOf(Error);
       }
     });
+
+    it('should delete only the requested vectors by ID', async () => {
+      const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
+
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ids.slice(0, 2) });
+
+      await expect(collection.get(ids[0])).rejects.toThrow();
+      await expect(collection.get(ids[1])).rejects.toThrow();
+      await expect(collection.get(ids[2])).resolves.toHaveProperty('content.embedding', testVectors[2]);
+    });
   });
 
   describe('Error Cases and Edge Cases', () => {
