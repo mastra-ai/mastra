@@ -3,6 +3,7 @@ import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { Bot } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
 import { useFactoryQuery } from '../../hooks/useFactories';
@@ -23,14 +24,16 @@ import type { ModelDefaultsAnchor } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
 import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
-import { StarterPrompts } from '../domains/chat/components/StarterPrompts';
+import { StarterBoard } from '../domains/chat/components/starters/StarterBoard';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
 import { newChatCatalogTarget, routedDefaultModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
-import { InFlight } from '../domains/factory/components/InFlight';
+import { FactoryActivity } from '../domains/factory/components/activity/FactoryActivity';
+import { traySurface } from '../ui/tray';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
 const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 
@@ -137,6 +140,7 @@ function NewPageContent({
           configurationError={configurationError}
           missingModel={missingModel}
           missingCredential={missingCredential}
+          starters={startsFromPrompt && <StarterBoard factoryId={activeFactory.id} />}
         />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
@@ -145,12 +149,7 @@ function NewPageContent({
           </div>
         )}
       </div>
-      {startsFromPrompt && (
-        <>
-          <StarterPrompts factoryId={activeFactory.id} />
-          <InFlight factoryId={activeFactory.id} />
-        </>
-      )}
+      {startsFromPrompt && <FactoryActivity factoryId={activeFactory.id} />}
     </div>
   );
 }
@@ -160,11 +159,13 @@ function DraftStart({
   configurationError,
   missingModel,
   missingCredential,
+  starters,
 }: {
   activeFactory: FactoryProject | undefined;
   configurationError: Error | undefined;
   missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
+  starters: ReactNode;
 }) {
   const firstName = useFactoryAuth().data?.user?.name?.trim().split(/\s+/)[0];
 
@@ -193,7 +194,12 @@ function DraftStart({
         <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
       )}
 
-      {activeFactory && <ComposerPanel composerVariant="textarea" />}
+      {activeFactory && (
+        <div className={cn(traySurface, 'flex flex-col gap-1.5 p-1.5')}>
+          <ComposerPanel composerVariant="textarea" />
+          {starters}
+        </div>
+      )}
     </section>
   );
 }

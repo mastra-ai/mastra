@@ -1,4 +1,4 @@
-import { createContext, useCallback, useContext, useRef, useState } from 'react';
+import { createContext, useContext, useRef, useState } from 'react';
 import type { ReactNode, RefObject } from 'react';
 import { flushSync } from 'react-dom';
 
@@ -12,10 +12,11 @@ export interface ComposerPreview {
 
 export interface ChatCommandsApi {
   composerDraft: string;
-  composerPreview: ComposerPreview | null;
+  composerPreview: ComposerPreview | undefined;
   composerInputRef: RefObject<HTMLTextAreaElement | null>;
   setComposerDraft: (draft: string) => void;
-  setComposerPreview: (preview: string | null) => void;
+  showComposerPreview: (text: string) => void;
+  clearComposerPreview: (text: string) => void;
   prefillComposer: (draft: string) => void;
   submitComposer: (draft: string) => void;
   commands: SlashCommand[];
@@ -26,13 +27,14 @@ const ChatCommandsContext = createContext<ChatCommandsApi | null>(null);
 
 export function ChatCommandsProvider({ children }: { children: ReactNode }) {
   const [composerDraft, setComposerDraft] = useState('');
-  const [composerPreview, setPreview] = useState<ComposerPreview | null>(null);
+  const [composerPreview, setPreview] = useState<ComposerPreview>();
   const composerInputRef = useRef<HTMLTextAreaElement>(null);
   // Measured before the preview lands: a composer that grew to fit it would move what the pointer is on.
-  const setComposerPreview = useCallback((text: string | null) => {
+  const showComposerPreview = (text: string) => {
     const height = composerInputRef.current?.getBoundingClientRect().height;
-    setPreview(text === null || height === undefined ? null : { text, height });
-  }, []);
+    setPreview(height === undefined ? undefined : { text, height });
+  };
+  const clearComposerPreview = (text: string) => setPreview(current => (current?.text === text ? undefined : current));
   const prefillComposer = (draft: string) => {
     setComposerDraft(draft);
     requestAnimationFrame(() => composerInputRef.current?.focus());
@@ -49,7 +51,8 @@ export function ChatCommandsProvider({ children }: { children: ReactNode }) {
     composerPreview,
     composerInputRef,
     setComposerDraft,
-    setComposerPreview,
+    showComposerPreview,
+    clearComposerPreview,
     prefillComposer,
     submitComposer,
     commands,

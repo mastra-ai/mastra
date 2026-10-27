@@ -2,7 +2,7 @@ import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
@@ -26,6 +26,22 @@ function card(id: string, stages: string[], board = 'work') {
   return { ...workItem(id, id, '2026-08-01T00:00:00.000Z', '2026-08-02T00:00:00.000Z'), stages, board };
 }
 
+function runStarted(id: string, occurredAt: Date) {
+  return {
+    id,
+    actorId: 'agent:thread-1',
+    actorType: 'agent' as const,
+    action: 'factory.run.started',
+    targets: [],
+    metadata: {},
+    occurredAt: occurredAt.toISOString(),
+  };
+}
+
+afterEach(() => {
+  vi.useRealTimers();
+});
+
 describe('the new session page', () => {
   it('asks the signed-in person, by first name, what to ship', async () => {
     stubDraftRoute();
@@ -43,7 +59,7 @@ describe('the new session page', () => {
     expect(await screen.findByRole('heading', { level: 1, name: 'What should we ship, Dustin?' })).toBeInTheDocument();
   });
 
-  it('suggests triaging the cards waiting in Intake, previews that prompt while hovered, gives my draft back after, and sends it on click', async () => {
+  it('suggests triaging the cards waiting in Intake, previews a prompt that names none of them while hovered, gives my draft back after, and sends it on click', async () => {
     const route = stubDraftRoute({
       workItems: [card('Login fails on Safari', ['intake']), card('Add dark mode', ['intake'])],
     });
@@ -54,12 +70,14 @@ describe('the new session page', () => {
     await waitFor(() => expect(message).toBeEnabled());
     await user.type(message, 'my own idea');
 
-    const starters = await screen.findByRole('list', { name: 'Start from a prompt' });
-    const starter = within(starters).getByRole('button', { name: /^Triage 2 cards in Intake/ });
+    const starters = await screen.findByRole('list', { name: 'Start from the board' });
+    const starter = within(starters).getByRole('button', { name: 'Triage the 2 newest' });
+    expect(starter).toHaveAccessibleDescription('Untriaged in Intake 2');
     await user.hover(starter);
     const previewed = message.value;
-    expect(previewed).toContain('Login fails on Safari');
-    expect(previewed).toContain('Add dark mode');
+    expect(previewed).toContain('Triage');
+    expect(previewed).not.toContain('Login fails on Safari');
+    expect(previewed).not.toContain('Add dark mode');
 
     await user.unhover(starter);
     expect(message).toHaveValue('my own idea');
@@ -78,12 +96,12 @@ describe('the new session page', () => {
     await waitForMutationsIdle(client);
   });
 
-  it('offers no prompt when nothing on the board waits on anyone', async () => {
+  it('offers no card when nothing on the board waits on anyone', async () => {
     stubDraftRoute({ workItems: [card('building', ['execute']), card('done', ['done'])] });
     renderDraft();
 
-    expect(await screen.findByRole('region', { name: 'In flight' })).toBeInTheDocument();
-    expect(screen.queryByRole('list', { name: 'Start from a prompt' })).not.toBeInTheDocument();
+    expect(await screen.findByRole('region', { name: 'This week' })).toBeInTheDocument();
+    expect(screen.queryByRole('list', { name: 'Start from the board' })).not.toBeInTheDocument();
   });
 
   it('gives the composer back empty when the prompts vanish under the pointer and later return', async () => {
@@ -99,7 +117,7 @@ describe('the new session page', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.hover(await screen.findByRole('button', { name: /^Triage 1 card in Intake/ }));
+    await user.hover(await screen.findByRole('button', { name: 'Triage it' }));
 
     answerProviders('none');
     await client.invalidateQueries({ queryKey: queryKeys.providers() });
@@ -113,28 +131,66 @@ describe('the new session page', () => {
     expect(returned).not.toHaveAttribute('readonly');
   });
 
-  it('counts the Work board cards in each open stage, a card with no stage in Intake as the board shows it, leaving out finished work and pull requests', async () => {
+  it('keeps previewing the hovered card when a refresh takes another card away', async () => {
+    const intakeCard = card('Login fails on Safari', ['intake']);
+    stubDraftRoute({ workItems: [intakeCard, { ...card('Crash on save', ['triage']), triageType: 'bug' }] });
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+
+    const message = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.hover(await screen.findByRole('button', { name: 'Triage it' }));
+    const previewed = message.value;
+    expect(previewed).toContain('Triage');
+
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
+        HttpResponse.json({ workItems: [intakeCard] }),
+      ),
+    );
+    await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan a fix for it' })).not.toBeInTheDocument());
+
+    expect(message).toHaveValue(previewed);
+  });
+
+  it('totals what came in, what agents started and what shipped this week, offers a recap only when something shipped, and narrows to today on request', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 27, 12));
+    const daysAgo = (days: number) => new Date(2026, 9, 27 - days, 11);
     stubDraftRoute({
       workItems: [
-        card('intake', ['intake']),
-        card('unstaged', []),
-        card('triage-1', ['triage']),
-        card('triage-2', ['triage']),
-        card('building', ['execute']),
-        card('reviewing', ['review']),
-        card('done', ['done']),
-        card('canceled', ['canceled']),
-        card('pull-request', ['review'], 'review'),
+        { ...card('arrived-today', ['intake']), createdAt: daysAgo(0).toISOString() },
+        { ...card('arrived-this-week', ['intake']), createdAt: daysAgo(3).toISOString() },
+        { ...card('arrived-last-month', ['intake']), createdAt: daysAgo(40).toISOString() },
+        {
+          ...card('shipped', ['done']),
+          stageHistory: [{ stage: 'done', enteredAt: daysAgo(2).toISOString(), by: 'user-1' }],
+        },
       ],
     });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
+        HttpResponse.json({
+          events: [runStarted('today', daysAgo(0)), runStarted('this-week', daysAgo(5))],
+          actors: {},
+        }),
+      ),
+    );
+    const user = userEvent.setup();
     renderDraft();
+    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /Shipped/ });
 
-    const inFlight = await screen.findByRole('region', { name: 'In flight' });
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() => expect(totals(week)).toHaveAccessibleName('Shipped: 1, Agents ran: 2, Came in: 2'));
+    expect(within(week).getByRole('button', { name: 'Recap the week' })).toBeInTheDocument();
 
-    expect(
-      within(inFlight)
-        .getAllByRole('listitem')
-        .map(stage => stage.textContent),
-    ).toEqual(['Intake 2', 'Triage 2', 'Planning 0', 'Building 1', 'Review 1']);
+    await user.click(within(week).getByRole('button', { name: 'This week' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Today' }));
+
+    const today = await screen.findByRole('region', { name: 'Today' });
+    await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
+    await waitFor(() => expect(totals(today)).toHaveAccessibleName('Shipped: 0, Agents ran: 1, Came in: 1'));
+    expect(within(today).queryByRole('button', { name: /^Recap/ })).not.toBeInTheDocument();
   });
 });

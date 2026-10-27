@@ -260,7 +260,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
             onPaste={onPaste}
             placeholder={placeholder}
             disabled={textareaDisabled}
-            readOnly={preview !== null}
+            readOnly={preview !== undefined}
             style={preview ? { height: preview.height } : undefined}
             variant={variant}
             aria-label="Message"
@@ -289,7 +289,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               </Button>
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}
-                sendDisabled={sendDisabled || (!hasSubmittableDraft && preview === null)}
+                sendDisabled={sendDisabled || (!hasSubmittableDraft && preview === undefined)}
                 sendTitle={sendTitle}
                 onAbort={() => void abortMutation.mutateAsync()}
               />

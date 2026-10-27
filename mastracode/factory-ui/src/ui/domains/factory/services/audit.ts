@@ -83,6 +83,8 @@ async function throwRequestError(res: Response): Promise<never> {
   throw new Error(message);
 }
 
+export const MAX_AUDIT_PAGE_SIZE = 200;
+
 export async function fetchAuditEvents(
   baseUrl: string,
   factoryProjectId: string,

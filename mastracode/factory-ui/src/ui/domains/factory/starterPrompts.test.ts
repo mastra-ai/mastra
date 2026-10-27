@@ -87,13 +87,6 @@ function promptFor(kind: StarterKind, cards: WorkItem[], effects: FactoryDecisio
   return found;
 }
 
-function listed(prompt: string): string[] {
-  return prompt
-    .split('\n')
-    .filter(line => line.startsWith('- '))
-    .map(line => line.slice(2));
-}
-
 describe('starterPrompts', () => {
   it('offers nothing when no card waits on anyone', () => {
     expect(
@@ -119,18 +112,11 @@ describe('starterPrompts', () => {
     ...memoryCards,
   ];
 
-  it('orders fresh pull requests, intake, bugs, the area sweep, stale pull requests and the weekly recap', () => {
-    expect(build(quietBoard).map(({ title }) => title)).toEqual([
-      'Review 1 open pull request',
-      'Triage 1 card in Intake',
-      'Plan a fix for the open bug',
-      'Sweep 3 open Memory cards',
-      'Close or revive 1 pull request open over a month',
-      'Recap 1 card done this week',
-    ]);
+  it('ranks fresh pull requests, decisions, intake, bugs, the area sweep and stale pull requests', () => {
+    expect(build(quietBoard).map(({ kind }) => kind)).toEqual(['review', 'decide', 'triage', 'bug', 'sweep', 'stale']);
   });
 
-  it('puts failed runs and review feedback first and shows six lines at most', () => {
+  it('puts failed runs and review feedback first and shows six cards at most', () => {
     const prompts = build(
       [
         ...quietBoard,
@@ -140,17 +126,10 @@ describe('starterPrompts', () => {
       [failedRun('stuck', 'Sandbox quota exceeded')],
     );
 
-    expect(prompts.map(({ title }) => title)).toEqual([
-      'Unblock 1 failed run',
-      'Fix review feedback on 1 Factory pull request',
-      'Review 1 open pull request',
-      'Triage 1 card in Intake',
-      'Plan a fix for the open bug',
-      'Sweep 3 open Memory cards',
-    ]);
+    expect(prompts.map(({ kind }) => kind)).toEqual(['unblock', 'feedback', 'review', 'decide', 'triage', 'bug']);
   });
 
-  it('reviews the open pull requests that waited longest, leaving out drafts, finished ones and those in review', () => {
+  it('shows how long the oldest fresh pull request has waited, leaving out drafts, finished ones and those in review', () => {
     const review = promptFor('review', [
       pullRequest(2, ['intake'], { sourceCreatedAt: daysAgo(1) }),
       pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(10) }),
@@ -160,11 +139,15 @@ describe('starterPrompts', () => {
       pullRequest(6, ['review']),
     ]);
 
-    expect(review.title).toBe('Review 2 open pull requests');
-    expect(listed(review.prompt)).toEqual(['#1 Pull request 1', '#2 Pull request 2']);
+    expect(review).toMatchObject({
+      label: 'Longest review wait',
+      value: 10,
+      unit: 'days',
+      action: 'Review the 2 oldest',
+    });
   });
 
-  it('hands pull requests open over a month to close or revive, oldest first, instead of review', () => {
+  it('hands pull requests open over a month to close or revive instead of review', () => {
     const cards = [
       pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(31) }),
       pullRequest(2, ['intake'], { sourceCreatedAt: daysAgo(90) }),
@@ -172,12 +155,21 @@ describe('starterPrompts', () => {
       pullRequest(4, ['intake'], { sourceCreatedAt: daysAgo(60), draft: true }),
     ];
 
-    const stale = promptFor('stale', cards);
-    const review = promptFor('review', cards);
+    expect(promptFor('stale', cards)).toMatchObject({ value: 2, action: 'Close or revive 2' });
+    expect(promptFor('review', cards)).toMatchObject({ value: 29, unit: 'days', action: 'Review it' });
+  });
 
-    expect(stale.title).toBe('Close or revive 2 pull requests open over a month');
-    expect(listed(stale.prompt)).toEqual(['#2 Pull request 2', '#1 Pull request 1']);
-    expect(listed(review.prompt)).toEqual(['#3 Pull request 3']);
+  it('asks for a decision on the cards triage classified that nobody accepted, leaving bugs and started work out', () => {
+    const decide = promptFor('decide', [
+      card('question', { stages: ['triage'], triageType: 'question/support' }),
+      card('feature', { stages: ['intake'], triageType: 'feature request' }),
+      card('accepted', { stages: ['triage'], triageType: 'feature request', acceptedAt: daysAgo(1) }),
+      card('bug', { stages: ['triage'], triageType: 'bug' }),
+      card('unclassified', { stages: ['intake'] }),
+      card('building', { stages: ['execute'], triageType: 'feature request' }),
+    ]);
+
+    expect(decide).toMatchObject({ label: 'Needs your decision', value: 2, action: 'Decide on the 2 oldest' });
   });
 
   it('sweeps the area label with the most open cards, ignoring process labels and GitHub type labels', () => {
@@ -189,9 +181,7 @@ describe('starterPrompts', () => {
       ...['a', 'b', 'c'].map(id => card(`agents-done-${id}`, { stages: ['done'], metadata: { labels: ['Agents'] } })),
     ]);
 
-    expect(sweep.title).toBe('Sweep 3 open Memory cards');
-    expect(sweep.prompt).toContain('labelled "Memory"');
-    expect(listed(sweep.prompt).toSorted()).toEqual(['Card memory-leak', 'Card memory-recall', 'Card memory-threads']);
+    expect(sweep).toMatchObject({ label: 'Waiting in Memory', value: 3 });
   });
 
   it('offers no sweep for an area with fewer than three open cards', () => {
@@ -200,31 +190,22 @@ describe('starterPrompts', () => {
     expect(kinds).not.toContain('sweep');
   });
 
-  it('leaves cards triage already classified to a person, out of the triage prompt', () => {
+  it('leaves cards triage already classified out of the triage count', () => {
     const triage = promptFor('triage', [
       card('unclassified'),
       card('held-question', { triageType: 'question/support' }),
     ]);
 
-    expect(listed(triage.prompt)).toEqual(['Card unclassified']);
+    expect(triage).toMatchObject({ label: 'Untriaged in Intake', value: 1, action: 'Triage it' });
   });
 
-  it('triages the five newest cards in Intake and leaves the rest for another session', () => {
-    const cards = Array.from({ length: 7 }, (_, index) =>
-      card(`intake-${index}`, { stageHistory: [{ stage: 'intake', enteredAt: daysAgo(index), by: 'user-1' }] }),
+  it('counts every card waiting in Intake but triages a batch of five', () => {
+    const triage = promptFor(
+      'triage',
+      Array.from({ length: 7 }, (_, index) => card(`intake-${index}`)),
     );
 
-    const triage = promptFor('triage', cards);
-
-    expect(triage.title).toBe('Triage 5 of 7 cards in Intake');
-    expect(listed(triage.prompt)).toEqual([
-      'Card intake-0',
-      'Card intake-1',
-      'Card intake-2',
-      'Card intake-3',
-      'Card intake-4',
-    ]);
-    expect(triage.prompt).toMatch(/\bother 2\b/);
+    expect(triage).toMatchObject({ value: 7, action: 'Triage the 5 newest' });
   });
 
   it('plans only the bugs nobody has planned or started', () => {
@@ -240,60 +221,17 @@ describe('starterPrompts', () => {
       card('feature', { stages: ['triage'], triageType: 'feature request' }),
     ]);
 
-    expect(plan.title).toBe('Plan a fix for one of 2 open bugs');
-    expect(listed(plan.prompt)).toEqual(['Card triaged-bug', 'Card labelled-bug']);
+    expect(plan).toMatchObject({ label: 'Bugs with no plan', value: 2, action: 'Plan a fix for one' });
   });
 
-  it('plans one bug picked from every open bug, with the oldest as examples', () => {
-    const bugs = Array.from({ length: 7 }, (_, index) =>
-      card(`bug-${index}`, { stages: ['triage'], triageType: 'bug', createdAt: daysAgo(10 - index) }),
-    );
-
-    const plan = promptFor('bug', bugs);
-
-    expect(plan.title).toBe('Plan a fix for one of 7 open bugs');
-    expect(plan.prompt).toContain('of the 7 open bugs');
-    expect(plan.prompt).not.toContain('Leave the other');
-    expect(listed(plan.prompt)).toEqual(['Card bug-0', 'Card bug-1', 'Card bug-2', 'Card bug-3', 'Card bug-4']);
-  });
-
-  it('recaps the cards that reached Done in the last seven days and are still there', () => {
-    const recap = promptFor('shipped', [
-      done('inside-the-week', 6.9),
-      done('outside-the-week', 7.1),
-      card('reopened', {
-        stages: ['execute'],
-        stageHistory: [{ stage: 'done', enteredAt: daysAgo(2), exitedAt: daysAgo(1), by: 'user-1' }],
-      }),
-    ]);
-
-    expect(listed(recap.prompt)).toEqual(['Card inside-the-week']);
-  });
-
-  it('gives the recap its scale and start date, with the latest ten as examples', () => {
-    const recap = promptFor('shipped', [
-      ...Array.from({ length: 11 }, (_, index) => done(`work-${index}`, index / 10)),
-      {
-        ...pullRequest(1, ['done'], { merged: true }),
-        stageHistory: [{ stage: 'done', enteredAt: daysAgo(3), by: 'github:octocat' }],
-      },
-    ]);
-
-    expect(recap.title).toBe('Recap 12 cards done this week');
-    expect(recap.prompt).toContain('since 2026-10-19');
-    expect(recap.prompt).toContain('1 pull request and 11 cards');
-    expect(listed(recap.prompt)).toEqual(Array.from({ length: 10 }, (_, index) => `Card work-${index}`));
-  });
-
-  it('unblocks the cards whose last run failed, with the error, ignoring runs still queued', () => {
+  it('counts the cards whose last run failed, ignoring runs still queued', () => {
     const unblock = promptFor(
       'unblock',
       [card('failed', { stages: ['execute'] }), card('queued', { stages: ['execute'] })],
       [failedRun('failed', 'Sandbox quota exceeded'), { ...failedRun('queued', ''), status: 'pending' }],
     );
 
-    expect(unblock.title).toBe('Unblock 1 failed run');
-    expect(listed(unblock.prompt)).toEqual(['Card failed: Sandbox quota exceeded']);
+    expect(unblock).toMatchObject({ label: 'Failed runs', value: 1, action: 'Unblock it' });
   });
 
   it('fixes review feedback only on open Factory pull requests whose verdict is still current', () => {
@@ -315,6 +253,30 @@ describe('starterPrompts', () => {
       pullRequest(5, ['done'], { factoryAuthored: true, reviewVerdict: 'request changes', merged: true }),
     ]);
 
-    expect(listed(feedback.prompt)).toEqual(['#1 Pull request 1']);
+    expect(feedback).toMatchObject({ label: 'Changes requested', value: 1 });
+  });
+
+  it('sends a prompt that names no card, pull request, error or area, whatever the board holds', () => {
+    const busyBoard = [
+      ...quietBoard,
+      pullRequest(2, ['review'], { factoryAuthored: true, reviewVerdict: 'request changes' }),
+      card('stuck', { stages: ['execute'] }),
+    ];
+    const failures = [failedRun('stuck', 'Sandbox quota exceeded')];
+    const prompts = [...build(busyBoard, failures), ...build(quietBoard)];
+    const specifics = [...busyBoard.map(item => item.title), 'Sandbox quota exceeded', 'Memory', '#'];
+
+    expect(new Set(prompts.map(({ kind }) => kind)).size).toBe(8);
+    for (const { prompt } of prompts) {
+      for (const specific of specifics) {
+        expect(prompt).not.toContain(specific);
+      }
+    }
+    expect(promptFor('triage', [card('only')]).prompt).toBe(
+      promptFor(
+        'triage',
+        Array.from({ length: 7 }, (_, index) => card(`intake-${index}`)),
+      ).prompt,
+    );
   });
 });
