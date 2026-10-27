@@ -172,6 +172,36 @@ describe('FactoryPhaseStateProcessor', () => {
     await expect(processor.processInputStep(stepArgs())).resolves.toBeUndefined();
   });
 
+  it('keeps the verdict tool for a crash-recovered reviewer and hides it when the lookup fails', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    await prepare(storage, 'review');
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+    });
+    const tools = { factory_record_review_verdict: {}, factory_transition_work_item: {} };
+    const recovered = new RequestContext();
+    recovered.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+    recovered.set('controller', {
+      resourceId: 'resource-1',
+      threadId: 'thread-1',
+      sessionId: 'resource-1',
+      state: {},
+      getState: () => ({}),
+      session: { modelId: 'openai/gpt-5.6-sol', modeId: 'review' },
+    });
+
+    await expect(
+      processor.processInputStep({ ...(inputArgs(recovered, []) as object), tools } as never),
+    ).resolves.toBeUndefined();
+
+    vi.spyOn(storage, 'findRunBindingBySession').mockRejectedValue(new Error('binding storage unavailable'));
+    await expect(
+      processor.processInputStep({ ...(inputArgs(requestContext(), []) as object), tools } as never),
+    ).resolves.toEqual({ tools: { factory_transition_work_item: {} } });
+  });
+
   it('reconciles caller memory settings once per request, before the step hooks', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);

@@ -37,6 +37,11 @@ const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
 /** Mirrors the verdict tool id in `tools.ts`. */
 const REVIEW_VERDICT_TOOL = 'factory_record_review_verdict';
+
+function withoutReviewVerdictTool(tools: ProcessInputStepArgs['tools']): ProcessInputStepResult | undefined {
+  if (!tools || !(REVIEW_VERDICT_TOOL in tools)) return undefined;
+  return { tools: Object.fromEntries(Object.entries(tools).filter(([name]) => name !== REVIEW_VERDICT_TOOL)) };
+}
 function ruleStage(boards: BoardRegistry, item: WorkItemRow | null | undefined): string | undefined {
   return item && workItemPhaseSemantics(boards, item) ? item.stages[0] : undefined;
 }
@@ -319,7 +324,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
       binding = address ? await this.options.storage.findRunBindingBySession(address) : undefined;
     } catch {
       await this.loadCallerMemorySettings(args.requestContext, undefined);
-      return;
+      return withoutReviewVerdictTool(args.tools);
     }
     // Resumed runs skip the input-processor phase, so re-check here: it is a
     // no-op once `processInput` already placed the row for this request. Passing
@@ -328,10 +333,18 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     await this.loadCallerMemorySettings(args.requestContext, binding);
     // Run tools carry the verdict tool for every role, since the role can
     // rotate mid-run; offer it only on steps where this session reviews.
-    const tools =
-      args.tools && REVIEW_VERDICT_TOOL in args.tools && !(binding?.status === 'active' && binding.role === 'review')
-        ? Object.fromEntries(Object.entries(args.tools).filter(([name]) => name !== REVIEW_VERDICT_TOOL))
-        : undefined;
+    let tools: ProcessInputStepResult | undefined;
+    if (args.tools && REVIEW_VERDICT_TOOL in args.tools) {
+      // Crash-recovered sessions lose `factoryProjectId`, so read the binding
+      // table directly rather than hiding the tool from a live reviewer.
+      const reviewer =
+        binding !== undefined
+          ? binding
+          : await findSessionRunBinding(args.requestContext, this.options.storage).catch(() => null);
+      if (!(reviewer?.status === 'active' && reviewer.role === 'review')) {
+        tools = withoutReviewVerdictTool(args.tools);
+      }
+    }
     if (binding && binding.status === 'active') {
       const completedToolCallIds = completedStepToolCallIds(args.steps);
       const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
@@ -339,7 +352,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
         await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
       }
     }
-    return tools ? { tools } : undefined;
+    return tools;
   }
 
   /**
