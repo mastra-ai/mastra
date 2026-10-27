@@ -2,6 +2,7 @@ import { MastraError } from '@mastra/core/error';
 import { afterEach, describe, expect, it } from 'vitest';
 import { startTasksFixtureServer } from '../../__fixtures__/tasks-server';
 import type { TasksFixtureServer } from '../../__fixtures__/tasks-server';
+import { taskKeyOf } from '../../shared/tasks';
 import { MCPClient } from '../configuration';
 import type { MastraMCPServerDefinition } from '../types';
 
@@ -48,6 +49,23 @@ describe('MCPClient with MCP Tasks', () => {
     // Polls are routed by task id.
     const taskId = server!.requests.find(request => request.method === 'tasks/get')!.params.taskId;
     expect(server!.requests.filter(r => r.method === 'tasks/get').every(r => r.mcpName === taskId)).toBe(true);
+  });
+
+  it('tags the tool call span with a hash of the task id, never the id itself', async () => {
+    const updates: Array<{ metadata?: Record<string, unknown> }> = [];
+    const span = {
+      isValid: true,
+      traceId: '0af7651916cd43dd8448eb211c80319c',
+      id: 'b7ad6b7169203331',
+      update: (options: { metadata?: Record<string, unknown> }) => updates.push(options),
+    };
+    const { call } = await connect();
+
+    await call('report', {}, { tracingContext: { currentSpan: span } });
+
+    const taskId = server!.requests.find(request => request.method === 'tasks/get')!.params.taskId as string;
+    expect(updates).toEqual([{ metadata: { mcpTaskKey: taskKeyOf(taskId) } }]);
+    expect(JSON.stringify(updates)).not.toContain(taskId);
   });
 
   it('keeps tool calls synchronous for servers that did not opt in', async () => {
