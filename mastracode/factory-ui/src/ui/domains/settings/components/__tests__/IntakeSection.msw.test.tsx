@@ -222,32 +222,54 @@ const jiraProjects: JiraProject[] = [
  */
 function useJiraHandlers({
   config = baseConfig(),
-  bindings = [],
-}: { config?: IntakeConfig; bindings?: IntakeSourceBinding[] } = {}) {
+  bindings: initial = [],
+  conflict,
+}: {
+  config?: IntakeConfig;
+  bindings?: IntakeSourceBinding[];
+  /** Answer every binding save with this 409, as the server does when another factory takes the issues. */
+  conflict?: { message: string; conflicts: Array<{ factoryProjectId: string; labels: string[] | null }> };
+} = {}) {
   const saved = useIntakeHandlers({ config });
+  let bindings = initial;
   const savedBindings: Array<{
     integrationId: string;
     sourceId: string;
     factoryProjectId: string | null;
     board: string | null;
+    labels?: string[] | null;
   }> = [];
+  const deletedBindings: Array<Record<string, string>> = [];
   server.use(
     http.get(JIRA_STATUS_URL, () => HttpResponse.json(jiraReadyStatus)),
     http.get(JIRA_PROJECTS_URL, () => HttpResponse.json({ projects: jiraProjects })),
     http.get(BINDINGS_URL, () => HttpResponse.json({ bindings })),
     http.put(BINDINGS_URL, async ({ request }) => {
-      const body = (await request.json()) as {
-        integrationId: string;
-        sourceId: string;
-        factoryProjectId: string | null;
-        board: string | null;
-      };
+      const body = (await request.json()) as (typeof savedBindings)[number];
       savedBindings.push(body);
-      const next = body.factoryProjectId === null ? [] : [body as IntakeSourceBinding];
-      return HttpResponse.json({ bindings: next });
+      if (conflict) return HttpResponse.json({ error: 'binding_conflict', ...conflict }, { status: 409 });
+      const factoryProjectId = body.factoryProjectId;
+      // Jira keeps one binding per factory; other factories' bindings of the project stay.
+      bindings = factoryProjectId
+        ? [
+            ...bindings.filter(
+              binding => !(binding.sourceId === body.sourceId && binding.factoryProjectId === factoryProjectId),
+            ),
+            { ...body, factoryProjectId, labels: body.labels ?? null },
+          ]
+        : bindings.filter(binding => binding.sourceId !== body.sourceId);
+      return HttpResponse.json({ bindings });
+    }),
+    http.delete(BINDINGS_URL, ({ request }) => {
+      const query = Object.fromEntries(new URL(request.url).searchParams);
+      deletedBindings.push(query);
+      bindings = bindings.filter(
+        binding => !(binding.sourceId === query.sourceId && binding.factoryProjectId === query.factoryProjectId),
+      );
+      return HttpResponse.json({ bindings });
     }),
   );
-  return { saved, savedBindings };
+  return { saved, savedBindings, deletedBindings };
 }
 
 function useIncidentioHandlers({
@@ -973,7 +995,7 @@ describe('IntakeSection', () => {
       expect(saved[0].jira.sourceIds).toEqual(['10001']);
     });
 
-    it('routes a selected Jira project to a Factory through the generic bindings', async () => {
+    it('routes a selected Jira project to a factory, taking all its issues', async () => {
       seedFactories();
       const { savedBindings } = useJiraHandlers({
         config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
@@ -982,10 +1004,11 @@ describe('IntakeSection', () => {
       renderIntakeSection();
 
       // Unrouted projects warn that no board picks them up.
-      expect(await screen.findByText(/Not routed — this source's issues won't be picked up\./)).toBeInTheDocument();
+      expect(await screen.findByText(/Not routed — this project's issues won't be picked up\./)).toBeInTheDocument();
 
-      await userEvent.click(await screen.findByLabelText('Factory for ENG · Engineering'));
+      await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
       await userEvent.click(await screen.findByRole('option', { name: 'Acme Web' }));
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
       await waitFor(() => expect(savedBindings).toHaveLength(1));
       expect(savedBindings[0]).toEqual({
@@ -993,32 +1016,121 @@ describe('IntakeSection', () => {
         sourceId: '10001',
         factoryProjectId: FACTORY_A,
         board: null,
+        labels: null,
       });
       expect(await screen.findByText('Jira routing updated')).toBeInTheDocument();
+      expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme Web')).toHaveTextContent(
+        'All issues',
+      );
     });
 
-    it('clears a Jira routing back to not routed', async () => {
+    it('routes the labelled issues of a project another factory already takes to a second factory', async () => {
       seedFactories();
       const { savedBindings } = useJiraHandlers({
         config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
-        bindings: [{ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_A, board: 'work' }],
+        bindings: [
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_A,
+            board: 'work',
+            labels: null,
+            createdAt: '2026-10-01T00:00:00.000Z',
+          },
+        ],
       });
 
       renderIntakeSection();
 
-      const trigger = await screen.findByLabelText('Factory for ENG · Engineering');
-      await waitFor(() => expect(trigger).toHaveTextContent('Acme Web'));
-
-      await userEvent.click(trigger);
-      await userEvent.click(await screen.findByRole('option', { name: 'Not routed' }));
+      expect(
+        await screen.findByText('Another factory takes all issues, so name the labels this factory should take.'),
+      ).toBeInTheDocument();
+      await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme API' }));
+      // Without labels the new factory would collide with the all-issues binding.
+      expect(screen.getByRole('button', { name: 'Add' })).toBeDisabled();
+      await userEvent.type(screen.getByLabelText('Labels for the new ENG · Engineering factory'), 'payments, billing');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
 
       await waitFor(() => expect(savedBindings).toHaveLength(1));
-      expect(savedBindings[0]).toEqual({
-        integrationId: 'jira',
-        sourceId: '10001',
-        factoryProjectId: null,
-        board: null,
+      expect(savedBindings[0]).toMatchObject({ factoryProjectId: FACTORY_B, labels: ['payments', 'billing'] });
+      expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme API')).toHaveTextContent(
+        'Only issues labelled…',
+      );
+      expect(screen.getByText('payments')).toBeInTheDocument();
+      expect(
+        screen.getByText("Choose a board — this factory won't pick up issues until one is set."),
+      ).toBeInTheDocument();
+      // The existing factory's row names the slice now routed elsewhere.
+      expect(screen.getByText('Also routed to Acme API (payments, billing).')).toBeInTheDocument();
+    });
+
+    it('explains which factory already takes a label when the save is refused', async () => {
+      seedFactories();
+      const { savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+        bindings: [
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_A,
+            board: 'work',
+            labels: ['payments'],
+            createdAt: '2026-10-01T00:00:00.000Z',
+          },
+        ],
+        conflict: {
+          message: 'Already routed to another factory: payments.',
+          conflicts: [{ factoryProjectId: FACTORY_A, labels: ['payments'] }],
+        },
       });
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByLabelText('Factory to add for ENG · Engineering'));
+      await userEvent.click(await screen.findByRole('option', { name: 'Acme API' }));
+      await userEvent.type(screen.getByLabelText('Labels for the new ENG · Engineering factory'), 'payments');
+      await userEvent.click(screen.getByRole('button', { name: 'Add' }));
+
+      await waitFor(() => expect(savedBindings).toHaveLength(1));
+      expect(await screen.findByText('"payments" already routed to Acme Web')).toBeInTheDocument();
+    });
+
+    it("stops routing a project to one factory and leaves the other factory's routing", async () => {
+      seedFactories();
+      const { deletedBindings, savedBindings } = useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+        bindings: [
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_A,
+            board: 'work',
+            labels: null,
+            createdAt: '2026-10-01T00:00:00.000Z',
+          },
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_B,
+            board: 'work',
+            labels: ['payments'],
+            createdAt: '2026-10-02T00:00:00.000Z',
+          },
+        ],
+      });
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('button', { name: 'Stop routing ENG · Engineering to Acme API' }));
+
+      await waitFor(() => expect(deletedBindings).toHaveLength(1));
+      expect(deletedBindings[0]).toEqual({ integrationId: 'jira', sourceId: '10001', factoryProjectId: FACTORY_B });
+      expect(savedBindings).toEqual([]);
+      await waitFor(() =>
+        expect(screen.queryByRole('button', { name: 'Stop routing ENG · Engineering to Acme API' })).toBeNull(),
+      );
+      expect(screen.getByRole('button', { name: 'Stop routing ENG · Engineering to Acme Web' })).toBeInTheDocument();
     });
 
     it('surfaces rejected connections as reconnect guidance instead of an empty picker', async () => {

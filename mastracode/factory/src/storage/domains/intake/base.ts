@@ -71,6 +71,11 @@ export function mergeIntakeSelections(configs: readonly IntakeConfig[]): IntakeC
  * ingested item should land. GitHub items are naturally scoped by their linked
  * repository; providers without that link (Linear) need this explicit binding
  * so viewing one project's board cannot materialize another project's items.
+ *
+ * Frozen: its unique index allows one binding per source, and indexes cannot be
+ * narrowed, so bindings moved to {@link INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA}. Rows
+ * are copied once at boot and never written again; the collection stays
+ * registered so an earlier build that is rolled back to still finds them.
  */
 export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
   name: 'intake_source_bindings',
@@ -95,12 +100,121 @@ export const INTAKE_SOURCE_BINDINGS_SCHEMA: CollectionSchema = {
   ],
 };
 
+/**
+ * Binds an intake source to a Factory project, one row per (source, Factory
+ * project). Most integrations keep one binding per source and rebinding moves
+ * it; integrations with `Intake.bindingLabelFilters` let several Factory
+ * projects share a source, each taking the issues carrying its own labels.
+ */
+export const INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA: CollectionSchema = {
+  name: 'intake_source_subscriptions',
+  columns: {
+    id: { type: 'uuid-pk' },
+    org_id: { type: 'text' },
+    integration_id: { type: 'text' },
+    source_id: { type: 'text' },
+    factory_project_id: { type: 'text' },
+    /** Installed board the source feeds; `null` keeps the legacy source-type routing (issues → work, PRs → review). */
+    board: { type: 'text', nullable: true },
+    /** Labels whose issues this binding takes, as the user typed them; `null` takes every unclaimed issue. */
+    labels: { type: 'json', nullable: true },
+    created_by_user_id: { type: 'text', nullable: true },
+    created_at: { type: 'timestamp' },
+    updated_at: { type: 'timestamp' },
+  },
+  indexes: [{ name: 'intake_source_subscriptions_project_idx', columns: ['org_id', 'factory_project_id'] }],
+  uniqueIndexes: [
+    {
+      name: 'intake_source_subscriptions_org_integration_source_project_unique',
+      columns: ['org_id', 'integration_id', 'source_id', 'factory_project_id'],
+    },
+  ],
+};
+
+/** One-time data migrations that have run, so none re-runs over rows users have changed since. */
+export const INTAKE_DATA_MIGRATIONS_SCHEMA: CollectionSchema = {
+  name: 'intake_data_migrations',
+  columns: {
+    name: { type: 'text', primaryKey: true },
+    completed_at: { type: 'timestamp' },
+  },
+};
+
+const COPY_LEGACY_BINDINGS_MIGRATION = 'copy_intake_source_bindings_to_subscriptions';
+
 export interface IntakeSourceBinding {
   integrationId: string;
   sourceId: string;
   factoryProjectId: string;
   /** Installed board the source feeds, or `null` for legacy source-type routing. */
   board: string | null;
+  /** Labels whose issues this binding takes; `null` takes every issue no other binding's labels claim. */
+  labels: string[] | null;
+  createdAt: Date;
+}
+
+/** Another Factory project's binding that already takes some of the requested issues. */
+export interface IntakeBindingConflict {
+  factoryProjectId: string;
+  /** The overlapping labels, or `null` when both bindings take all unclaimed issues. */
+  labels: string[] | null;
+}
+
+/** Bindings on one source in precedence order: the oldest binding wins an issue two of them match. */
+function inPrecedenceOrder<T extends Pick<IntakeSourceBinding, 'createdAt' | 'factoryProjectId'>>(
+  bindings: readonly T[],
+): T[] {
+  return [...bindings].sort(
+    (left, right) =>
+      left.createdAt.getTime() - right.createdAt.getTime() ||
+      left.factoryProjectId.localeCompare(right.factoryProjectId),
+  );
+}
+
+/**
+ * The slice of a shared source's issues `binding` takes, given every binding
+ * on that source (`siblings` may include `binding` itself). Label bindings beat
+ * the all-issues binding, and an issue carrying labels of two label bindings
+ * goes to the older one.
+ */
+export function bindingLabelSlice(
+  binding: Pick<IntakeSourceBinding, 'factoryProjectId' | 'labels' | 'createdAt'>,
+  siblings: readonly Pick<IntakeSourceBinding, 'factoryProjectId' | 'labels' | 'createdAt'>[],
+): { include: string[] | null; exclude: string[] } {
+  const labelled = inPrecedenceOrder(
+    siblings.filter(sibling => sibling.labels !== null && sibling.factoryProjectId !== binding.factoryProjectId),
+  );
+  if (binding.labels === null) {
+    return { include: null, exclude: labelled.flatMap(sibling => sibling.labels ?? []) };
+  }
+  const older = labelled.filter(sibling => inPrecedenceOrder([sibling, binding])[0] === sibling);
+  return { include: binding.labels, exclude: older.flatMap(sibling => sibling.labels ?? []) };
+}
+
+/** Whether an issue carrying `labels` falls in `binding`'s slice of its source. */
+export function bindingTakesIssue(
+  binding: Pick<IntakeSourceBinding, 'factoryProjectId' | 'labels' | 'createdAt'>,
+  siblings: readonly Pick<IntakeSourceBinding, 'factoryProjectId' | 'labels' | 'createdAt'>[],
+  labels: readonly string[],
+): boolean {
+  const carried = new Set(labels.map(normalizeIntakeLabel));
+  const { include, exclude } = bindingLabelSlice(binding, siblings);
+  if (exclude.some(label => carried.has(normalizeIntakeLabel(label)))) return false;
+  return include === null || include.some(label => carried.has(normalizeIntakeLabel(label)));
+}
+
+/** Trim and de-duplicate case-insensitively, keeping the first spelling the user typed. */
+export function normalizeBindingLabels(labels: readonly string[]): string[] {
+  const seen = new Set<string>();
+  const kept: string[] = [];
+  for (const label of labels) {
+    const trimmed = label.trim();
+    const key = normalizeIntakeLabel(trimmed);
+    if (!key || seen.has(key)) continue;
+    seen.add(key);
+    kept.push(trimmed);
+  }
+  return kept;
 }
 
 /**
@@ -176,10 +290,14 @@ export function resolveIntakeLabelRoute(
 }
 
 type IntakeSourceBindingRow = {
+  org_id: string;
   integration_id: string;
   source_id: string;
   factory_project_id: string;
   board?: string | null;
+  labels?: string[] | null;
+  created_by_user_id?: string | null;
+  created_at: Date;
 };
 function toIntakeSourceBinding(row: IntakeSourceBindingRow): IntakeSourceBinding {
   return {
@@ -187,7 +305,46 @@ function toIntakeSourceBinding(row: IntakeSourceBindingRow): IntakeSourceBinding
     sourceId: row.source_id,
     factoryProjectId: row.factory_project_id,
     board: row.board ?? null,
+    labels: row.labels ?? null,
+    createdAt: row.created_at,
   };
+}
+
+/** Overlap between a requested binding and the other Factory projects' bindings on the same source. */
+function bindingConflicts(
+  factoryProjectId: string,
+  labels: string[] | null,
+  rows: readonly IntakeSourceBindingRow[],
+): IntakeBindingConflict[] {
+  const requested = new Set(labels?.map(normalizeIntakeLabel));
+  return rows.flatMap((row): IntakeBindingConflict[] => {
+    if (row.factory_project_id === factoryProjectId) return [];
+    const theirs = row.labels ?? null;
+    if (labels === null || theirs === null) {
+      return labels === null && theirs === null ? [{ factoryProjectId: row.factory_project_id, labels: null }] : [];
+    }
+    const overlap = theirs.filter(label => requested.has(normalizeIntakeLabel(label)));
+    return overlap.length > 0 ? [{ factoryProjectId: row.factory_project_id, labels: overlap }] : [];
+  });
+}
+
+/** Update one (source, Factory project) binding in place, keeping its age, or insert it. */
+async function upsertBinding(
+  ops: FactoryStorageOps,
+  key: { org_id: string; integration_id: string; source_id: string; factory_project_id: string },
+  patch: { board: string | null; labels: string[] | null },
+  userId: string | undefined,
+): Promise<void> {
+  const now = new Date();
+  const updated = await ops.updateMany('intake_source_subscriptions', key, { ...patch, updated_at: now });
+  if (updated > 0) return;
+  await ops.insertOne('intake_source_subscriptions', {
+    ...key,
+    ...patch,
+    created_by_user_id: userId ?? null,
+    created_at: now,
+    updated_at: now,
+  });
 }
 
 export class IntakeStorage extends FactoryStorageDomain {
@@ -200,9 +357,51 @@ export class IntakeStorage extends FactoryStorageDomain {
       INTAKE_ORG_SETTINGS_SCHEMA,
       LEGACY_INTAKE_USER_SETTINGS_SCHEMA,
       INTAKE_SOURCE_BINDINGS_SCHEMA,
+      INTAKE_SOURCE_SUBSCRIPTIONS_SCHEMA,
+      INTAKE_DATA_MIGRATIONS_SCHEMA,
       INTAKE_LABEL_ROUTES_SCHEMA,
     ]);
     await this.#foldLegacyUserSelections();
+    await this.#copyLegacyBindings();
+  }
+
+  /**
+   * Copy `intake_source_bindings` into `intake_source_subscriptions` as
+   * all-issues bindings, once. The migration marker stops a later boot from
+   * resurrecting bindings users removed after the copy. Concurrent boots both
+   * copy; the unique index keeps one row per binding.
+   */
+  async #copyLegacyBindings(): Promise<void> {
+    if (await this.ops.findOne('intake_data_migrations', { name: COPY_LEGACY_BINDINGS_MIGRATION })) return;
+    const legacyRows = await this.ops.findMany<IntakeSourceBindingRow & { updated_at: Date }>(
+      'intake_source_bindings',
+      {},
+    );
+    for (const row of legacyRows) {
+      try {
+        await this.ops.insertOne('intake_source_subscriptions', {
+          org_id: row.org_id,
+          integration_id: row.integration_id,
+          source_id: row.source_id,
+          factory_project_id: row.factory_project_id,
+          board: row.board ?? null,
+          labels: null,
+          created_by_user_id: row.created_by_user_id ?? null,
+          created_at: row.created_at,
+          updated_at: row.updated_at,
+        });
+      } catch (error) {
+        if (!(error instanceof UniqueViolationError)) throw error;
+      }
+    }
+    try {
+      await this.ops.insertOne('intake_data_migrations', {
+        name: COPY_LEGACY_BINDINGS_MIGRATION,
+        completed_at: new Date(),
+      });
+    } catch (error) {
+      if (!(error instanceof UniqueViolationError)) throw error;
+    }
   }
 
   async #foldLegacyUserSelections(): Promise<void> {
@@ -222,6 +421,8 @@ export class IntakeStorage extends FactoryStorageDomain {
     await this.ops.deleteMany('intake_org_settings', {});
     await this.ops.deleteMany('intake_settings', {});
     await this.ops.deleteMany('intake_source_bindings', {});
+    await this.ops.deleteMany('intake_source_subscriptions', {});
+    await this.ops.deleteMany('intake_data_migrations', {});
     await this.ops.deleteMany('intake_label_routes', {});
   }
 
@@ -275,7 +476,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     }
   }
 
-  /** Every source binding in the org, optionally narrowed to one integration. */
+  /** Every source binding in the org, optionally narrowed to one integration, oldest first. */
   async listBindings({
     orgId,
     integrationId,
@@ -283,11 +484,11 @@ export class IntakeStorage extends FactoryStorageDomain {
     orgId: string;
     integrationId?: string;
   }): Promise<IntakeSourceBinding[]> {
-    const rows = await this.#db.findMany<IntakeSourceBindingRow>('intake_source_bindings', {
+    const rows = await this.#db.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', {
       org_id: orgId,
       ...(integrationId ? { integration_id: integrationId } : {}),
     });
-    return rows.map(toIntakeSourceBinding);
+    return inPrecedenceOrder(rows.map(toIntakeSourceBinding));
   }
 
   /** Source ids bound to one Factory project. Empty means "nothing bound". */
@@ -300,7 +501,7 @@ export class IntakeStorage extends FactoryStorageDomain {
     integrationId: string;
     factoryProjectId: string;
   }): Promise<string[]> {
-    const rows = await this.#db.findMany<IntakeSourceBindingRow>('intake_source_bindings', {
+    const rows = await this.#db.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', {
       org_id: orgId,
       integration_id: integrationId,
       factory_project_id: factoryProjectId,
@@ -308,45 +509,68 @@ export class IntakeStorage extends FactoryStorageDomain {
     return rows.map(row => row.source_id);
   }
 
-  /** The binding for one source, or `null` when it is unbound. */
+  /**
+   * One Factory project's binding of a source, or `null` when it has none.
+   * Without `factoryProjectId`, the source's oldest binding — for integrations
+   * that keep one binding per source.
+   */
   async getBinding({
     orgId,
     integrationId,
     sourceId,
+    factoryProjectId,
   }: {
     orgId: string;
     integrationId: string;
     sourceId: string;
+    factoryProjectId?: string;
   }): Promise<IntakeSourceBinding | null> {
-    const row = await this.#db.findOne<IntakeSourceBindingRow>('intake_source_bindings', {
+    const rows = await this.#db.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', {
       org_id: orgId,
       integration_id: integrationId,
       source_id: sourceId,
+      ...(factoryProjectId ? { factory_project_id: factoryProjectId } : {}),
     });
-    return row ? toIntakeSourceBinding(row) : null;
+    return inPrecedenceOrder(rows.map(toIntakeSourceBinding))[0] ?? null;
   }
 
+  /**
+   * Remove one Factory project's binding of a source, or — without
+   * `factoryProjectId` — every binding of it. Returns the (oldest) removed
+   * binding, or `null` when there was none.
+   */
   async clearBinding({
     orgId,
     integrationId,
     sourceId,
+    factoryProjectId,
   }: {
     orgId: string;
     integrationId: string;
     sourceId: string;
+    factoryProjectId?: string;
   }): Promise<IntakeSourceBinding | null> {
-    const where = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
+    const where = {
+      org_id: orgId,
+      integration_id: integrationId,
+      source_id: sourceId,
+      ...(factoryProjectId ? { factory_project_id: factoryProjectId } : {}),
+    };
     return this.storage.withTransaction(
       async ops => {
-        const row = await ops.findOne<IntakeSourceBindingRow>('intake_source_bindings', where);
-        if (!row) return null;
-        await ops.deleteMany('intake_source_bindings', where);
-        return toIntakeSourceBinding(row);
+        const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', where);
+        if (rows.length === 0) return null;
+        await ops.deleteMany('intake_source_subscriptions', where);
+        return inPrecedenceOrder(rows.map(toIntakeSourceBinding))[0]!;
       },
       { isolationLevel: 'serializable' },
     );
   }
 
+  /**
+   * Bind a source to one Factory project, moving it away from any other: the
+   * source keeps a single binding, which takes all of its issues.
+   */
   async setBinding({
     orgId,
     integrationId,
@@ -362,25 +586,61 @@ export class IntakeStorage extends FactoryStorageDomain {
     board?: string | null;
     userId?: string;
   }): Promise<void> {
-    const where = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
-    const now = new Date();
-    const patch = { factory_project_id: factoryProjectId, board, updated_at: now };
-    const updated = await this.#db.updateMany('intake_source_bindings', where, patch);
-    if (updated > 0) return;
-    try {
-      await this.#db.insertOne('intake_source_bindings', {
-        ...where,
-        factory_project_id: factoryProjectId,
-        board,
-        created_by_user_id: userId ?? null,
-        created_at: now,
-        updated_at: now,
-      });
-    } catch (error) {
-      if (!(error instanceof UniqueViolationError)) throw error;
-      await this.#db.updateMany('intake_source_bindings', where, patch);
-    }
+    const source = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
+    await this.storage.withTransaction(
+      async ops => {
+        const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
+        for (const row of rows) {
+          if (row.factory_project_id === factoryProjectId) continue;
+          await ops.deleteMany('intake_source_subscriptions', {
+            ...source,
+            factory_project_id: row.factory_project_id,
+          });
+        }
+        await upsertBinding(ops, { ...source, factory_project_id: factoryProjectId }, { board, labels: null }, userId);
+      },
+      { isolationLevel: 'serializable' },
+    );
   }
+
+  /**
+   * Bind a source to one Factory project alongside other Factory projects'
+   * bindings of it, taking the issues carrying one of `labels` — or, with
+   * `labels: null`, every issue no label binding claims. Rejected with the
+   * overlapping bindings when another Factory project already takes some of
+   * those labels, or already takes all unclaimed issues.
+   */
+  async setSharedBinding({
+    orgId,
+    integrationId,
+    sourceId,
+    factoryProjectId,
+    board = null,
+    labels,
+    userId,
+  }: {
+    orgId: string;
+    integrationId: string;
+    sourceId: string;
+    factoryProjectId: string;
+    board?: string | null;
+    labels: string[] | null;
+    userId?: string;
+  }): Promise<{ conflicts: IntakeBindingConflict[] }> {
+    const source = { org_id: orgId, integration_id: integrationId, source_id: sourceId };
+    const kept = labels === null ? null : normalizeBindingLabels(labels);
+    return this.storage.withTransaction(
+      async ops => {
+        const rows = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', source);
+        const conflicts = bindingConflicts(factoryProjectId, kept, rows);
+        if (conflicts.length > 0) return { conflicts };
+        await upsertBinding(ops, { ...source, factory_project_id: factoryProjectId }, { board, labels: kept }, userId);
+        return { conflicts: [] };
+      },
+      { isolationLevel: 'serializable' },
+    );
+  }
+
   /** Atomically replace legacy provider source ids in both selection and routing state. */
   async migrateSourceIds({
     orgId,
@@ -394,55 +654,50 @@ export class IntakeStorage extends FactoryStorageDomain {
     if (migrations.length === 0) return { migrations: [], conflicts: [] };
     return this.storage.withTransaction(
       async ops => {
-        const bindings = await ops.findMany<IntakeSourceBindingRow>('intake_source_bindings', {
+        const bindings = await ops.findMany<IntakeSourceBindingRow>('intake_source_subscriptions', {
           org_id: orgId,
           integration_id: integrationId,
         });
-        const bindingBySource = new Map(bindings.map(binding => [binding.source_id, binding] as const));
+        const bindingsBySource = new Map<string, IntakeSourceBindingRow[]>();
+        for (const binding of bindings) {
+          bindingsBySource.set(binding.source_id, [...(bindingsBySource.get(binding.source_id) ?? []), binding]);
+        }
+        // Where a source's issues land: every Factory project, board and label slice bound to it.
+        const destination = (rows: IntakeSourceBindingRow[]) =>
+          rows
+            .map(row => `${row.factory_project_id}\0${row.board ?? ''}\0${JSON.stringify(row.labels ?? null)}`)
+            .sort()
+            .join('\n');
         const grouped = new Map<string, Array<{ from: string; to: string }>>();
         for (const migration of migrations) {
           grouped.set(migration.to, [...(grouped.get(migration.to) ?? []), migration]);
         }
         const conflicts: Array<{ from: string; to: string }> = [];
         for (const [to, group] of grouped) {
-          const candidates = [bindingBySource.get(to), ...group.map(({ from }) => bindingBySource.get(from))].filter(
-            (binding): binding is IntakeSourceBindingRow => binding !== undefined,
+          const candidates = [bindingsBySource.get(to), ...group.map(({ from }) => bindingsBySource.get(from))].filter(
+            (rows): rows is IntakeSourceBindingRow[] => rows !== undefined,
           );
-          const destinations = new Set(
-            candidates.map(binding => `${binding.factory_project_id}\0${binding.board ?? ''}`),
-          );
-          if (destinations.size > 1) conflicts.push(...group);
+          if (new Set(candidates.map(destination)).size > 1) conflicts.push(...group);
         }
         if (conflicts.length > 0) return { migrations: [], conflicts };
 
         const now = new Date();
         for (const [to, group] of grouped) {
-          const canonical = bindingBySource.get(to);
-          const legacy = group.flatMap(({ from }) => {
-            const binding = bindingBySource.get(from);
-            return binding ? [{ from, binding }] : [];
-          });
-          if (!canonical && legacy.length > 0) {
+          const legacy = group.filter(({ from }) => bindingsBySource.has(from));
+          const scope = { org_id: orgId, integration_id: integrationId };
+          if (!bindingsBySource.has(to) && legacy.length > 0) {
             const [first, ...duplicates] = legacy;
             await ops.updateMany(
-              'intake_source_bindings',
-              { org_id: orgId, integration_id: integrationId, source_id: first!.from },
+              'intake_source_subscriptions',
+              { ...scope, source_id: first!.from },
               { source_id: to, updated_at: now },
             );
             for (const duplicate of duplicates) {
-              await ops.deleteMany('intake_source_bindings', {
-                org_id: orgId,
-                integration_id: integrationId,
-                source_id: duplicate.from,
-              });
+              await ops.deleteMany('intake_source_subscriptions', { ...scope, source_id: duplicate.from });
             }
-          } else if (canonical) {
+          } else {
             for (const entry of legacy) {
-              await ops.deleteMany('intake_source_bindings', {
-                org_id: orgId,
-                integration_id: integrationId,
-                source_id: entry.from,
-              });
+              await ops.deleteMany('intake_source_subscriptions', { ...scope, source_id: entry.from });
             }
           }
         }

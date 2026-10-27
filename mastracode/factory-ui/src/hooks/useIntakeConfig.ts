@@ -3,6 +3,7 @@ import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
 import {
+  deleteIntakeBinding,
   fetchIntakeBindings,
   fetchIntakeConfig,
   fetchIntakeLabelRoutes,
@@ -63,7 +64,23 @@ export function useSaveIntakeBindingMutation() {
       sourceId: string;
       factoryProjectId: string | null;
       board?: string | null;
+      labels?: string[] | null;
     }) => saveIntakeBinding(baseUrl, binding),
+    onSuccess: bindings => {
+      queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
+      void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });
+      void queryClient.invalidateQueries({ queryKey: queryKeys.jiraIssuesAll() });
+    },
+  });
+}
+
+/** Remove one factory's binding of a source; other factories sharing the source keep theirs. */
+export function useDeleteIntakeBindingMutation() {
+  const { baseUrl } = useApiConfig();
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (binding: { integrationId: string; sourceId: string; factoryProjectId: string }) =>
+      deleteIntakeBinding(baseUrl, binding),
     onSuccess: bindings => {
       queryClient.setQueryData(queryKeys.intakeBindings(), bindings);
       void queryClient.invalidateQueries({ queryKey: queryKeys.linearIssuesAll() });

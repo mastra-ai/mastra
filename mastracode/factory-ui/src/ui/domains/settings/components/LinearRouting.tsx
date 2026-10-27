@@ -163,7 +163,7 @@ export function LinearRouting({
   );
 }
 
-function BoardPicker({
+export function BoardPicker({
   name,
   factoryProjectId,
   board,

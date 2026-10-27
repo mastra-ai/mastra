@@ -33,6 +33,7 @@ import type { FactoryProject, GithubStatus } from '../../workspaces/services/git
 import { SourcePicker } from './IntakeSourcePicker';
 import type { SourcePickerGroup } from './IntakeSourcePicker';
 import { GithubLabelRouting } from './GithubLabelRouting';
+import { JiraRouting } from './JiraRouting';
 import { IntakeSourceRouting, LinearRouting } from './LinearRouting';
 
 import { SettingsSubsection } from './SettingsSubsection';
@@ -783,12 +784,10 @@ export function IntakeSection() {
         <SettingsSubsection
           scope="org"
           title="Jira routing"
-          description="Each selected project feeds one factory. Until a project is routed, its issues are not picked up."
+          description="A selected project can feed several factories, each taking all issues or only issues with its labels. Until a project is routed, its issues are not picked up."
         >
           <SettingsContainer>
-            <IntakeSourceRouting
-              integrationId="jira"
-              label="Jira"
+            <JiraRouting
               sourceIds={jiraSourceIds}
               sources={jiraProjects.map(project => ({ id: project.id, name: `${project.key} · ${project.name}` }))}
               factories={factoriesQuery.data ?? []}
