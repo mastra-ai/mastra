@@ -1,8 +1,8 @@
 // @vitest-environment jsdom
 import type { QuerySpansResult } from '@mastra/client-js';
-import { fireEvent, screen } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, describe, expect, it, vi } from 'vitest';
+import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   emptyEntityNames,
   emptyEnvironments,
@@ -14,6 +14,8 @@ import {
 import type { SpanSelection } from '../span-detail-panel';
 import { SpansExplorerBody } from '../spans-explorer-body';
 import type { SpansExplorerPanelArgs } from '../spans-explorer-body';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -38,11 +40,31 @@ const renderBody = (selection?: SpanSelection) => {
   return { onSelectionChange, renderPanel };
 };
 
+/** The spans body next to a readout of the traces page's saved columns, which live under their own key. */
+function BodyWithTracesColumns() {
+  const traces = useTraceColumnPreferences();
+  return (
+    <>
+      <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />
+      <output data-testid="traces-columns">{traces.preferences.visibleColumns.join(',')}</output>
+    </>
+  );
+}
+
+const openColumnsMenu = async () => {
+  const button = await screen.findByRole<HTMLButtonElement>('button', { name: 'Columns' });
+  await waitFor(() => expect(button.disabled).toBe(false));
+  fireEvent.click(button);
+};
+
 describe('SpansExplorerBody', () => {
   useFixedChartSize(1200, 800);
   // Base UI ScrollArea calls getAnimations once a ResizeObserver exists; jsdom has no Web Animations API.
   beforeAll(() => {
     Element.prototype.getAnimations ??= () => [];
+  });
+  beforeEach(() => {
+    window.localStorage.clear();
   });
 
   describe('when the store returns span rows', () => {
@@ -112,6 +134,61 @@ describe('SpansExplorerBody', () => {
       renderBody();
 
       expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
+    });
+  });
+
+  describe('when the user opens the Columns menu', () => {
+    it('offers the span columns, Model and Provider included', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await openColumnsMenu();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Model' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Provider' })).toBeTruthy();
+      expect(screen.getByRole('menuitemcheckbox', { name: 'Thread ID' })).toBeTruthy();
+    });
+
+    it('offers neither usage nor metadata columns', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await openColumnsMenu();
+      await screen.findByRole('menuitemcheckbox', { name: 'Model' });
+
+      expect(screen.queryByText('Usage columns')).toBeNull();
+      expect(screen.queryByText('Metadata columns')).toBeNull();
+    });
+  });
+
+  describe('when the user turns on the Model and Provider columns', () => {
+    it("shows each span's model and provider in the list", async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      await openColumnsMenu();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Model' }));
+      fireEvent.click(screen.getByRole('menuitemcheckbox', { name: 'Provider' }));
+
+      expect(await screen.findByText('gpt-5.6')).toBeTruthy();
+      expect(screen.getByText('openai')).toBeTruthy();
+    });
+
+    it('keeps the choice for the next visit, without touching the traces columns', async () => {
+      setHandlers(spanRowsPage);
+
+      const { unmount } = renderWithProviders(<BodyWithTracesColumns />);
+      await openColumnsMenu();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Model' }));
+      await screen.findByText('gpt-5.6');
+      unmount();
+
+      renderWithProviders(<BodyWithTracesColumns />);
+
+      expect(await screen.findByText('gpt-5.6')).toBeTruthy();
+      expect(screen.getByTestId('traces-columns').textContent).toBe(
+        DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.join(','),
+      );
     });
   });
 });
