@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 
-import { reviewVerdict, selfReviewVerdict } from './WorkItemCardRows';
+import { reviewVerdict, selfReviewVerdict } from './reviewVerdict';
 
 describe('reviewVerdict', () => {
   it('labels a recorded verdict without the reviewed commit', () => {
