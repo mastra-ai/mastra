@@ -33,6 +33,74 @@ const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Pr
   ],
 ];
 
+describe('nested workflow finish publication failure', () => {
+  it('does not advance the parent twice when a finish frame hits the publisher cap', async () => {
+    const pubsub = new EventEmitterPubSub();
+    let rejected = false;
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event, options) => {
+      if (topic === 'workflows-finish' && event.type === 'workflow.end' && !rejected) {
+        rejected = true;
+        throw new Error('UnixSocketPubSub publisher queue limit exceeded');
+      }
+      return publish(topic, event, options);
+    };
+    let parentAdvances = 0;
+    const child = createWorkflow({
+      id: 'child-cap',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(
+        createStep({
+          id: 'child-work',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async () => ({ ok: true }),
+        }),
+      )
+      .commit();
+    const parent = createWorkflow({
+      id: 'parent-cap',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(child)
+      .then(
+        createStep({
+          id: 'parent-work',
+          inputSchema: z.object({ ok: z.boolean() }),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async ({ inputData }) => {
+            parentAdvances++;
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({
+      workflows: { [parent.id]: parent, [child.id]: child },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await parent.createRun();
+      const result = await Promise.race([
+        run.start({ inputData: {} }),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      expect(rejected).toBe(true);
+      expect(result).not.toBe('HANG');
+      expect(result).toMatchObject({ status: 'success', result: { ok: true } });
+      expect(parentAdvances).toBe(1);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+});
+
 describe.each(transports)(
   'evented workflow: workflow.fail publish fails after retry exhaustion (%s)',
   (_name, makeTransport) => {
