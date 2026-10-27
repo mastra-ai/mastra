@@ -317,6 +317,13 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
       'Answers input requests from this server. When a tool, resource or prompt call ends as `input_required`, the handler is called with each embedded request and the client retries the call with the answers. Without a handler an `input_required` result surfaces as an error. See Answering input requests below.',
   },
   {
+    name: 'tasks',
+    type: 'boolean | MCPClientTasksOptions',
+    isOptional: true,
+    description:
+      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
+  },
+  {
     name: 'authProvider',
     type: 'OAuthClientProvider',
     isOptional: true,
@@ -1434,6 +1441,51 @@ for await (const event of subscription) {
   if (subscription.cursor) await saveCursor(subscription.cursor)
 }
 ```
+
+### `tasks` Property (experimental)
+
+Some tools take longer than one HTTP request can stay open. A server that implements the [MCP Tasks extension (SEP-2663)](https://modelcontextprotocol.github.io/ext-tasks/specification/2026-07-28/tasks.html) can answer such a call with a task, and the client fetches the result later. Set `tasks` on a server to accept them:
+
+```typescript
+const mcpClient = new MCPClient({
+  servers: {
+    reports: {
+      url: new URL('https://reports.example.com/mcp'),
+      tasks: { maxWaitMs: 30 * 60_000 },
+      inputRequests: async ({ params }) => askUser(params),
+    },
+  },
+})
+```
+
+:::warning
+This API may change in any release.
+:::
+
+With `tasks` set, the client tells the server it accepts tasks. The server decides per call whether to answer directly or with a task. Without `tasks`, the client never receives one and tool calls behave as before.
+
+When a tool call returns a task, the tool keeps its usual shape:
+
+- The client polls the task at the interval the server suggests until it finishes, then returns the tool result.
+- A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task; it never sends `tools/call` again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
+- Aborting the tool call sends `tasks/cancel`. Reaching `maxWaitMs` sends it too, and fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`.
+- If the server can't be reached while the client polls, for example during a restart or deploy, the client reconnects and keeps polling with growing delays of up to 30 seconds. Refused connections and HTTP 502, 503, and 504 from a proxy count as unreachable. After 5 minutes without an answer, or when `maxWaitMs` or the task's TTL ends first, the call fails with `MCP_CLIENT_TOOL_TASK_POLL_FAILED`; the task may still finish on the server.
+- A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
+- A call that returned a task is never retried, because a retry would start a second task.
+
+On an agent with [background tasks](/docs/harness/background-tasks) enabled, tools from a server with `tasks` set run as deferred background tasks with no retries. The agent keeps working while the remote task runs, and cancelling the background task cancels the remote task. Override this per tool with the agent's `backgroundTasks.tools`.
+
+#### `tasks.get(serverName: string, taskId: string)`
+
+Returns the task's current state (`MCPDetailedTask`), including `result` once it's `completed` and `inputRequests` while it's `input_required`. Fails with `MCP_CLIENT_GET_TASK_FAILED`; an unknown task, or one created by another caller, has `error.cause.code` `-32602`.
+
+#### `tasks.update(serverName: string, taskId: string, inputResponses: MCPTaskInputResponses)`
+
+Answers the `inputRequests` of an `input_required` task, keyed like the requests. The server ignores keys it didn't ask for or that are already answered. Fails with `MCP_CLIENT_UPDATE_TASK_FAILED`.
+
+#### `tasks.cancel(serverName: string, taskId: string)`
+
+Asks the server to stop the task. The server may still finish it. Fails with `MCP_CLIENT_CANCEL_TASK_FAILED`.
 
 ## Answering input requests
 
