@@ -21,7 +21,7 @@ import type {
   ScoreRecord,
   SpanRecord,
 } from '@mastra/core/storage';
-import { computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
 import { toPgText } from '../../../db/sanitize-json';
 import { storedPreview as buildStoredPreview, readPreview } from './preview-compat';
 import { coerceFeedbackReviewStatus } from './review-status';
@@ -311,6 +311,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = spanRowEndedAt(row, startedAt);
   const error = parsedJson(row.error);
+  const attributes = parsedJson(row.attributes) as Record<string, unknown> | null;
   // Spans expose the row's `executionSource` column as `source` on the record.
   const { executionSource, ...ctx } = rowToCommonContext(row);
   return {
@@ -326,14 +327,14 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     endedAt,
     externalParentSpanId: nullableString(row.externalParentSpanId),
     resumedFromSpanId: nullableString(row.resumedFromSpanId),
-    model: nullableString(row.model),
-    provider: nullableString(row.provider),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
     outcome: nullableString(row.outcome),
     stopReason: nullableString(row.stopReason),
     tags: normalizeTags(row.tags),
     metadata: (parsedJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parsedJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parsedJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parsedJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parsedJson(row.input) ?? undefined,
     output: parsedJson(row.output) ?? undefined,

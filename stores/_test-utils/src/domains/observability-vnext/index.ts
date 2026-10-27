@@ -2559,7 +2559,7 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         }
       });
 
-      it('keeps the values written at start when the ended write adds the outcome', async () => {
+      it('adds the outcome on the ended write, which re-sends the fields written at start', async () => {
         const started = { model: 'gpt-6.1-sol', provider: 'openai' };
         await storage.createSpan({
           span: makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', endedAt: null, ...started }),
@@ -2573,6 +2573,29 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         expect(span).toMatchObject({ ...started, outcome: 'success' });
         expect(span.stopReason ?? null).toBeNull();
       });
+
+      if (capabilities.traceQuery) {
+        it('reads model and provider from attributes when the columns are empty', async () => {
+          // Rows written before the columns existed are never backfilled, so a
+          // span read must agree with the trace and span queries, which read
+          // the model-call attributes.
+          await storage.batchCreateSpans({
+            records: [
+              makeSpan({
+                traceId: 'native-fields',
+                spanId: 'legacy',
+                spanType: SpanType.MODEL_GENERATION,
+                attributes: { model: 'gpt-6.1-sol', provider: 'openai', outcome: 'ignored' },
+              }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          const span = await readSpan('legacy');
+          expect(span).toMatchObject({ model: 'gpt-6.1-sol', provider: 'openai' });
+          expect(span.outcome ?? null).toBeNull();
+        });
+      }
     });
 
     describe('getStructure / getTraceLight', () => {

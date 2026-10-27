@@ -1623,14 +1623,13 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   externalParentSpanId?: string;
   /**
    * Native span fields, stored in their own columns alongside `externalParentSpanId`.
-   * Producers set them where known; an unset field is stored as null and never
-   * derived from other span data.
+   * An unset field is stored as null.
    */
   /** Span id of the initial invocation a resumed execution continues (unset on the initial execution) */
   resumedFromSpanId?: string;
-  /** Model identity for this span, where applicable */
+  /** Model identity for this span, filled at export from the model-call attributes; the live span does not carry it */
   model?: string;
-  /** Provider paired with `model` */
+  /** Provider paired with `model`, filled the same way */
   provider?: string;
   /** How this execution ended, in the shared outcome contract; unset while it is still running */
   outcome?: string;
@@ -1959,8 +1958,6 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   externalParentSpanId?: string;
   /** Native span fields to carry on the span; see {@link SpanData}. Restored by `rebuildSpan()`. */
   resumedFromSpanId?: string;
-  model?: string;
-  provider?: string;
   outcome?: string;
   stopReason?: string;
   /**

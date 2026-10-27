@@ -241,29 +241,31 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
   };
 }
 
-const NATIVE_SPAN_FIELDS = [
+/** Columns an update sets only when the span has a value, so an earlier write is never cleared. */
+const SUPPLIED_SPAN_COLUMNS = [
   'externalParentSpanId',
   'resumedFromSpanId',
   'model',
   'provider',
   'outcome',
   'stopReason',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
+  'timeToFirstChunkMs',
 ] as const;
 
-/** Native span fields the span carries. Unset ones stay off an update so an earlier write is never cleared. */
-function suppliedNativeSpanFields(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
-  const fields: Partial<UpdateSpanRecord> = {};
-  for (const field of NATIVE_SPAN_FIELDS) {
-    if (span[field] !== undefined) fields[field] = span[field];
-  }
-  return fields;
+function suppliedSpanColumns(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
+  const source = { ...span, timeToFirstChunkMs: getTimeToFirstChunkMs(span) };
+  return Object.fromEntries(
+    SUPPLIED_SPAN_COLUMNS.filter(column => source[column] !== undefined).map(column => [column, source[column]]),
+  ) as Partial<UpdateSpanRecord>;
 }
 
 /** Convert an exported span to a partial UpdateSpanRecord */
 export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
-  const timeToFirstChunkMs = getTimeToFirstChunkMs(span);
   return {
-    ...suppliedNativeSpanFields(span),
+    ...suppliedSpanColumns(span),
     name: span.name,
     scope: null,
     attributes: serializeSpanAttributes(span),
@@ -271,13 +273,8 @@ export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpan
     links: span.links ?? null,
     endedAt: span.endTime ?? null,
     input: span.input,
-    inputPreview: span.inputPreview,
-    outputPreview: span.outputPreview,
-    errorPreview: span.errorPreview,
     output: span.output,
     error: span.errorInfo ?? null,
-    // Set only once the first chunk arrived, so an earlier update never clears it.
-    ...(timeToFirstChunkMs !== undefined && { timeToFirstChunkMs }),
   };
 }
 

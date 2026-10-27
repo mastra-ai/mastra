@@ -597,8 +597,6 @@ describe('Span', () => {
       const instance = tracing();
       const fields = {
         resumedFromSpanId: 'a1b2c3d4e5f60718',
-        model: 'gpt-6.1-sol',
-        provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
       };

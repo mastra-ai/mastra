@@ -22,6 +22,7 @@ import type {
 import {
   BRANCH_SPAN_TYPES,
   computeTraceStatus,
+  getStringAttribute,
   listBranchesArgsSchema,
   listTracesArgsSchema,
   toTraceSpans,
@@ -415,6 +416,7 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
 }
 
 function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
+  const attributes = parseJson(row.attributes) as Record<string, unknown> | null;
   return {
     traceId: row.traceId as string,
     spanId: row.spanId as string,
@@ -426,8 +428,8 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     endedAt: rowEndedAt(row),
     externalParentSpanId: (row.externalParentSpanId as string) ?? null,
     resumedFromSpanId: (row.resumedFromSpanId as string) ?? null,
-    model: (row.model as string) ?? null,
-    provider: (row.provider as string) ?? null,
+    model: (row.model as string) ?? getStringAttribute(attributes, 'model'),
+    provider: (row.provider as string) ?? getStringAttribute(attributes, 'provider'),
     outcome: (row.outcome as string) ?? null,
     stopReason: (row.stopReason as string) ?? null,
     experimentId: (row.experimentId as string) ?? null,
@@ -453,7 +455,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     environment: (row.environment as string) ?? null,
     source: (row.source as string) ?? null,
     serviceName: (row.serviceName as string) ?? null,
-    attributes: parseJson(row.attributes) as Record<string, unknown> | null,
+    attributes,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
     tags: parseJsonArray(row.tags) as string[] | null,
     scope: parseJson(row.scope) as Record<string, unknown> | null,
@@ -797,9 +799,13 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
-/** Native span field columns, stored as supplied on both event rows (NULL when unset). */
-function nativeSpanFieldColumns(s: CreateSpanArgs['span']) {
+/**
+ * Columns copied as supplied onto both event rows (NULL when unset). Previews
+ * stay out: the start row derives them from the payload it keeps.
+ */
+function copiedSpanColumns(s: CreateSpanArgs['span']) {
   return {
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     externalParentSpanId: s.externalParentSpanId ?? null,
     resumedFromSpanId: s.resumedFromSpanId ?? null,
     model: s.model ?? null,
@@ -826,8 +832,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
-    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
-    ...nativeSpanFieldColumns(s),
+    ...copiedSpanColumns(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -883,8 +888,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
-    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
-    ...nativeSpanFieldColumns(s),
+    ...copiedSpanColumns(s),
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,

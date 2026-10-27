@@ -19,7 +19,7 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
 import { storedPreview as buildStoredPreview } from './preview-compat';
 import { resolveStoredPreviews } from './previews';
 import { coerceFeedbackReviewStatus } from './review-status';
@@ -153,6 +153,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
   const error = parseJson(row.error);
+  const attributes = parseJson(row.attributes) as Record<string, unknown> | null;
 
   return {
     traceId: row.traceId,
@@ -189,7 +190,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     tags: normalizeTags(row.tags),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parseJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parseJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parseJson(row.input) ?? undefined,
     output: parseJson(row.output) ?? undefined,
@@ -197,8 +198,8 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     requestContext: (parseJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
     externalParentSpanId: nullableString(row.externalParentSpanId),
     resumedFromSpanId: nullableString(row.resumedFromSpanId),
-    model: nullableString(row.model),
-    provider: nullableString(row.provider),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
     outcome: nullableString(row.outcome),
     stopReason: nullableString(row.stopReason),
     createdAt: startedAt,

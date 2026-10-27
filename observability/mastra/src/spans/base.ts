@@ -225,8 +225,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public externalParentSpanId?: string;
   /** Native span fields (see `SpanData`); carried as supplied and exported only when set */
   public resumedFromSpanId?: string;
-  public model?: string;
-  public provider?: string;
   public outcome?: string;
   public stopReason?: string;
   /** Deep clean options for serialization */
@@ -323,8 +321,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
     this.resumedFromSpanId = options.resumedFromSpanId;
-    this.model = options.model;
-    this.provider = options.provider;
     this.outcome = options.outcome;
     this.stopReason = options.stopReason;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
@@ -714,8 +710,6 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
       ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
-      ...(this.model !== undefined ? { model: this.model } : {}),
-      ...(this.provider !== undefined ? { provider: this.provider } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),

@@ -354,8 +354,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       parentSpanId: cached.parentSpanId,
       externalParentSpanId: cached.externalParentSpanId,
       resumedFromSpanId: cached.resumedFromSpanId,
-      model: cached.model,
-      provider: cached.provider,
       outcome: cached.outcome,
       stopReason: cached.stopReason,
       links: cached.links,

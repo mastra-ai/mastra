@@ -218,6 +218,17 @@ export function computeTraceStatus(span: { error?: unknown; endedAt?: Date | str
   return TraceStatus.SUCCESS;
 }
 
+/**
+ * A string attribute of a span, or null when unset or not a string.
+ * Model-call spans keep `model` and `provider` in `attributes`; the native
+ * columns of the same name fall back to it for rows written before the
+ * columns existed, since those rows are never backfilled.
+ */
+export function getStringAttribute(attributes: unknown, key: string): string | null {
+  const value = (attributes as Record<string, unknown> | null | undefined)?.[key];
+  return typeof value === 'string' ? value : null;
+}
+
 /** Schema for a trace span (root span with computed status) */
 export const traceSpanSchema = spanRecordSchema
   .extend({

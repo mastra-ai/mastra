@@ -78,7 +78,6 @@ import {
   TABLE_TRACE_ROOTS_DELTA,
   TRACE_BRANCHES_MV_DDL,
   TRACE_ROOTS_MV_DDL,
-  NATIVE_SPAN_FIELD_COLUMNS,
 } from './ddl';
 import { feedbackRecordToRow, scoreRecordToRow, spanRecordToRow } from './helpers';
 import { isReplacingMergeTreeEngine } from './migration';
@@ -6457,7 +6456,6 @@ LIMIT 1`,
         password: process.env.CLICKHOUSE_PASSWORD || 'password',
       });
       const spanTables = [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES];
-      const columns = NATIVE_SPAN_FIELD_COLUMNS.map(([column]) => column);
       const fields = {
         externalParentSpanId: 'b7ad6b7169203331',
         resumedFromSpanId: 'initial-run',
@@ -6466,6 +6464,7 @@ LIMIT 1`,
         outcome: 'success',
         stopReason: 'max_steps',
       };
+      const columns = Object.keys(fields);
       const startedAt = new Date('2026-01-01T00:00:00Z');
       const span = (traceId: string) => ({
         traceId,
