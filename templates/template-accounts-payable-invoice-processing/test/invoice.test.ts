@@ -89,6 +89,37 @@ const normalized = normalizeInvoice({
 });
 
 describe('invoice validation and money', () => {
+  // PR #28532, CodeRabbit 4383787363: credits and offsets must not bypass invoice approval limits.
+  it('rejects reconciled negative invoices and mixed-sign offsets before policy routing', () => {
+    const negative = {
+      ...invoice,
+      subtotal: -100,
+      tax: -8,
+      total: -108,
+      lines: [{ ...invoice.lines[0]!, unitPrice: -10, lineTotal: -100 }],
+    };
+    const mixed = {
+      ...invoice,
+      subtotal: 90,
+      tax: 0,
+      total: 90,
+      lines: [
+        { ...invoice.lines[0]!, qty: 1, unitPrice: 100, lineTotal: 100 },
+        { ...invoice.lines[0]!, qty: 1, unitPrice: -10, lineTotal: -10 },
+      ],
+    };
+    for (const invalid of [
+      negative,
+      mixed,
+      { ...invoice, subtotal: 0, tax: 0, total: 0, lines: [{ ...invoice.lines[0]!, qty: 0, lineTotal: 0 }] },
+      { ...invoice, lines: [{ ...invoice.lines[0]!, qty: -10, unitPrice: -10 }] },
+    ]) {
+      assert.equal(ExtractedInvoiceSchema.safeParse(invalid).success, false);
+      assert.equal(validateExtraction(invalid).extracted, null);
+    }
+    assert.equal(ExtractedInvoiceSchema.safeParse(invoice).success, true);
+  });
+
   // PR #28532, CodeRabbit 4383787296: schema-first validation still allows structured extraction review.
   it('enforces reconciliation and currency precision in the extracted-invoice schema', () => {
     for (const invalid of [{ total: 108.001 }, { subtotal: 99 }, { tax: 7 }])

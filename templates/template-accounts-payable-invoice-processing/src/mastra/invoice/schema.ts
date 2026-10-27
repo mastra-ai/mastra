@@ -30,9 +30,9 @@ const reconciles = (parts: Array<number | Decimal>, total: number, digits: numbe
 const LineItemSchema = z.object({
   sku: z.string().nullable(),
   description: RequiredTextSchema,
-  qty: z.number().finite(),
-  unitPrice: z.number().finite(),
-  lineTotal: z.number().finite().nullable(),
+  qty: z.number().finite().positive(),
+  unitPrice: z.number().finite().nonnegative(),
+  lineTotal: z.number().finite().nonnegative().nullable(),
 });
 const FieldConfidenceSchema = z.object({
   field: z.string(),
@@ -46,9 +46,9 @@ export const ExtractedInvoiceSchema = z
     poNumber: z.string().nullable(),
     invoiceDate: InvoiceDateSchema,
     currency: CurrencySchema,
-    subtotal: z.number().finite().nullable(),
-    tax: z.number().finite().nullable(),
-    total: z.number().finite(),
+    subtotal: z.number().finite().nonnegative().nullable(),
+    tax: z.number().finite().nonnegative().nullable(),
+    total: z.number().finite().nonnegative(),
     lines: z.array(LineItemSchema),
     confidence: z.array(FieldConfidenceSchema),
     overallConfidence: z.number().min(0).max(1),
@@ -123,7 +123,7 @@ const DocumentRefSchema = z.object({
   source: z.enum(['PDF', 'image']).default('PDF'),
 });
 
-const MoneySchema = z.number().int().safe();
+const MoneySchema = z.number().int().safe().nonnegative();
 export const DecisionReasonSchema = z.object({
   code: z.string(),
   message: z.string(),
@@ -139,7 +139,7 @@ export type StepDecision = z.infer<typeof StepDecisionSchema>;
 const NormalizedLineSchema = z.object({
   sku: z.string().nullable(),
   description: z.string(),
-  qty: z.number(),
+  qty: z.number().positive(),
   unitPriceMinor: MoneySchema,
   lineTotalMinor: MoneySchema.nullable(),
 });
@@ -170,7 +170,7 @@ export type VendorRecord = z.infer<typeof VendorRecordSchema>;
 const PurchaseOrderLineSchema = z.object({
   sku: z.string().nullable(),
   description: z.string().nullable().optional(),
-  qty: z.number(),
+  qty: z.number().positive(),
   unitPriceMinor: MoneySchema,
   lineTotalMinor: MoneySchema,
 });
