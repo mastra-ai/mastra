@@ -15,16 +15,19 @@ interface HoveredSlot {
   width: number;
 }
 
-function chartLabel({ slots, hoursPerSlot }: Activity, runs: RunsState) {
-  const byWhen = new Map<string, ActivityCounts>();
+function chartLabel({ slots, hoursPerSlot }: Activity, status: RunsState['status']) {
+  const byWhen = new Map<string, { counts: ActivityCounts; complete: boolean }>();
   for (const slot of slots) {
     const { day, hours } = slotWhen(slot, hoursPerSlot);
     const when = hoursPerSlot === 1 && hours ? hours : day;
-    const counts = byWhen.get(when) ?? { cameIn: 0, ran: 0, shipped: 0 };
-    for (const kind of ACTIVITY_KIND_ORDER) counts[kind] += slot.counts[kind];
-    byWhen.set(when, counts);
+    const group = byWhen.get(when) ?? { counts: { cameIn: 0, ran: 0, shipped: 0 }, complete: true };
+    for (const kind of ACTIVITY_KIND_ORDER) group.counts[kind] += slot.counts[kind];
+    group.complete = group.complete && slot.ranComplete;
+    byWhen.set(when, group);
   }
-  return [...byWhen].map(([when, counts]) => `${when}: ${countsLabel(counts, runs)}`).join('; ');
+  return [...byWhen]
+    .map(([when, { counts, complete }]) => `${when}: ${countsLabel(counts, { status, complete })}`)
+    .join('; ');
 }
 
 export function ActivityChart({
@@ -60,7 +63,7 @@ export function ActivityChart({
                 </Txt>
               </div>
             ) : (
-              <div role="img" aria-label={chartLabel(activity, runs)}>
+              <div role="img" aria-label={chartLabel(activity, runs.status)}>
                 <ActivityField
                   slots={activity.slots}
                   loading={runs.status === 'pending'}
@@ -77,7 +80,7 @@ export function ActivityChart({
         <ActivitySlotCard
           slot={hoveredSlot}
           hoursPerSlot={activity.hoursPerSlot}
-          runs={runs.status}
+          runs={{ status: runs.status, complete: hoveredSlot.ranComplete }}
           x={hovered.x}
           containerWidth={hovered.width}
         />

@@ -18,12 +18,19 @@ export interface ActivitySlot {
   start: number;
   end: number;
   counts: ActivityCounts;
+  ranComplete: boolean;
 }
 
 export interface Activity {
   hoursPerSlot: number;
   slots: ActivitySlot[];
   totals: ActivityCounts;
+  ranComplete: boolean;
+}
+
+export interface RunStarts {
+  starts: readonly number[];
+  completeAfter: number;
 }
 
 const HOUR_MS = 60 * 60 * 1000;
@@ -48,12 +55,18 @@ function localHour(day: Date, daysLater: number, hour: number): number {
   return new Date(day.getFullYear(), day.getMonth(), day.getDate() + daysLater, hour).getTime();
 }
 
-function activitySlots(period: ActivityPeriod, now: number): ActivitySlot[] {
+function activitySlots(period: ActivityPeriod, now: number, runsCompleteAfter: number): ActivitySlot[] {
   const from = activityStart(period, now);
   const slots: ActivitySlot[] = [];
+  const slot = (start: number, end: number): ActivitySlot => ({
+    start,
+    end,
+    counts: noCounts(),
+    ranComplete: Math.max(start, from) > runsCompleteAfter,
+  });
   if (period === 'today') {
     for (let start = from; start <= now; start += HOUR_MS) {
-      slots.push({ start, end: start + HOUR_MS, counts: noCounts() });
+      slots.push(slot(start, start + HOUR_MS));
     }
     return slots;
   }
@@ -64,7 +77,7 @@ function activitySlots(period: ActivityPeriod, now: number): ActivitySlot[] {
       const start = localHour(firstDay, day, hour);
       if (start > now) return slots;
       const end = localHour(firstDay, day, hour + hoursPerSlot);
-      if (end > from) slots.push({ start, end, counts: noCounts() });
+      if (end > from) slots.push(slot(start, end));
     }
   }
 }
@@ -78,14 +91,14 @@ export function periodActivity({
   period: ActivityPeriod;
   now: number;
   cards: readonly WorkItem[];
-  runStarts: readonly number[];
+  runStarts: RunStarts;
 }): Activity {
   const from = activityStart(period, now);
-  const slots = activitySlots(period, now);
+  const slots = activitySlots(period, now, runStarts.completeAfter);
   const totals = noCounts();
   const times: Record<ActivityKind, ReadonlyArray<number | undefined>> = {
     cameIn: cards.map(card => Date.parse(card.createdAt)),
-    ran: runStarts,
+    ran: runStarts.starts,
     shipped: cards.map(doneAt),
   };
   for (const kind of ACTIVITY_KIND_ORDER) {
@@ -97,7 +110,12 @@ export function periodActivity({
       totals[kind] += 1;
     }
   }
-  return { hoursPerSlot: HOURS_PER_SLOT[period], slots, totals };
+  return {
+    hoursPerSlot: HOURS_PER_SLOT[period],
+    slots,
+    totals,
+    ranComplete: from > runStarts.completeAfter,
+  };
 }
 
 export function liveSessionCounts(

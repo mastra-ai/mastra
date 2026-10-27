@@ -3,15 +3,10 @@ import { useQuery } from '@tanstack/react-query';
 import { useApiConfig } from '../../../../api/config';
 import { queryKeys } from '../../../../api/keys';
 import { activityStart } from '../periodActivity';
-import type { ActivityPeriod } from '../periodActivity';
+import type { ActivityPeriod, RunStarts } from '../periodActivity';
 import { fetchAuditEvents, MAX_AUDIT_PAGE_SIZE } from '../services/audit';
 
 const MAX_PAGES = 20;
-
-interface RunStarts {
-  starts: number[];
-  complete: boolean;
-}
 
 export function useRunStarts(factoryId: string, period: ActivityPeriod) {
   const { baseUrl } = useApiConfig();
@@ -23,7 +18,7 @@ export function useRunStarts(factoryId: string, period: ActivityPeriod) {
       const from = activityStart(depth, Date.now());
       const starts: number[] = [];
       let before: string | undefined;
-      for (let page = 0; page < MAX_PAGES; page += 1) {
+      for (let page = 1; ; page += 1) {
         const { events, nextCursor } = await fetchAuditEvents(baseUrl, factoryId, {
           actions: ['factory.run.started'],
           limit: MAX_AUDIT_PAGE_SIZE,
@@ -32,10 +27,11 @@ export function useRunStarts(factoryId: string, period: ActivityPeriod) {
         });
         starts.push(...events.map(event => Date.parse(event.occurredAt)));
         const oldest = events.at(-1);
-        if (!nextCursor || !oldest || Date.parse(oldest.occurredAt) < from) return { starts, complete: true };
+        if (!nextCursor || !oldest) return { starts, completeAfter: Number.NEGATIVE_INFINITY };
+        const oldestAt = Date.parse(oldest.occurredAt);
+        if (oldestAt < from || page === MAX_PAGES) return { starts, completeAfter: oldestAt };
         before = nextCursor;
       }
-      return { starts, complete: false };
     },
   });
 }

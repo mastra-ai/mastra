@@ -30,22 +30,20 @@ export function slotWhen(slot: ActivitySlot, hoursPerSlot: number) {
   return { day, hours: `${hourFormat.format(slot.start)} – ${hourFormat.format(slot.end)}` };
 }
 
-export function totalOf(kind: ActivityKind, counts: ActivityCounts, runs: RunsState): { count: string; noun: string } {
+export function totalOf(kind: ActivityKind, counts: ActivityCounts, runs: RunsState) {
   const { counted } = LOOKS[kind];
-  if (kind === 'ran' && runs.status !== 'success') {
-    return { count: runs.status === 'error' ? '–' : '…', noun: counted.other };
+  const value = counts[kind];
+  if (kind === 'ran' && runs.status === 'pending') {
+    return { count: '…', noun: counted.other, label: `${counted.other} loading` };
   }
-  const more = kind === 'ran' && !runs.complete ? '+' : '';
-  return {
-    count: `${counts[kind].toLocaleString()}${more}`,
-    noun: plural.select(counts[kind]) === 'one' && !more ? counted.one : counted.other,
-  };
+  const known = kind !== 'ran' || (runs.status === 'success' && (runs.complete || value > 0));
+  if (!known) return { count: '–', noun: counted.other, label: `${counted.other} unavailable` };
+  const atLeast = kind === 'ran' && !runs.complete;
+  const count = `${value.toLocaleString()}${atLeast ? '+' : ''}`;
+  const noun = plural.select(value) === 'one' && !atLeast ? counted.one : counted.other;
+  return { count, noun, label: `${count} ${noun}` };
 }
 
 export function countsLabel(counts: ActivityCounts, runs: RunsState): string {
-  return ACTIVITY_KIND_ORDER.map(kind => {
-    const { count, noun } = totalOf(kind, counts, runs);
-    if (kind !== 'ran' || runs.status === 'success') return `${count} ${noun}`;
-    return `${noun} ${runs.status === 'pending' ? 'loading' : 'unavailable'}`;
-  }).join(', ');
+  return ACTIVITY_KIND_ORDER.map(kind => totalOf(kind, counts, runs).label).join(', ');
 }

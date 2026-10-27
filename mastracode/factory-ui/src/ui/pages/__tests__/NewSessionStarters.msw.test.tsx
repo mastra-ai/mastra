@@ -220,6 +220,36 @@ describe('the new session page', () => {
     expect(runRequests).toBe(weekRequests);
   });
 
+  it('reads agent runs as a lower bound for a week too busy to fetch whole, yet exact for today, which the fetched runs fully cover', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    const now = new Date(2026, 9, 27, 12).getTime();
+    vi.setSystemTime(now);
+    stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, ({ request }) => {
+        const page = Number(new URL(request.url).searchParams.get('before') ?? 0);
+        const events = Array.from({ length: 200 }, (_, index) => {
+          const minutesAgo = page * 200 + index;
+          return runStarted(`run-${minutesAgo}`, new Date(now - minutesAgo * 60_000));
+        });
+        return HttpResponse.json({ events, actors: {}, nextCursor: String(page + 1) });
+      }),
+    );
+    const user = userEvent.setup();
+    renderDraft();
+    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /shipped/ });
+
+    const week = await screen.findByRole('region', { name: 'This week' });
+    await waitFor(() => expect(totals(week)).toHaveAccessibleName('0 came in, 4,000+ agent runs, 0 shipped'));
+
+    await user.click(totals(week));
+    await user.click(within(week).getByRole('button', { name: 'This week' }));
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Today' }));
+
+    const today = await screen.findByRole('region', { name: 'Today' });
+    await waitFor(() => expect(totals(today)).toHaveAccessibleName('0 came in, 721 agent runs, 0 shipped'));
+  });
+
   it('says nothing happened instead of drawing an empty chart when the period is quiet', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 27, 12));

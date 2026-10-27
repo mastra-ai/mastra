@@ -4,7 +4,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 
 import type { RunsState } from '../../hooks/useFactoryActivity';
 import type { ActivitySlot } from '../../periodActivity';
-import { ACTIVITY_KINDS, slotWhen } from './activityFormat';
+import { ACTIVITY_KINDS, slotWhen, totalOf } from './activityFormat';
 
 const WIDTH_PX = 288;
 
@@ -17,7 +17,7 @@ export function ActivitySlotCard({
 }: {
   slot: ActivitySlot;
   hoursPerSlot: number;
-  runs: RunsState['status'];
+  runs: RunsState;
   x: number;
   containerWidth: number;
 }) {
@@ -44,8 +44,7 @@ export function ActivitySlotCard({
       </div>
       <div className="grid grid-cols-3 gap-1">
         {ACTIVITY_KINDS.map(({ kind, label, icon: Icon }) => {
-          const unknown = kind === 'ran' && runs !== 'success';
-          const active = !unknown && slot.counts[kind] > 0;
+          const active = slot.counts[kind] > 0;
           return (
             <div
               key={kind}
@@ -56,7 +55,7 @@ export function ActivitySlotCard({
             >
               <Icon className={cn('size-4', active ? 'text-foreground' : 'text-muted-foreground')} />
               <div className="flex flex-col gap-0.5">
-                {unknown && runs === 'pending' ? (
+                {kind === 'ran' && runs.status === 'pending' ? (
                   <span className="bg-fill h-7 w-8 rounded-md motion-safe:animate-pulse" />
                 ) : (
                   <Txt
@@ -66,7 +65,7 @@ export function ActivitySlotCard({
                     tone={active ? 'ink' : 'faint'}
                     className="leading-none tabular-nums"
                   >
-                    {unknown ? '–' : slot.counts[kind].toLocaleString()}
+                    {totalOf(kind, slot.counts, runs).count}
                   </Txt>
                 )}
                 <Txt as="span" variant="caption" tone="muted" className="truncate">
