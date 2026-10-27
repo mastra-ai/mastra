@@ -41,11 +41,12 @@ const SHARED_REGISTRY_SUITES = {
   softwarefactory: {
     tag: 'softwarefactory-e2e-test',
     manifestGlobs: [],
-    // The Software Factory template is generated from the mastracode/web
-    // server scaffold by create-factory's sync-template.mjs. Discover its
-    // linked package roots from that manifest instead of hardcoding a list
-    // that can drift; the browser app is bundled by the CLI and not copied.
-    linkManifests: ['mastracode/web/package.json'],
+    // The checked-in factory templates track `latest`; the suite pins their
+    // Mastra dependencies to this tag, so publish exactly those packages.
+    templateManifests: [
+      'templates/template-factory/package.json',
+      'templates/template-factory-self-hosted/package.json',
+    ],
   },
 };
 
@@ -123,13 +124,12 @@ async function getFixtureRoots(rootDir, suite) {
   return roots;
 }
 
-/** Collect deps declared with `link:` or `workspace:` specs (standalone projects like mastracode/web and workspace members like mastracode/factory-ui). */
-function collectLinkDependencies(manifest) {
+/** Collect Mastra packages a checked-in template depends on (`mastra` and `@mastra/*`). */
+function collectMastraDependencies(manifest) {
   const roots = [];
   for (const field of DEPENDENCY_FIELDS) {
-    for (const [name, version] of Object.entries(manifest[field] || {})) {
-      if (version.startsWith('link:') || version.startsWith('workspace:')) {
-        if (name.startsWith('@internal/')) continue; // private package, not published
+    for (const name of Object.keys(manifest[field] || {})) {
+      if (name === 'mastra' || name.startsWith('@mastra/')) {
         roots.push(name);
       }
     }
@@ -137,10 +137,10 @@ function collectLinkDependencies(manifest) {
   return roots;
 }
 
-function getLinkManifestRoots(rootDir, suite) {
+function getTemplateManifestRoots(rootDir, suite) {
   const roots = [];
-  for (const manifestPath of suite.linkManifests || []) {
-    roots.push(...collectLinkDependencies(readJson(join(rootDir, manifestPath))));
+  for (const manifestPath of suite.templateManifests || []) {
+    roots.push(...collectMastraDependencies(readJson(join(rootDir, manifestPath))));
   }
   return roots;
 }
@@ -165,7 +165,7 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
   const roots = [
     ...(suite.extraRoots || []),
     ...(await getFixtureRoots(rootDir, suite)),
-    ...getLinkManifestRoots(rootDir, suite),
+    ...getTemplateManifestRoots(rootDir, suite),
   ];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));

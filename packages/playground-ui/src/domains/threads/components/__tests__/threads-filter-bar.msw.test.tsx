@@ -73,9 +73,9 @@ describe('ThreadsFilterBar', () => {
       await renderBar([]);
 
       getFilterInput().focus();
-      fireEvent.change(getFilterInput(), { target: { value: 'Trace count' } });
+      fireEvent.change(getFilterInput(), { target: { value: 'Messages' } });
 
-      expect(await screen.findByRole('option', { name: 'Trace count' })).toBeTruthy();
+      expect(await screen.findByRole('option', { name: 'Messages' })).toBeTruthy();
     });
 
     it('labels the input for threads', async () => {

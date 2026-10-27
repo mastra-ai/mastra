@@ -169,22 +169,7 @@
     "z-ai/glm-5"
   ],
   "reasoning": {
-    "glm-4.5": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-235b-a22b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-32b": [
+    "qwen3-30b-a3b": [
       {
         "type": "toggle"
       }
@@ -194,12 +179,7 @@
         "type": "toggle"
       }
     ],
-    "qwen-turbo": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-1.6-flash": [
+    "doubao-seed-2.0-pro": [
       {
         "type": "toggle"
       }
@@ -209,17 +189,7 @@
         "type": "toggle"
       }
     ],
-    "doubao-seed-2.0-pro": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3-30b-a3b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "doubao-seed-2.0-code": [
+    "qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       }
@@ -229,12 +199,37 @@
         "type": "toggle"
       }
     ],
-    "qwen3.5-397b-a17b": [
+    "doubao-seed-1.6-flash": [
       {
         "type": "toggle"
       }
     ],
-    "z-ai/glm-4.7": [
+    "qwen3-32b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen-turbo": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-1.6": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-4.5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "doubao-seed-2.0-code": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3-235b-a22b": [
       {
         "type": "toggle"
       }
@@ -245,6 +240,11 @@
       }
     ],
     "z-ai/glm-5": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "z-ai/glm-4.7": [
       {
         "type": "toggle"
       }

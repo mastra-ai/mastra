@@ -8,6 +8,7 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import type { FactoryProjectPayload } from '../domains/workspaces/services/github';
 import { pickModel } from '../domains/settings/components/models/defaults/__tests__/default-model-test-utils';
+import { environmentPayload } from '../domains/settings/components/__tests__/fixtures/environment';
 import { createAppRoutes } from '../router';
 import {
   settingsFactory,
@@ -148,6 +149,19 @@ describe('Settings ownership', () => {
     expect(await screen.findByRole('region', { name: 'Factory memory' })).toBeInTheDocument();
     expect(router.state.location.pathname).toBe('/factories/fp-1/settings/memory');
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
+  });
+
+  it('sends retired Environment links to Repositories, where pre-clone and repository commands now live', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/environment`, () =>
+        HttpResponse.json({ environment: environmentPayload() }),
+      ),
+    );
+    const router = renderSettings('environment');
+
+    expect(await screen.findByRole('button', { name: 'Show settings for acme/web' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/repositories');
+    expect(screen.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {

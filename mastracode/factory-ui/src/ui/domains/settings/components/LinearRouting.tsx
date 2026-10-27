@@ -1,24 +1,22 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsFieldsetRow } from '@mastra/playground-ui/new/settings';
+import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { RotateCcw } from 'lucide-react';
 import { useState } from 'react';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
 import { isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
 
-/**
- * Routing for one provider's selected intake sources. A source feeds exactly
- * one board of one Factory; until it is routed to both, its issues are not
- * picked up.
- */
 export function IntakeSourceRouting({
   integrationId,
   label,
@@ -52,6 +50,19 @@ export function IntakeSourceRouting({
       },
     );
   };
+
+  if (sourceIds.length === 0) return null;
+  if (bindingsQuery.isPending)
+    return <SkeletonRows label={`Loading ${label} routing`} rows={Math.min(sourceIds.length, 3)} />;
+  if (bindingsQuery.isError) {
+    return (
+      <SettingsRow label="Routing is unavailable" description="Your source routes could not be loaded.">
+        <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void bindingsQuery.refetch()}>
+          Retry
+        </Button>
+      </SettingsRow>
+    );
+  }
 
   return (
     <div className="flex flex-col">
@@ -180,11 +191,13 @@ function BoardPicker({
 
   const boards = (catalog.data ?? []).filter(candidate => candidate.id !== 'review');
   const current = boards.find(candidate => candidate.id === board);
-  const label = current?.title ?? (board ? `${board} (not installed)` : 'Choose a board');
+  const label = catalog.isError
+    ? 'Boards unavailable'
+    : (current?.title ?? (board ? `${board} (not installed)` : 'Choose a board'));
   return (
     <Select
       value={current?.id ?? NO_BOARD}
-      disabled={disabled || catalog.isPending}
+      disabled={disabled || catalog.isPending || catalog.isError}
       onValueChange={value => onChange(value === NO_BOARD ? null : value)}
     >
       <SelectTrigger size="sm" aria-label={`Board for ${name}`} className="w-auto">

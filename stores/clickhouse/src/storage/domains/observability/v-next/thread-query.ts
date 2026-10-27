@@ -6,7 +6,7 @@ import type {
   TrustedThreadRowsQueryPlan,
   TrustedTraceQueryScalarPredicate,
 } from '@mastra/core/storage';
-import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS } from './ddl';
+import { TABLE_TRACE_ROOTS } from './ddl';
 import { needsPreviewPayloads, PREVIEW_COLUMNS, resolveStoredPreviews } from './previews';
 import {
   compileThreadQueryPredicate,
@@ -307,7 +307,7 @@ export async function queryThreadRows(
   for (const batch of batches([...roots.values()]))
     stored.push(
       ...(await run<Root & Record<string, unknown>>({
-        query: `SELECT organizationId, traceId, spanId, startedAt, endedAt, spanType,
+        query: `SELECT organizationId, traceId, spanId, startedAt, endedAt,
       ${contextFields.join(', ')}, if(spanType = 'agent_run', timeToFirstChunkMs, NULL) AS timeToFirstChunkMs,
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
       FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
@@ -329,48 +329,10 @@ export async function queryThreadRows(
       if (row) Object.assign(row, resolveStoredPreviews(row, payload));
     }
   }
-  // Only the first root agent's direct model generation supplies display model/provider.
-  // Nested processor/scorer agents have a different parent and cannot supply these values.
-  const firstRoots = page
-    .map(row => representative(row, 'first'))
-    .filter(root => byRoot.get(rootKey(root))?.spanType === 'agent_run');
-  const models: Array<{
-    organizationId: string | null;
-    traceId: string;
-    model: string | null;
-    provider: string | null;
-  }> = [];
-  for (const batch of batches(firstRoots))
-    models.push(
-      ...(await run<(typeof models)[number]>({
-        query: `SELECT organizationId, traceId,
-      if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
-      if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider
-      FROM ${TABLE_SPAN_EVENTS} WHERE spanType = 'model_generation' AND
-      tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''), traceId, parentSpanId)
-        IN {agents:Array(Tuple(UInt8, String, UInt8, String, String, String))}
-      ORDER BY organizationId, traceId, startedAt, spanId LIMIT 1 BY organizationId, traceId`,
-        query_params: {
-          agents: batch.map(
-            root =>
-              new TupleParam([
-                root.organizationId === null ? 1 : 0,
-                root.organizationId ?? '',
-                root.resourceId === null ? 1 : 0,
-                root.resourceId ?? '',
-                root.traceId,
-                root.spanId,
-              ]),
-          ),
-        },
-      })),
-    );
-  const byTrace = new Map(models.map(row => [JSON.stringify([row.organizationId, row.traceId]), row]));
   const threads = page.flatMap(row => {
     const first = byRoot.get(rootKey(representative(row, 'first')));
     const last = byRoot.get(rootKey(representative(row, 'last')));
     if (!first || !last) return []; // Concurrent deletion between selection and hydration.
-    const model = byTrace.get(JSON.stringify([row.organizationId, row.firstTraceId]));
     return [
       coreStorage.threadQueryRowSchema.parse({
         organizationId: row.organizationId,
@@ -383,8 +345,6 @@ export async function queryThreadRows(
         endedAt: iso(row.endedAt),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
-        model: model?.model ?? null,
-        provider: model?.provider ?? null,
         inputPreview: resolveStoredPreviews(first).inputPreview,
         outputPreview: resolveStoredPreviews(last).outputPreview,
         errorPreview: resolveStoredPreviews(last).errorPreview,

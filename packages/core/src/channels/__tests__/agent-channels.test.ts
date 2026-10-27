@@ -19,7 +19,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelContext, ChannelHandler } from '../types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -792,9 +792,9 @@ describe('AgentChannels', () => {
     });
 
     describe('approval requester check', () => {
-      async function setup(record: Record<string, unknown>, mastra = makeMastra()) {
+      async function setup(record: Record<string, unknown>, mastra = makeMastra(), toolApprovers?: 'anyone') {
         const adapter = createMockAdapter('discord');
-        const channels = new AgentChannels({ adapters: { discord: adapter } });
+        const channels = new AgentChannels({ adapters: { discord: { adapter, toolApprovers } } });
         channels.__setAgent(mockAgent);
         const logger = { debug: vi.fn(), info: vi.fn(), warn: vi.fn(), error: vi.fn() };
         channels.__setLogger(logger as any);
@@ -831,6 +831,40 @@ describe('AgentChannels', () => {
         expect(dispatchDecline).not.toHaveBeenCalled();
         expect(adapter.editMessage).not.toHaveBeenCalled();
         expect(logger.info).toHaveBeenCalledWith(expect.stringContaining('only alice may answer'), expect.anything());
+      });
+
+      it.each([
+        ['tool_approve:tool-call-1', 'dispatchApproval'],
+        ['tool_deny:tool-call-1', 'dispatchDecline'],
+      ] as const)('lets another channel member %s when configured', async (action, dispatch) => {
+        const ctx = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+        await ctx.click(action, 'bob');
+        expect(ctx[dispatch]).toHaveBeenCalledTimes(1);
+      });
+
+      it('keeps thread mapping required with channel-wide approvers', async () => {
+        const { channels, adapter, dispatchApproval, dispatchDecline, click } = await setup(
+          { requesterId: 'alice' },
+          makeMastra(),
+          'anyone',
+        );
+        (channels as any).findThreadMapping = vi.fn().mockResolvedValue({ thread: undefined });
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_deny:tool-call-1', 'bob');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+      });
+
+      it('keeps pending tool calls required with channel-wide approvers', async () => {
+        const { adapter, dispatchApproval, click } = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+
+        await click('tool_approve:unknown-call', 'bob');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
       });
 
       it('lets the requester approve', async () => {
@@ -899,6 +933,35 @@ describe('AgentChannels', () => {
         await click('tool_approve:tool-call-1', 'bob');
         await click('tool_approve:tool-call-1', 'alice');
         expect(dispatchApproval).not.toHaveBeenCalled();
+      });
+
+      it('lets a channel member approve after restart when the requester is ambiguous and anyone is enabled', async () => {
+        const author = (userId: string) => ({
+          role: 'user',
+          content: { providerMetadata: { mastra: { channels: { discord: { author: { userId } } } } } },
+        });
+        const messages = [
+          {
+            role: 'assistant',
+            content: {
+              metadata: {
+                pendingToolApprovals: {
+                  lookup: { toolCallId: 'tool-call-1', runId: 'run-1', toolName: 'lookup', args: {} },
+                },
+              },
+            },
+          },
+          author('bob'),
+          author('alice'),
+        ];
+        const mastra = {
+          getStorage: () => ({ getStore: async () => ({ listMessages: async () => ({ messages }) }) }),
+          getServer: () => null,
+        } as any;
+        const { channels, dispatchApproval, click } = await setup({}, mastra, 'anyone');
+        (channels as any).pendingApprovalCards.clear();
+        await click('tool_approve:tool-call-1', 'charlie');
+        expect(dispatchApproval).toHaveBeenCalledTimes(1);
       });
 
       it('keeps a stashed requester when the run id is recovered from stored messages', async () => {
@@ -2206,7 +2269,7 @@ describe('AgentChannels', () => {
         options: {
           platform?: string;
           threadId?: string;
-          formatError?: (error: Error) => string;
+          formatError?: ChannelAdapterBaseConfig['formatError'];
           logger?: IMastraLogger;
         } = {},
       ) {
@@ -2280,13 +2343,13 @@ describe('AgentChannels', () => {
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
       });
 
-      it('passes the original Error to the custom formatter', async () => {
+      it("passes the original Error and the run's request context to the custom formatter", async () => {
         const error = new Error('failure');
         const formatError = vi.fn(() => 'custom feedback');
         const f = await fixture(error, { formatError });
         await f.run();
         expect(f.record().error.message).toBe('failure');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
       });
 
@@ -2389,7 +2452,7 @@ describe('AgentChannels', () => {
         });
         expect(toJSON).not.toHaveBeenCalled();
         expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
       });
 
       it('does not serialize non-string Mastra classification fields', async () => {

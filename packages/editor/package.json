@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.16.5-alpha.2",
+  "version": "0.16.5-alpha.3",
   "description": "Mastra Editor for agent management and instantiation",
   "license": "Apache-2.0",
   "main": "dist/index.cjs",
@@ -103,7 +103,7 @@
     "zod": "^3.25.76"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.34.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "@mastra/mcp": ">=1.0.0-0 <3.0.0-0"
   },
   "peerDependenciesMeta": {
