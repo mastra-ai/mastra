@@ -11,7 +11,7 @@ import type { DynamicArgument, MastraUser } from '../types';
  * request. Returns `undefined` when the request is unauthenticated, no auth
  * provider is configured, or the stored value is malformed.
  */
-export function getRequestUser(requestContext: RequestContext<any>): MastraUser | undefined {
+export function getRequestUser(requestContext?: RequestContext<any>): MastraUser | undefined {
   const user = requestContext?.getRaw(MASTRA_NORMALIZED_USER_KEY);
   if (user && typeof user === 'object' && typeof (user as MastraUser).id === 'string') {
     return user as MastraUser;

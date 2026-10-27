@@ -84,7 +84,7 @@ export async function resolveVectorStore(
       const resolved = await vectorStoreOption({
         requestContext,
         mastra,
-        user: requestContext ? getRequestUser(requestContext) : undefined,
+        user: getRequestUser(requestContext),
       });
 
       // Validate that the resolver returned a valid MastraVector
