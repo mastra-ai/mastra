@@ -265,7 +265,7 @@ describe('QuickBooks provider', () => {
           subtotal: 100,
           tax: 0,
           total: 100,
-          lines: [{ sku: 'PEN-01', description: 'Pens', qty: 10, unitPrice: 10, lineTotal: 100 }],
+          lines: [{ sku: 'item-1', description: 'Pens', qty: 10, unitPrice: 10, lineTotal: 100 }],
           confidence: [
             'invoiceNumber',
             'vendorName',

@@ -389,3 +389,52 @@ it('preserves invoice identity, amount and digest in the real approval tool resp
     await test.close();
   }
 });
+
+// PR #28532, CodeRabbit 4383787324: equal descriptions cannot override distinct SKU identities.
+it('matches identical descriptions by SKU and refuses a conflicting SKU before linking a Bill', async () => {
+  for (const sku of ['item-b', 'item-c']) {
+    const test = await scenario({
+      state: {
+        orders: [
+          {
+            Id: 'po-1',
+            DocNumber: 'AP-PO-1001',
+            VendorRef: { value: 'vendor-1' },
+            CurrencyRef: { value: 'USD' },
+            TotalAmt: 100,
+            Line: ['a', 'b'].map(id => ({
+              Id: `line-${id}`,
+              Description: 'Pens',
+              Amount: 50,
+              ItemBasedExpenseLineDetail: { ItemRef: { value: `item-${id}` }, Qty: 1, UnitPrice: 50 },
+            })),
+          },
+        ],
+      },
+    });
+    try {
+      const result = await test.run({
+        invoice: {
+          lines: [
+            { sku, description: 'Pens', qty: 1, unitPrice: 50, lineTotal: 50 },
+            { sku: 'item-a', description: 'Pens', qty: 1, unitPrice: 50, lineTotal: 50 },
+          ],
+          confidence: [...invoiceInput().extractedResult.confidence, { field: 'lines', confidence: 0.99 }],
+        },
+      });
+      const state = await test.state();
+      if (sku === 'item-b') {
+        assert.equal(result.result?.executionStatus, 'posted');
+        assert.deepEqual(
+          state.bills[0]?.Line.map(line => line.LinkedTxn?.[0]?.TxnLineId),
+          ['line-b', 'line-a'],
+        );
+      } else {
+        assert.equal(result.result?.disposition, 'review');
+        assert.equal(state.bills.length, 0);
+      }
+    } finally {
+      await test.close();
+    }
+  }
+});

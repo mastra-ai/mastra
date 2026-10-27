@@ -18,6 +18,7 @@ import {
   type PostingRequest,
 } from '../invoice/schema.ts';
 import { toMajorUnits, toMinorUnits } from '../invoice/money.ts';
+import { matchingOrderLine } from '../invoice/line-match.ts';
 export interface McpToolClient {
   listToolNames(): Promise<Set<string>>;
   call(toolName: string, input: unknown): Promise<unknown>;
@@ -248,16 +249,8 @@ const createQuickBooksConnector = (client: McpToolClient, postingConfig?: QuickB
       throw new Error('QuickBooks purchase order changed or is unavailable; reassess the invoice before posting');
     const rawLines = (current.Line ?? []).filter(line => line.ItemBasedExpenseLineDetail);
     const unused = new Set(approvedOrder.lines.map((_, index) => index));
-    return input.invoice.lines.map((line, invoiceIndex) => {
-      const orderIndex = line.sku
-        ? approvedOrder.lines.findIndex(
-            (candidate, index) =>
-              unused.has(index) &&
-              [candidate.sku, candidate.description].some(id => id === line.sku || id === line.description),
-          )
-        : unused.has(invoiceIndex)
-          ? invoiceIndex
-          : -1;
+    return input.invoice.lines.map(line => {
+      const orderIndex = matchingOrderLine(line, approvedOrder.lines, unused);
       if (orderIndex < 0) throw new Error('QuickBooks purchase order line could not be linked safely');
       unused.delete(orderIndex);
       return [

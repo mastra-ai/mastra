@@ -3,21 +3,14 @@ import { ProviderUnavailableError } from '../../accounting/types.ts';
 import type { AssessmentState, PurchaseOrder } from '../schema.ts';
 import { hasLowConfidence } from '../validation.ts';
 import { decide } from './decision.ts';
+import { matchingOrderLine } from '../line-match.ts';
 
 const compareLines = (state: AssessmentState, order: PurchaseOrder, tolerance: number) => {
   const unusedOrderLines = new Set(order.lines.map((_, index) => index));
   const mismatches: string[] = [];
 
   state.invoice.lines.forEach((line, invoiceIndex) => {
-    const orderIndex = line.sku
-      ? order.lines.findIndex(
-          (candidate, index) =>
-            unusedOrderLines.has(index) &&
-            [candidate.sku, candidate.description].some(id => id === line.sku || id === line.description),
-        )
-      : unusedOrderLines.has(invoiceIndex)
-        ? invoiceIndex
-        : -1;
+    const orderIndex = matchingOrderLine(line, order.lines, unusedOrderLines);
     if (orderIndex < 0) return void mismatches.push(`lines.${invoiceIndex}.missing`);
 
     unusedOrderLines.delete(orderIndex);
