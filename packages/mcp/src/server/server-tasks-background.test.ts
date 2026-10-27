@@ -174,7 +174,13 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       mcpServers: { tasks: server },
       ...mastraExtra,
     });
-    const served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
+    const served = await serveHTTP(server, {
+      auth: req => {
+        const info = authFor(String(req.headers['x-test-user'] ?? 'alice'));
+        const sub = req.headers['x-test-sub'];
+        return typeof sub === 'string' ? { ...info, extra: { sub } } : info;
+      },
+    });
     let closed = false;
     const created: Instance = {
       url: served.url,
@@ -208,12 +214,17 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     }
   }
 
-  async function call(url: URL, name: string, args: Record<string, unknown> = {}) {
+  async function call(
+    url: URL,
+    name: string,
+    args: Record<string, unknown> = {},
+    headers: Record<string, string> = {},
+  ) {
     const response = await rawRequest(url, {
       method: 'tools/call',
       params: { name, arguments: args },
       capabilities: { extensions: tasksCapabilityEntry() },
-      headers: { 'x-test-user': 'alice', 'mcp-name': name },
+      headers: { 'x-test-user': 'alice', 'mcp-name': name, ...headers },
     });
     const { result, error } = response.json();
     if (error) throw new Error(JSON.stringify(error));
@@ -221,8 +232,8 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     return result.taskId as string;
   }
 
-  async function requester(url: URL, user = 'alice') {
-    const client = await connectClient(url, {}, { 'x-test-user': user });
+  async function requester(url: URL, user = 'alice', headers: Record<string, string> = {}) {
+    const client = await connectClient(url, {}, { 'x-test-user': user, ...headers });
     clients.push(client);
     return new TaskRequester(client);
   }
@@ -419,6 +430,24 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         }
       },
     );
+  });
+
+  it('runs a task again on a peer when its instance shuts down gracefully mid-task (recover: true)', async () => {
+    const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
+    // Up before the task exists, so core's own stale recovery on B never looks at its row again.
+    const b = await instance(tasks);
+    const a = await instance(tasks);
+    const taskId = await call(a.url, 'crashy');
+    await until(() => runsIn(counterFile) === 1);
+
+    // A graceful stop hands the lease back but leaves the row running, with no owner and no lease.
+    await a.mastra.backgroundTaskManager!.shutdown();
+    const [row] = await rows(b.mastra);
+    expect(row).toMatchObject({ status: 'running', ownerId: undefined, leaseExpiresAt: undefined });
+
+    const done = await waitFor(await requester(b.url), taskId, 'completed');
+    expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
+    expect(runsIn(counterFile)).toBe(2);
   });
 
   describe("an 'auto' task's first attempt, already running under its request", () => {
@@ -667,7 +696,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     }
   });
 
-  it("stores only a hash of the caller's principal, and still serves the task to that caller alone", async () => {
+  it("stores neither the task id, the bearer token nor the caller's principal, and still serves the task to that caller alone", async () => {
     const a = await instance({ tools: { approve: 'always' } });
     const b = await instance({ tools: { approve: 'always' } });
     const taskId = await call(a.url, 'approve', { item: 'invoice' });
@@ -677,8 +706,12 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const principal = `alice:token:${createHash('sha256').update('alice-token').digest('base64url')}`;
     const [row] = await rows(a.mastra);
     expect(row!.resourceId).toMatch(/^mcp-server:tasks:/);
-    expect(JSON.stringify([row!.resourceId, row!.metadata, row!.args])).not.toContain(principal);
-    expect(JSON.stringify(row)).not.toContain(principal);
+    for (const stored of [row!.resourceId, row!.metadata, row!.args, row]) {
+      const text = JSON.stringify(stored);
+      expect(text).not.toContain(taskId);
+      expect(text).not.toContain('alice-token');
+      expect(text).not.toContain(principal);
+    }
 
     // Another caller gets the same "not found" from either instance, and can't answer or cancel.
     const [key] = Object.keys(waiting.inputRequests ?? {});
@@ -691,6 +724,34 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       await expect(asBob.cancel(taskId)).rejects.toMatchObject({ code: -32602 });
     }
     expect(await waitFor(await requester(a.url), taskId, 'input_required')).toMatchObject({ status: 'input_required' });
+  });
+
+  it.each([
+    { form: 'subject', headers: { 'x-test-sub': 'sub-123' }, label: 'alice:sub:sub-123' },
+    { form: 'user id', headers: {}, label: 'alice:user:user-alice', mapsUser: true },
+    {
+      form: 'token',
+      headers: {},
+      label: `alice:token:${createHash('sha256').update('alice-token').digest('base64url').slice(0, 8)}`,
+    },
+  ])('labels the row with the client that sent the task ($form)', async ({ headers, label, mapsUser }) => {
+    const a = await instance(
+      { tools: { echo: 'always' } },
+      mapsUser
+        ? {
+            extra: {
+              mapAuthInfoToUser: ({ authInfo }: { authInfo: { clientId: string } }) => ({
+                id: `user-${authInfo.clientId}`,
+              }),
+            },
+          }
+        : {},
+    );
+    const taskId = await call(a.url, 'echo', { text: 'hi' }, headers);
+    await waitFor(await requester(a.url, 'alice', headers), taskId, 'completed');
+    const [row] = await rows(a.mastra);
+    expect(row!.metadata).toMatchObject({ clientLabel: label });
+    expect(JSON.stringify(row)).not.toContain('alice-token');
   });
 
   it('keeps tasks in memory, with a warning, when the storage cannot expire rows', async () => {

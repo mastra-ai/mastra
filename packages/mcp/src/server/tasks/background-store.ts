@@ -51,6 +51,8 @@ export interface BackgroundTaskEnvelope {
   v: 1;
   /** The caller's principal, hashed with {@link principalKeyOf}. */
   principalKey: string;
+  /** Who sent the task, readable for operators; never a credential, and never used to authorize. */
+  clientLabel?: string;
   ttlMs: number | null;
   pollIntervalMs?: number;
   recover: boolean;
@@ -248,7 +250,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     this.#executors.add(key);
   }
 
-  async create(params: MCPTaskCreateParams, { pinToWorker = false }: { pinToWorker?: boolean } = {}): Promise<MCPTask> {
+  async create(
+    params: MCPTaskCreateParams,
+    { pinToWorker = false, clientLabel }: { pinToWorker?: boolean; clientLabel?: string } = {},
+  ): Promise<MCPTask> {
     const context = params.context as BackgroundToolTaskContext | undefined;
     if (!context || typeof context.toolName !== 'string') {
       throw new Error('A background-task MCP task needs the tool it runs in its context');
@@ -263,6 +268,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     const envelope: BackgroundTaskEnvelope = {
       v: ENVELOPE_VERSION,
       principalKey,
+      ...(clientLabel !== undefined && { clientLabel }),
       ttlMs: params.ttlMs,
       ...(params.pollIntervalMs !== undefined && { pollIntervalMs: params.pollIntervalMs }),
       recover,
@@ -541,7 +547,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
       try {
         if (isExpired(row, now)) await this.#expire(storage, row);
         else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
-        else if (isOwned(row) && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
+        // No lease at all: a worker that shut down gracefully handed it back, leaving the row running.
+        else if (isOwned(row) && (!row.leaseExpiresAt || row.leaseExpiresAt.getTime() <= now)) {
           await this.#reclaim(storage, row, envelope);
         } else if (row.status === 'pending' && !row.ownerId && now - row.createdAt.getTime() >= lease) {
           // Never started, or reclaimed for another attempt, and still waiting a lease on: it may
@@ -574,8 +581,9 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
 
   /**
    * A running row, or a pending row pinned to the worker running its first attempt, whose lease
-   * lapsed: its worker died with the attempt in flight. Fenced like the manager's own recovery, so
-   * of all instances (and managers) noticing it, exactly one settles it.
+   * lapsed or was released: its worker died, or shut down, with the attempt in flight. Fenced like
+   * the manager's own recovery, so of all instances (and managers) noticing it, exactly one
+   * settles it.
    */
   async #reclaim(
     storage: BackgroundTasksStorage,

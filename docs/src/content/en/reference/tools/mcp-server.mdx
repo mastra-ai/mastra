@@ -2127,10 +2127,11 @@ Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<s
 - They don't belong to any agent, thread or memory, so they never appear in an agent's conversation.
 - The `/background-tasks` routes don't return them to a caller scoped to a resource. Callers without a resource scope can list them, as can the global `onTaskComplete` and `onTaskFailed` hooks. Check `task.agentId.startsWith('mcp-server:')` in hooks that only expect agent tasks.
 - A row stores hashes of the task id and of the caller's principal, not the values themselves, and the request context without the bearer token. `authInfo.extra` and `user` are stored unchanged, so they're visible to anyone who can read the row.
+- To show which client sent a task, `metadata.clientLabel` holds the OAuth client id with the token's subject (`<client id>:sub:<subject>`), or with the id of the user `mapAuthInfoToUser` returned (`<client id>:user:<user id>`). Without either, it holds the client id and the first 8 characters of the token's hash (`<client id>:token:<hash prefix>`). The label is for debugging only: the server matches callers on the hashed principal, never on the label.
 
 ### Recovery after a crash
 
-When the instance running a task stops, the task's lease lapses and another instance notices it. What happens next depends on `recover`:
+When the instance running a task stops, another instance notices it: after the task's lease lapses if the instance crashed, or at its next sweep if the instance shut down and handed the lease back. What happens next depends on `recover`:
 
 - `recover: false` (default): the task ends `failed` with `task lost: the server restarted while it was running`. `execute` never runs twice.
 - `recover: true`: another instance runs `execute` again from the start, once. Only turn it on for tools that are safe to repeat.

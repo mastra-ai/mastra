@@ -81,6 +81,7 @@ import { WebhookDispatcher } from './events/webhook-dispatcher';
 import {
   INPUT_KEY,
   callerTrace,
+  clientLabelOf,
   hashArguments,
   principalOf,
   readContinuation,
@@ -1116,7 +1117,10 @@ export class MCPServer extends MCPServerBase {
     const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
     const task =
       store instanceof BackgroundTaskMCPTaskStore
-        ? await store.create(params, { pinToWorker: initialAttempt !== undefined })
+        ? await store.create(params, {
+            pinToWorker: initialAttempt !== undefined,
+            clientLabel: clientLabelOf(ctx, requestContext),
+          })
         : await store.create(params);
     store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
     this.logger.debug(`Tool '${name}' continues as task.`);
