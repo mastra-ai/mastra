@@ -19,7 +19,7 @@ import { Mastra } from '../../../mastra';
 import { Agent } from '../../agent';
 import { isDurableAgentLike } from '../../types';
 import { isDurableAgent } from '../create-durable-agent';
-import type { DurableAgent } from '../durable-agent';
+import type { DurableAgent, DurableAgentStreamResult } from '../durable-agent';
 
 function makeMockModel() {
   return new MockLanguageModelV2({
@@ -65,6 +65,28 @@ describe('AgentConfig.durable', () => {
     // `.agent` points to the underlying raw Agent, not itself.
     expect(registered.agent).toBe(raw);
     expect(registered.agent).not.toBe(registered);
+  });
+
+  it.each(['standalone', 'registered'] as const)('exposes the typed stream output on %s durable agents', async kind => {
+    const agent = new Agent({
+      id: `stream-output-${kind}`,
+      name: `StreamOutput${kind}`,
+      instructions: 'test',
+      model: makeMockModel(),
+      durable: true,
+    });
+    const streamAgent = kind === 'registered' ? new Mastra({ agents: { agent } }).getAgent('agent') : agent;
+    const result = await streamAgent.stream('hi');
+
+    try {
+      expect(await result.text).toBe('hi');
+      expect(await result.finishReason).toBe('stop');
+      expect(result.status).toBe('success');
+      expect((result as unknown as DurableAgentStreamResult).output).toBe(result);
+      expect(result.fullStream).toBeInstanceOf(ReadableStream);
+    } finally {
+      (result as unknown as DurableAgentStreamResult).cleanup();
+    }
   });
 
   it('exposes self-referential `agent` getter only when `durable` is set', () => {

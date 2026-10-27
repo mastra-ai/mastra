@@ -484,7 +484,7 @@ type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<O
  * Result from DurableAgent.stream()
  */
 export interface DurableAgentStreamResult<OUTPUT = undefined> {
-  /** The streaming output */
+  /** The streaming output (also available directly on stream() results) */
   output: MastraModelOutput<OUTPUT>;
   /** The full stream - delegates to output.fullStream for server compatibility */
   readonly fullStream: ReadableStream<any>;
@@ -3352,17 +3352,13 @@ export class DurableAgent<
       if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
-    return {
+    return Object.assign(output, {
       output,
-      get fullStream() {
-        return output.fullStream as ReadableStream<any>;
-      },
-      runId,
       threadId,
       resourceId,
       cleanup,
       abort,
-    };
+    }) as unknown as DurableAgentStreamResult<TOutput>;
   }
 
   /**
