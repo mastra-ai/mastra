@@ -1,43 +1,95 @@
-import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
+import type { UsageStats } from '@mastra/core/observability';
+import { SpanType } from '@mastra/core/observability';
+import { getSpanDurationMs } from '../utils/span-utils';
+import { formatDuration } from '@/utils/duration';
 
-type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
-
-export type TokenUsageView = {
-  inputValue: number;
-  outputValue: number;
+export type TokenUsageRow = {
+  label: 'Input' | 'Output';
   total: number;
-  showSplit: boolean;
-  inputPct: number;
-  outputPct: number;
-  inputDetails: TokenDetailsObject | undefined;
-  outputDetails: TokenDetailsObject | undefined;
+  /** Non-zero breakdown, e.g. `5,632 cached · 974 text`. */
+  breakdown: string | undefined;
 };
 
-function hasNumericDetails(details: TokenDetailsObject | undefined): details is TokenDetailsObject {
-  return !!details && Object.values(details).some(v => typeof v === 'number');
+const BREAKDOWN_PARTS = [
+  ['cacheRead', 'cached'],
+  ['cacheWrite', 'cache write'],
+  ['reasoning', 'reasoning'],
+  ['text', 'text'],
+  ['audio', 'audio'],
+  ['image', 'image'],
+] as const;
+
+function formatBreakdown(details: object | undefined): string | undefined {
+  if (!details) return undefined;
+  const parts = BREAKDOWN_PARTS.flatMap(([key, label]) => {
+    const value: unknown = (details as Record<string, unknown>)[key];
+    return typeof value === 'number' && value > 0 ? [`${value.toLocaleString()} ${label}`] : [];
+  });
+  return parts.length > 0 ? parts.join(' · ') : undefined;
 }
 
-export function getTokenUsageView(usage: UsageStats | undefined | null): TokenUsageView | null {
+/** One row per direction that reports a token count; null when neither does. */
+export function getTokenUsageRows(usage: UsageStats | undefined | null): TokenUsageRow[] | null {
   if (!usage) return null;
+  const rows: TokenUsageRow[] = [];
+  if (typeof usage.inputTokens === 'number') {
+    rows.push({ label: 'Input', total: usage.inputTokens, breakdown: formatBreakdown(usage.inputDetails) });
+  }
+  if (typeof usage.outputTokens === 'number') {
+    rows.push({ label: 'Output', total: usage.outputTokens, breakdown: formatBreakdown(usage.outputDetails) });
+  }
+  return rows.length > 0 ? rows : null;
+}
 
-  const hasInput = typeof usage.inputTokens === 'number';
-  const hasOutput = typeof usage.outputTokens === 'number';
+export type ModelFacts = {
+  model?: string;
+  provider?: string;
+  finishReason?: string;
+  firstToken?: string;
+  speed?: string;
+};
 
-  if (!hasInput && !hasOutput) return null;
+type ModelSpan = {
+  spanType?: string | null;
+  startedAt: Date | string;
+  endedAt?: Date | string | null;
+  attributes?: Record<string, unknown> | null;
+};
 
-  const inputValue = usage.inputTokens ?? 0;
-  const outputValue = usage.outputTokens ?? 0;
-  const total = inputValue + outputValue;
-  const showSplit = total > 0;
+const MODEL_SPAN_TYPES: ReadonlySet<string> = new Set([
+  SpanType.MODEL_GENERATION,
+  SpanType.MODEL_STEP,
+  SpanType.MODEL_INFERENCE,
+]);
+
+const asString = (value: unknown) => (typeof value === 'string' && value !== '' ? value : undefined);
+
+/**
+ * Model, finish reason, time to first token and output speed of a model span.
+ * Other spans get none; each fact is left out when the span doesn't record what it needs.
+ */
+export function getModelFacts(span: ModelSpan): ModelFacts {
+  if (!span.spanType || !MODEL_SPAN_TYPES.has(span.spanType)) return {};
+  const attributes = span.attributes ?? {};
+  const completionStartTime =
+    attributes.completionStartTime instanceof Date
+      ? attributes.completionStartTime
+      : asString(attributes.completionStartTime);
+  const usage = attributes.usage as UsageStats | undefined;
+
+  const firstTokenMs = getSpanDurationMs(span.startedAt, completionStartTime);
+  const streamingMs = getSpanDurationMs(completionStartTime, span.endedAt);
+  const outputTokens = usage?.outputTokens;
+  const tokensPerSecond =
+    typeof outputTokens === 'number' && outputTokens > 0 && streamingMs
+      ? (outputTokens / streamingMs) * 1_000
+      : undefined;
 
   return {
-    inputValue,
-    outputValue,
-    total,
-    showSplit,
-    inputPct: showSplit ? (inputValue / total) * 100 : 0,
-    outputPct: showSplit ? (outputValue / total) * 100 : 0,
-    inputDetails: hasInput && hasNumericDetails(usage.inputDetails) ? usage.inputDetails : undefined,
-    outputDetails: hasOutput && hasNumericDetails(usage.outputDetails) ? usage.outputDetails : undefined,
+    model: asString(attributes.model),
+    provider: asString(attributes.provider),
+    finishReason: asString(attributes.finishReason),
+    firstToken: completionStartTime ? formatDuration(firstTokenMs) : undefined,
+    speed: tokensPerSecond === undefined ? undefined : `${Math.round(tokensPerSecond).toLocaleString()} tok/s`,
   };
 }
