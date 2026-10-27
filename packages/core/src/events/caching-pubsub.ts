@@ -336,9 +336,9 @@ export class CachingPubSub extends PubSub {
           }
           if (closed) return ack?.();
 
-          const restarted =
-            typeof allocated === 'number' &&
-            (compareIds ? currentFirstId !== undefined && currentFirstId !== firstId : allocated < next);
+          const restarted = compareIds
+            ? currentFirstId !== undefined && currentFirstId !== firstId
+            : typeof allocated === 'number' && allocated < next;
           if (restarted) {
             firstId = compareIds ? currentFirstId : await readFirstId().catch(() => undefined);
             this.logWarn(
