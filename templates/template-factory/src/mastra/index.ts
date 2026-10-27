@@ -30,7 +30,21 @@ import { PlatformFactorySandbox } from '@mastra/platform-workspace';
 // `LocalFactorySandbox` needs its root and env spelled out. Only an allow-list
 // of host variables reaches sandbox commands, so server secrets such as
 // DATABASE_URL stay out of them.
-const SANDBOX_ENV_KEYS = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'TZ'];
+const SANDBOX_ENV_KEYS = [
+  'HOME',
+  'USER',
+  'LOGNAME',
+  'SHELL',
+  'TMPDIR',
+  'LANG',
+  'LC_ALL',
+  'TERM',
+  'TZ',
+  'GIT_EXEC_PATH',
+  'GIT_TEMPLATE_DIR',
+  'SSL_CERT_FILE',
+  'SSL_CERT_DIR',
+];
 
 function localSandbox(): LocalFactorySandbox {
   return new LocalFactorySandbox({
