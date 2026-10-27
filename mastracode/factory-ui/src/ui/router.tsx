@@ -25,6 +25,7 @@ import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
+import { RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
@@ -169,6 +170,7 @@ export function createAppRoutes(): RouteObject[] {
       path: '/',
       element: <RootGuards />,
       hydrateFallbackElement: <AuthPendingSkeleton label="Loading page" />,
+      errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
@@ -179,29 +181,35 @@ export function createAppRoutes(): RouteObject[] {
             {
               element: <AppLayout />,
               children: [
-                { index: true, element: <FactoryHomeRedirect /> },
-                { path: 'workspaces/:sessionId', lazy: loadNewPage },
-                { path: 'workspaces/:sessionId/threads/:threadId', lazy: loadThreadPage },
-                { path: 'user/new/:draftSessionId', lazy: loadNewPage },
-                { path: 'user/threads/:threadId', lazy: loadThreadPage },
-                { path: 'new', lazy: loadNewPage },
-                { path: 'new-factory', element: <CreateFactoryPage /> },
-                { path: 'work', element: <WorkBoardPage /> },
-                { path: 'review', element: <ReviewBoardPage /> },
-                { path: 'boards/:boardId', element: <CustomBoardPage /> },
-                { path: 'activity', element: <FactoryHomeRedirect /> },
-                { path: 'overview', element: <FactoryHomeRedirect /> },
-                { path: 'attention', element: <FactoryHomeRedirect /> },
-                { path: 'metrics', element: <FactoryHomeRedirect /> },
-                { path: 'audit', element: <FactoryHomeRedirect /> },
-                { path: 'rules', element: <RulesPage /> },
-                { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
-                  path: 'settings',
+                  // Errors replace only the page, preserving the shell and its providers.
+                  errorElement: <RouteErrorPage />,
                   children: [
-                    { index: true, element: <Navigate to="preferences" replace /> },
-                    { path: 'connections/slack', element: <SlackConnectionPage /> },
-                    { path: ':section', element: <SettingsPage /> },
+                    { index: true, element: <FactoryHomeRedirect /> },
+                    { path: 'workspaces/:sessionId', lazy: loadNewPage },
+                    { path: 'workspaces/:sessionId/threads/:threadId', lazy: loadThreadPage },
+                    { path: 'user/new/:draftSessionId', lazy: loadNewPage },
+                    { path: 'user/threads/:threadId', lazy: loadThreadPage },
+                    { path: 'new', lazy: loadNewPage },
+                    { path: 'new-factory', element: <CreateFactoryPage /> },
+                    { path: 'work', element: <WorkBoardPage /> },
+                    { path: 'review', element: <ReviewBoardPage /> },
+                    { path: 'boards/:boardId', element: <CustomBoardPage /> },
+                    { path: 'activity', element: <FactoryHomeRedirect /> },
+                    { path: 'overview', element: <FactoryHomeRedirect /> },
+                    { path: 'attention', element: <FactoryHomeRedirect /> },
+                    { path: 'metrics', element: <FactoryHomeRedirect /> },
+                    { path: 'audit', element: <FactoryHomeRedirect /> },
+                    { path: 'rules', element: <RulesPage /> },
+                    { path: 'knowledge', element: <KnowledgeRoute /> },
+                    {
+                      path: 'settings',
+                      children: [
+                        { index: true, element: <Navigate to="preferences" replace /> },
+                        { path: 'connections/slack', element: <SlackConnectionPage /> },
+                        { path: ':section', element: <SettingsPage /> },
+                      ],
+                    },
                   ],
                 },
               ],
@@ -215,7 +223,7 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
-    { path: '/signin', element: <SignInPage /> },
+    { path: '/signin', element: <SignInPage />, errorElement: <RouteErrorPage /> },
   ];
 }
 
