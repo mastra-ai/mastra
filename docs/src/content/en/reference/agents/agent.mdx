@@ -750,6 +750,8 @@ Default delivery is priority-aware. `urgent` notifications deliver immediately. 
 Configure `notifications.deliveryPolicy` on the agent when some notifications should wait for a different dispatch window or summary rollup:
 
 ```typescript title="src/mastra/agents/support-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const supportAgent = new Agent({
   id: 'support-agent',
   name: 'Support Agent',

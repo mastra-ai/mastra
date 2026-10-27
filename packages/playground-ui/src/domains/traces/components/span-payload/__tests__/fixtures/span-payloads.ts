@@ -468,3 +468,33 @@ export const ALL_SPAN_FIXTURES = {
   processorRequestErrorSpan,
   legacyProcessorSpan,
 } as const;
+
+/** An input-step processor offered two tools: one in the tool registry, one a workspace tool that is not. */
+export const processorToolsSpan = makeSpan({
+  spanId: 'span-processor-tools',
+  name: 'memory: recall',
+  spanType: SpanType.PROCESSOR_RUN,
+  entityType: 'input_step_processor',
+  entityId: 'observational-memory',
+  attributes: { processorPhase: 'inputStep', processorExecutor: 'legacy', processorIndex: 0 },
+  input: {
+    messages: [{ role: 'user', content: 'What should I cook tonight?' }],
+    messageId: 'msg-tools-0',
+    tools: [
+      { id: 'cooking-tool', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' },
+      { id: 'mastra_workspace_read_file', name: 'mastra_workspace_read_file', description: 'Reads a workspace file.' },
+    ],
+    toolChoice: { type: 'auto' },
+  },
+});
+
+/** A model call that was forced to one tool; model spans record definitions under the registry key. */
+export const modelToolsSpan = makeSpan({
+  spanId: 'span-model-tools',
+  name: "llm: 'gpt-5-mini'",
+  spanType: SpanType.MODEL_INFERENCE,
+  attributes: {
+    tools: [{ type: 'function', name: 'cookingTool', description: 'Suggests a recipe from what is in the fridge.' }],
+    toolChoice: { type: 'tool', toolName: 'cookingTool' },
+  },
+});

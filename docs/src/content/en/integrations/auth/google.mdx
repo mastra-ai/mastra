@@ -199,6 +199,8 @@ When auth is enabled, requests to Mastra routes require authentication. When SSO
 For cross-origin requests (for example, a frontend on `:3000` calling Mastra on `:4111`), enable CORS credentials on the Mastra server:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   server: {
     auth: new MastraAuthGoogle(),

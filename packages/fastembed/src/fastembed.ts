@@ -98,7 +98,7 @@ function getEmbeddings(data: number[], dimensions: [number, number, number], mas
       if (masks[batchIndex]![tokenIndex] === 0n) continue;
       tokenCount++;
       for (let dimension = 0; dimension < hiddenSize; dimension++) {
-        embedding[dimension] = embedding[dimension]! + data[start + tokenIndex * hiddenSize + dimension]!;
+        embedding[dimension]! += data[start + tokenIndex * hiddenSize + dimension]!;
       }
     }
     return embedding.map(value => value / Math.max(tokenCount, 1));
@@ -223,6 +223,20 @@ function assertValidBatchSize(batchSize: number): void {
   }
 }
 
+function assertValidMaxLength(maxLength: number): void {
+  if (!Number.isSafeInteger(maxLength) || maxLength <= 0) {
+    throw new RangeError(`maxLength must be a positive safe integer, received ${String(maxLength)}`);
+  }
+}
+
+// Pooling indexes token-level [batch, sequence, features] output; other ranks would silently yield empty vectors.
+function getOutputDimensions(outputName: string, tensor: ort.Tensor): [number, number, number] {
+  if (tensor.dims.length !== 3) {
+    throw new Error(`Expected model output "${outputName}" to have 3 dimensions, received [${tensor.dims.join(', ')}]`);
+  }
+  return tensor.dims as [number, number, number];
+}
+
 export class FlagEmbedding extends Embedding {
   private constructor(
     private tokenizer: Tokenizer,
@@ -243,6 +257,7 @@ export class FlagEmbedding extends Embedding {
     modelAbsoluteDirPath = '',
     modelName = '',
   }: Partial<InitOptions> = {}) {
+    assertValidMaxLength(maxLength);
     if (model === EmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in FlagEmbedding.init');
@@ -394,7 +409,7 @@ export class FlagEmbedding extends Embedding {
       const lastHiddenState = output.last_hidden_state!;
       const embeddings = getEmbeddings(
         lastHiddenState.data as unknown[] as number[],
-        lastHiddenState.dims as [number, number, number],
+        getOutputDimensions('last_hidden_state', lastHiddenState),
         this.model === EmbeddingModel.AllMiniLML6V2 || this.model === EmbeddingModel.MLE5Large ? maskArray : undefined,
       );
 
@@ -448,6 +463,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
     modelAbsoluteDirPath = '',
     modelName = '',
   }: Partial<InitSparseOptions> = {}) {
+    assertValidMaxLength(maxLength);
     if (model === SparseEmbeddingModel.CUSTOM) {
       if (!modelAbsoluteDirPath) {
         throw new Error('For custom model, modelAbsoluteDirPath is required in SparseTextEmbedding.init');
@@ -582,8 +598,7 @@ export class SparseTextEmbedding extends SparseEmbedding {
       const outputTensor = output.output!;
       // @ts-expect-error cpuData exists at runtime on onnxruntime Tensor
       const logits = outputTensor.cpuData as Float32Array;
-      const dims = outputTensor.dims as [number, number, number];
-      const [currentBatchSize, seqLen, currentVocabSize] = dims;
+      const [currentBatchSize, seqLen, currentVocabSize] = getOutputDimensions('output', outputTensor);
 
       const sparseVectors: SparseVector[] = [];
 

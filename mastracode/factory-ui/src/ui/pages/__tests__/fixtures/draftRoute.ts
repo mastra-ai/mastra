@@ -35,7 +35,7 @@ export interface DraftRoute {
 }
 
 interface DraftRouteOptions {
-  factoryProjectGate?: Promise<void>;
+  modelDefaultsGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -49,7 +49,7 @@ function readSentMessage(body: unknown): string {
 }
 
 export function stubDraftRoute({
-  factoryProjectGate,
+  modelDefaultsGate,
   defaultModelId = null,
   persistedMessages = [],
   workItems = [],
@@ -84,11 +84,12 @@ export function stubDraftRoute({
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
-      await factoryProjectGate;
+      await modelDefaultsGate;
       return HttpResponse.json({
         project: {
           id: FACTORY_ID,
           name: 'Acme Factory',
+          modelScope: 'hybrid',
           defaultModelId: 'openai/gpt-4o-mini',
           defaultThinkingLevel: 'medium',
         },
@@ -116,12 +117,14 @@ export function stubDraftRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/decisions`, () =>
       HttpResponse.json({ decisions: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
-      HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
+      await modelDefaultsGate;
+      return HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
         models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
+        fallbackModelId: 'openai/gpt-4o-mini',
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),

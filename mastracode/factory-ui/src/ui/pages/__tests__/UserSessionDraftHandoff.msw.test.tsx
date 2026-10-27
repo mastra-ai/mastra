@@ -13,7 +13,7 @@ if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoVi
 
 describe('a user session draft on the real thread route', () => {
   it('given a new draft, when the first prompt is sent, then the session starts without a mode picker or mode switch', async () => {
-    const route = stubDraftRoute();
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -35,7 +35,7 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -104,7 +104,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -128,12 +128,12 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the Factory default.')).toBeInTheDocument();
+    expect(await screen.findByText('Follows the Built-in default.')).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 
@@ -145,11 +145,11 @@ describe('a user session draft on the real thread route', () => {
   });
 
   it('keeps typing free while the draft model resolves, but holds the send', async () => {
-    let releaseFactoryProject = () => {};
-    const factoryProjectGate = new Promise<void>(resolve => {
-      releaseFactoryProject = resolve;
+    let releaseModelDefaults = () => {};
+    const modelDefaultsGate = new Promise<void>(resolve => {
+      releaseModelDefaults = resolve;
     });
-    const route = stubDraftRoute({ factoryProjectGate });
+    const route = stubDraftRoute({ modelDefaultsGate, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -167,7 +167,7 @@ describe('a user session draft on the real thread route', () => {
     expect(message).toHaveValue('fix the login bug');
     expect(route.createBodies).toEqual([]);
 
-    releaseFactoryProject();
+    releaseModelDefaults();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(message).toHaveValue('fix the login bug');

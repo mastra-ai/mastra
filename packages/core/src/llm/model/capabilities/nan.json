@@ -23,12 +23,6 @@
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
     "mimo-v2.6-flash": [
       {
         "type": "effort",
@@ -45,6 +39,12 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "gemma4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
       }
     ],
     "deepseek-v4-flash": [

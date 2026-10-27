@@ -1,8 +1,18 @@
 import { Columns3Icon, PlusIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import type { FormEvent } from 'react';
-import { TRACE_CUSTOM_COLUMN_FIELDS, TRACE_CUSTOM_COLUMN_LABELS, TRACE_USAGE_COLUMNS } from '../trace-list-columns';
-import type { TraceColumnPreferences, TraceCustomColumn, TraceOptionalColumn } from '../trace-list-columns';
+import {
+  TRACE_COLUMN_CATALOGS,
+  TRACE_CUSTOM_COLUMN_FIELDS,
+  TRACE_CUSTOM_COLUMN_LABELS,
+  TRACE_USAGE_COLUMNS,
+} from '../trace-list-columns';
+import type {
+  TraceColumnCatalog,
+  TraceColumnPreferences,
+  TraceCustomColumn,
+  TraceOptionalColumn,
+} from '../trace-list-columns';
 import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import {
@@ -23,22 +33,16 @@ import { Txt } from '@/ds/components/Txt';
 
 const EMPTY_KEYS: readonly string[] = [];
 
-const STANDARD_COLUMNS: readonly TraceOptionalColumn[] = [
-  'type',
-  'input',
-  'output',
-  'duration',
-  'endTime',
-  'environment',
-];
-
 const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
   type: 'Primitive type',
   input: 'Input',
   output: 'Output',
   duration: 'Duration',
+  timeToFirstChunk: 'Time to first chunk',
   endTime: 'End',
   environment: 'Environment',
+  model: 'Model',
+  provider: 'Provider',
   inputTokens: 'Input tokens',
   outputTokens: 'Output tokens',
   totalTokens: 'Total tokens',
@@ -47,6 +51,8 @@ const COLUMN_LABELS: Record<TraceOptionalColumn, string> = {
 
 type TraceColumnsMenuProps = {
   preferences: TraceColumnPreferences;
+  /** Which columns the list offers. Defaults to the traces catalog. */
+  catalog?: TraceColumnCatalog;
   /** Top-level metadata keys observed on traces in the current time range, offered in the picker. */
   availableMetadataKeys?: readonly string[];
   usageDisabledReason?: string;
@@ -58,10 +64,13 @@ type TraceColumnsMenuProps = {
   onAddMetadataColumn: (key: string) => void;
   onRemoveMetadataColumn: (key: string) => void;
   onReset: () => void;
+  /** Keeps the trigger in place but inert, e.g. while capabilities load. */
+  disabled?: boolean;
 };
 
 export function TraceColumnsMenu({
   preferences,
+  catalog = TRACE_COLUMN_CATALOGS.traces,
   availableMetadataKeys = EMPTY_KEYS,
   usageDisabledReason,
   withQueryTrace = true,
@@ -71,7 +80,9 @@ export function TraceColumnsMenu({
   onAddMetadataColumn,
   onRemoveMetadataColumn,
   onReset,
+  disabled,
 }: TraceColumnsMenuProps) {
+  const withMetadata = catalog.metadata && withQueryTrace;
   const [isMetadataDialogOpen, setIsMetadataDialogOpen] = useState(false);
   const [metadataKey, setMetadataKey] = useState('');
   const [metadataError, setMetadataError] = useState<string | undefined>();
@@ -110,6 +121,7 @@ export function TraceColumnsMenu({
     <>
       <DropdownMenu>
         <DropdownMenu.Trigger
+          disabled={disabled}
           render={
             <Button variant="ghost" size="md" icon={<Columns3Icon aria-hidden />}>
               Columns
@@ -118,7 +130,7 @@ export function TraceColumnsMenu({
         />
         <DropdownMenu.Content align="end" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
-          {STANDARD_COLUMNS.map(column => (
+          {catalog.standardColumns.map(column => (
             <DropdownMenu.CheckboxItem
               key={column}
               checked={preferences.visibleColumns.includes(column)}
@@ -128,22 +140,26 @@ export function TraceColumnsMenu({
             </DropdownMenu.CheckboxItem>
           ))}
 
-          <DropdownMenu.Separator />
-          <DropdownMenu.Label>Usage columns</DropdownMenu.Label>
-          {TRACE_USAGE_COLUMNS.map(column => (
-            <DropdownMenu.CheckboxItem
-              key={column}
-              checked={preferences.visibleColumns.includes(column)}
-              disabled={Boolean(usageDisabledReason)}
-              onCheckedChange={() => onToggleColumn(column)}
-            >
-              {COLUMN_LABELS[column]}
-            </DropdownMenu.CheckboxItem>
-          ))}
-          {usageDisabledReason && (
-            <Txt variant="meta" tone="faint" className="px-2 py-1" role="note">
-              {usageDisabledReason}
-            </Txt>
+          {catalog.usage && (
+            <>
+              <DropdownMenu.Separator />
+              <DropdownMenu.Label>Usage columns</DropdownMenu.Label>
+              {TRACE_USAGE_COLUMNS.map(column => (
+                <DropdownMenu.CheckboxItem
+                  key={column}
+                  checked={preferences.visibleColumns.includes(column)}
+                  disabled={Boolean(usageDisabledReason)}
+                  onCheckedChange={() => onToggleColumn(column)}
+                >
+                  {COLUMN_LABELS[column]}
+                </DropdownMenu.CheckboxItem>
+              ))}
+              {usageDisabledReason && (
+                <Txt variant="meta" tone="faint" className="px-2 py-1" role="note">
+                  {usageDisabledReason}
+                </Txt>
+              )}
+            </>
           )}
 
           <DropdownMenu.Separator />
@@ -161,7 +177,7 @@ export function TraceColumnsMenu({
             );
           })}
 
-          {(withQueryTrace || preferences.metadataKeys.length > 0) && (
+          {catalog.metadata && (withQueryTrace || preferences.metadataKeys.length > 0) && (
             <>
               <DropdownMenu.Separator />
               <DropdownMenu.Label>Metadata columns</DropdownMenu.Label>
@@ -175,7 +191,7 @@ export function TraceColumnsMenu({
                   {key}
                 </DropdownMenu.CheckboxItem>
               ))}
-              {withQueryTrace && (
+              {withMetadata && (
                 <DropdownMenu.Item onSelect={() => setIsMetadataDialogOpen(true)}>
                   <PlusIcon aria-hidden />
                   Add metadata column
@@ -189,7 +205,7 @@ export function TraceColumnsMenu({
         </DropdownMenu.Content>
       </DropdownMenu>
 
-      {withQueryTrace && (
+      {withMetadata && (
         <Dialog open={isMetadataDialogOpen} onOpenChange={handleDialogOpenChange}>
           <DialogContent>
             <Form onSubmit={handleAddMetadata} className="gap-0">
