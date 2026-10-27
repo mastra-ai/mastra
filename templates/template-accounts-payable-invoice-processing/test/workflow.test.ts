@@ -93,6 +93,8 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         runId: string;
         status: string;
         result?: InvoiceResult;
+        disposition?: string;
+        reasons?: Array<{ code: string; message: string }>;
       };
     },
     async state(): Promise<WireState> {
@@ -160,7 +162,7 @@ it('never posts blocked, review, low-confidence, read-only or unavailable-provid
       disposition: 'blocked',
     },
     { name: 'missing PO', state: { orders: [] }, disposition: 'review' },
-    { name: 'PO mismatch', invoice: { total: 101 }, disposition: 'review' },
+    { name: 'PO mismatch', invoice: { total: 101, subtotal: 101, lines: [{ sku: 'item-1', description: 'Pens', qty: 10, unitPrice: 10.1, lineTotal: 101 }] }, disposition: 'review' },
     { name: 'no printed PO', invoice: { poNumber: null }, disposition: 'review' },
     { name: 'low confidence', invoice: { overallConfidence: 0.5 }, disposition: 'verify_extraction' },
     { name: 'missing confidence', invoice: { confidence: [] }, disposition: 'verify_extraction' },
@@ -345,5 +347,22 @@ it('does not post after approval if the external PO changed or lost its line ide
     } finally {
       await test.close();
     }
+  }
+});
+
+// PR #28532, CodeRabbit 4383787296: malformed extraction stays a review result, not a tool exception.
+it('returns structured extraction review for incomplete or inconsistent invoice drafts', async () => {
+  const test = await scenario();
+  try {
+    for (const invoice of [{ invoiceNumber: null }, { invoiceDate: '2026-02-30' }, { total: 101 }]) {
+      const result = await test.run({ tool: true, invoice });
+      assert.equal(result.status, 'needs_extraction_review');
+      assert.equal(result.disposition, 'verify_extraction');
+      assert.ok(result.reasons?.every(reason => reason.code === 'EXTRACTION_VALIDATION_FAILED'));
+      assert.ok(result.reasons?.length);
+    }
+    assert.deepEqual((await test.state()).calls, []);
+  } finally {
+    await test.close();
   }
 });

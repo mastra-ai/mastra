@@ -1,4 +1,5 @@
 import { z } from 'zod';
+import Decimal from 'decimal.js';
 import { isCanonicalCurrency, minorUnitDigits } from './currency.ts';
 
 const RequiredTextSchema = z.string().refine(value => value.trim().length > 0, 'Must not be blank');
@@ -16,6 +17,16 @@ const CurrencySchema = z
   .refine(isCanonicalCurrency, 'currency must be a canonical uppercase ISO 4217 code')
   .refine(value => minorUnitDigits(value) !== null, 'currency must define ISO 4217 minor units');
 
+const hasMinorUnitPrecision = (value: number, digits: number) => new Decimal(value).decimalPlaces() <= digits;
+// Unit prices may be sub-minor-unit rates; posted extended amounts must obey the currency scale.
+const reconciles = (parts: Array<number | Decimal>, total: number, digits: number) => {
+  const sum = parts.reduce<Decimal>((value, part) => value.plus(part), new Decimal(0)),
+    expected = new Decimal(total);
+  return sum
+    .toDecimalPlaces(digits, Decimal.ROUND_HALF_UP)
+    .equals(expected.toDecimalPlaces(digits, Decimal.ROUND_HALF_UP));
+};
+
 const LineItemSchema = z.object({
   sku: z.string().nullable(),
   description: RequiredTextSchema,
@@ -27,21 +38,59 @@ const FieldConfidenceSchema = z.object({
   field: z.string(),
   confidence: z.number().min(0).max(1),
 });
-export const ExtractedInvoiceSchema = z.object({
-  invoiceNumber: RequiredTextSchema,
-  vendorName: RequiredTextSchema,
-  vendorTaxId: z.string().nullable(),
-  poNumber: z.string().nullable(),
-  invoiceDate: InvoiceDateSchema,
-  currency: CurrencySchema,
-  subtotal: z.number().finite().nullable(),
-  tax: z.number().finite().nullable(),
-  total: z.number().finite(),
-  lines: z.array(LineItemSchema),
-  confidence: z.array(FieldConfidenceSchema),
-  overallConfidence: z.number().min(0).max(1),
-  source: z.enum(['PDF', 'image']).default('PDF'),
-});
+export const ExtractedInvoiceSchema = z
+  .object({
+    invoiceNumber: RequiredTextSchema,
+    vendorName: RequiredTextSchema,
+    vendorTaxId: z.string().nullable(),
+    poNumber: z.string().nullable(),
+    invoiceDate: InvoiceDateSchema,
+    currency: CurrencySchema,
+    subtotal: z.number().finite().nullable(),
+    tax: z.number().finite().nullable(),
+    total: z.number().finite(),
+    lines: z.array(LineItemSchema),
+    confidence: z.array(FieldConfidenceSchema),
+    overallConfidence: z.number().min(0).max(1),
+    source: z.enum(['PDF', 'image']).default('PDF'),
+  })
+  .superRefine((invoice, context) => {
+    const issues: string[] = [];
+    const digits = minorUnitDigits(invoice.currency);
+    const lineAmounts: Array<number | Decimal> = invoice.lines.map(
+      line => line.lineTotal ?? new Decimal(line.qty).mul(line.unitPrice),
+    );
+    const subtotalBasis =
+      invoice.subtotal ??
+      (lineAmounts.length ? lineAmounts.reduce<Decimal>((sum, value) => sum.plus(value), new Decimal(0)) : null);
+
+    if (digits !== null) {
+      for (const [field, value] of [
+        ['subtotal', invoice.subtotal],
+        ['tax', invoice.tax],
+        ['total', invoice.total],
+      ] as const)
+        if (value !== null && !hasMinorUnitPrecision(value, digits))
+          issues.push(`${field} exceeds ${invoice.currency} minor-unit precision`);
+
+      if (subtotalBasis === null) issues.push('total cannot be reconciled from printed amounts');
+      else if (!reconciles([subtotalBasis, invoice.tax ?? 0], invoice.total, digits))
+        issues.push('subtotal + tax does not equal total');
+
+      invoice.lines.forEach((line, index) => {
+        if (line.lineTotal === null) return;
+        if (!hasMinorUnitPrecision(line.lineTotal, digits))
+          issues.push(`lines.${index}.lineTotal exceeds ${invoice.currency} minor-unit precision`);
+        if (!reconciles([new Decimal(line.qty).mul(line.unitPrice)], line.lineTotal, digits))
+          issues.push(`lines.${index} does not reconcile`);
+      });
+      if (invoice.subtotal !== null && lineAmounts.length && !reconciles(lineAmounts, invoice.subtotal, digits))
+        issues.push('line totals do not equal subtotal');
+    }
+
+    for (const message of issues) context.addIssue({ code: 'custom', message });
+  });
+
 export type ExtractedInvoice = z.infer<typeof ExtractedInvoiceSchema>;
 
 const DraftLineItemSchema = z.object({

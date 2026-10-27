@@ -89,6 +89,12 @@ const normalized = normalizeInvoice({
 });
 
 describe('invoice validation and money', () => {
+  // PR #28532, CodeRabbit 4383787296: schema-first validation still allows structured extraction review.
+  it('enforces reconciliation and currency precision in the extracted-invoice schema', () => {
+    for (const invalid of [{ total: 108.001 }, { subtotal: 99 }, { tax: 7 }])
+      assert.equal(ExtractedInvoiceSchema.safeParse({ ...invoice, ...invalid }).success, false);
+  });
+
   // PR #28532, CodeRabbit 4383787348: direct workflow input must enforce field formats.
   it('rejects blank identities, invalid calendar dates and unsupported currencies at the workflow schema', () => {
     for (const invalid of [
