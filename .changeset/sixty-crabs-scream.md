@@ -7,6 +7,7 @@ Added an optional `user` argument to dynamic configuration callbacks. When serve
 ```ts
 export const supportAgent = new Agent({
   id: 'support-agent',
+  model: 'openai/gpt-5-mini',
   instructions: ({ user }) => (user ? `You are helping ${user.name ?? user.id}.` : 'You are a helpful assistant.'),
 });
 ```
