@@ -251,7 +251,17 @@ export class CachingPubSub extends PubSub {
     // of a new segment; a new segment writes a new entry 0 with a different id.
     const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0)) as Event[])[0]?.id;
     const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
-    let firstId = typeof logLength === 'number' ? await readFirstId().catch(() => undefined) : undefined;
+    // When the attach-time id read fails on an existing log, the counter
+    // fallback must compare against the log's end, not a cursor past it, or the
+    // intact log's retained frame 0 reads as a restart.
+    let attachLogEnd: number | undefined;
+    let firstId =
+      typeof logLength === 'number'
+        ? await readFirstId().catch(() => {
+            attachLogEnd = logLength;
+            return undefined;
+          })
+        : undefined;
     let closed = false;
     let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
@@ -338,8 +348,9 @@ export class CachingPubSub extends PubSub {
 
           const restarted = compareIds
             ? currentFirstId !== undefined && currentFirstId !== firstId
-            : typeof allocated === 'number' && allocated < next;
+            : typeof allocated === 'number' && allocated < Math.min(next, attachLogEnd ?? next);
           if (restarted) {
+            attachLogEnd = undefined;
             firstId = compareIds ? currentFirstId : await readFirstId().catch(() => undefined);
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +

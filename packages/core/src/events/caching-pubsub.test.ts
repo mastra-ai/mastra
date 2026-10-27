@@ -1578,6 +1578,43 @@ describe('CachingPubSub', () => {
       expect(warn).not.toHaveBeenCalled();
     });
 
+    it('delivers nothing past the end of an intact log when the attach-time frame 0 id read fails', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      const frames = [await append(shared, 0), await append(shared, 1), await append(shared, 2)];
+      inner.retained.set(topic, frames);
+      // The attach-time read of entry 0 fails once; the log itself stays intact.
+      vi.spyOn(shared, 'listFromTo').mockRejectedValueOnce(new Error('cache unavailable'));
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      expect(received).toEqual([]);
+      expect(warn).not.toHaveBeenCalled();
+    });
+
+    it('delivers the next run from the start when the log is empty at attach', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn: vi.fn() } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      for (const n of [0, 1]) await inner.publish(topic, await append(shared, n));
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+    });
+
     it('resyncs when a short log past the offset expires and a new segment restarts at 0', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();
