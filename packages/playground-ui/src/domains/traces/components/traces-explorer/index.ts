@@ -30,12 +30,19 @@ export type {
   TracesExplorerTimeRangeChipProps,
 } from './traces-explorer-filter-bar';
 export type { TracesExplorerPanelProps } from './traces-explorer-panel';
-export { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION, resolveTracesDateWindow } from './traces-explorer-actions';
+export {
+  DEFAULT_TRACES_FILTERS,
+  DEFAULT_TRACES_SORT,
+  EMPTY_TRACES_SELECTION,
+  resolveTracesDateWindow,
+} from './traces-explorer-actions';
 export type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
+  TracesSort,
   TracesSortDirection,
+  TracesSortField,
 } from './traces-explorer-actions';
 export {
   useTraceUsageColumns,
