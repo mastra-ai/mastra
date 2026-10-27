@@ -43,6 +43,10 @@ export const dailyReport = createWorkflow({
 
 A separate "register schedule" call won't happen. The scheduler reads `schedule` straight off the workflow when `Mastra` boots.
 
+## Delivery guarantees
+
+Scheduled workflow publication is best-effort. The scheduler claims each occurrence before publishing its start event, so a publication failure or process crash can skip that occurrence. It is not automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence; this does not confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+
 ## Execution engine
 
 Declaring `schedule` doesn't change how the workflow runs. Scheduled fires run in-process on the host that runs the scheduler, the same way `workflow.start()` or an HTTP-triggered run does. A workflow that declares `schedule` needs no extra storage or worker setup to run directly.

@@ -397,6 +397,9 @@ export class Scheduler extends MastraBase {
         scheduleId: schedule.id,
         runId,
         targetType: schedule.target.type,
+        scheduledFireAt: schedule.nextFireAt,
+        publicationOutcome: 'unknown',
+        automaticRetry: false,
         error: err,
       });
       this.#notifyError(err, schedule.id);
