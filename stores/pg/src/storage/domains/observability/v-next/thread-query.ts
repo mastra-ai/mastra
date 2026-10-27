@@ -221,7 +221,7 @@ export async function queryThreadRows(
     }),
   );
   const payloads = await run<Record<string, unknown>>(
-    `SELECT "organizationId", "traceId", "cursorId", "spanType", ${contextFields.map(field => `"${field}"`).join(', ')},
+    `SELECT "organizationId", "traceId", "cursorId", ${contextFields.map(field => `"${field}"`).join(', ')},
     CASE WHEN "spanType" = 'agent_run' THEN "timeToFirstChunkMs" END AS "timeToFirstChunkMs",
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
     ${(['input', 'output', 'error'] as const).map(field => `"${field}Preview", CASE WHEN ${missingPreviewSql(`"${field}Preview"`)} THEN "${field}" END AS "${field}"`).join(', ')}
@@ -230,47 +230,10 @@ export async function queryThreadRows(
   );
   const key = (org: unknown, trace: unknown, version: unknown) => JSON.stringify([org, trace, String(version)]);
   const byRoot = new Map(payloads.map(row => [key(row.organizationId, row.traceId, row.cursorId), row]));
-  const agents = page.filter(
-    row => byRoot.get(key(row.organizationId, row.firstTraceId, row.firstCursorId))?.spanType === 'agent_run',
-  );
-  const models = new Map<string, { model: string | null; provider: string | null }>();
-  if (agents.length) {
-    const modelValues: unknown[] = [];
-    const predicates = agents.map(
-      row =>
-        `(${Object.entries({
-          organizationId: row.organizationId,
-          resourceId: row.resourceId,
-          traceId: row.firstTraceId,
-          parentSpanId: row.firstSpanId,
-        })
-          .map(([field, value]) => {
-            modelValues.push(value);
-            const operator = field === 'organizationId' || field === 'resourceId' ? 'IS NOT DISTINCT FROM' : '=';
-            return `"${field}" ${operator} $${modelValues.length}`;
-          })
-          .join(' AND ')})`,
-    );
-    const rows = await run<{
-      organizationId: string | null;
-      traceId: string;
-      model: string | null;
-      provider: string | null;
-    }>(
-      `SELECT DISTINCT ON ("organizationId", "traceId") "organizationId", "traceId",
-        CASE WHEN jsonb_typeof(attributes -> 'model') = 'string' THEN attributes ->> 'model' END AS model,
-        CASE WHEN jsonb_typeof(attributes -> 'provider') = 'string' THEN attributes ->> 'provider' END AS provider
-        FROM ${table} WHERE "spanType" = 'model_generation' AND NOT "isPending" AND (${predicates.join(' OR ')})
-        ORDER BY "organizationId", "traceId", "startedAt", "spanId" COLLATE "C", "cursorId" DESC`,
-      modelValues,
-    );
-    for (const row of rows) models.set(JSON.stringify([row.organizationId, row.traceId]), row);
-  }
   const threads = page.flatMap(row => {
     const first = byRoot.get(key(row.organizationId, row.firstTraceId, row.firstCursorId));
     const last = byRoot.get(key(row.organizationId, row.lastTraceId, row.lastCursorId));
     if (!first || !last) return [];
-    const model = models.get(JSON.stringify([row.organizationId, row.firstTraceId]));
     return [
       coreStorage.threadQueryRowSchema.parse({
         organizationId: row.organizationId,
@@ -283,8 +246,6 @@ export async function queryThreadRows(
         endedAt: row.endedAt.toISOString(),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
-        model: model?.model ?? null,
-        provider: model?.provider ?? null,
         inputPreview: readPreview(first.inputPreview, first.input),
         outputPreview: readPreview(last.outputPreview, last.output),
         errorPreview: readPreview(last.errorPreview, last.error),

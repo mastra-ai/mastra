@@ -16,6 +16,7 @@ import type {
   UpdateSpanArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   BatchCreateSpansArgs,
   CreateSpanArgs,
   GetSpanArgs,
@@ -588,32 +589,59 @@ export class ObservabilityLibSQL extends ObservabilityStorage {
     }
   }
 
-  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
+  #toSpanUpdates(records: BatchUpdateSpansArgs['records']) {
     const now = new Date().toISOString();
+    return records.map(record => {
+      const data: Record<string, any> = { ...record.updates };
+      if (data.endedAt instanceof Date) {
+        data.endedAt = data.endedAt.toISOString();
+      }
+      if (data.startedAt instanceof Date) {
+        data.startedAt = data.startedAt.toISOString();
+      }
+      data.updatedAt = now;
 
+      return {
+        keys: { spanId: record.spanId, traceId: record.traceId },
+        data,
+      };
+    });
+  }
+
+  async batchUpdateSpans(args: BatchUpdateSpansArgs): Promise<void> {
     try {
       return this.#db.batchUpdate({
         tableName: TABLE_SPANS,
-        updates: args.records.map(record => {
-          const data: Record<string, any> = { ...record.updates };
-          if (data.endedAt instanceof Date) {
-            data.endedAt = data.endedAt.toISOString();
-          }
-          if (data.startedAt instanceof Date) {
-            data.startedAt = data.startedAt.toISOString();
-          }
-          data.updatedAt = now;
-
-          return {
-            keys: { spanId: record.spanId, traceId: record.traceId },
-            data,
-          };
-        }),
+        updates: this.#toSpanUpdates(args.records),
       });
     } catch (error) {
       throw new MastraError(
         {
           id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_SPANS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.USER,
+        },
+        error,
+      );
+    }
+  }
+
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    try {
+      const changed = await this.#db.batchUpdateReportingChanges({
+        tableName: TABLE_SPANS,
+        updates: this.#toSpanUpdates(args.records).map(update => ({
+          ...update,
+          keys: { ...update.keys, endedAt: null },
+        })),
+      });
+      return {
+        updated: args.records.filter((_, index) => changed[index]).map(({ traceId, spanId }) => ({ traceId, spanId })),
+      };
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('LIBSQL', 'BATCH_UPDATE_UNENDED_SPANS', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.USER,
         },

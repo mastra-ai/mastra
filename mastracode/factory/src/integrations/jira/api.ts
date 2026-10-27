@@ -213,7 +213,7 @@ export class JiraApiClient {
     this.#fetch = config.fetchImpl ?? globalThis.fetch;
   }
 
-  /** Normalized site base URL (no trailing slash) — used for `/browse/<key>` links. */
+  /** Normalized API base URL (no trailing slash). */
   get baseUrl(): string {
     return this.#baseUrl;
   }

@@ -33,13 +33,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "trustedrouter/fast": [
+    "trustedrouter/zdr": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "trustedrouter/synth": [
+    "trustedrouter/fast": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -51,13 +51,13 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "trustedrouter/zdr": [
+    "trustedrouter/e2e": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "trustedrouter/e2e": [
+    "trustedrouter/synth": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]

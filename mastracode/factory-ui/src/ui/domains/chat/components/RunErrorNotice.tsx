@@ -45,6 +45,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
   return (
     <Notice
       variant="destructive"
+      className="gap-y-2"
       title={title}
       action={
         <>

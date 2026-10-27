@@ -186,7 +186,7 @@ await agent.streamLegacy('message for agent')
             type: 'StreamTextOnStepFinishCallback<any> | never',
             isOptional: true,
             description:
-              'Callback function called after each execution step. Receives step details as a JSON string. Unavailable for structured output',
+              'Callback function called after each execution step. Receives the step result (text, tool calls, tool results, usage, finish reason) plus the `runId`. Unavailable for structured output',
           },
           {
             name: 'resourceId',

@@ -63,8 +63,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/is not valid JSON/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });
@@ -78,8 +77,7 @@ describe('SlackConnectionPage', () => {
 
     renderPage();
 
-    expect(await screen.findByText('Not configured')).toBeInTheDocument();
-    expect(screen.getByText(/Slack is not set up for this factory/)).toBeInTheDocument();
+    expect(await screen.findByText(/Slack is not set up for this factory/)).toBeInTheDocument();
     expect(screen.queryByText(/SLACK_APP_SIGNING_SECRET/)).not.toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /Connect Slack/ })).not.toBeInTheDocument();
   });

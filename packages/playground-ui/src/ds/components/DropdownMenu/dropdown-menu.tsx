@@ -83,7 +83,11 @@ DropdownMenuSubTrigger.displayName = 'DropdownMenuSubTrigger';
 
 type DropdownMenuContentPositionerProps = Omit<MenuPositionerProps, keyof MenuPopupProps>;
 
-type DropdownMenuSubContentProps = MenuPopupProps & DropdownMenuContentPositionerProps;
+type DropdownMenuSubContentProps = MenuPopupProps &
+  DropdownMenuContentPositionerProps & {
+    /** Fixed content above the scrolling options, such as a search field. */
+    header?: React.ReactNode;
+  };
 
 const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubContentProps>(
   (
@@ -101,6 +105,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       arrowPadding,
       disableAnchorTracking,
       collisionAvoidance,
+      header,
       children,
       ...props
     },
@@ -134,6 +139,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
             className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
           >
+            {header && <div className="shrink-0">{header}</div>}
             <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
