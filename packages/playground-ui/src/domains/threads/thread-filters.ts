@@ -1,5 +1,7 @@
 import { EntityType } from '@mastra/core/observability';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { MessagesSquareIcon } from 'lucide-react';
+import type { LucideIcon } from 'lucide-react';
 import {
   isLegacyAnyValue,
   ROOT_ENTITY_TYPE_OPTIONS,
@@ -55,17 +57,21 @@ const THREAD_FILTER_BAR_LABELS: Record<string, string> = {
 
 /** Thread fields without their own trace icon borrow the icon of the closest trace field. */
 const THREAD_ICON_FIELD_ALIASES: Record<string, string> = {
-  traceCount: 'traceId',
   timeToFirstChunkMs: 'durationMs',
   executionSource: 'runId',
   entityType: 'rootEntityType',
   entityVersionId: 'entityId',
 };
 
+/** Thread fields with an icon of their own: Messages uses the Threads tab's icon. */
+const THREAD_FILTER_BAR_ICONS: Record<string, LucideIcon> = {
+  traceCount: MessagesSquareIcon,
+};
+
 const threadFieldBase = (id: string) => ({
   id,
   label: THREAD_FILTER_BAR_LABELS[id] ?? id,
-  icon: traceFilterFieldIcon(THREAD_ICON_FIELD_ALIASES[id] ?? id),
+  icon: THREAD_FILTER_BAR_ICONS[id] ?? traceFilterFieldIcon(THREAD_ICON_FIELD_ALIASES[id] ?? id),
   color: traceFilterFieldColor(id),
 });
 
