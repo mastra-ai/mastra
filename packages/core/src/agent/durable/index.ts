@@ -143,7 +143,6 @@ export {
 export {
   AGENT_STREAM_TOPIC,
   AGENT_CONTROL_TOPIC,
-  AGENT_CONTROL_ACK_TOPIC,
   AgentStreamEventTypes,
   AgentControlEventTypes,
   DURABLE_STOP_WHEN_ERROR_ID,

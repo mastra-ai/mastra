@@ -14,7 +14,7 @@
  */
 import type { PubSub } from '../../events';
 import type { Mastra } from '../../mastra';
-import { AGENT_CONTROL_ACK_TOPIC, AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
+import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from './constants';
 import { getRunRegistryEntry, setRunRegistryEntry } from './run-registry';
 import type { RunRegistryEntry } from './types';
 
@@ -25,16 +25,24 @@ import type { RunRegistryEntry } from './types';
  * when nobody is listening — an unheard request is a no-op, exactly like
  * aborting a run that already finished.
  */
-export async function publishAbortRequest(pubsub: PubSub, runId: string, requestId?: string): Promise<void> {
+export async function publishAbortRequest(pubsub: PubSub, runId: string): Promise<void> {
   await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
     type: AgentControlEventTypes.ABORT_REQUEST,
     runId,
-    data: requestId ? { requestId } : {},
+    data: {},
   });
 }
 
+/**
+ * Topic on which the process executing a run acknowledges abort requests that
+ * carried a `requestId`. Kept apart from the control topic so a requester never
+ * has to read (or replay) the control history to wait for its own reply.
+ */
+const abortAckTopic = (runId: string): string => `agent.control.${runId}.ack`;
+const ABORT_ACK = 'abort-ack';
+
 /** How long `requestAcknowledgedAbort` waits for the executing process to answer. */
-export const ABORT_ACK_TIMEOUT_MS = 2_000;
+const ABORT_ACK_TIMEOUT_MS = 2_000;
 
 /**
  * Ask whichever process is executing `runId` to abort it, and wait for that
@@ -44,6 +52,8 @@ export const ABORT_ACK_TIMEOUT_MS = 2_000;
  * `false` when nobody answered within `timeoutMs` (the run is not executing
  * anywhere, its owner died, or its listener is not installed yet). A publish
  * failure rejects: the caller cannot claim an abort it never sent.
+ *
+ * @internal Used by `@mastra/server`'s run abort route; not a public API.
  */
 export async function requestAcknowledgedAbort(
   pubsub: PubSub,
@@ -51,7 +61,7 @@ export async function requestAcknowledgedAbort(
   timeoutMs: number = ABORT_ACK_TIMEOUT_MS,
 ): Promise<boolean> {
   const requestId = globalThis.crypto.randomUUID();
-  const topic = AGENT_CONTROL_ACK_TOPIC(runId);
+  const topic = abortAckTopic(runId);
   let acknowledge!: () => void;
   const acknowledged = new Promise<boolean>(resolve => {
     acknowledge = () => resolve(true);
@@ -60,7 +70,7 @@ export async function requestAcknowledgedAbort(
     event: { type?: string; data?: { requestId?: string } },
     ack?: () => Promise<void>,
   ): Promise<void> => {
-    if (event?.type === AgentControlEventTypes.ABORT_ACK && event.data?.requestId === requestId) acknowledge();
+    if (event?.type === ABORT_ACK && event.data?.requestId === requestId) acknowledge();
     await ack?.();
   };
 
@@ -68,7 +78,11 @@ export async function requestAcknowledgedAbort(
   await pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
   let timer: ReturnType<typeof setTimeout> | undefined;
   try {
-    await publishAbortRequest(pubsub, runId, requestId);
+    await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
+      type: AgentControlEventTypes.ABORT_REQUEST,
+      runId,
+      data: { requestId },
+    });
     return await Promise.race([
       acknowledged,
       new Promise<boolean>(resolve => {
@@ -104,8 +118,8 @@ export async function subscribeToAbortRequests(
         // Confirm to a requester waiting on `requestAcknowledgedAbort`. A lost
         // acknowledgement only makes the requester retry; the abort has applied.
         await pubsub
-          .publish(AGENT_CONTROL_ACK_TOPIC(runId), {
-            type: AgentControlEventTypes.ABORT_ACK,
+          .publish(abortAckTopic(runId), {
+            type: ABORT_ACK,
             runId,
             data: { requestId },
           })

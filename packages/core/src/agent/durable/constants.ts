@@ -29,13 +29,6 @@ export const AGENT_STREAM_TOPIC = (runId: string): string => `agent.stream.${run
 export const AGENT_CONTROL_TOPIC = (runId: string): string => `agent.control.${runId}`;
 
 /**
- * Topic on which the process executing a run acknowledges abort requests.
- * Kept apart from the control topic so a requester never has to read (or
- * replay) the control history to wait for its own reply.
- */
-export const AGENT_CONTROL_ACK_TOPIC = (runId: string): string => `agent.control.${runId}.ack`;
-
-/**
  * Event type constants for agent control events
  */
 export const AgentControlEventTypes = {
@@ -45,11 +38,6 @@ export const AgentControlEventTypes = {
    * executing the run's steps.
    */
   ABORT_REQUEST: 'abort-request',
-  /**
-   * Published on `AGENT_CONTROL_ACK_TOPIC` by the process executing a run once
-   * it has applied an abort request that carried a `requestId`.
-   */
-  ABORT_ACK: 'abort-ack',
 } as const;
 
 /**

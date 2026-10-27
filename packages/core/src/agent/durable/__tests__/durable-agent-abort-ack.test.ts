@@ -7,7 +7,10 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { PubSub } from '../../../events/pubsub';
 import { UnixSocketPubSub } from '../../../events/unix-socket-pubsub';
-import { ensureRemoteAbortListener, requestAcknowledgedAbort } from '../abort-transport';
+import { Agent } from '../../agent';
+import { ensureRemoteAbortListener, requestAcknowledgedAbort, subscribeToAbortRequests } from '../abort-transport';
+import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../constants';
+import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
 import type { RunRegistryEntry } from '../types';
 
@@ -75,5 +78,60 @@ describe.each(transports)('requestAcknowledgedAbort over $name', ({ setup }) => 
     vi.spyOn(requester, 'publish').mockRejectedValue(new Error('pubsub down'));
 
     await expect(requestAcknowledgedAbort(requester, 'any-run', 300)).rejects.toThrow('pubsub down');
+  });
+});
+
+/**
+ * The server's run abort route answers with `__abortRunAcknowledged`. Only a
+ * close this process performs, or the executor's answer, may confirm an abort.
+ */
+describe('DurableAgent.__abortRunAcknowledged', () => {
+  const createAgent = (pubsub: PubSub) =>
+    createDurableAgent({
+      agent: new Agent({
+        id: 'abort-ack-agent',
+        name: 'Abort Ack Agent',
+        instructions: 'Test',
+        model: 'openai/gpt-4o',
+      }),
+      pubsub,
+    });
+
+  it('does not confirm a run this process only holds a registry entry for', async () => {
+    // An evented run keeps its registry entry on the process that started it
+    // while another process executes the steps. Here that executor is gone.
+    const pubsub = new EventEmitterPubSub();
+    const runId = `registry-only-run-${globalThis.crypto.randomUUID()}`;
+    const controller = new AbortController();
+    globalRunRegistry.set(runId, { abortController: controller, abortSignal: controller.signal } as RunRegistryEntry);
+    cleanups.push(async () => {
+      globalRunRegistry.delete(runId);
+    });
+
+    await expect(createAgent(pubsub).__abortRunAcknowledged(runId)).resolves.toBe(false);
+    // The local controller is still flipped.
+    expect(controller.signal.aborted).toBe(true);
+  });
+
+  it('confirms through an executor that drops its listener on the first abort request', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = `remote-run-${globalThis.crypto.randomUUID()}`;
+    const publish = vi.spyOn(pubsub, 'publish');
+    // The executing process unwinds as soon as it is told to abort, which tears
+    // down its abort listener: it can answer exactly one request.
+    let unsubscribe: (() => Promise<void>) | undefined;
+    unsubscribe = await subscribeToAbortRequests(pubsub, runId, () => {
+      void unsubscribe?.();
+      unsubscribe = undefined;
+    });
+    cleanups.push(async () => {
+      await unsubscribe?.();
+    });
+
+    await expect(createAgent(pubsub).__abortRunAcknowledged(runId)).resolves.toBe(true);
+    const abortRequests = publish.mock.calls.filter(
+      ([topic, event]) => topic === AGENT_CONTROL_TOPIC(runId) && event.type === AgentControlEventTypes.ABORT_REQUEST,
+    );
+    expect(abortRequests).toHaveLength(1);
   });
 });
