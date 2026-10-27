@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
 import { transformRequest } from './transform-request';
@@ -5,6 +6,28 @@ import { transformRequest } from './transform-request';
 const googleUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent';
 
 describe('transformRequest', () => {
+  it.each([
+    ['Oct 25 2026:', 'Nov 2 2028:'],
+    ['Date: Oct 25, 2026', 'Date: Nov 2, 2028'],
+  ])('keeps replay hashes stable when the OM heading changes from %s to %s', (first, later) => {
+    const hash = (heading: string) => {
+      const request = {
+        url: 'https://api.openai.com/v1/responses',
+        body: { model: 'gpt-5-mini', input: [{ role: 'user', content: `${heading}\nUser: Lisbon weather?` }] },
+      };
+      const original = JSON.stringify(request);
+      const normalized = transformRequest(request);
+      expect(JSON.stringify(request)).toBe(original);
+      return createHash('md5').update(`${normalized.url}:${JSON.stringify(normalized.body)}`).digest('hex');
+    };
+    expect(hash(first)).toBe(hash(later));
+  });
+
+  it.each(['Oct 25 2026:', 'Date: Oct 25, 2026'])('preserves ordinary user text containing %s', date => {
+    const body = { messages: [{ role: 'user', content: `My note says ${date}\nPlease keep that date.` }] };
+    expect(transformRequest({ url: 'https://api.anthropic.com/v1/messages', body }).body).toEqual(body);
+  });
+
   it('normalizes legacy and current Google tool-call histories identically', () => {
     const text = { text: 'I will check the weather.' };
     const functionCall = {
