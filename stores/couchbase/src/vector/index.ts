@@ -523,7 +523,7 @@ export class CouchbaseVector extends MastraVector {
         text: 'Couchbase deleteVectors filter-based deletion is not supported; provide ids instead',
         domain: ErrorDomain.STORAGE,
         category: ErrorCategory.USER,
-        details: { indexName, filter: JSON.stringify(filter) },
+        details: { indexName },
       });
     }
 

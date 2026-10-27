@@ -522,10 +522,13 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
     });
 
-    it('should reject filter-based deletion without removing documents', async () => {
-      await expect(
-        couchbase_client.deleteVectors({ indexName: test_indexName, filter: { label: 'x-axis' } }),
-      ).rejects.toThrow('filter-based deletion is not supported');
+    it('should reject filter-based deletion without exposing filter values in the error', async () => {
+      const error = await couchbase_client
+        .deleteVectors({ indexName: test_indexName, filter: { label: 'sensitive-user-token' } })
+        .catch(error => error);
+      expect(error.message).toContain('filter-based deletion is not supported');
+      expect(JSON.stringify(error)).not.toContain('sensitive-user-token');
+      expect(String(error)).not.toContain('sensitive-user-token');
       expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
     });
 
