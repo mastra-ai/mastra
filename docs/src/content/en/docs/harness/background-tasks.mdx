@@ -131,7 +131,7 @@ For compatibility, `_background.enabled: true` selects `deferred`, and `_backgro
 
 The `_background` override only _modifies_ tools the developer has already opted in at the tool or agent layer. If a tool hasn't been opted in, a model-selected background disposition is ignored and the tool runs in the foreground. This keeps deterministic, foreground-only tools (calculators, lookups, schema validators) from being silently dispatched as tasks.
 
-Each eligible tool that accepts model overrides adds an optional `_background` object and four optional fields to its model-facing schema. Some providers limit the total number of optional parameters across tools. To omit these fields while keeping background execution enabled, set `allowModelOverride: false` in the tool's `background` configuration or its entry in `agent.backgroundTasks.tools`. The tool then uses its configured `defaultDisposition`, `timeoutMs`, and `maxRetries`; any `_background` supplied in a call is ignored. Agent-level `allowModelOverride` takes precedence over the tool-level setting.
+Each eligible tool that accepts model overrides adds an optional `_background` object and four optional fields to its model-facing schema. Some providers limit the total number of optional parameters across tools. To omit these fields while keeping background execution enabled, set `allowModelOverride: false` in the tool's `background` configuration or its entry in `agent.backgroundTasks.tools`. The tool then uses its configured `defaultDisposition`, `timeoutMs`, and `maxRetries`. Any `_background` supplied in a call is ignored. Agent-level `allowModelOverride` takes precedence over the tool-level setting.
 
 ### Resolution order
 
