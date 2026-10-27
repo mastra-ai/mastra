@@ -201,10 +201,9 @@ export function createThreadQueryTests(
           root('same', 15.1, {
             organizationId: null,
             resourceId: null,
-            spanId: 'null-tenant-model',
+            spanId: 'null-tenant-child',
             parentSpanId: 'root-same',
             spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'gpt-4o', provider: 'openai' },
           }),
           root('same', 16, { organizationId: 'org-a', threadId: 'same', input: 'named tenant' }),
         ],
@@ -215,8 +214,6 @@ export function createThreadQueryTests(
         traceCount: 1,
         inputPreview: 'null tenant',
         resourceId: null,
-        model: 'gpt-4o',
-        provider: 'openai',
       });
       expect(rows.find(row => row.organizationId === 'org-a')).toMatchObject({
         traceCount: 1,
@@ -249,7 +246,7 @@ export function createThreadQueryTests(
       });
     });
 
-    it('returns null root-agent fields for a non-agent first trace', async () => {
+    it('returns null time to first chunk for a non-agent first trace and no model or provider', async () => {
       await getStorage().batchCreateSpans({
         records: [
           root('a', 15, { spanType: SpanType.WORKFLOW_RUN, timeToFirstChunkMs: 100 }),
@@ -258,24 +255,32 @@ export function createThreadQueryTests(
             spanId: 'model',
             parentSpanId: 'root-a',
             spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'not-root-agent' },
+            attributes: { model: 'gpt-4o', provider: 'openai' },
           }),
         ],
       });
-      expect((await query()).threads[0]).toMatchObject({ model: null, provider: null, timeToFirstChunkMs: null });
+      // Read the store's own rows: the response schema would drop extra keys.
+      const { threads } = (await getStorage().queryThreads(planThreadRowsQuery({ timeRange: { traces: range } }))) as {
+        threads: Record<string, unknown>[];
+      };
+      expect(threads[0]).toMatchObject({ timeToFirstChunkMs: null });
+      expect(threads[0]).not.toHaveProperty('model');
+      expect(threads[0]).not.toHaveProperty('provider');
     });
 
-    it('hydrates the maximum page and keeps the continuation', async () => {
+    it('hydrates the maximum page, defaults to 25 rows and keeps the continuation', async () => {
       await getStorage().batchCreateSpans({
-        records: Array.from({ length: 1001 }, (_, index) =>
-          root(`trace-${index}`, 15, { threadId: `thread-${String(index).padStart(4, '0')}` }),
+        records: Array.from({ length: 101 }, (_, index) =>
+          root(`trace-${index}`, 15, { threadId: `thread-${String(index).padStart(3, '0')}` }),
         ),
       });
-      const first = await query({ page: { limit: 1000 } });
-      expect(first.threads).toHaveLength(1000);
+      expect((await query()).threads).toHaveLength(25);
+      expect(() => planThreadRowsQuery({ timeRange: { traces: range }, page: { limit: 101 } })).toThrow();
+      const first = await query({ page: { limit: 100 } });
+      expect(first.threads).toHaveLength(100);
       expect(first.page.next).not.toBeNull();
       const next = await query({ page: { after: first.page.next! } });
-      expect(next.threads.map(row => row.threadId)).toEqual(['thread-1000']);
+      expect(next.threads.map(row => row.threadId)).toEqual(['thread-100']);
       expect(next.page.next).toBeNull();
     });
 
@@ -300,34 +305,6 @@ export function createThreadQueryTests(
       expect(next.threads).toHaveLength(1);
       expect(next.threads[0]).toMatchObject({ inputPreview: 'input 35', outputPreview: 'output 35', traceCount: 2 });
       expect(next.page.next).toBeNull();
-    });
-
-    it('uses the root agent own model generation instead of a nested processor model', async () => {
-      await getStorage().batchCreateSpans({
-        records: [
-          root('a', 15),
-          root('a', 15.1, { spanId: 'processor', parentSpanId: 'root-a' }),
-          root('a', 15.2, {
-            spanId: 'nested-model',
-            parentSpanId: 'processor',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'wrong', provider: 'wrong' },
-          }),
-          root('a', 15.3, {
-            spanId: 'own-model',
-            parentSpanId: 'root-a',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'first-model', provider: 'first-provider' },
-          }),
-          root('a', 15.4, {
-            spanId: 'later-model',
-            parentSpanId: 'root-a',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'later-model' },
-          }),
-        ],
-      });
-      expect((await query()).threads[0]).toMatchObject({ model: 'first-model', provider: 'first-provider' });
     });
   });
 }

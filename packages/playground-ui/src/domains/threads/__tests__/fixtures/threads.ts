@@ -76,8 +76,6 @@ function makeThread(
     outputPreview: null,
     errorPreview: null,
     traceCount: 2,
-    model: null,
-    provider: null,
     ...overrides,
   };
 }
