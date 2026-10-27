@@ -31,6 +31,18 @@
         "type": "budget_tokens"
       }
     ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      },
+      {
+        "type": "budget_tokens"
+      }
+    ],
     "zai-org/GLM-5.3": [
       {
         "type": "effort",
@@ -44,18 +56,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      },
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       },
       {
         "type": "budget_tokens"

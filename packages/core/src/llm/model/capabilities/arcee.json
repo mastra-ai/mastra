@@ -25,13 +25,31 @@
     "zai-org/glm-5.3-flash"
   ],
   "reasoning": {
-    "deepseek/deepseek-v4-pro": [
+    "zai-org/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-flash-latest": [
+    "zai-org/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro-0813": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -49,7 +67,7 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek/deepseek-v4-pro-0813": [
+    "deepseek/deepseek-v4-flash-latest": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -59,24 +77,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ]
   }
