@@ -110,7 +110,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 1: no pins, no pinned-knowledge tag — OK');
 
     // Curator pins a standing instruction.
-    const pin = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
+    const pin = await tools.knowledge_pin!.execute!({ op: 'pin', text: 'Always answer in French.' } as any, {} as any);
 
     // Turn 2: snapshot appears.
     await agent.generate('What is the capital of France?', turnOptions);
@@ -126,8 +126,8 @@ describe('Pinned knowledge live proof', () => {
     console.info(`[proof] turn 3: unchanged set, tag occurrences ${before} -> ${after} — OK`);
 
     // Curator edits the pin.
-    const edited = await tools.knowledge_edit_pin!.execute!(
-      { recordId: pin.id, text: 'Always answer in French. Politely.' } as any,
+    const edited = await tools.knowledge_pin!.execute!(
+      { op: 'edit', recordId: pin.id, text: 'Always answer in French. Politely.' } as any,
       {} as any,
     );
 
@@ -137,7 +137,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 4: edit delivered — OK');
 
     // Curator unpins.
-    await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
+    await tools.knowledge_pin!.execute!({ op: 'unpin', recordId: edited.id } as any, {} as any);
 
     // Turn 5: lane clears — the latest state carries no pin body.
     await agent.generate('One more thing.', turnOptions);

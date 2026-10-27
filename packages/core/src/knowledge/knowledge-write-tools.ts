@@ -35,9 +35,15 @@ const recordTextSchema: JSONSchema7 = {
 function requireRecordTextWithinBound(text: string): void {
   if (estimateTokenCount(text) > MAX_KNOWLEDGE_RECORD_TOKENS) {
     throw new Error(
-      `Knowledge records are limited to about ${MAX_KNOWLEDGE_RECORD_TOKENS} tokens. Split this into separate records, one fact each, or summarize it, then retry.`,
+      `Knowledge records are limited to about ${MAX_KNOWLEDGE_RECORD_TOKENS} tokens. Split this into separate records, one fact each, or summarize it, then retry. Long-form text belongs in a node's content: knowledge_node op "write".`,
     );
   }
+}
+
+/** A field an op needs; the flat op schema can't require it per op. */
+function requireField<T>(value: T | undefined, tool: string, op: string, field: string): T {
+  if (value === undefined) throw new Error(`${tool} op "${op}" needs ${field}.`);
+  return value;
 }
 
 const dateTimeSchema: JSONSchema7 = {
@@ -243,346 +249,299 @@ export function createKnowledgeWriteTools(
     return node;
   }
 
+  async function addRecord(value: {
+    node: string;
+    text: string;
+    scope?: string[];
+    when?: string;
+    kind?: string;
+    nodeScope?: string;
+    confirmDistinct?: boolean;
+  }) {
+    requireRecordTextWithinBound(value.text);
+    const when = value.when ? new Date(value.when) : undefined;
+    if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
+    const store = await getStore(memory);
+    const byId = await store.getNode(value.node);
+    if (byId && !byId.mergedInto) {
+      requireVisible(byId.scope, options, 'Knowledge node', 'append');
+      const scope = resolveWriteScope(options, value.scope);
+      const node = await ensureNodeCoversRecord(store, byId, scope);
+      const record = await store.appendKnowledge({
+        node: node.id,
+        text: value.text,
+        scope,
+        sourceThreadId: options.sourceThreadId,
+        ...(options.source ? { metadata: { source: options.source } } : {}),
+        when,
+        resolutionScope: options.scope,
+        defaultScope: scope,
+      });
+      await vouchThreadScope(scope);
+      return { node, record };
+    }
+    const name = value.node;
+    let existing: KnowledgeNode | undefined;
+    if (!value.confirmDistinct) {
+      const { exact, similar } = await findSimilarNodes(store, options.scope, name);
+      existing = exact;
+      if (similar.length > 0) {
+        throw new Error(
+          `Similar nodes already exist: ${similar.map(node => `${node.id} "${node.name}"`).join(', ')}. Add the record to one of them by passing its id as node, or retry with confirmDistinct: true if this is a different thing.`,
+        );
+      }
+    }
+    if (!existing && !value.kind) {
+      throw new Error(`knowledge_record op "add" creates a new node "${name}"; it needs kind.`);
+    }
+    const recordScope = resolveWriteScope(options, value.scope);
+    const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, recordScope);
+    const node = await ensureNodeCoversRecord(
+      store,
+      await store.createNode({
+        name,
+        kind: existing?.kind ?? value.kind!,
+        // An exact-name visible node is reused rather than duplicated at another scope.
+        scope: existing?.scope ?? nodeScope,
+        ...(scopeAddresses ? { scopeAddresses } : {}),
+      }),
+      recordScope,
+    );
+    const record = await store.appendKnowledge({
+      node: node.id,
+      text: value.text,
+      scope: recordScope,
+      sourceThreadId: options.sourceThreadId,
+      ...(options.source ? { metadata: { source: options.source } } : {}),
+      when,
+      resolutionScope: options.scope,
+      defaultScope: nodeScope,
+    });
+    await vouchThreadScope(recordScope);
+    return { node, record };
+  }
+
+  async function removeRecord(recordId: string) {
+    const store = await getStore(memory);
+    const record = await store.getKnowledge({ id: recordId, includeDeleted: true });
+    if (!record) throw new Error(`KnowledgeRecord not found: ${recordId}`);
+    requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
+    return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
+  }
+
+  async function rescopeRecord(recordId: string, requested: string[]) {
+    const store = await getStore(memory);
+    const record = await store.getKnowledge({ id: recordId });
+    if (!record) throw new Error(`KnowledgeRecord not found: ${recordId}`);
+    requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
+    const scope = resolveWriteScope(options, requested);
+    const node = await store.getNode(record.node);
+    if (node && !node.mergedInto) await ensureNodeCoversRecord(store, node, scope);
+    const rescoped = await store.rescopeKnowledge({ id: record.id, scope });
+    await vouchThreadScope(scope);
+    return rescoped;
+  }
+
+  async function updateNode(value: {
+    node: string;
+    expectedVersion: number;
+    name?: string;
+    kind?: string;
+    description?: string | null;
+    content?: string;
+  }) {
+    const description = value.description === null ? '' : value.description;
+    if (
+      value.name === undefined &&
+      value.kind === undefined &&
+      description === undefined &&
+      value.content === undefined
+    ) {
+      throw new Error('knowledge_node op "update" needs at least one of name, kind, description, content.');
+    }
+    if (description !== undefined && estimateTokenCount(description) > MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS) {
+      throw new Error(
+        `Node descriptions are limited to about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens. Shorten the description and retry.`,
+      );
+    }
+    const node = await resolveWritableNode(value.node);
+    const store = await getStore(memory);
+    return store.updateNode({
+      id: node.id,
+      version: value.expectedVersion,
+      ...(value.name !== undefined ? { name: value.name } : {}),
+      ...(value.kind !== undefined ? { kind: value.kind } : {}),
+      ...(description !== undefined ? { description } : {}),
+      ...(value.content !== undefined ? { content: value.content, resolutionScope: options.scope } : {}),
+    });
+  }
+
+  async function writeNode(value: { name: string; content: string; kind?: string; scope?: string[] }) {
+    const name = value.name.trim();
+    const store = await getStore(memory);
+    const scope = resolveWriteScope(options, value.scope);
+    const resolved = await store.resolveNode({ name, scope });
+    if (resolved && knowledgeScopeKey(resolved.scope) === knowledgeScopeKey(scope)) {
+      throw new Error(
+        `Node "${name}" already exists here (id ${resolved.id}, version ${resolved.version}). Change its content with op "update".`,
+      );
+    }
+    const node = await store.createNode({
+      name,
+      kind: value.kind ?? 'document',
+      content: value.content,
+      scope,
+      resolutionScope: options.scope,
+    });
+    await vouchThreadScope(scope);
+    return node;
+  }
+
+  async function mergeNodes(value: { sourceId: string; targetId: string; sourceVersion: number }) {
+    const store = await getStore(memory);
+    const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
+    if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
+    requireVisible(source.scope, options, 'Knowledge merge source', 'edit');
+    requireVisible(target.scope, options, 'Knowledge merge target', 'edit');
+    return store.mergeNodes(value);
+  }
+
+  // Each tool takes a flat object with an `op` enum, checked per op when it runs. A per-op
+  // `oneOf` can't go on this wire: some providers reject a root-level union, and the Google
+  // compat layer drops every sibling key of an `anyOf` (schema-compat `provider-compats/google.ts`).
   return {
-    knowledge_create: createTool({
-      id: 'knowledge_create',
+    knowledge_record: createTool({
+      id: 'knowledge_record',
       description:
-        'Create a scoped knowledge node and its first record. Provenance and capture time are stamped by code.',
+        'Write knowledge records, the facts themselves. op "add" adds a record about a node, creating the node when none by that name exists; "remove" soft-deletes a wrong record; "rescope" moves a record to other scope tags. Provenance and capture time are stamped by code.',
       inputSchema: {
         type: 'object',
         properties: {
-          name: { type: 'string', minLength: 1 },
-          kind: { type: 'string', minLength: 1 },
+          op: { type: 'string', enum: ['add', 'remove', 'rescope'] },
+          node: {
+            type: 'string',
+            minLength: 1,
+            description: 'add: the id of an existing node, or the name of the node the record is about.',
+          },
           text: recordTextSchema,
-          nodeScope: nodePlacementSchema,
-          scope: scopeTagsSchema,
           when: dateTimeSchema,
+          scope: scopeTagsSchema,
+          kind: { type: 'string', minLength: 1, description: 'add, new node only: what kind of thing the node is.' },
+          nodeScope: nodePlacementSchema,
           confirmDistinct: {
             type: 'boolean',
             description:
-              'Set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.',
+              'add, new node only: set true only after a previous call reported similar existing nodes and this node is genuinely a different thing.',
           },
+          recordId: { type: 'string', minLength: 1, description: 'remove, rescope: the record to change.' },
         },
-        required: ['name', 'kind', 'text'],
+        required: ['op'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as {
-          name: string;
-          kind: string;
-          text: string;
-          nodeScope?: string;
-          scope?: string[];
+          op: 'add' | 'remove' | 'rescope';
+          node?: string;
+          text?: string;
           when?: string;
+          scope?: string[];
+          kind?: string;
+          nodeScope?: string;
           confirmDistinct?: boolean;
+          recordId?: string;
         };
-        requireRecordTextWithinBound(value.text);
-        const store = await getStore(memory);
-        let existing: KnowledgeNode | undefined;
-        if (!value.confirmDistinct) {
-          const { exact, similar } = await findSimilarNodes(store, options.scope, value.name);
-          existing = exact;
-          if (similar.length > 0) {
-            throw new Error(
-              `Similar nodes already exist: ${similar.map(node => `${node.id} "${node.name}"`).join(', ')}. Append to one of them with knowledge_append, or retry with confirmDistinct: true if this is a different thing.`,
+        switch (value.op) {
+          case 'add':
+            return addRecord({
+              ...value,
+              node: requireField(value.node, 'knowledge_record', 'add', 'node'),
+              text: requireField(value.text, 'knowledge_record', 'add', 'text'),
+            });
+          case 'remove':
+            return removeRecord(requireField(value.recordId, 'knowledge_record', 'remove', 'recordId'));
+          case 'rescope':
+            return rescopeRecord(
+              requireField(value.recordId, 'knowledge_record', 'rescope', 'recordId'),
+              requireField(value.scope, 'knowledge_record', 'rescope', 'scope'),
             );
-          }
+          default:
+            throw new Error(`knowledge_record has no op "${String(value.op)}".`);
         }
-        const recordScope = resolveWriteScope(options, value.scope);
-        const { nodeScope, scopeAddresses } = await resolveNodePlacement(memory, options, value.nodeScope, recordScope);
-        const when = value.when ? new Date(value.when) : undefined;
-        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        const node = await ensureNodeCoversRecord(
-          store,
-          await store.createNode({
-            name: value.name,
-            kind: value.kind,
-            // An exact-name visible node is reused rather than duplicated at another scope.
-            scope: existing?.scope ?? nodeScope,
-            ...(scopeAddresses ? { scopeAddresses } : {}),
-          }),
-          recordScope,
-        );
-        const record = await store.appendKnowledge({
-          node: node.id,
-          text: value.text,
-          scope: recordScope,
-          sourceThreadId: options.sourceThreadId,
-          ...(options.source ? { metadata: { source: options.source } } : {}),
-          when,
-          resolutionScope: options.scope,
-          defaultScope: nodeScope,
-        });
-        await vouchThreadScope(recordScope);
-        return { node, record };
       },
     }),
-    knowledge_append: createTool({
-      id: 'knowledge_append',
-      description: 'Append a scoped record to an existing node. Provenance and capture time are stamped by code.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          node: { type: 'string', minLength: 1 },
-          text: recordTextSchema,
-          scope: scopeTagsSchema,
-          when: dateTimeSchema,
-        },
-        required: ['node', 'text'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { node: string; text: string; scope?: string[]; when?: string };
-        requireRecordTextWithinBound(value.text);
-        const store = await getStore(memory);
-        const parent = await store.getNode(value.node);
-        if (!parent || parent.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
-        requireVisible(parent.scope, options, 'Knowledge node', 'append');
-        const scope = resolveWriteScope(options, value.scope);
-        const when = value.when ? new Date(value.when) : undefined;
-        if (when && Number.isNaN(when.getTime())) throw new Error('KnowledgeRecord when must be a valid date.');
-        await ensureNodeCoversRecord(store, parent, scope);
-        const record = await store.appendKnowledge({
-          node: parent.id,
-          text: value.text,
-          scope,
-          sourceThreadId: options.sourceThreadId,
-          ...(options.source ? { metadata: { source: options.source } } : {}),
-          when,
-          resolutionScope: options.scope,
-          defaultScope: scope,
-        });
-        await vouchThreadScope(scope);
-        return record;
-      },
-    }),
-    knowledge_remove: createTool({
-      id: 'knowledge_remove',
-      description: 'Soft-delete a visible record. Curators cannot restore or physically erase knowledge records.',
-      inputSchema: {
-        type: 'object',
-        properties: { recordId: { type: 'string', minLength: 1 } },
-        required: ['recordId'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const store = await getStore(memory);
-        const record = await store.getKnowledge({ id: (input as { recordId: string }).recordId, includeDeleted: true });
-        if (!record) throw new Error(`KnowledgeRecord not found: ${(input as { recordId: string }).recordId}`);
-        requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
-        return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
-      },
-    }),
-    // Single-field edits use dedicated tools rather than one tool with an optional pair, because
-    // "change at least one of these" is not something a schema can say on this wire. Google
-    // rejects `required` inside a branch that is not an OBJECT, so a root-level
-    // `anyOf: [{ required: ['name'] }, { required: ['kind'] }]` fails the request before the
-    // model runs; nesting that union under a typed object does not help either, because the
-    // Google compat layer drops every sibling key of an `anyOf` (schema-compat
-    // `provider-compats/google.ts`), which would hide the fields from the model entirely.
-    // One required field per single-field tool makes an empty edit unrepresentable. The
-    // combined tool keeps multi-field edits atomic under one expected version. Supplying a
-    // field with its current value can still be a no-op, matching the previous runtime guard,
-    // which rejected only calls that omitted both editable fields.
-    knowledge_update_node: createTool({
-      id: 'knowledge_update_node',
-      description: 'Atomically rename and re-kind a visible node using optimistic concurrency.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          node: { type: 'string', minLength: 1 },
-          expectedVersion: { type: 'integer', minimum: 1 },
-          name: { type: 'string', minLength: 1 },
-          kind: { type: 'string', minLength: 1 },
-        },
-        required: ['node', 'expectedVersion', 'name', 'kind'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { node: string; expectedVersion: number; name: string; kind: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({
-          id: node.id,
-          version: value.expectedVersion,
-          name: value.name,
-          kind: value.kind,
-        });
-      },
-    }),
-    knowledge_rename_node: createTool({
-      id: 'knowledge_rename_node',
-      description: 'Rename a visible node using optimistic concurrency.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          node: { type: 'string', minLength: 1 },
-          expectedVersion: { type: 'integer', minimum: 1 },
-          name: { type: 'string', minLength: 1 },
-        },
-        required: ['node', 'expectedVersion', 'name'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { node: string; expectedVersion: number; name: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({ id: node.id, version: value.expectedVersion, name: value.name });
-      },
-    }),
-    knowledge_set_node_kind: createTool({
-      id: 'knowledge_set_node_kind',
-      description: 'Change a visible node kind using optimistic concurrency.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          node: { type: 'string', minLength: 1 },
-          expectedVersion: { type: 'integer', minimum: 1 },
-          kind: { type: 'string', minLength: 1 },
-        },
-        required: ['node', 'expectedVersion', 'kind'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { node: string; expectedVersion: number; kind: string };
-        const node = await resolveWritableNode(value.node);
-        const store = await getStore(memory);
-        return store.updateNode({ id: node.id, version: value.expectedVersion, kind: value.kind });
-      },
-    }),
-    knowledge_merge_nodes: createTool({
-      id: 'knowledge_merge_nodes',
-      description: 'Merge a visible duplicate node into another visible node using source-version CAS.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          sourceId: { type: 'string', minLength: 1 },
-          targetId: { type: 'string', minLength: 1 },
-          sourceVersion: { type: 'integer', minimum: 1 },
-        },
-        required: ['sourceId', 'targetId', 'sourceVersion'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { sourceId: string; targetId: string; sourceVersion: number };
-        const store = await getStore(memory);
-        const [source, target] = await Promise.all([store.getNode(value.sourceId), store.getNode(value.targetId)]);
-        if (!source || !target) throw new Error('Knowledge merge requires two existing nodes.');
-        requireVisible(source.scope, options, 'Knowledge merge source', 'edit');
-        requireVisible(target.scope, options, 'Knowledge merge target', 'edit');
-        return store.mergeNodes(value);
-      },
-    }),
-    knowledge_rescope: createTool({
-      id: 'knowledge_rescope',
-      description: "Change a record's scope to other tags this run holds.",
-      inputSchema: {
-        type: 'object',
-        properties: { recordId: { type: 'string', minLength: 1 }, scope: scopeTagsSchema },
-        required: ['recordId', 'scope'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { recordId: string; scope: string[] };
-        const store = await getStore(memory);
-        const record = await store.getKnowledge({ id: value.recordId });
-        if (!record) throw new Error(`KnowledgeRecord not found: ${value.recordId}`);
-        requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
-        const scope = resolveWriteScope(options, value.scope);
-        const node = await store.getNode(record.node);
-        if (node && !node.mergedInto) await ensureNodeCoversRecord(store, node, scope);
-        const rescoped = await store.rescopeKnowledge({ id: record.id, scope });
-        await vouchThreadScope(scope);
-        return rescoped;
-      },
-    }),
-    knowledge_write_node_description: createTool({
-      id: 'knowledge_write_node_description',
-      description: `Write the bounded synopsis (about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens at most) on an existing visible node using optimistic concurrency. Pass an empty string to clear it. Does not create nodes.`,
-      inputSchema: {
-        type: 'object',
-        properties: {
-          node: { type: 'string', minLength: 1 },
-          expectedVersion: { type: 'integer', minimum: 1 },
-          description: {
-            type: 'string',
-            minLength: 0,
-            description: `One or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens, enforced by storage on every write. Long-form detail belongs in node content, not here. An empty string clears the description.`,
-          },
-        },
-        required: ['node', 'expectedVersion', 'description'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { node: string; expectedVersion: number; description: string };
-        if (estimateTokenCount(value.description) > MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS) {
-          throw new Error(
-            `Node descriptions are limited to about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens. Shorten the description and retry.`,
-          );
-        }
-        const store = await getStore(memory);
-        const node = await store.getNode(value.node);
-        if (!node || node.mergedInto) throw new Error(`Knowledge node not found: ${value.node}`);
-        requireVisible(node.scope, options, 'Knowledge node', 'edit');
-        return store.updateNode({
-          id: node.id,
-          version: value.expectedVersion,
-          description: value.description,
-        });
-      },
-    }),
-    knowledge_write_node_content: createTool({
-      id: 'knowledge_write_node_content',
+    knowledge_node: createTool({
+      id: 'knowledge_node',
       description:
-        'Create or replace long-form content on a scoped knowledge node. Existing nodes require expectedVersion.',
+        'Change knowledge nodes, the things records are about. op "update" edits name, kind, description and content in one compare-and-swap; "write" creates a long-form node such as a spec or runbook; "merge" folds a duplicate node into another.',
       inputSchema: {
         type: 'object',
         properties: {
-          name: { type: 'string', minLength: 1 },
+          op: { type: 'string', enum: ['update', 'write', 'merge'] },
+          node: { type: 'string', minLength: 1, description: 'update: the node id.' },
+          expectedVersion: {
+            type: 'integer',
+            minimum: 1,
+            description: 'update: the version you read; the edit fails if the node changed since.',
+          },
+          name: { type: 'string', minLength: 1, description: 'update: the new name. write: the node name.' },
           kind: { type: 'string', minLength: 1 },
-          content: { type: 'string', minLength: 1 },
+          description: {
+            type: ['string', 'null'],
+            description: `update: one or two plain-text sentences describing the node, targeting 40-75 tokens. Hard limit about ${MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS} tokens. Long-form detail belongs in content. null or an empty string clears it.`,
+          },
+          content: {
+            type: 'string',
+            minLength: 1,
+            description: 'update, write: long-form content, replacing what the node had.',
+          },
           scope: scopeTagsSchema,
-          expectedVersion: { type: 'integer', minimum: 1 },
+          sourceId: { type: 'string', minLength: 1, description: 'merge: the duplicate node.' },
+          sourceVersion: { type: 'integer', minimum: 1, description: 'merge: the version of the duplicate you read.' },
+          targetId: { type: 'string', minLength: 1, description: 'merge: the node to keep.' },
         },
-        required: ['name', 'content'],
+        required: ['op'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
         const value = input as {
-          name: string;
-          kind?: string;
-          content: string;
-          scope?: string[];
+          op: 'update' | 'write' | 'merge';
+          node?: string;
           expectedVersion?: number;
+          name?: string;
+          kind?: string;
+          description?: string | null;
+          content?: string;
+          scope?: string[];
+          sourceId?: string;
+          sourceVersion?: number;
+          targetId?: string;
         };
-        const name = value.name.trim();
-        const store = await getStore(memory);
-        const scope = resolveWriteScope(options, value.scope);
-        const resolvedNode = await store.resolveNode({ name, scope });
-        const existing =
-          resolvedNode && knowledgeScopeKey(resolvedNode.scope) === knowledgeScopeKey(scope) ? resolvedNode : null;
-        if (!existing) {
-          if (value.expectedVersion !== undefined)
-            throw new Error('expectedVersion is only valid for an existing node.');
-          const node = await store.createNode({
-            name,
-            kind: value.kind ?? 'document',
-            content: value.content,
-            scope,
-            resolutionScope: options.scope,
-          });
-          await vouchThreadScope(scope);
-          return node;
+        switch (value.op) {
+          case 'update':
+            return updateNode({
+              node: requireField(value.node, 'knowledge_node', 'update', 'node'),
+              expectedVersion: requireField(value.expectedVersion, 'knowledge_node', 'update', 'expectedVersion'),
+              name: value.name,
+              kind: value.kind,
+              description: value.description,
+              content: value.content,
+            });
+          case 'write':
+            return writeNode({
+              name: requireField(value.name, 'knowledge_node', 'write', 'name'),
+              content: requireField(value.content, 'knowledge_node', 'write', 'content'),
+              kind: value.kind,
+              scope: value.scope,
+            });
+          case 'merge':
+            return mergeNodes({
+              sourceId: requireField(value.sourceId, 'knowledge_node', 'merge', 'sourceId'),
+              sourceVersion: requireField(value.sourceVersion, 'knowledge_node', 'merge', 'sourceVersion'),
+              targetId: requireField(value.targetId, 'knowledge_node', 'merge', 'targetId'),
+            });
+          default:
+            throw new Error(`knowledge_node has no op "${String(value.op)}".`);
         }
-        if (value.expectedVersion === undefined) throw new Error('Updating node content requires expectedVersion.');
-        requireVisible(existing.scope, options, 'Knowledge node', 'edit');
-        return store.updateNode({
-          id: existing.id,
-          version: value.expectedVersion,
-          kind: value.kind,
-          content: value.content,
-          resolutionScope: options.scope,
-        });
       },
     }),
   };

@@ -21,7 +21,7 @@ describe('Knowledge limits are counted in tokens', () => {
       maxPins: 20,
       maxTokens: 300,
     });
-    const pin = (text: string) => tools.knowledge_pin!.execute!({ text } as never, {} as never);
+    const pin = (text: string) => tools.knowledge_pin!.execute!({ op: 'pin', text } as never, {} as never);
 
     await pin(words(200));
     // 120 more tokens would bring the set to 320, over the 300-token budget.
