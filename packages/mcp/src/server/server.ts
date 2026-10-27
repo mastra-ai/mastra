@@ -1372,8 +1372,8 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * An `'auto'` tool's first run, already under way under the request, as attempt 1 of its task:
-   * the attempt span opens when the task is created and ends with that run.
+   * A first run already under way (an `'auto'` tool's or workflow's, under the request, or a
+   * workflow run started under `opened`) as attempt 1 of its task: the attempt span ends with that run.
    */
   private tracedInitialAttempt(
     name: string,
@@ -1381,14 +1381,13 @@ export class MCPServer extends MCPServerBase {
     trace: MCPTaskTrace | undefined,
     taskId: string,
     requestContext: RequestContext,
+    /** The attempt's span, when it was opened before the attempt started so it could run under it. */
+    opened?: Span<SpanType.MCP_SERVER_REQUEST>,
   ): NonNullable<MCPTaskRunOptions['initialAttempt']> {
     if (!trace) return initialAttempt;
-    const span = this.openTaskSpan(`task attempt ${name} #1`, trace, {
-      mcpMethod: 'tools/call',
-      targetName: name,
-      requestContext,
-      metadata: { mcpTaskKey: taskKeyOf(taskId), attempt: 1, resumed: false, recovered: false },
-    });
+    const span =
+      opened ??
+      this.openTaskSpan(`task attempt ${name} #1`, trace, { requestContext, ...firstAttemptSpan(name, taskId) });
     const aborted = new AbortController();
     return {
       outcome: this.endAttemptSpan(span, aborted.signal, initialAttempt.outcome),
@@ -1467,11 +1466,18 @@ export class MCPServer extends MCPServerBase {
       runId: randomUUID(),
       requestContext: this.persistTaskRequestContext(name, requestContext),
     };
-    const params = { ttlMs: taskMode.ttlMs, principal: principalOf(ctx, requestContext), context };
-    const start = () => {
+    const rootSpan = tracingContext.currentSpan;
+    const params = {
+      ttlMs: taskMode.ttlMs,
+      principal: principalOf(ctx, requestContext),
+      context,
+      ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
+    };
+    // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
+    const start = (runTracing: TracingContext) => {
       const run = workflow.createRun({ runId: context.runId });
       const result: Promise<WorkflowRunView> = run.then(started =>
-        started.start({ inputData: args, requestContext, tracingContext }),
+        started.start({ inputData: args, requestContext, tracingContext: runTracing }),
       );
       const cancel = () =>
         void run
@@ -1486,15 +1492,26 @@ export class MCPServer extends MCPServerBase {
     if (taskMode.mode === 'always') {
       // The task exists before the run does: if creating it fails, nothing ran.
       const { store, task } = await this.createTask(ctx, requestContext, params, true);
-      const live = start();
+      // The run is the task's first attempt, so it runs under that attempt's span.
+      const span =
+        params.trace && this.openTaskSpan(`task attempt ${name} #1`, params.trace, firstAttemptSpan(name, task.taskId));
+      const live = start(span ? { currentSpan: span } : tracingContext);
       store.run(task.taskId, this.workflowTaskWork(context), {
-        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
+        initialAttempt: this.tracedInitialAttempt(
+          name,
+          this.liveWorkflowAttempt(workflow, context, live.result),
+          params.trace,
+          task.taskId,
+          requestContext,
+          span,
+        ),
       });
       this.logger.debug(`Workflow tool '${name}' runs as task.`);
       return taskHandleResult(task);
     }
 
-    const live = start();
+    // Started under the request, as an 'auto' tool is: the request span becomes the task's root.
+    const live = start(tracingContext);
     const requestSignal = ctx.mcpReq.signal;
     const followRequest = () => live.cancel();
     if (requestSignal.aborted) followRequest();
@@ -1519,7 +1536,13 @@ export class MCPServer extends MCPServerBase {
     try {
       const { store, task } = await this.createTask(ctx, requestContext, params, true);
       store.run(task.taskId, this.workflowTaskWork(context), {
-        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
+        initialAttempt: this.tracedInitialAttempt(
+          name,
+          this.liveWorkflowAttempt(workflow, context, live.result),
+          params.trace,
+          task.taskId,
+          requestContext,
+        ),
       });
       this.logger.debug(`Workflow tool '${name}' continues as task.`);
       return taskHandleResult(task);
@@ -1566,9 +1589,27 @@ export class MCPServer extends MCPServerBase {
       } catch (error) {
         return this.toolErrorOutcome(name, error);
       }
-      // An aborted attempt only stops following the run (see liveWorkflowAttempt).
-      if (!attempt.resume) return this.watchWorkflowRun(workflow, context, attempt.signal);
-      return this.resumeWorkflowRun(workflow, context, attempt, requestContext);
+      const span =
+        attempt.trace &&
+        this.openTaskSpan(`task attempt ${name} #${attempt.trace.attempt}`, attempt.trace, {
+          requestContext,
+          mcpMethod: 'tools/call',
+          targetName: name,
+          metadata: {
+            mcpTaskKey: attempt.trace.taskKey,
+            attempt: attempt.trace.attempt,
+            resumed: attempt.trace.resumed,
+            recovered: attempt.trace.recovered,
+          },
+        });
+      return this.endAttemptSpan(
+        span,
+        attempt.signal,
+        // An aborted attempt only stops following the run (see liveWorkflowAttempt).
+        attempt.resume
+          ? this.resumeWorkflowRun(workflow, context, attempt, requestContext, span)
+          : this.watchWorkflowRun(workflow, context, attempt.signal),
+      );
     };
   }
 
@@ -1577,6 +1618,7 @@ export class MCPServer extends MCPServerBase {
     context: WorkflowTaskContext,
     attempt: MCPTaskAttempt,
     requestContext: RequestContext,
+    span: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
   ): Promise<MCPTaskAttemptOutcome> {
     const { inputResponses, suspendPayload } = attempt.resume!;
     // One key is enough: the server asks for one suspension at a time (see workflowRunOutcome).
@@ -1604,6 +1646,9 @@ export class MCPServer extends MCPServerBase {
         step: answered.step,
         resumeData: answer.content ?? {},
         requestContext,
+        // Under the attempt that resumes it, in the task's trace, on whichever instance this is.
+        // Without a span, core falls back to the trace the run's snapshot recorded.
+        ...(span && { tracingContext: { currentSpan: span } }),
       });
     } catch (error) {
       // Resumed already, by another instance or an earlier try of this attempt: follow that.
@@ -2341,6 +2386,15 @@ function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, an
 
 function errorResult(text: string): CallToolResult {
   return { content: [{ type: 'text', text }], isError: true };
+}
+
+/** The span options of a task's first attempt, minus its request context. */
+function firstAttemptSpan(name: string, taskId: string) {
+  return {
+    mcpMethod: 'tools/call',
+    targetName: name,
+    metadata: { mcpTaskKey: taskKeyOf(taskId), attempt: 1, resumed: false, recovered: false },
+  };
 }
 
 function completed(result: CallToolResult): MCPTaskAttemptOutcome {

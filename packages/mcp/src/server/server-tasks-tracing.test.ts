@@ -1,7 +1,10 @@
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import { Agent } from '@mastra/core/agent';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType, TracingEventType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
+import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
 import type { AuthInfo } from '@modelcontextprotocol/server';
@@ -263,5 +266,207 @@ describe.each([
     const recorded = JSON.stringify(ended);
     expect(recorded).not.toContain(taskId);
     expect(recorded).not.toContain('not-a-task');
+  });
+});
+
+const approval = createWorkflow({
+  id: 'approval',
+  description: 'Prepares a release, then asks who approves it',
+  inputSchema: z.object({ release: z.string() }),
+  outputSchema: z.object({ outcome: z.string() }),
+})
+  .then(
+    createStep({
+      id: 'prepare',
+      inputSchema: z.object({ release: z.string() }),
+      outputSchema: z.object({ release: z.string() }),
+      execute: async ({ inputData }) => inputData,
+    }),
+  )
+  .then(
+    createStep({
+      id: 'ask',
+      inputSchema: z.object({ release: z.string() }),
+      outputSchema: z.object({ outcome: z.string() }),
+      resumeSchema: z.object({ approver: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) return suspend({ message: `Who approves ${inputData.release}?` });
+        return { outcome: `${inputData.release} approved by ${resumeData.approver}` };
+      },
+    }),
+  )
+  .commit();
+
+const researcher = new Agent({
+  id: 'researcher',
+  name: 'researcher',
+  description: 'Researches a topic',
+  instructions: 'Answer briefly.',
+  model: new MockLanguageModelV2({
+    doGenerate: async () => {
+      await sleep(100);
+      return {
+        content: [{ type: 'text', text: 'Phobos is a moon of Mars.' }],
+        finishReason: 'stop',
+        usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+        warnings: [],
+      };
+    },
+  }),
+});
+
+describe.each([
+  { store: 'in-memory', background: false },
+  { store: 'Mastra background tasks', background: true },
+])('MCP workflow and agent task tracing ($store)', ({ background }) => {
+  const ended: any[] = [];
+  let served: ServedHTTP | undefined;
+  let mastra: Mastra | undefined;
+  const clients: Client[] = [];
+
+  afterEach(async () => {
+    await Promise.all(clients.splice(0).map(client => client.close()));
+    await served?.close();
+    served = undefined;
+    await mastra?.shutdown();
+    mastra = undefined;
+    ended.length = 0;
+  });
+
+  async function start(tasks: MCPServerConfig['tasks']) {
+    const server = new MCPServer({
+      id: 'tasks',
+      name: 'Tasks',
+      version: '1.0.0',
+      tools: {},
+      workflows: { approval },
+      agents: { researcher },
+      tasks,
+    });
+    mastra = new Mastra({
+      logger: false,
+      mcpServers: { tasks: server },
+      // Workflow runs need storage to suspend and resume.
+      storage: new InMemoryStore(),
+      ...(background && { backgroundTasks: { enabled: true } }),
+      observability: new Observability({
+        configs: {
+          default: {
+            serviceName: 'mcp-task-tracing-test',
+            exporters: [
+              {
+                name: 'collecting-exporter',
+                async exportTracingEvent(event: { type: string; exportedSpan?: any }) {
+                  if (event.type === TracingEventType.SPAN_ENDED) ended.push(event.exportedSpan);
+                },
+                async flush() {},
+                async shutdown() {},
+              },
+            ],
+          },
+        },
+      }),
+    });
+    served = await serveHTTP(server, { auth: () => authFor('alice') });
+    const client = await connectClient(served.url);
+    clients.push(client);
+    return new TaskRequester(client);
+  }
+
+  async function call(name: string, args: Record<string, unknown> = {}) {
+    const response = await rawRequest(served!.url, {
+      method: 'tools/call',
+      params: { name, arguments: args },
+      capabilities: TASKS_CLIENT,
+      headers: { 'mcp-name': name },
+    });
+    return response.json().result as { taskId: string; resultType: string };
+  }
+
+  async function waitFor(tasks: TaskRequester, taskId: string, status: MCPDetailedTask['status']) {
+    for (let i = 0; i < 200; i++) {
+      const task = await tasks.get(taskId);
+      if (task.status === status) return task;
+      await sleep(20);
+    }
+    throw new Error(`task never reached ${status}`);
+  }
+
+  async function spanNamed(name: string) {
+    for (let i = 0; i < 100 && !ended.some(span => span.name === name); i++) await sleep(20);
+    const span = ended.find(span => span.name === name);
+    if (!span) throw new Error(`no span "${name}" in ${ended.map(s => s.name).join(', ')}`);
+    return span;
+  }
+
+  const root = (taskId: string) => {
+    const span = ended.find(s => s.metadata?.mcpTaskKey === taskKeyOf(taskId) && s.name.startsWith('tools/call'));
+    if (!span) throw new Error('no root span');
+    return span;
+  };
+
+  /** The span's ancestors, nearest first, as far as the recorded spans go. */
+  const ancestors = (span: any) => {
+    const chain: any[] = [];
+    for (let parent = span.parentSpanId; parent;) {
+      const next = ended.find(s => s.id === parent);
+      if (!next) break;
+      chain.push(next);
+      parent = next.parentSpanId;
+    }
+    return chain;
+  };
+
+  it.each(['always', 'auto'] as const)(
+    "keeps an '%s' workflow task in one trace: tools/call, the run, tasks/update, and the resumed run",
+    async mode => {
+      const tasks = await start({ workflows: { approval: mode } });
+      const { taskId, resultType } = await call('run_approval', { release: 'v1' });
+      expect(resultType).toBe('task');
+      const waiting = await waitFor(tasks, taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests!);
+      await tasks.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      const done = await waitFor(tasks, taskId, 'completed');
+      expect(done.result).toMatchObject({ isError: false });
+      const run = await spanNamed("workflow run: 'approval'");
+      const resumed = await spanNamed("workflow run: 'approval' (resumed)");
+      const update = await spanNamed('tasks/update');
+      const second = await spanNamed('task attempt run_approval #2');
+      const first = await spanNamed('task attempt run_approval #1');
+
+      const top = root(taskId);
+      expect(top).toMatchObject({ parentSpanId: undefined, errorInfo: undefined });
+      expect(ancestors(run)).toContainEqual(expect.objectContaining({ id: top.id }));
+      expect(first).toMatchObject({
+        traceId: top.traceId,
+        parentSpanId: top.id,
+        metadata: { attempt: 1, mcpTaskStatus: 'input_required' },
+      });
+      expect(update).toMatchObject({ traceId: top.traceId, parentSpanId: top.id });
+      expect(second).toMatchObject({ traceId: top.traceId, parentSpanId: top.id, metadata: { resumed: true } });
+      // The resumed run belongs to the attempt that resumed it.
+      expect(resumed).toMatchObject({ traceId: top.traceId, parentSpanId: second.id });
+      expect(new Set(ended.map(span => span.traceId))).toEqual(new Set([top.traceId]));
+
+      const recorded = JSON.stringify(ended);
+      expect(recorded).not.toContain(taskId);
+      expect(run.metadata.runId).not.toBe(taskId);
+    },
+  );
+
+  it.each(['always', 'auto'] as const)('runs an %s agent task under its attempt span', async mode => {
+    const tasks = await start({ agents: { researcher: mode === 'auto' ? { mode, syncWindowMs: 20 } : mode } });
+    const { taskId, resultType } = await call('ask_researcher', { message: 'Tell me about Phobos' });
+    expect(resultType).toBe('task');
+    await waitFor(tasks, taskId, 'completed');
+    const agentRun = await spanNamed("agent run: 'researcher'");
+    const attempt = await spanNamed('task attempt ask_researcher #1');
+
+    const top = root(taskId);
+    expect(attempt).toMatchObject({ traceId: top.traceId, parentSpanId: top.id });
+    expect(agentRun).toMatchObject({ traceId: top.traceId });
+    expect(ancestors(agentRun)).toContainEqual(expect.objectContaining({ id: top.id }));
+    expect(new Set(ended.map(span => span.traceId))).toEqual(new Set([top.traceId]));
+    expect(JSON.stringify(ended)).not.toContain(taskId);
   });
 });

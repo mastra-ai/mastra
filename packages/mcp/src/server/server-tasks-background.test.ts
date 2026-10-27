@@ -535,34 +535,34 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     expect(runsIn(counterFile)).toBe(2);
   });
 
+  /** Spans go to the shared storage, as Studio reads them. */
+  const traced = () => ({
+    mastraExtra: {
+      observability: new Observability({
+        configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 20 })] } },
+      }),
+    },
+  });
+
+  /** Every stored span of every trace storage lists. */
+  async function storedSpans(mastra: Mastra): Promise<SpanRecord[]> {
+    const store = (await mastra.getStorage()!.getStore('observability'))!;
+    await mastra.observability.getSelectedInstance({})?.flush();
+    const { spans: roots } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
+    const traces = await Promise.all(roots.map(root => store.getTrace({ traceId: root.traceId })));
+    return traces.flatMap(trace => trace?.spans ?? []);
+  }
+
+  async function spanNamed(mastra: Mastra, name: string) {
+    for (let i = 0; i < 100; i++) {
+      const span = (await storedSpans(mastra)).find(span => span.name === name && span.endedAt);
+      if (span) return span;
+      await sleep(50);
+    }
+    throw new Error(`no stored span "${name}"`);
+  }
+
   describe('tracing', () => {
-    /** Spans go to the shared storage, as Studio reads them. */
-    const traced = () => ({
-      mastraExtra: {
-        observability: new Observability({
-          configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 20 })] } },
-        }),
-      },
-    });
-
-    /** Every stored span of every trace storage lists. */
-    async function storedSpans(mastra: Mastra): Promise<SpanRecord[]> {
-      const store = (await mastra.getStorage()!.getStore('observability'))!;
-      await mastra.observability.getSelectedInstance({})?.flush();
-      const { spans: roots } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
-      const traces = await Promise.all(roots.map(root => store.getTrace({ traceId: root.traceId })));
-      return traces.flatMap(trace => trace?.spans ?? []);
-    }
-
-    async function spanNamed(mastra: Mastra, name: string) {
-      for (let i = 0; i < 100; i++) {
-        const span = (await storedSpans(mastra)).find(span => span.name === name && span.endedAt);
-        if (span) return span;
-        await sleep(50);
-      }
-      throw new Error(`no stored span "${name}"`);
-    }
-
     it('keeps an attempt recovered on a peer in the trace of the call that created the task', async () => {
       const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
       const b = await instance(tasks, traced());
@@ -1072,8 +1072,9 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
 
   describe('workflow tasks', () => {
     const tasks = { workflows: { approval: 'always' as const, nightly: 'always' as const, slow: 'always' as const } };
-    const workflowInstance = () =>
+    const workflowInstance = (options: { mastraExtra?: Record<string, unknown> } = {}) =>
       instance(tasks, {
+        ...options,
         extra: {
           workflows: {
             approval: makeApproval(probe),
@@ -1107,9 +1108,45 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect((await onlyRun(a.mastra, 'slow')).status).toBe('canceled');
     });
 
+    /** The stored spans of one trace. */
+    async function traceOf(mastra: Mastra, traceId: string) {
+      const store = (await mastra.getStorage()!.getStore('observability'))!;
+      return (await store.getTrace({ traceId }))?.spans ?? [];
+    }
+
+    it('keeps a workflow task answered on a peer in one trace: the run, tasks/update, and the run resumed there', async () => {
+      const a = await workflowInstance(traced());
+      const b = await workflowInstance(traced());
+      const taskId = await call(a.url, 'run_approval', { release: 'v6' });
+      const onB = await requester(b.url);
+      const waiting = await waitFor(onB, taskId, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests!);
+      await onB.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      await waitFor(onB, taskId, 'completed');
+
+      const root = await spanNamed(b.mastra, 'tools/call run_approval');
+      const resumedOnB = await spanNamed(b.mastra, 'task attempt run_approval #2');
+      const resumedRun = await spanNamed(b.mastra, "workflow run: 'approval' (resumed)");
+      await a.mastra.observability.getSelectedInstance({})?.flush();
+      const run = await spanNamed(a.mastra, "workflow run: 'approval'");
+      const update = await spanNamed(b.mastra, 'tasks/update');
+      expect(root).toMatchObject({ parentSpanId: null, metadata: { mcpTaskKey: taskKeyOf(taskId) } });
+      expect(run).toMatchObject({ traceId: root.traceId });
+      expect(update).toMatchObject({ traceId: root.traceId, parentSpanId: root.spanId });
+      expect(resumedOnB).toMatchObject({
+        traceId: root.traceId,
+        parentSpanId: root.spanId,
+        metadata: { attempt: 2, resumed: true, mcpTaskStatus: 'completed' },
+      });
+      expect(resumedRun).toMatchObject({ traceId: root.traceId, parentSpanId: resumedOnB.spanId });
+      // One trace for the whole task, and the task id in none of its spans.
+      expect((await storedSpans(b.mastra)).filter(span => span.traceId !== root.traceId)).toEqual([]);
+      expect(JSON.stringify(await traceOf(b.mastra, root.traceId))).not.toContain(taskId);
+    });
+
     it('leaves a run alone when its server shuts down mid-step, so the task completes with it on a peer', async () => {
-      const a = await workflowInstance();
-      const b = await workflowInstance();
+      const a = await workflowInstance(traced());
+      const b = await workflowInstance(traced());
       const taskId = await call(a.url, 'run_slow');
       await vi.waitFor(async () => expect((await onlyRun(b.mastra, 'slow')).status).toBe('running'));
       // A shuts down its background tasks (as `mastra.shutdown()` does first): that aborts A's
@@ -1120,6 +1157,18 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       const done = await waitFor(await requester(b.url), taskId, 'completed', 60_000);
       expect(done.result).toMatchObject({ isError: false });
       expect((await onlyRun(b.mastra, 'slow')).status).toBe('success');
+
+      // The peer follows the run in the task's trace, which the run itself never left.
+      const root = await spanNamed(b.mastra, 'tools/call run_slow');
+      const followed = await spanNamed(b.mastra, 'task attempt run_slow #2');
+      await a.mastra.observability.getSelectedInstance({})?.flush();
+      const run = await spanNamed(a.mastra, "workflow run: 'slow'");
+      expect(followed).toMatchObject({
+        traceId: root.traceId,
+        parentSpanId: root.spanId,
+        metadata: { attempt: 2, recovered: true, mcpTaskStatus: 'completed' },
+      });
+      expect(run).toMatchObject({ traceId: root.traceId });
     }, 90_000);
 
     it('leaves a run alone when its server loses the task to another worker, so the task still completes', async () => {
@@ -1207,6 +1256,26 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect((await onB.get(taskId)).status).toBe('cancelled');
       await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'approval')).status).toBe('canceled'));
     });
+
+    // Fails until core's restart() joins the trace its run's snapshot recorded, as resume() does:
+    // today the boot sweep restarts a crashed run as a new root trace. The task's own attempt on the
+    // survivor is in the task's trace either way.
+    it.fails('keeps a run restarted by workflow recovery in the trace of the task that started it', async () => {
+      const stepsFile = `${counterFile}.nightly`;
+      const dying = await child(false, 'default', 'always', true);
+      const taskId = await call(dying.url, 'run_nightly', { day: 'tuesday' });
+      await until(() => stepsIn(stepsFile).includes('crunch'));
+      dying.process.kill('SIGKILL');
+
+      const survivor = await workflowInstance(traced());
+      void survivor.mastra.restartAllActiveWorkflowRuns();
+      await waitFor(await requester(survivor.url), taskId, 'completed', 50_000);
+      const root = await spanNamed(survivor.mastra, 'tools/call run_nightly');
+      const followed = await spanNamed(survivor.mastra, 'task attempt run_nightly #2');
+      expect(followed).toMatchObject({ traceId: root.traceId, metadata: { recovered: true } });
+      const restarted = await spanNamed(survivor.mastra, "workflow run: 'nightly'");
+      expect(restarted).toMatchObject({ traceId: root.traceId });
+    }, 90_000);
 
     it('completes a run whose server died mid-step once workflow recovery continues it, without running it twice', async () => {
       const stepsFile = `${counterFile}.nightly`;
