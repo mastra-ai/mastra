@@ -31,17 +31,22 @@ export function readNotificationRoutingRequirement(
   return read.requireClaimedOwner || read.scopes ? read : undefined;
 }
 
-/** Store a requirement on a record's metadata, leaving other metadata alone. */
+/**
+ * Store a requirement on a record's metadata, leaving other metadata alone. Caller metadata
+ * never supplies the reserved key: its scopes would start the delayed run, so any copy the
+ * caller sent is dropped, even when there is no requirement to store.
+ */
 export function applyNotificationRoutingRequirement(
   metadata: NotificationRecord['metadata'],
   requirement: NotificationRoutingRequirement,
 ): NotificationRecord['metadata'] {
+  const callerMetadata = stripNotificationRoutingRequirement(metadata);
   const stored: NotificationRoutingRequirement = {
     ...(requirement.requireClaimedOwner ? { requireClaimedOwner: true } : {}),
     ...(requirement.scopes?.length ? { scopes: requirement.scopes } : {}),
   };
-  if (!stored.requireClaimedOwner && !stored.scopes) return metadata;
-  return { ...metadata, [NOTIFICATION_ROUTING_METADATA_KEY]: stored };
+  if (!stored.requireClaimedOwner && !stored.scopes) return callerMetadata;
+  return { ...callerMetadata, [NOTIFICATION_ROUTING_METADATA_KEY]: stored };
 }
 
 /** Drop the reserved key so it never reaches a delivered signal or a recipient. */
