@@ -2,6 +2,8 @@ import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { EventEmitterPubSub } from '../../../events/event-emitter';
@@ -11,6 +13,7 @@ import { Agent } from '../../agent';
 import { ensureRemoteAbortListener, requestAcknowledgedAbort, subscribeToAbortRequests } from '../abort-transport';
 import { AGENT_CONTROL_TOPIC, AgentControlEventTypes } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
+import { createEventedAgent } from '../create-evented-agent';
 import { globalRunRegistry } from '../run-registry';
 import type { RunRegistryEntry } from '../types';
 
@@ -133,5 +136,64 @@ describe('DurableAgent.__abortRunAcknowledged', () => {
       ([topic, event]) => topic === AGENT_CONTROL_TOPIC(runId) && event.type === AgentControlEventTypes.ABORT_REQUEST,
     );
     expect(abortRequests).toHaveLength(1);
+  });
+
+  // The durable, threaded and evented-with-thread owner cases are in
+  // durable-agent-abort.test.ts. This one runs here because, on main, a run
+  // started after a threadless run of the other agent kind in the same process
+  // never reaches the model.
+  it('confirms a threadless evented run executing in this process', async () => {
+    const pubsub = new EventEmitterPubSub();
+    cleanups.push(() => pubsub.close());
+    let streaming: () => void;
+    const modelCalled = new Promise<void>(resolve => {
+      streaming = resolve;
+    });
+    // Holds the response open until the run is aborted.
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
+        streaming();
+        return {
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 'text-1' });
+              abortSignal?.addEventListener(
+                'abort',
+                () => {
+                  const err = new Error('Aborted');
+                  err.name = 'AbortError';
+                  controller.error(err);
+                },
+                { once: true },
+              );
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+        };
+      },
+    });
+    const agent = createEventedAgent({
+      agent: new Agent({
+        id: 'abort-ack-evented-agent',
+        name: 'Abort Ack Evented Agent',
+        instructions: 'Test',
+        model: model as LanguageModelV2,
+      }),
+      pubsub,
+    });
+
+    let abortPayload: { steps: { finishReason?: string }[] } | undefined;
+    const { output, runId, cleanup } = await agent.stream('Go', {
+      onAbort: data => {
+        abortPayload = data;
+      },
+    });
+    cleanups.push(async () => cleanup());
+
+    await modelCalled;
+    await expect(agent.__abortRunAcknowledged(runId)).resolves.toBe(true);
+    await output.consumeStream();
+    expect(abortPayload?.steps.at(-1)?.finishReason).toBe('abort');
   });
 });
