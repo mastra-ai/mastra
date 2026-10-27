@@ -19,5 +19,5 @@ export default defineConfig({
     'no-unused-vars': ['error', { argsIgnorePattern: '^_', varsIgnorePattern: '^_' }],
     'no-restricted-imports': ['error', { patterns: ['**/test/**', '**/*.test.*'] }],
   },
-  overrides: [{ files: ['test/**'], rules: { 'no-restricted-imports': 'off' } }],
+  overrides: [{ files: ['test/**', 'integration/**'], rules: { 'no-restricted-imports': 'off' } }],
 });

@@ -290,7 +290,7 @@ it(
 
       const { makeQuickBooksProvider } = await import('../src/mastra/accounting/quickbooks.ts');
       const { normalizeInvoice } = await import('../src/mastra/invoice/money.ts');
-      const { invoiceInput } = await import('./helpers/invoice.ts');
+      const { invoiceInput } = await import('../test/helpers/invoice.ts');
       const adapter = {
         async listToolNames() {
           return new Set(Object.keys(tools).map(name => name.replace(/^quickbooks_/, '')));

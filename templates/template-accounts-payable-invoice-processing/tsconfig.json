@@ -15,5 +15,5 @@
     "lib": ["ES2022", "ES2022.Intl"],
     "types": ["node"]
   },
-  "include": ["src/**/*", "test/**/*"]
+  "include": ["src/**/*", "test/**/*", "integration/**/*"]
 }
