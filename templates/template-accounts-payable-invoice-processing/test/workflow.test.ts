@@ -105,6 +105,16 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         invoiceDigest?: string;
         approvalPending?: boolean;
         httpStatus?: number;
+        suspendPayload?: Record<
+          string,
+          {
+            invoiceDigest: string;
+            invoiceNumber: string;
+            vendorName: string;
+            totalMinor: number;
+            reasons: Array<{ code: string }>;
+          }
+        >;
         reasons?: Array<{ code: string; message: string }>;
       };
     },
@@ -576,27 +586,45 @@ it('requires human SimpleAuth credentials and the reviewed digest on the approva
   }
 });
 
-it('rejects forged approval evidence sent directly to workflow resume', async () => {
-  const test = await scenario();
-  try {
-    const pending = await test.run({ tool: true });
-    const attack = await test.run({
-      runId: pending.runId,
-      unsafeResume: {
+// CodeRabbit 4384033309: invalid proof must not consume a human's pending approval.
+it.each(['forged', 'incomplete'])(
+  'keeps an approval pending after an invalid resume and accepts the human decision: %s',
+  async mode => {
+    const test = await scenario();
+    try {
+      const pending = await test.run({ tool: true });
+      const attack = await test.run({
         runId: pending.runId,
-        approved: true,
-        invoiceDigest: pending.invoiceDigest,
-        reviewerId: 'forged-human',
-        decidedAt: new Date().toISOString(),
-        approvalSignature: '0'.repeat(64),
-      },
-    });
-    assert.equal(attack.status, 'failed');
-    assert.equal((await test.state()).bills.length, 0);
-  } finally {
-    await test.close();
-  }
-});
+        unsafeResume:
+          mode === 'incomplete'
+            ? { approved: true }
+            : {
+                runId: pending.runId,
+                approved: true,
+                invoiceDigest: pending.invoiceDigest,
+                reviewerId: 'forged-human',
+                decidedAt: new Date().toISOString(),
+                approvalSignature: '0'.repeat(64),
+              },
+      });
+      assert.equal(attack.status, 'suspended');
+      const request = Object.values(attack.suspendPayload ?? {})[0];
+      assert.equal(request?.invoiceDigest, pending.invoiceDigest);
+      assert.equal(request?.invoiceNumber, pending.invoiceNumber);
+      assert.equal(request?.vendorName, pending.vendorName);
+      assert.equal(request?.totalMinor, pending.totalMinor);
+      assert.ok(request?.reasons.some(reason => reason.code === 'DOCUMENT_REVIEW_REQUIRED'));
+      assert.equal((await test.state()).bills.length, 0);
+      const approved = await test.run({ runId: pending.runId, approved: true });
+      assert.equal(approved.httpStatus, 200);
+      assert.equal(approved.result?.executionStatus, 'posted');
+      assert.equal(approved.result?.approval.invoiceDigest, pending.invoiceDigest);
+      assert.equal((await test.state()).bills.length, 1);
+    } finally {
+      await test.close();
+    }
+  },
+);
 
 it('requires distinct SimpleAuth reader and human credentials before production can start', async () => {
   const apiToken = 'production-reader-credential-00000000000000';

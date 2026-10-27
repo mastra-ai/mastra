@@ -20,7 +20,7 @@ import { makeDuplicateDetection } from '../invoice/controls/duplicates.ts';
 import { makeInvoiceMatch } from '../invoice/controls/matching.ts';
 import { makePolicyRouting } from '../invoice/controls/policy.ts';
 import { makeVendorValidation } from '../invoice/controls/vendor.ts';
-import { HumanApprovalDecisionSchema, isHumanApproval } from '../approvals/decision.ts';
+import { HumanApprovalAttemptSchema, isHumanApproval } from '../approvals/decision.ts';
 
 const submissionSecret = randomBytes(32);
 
@@ -122,7 +122,7 @@ const approvalStep = createStep({
   inputSchema: FinalAssessmentSchema,
   outputSchema: InvoiceResultSchema,
   suspendSchema: ApprovalRequestSchema,
-  resumeSchema: HumanApprovalDecisionSchema,
+  resumeSchema: HumanApprovalAttemptSchema,
   execute: async ({ inputData, resumeData, suspend, runId }) => {
     if (inputData.disposition === 'auto_post') {
       return workflowResult(
@@ -139,7 +139,7 @@ const approvalStep = createStep({
       return workflowResult(inputData, approvalEvidence(inputData, {}), 'not_postable');
     }
 
-    if (!resumeData) {
+    if (!resumeData || !isHumanApproval(resumeData, runId, invoiceDigest(inputData))) {
       return await suspend({
         invoiceNumber: inputData.invoice.invoiceNumber,
         vendorName: inputData.invoice.vendorName,
@@ -150,9 +150,6 @@ const approvalStep = createStep({
         invoiceDigest: invoiceDigest(inputData),
       });
     }
-
-    if (!isHumanApproval(resumeData, runId, invoiceDigest(inputData)))
-      throw new Error('A current authenticated human decision bound to this run and invoice is required');
 
     const approval = approvalEvidence(inputData, {
       status: resumeData.approved ? 'approved' : 'rejected',

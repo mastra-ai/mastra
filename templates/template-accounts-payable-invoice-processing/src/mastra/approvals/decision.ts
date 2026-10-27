@@ -14,6 +14,12 @@ export const HumanApprovalDecisionSchema = DecisionPayloadSchema.extend({
   approvalSignature: z.string().regex(/^[a-f0-9]{64}$/),
 });
 
+// Invalid resume attempts carry no authorization and leave the approval pending.
+export const HumanApprovalAttemptSchema = z.unknown().transform(value => {
+  const decision = HumanApprovalDecisionSchema.safeParse(value);
+  return decision.success ? decision.data : null;
+});
+
 const signature = (payload: z.infer<typeof DecisionPayloadSchema>) =>
   createHmac('sha256', secret)
     .update(JSON.stringify(DecisionPayloadSchema.parse(payload)))
