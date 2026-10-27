@@ -260,6 +260,15 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     expect(classifyRotationError(Object.assign(new Error('request failed'), { status }))).toEqual(expected);
   });
 
+  it.each([
+    [503, { kind: 'hop' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [404, { kind: 'never' }],
+  ] as const)('lets a numeric status %d outrank usage-limit wording', (status, expected) => {
+    const error = Object.assign(new Error('Your weekly limit has been reached'), { status });
+    expect(classifyRotationError(error)).toEqual(expected);
+  });
+
   it('classifies a nested ProviderAuthRequiredError', () => {
     const wrapper = new Error('provider request failed', { cause: new ProviderAuthRequiredError('Login required') });
     expect(classifyRotationError(wrapper)).toEqual({ kind: 'rotate', reason: 'auth-failed' });

@@ -1754,6 +1754,14 @@ describe('createMastraCode', () => {
     // account-rotation processor may classify them as a persistent outage.
     expect(serverErrorPolicy.match!(Object.assign(new Error('Gateway timeout'), { statusCode: 504 }))).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Server error'), { statusCode: 500 }))).toBe(true);
+    expect(
+      serverErrorPolicy.match!(
+        Object.assign(new Error('Service Unavailable'), {
+          statusCode: 503,
+          responseBody: '{"error":{"message":"prompt is too long: 210345 tokens > 200000 maximum"}}',
+        }),
+      ),
+    ).toBe(false);
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');

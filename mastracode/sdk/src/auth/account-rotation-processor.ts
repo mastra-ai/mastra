@@ -215,11 +215,13 @@ export function classifyRotationError(error: unknown): RotationClassification {
   if (isProviderAuthRequiredError(error)) {
     return { kind: 'rotate', reason: 'auth-failed' };
   }
-  return (
-    ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] ??
-    rotationFromStatus(readErrorStatus(error)) ??
-    (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' })
-  );
+  const status = readErrorStatus(error);
+  const byStatus = rotationFromStatus(status);
+  if (byStatus) return byStatus;
+  // Wording only speaks for a statusless or 400 failure, where providers put quota and rate-limit text.
+  const byKind =
+    status === undefined || status === 400 ? ROTATION_BY_PROVIDER_KIND[classifyProviderError(error)] : undefined;
+  return byKind ?? (isNetworkErrorLike(error) ? { kind: 'hop' } : { kind: 'never' });
 }
 
 /** Provider id off a router model id: `mastracode/<provider>/<model>` or `<provider>/<model>`. */

@@ -83,4 +83,14 @@ describe('parseError', () => {
 
     expect(parseError(error).type).toBe('context_length');
   });
+
+  it.each([
+    ['usage-limit wording under a numeric status 503', { status: 503 }, 'Your weekly limit has been reached'],
+    ['auth wording under a provider outage', { statusCode: 503 }, 'Upstream authentication service unavailable'],
+  ])('retries %s as a server error', (_label, status, message) => {
+    const parsed = parseError(Object.assign(new Error(message), status));
+
+    expect(parsed.type).toBe('server_error');
+    expect(parsed.retryable).toBe(true);
+  });
 });

@@ -117,16 +117,15 @@ function toError(error: unknown): Error {
 }
 
 function errorTypeOf(error: unknown, message: string, status: unknown): ErrorType {
-  const kind = classifyProviderError(error);
+  const kind = classifyProviderError(typeof status === 'number' ? { statusCode: status, cause: error } : error);
   if (kind === 'quota') return 'quota';
   if (kind === 'rate_limited' || status === 429 || message.includes('429')) return 'rate_limit';
   if (
     kind === 'auth' ||
     status === 401 ||
     status === 403 ||
-    message.includes('unauthorized') ||
-    message.includes('authentication') ||
-    message.includes('api key')
+    (kind !== 'unavailable' &&
+      (message.includes('unauthorized') || message.includes('authentication') || message.includes('api key')))
   ) {
     return 'auth';
   }
@@ -183,7 +182,7 @@ export function parseError(error: unknown): ParsedError {
   }
 
   const message = err.message.toLowerCase();
-  const type = errorTypeOf(error, message, errorObj.status);
+  const type = errorTypeOf(error, message, errorObj.statusCode ?? errorObj.status);
 
   switch (type) {
     case 'quota':

@@ -221,6 +221,8 @@ function isTransientConnectionError(error: unknown): boolean {
 
 function isTransientServerError(error: unknown): boolean {
   if (!error) return false;
+  const kind = classifyProviderError(error);
+  if (kind === 'context_overflow') return false;
 
   const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
   if (
@@ -230,7 +232,7 @@ function isTransientServerError(error: unknown): boolean {
     return true;
   }
 
-  return classifyProviderError(error) === 'unavailable';
+  return kind === 'unavailable';
 }
 
 function getTransientRetryDelay(retryCount: number): number {
