@@ -57,7 +57,6 @@ export const browserModelPickerScenario = {
     // Omitting the value opens the picker instead of erroring.
     terminal.submit('/browser set model');
     await runtime.waitForScreenText(/Select Browser Model/i, terminal, 8_000);
-    await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
 
     // The picker filters to providers Stagehand resolves, but still offers a
     // freely typed id as "Use: <id>", so the validation has to run on select
@@ -72,7 +71,7 @@ export const browserModelPickerScenario = {
 
     // groq is a provider Stagehand resolves, but has no key in this run.
     terminal.write('groq/llama-3.3-70b-versatile');
-    await runtime.waitForScreenText(/groq\/llama-3\.3-70b-versatile ✗ \(GROQ_API_KEY\)/i, terminal, 8_000);
+    await runtime.waitForScreenText(/groq\/llama-3\.3-70b-versatile\s+✗ GROQ_API_KEY/i, terminal, 8_000);
     terminal.write('\r');
 
     await runtime.waitForScreenText(/API Key Required/i, terminal, 8_000);

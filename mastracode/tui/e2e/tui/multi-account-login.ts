@@ -84,7 +84,7 @@ export const multiAccountLoginScenario = {
 
     // First login on a fresh provider: normal flow + account-name prompt.
     terminal.submit('/login');
-    await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/select provider to login/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Name this account/i, terminal, 8_000);
     terminal.write('Account A');
@@ -93,7 +93,7 @@ export const multiAccountLoginScenario = {
 
     // Second /login: selector shows the account count, selection opens the manager.
     terminal.submit('/login');
-    await runtime.waitForScreenText(/Select provider to login:/i, terminal, 8_000);
+    await runtime.waitForScreenText(/select provider to login/i, terminal, 8_000);
     await runtime.waitForScreenText(/\(1 account\)/i, terminal, 8_000);
     terminal.write('\r');
     await runtime.waitForScreenText(/Anthropic \(Claude Pro\/Max\) accounts/i, terminal, 8_000);

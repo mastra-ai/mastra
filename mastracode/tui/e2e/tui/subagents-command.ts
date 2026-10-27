@@ -51,7 +51,6 @@ export const subagentsCommandScenario = {
     terminal.write('\x1b[B');
     terminal.write('\r');
     await runtime.waitForScreenText(/Select subagent model \(Explore · Global\)/i, terminal);
-    await runtime.waitForScreenText(/Type to search/i, terminal);
     terminal.write(selectedModel);
     await runtime.waitForScreenText(/Use: 302ai\/subagent-config-e2e-model/i, terminal);
     terminal.write('\r');

@@ -32,6 +32,15 @@ describe('MenuList', () => {
     expect(rows[1]).toMatch(/^ {2}xAI/);
   });
 
+  it('keeps a long label whole when its row has no description', () => {
+    const label = 'Remove "Anthropic (Claude Pro/Max) Account A"? Enter to confirm, Escape to cancel';
+    const list = new MenuList([
+      { value: 'remove', label },
+      { value: 'back', label: 'Back', description: 'menu' },
+    ]);
+    expect(plain(list.render(120))[0]).toBe(`→ ${label}`);
+  });
+
   it('wraps around at both ends', () => {
     const onSelect = vi.fn();
     const list = new MenuList(['One', 'Two', 'Three'].map(label => ({ value: label, label })));

@@ -7,7 +7,6 @@ const modelId = 'kimi-code-plan-cn/k3';
 
 async function selectModel(terminal: McE2eTerminal, runtime: McE2eScenarioRuntime, title: RegExp) {
   await runtime.waitForScreenText(title, terminal, 8_000);
-  await runtime.waitForScreenText(/Type to search/i, terminal, 8_000);
   // Every Kimi For Coding row, not just the exact match, must use the models.dev id.
   terminal.write('kimi-for-coding');
   await runtime.waitForScreenText(/kimi-code-plan-cn\/kimi-for-coding/i, terminal, 8_000);

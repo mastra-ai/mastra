@@ -86,13 +86,14 @@ export class MenuList implements Component, Filterable, MenuChrome {
   render(width: number): string[] {
     if (this.filteredItems.length === 0) return [theme.fg('muted', '  no matches')];
 
-    const column = labelColumnWidth(this.items.map(item => item.label || item.value));
+    const column = labelColumnWidth(this.items.filter(item => item.description).map(item => item.label || item.value));
     const labelWidth = column - COLUMN_GAP;
     const { startIndex, endIndex } = this.window.range(this.selectedIndex, this.filteredItems.length, this.maxVisible);
     const lines: string[] = [];
     for (let i = startIndex; i < endIndex; i++) {
       const item = this.filteredItems[i]!;
-      const label = truncateToWidth(item.label || item.value, labelWidth);
+      // Only rows with a description need their label cut to the column.
+      const label = item.description ? truncateToWidth(item.label || item.value, labelWidth) : item.label || item.value;
       const details = item.description ? theme.fg('muted', item.description) : '';
       lines.push(truncateToWidth(menuRow(i === this.selectedIndex, label, details, column), width));
     }
