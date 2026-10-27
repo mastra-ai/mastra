@@ -122,6 +122,11 @@ export type SessionSendNotificationSignalOptions = {
   tracingContext?: TracingContext;
   tracingOptions?: TracingOptions;
   requestContext?: RequestContext;
+  /**
+   * Scopes for the run the notification starts. A run's scopes are fixed when it starts:
+   * a notification naming other scopes than the active run's starts its own run after it.
+   */
+  scopes?: AgentScopeEntry[];
 };
 
 /** Usage fields that are summed across steps when present on a step's usage. */
@@ -5325,7 +5330,8 @@ export class Session<TState = unknown> {
     input: SendNotificationSignalInput,
     options: SessionSendNotificationSignalOptions = {},
   ): Promise<SendAgentNotificationSignalResult> {
-    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions } = options;
+    const { ifActive, ifIdle, requestContext: requestContextInput, tracingContext, tracingOptions, scopes } = options;
+    const scoped = scopes?.length ? { scopes } : {};
     await this.machinery.authorizeExecute?.(requestContextInput);
     const threadId = await this.thread.ensureId({ requestContext: requestContextInput });
 
@@ -5338,6 +5344,7 @@ export class Session<TState = unknown> {
         threadId,
         ifActive,
         ifIdle,
+        ...scoped,
       });
     }
 
@@ -5352,6 +5359,7 @@ export class Session<TState = unknown> {
       threadId,
       ifActive,
       ifIdle: { ...ifIdle, streamOptions: streamOptions as any },
+      ...scoped,
     });
   }
 
@@ -5568,6 +5576,7 @@ export class Session<TState = unknown> {
     tracingOptions,
     requestContext: requestContextInput,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
@@ -5575,6 +5584,8 @@ export class Session<TState = unknown> {
     tracingOptions?: TracingOptions;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Scopes for the run the queued message starts. */
+    scopes?: AgentScopeEntry[];
   }): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
     const wasActive = this.stream.isActive();
@@ -5596,7 +5607,7 @@ export class Session<TState = unknown> {
         messageAuthor || providerOptions
           ? { contents: messageInput, ...(messageAuthor ? { author: messageAuthor } : {}), providerOptions }
           : messageInput,
-        target,
+        scopes?.length ? { ...target, scopes } : target,
       );
 
     if (wasActive) {
@@ -5618,10 +5629,13 @@ export class Session<TState = unknown> {
       tracingContext,
       tracingOptions,
       requestContext: requestContextInput,
+      scopes,
     }: {
       tracingContext?: TracingContext;
       tracingOptions?: TracingOptions;
       requestContext?: RequestContext;
+      /** Scopes for the run the queued signal starts. */
+      scopes?: AgentScopeEntry[];
     } = {},
   ): Promise<void> {
     await this.machinery.authorizeExecute?.(requestContextInput);
@@ -5633,7 +5647,7 @@ export class Session<TState = unknown> {
       // See queueMessage: a queued run must not inherit the active run's abort signal.
       abortSignal: wasActive ? new AbortController().signal : undefined,
     });
-    const result = this.machinery.getAgent().queueSignal(signal, target);
+    const result = this.machinery.getAgent().queueSignal(signal, scopes?.length ? { ...target, scopes } : target);
 
     if (wasActive) {
       await result.accepted;
@@ -5648,14 +5662,17 @@ export class Session<TState = unknown> {
     files,
     requestContext,
     author,
+    scopes,
   }: {
     content: string;
     files?: Array<{ data: string; mediaType: string; filename?: string }>;
     requestContext?: RequestContext;
     author?: MessageAuthor;
+    /** Scopes for the run the steering message starts; see `sendMessage`. */
+    scopes?: AgentScopeEntry[];
   }): Promise<void> {
     this.abort();
-    await this.sendMessage({ content, files, requestContext, author });
+    await this.sendMessage({ content, files, requestContext, author, ...(scopes?.length ? { scopes } : {}) });
   }
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {

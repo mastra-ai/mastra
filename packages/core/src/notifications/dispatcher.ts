@@ -1,3 +1,4 @@
+import type { AgentScopeEntry } from '../agent/scopes';
 import type { CreatedAgentSignal } from '../agent/signals';
 import { agentThreadStreamRuntime } from '../agent/thread-stream-runtime';
 import type { AgentSignalIfIdleOptions, SendAgentSignalOptions, SendAgentSignalResult } from '../agent/types';
@@ -14,6 +15,7 @@ type NotificationDispatchAgent = {
   id?: string;
   getPubSub?: () => PubSub | undefined;
   sendSignal: (signal: CreatedAgentSignal, target: SendAgentSignalOptions) => SendAgentSignalResult;
+  queueSignal?: (signal: CreatedAgentSignal, target: SendAgentSignalOptions) => SendAgentSignalResult;
   resolveNotificationDeliveryDecision?: (
     input: NotificationDeliveryPolicyInput,
   ) => Promise<NotificationDeliveryDecision> | NotificationDeliveryDecision;
@@ -51,21 +53,50 @@ function delayedDeliveryTarget({
   threadId,
   streamOptions,
   requireClaimedOwner,
+  scopes,
 }: {
   resourceId: string;
   threadId: string;
   streamOptions?: AgentSignalIfIdleOptions['streamOptions'];
   requireClaimedOwner: boolean;
+  scopes?: AgentScopeEntry[];
 }): SendAgentSignalOptions {
-  if (!streamOptions && !requireClaimedOwner) return { resourceId, threadId };
+  const scoped = scopes?.length ? { scopes } : {};
+  if (!streamOptions && !requireClaimedOwner) return { resourceId, threadId, ...scoped };
   return {
     resourceId,
     threadId,
+    ...scoped,
     ifIdle: {
       ...(requireClaimedOwner ? { requireClaimedOwner: true } : {}),
       ...(streamOptions ? { streamOptions } : {}),
     },
   };
+}
+
+/**
+ * A run's scopes are fixed when it starts, so a notification naming other scopes than the
+ * run active on its thread can't join that run: it queues to start its own run after it.
+ */
+async function sendNotificationSignalToAgent(
+  agent: NotificationDispatchAgent,
+  signal: CreatedAgentSignal,
+  target: SendAgentSignalOptions,
+): Promise<SendAgentSignalResult> {
+  const result = agent.sendSignal(signal, target);
+  // A rejection still reaches the caller through `result.accepted`.
+  const accepted = await result.accepted.catch(() => undefined);
+  if (accepted?.action === 'blocked' && accepted.reason === 'scope-mismatch' && agent.queueSignal) {
+    return agent.queueSignal(signal, target);
+  }
+  return result;
+}
+
+/** The scopes every record of a summary names, or none when they differ. */
+function sharedScopes(records: NotificationRecord[]): AgentScopeEntry[] | undefined {
+  const scopes = records.map(record => readNotificationRoutingRequirement(record.metadata)?.scopes);
+  const key = JSON.stringify(scopes[0] ?? null);
+  return scopes.every(entry => JSON.stringify(entry ?? null) === key) ? scopes[0] : undefined;
 }
 
 export type DispatchDueNotificationsInput = {
@@ -187,14 +218,15 @@ async function sendNotificationRecord({
     now,
   });
   if (hold) return null;
-  const requireClaimedOwner = readNotificationRoutingRequirement(current.metadata)?.requireClaimedOwner === true;
+  const routing = readNotificationRoutingRequirement(current.metadata);
   const target = delayedDeliveryTarget({
     resourceId: current.resourceId,
     threadId: current.threadId,
     streamOptions,
-    requireClaimedOwner,
+    requireClaimedOwner: routing?.requireClaimedOwner === true,
+    scopes: routing?.scopes,
   });
-  const result = agent.sendSignal(signal, target);
+  const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started (e.g. a
   // misconfigured agent). Let that propagate so the caller records the
   // notification as a failed delivery.
@@ -259,8 +291,9 @@ async function sendNotificationSummary({
         threadId: first.threadId,
         streamOptions: decision.streamOptions,
         requireClaimedOwner,
+        scopes: sharedScopes(records),
       });
-  const result = agent.sendSignal(signal, target);
+  const result = await sendNotificationSignalToAgent(agent, signal, target);
   // `accepted` rejects when the signal could not be routed/started; let it
   // propagate so the caller records the notifications as failed deliveries.
   await result.accepted;
