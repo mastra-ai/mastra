@@ -842,6 +842,31 @@ describe('AgentChannels', () => {
         expect(ctx[dispatch]).toHaveBeenCalledTimes(1);
       });
 
+      it('keeps thread mapping required with channel-wide approvers', async () => {
+        const { channels, adapter, dispatchApproval, dispatchDecline, click } = await setup(
+          { requesterId: 'alice' },
+          makeMastra(),
+          'anyone',
+        );
+        (channels as any).findThreadMapping = vi.fn().mockResolvedValue({ thread: undefined });
+
+        await click('tool_approve:tool-call-1', 'bob');
+        await click('tool_deny:tool-call-1', 'bob');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(dispatchDecline).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+      });
+
+      it('keeps pending tool calls required with channel-wide approvers', async () => {
+        const { adapter, dispatchApproval, click } = await setup({ requesterId: 'alice' }, makeMastra(), 'anyone');
+
+        await click('tool_approve:unknown-call', 'bob');
+
+        expect(dispatchApproval).not.toHaveBeenCalled();
+        expect(adapter.editMessage).not.toHaveBeenCalled();
+      });
+
       it('lets the requester approve', async () => {
         const { dispatchApproval, click } = await setup({ requesterId: 'alice' });
         await click('tool_approve:tool-call-1', 'alice');

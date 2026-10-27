@@ -250,7 +250,7 @@ const agent = new Agent({
     isOptional: true,
     defaultValue: "'requester'",
     description:
-      "Who may approve or deny a pending tool call in this adapter's channel. By default, only the user who triggered the call can respond. Set `'anyone'` to allow another channel member to respond. Pending-approval and thread-mapping checks still apply.",
+      "Who may approve or deny a pending tool call in this adapter's channel. By default, only the user who triggered the call can respond when their identity was recorded; runs without a recorded requester (such as scheduled runs) may allow another channel member to respond. Set `'anyone'` to allow another channel member to respond even when a requester was recorded. Pending-approval and thread-mapping checks still apply.",
   },
   {
     name: 'typingStatus',

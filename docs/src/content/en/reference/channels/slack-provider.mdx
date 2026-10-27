@@ -130,7 +130,7 @@ await slack.configure({
     isOptional: true,
     defaultValue: "'requester'",
     description:
-      "Who can approve or deny tool calls. By default, only the user whose message triggered the call can respond. Set `'anyone'` to allow another member of the shared Slack channel to approve or deny. This bypasses only the requester check; the action still requires a pending approval in the same thread.",
+      "Who can approve or deny tool calls. By default, only the user whose message triggered the call can respond when their identity was recorded; without a recorded requester, another channel member may respond. Set `'anyone'` to allow another member of the shared Slack channel to approve or deny even when a requester was recorded. This bypasses only the requester check; the action still requires a pending approval in the same thread.",
   },
   {
     name: 'typingStatus',

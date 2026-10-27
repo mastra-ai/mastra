@@ -1,6 +1,6 @@
 ---
-'@mastra/core': patch
-'@mastra/slack': patch
+'@mastra/core': minor
+'@mastra/slack': minor
 ---
 
-Allow shared-channel tool approvals with an opt-in `toolApprovers: 'anyone'` setting while keeping requester-only approval as the default.
+Added opt-in shared-channel tool approvals while keeping requester-only approval as the default. Configure `new SlackProvider({ toolApprovers: 'anyone' })` to allow channel members to approve or deny pending tools.
