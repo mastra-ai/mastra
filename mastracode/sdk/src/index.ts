@@ -80,9 +80,7 @@ import {
   loadSessionInstructions,
   sessionInstructionRoots,
 } from './agents/prompts/agent-instructions.js';
-import { executeSubagent } from './agents/subagents/execute.js';
-import { exploreSubagent } from './agents/subagents/explore.js';
-import { planSubagent } from './agents/subagents/plan.js';
+import { builtinSubagents } from './agents/subagents/index.js';
 import { attachOMThreadStatePersistence, restoreOMThreadStateForCurrentThread } from './agents/thread-caveman-state.js';
 import { createDynamicTools, createToolHooks } from './agents/tools.js';
 import type { PostToolObserver, ToolLike } from './agents/tools.js';
@@ -305,7 +303,10 @@ export interface MastraCodeConfig {
    * threads saved in another mode reopen as Build, and per-mode thinking defaults never apply.
    */
   modes?: AgentControllerMode[] | false;
-  /** Replace subagent definitions. Default: explore/plan/execute. An empty array disables subagents. */
+  /**
+   * Subagent definitions. Default: none. Pass `[...builtinSubagents]` to enable the
+   * explore/plan/execute subagents, or your own definitions.
+   */
   subagents?: AgentControllerSubagent[];
   /** Extra tools merged into the dynamic tool set. Can be a static record or a (sync or async) function that receives requestContext. */
   extraTools?:
@@ -1530,9 +1531,6 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   });
   const codeAgent = wrapExperimentalAgent(baseCodeAgent, experimentalAgent);
 
-  // const defaultSubAgents: Array<AgentControllerSubagent> = [];
-  // const defaultSubagents = [exploreSubagent, planSubagent, executeSubagent];
-
   const planMode = createPlanMode(!disabledBuiltinTools.has('submit_plan'));
   const defaultModes: AgentControllerMode[] = [
     {
@@ -1648,9 +1646,9 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
 
   const subagentModeMap: Record<string, string> = { explore: 'fast', plan: 'plan', execute: 'build' };
   const disabledTools = new Set(config?.disabledTools);
-  const subagents = (config?.subagents ?? [exploreSubagent, planSubagent, executeSubagent]).map(definition => ({
+  const subagents = (config?.subagents ?? []).map(definition => ({
     ...definition,
-    ...(config?.subagents == null && {
+    ...(builtinSubagents.includes(definition) && {
       defaultModelId:
         modes.find(mode => mode.id === subagentModeMap[definition.id])?.defaultModelId ??
         modes.find(mode => mode.id === defaultModeId)?.defaultModelId,
@@ -2284,6 +2282,7 @@ export async function prepareAgentControllerMount(
  * case: `bootLocalAgentController` (local) or {@link mountAgentControllerOnMastra} (server).
  */
 export const createMastraCode = bootLocalAgentController;
+export { builtinSubagents, resolveSubagentsSetting } from './agents/subagents/index.js';
 export * from './knowledge-inspector.js';
 export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
