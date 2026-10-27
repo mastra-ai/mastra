@@ -59,16 +59,6 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.1-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.2-TEE": [
-      {
-        "type": "toggle"
-      }
-    ],
     "moonshotai/Kimi-K2.6-TEE": [
       {
         "type": "toggle"
@@ -80,6 +70,16 @@
       }
     ],
     "google/gemma-4-31B-turbo-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.2-TEE": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.1-TEE": [
       {
         "type": "toggle"
       }
