@@ -522,6 +522,11 @@ export interface MCPServerTaskSummary {
   expiresAt?: string;
   /** SHA-256 hash of the principal that created the task. */
   principalKey: string;
+  /**
+   * Who sent the task, readable for operators: the client id with the token subject or user id,
+   * or with a short prefix of the token's hash. Never a credential. Missing for older tasks.
+   */
+  clientLabel?: string;
   /** Open input requests, keyed as on the wire. Only while `input_required`. */
   inputRequests?: Record<string, { method: string; params?: Record<string, unknown> }>;
   /** The `CallToolResult` of a completed task. */

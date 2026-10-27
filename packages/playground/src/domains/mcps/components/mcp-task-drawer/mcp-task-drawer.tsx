@@ -83,14 +83,22 @@ function McpTaskDrawerBody({ serverId, task }: { serverId: string; task: McpServ
         <DataKeysAndValues.ValueWithCopyBtn copyValue={task.taskKey} copyTooltip="Copy task key">
           {shortTaskKey(task.taskKey)}
         </DataKeysAndValues.ValueWithCopyBtn>
-        <DataKeysAndValues.Key>Client</DataKeysAndValues.Key>
+        {task.clientLabel && (
+          <>
+            <DataKeysAndValues.Key>Client</DataKeysAndValues.Key>
+            <DataKeysAndValues.ValueWithCopyBtn copyValue={task.clientLabel} copyTooltip="Copy client">
+              {task.clientLabel}
+            </DataKeysAndValues.ValueWithCopyBtn>
+          </>
+        )}
+        <DataKeysAndValues.Key>Client key</DataKeysAndValues.Key>
         <DataKeysAndValues.ValueWithCopyBtn copyValue={task.principalKey} copyTooltip="Copy client key">
           {shortTaskKey(task.principalKey)}
         </DataKeysAndValues.ValueWithCopyBtn>
       </DataKeysAndValues>
 
       <Txt tone="muted" variant="caption">
-        Keys are hashes: the task id and the client's identity stay with the client that started the task.
+        Keys are hashes: the task id and the client's credentials stay with the client that started the task.
       </Txt>
 
       {inputRequests.map(([key, request]) => (

@@ -395,7 +395,13 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
         const envelope = envelopeOf(row);
         if (!envelope || isForgotten(row, now)) continue;
         const { context } = row.args as unknown as RowArgs;
-        const listing = toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now));
+        const listing = toListing(
+          row.toolCallId,
+          envelope.principalKey,
+          context,
+          projectTask(row, envelope, '', now),
+          envelope.clientLabel,
+        );
         if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
         matching.push(listing);
         if (matching.length > limit) break;

@@ -268,6 +268,7 @@ export const mcpServerTaskSummarySchema = z.object({
   lastUpdatedAt: z.string(),
   expiresAt: z.string().optional(),
   principalKey: z.string(),
+  clientLabel: z.string().optional(),
   inputRequests: z
     .record(z.string(), z.object({ method: z.string(), params: jsonObjectSchema.optional() }).passthrough())
     .optional(),

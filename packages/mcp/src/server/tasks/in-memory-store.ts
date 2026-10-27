@@ -71,6 +71,7 @@ interface TaskRecord {
   taskId: string;
   taskKey: string;
   principal: string;
+  clientLabel?: string;
   context?: Record<string, unknown>;
   status: MCPTaskStatus;
   statusMessage?: string;
@@ -111,7 +112,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     this.#expiredRetentionMs = options.expiredRetentionMs ?? DEFAULT_EXPIRED_RETENTION_MS;
   }
 
-  async create(params: MCPTaskCreateParams): Promise<MCPTask> {
+  async create(params: MCPTaskCreateParams, { clientLabel }: { clientLabel?: string } = {}): Promise<MCPTask> {
     assertNonNegativeInteger('ttlMs', params.ttlMs);
     assertNonNegativeInteger('pollIntervalMs', params.pollIntervalMs);
     this.#sweep();
@@ -121,6 +122,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
       taskId,
       taskKey: taskKeyOf(taskId),
       principal: params.principal,
+      clientLabel,
       context: params.context,
       status: 'working',
       createdAt: now,
@@ -164,6 +166,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
         principalKeyOf(record.principal),
         record.context,
         this.#detailed(record),
+        record.clientLabel,
       );
       if (!isPastTaskListCursor(listing, cursor) || !matchesTaskListOptions(listing, options)) continue;
       matching.push(listing);

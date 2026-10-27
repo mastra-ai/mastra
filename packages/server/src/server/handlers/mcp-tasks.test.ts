@@ -230,6 +230,12 @@ describe('MCP task routes', () => {
       const parsed = listMcpServerTasksResponseSchema.parse({ surfaces: [], tasks: [leaky] });
       expect(JSON.stringify(parsed)).not.toMatch(/raw-task-id|client:sub:alice|alice-token/);
     });
+
+    it("keeps the task's client label for operators", () => {
+      const labelled = { ...waiting, clientLabel: 'studio-app:token:AbCdEfGh' };
+      const parsed = listMcpServerTasksResponseSchema.parse({ surfaces: [], tasks: [labelled] });
+      expect(parsed.tasks[0]?.clientLabel).toBe('studio-app:token:AbCdEfGh');
+    });
   });
 
   describe('FIND_MCP_SERVER_TASK_ROUTE', () => {

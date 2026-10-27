@@ -3834,6 +3834,7 @@ type Shared_Type_71 = {
   lastUpdatedAt: string;
   expiresAt?: string | undefined;
   principalKey: string;
+  clientLabel?: string | undefined;
   inputRequests?: Shared_Type_70 | undefined;
   result?:
     | {

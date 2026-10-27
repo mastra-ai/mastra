@@ -43,6 +43,9 @@ const STATUS_OPTIONS = Object.entries(TASK_STATUS_LABELS).map(([value, label]) =
 
 const stopPropagation = (event: SyntheticEvent) => event.stopPropagation();
 
+/** The client's readable label, or a short form of its key for tasks stored without one. */
+const clientName = (task: McpServerTask) => task.clientLabel ?? shortClientKey(task.principalKey);
+
 const toItems = (filters: McpTaskFilters): FilterBarItem[] =>
   (['status', 'surface', 'client'] as const).flatMap(fieldId => {
     const value = filters[fieldId];
@@ -77,11 +80,13 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
   const { containerRef, getRowProps } = useDataListKeyboard({ count: tasks.length });
   const filtered = toItems(filters).length > 0;
 
-  // Clients in the loaded tasks, plus the filtered one, for the client filter's suggestions.
-  const clients = useMemo(
-    () => [...new Set([...tasks.map(task => task.principalKey), ...(filters.client ? [filters.client] : [])])],
-    [tasks, filters.client],
-  );
+  // Clients in the loaded tasks, plus the filtered one, for the client filter's suggestions. The
+  // filter matches the client key exactly; the label is what the chip shows.
+  const clients = useMemo(() => {
+    const names = new Map(tasks.map(task => [task.principalKey, clientName(task)]));
+    if (filters.client && !names.has(filters.client)) names.set(filters.client, shortClientKey(filters.client));
+    return [...names];
+  }, [tasks, filters.client]);
 
   const fields = useMemo<FilterBarField[]>(
     () => [
@@ -109,7 +114,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
         icon: UserIcon,
         color: hueAccentColor('purple'),
         operators: ['is'],
-        suggestions: clients.map(client => ({ value: client, label: shortClientKey(client) })),
+        suggestions: clients.map(([value, label]) => ({ value, label })),
       },
     ],
     [surfaces, clients],
@@ -239,13 +244,13 @@ function McpTaskRow({
           size="sm"
           className="font-mono"
           tooltip="Show only this client's tasks"
-          aria-label={`Show only tasks from client ${shortClientKey(task.principalKey)}`}
+          aria-label={`Show only tasks from client ${clientName(task)}`}
           onClick={event => {
             event.stopPropagation();
             onFilterClient();
           }}
         >
-          {shortClientKey(task.principalKey)}
+          {clientName(task)}
         </Button>
       </DataList.Cell>
     </DataList.RowWrapper>

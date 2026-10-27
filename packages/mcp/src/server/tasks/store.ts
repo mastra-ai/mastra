@@ -141,6 +141,8 @@ export interface MCPTaskListing {
   taskKey: string;
   /** The principal that created the task, hashed with {@link principalKeyOf}. */
   principalKey: string;
+  /** Who sent the task, readable for operators (see `clientLabelOf`); never a credential. */
+  clientLabel?: string;
   /** The `context` given to `create`. */
   context?: Record<string, unknown>;
   status: MCPTaskStatus;
@@ -269,10 +271,12 @@ export function toListing(
   principalKey: string,
   context: Record<string, unknown> | undefined,
   task: MCPDetailedTask,
+  clientLabel?: string,
 ): MCPTaskListing {
   return {
     taskKey,
     principalKey,
+    ...(clientLabel !== undefined && { clientLabel }),
     ...(context && { context }),
     status: task.status,
     ...(task.statusMessage !== undefined && { statusMessage: task.statusMessage }),

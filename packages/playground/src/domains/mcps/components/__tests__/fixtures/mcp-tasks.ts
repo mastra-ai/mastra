@@ -96,6 +96,7 @@ export const cancelledTask: McpServerTask = { ...base('cancelledKey01', 'slow_re
 export const bobFailedTask: McpServerTask = {
   ...base('bobFailedKey01', 'slow_report'),
   principalKey: bobKey,
+  clientLabel: 'ci-bot:sub:nightly',
   status: 'failed',
   error: { code: -32603, message: 'upstream timed out' },
 };

@@ -7,6 +7,7 @@ import { McpTaskDrawer } from '../mcp-task-drawer/mcp-task-drawer';
 import { MCPDetail } from '../MCPDetail';
 import { v2Server } from './fixtures/mcp-servers';
 import {
+  aliceKey,
   bobFailedTask,
   bobKey,
   cancelledTask,
@@ -181,20 +182,25 @@ describe('MCPDetail tasks section', () => {
   });
 
   describe('when a client is picked from a row', () => {
-    it("lists only that client's tasks", async () => {
-      useTasks(workingTask, failedTask, bobFailedTask);
+    it("lists only that client's tasks, filtering on its key and showing its label", async () => {
+      const onList = vi.fn<(query: URLSearchParams) => void>();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
+        listTasks(() => [workingTask, failedTask, bobFailedTask], onList),
+      );
       renderDetail();
 
       const section = await tasksSection();
-      fireEvent.click(
-        await within(section).findByRole('button', { name: `Show only tasks from client ${bobKey.slice(0, 8)}…` }),
-      );
+      // A task stored without a label falls back to a short form of its client key.
+      expect(
+        await within(section).findAllByRole('button', { name: `Show only tasks from client ${aliceKey.slice(0, 8)}…` }),
+      ).toHaveLength(2);
+      fireEvent.click(within(section).getByRole('button', { name: 'Show only tasks from client ci-bot:sub:nightly' }));
 
       await waitFor(() => expect(within(section).getAllByRole('link', { name: /task / })).toHaveLength(1));
       expect(within(section).getByRole('link', { name: /slow_report task bobFaile/ })).not.toBeNull();
-      expect(within(section).getByRole('group', { name: 'Task filters' }).textContent).toContain(
-        `${bobKey.slice(0, 8)}…`,
-      );
+      expect(onList.mock.calls.some(([query]) => query.get('client') === bobKey)).toBe(true);
+      expect(within(section).getByRole('group', { name: 'Task filters' }).textContent).toContain('ci-bot:sub:nightly');
     });
   });
 
@@ -405,6 +411,16 @@ describe('MCP task drawer', () => {
       expect(await screen.findByRole('heading', { name: 'Error' })).not.toBeNull();
       expect(screen.getAllByText(/tool exploded/).length).toBeGreaterThan(0);
       expect(screen.queryByRole('button', { name: 'Cancel task' })).toBeNull();
+    });
+  });
+
+  describe('when the task has a client label', () => {
+    it('names the client next to its key', async () => {
+      useTasks(bobFailedTask);
+      renderDrawer(bobFailedTask.taskKey);
+
+      expect(await screen.findByText('ci-bot:sub:nightly')).not.toBeNull();
+      expect(screen.getByText('Client key')).not.toBeNull();
     });
   });
 

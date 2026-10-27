@@ -1121,7 +1121,9 @@ export class MCPServer extends MCPServerBase {
             pinToWorker: initialAttempt !== undefined,
             clientLabel: clientLabelOf(ctx, requestContext),
           })
-        : await store.create(params);
+        : store instanceof InMemoryMCPTaskStore
+          ? await store.create(params, { clientLabel: clientLabelOf(ctx, requestContext) })
+          : await store.create(params);
     store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);

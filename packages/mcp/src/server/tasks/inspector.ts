@@ -83,6 +83,7 @@ function toSummary(listing: MCPTaskListing): MCPServerTaskSummary {
       expiresAt: new Date(new Date(listing.createdAt).getTime() + listing.ttlMs).toISOString(),
     }),
     principalKey: listing.principalKey,
+    ...(listing.clientLabel !== undefined && { clientLabel: listing.clientLabel }),
     ...(listing.inputRequests && { inputRequests: listing.inputRequests }),
     ...(listing.result && { result: listing.result }),
     ...(listing.error && { error: listing.error }),

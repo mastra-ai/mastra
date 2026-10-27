@@ -3643,6 +3643,7 @@ export const API_ROUTE_METADATA = {
     "queryParams": [
       "client",
       "cursor",
+      "key",
       "limit",
       "status",
       "surface"

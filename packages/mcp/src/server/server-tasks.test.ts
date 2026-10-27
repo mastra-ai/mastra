@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -502,7 +503,15 @@ describe.each([
     const inspector = server.getTasksInspector()!;
     const { tasks } = await inspector.list({});
     const serialized = JSON.stringify(tasks);
-    for (const secret of [asking, hanging, 'alice-token', 'bob-token', 'alice', 'bob']) {
+    const tokenHash = (token: string) => createHash('sha256').update(token).digest('base64url');
+    for (const secret of [
+      asking,
+      hanging,
+      'alice-token',
+      'bob-token',
+      tokenHash('alice-token'),
+      tokenHash('bob-token'),
+    ]) {
       expect(serialized).not.toContain(secret);
     }
     const bySurface = Object.fromEntries(tasks.map(task => [task.surface, task]));
@@ -512,6 +521,9 @@ describe.each([
       inputRequests: { [Object.keys(bySurface.approve!.inputRequests!)[0]!]: { method: 'elicitation/create' } },
     });
     expect(bySurface.approve!.principalKey).not.toBe(bySurface.hang!.principalKey);
+    // Token callers are labelled with their client id and a short prefix of the token's hash.
+    expect(bySurface.approve!.clientLabel).toBe(`alice:token:${tokenHash('alice-token').slice(0, 8)}`);
+    expect(bySurface.hang!.clientLabel).toBe(`bob:token:${tokenHash('bob-token').slice(0, 8)}`);
 
     const [key] = Object.keys(bySurface.approve!.inputRequests!);
     const answer = { [key!]: { action: 'accept', content: { approver: 'studio' } } };
