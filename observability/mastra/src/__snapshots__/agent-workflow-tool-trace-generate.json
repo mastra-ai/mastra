@@ -31,6 +31,8 @@
         "entityId": "workflow-agent",
         "attributes": {
           "instructions": "You can execute workflows using the workflow executor tool",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "availableTools": ["workflowExecutor"],
           "completionStartTime": "<date>"
         },
@@ -184,6 +186,8 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
                   "usage": {
@@ -626,6 +630,8 @@
                 "entityId": "workflow-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
                   "usage": {

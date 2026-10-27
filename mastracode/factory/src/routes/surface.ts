@@ -380,7 +380,7 @@ export async function prepareFactoryRuleBinding(
           // The card resolved to a linked repository the sandbox will not check out.
           throw new FactoryDispatchError(
             'source_repository_missing',
-            `Repository ${repository.slug} is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.`,
+            `Repository ${repository.slug} is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.`,
             { cause: error },
           );
         }

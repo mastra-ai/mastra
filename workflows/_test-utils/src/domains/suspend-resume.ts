@@ -1046,7 +1046,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
         return { value, condition };
       }
 
-      value = value + 1;
+      value += 1;
       condition = value >= 10;
 
       return { value, condition };
@@ -1833,7 +1833,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       // Small delay to simulate work
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      value = value + 1;
+      value += 1;
       condition = value >= 10;
 
       return {

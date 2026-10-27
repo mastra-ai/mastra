@@ -1,5 +1,20 @@
 # @mastra/redis-streams
 
+## 0.7.0-alpha.2
+
+### Minor Changes
+
+- Added `retainTerminalEvents` to `trimTopic` to preserve compact run outcomes and execution authority metadata while removing saved output. Upgrade alongside `@mastra/core` for opted-in thread outcome recovery. ([#28621](https://github.com/mastra-ai/mastra/pull/28621))
+
+  ```ts
+  await pubsub.trimTopic(topic, { runId, retainTerminalEvents: true });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c)]:
+  - @mastra/core@1.80.0-alpha.6
+
 ## 0.6.5-alpha.1
 
 ### Patch Changes
