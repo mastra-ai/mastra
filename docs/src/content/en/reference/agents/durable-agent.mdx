@@ -587,9 +587,10 @@ Model and tool calls after the checkpoint may run again. Make tool side effects 
 | `DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY` | This process is executing the run. `force` doesn't override this. |
 | `DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS` | This process is already recovering the run. |
 | `DURABLE_AGENT_RECOVER_RUN_SUSPENDED` | The run is suspended. Continue it with `resume()`. |
+| `DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE` | The snapshot isn't restartable and isn't suspended. |
 | `DURABLE_AGENT_EXECUTION_CONFLICT` | With `force`, another execution claimed the run during the takeover. |
 
-The server's `POST /agents/:agentId/recover` route returns ownership and suspended-run conflicts as `409 Conflict`. An unavailable checkpoint returns `500 Internal Server Error`.
+The server's `POST /agents/:agentId/recover` route returns ownership, suspended-run, and inactive-run conflicts as `409 Conflict`. An unavailable checkpoint returns `500 Internal Server Error`.
 
 <PropertiesTable
   content={[

@@ -2,4 +2,4 @@
 '@mastra/server': patch
 ---
 
-Return HTTP 409 for durable-agent recovery requests whose run is no longer active instead of treating snapshot state as an HTTP status.
+Return HTTP 409 Conflict from `POST /agents/:agentId/recover` when the run is no longer active.

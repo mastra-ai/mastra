@@ -85,9 +85,15 @@ it(
         recovered.cleanup();
       }
     } finally {
-      await env.cleanup();
-      await mastra?.shutdown();
-      await storage.close();
+      try {
+        await mastra?.shutdown();
+      } finally {
+        try {
+          await storage.close();
+        } finally {
+          await env.cleanup();
+        }
+      }
     }
   },
   PEER_TIMEOUT_MS + DEFAULT_HANG_GUARD_MS + 10_000,
