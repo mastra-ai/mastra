@@ -136,6 +136,7 @@ describe('T4 durable-recover checkpoint availability (COR-1493)', () => {
           await expect(replacement.recover(runId, { force: true })).rejects.toMatchObject({
             id: 'DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE',
           });
+          expect(replacementGraph.getRunRegistryEntry(runId, replacementMastra)).toBeUndefined();
           release.resolve();
           await execution;
           return;
