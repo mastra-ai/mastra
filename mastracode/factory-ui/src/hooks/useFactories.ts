@@ -1,4 +1,5 @@
 import { useMutation, useQuery, useQueryClient } from '@tanstack/react-query';
+import type { QueryClient } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
@@ -20,11 +21,18 @@ import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab'
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
-function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
-  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+function invalidateFactories(queryClient: QueryClient) {
+  return queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 }
 
-function refetchFactories(queryClient: ReturnType<typeof useQueryClient>) {
+function invalidateFactoryRepositories(queryClient: QueryClient, factoryProjectId: string) {
+  return Promise.all([
+    invalidateFactories(queryClient),
+    queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryProjectId) }),
+  ]);
+}
+
+function refetchFactories(queryClient: QueryClient) {
   return queryClient.refetchQueries({ queryKey: queryKeys.factories() });
 }
 
@@ -65,10 +73,6 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
-/**
- * Also feeds the org's issue intake. The link lands first, so the Factory list
- * refreshes even when the intake write fails; the server link is idempotent, so retrying is safe.
- */
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();
@@ -105,7 +109,7 @@ export function useLinkRepositoryMutation() {
             await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
         }
       } finally {
-        invalidateFactories(queryClient);
+        await invalidateFactoryRepositories(queryClient, factoryProjectId);
       }
       return linked;
     },
@@ -123,7 +127,7 @@ export function useUnlinkRepositoryMutation() {
       factoryProjectId: string;
       projectRepositoryId: string;
     }) => unlinkRepository(baseUrl, factoryProjectId, projectRepositoryId),
-    onSuccess: () => invalidateFactories(queryClient),
+    onSuccess: (_data, { factoryProjectId }) => invalidateFactoryRepositories(queryClient, factoryProjectId),
   });
 }
 

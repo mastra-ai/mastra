@@ -1,5 +1,4 @@
 export { EmptyFactoryState } from './components/EmptyFactoryState';
-export { ConnectRepositoriesPanel } from './components/ConnectRepositoriesPanel';
 export { FactorySwitcher } from './components/FactorySwitcher';
 export { SessionsSection } from './components/SessionsSection';
 export * from '../../../hooks/useGithubGitOps';

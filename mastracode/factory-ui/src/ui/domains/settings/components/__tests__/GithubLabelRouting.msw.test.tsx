@@ -107,12 +107,33 @@ describe('GithubLabelRouting', () => {
     expect(screen.getByText(/is not installed; issues stay on Work/)).toBeInTheDocument();
   });
 
-  it('explains that nothing can be routed without custom boards', async () => {
+  it('hides label editors when no custom boards can receive a route', async () => {
     stub([], builtinBoardCatalog.boards);
-    renderRouting();
+    const { client } = renderRouting();
 
-    expect(await screen.findByText(/No custom boards are installed/)).toBeInTheDocument();
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Routing')).toBeVisible();
     expect(screen.queryByRole('textbox', { name: 'Label for Acme' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
+  });
+
+  it('omits redundant Factory and repository scope for a single default-routing source', async () => {
+    stub([], builtinBoardCatalog.boards);
+    const { client } = renderWithProviders(
+      <GithubLabelRouting
+        factoryProjectId="fp-1"
+        name="Acme"
+        repositories={['acme/app', 'acme/docs']}
+        showScope={false}
+      />,
+    );
+
+    await waitForMutationsIdle(client);
+    expect(screen.getByText('Routing')).toBeVisible();
+    expect(screen.queryByText('Acme')).not.toBeInTheDocument();
+    expect(screen.queryByText('acme/app', { exact: false })).not.toBeInTheDocument();
+    expect(screen.queryByRole('textbox')).not.toBeInTheDocument();
+    expect(screen.queryByRole('combobox')).not.toBeInTheDocument();
   });
 
   it('reports when routes cannot be loaded instead of pretending none exist', async () => {
@@ -136,7 +157,6 @@ describe('GithubLabelRouting', () => {
 
     await waitForMutationsIdle(client);
     expect(screen.getByText(/Installed boards are unavailable right now/)).toBeInTheDocument();
-    expect(screen.queryByText(/No custom boards are installed/)).not.toBeInTheDocument();
     // The route is still listed; it must not be mislabelled as uninstalled.
     expect(screen.queryByText(/is not installed/)).not.toBeInTheDocument();
     expect(screen.getByRole('combobox', { name: 'Board for release' })).toBeDisabled();

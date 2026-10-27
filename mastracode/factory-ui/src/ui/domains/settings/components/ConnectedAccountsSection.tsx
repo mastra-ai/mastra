@@ -1,46 +1,33 @@
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { focusRing } from '@mastra/playground-ui/primitives/transitions';
-import { ChevronRight, InfoIcon } from 'lucide-react';
+import { Button } from '@mastra/playground-ui/components/Button';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { Link2, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { SlackIcon } from '@mastra/playground-ui/icons/SlackIcon';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+
+const slackLabel = (
+  <span className="flex items-center gap-2">
+    <SettingsIntegrationIcon provider="slack" />
+    Slack
+  </span>
+);
 
 // Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
   return (
     <SettingsContainer>
-      <SettingsRow
-        label={
-          <span className="flex items-center gap-3">
-            <SlackIcon className="size-7 shrink-0 opacity-50" />
-            <span className="flex flex-col gap-0.5">
-              <Txt as="span" variant="body">
-                Slack
-              </Txt>
-              <Txt tone="muted" as="span" variant="caption" className="whitespace-nowrap">
-                Not configured
-              </Txt>
-            </span>
-          </span>
-        }
-      >
-        <Txt
-          tone="muted"
-          as="span"
-          variant="caption"
-          className="flex items-start gap-1.5 pl-10 text-left lg:block lg:pl-0 lg:text-right"
-        >
-          <InfoIcon aria-hidden="true" className="mt-0.5 size-3.5 shrink-0 lg:hidden" />
-          Slack is not set up for this factory.
-        </Txt>
-      </SettingsRow>
+      <SlackUnavailableRow />
     </SettingsContainer>
   );
+}
+
+function SlackUnavailableRow() {
+  return <SettingsRow label={slackLabel} description="Slack is not set up for this factory." />;
 }
 
 export function ConnectedAccountsSection() {
@@ -50,88 +37,60 @@ export function ConnectedAccountsSection() {
   const slackAccounts = accountsQuery.data?.accounts.filter(account => account.platform === 'slack') ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
 
-  const connectSlack = () => {
-    window.location.assign(connectSlackUrl(baseUrl, factoryId));
-  };
-
   if (accountsQuery.isPending) {
     return <SkeletonRows label="Loading connected accounts" rows={1} rowClassName="h-16 w-full" />;
   }
 
   if (accountsQuery.error) {
     return (
-      <Txt as="p" variant="caption" className="text-destructive-foreground">
-        {accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'}
-      </Txt>
+      <SettingsRow
+        label={slackLabel}
+        errorMsg={
+          accountsQuery.error instanceof Error ? accountsQuery.error.message : 'Failed to load connected accounts'
+        }
+      >
+        <Button size="sm" icon={<RotateCcw />} onClick={() => void accountsQuery.refetch()}>
+          Retry
+        </Button>
+      </SettingsRow>
     );
   }
 
   if (accountsQuery.data?.reason === 'not_registered' || accountsQuery.data?.unavailable) {
-    return <SlackNotConfigured />;
+    return <SlackUnavailableRow />;
   }
 
-  const slackLabel = (
-    <span className="flex items-center gap-3">
-      <SlackIcon className="size-7 shrink-0" />
-      <span className="flex flex-col gap-0.5">
-        <Txt as="span" variant="body">
-          Slack
-        </Txt>
-        <Txt
-          tone="muted"
-          as="span"
-          variant="caption"
-          className={slackAccounts.length > 0 ? 'text-success-indicator' : ''}
-        >
-          {slackAccounts.length > 1
-            ? `${slackAccounts.length} connected`
-            : slackAccounts.length === 1
-              ? 'Connected'
-              : 'Not connected'}
-        </Txt>
-      </span>
-    </span>
-  );
-
   return (
-    <SettingsContainer>
-      {slackAccounts.length > 0 && factoryId ? (
-        <Link
-          to={`/factories/${factoryId}/settings/connections/slack`}
-          className={`group hover:bg-fill block cursor-pointer rounded-xl transition-colors ${focusRing}`}
-        >
-          <SettingsRow label={slackLabel}>
-            <Txt
-              as="span"
-              variant="caption"
-              tone="muted"
-              className="group-hover:text-foreground flex items-center gap-2"
-            >
-              Configure
-              <ChevronRight aria-hidden="true" />
-            </Txt>
+    <>
+      {slackAccounts.length > 0 ? (
+        slackAccounts.map((account, index) => (
+          <SettingsRow
+            key={`${account.externalTeamId}:${account.externalUserId}`}
+            label={slackLabel}
+            description={`${account.externalUserName || account.externalUserId} · ${account.externalTeamName || account.externalTeamId}`}
+          >
+            {index === 0 && factoryId && (
+              <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>
+                Configure Slack
+              </ConnectionManagementButton>
+            )}
           </SettingsRow>
-        </Link>
+        ))
       ) : (
-        <button
-          type="button"
-          disabled={!canConnect}
-          onClick={connectSlack}
-          className={`group hover:bg-fill block w-full cursor-pointer rounded-xl text-left transition-colors disabled:cursor-not-allowed disabled:opacity-50 ${focusRing}`}
+        <SettingsRow
+          label={slackLabel}
+          description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
         >
-          <SettingsRow label={slackLabel}>
-            <Txt
-              as="span"
-              variant="caption"
-              tone="muted"
-              className="group-hover:text-foreground flex items-center gap-2"
-            >
-              Connect
-              <ChevronRight aria-hidden="true" />
-            </Txt>
-          </SettingsRow>
-        </button>
+          <Button
+            size="sm"
+            icon={<Link2 />}
+            disabled={!canConnect}
+            onClick={() => window.location.assign(connectSlackUrl(baseUrl, factoryId))}
+          >
+            Connect Slack
+          </Button>
+        </SettingsRow>
       )}
-    </SettingsContainer>
+    </>
   );
 }

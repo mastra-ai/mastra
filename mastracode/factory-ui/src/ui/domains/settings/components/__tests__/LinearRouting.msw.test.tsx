@@ -1,7 +1,3 @@
-/**
- * BDD coverage for Linear routing: a routed project can name which installed
- * board its issues land on, and the choice travels with every binding save.
- */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -99,8 +95,6 @@ describe('LinearRouting board target', () => {
     await user.click(factory);
     await user.click(await screen.findByRole('option', { name: 'Globex' }));
 
-    // A board id belongs to one Factory's catalog; carrying it over could bind
-    // to a board the new Factory never installed.
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
   });
@@ -164,7 +158,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       const { rerender } = renderMany();
 
-      await user.type(screen.getByRole('searchbox', { name: 'Search Linear routing' }), 'release');
+      await user.type(await screen.findByRole('searchbox', { name: 'Search Linear routing' }), 'release');
       await waitFor(() =>
         expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
       );
@@ -190,7 +184,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       renderMany();
 
-      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
+      const search = await screen.findByRole('searchbox', { name: 'Search Linear routing' });
       await user.type(search, 'release');
       const factory = await screen.findByRole('combobox', { name: 'Factory for Release Tools' });
       await user.click(factory);

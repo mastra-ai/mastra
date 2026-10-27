@@ -1,14 +1,22 @@
-import { screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { RepositoriesSection } from '../RepositoriesSection';
+import { environmentPayload, environmentRepository } from './fixtures/environment';
 
 const FACTORY_ID = 'fp-1';
 const PRIMARY_PROJECT = 'rhys-group1/factory-validation-rhys-20260916/factory-gitlab-primary';
+
+function repositoryEnvironment() {
+  return environmentPayload({
+    repositories: [environmentRepository({ projectRepositoryId: 'repo-1', slug: PRIMARY_PROJECT })],
+  });
+}
 
 function renderRepositoriesSettings() {
   renderWithProviders(
@@ -21,7 +29,7 @@ function renderRepositoriesSettings() {
 }
 
 describe('Repositories settings', () => {
-  it('offers reconnection when the Platform GitLab account needs reauthorization', async () => {
+  beforeEach(() => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
         HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -29,40 +37,8 @@ describe('Repositories settings', () => {
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
       ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-        HttpResponse.json({ connections: [] }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
-        HttpResponse.json({ enabled: false, connected: false, installations: [], reason: 'missing_config' }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
-        HttpResponse.json({
-          enabled: true,
-          configured: false,
-          mode: 'platform',
-          connections: [{ id: 'conn-1', integrationId: 'gitlab', status: 'needs_reauth', accountLabel: 'fixture' }],
-          accounts: [],
-          reauthRequired: true,
-          reason: 'not_connected',
-        }),
-      ),
-    );
-
-    renderRepositoriesSettings();
-
-    const reconnect = await screen.findByRole('button', { name: 'Reconnect GitLab' });
-    expect(reconnect).toBeInTheDocument();
-    expect(reconnect.tagName).toBe('BUTTON');
-  });
-
-  it('shows GitLab repository details without unrelated GitHub settings for a GitLab-only Factory', async () => {
-    let gitlabProjectReads = 0;
-    server.use(
-      http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-      ),
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({ environment: repositoryEnvironment() }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
         HttpResponse.json({
@@ -103,7 +79,6 @@ describe('Repositories settings', () => {
         }),
       ),
       http.get(`${TEST_BASE_URL}/web/gitlab/projects`, () => {
-        gitlabProjectReads += 1;
         return HttpResponse.json({
           projects: [
             {
@@ -121,30 +96,308 @@ describe('Repositories settings', () => {
         });
       }),
     );
+  });
+
+  it('keeps linked GitLab repositories visible while searching for another repository', async () => {
+    const user = userEvent.setup();
 
     renderRepositoriesSettings();
 
-    expect((await screen.findAllByText(PRIMARY_PROJECT)).length).toBeGreaterThan(0);
-    expect((await screen.findAllByText('Default branch: main')).length).toBeGreaterThan(0);
-    await waitFor(() => expect(gitlabProjectReads).toBe(1));
-    expect(await screen.findByText(/factory-gitlab-control/)).toBeInTheDocument();
-    expect(screen.queryByText('GitHub is disabled on the server.')).not.toBeInTheDocument();
-    expect(screen.queryByText('GitHub CLI tokens')).not.toBeInTheDocument();
-    expect(screen.queryByRole('heading', { name: 'Sandbox' })).not.toBeInTheDocument();
-    expect(screen.queryByLabelText(/Setup command for/)).not.toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Environment' })).toHaveAttribute(
+    expect(await screen.findByText(PRIMARY_PROJECT)).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: `Show settings for ${PRIMARY_PROJECT}` }));
+    expect(screen.queryByRole('searchbox', { name: 'Search repositories' })).not.toBeInTheDocument();
+
+    const addRepository = screen.getByRole<HTMLButtonElement>('button', { name: 'Add repository' });
+    addRepository.focus();
+    await user.keyboard('{Enter}');
+    expect(await screen.findByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('searchbox', { name: 'Search repositories' })).toHaveFocus());
+    expect(await screen.findByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
+    await user.type(screen.getByRole('searchbox', { name: 'Search repositories' }), 'no-match');
+    expect(screen.getByText(PRIMARY_PROJECT)).toBeInTheDocument();
+    expect(screen.getByText('No repositories match your search.')).toBeInTheDocument();
+    await user.keyboard('{Escape}');
+    expect(screen.queryByRole('searchbox', { name: 'Search repositories' })).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus();
+    expect(screen.getByRole('switch', { name: `Clone ${PRIMARY_PROJECT} into every session` })).toBeChecked();
+    await user.keyboard(' ');
+    expect(await screen.findByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'Manage connections' })).toHaveAttribute(
       'href',
-      `/factories/${FACTORY_ID}/settings/environment`,
+      `/factories/${FACTORY_ID}/settings/connections`,
     );
-    const connectAnother = screen.getByRole('button', { name: 'Connect another GitLab account' });
-    expect(connectAnother).toBeInTheDocument();
-    expect(connectAnother.tagName).toBe('BUTTON');
-    const manage = screen.getByRole('link', { name: 'Manage GitLab connection' });
-    expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
-    expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    await waitFor(() => expect(addRepository).toHaveFocus());
+    await user.click(addRepository);
+    expect(await screen.findByRole('searchbox', { name: 'Search repositories' })).toHaveValue('');
   });
 
-  it('keeps linked repositories visible and labels the wait while available repositories load', async () => {
+  it('keeps the drawer open through linking and a failed attempt, then refreshes the list after retry', async () => {
+    const user = userEvent.setup();
+    let releaseSave!: () => void;
+    const savePending = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
+    let linked = false;
+    let attempts = 0;
+    const repository = {
+      id: 'repo-2',
+      branch: 'main',
+      sandboxWorkdir: '~/widget',
+      repository: { externalId: '42', slug: 'acme/widget', defaultBranch: 'main' },
+    };
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, () =>
+        HttpResponse.json({
+          repos: [
+            {
+              id: 42,
+              fullName: 'acme/widget',
+              name: 'widget',
+              owner: 'acme',
+              defaultBranch: 'main',
+              private: true,
+              installationId: 1,
+              installationStorageId: 'inst-1',
+              sandboxProvider: 'custom',
+              sandboxWorkdir: '~/widget',
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              integrationId: 'github',
+              installationId: 'inst-1',
+              repositories: linked ? [repository] : [],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({
+          environment: environmentPayload({
+            repositories: linked
+              ? [environmentRepository({ projectRepositoryId: repository.id, slug: repository.repository.slug })]
+              : [],
+          }),
+        }),
+      ),
+      http.post(
+        `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections/conn-1/repositories`,
+        async () => {
+          await savePending;
+          attempts++;
+          if (attempts === 1) return HttpResponse.json({ error: 'Link unavailable' }, { status: 503 });
+          linked = true;
+          return HttpResponse.json({ projectRepository: repository });
+        },
+      ),
+      http.get(`${TEST_BASE_URL}/web/intake/config`, () =>
+        HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['acme/widget'] } } }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+    await user.click(await screen.findByRole('button', { name: 'Add acme/widget' }));
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeDisabled();
+    expect(screen.getByRole('searchbox', { name: 'Search repositories' })).toBeDisabled();
+    await user.keyboard('{Escape}');
+    expect(screen.getByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
+
+    releaseSave();
+    expect(await screen.findByText('Failed to link GitHub repository (503)')).toBeInTheDocument();
+    expect(screen.getByRole('dialog', { name: 'Add repository' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Cancel' })).toBeEnabled();
+    await user.click(screen.getByRole('button', { name: 'Add acme/widget' }));
+    await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Add repository' })).not.toBeInTheDocument());
+    expect(await screen.findByRole('button', { name: 'Remove acme/widget' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
+  });
+
+  it('does not mistake an unsettled GitHub search or a failed request for an empty result', async () => {
+    const user = userEvent.setup();
+    let releaseSearch!: () => void;
+    const searchPending = new Promise<void>(resolve => {
+      releaseSearch = resolve;
+    });
+    const requests: string[] = [];
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({ enabled: true, connected: true, installations: [], reason: 'ready' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, async ({ request }) => {
+        const query = new URL(request.url).searchParams.get('q') ?? '';
+        requests.push(query);
+        if (!query) return HttpResponse.json({ repos: [] });
+        await searchPending;
+        return HttpResponse.json({ error: 'Repository search unavailable' }, { status: 503 });
+      }),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+    expect(await screen.findByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
+    vi.useFakeTimers();
+    try {
+      const search = screen.getByRole('searchbox', { name: 'Search repositories' });
+      fireEvent.change(search, { target: { value: 'r' } });
+      fireEvent.change(search, { target: { value: 'rem' } });
+      fireEvent.change(search, { target: { value: 'remote' } });
+      expect(requests).toEqual(['']);
+      expect(screen.getByRole('status', { name: 'Loading available repositories' })).toBeInTheDocument();
+      expect(screen.queryByText(/No repositories match/)).not.toBeInTheDocument();
+      act(() => vi.advanceTimersByTime(1000));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    await waitFor(() => expect(requests).toEqual(['', 'remote']));
+    expect(screen.getByRole('status', { name: 'Loading available repositories' })).toBeInTheDocument();
+    releaseSearch();
+    expect(await screen.findByText(/Failed to list repos/)).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading available repositories' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/No repositories match/)).not.toBeInTheDocument();
+    await user.clear(screen.getByRole('searchbox', { name: 'Search repositories' }));
+    expect(screen.getByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
+    expect(screen.queryByText(/Failed to list repos/)).not.toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading available repositories' })).not.toBeInTheDocument();
+  });
+
+  it('excludes a checkout without unlinking it, then removes only the requested repository with safe retry', async () => {
+    const user = userEvent.setup();
+    let linked = true;
+    let environment = repositoryEnvironment();
+    environment.repositories.push(
+      environmentRepository({ projectRepositoryId: 'repo-2', slug: 'acme/other', position: 2 }),
+    );
+    const patches: unknown[] = [];
+    let releaseRemoval!: () => void;
+    const removalPending = new Promise<void>(resolve => {
+      releaseRemoval = resolve;
+    });
+    let removals = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({ environment }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              integrationId: 'gitlab',
+              installationId: 'inst-1',
+              repositories: [
+                ...(linked
+                  ? [{ id: 'repo-1', branch: 'main', repository: { slug: PRIMARY_PROJECT, defaultBranch: 'main' } }]
+                  : []),
+                { id: 'repo-2', branch: 'main', repository: { slug: 'acme/other', defaultBranch: 'main' } },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.patch(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, async ({ request }) => {
+        patches.push(await request.json());
+        environment = {
+          ...environment,
+          repositories: environment.repositories.map(repository =>
+            repository.projectRepositoryId === 'repo-1' ? { ...repository, inEnvironment: false } : repository,
+          ),
+        };
+        return HttpResponse.json({ environment });
+      }),
+      http.delete(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/repositories/repo-1`, async () => {
+        removals++;
+        if (removals === 1) {
+          await removalPending;
+          return HttpResponse.json({ error: 'Removal unavailable' }, { status: 503 });
+        }
+        linked = false;
+        environment = {
+          ...environment,
+          repositories: environment.repositories.filter(repo => repo.projectRepositoryId !== 'repo-1'),
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: `Show settings for ${PRIMARY_PROJECT}` }));
+    const clone = screen.getByRole('switch', { name: `Clone ${PRIMARY_PROJECT} into every session` });
+    await user.click(clone);
+    await waitFor(() => expect(clone).not.toBeChecked());
+    expect(screen.getByRole('button', { name: `Hide settings for ${PRIMARY_PROJECT}` })).toHaveAttribute(
+      'aria-expanded',
+      'true',
+    );
+    expect(patches).toEqual([{ repositories: [{ projectRepositoryId: 'repo-1', inEnvironment: false }] }]);
+    expect(removals).toBe(0);
+    expect(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` })).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` })).toBeEnabled());
+    await user.click(screen.getByRole('button', { name: 'Show settings for acme/other' }));
+    await user.click(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
+    expect(await screen.findByText('Removing…')).toBeInTheDocument();
+    expect(screen.getByRole('switch', { name: 'Clone acme/other into every session' })).toBeDisabled();
+    expect(screen.getByRole('button', { name: 'Add repository' })).toBeDisabled();
+    releaseRemoval();
+    const primaryRow = screen.getByRole('group', { name: PRIMARY_PROJECT });
+    expect(await within(primaryRow).findByText('Failed to unlink repository (503)')).toBeInTheDocument();
+    expect(
+      within(screen.getByRole('group', { name: 'acme/other' })).queryByText(/Failed to unlink/),
+    ).not.toBeInTheDocument();
+    expect(clone).not.toBeChecked();
+    await user.click(screen.getByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
+    await waitFor(() => expect(screen.queryByText(PRIMARY_PROJECT)).not.toBeInTheDocument());
+    expect(screen.getByText('acme/other')).toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
+  });
+
+  it('allows adding the first repository while configuration loads, and retries configuration failures without inventing rows', async () => {
+    const user = userEvent.setup();
+    let releaseEnvironment!: () => void;
+    const environmentPending = new Promise<void>(resolve => {
+      releaseEnvironment = resolve;
+    });
+    let fail = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({ connections: [] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, async () => {
+        await environmentPending;
+        return fail
+          ? HttpResponse.json({ error: 'Repository configuration unavailable' }, { status: 503 })
+          : HttpResponse.json({ environment: environmentPayload({ repositories: [] }) });
+      }),
+    );
+
+    renderRepositoriesSettings();
+    expect(await screen.findByRole('status', { name: 'Loading repository configuration' })).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Add repository' }));
+    expect(await screen.findByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
+    await user.click(screen.getByRole('button', { name: 'Cancel' }));
+    releaseEnvironment();
+    expect(await screen.findByText(/Failed to load environment/)).toBeInTheDocument();
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add repository' })).toBeEnabled();
+    fail = false;
+    await user.click(screen.getByRole('button', { name: 'Retry repository configuration' }));
+    await waitFor(() => expect(screen.queryByText(/Failed to load environment/)).not.toBeInTheDocument());
+    expect(screen.queryByRole('switch')).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Add repository' })).toBeEnabled();
+  });
+
+  it('keeps linked repositories visible while repository discovery loads in the drawer', async () => {
     let releaseStatus!: () => void;
     const statusGate = new Promise<void>(resolve => (releaseStatus = resolve));
     let releaseRepos!: () => void;
@@ -155,6 +408,13 @@ describe('Repositories settings', () => {
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
         HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'personal-factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({
+          environment: environmentPayload({
+            repositories: [environmentRepository({ projectRepositoryId: 'repo-1', slug: 'octo/agent' })],
+          }),
+        }),
       ),
       http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
         HttpResponse.json({
@@ -208,21 +468,19 @@ describe('Repositories settings', () => {
 
     renderRepositoriesSettings();
 
-    // Linked repositories render before the provider status resolves.
-    expect(await screen.findByText('octo/agent')).toBeInTheDocument();
-    expect(screen.queryByRole('status', { name: 'Loading source control status' })).not.toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Loading repositories' })).toHaveTextContent(
-      'Loading available repositories…',
-    );
-    expect(screen.getByText('Available')).toBeInTheDocument();
+    const linkedRepository = await screen.findByText('octo/agent');
+    await userEvent.click(screen.getByRole('button', { name: 'Add repository' }));
+    const drawer = within(await screen.findByRole('dialog', { name: 'Add repository' }));
+    expect(drawer.getByRole('status', { name: 'Loading available repositories' })).toBeInTheDocument();
+    expect(linkedRepository).toBeInTheDocument();
 
     releaseStatus();
-    expect(await screen.findByRole('button', { name: /Refresh/ })).toBeInTheDocument();
-    expect(screen.getByRole('status', { name: 'Loading repositories' })).toBeInTheDocument();
+    expect(await drawer.findByRole('button', { name: 'Refresh GitHub repositories' })).toBeInTheDocument();
+    expect(drawer.getByRole('status', { name: 'Loading available repositories' })).toBeInTheDocument();
 
     releaseRepos();
-    expect(await screen.findByText('octo/hello')).toBeInTheDocument();
-    expect(screen.queryByRole('status', { name: 'Loading repositories' })).not.toBeInTheDocument();
-    expect(screen.getByText('octo/agent')).toBeInTheDocument();
+    expect(await drawer.findByText('octo/hello')).toBeInTheDocument();
+    expect(drawer.queryByRole('status', { name: 'Loading available repositories' })).not.toBeInTheDocument();
+    expect(linkedRepository).toBeInTheDocument();
   });
 });

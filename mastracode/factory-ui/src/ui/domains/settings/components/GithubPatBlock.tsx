@@ -1,16 +1,16 @@
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { Check, Pencil, Plus, RotateCcw, Trash2, X } from 'lucide-react';
+import { useRef, useState } from 'react';
 
 import {
   useGithubPatStatusQuery,
   useRemoveGithubPatMutation,
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { GithubPatKind } from '../../workspaces/services/github';
-import { SettingsContainer } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
 
 // GitHub App tokens cannot authorize the gh CLI endpoints; sandboxes use PATs.
@@ -23,20 +23,32 @@ export function GithubPatBlock() {
       title="GitHub CLI tokens"
       description="Classic PATs agents use for gh CLI commands in sandboxes. The token's account needs access to the linked repositories."
     >
-      <SettingsContainer>
-        <TokenRow
-          kind="default"
-          title="Worker token"
-          description="Used by every sandbox."
-          configured={statusQuery.data?.configured === true}
-        />
-        <TokenRow
-          kind="reviewer"
-          title="Reviewer token (optional)"
-          description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
-          configured={statusQuery.data?.reviewerConfigured === true}
-        />
-      </SettingsContainer>
+      {statusQuery.isPending ? (
+        <SkeletonRows label="Loading GitHub CLI tokens" rows={2} rowClassName="h-16 w-full" />
+      ) : statusQuery.error ? (
+        <SettingsContainer>
+          <SettingsRow label="GitHub CLI tokens" errorMsg={statusQuery.error.message}>
+            <Button size="sm" icon={<RotateCcw />} onClick={() => void statusQuery.refetch()}>
+              Retry
+            </Button>
+          </SettingsRow>
+        </SettingsContainer>
+      ) : (
+        <SettingsContainer>
+          <TokenRow
+            kind="default"
+            title="Worker token"
+            description="Used by every sandbox."
+            configured={statusQuery.data?.configured === true}
+          />
+          <TokenRow
+            kind="reviewer"
+            title="Reviewer token (optional)"
+            description="Used by review sessions so PR reviews come from a different account. Falls back to the worker token."
+            configured={statusQuery.data?.reviewerConfigured === true}
+          />
+        </SettingsContainer>
+      )}
     </SettingsSubsection>
   );
 }
@@ -52,103 +64,97 @@ function TokenRow({
   description: string;
   configured: boolean;
 }) {
-  const saveMutation = useSaveGithubPatMutation(kind);
   const removeMutation = useRemoveGithubPatMutation(kind);
   const [editing, setEditing] = useState(false);
+  const editButton = useRef<HTMLButtonElement>(null);
+  const closeEditor = () => {
+    setEditing(false);
+    requestAnimationFrame(() => editButton.current?.focus());
+  };
+
+  if (editing) {
+    return <TokenEditor kind={kind} title={title} description={description} onClose={closeEditor} />;
+  }
+
+  return (
+    <SettingsRow label={title} description={description} errorMsg={removeMutation.error?.message}>
+      <div className="flex flex-wrap items-center gap-2">
+        <Button
+          ref={editButton}
+          size="sm"
+          icon={configured ? <Pencil /> : <Plus />}
+          disabled={removeMutation.isPending}
+          onClick={() => setEditing(true)}
+        >
+          {configured ? 'Update token' : 'Add token'}
+        </Button>
+        {configured && (
+          <Button
+            size="sm"
+            icon={<Trash2 />}
+            disabled={removeMutation.isPending}
+            onClick={() => removeMutation.mutate()}
+          >
+            {removeMutation.isPending ? 'Removing…' : 'Remove'}
+          </Button>
+        )}
+      </div>
+    </SettingsRow>
+  );
+}
+
+function TokenEditor({
+  kind,
+  title,
+  description,
+  onClose,
+}: {
+  kind: GithubPatKind;
+  title: string;
+  description: string;
+  onClose: () => void;
+}) {
+  const saveMutation = useSaveGithubPatMutation(kind);
   const [draft, setDraft] = useState('');
 
-  const busy = saveMutation.isPending || removeMutation.isPending;
-  const mutationError = saveMutation.error ?? removeMutation.error;
-  const error = mutationError instanceof Error ? mutationError.message : undefined;
-
-  const save = async () => {
+  const save = () => {
     const token = draft.trim();
-    if (!token) return;
-    try {
-      await saveMutation.mutateAsync(token);
-      setEditing(false);
-      setDraft('');
-    } catch {
-      // Mutation error is rendered below.
-    }
+    if (!token || saveMutation.isPending) return;
+    saveMutation.mutate(token, { onSuccess: onClose });
   };
 
   return (
-    <div className="flex flex-col gap-2 px-4 py-3">
-      <div className="flex flex-col gap-2 lg:flex-row lg:items-center lg:justify-between lg:gap-4">
-        <div className="flex min-w-0 flex-col">
-          <div className="flex items-center gap-2">
-            <Txt tone="ink" variant="body">
-              {title}
-            </Txt>
-            <Badge size="sm" variant={configured ? 'success' : 'neutral'}>
-              {configured ? 'Configured' : 'Not set'}
-            </Badge>
-          </div>
-          <Txt tone="muted" variant="caption">
-            {description}
-          </Txt>
-        </div>
-        {!editing && (
-          <div className="flex shrink-0 items-center gap-2">
-            <Button
-              size="sm"
-              disabled={busy}
-              onClick={() => {
-                setEditing(true);
-                setDraft('');
-              }}
-            >
-              {configured ? 'Update token' : 'Add token'}
-            </Button>
-            {configured && (
-              <Button size="sm" disabled={busy} onClick={() => removeMutation.mutate()}>
-                {removeMutation.isPending ? 'Removing…' : 'Remove'}
-              </Button>
-            )}
-          </div>
-        )}
-      </div>
-
-      {editing && (
+    <SettingsRow label={title} description={description} errorMsg={saveMutation.error?.message}>
+      <div className="flex min-w-0 flex-col gap-2">
+        <Input
+          autoFocus
+          type="password"
+          size="sm"
+          aria-label={`${title} GitHub Personal Access Token`}
+          placeholder="Paste classic Personal Access Token"
+          value={draft}
+          disabled={saveMutation.isPending}
+          onChange={event => setDraft(event.target.value)}
+          onKeyDown={event => {
+            if (event.key === 'Enter') save();
+            if (event.key === 'Escape' && !saveMutation.isPending) onClose();
+          }}
+        />
         <div className="flex items-center gap-2">
-          <Input
-            autoFocus
-            type="password"
-            size="sm"
-            aria-label={`${title} GitHub Personal Access Token`}
-            placeholder="Paste classic Personal Access Token"
-            value={draft}
-            onChange={event => setDraft(event.target.value)}
-            onKeyDown={event => {
-              if (event.key === 'Enter') void save();
-              if (event.key === 'Escape') {
-                setEditing(false);
-                setDraft('');
-              }
-            }}
-          />
-          <Button
-            size="sm"
-            disabled={busy}
-            onClick={() => {
-              setEditing(false);
-              setDraft('');
-            }}
-          >
+          <Button size="sm" icon={<X />} disabled={saveMutation.isPending} onClick={onClose}>
             Cancel
           </Button>
-          <Button variant="primary" size="sm" disabled={busy || !draft.trim()} onClick={() => void save()}>
+          <Button
+            variant="primary"
+            size="sm"
+            icon={<Check />}
+            disabled={saveMutation.isPending || !draft.trim()}
+            onClick={save}
+          >
             {saveMutation.isPending ? 'Saving…' : 'Save'}
           </Button>
         </div>
-      )}
-
-      {error && (
-        <Txt as="p" variant="caption" className="text-destructive-foreground">
-          {error}
-        </Txt>
-      )}
-    </div>
+      </div>
+    </SettingsRow>
   );
 }

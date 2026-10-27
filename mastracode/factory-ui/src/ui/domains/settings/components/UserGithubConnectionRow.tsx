@@ -1,49 +1,47 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { Link2 } from 'lucide-react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { connectUserGithub } from '../../workspaces/services/github';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-
-import { SettingsSubsection } from './SettingsSubsection';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 
 export function UserGithubConnectionRow() {
   const { baseUrl } = useApiConfig();
   const status = useGithubStatusQuery().data;
 
-  if (!status || status.installations.length === 0) return undefined;
+  if (!status || (!status.userConnected && status.installations.length === 0)) return null;
 
   if (status.userConnected) {
     return (
-      <SettingsSubsection scope="personal" title="GitHub account">
-        <SettingsContainer>
-          <SettingsRow
-            label={
-              <span className="flex items-center gap-2">
-                <GithubIcon className="text-muted-foreground size-4 shrink-0" />
-                {`@${status.userGithubUsername ?? 'unknown'}`}
-              </span>
-            }
-            description="Issues and PRs you create are authored as you."
-          />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <SettingsRow
+        label={
+          <span className="flex items-center gap-2">
+            <SettingsIntegrationIcon provider="github" />
+            GitHub
+          </span>
+        }
+        description={status.userGithubUsername ? `@${status.userGithubUsername}` : 'Personal account connected'}
+      />
     );
   }
 
-  if (status.userConnected !== false) return undefined;
+  if (status.userConnected !== false) return null;
 
   return (
-    <SettingsSubsection scope="personal" title="GitHub account">
-      <SettingsContainer>
-        <SettingsRow label="Not connected" description="Connect it so issues and PRs you create are authored as you.">
-          <Button size="sm" onClick={() => connectUserGithub(baseUrl)}>
-            <GithubIcon className="size-3.5" />
-            Connect GitHub
-          </Button>
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsSubsection>
+    <SettingsRow
+      label={
+        <span className="flex items-center gap-2">
+          <SettingsIntegrationIcon provider="github" />
+          GitHub
+        </span>
+      }
+      description="Connect it so issues and PRs you create are authored as you."
+    >
+      <Button size="sm" icon={<Link2 />} onClick={() => connectUserGithub(baseUrl)}>
+        Connect GitHub
+      </Button>
+    </SettingsRow>
   );
 }

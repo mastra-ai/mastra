@@ -14,8 +14,6 @@ describe('reorderPatch', () => {
   });
 
   it('renumbers every link 1..n in display order, dead ones included, and sends nothing but positions', () => {
-    // The page lists the live rows first (here dropped in a new order) and appends the dead links.
-    // Commands and inclusion stay out, so a reorder never overwrites another editor's saved values.
     expect(reorderPatch([api, web, gone])).toEqual([
       { projectRepositoryId: 'link-api', position: 1 },
       { projectRepositoryId: 'link-web', position: 2 },

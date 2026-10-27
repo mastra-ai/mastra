@@ -13,6 +13,7 @@ import {
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -70,25 +71,16 @@ function ApiKeyDialog({ provider, title, pending, onSubmit, onClose }: ApiKeyDia
 
 export interface ProviderConnectControlProps {
   provider: PlatformConnectProviderId;
-  /** Reconnect an existing connection instead of creating a new one. */
   reconnectConnectionId?: string;
   label: string;
-  /** Short visible action when the provider is already named beside it. */
   buttonLabel?: string;
   size?: 'sm' | 'md';
   variant?: 'default' | 'ghost' | 'primary';
-  /** Leading icon inside the button, e.g. the provider's logomark. */
   icon?: ReactNode;
-  /** Layout classes forwarded to the connect button. */
   className?: string;
-  /** Called after the provider confirmed the authorization. */
   onCompleted?: () => void;
 }
 
-/**
- * One button driving the full connect or reconnect flow for a provider.
- * Owns its mutation: mint session → headless auth → wait for activation.
- */
 export function ProviderConnectControl({
   provider,
   reconnectConnectionId,
@@ -157,11 +149,6 @@ export interface ProviderConnectionsListProps {
   connections: PlatformProviderConnection[];
 }
 
-/**
- * Per-connection rows for organizations with multiple installed accounts.
- * Healthy connections show a quiet reconnect affordance; connections the
- * provider rejected surface it prominently.
- */
 export function ProviderConnectionsList({ provider, connections }: ProviderConnectionsListProps) {
   if (connections.length === 0) return null;
   return (
@@ -182,6 +169,7 @@ export function ProviderConnectionsList({ provider, connections }: ProviderConne
             provider={provider}
             reconnectConnectionId={connection.id}
             label="Reconnect"
+            icon={<Link2 />}
             size="sm"
             variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
           />

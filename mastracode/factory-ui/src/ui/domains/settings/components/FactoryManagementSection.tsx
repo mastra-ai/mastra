@@ -7,6 +7,8 @@ import { useParams } from 'react-router';
 import { useDeleteFactoryMutation, useFactoryQuery } from '../../../../hooks/useFactories';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
+import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { EnvironmentSection } from './EnvironmentSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
 export function FactoryManagementSection() {
@@ -15,50 +17,57 @@ export function FactoryManagementSection() {
   const factory = factoryQuery.data;
   const deleteMutation = useDeleteFactoryMutation();
 
-  if (!factory) {
+  if (!factoryId || (factoryQuery.isSuccess && !factory)) {
     return <Notice variant="info">Select a factory to manage its settings.</Notice>;
   }
+  if (factoryQuery.isError) {
+    return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
+  }
+  if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;
 
   return (
-    <SettingsSubsection scope="factory" title="Danger zone">
-      <SettingsContainer>
-        <SettingsRow label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
-          <AlertDialog>
-            <AlertDialog.Trigger
-              render={
-                <Button
-                  size="sm"
-                  variant="destructive-ghost"
-                  disabled={deleteMutation.isPending}
-                  aria-label={`Delete ${factory.name}`}
-                >
-                  <Trash2 size={14} />
-                  Delete
-                </Button>
-              }
-            />
-            <AlertDialog.Content>
-              <AlertDialog.Header>
-                <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
-                <AlertDialog.Description>
-                  This deletes the Factory and unlinks its repositories. It cannot be undone.
-                </AlertDialog.Description>
-              </AlertDialog.Header>
-              <AlertDialog.Footer>
-                <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
-                <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
-              </AlertDialog.Footer>
-            </AlertDialog.Content>
-          </AlertDialog>
-        </SettingsRow>
-        {deleteMutation.isError && (
-          <div className="p-4">
-            <Notice variant="destructive">
-              {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
-            </Notice>
-          </div>
-        )}
-      </SettingsContainer>
-    </SettingsSubsection>
+    <div className="flex min-w-0 flex-col gap-8">
+      <EnvironmentSection factoryId={factory.id} />
+      <SettingsSubsection scope="factory" title="Danger zone">
+        <SettingsContainer>
+          <SettingsRow label={`Delete ${factory.name}`} description="Also unlinks its repositories.">
+            <AlertDialog>
+              <AlertDialog.Trigger
+                render={
+                  <Button
+                    size="sm"
+                    variant="destructive-ghost"
+                    disabled={deleteMutation.isPending}
+                    aria-label={`Delete ${factory.name}`}
+                  >
+                    <Trash2 size={14} />
+                    Delete
+                  </Button>
+                }
+              />
+              <AlertDialog.Content>
+                <AlertDialog.Header>
+                  <AlertDialog.Title>Delete {factory.name}?</AlertDialog.Title>
+                  <AlertDialog.Description>
+                    This deletes the Factory and unlinks its repositories. It cannot be undone.
+                  </AlertDialog.Description>
+                </AlertDialog.Header>
+                <AlertDialog.Footer>
+                  <AlertDialog.Cancel>Cancel</AlertDialog.Cancel>
+                  <AlertDialog.Action onClick={() => deleteMutation.mutate(factory.id)}>Delete</AlertDialog.Action>
+                </AlertDialog.Footer>
+              </AlertDialog.Content>
+            </AlertDialog>
+          </SettingsRow>
+          {deleteMutation.isError && (
+            <div className="p-4">
+              <Notice variant="destructive">
+                {deleteMutation.error instanceof Error ? deleteMutation.error.message : 'Failed to delete Factory'}
+              </Notice>
+            </div>
+          )}
+        </SettingsContainer>
+      </SettingsSubsection>
+    </div>
   );
 }
