@@ -75,6 +75,30 @@ describe('UnixSocketPubSub', () => {
     }
   });
 
+  it('rejects an oversized membership frame while the broker is not reading', async () => {
+    const path = await socketPath();
+    const connections: net.Socket[] = [];
+    const server = net.createServer(socket => {
+      connections.push(socket);
+      socket.pause();
+    });
+    await new Promise<void>((resolve, reject) => {
+      server.once('error', reject);
+      server.listen(path, resolve);
+    });
+    try {
+      const client = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 64 * 1024 });
+      pubsubs.push(client);
+      await expect(client.subscribe('topic-' + 'x'.repeat(128 * 1024), () => {})).rejects.toThrow(
+        /publisher queue limit exceeded/,
+      );
+    } finally {
+      await Promise.allSettled(pubsubs.splice(0).map(pubsub => pubsub.close()));
+      connections.forEach(socket => socket.destroy());
+      await new Promise<void>(resolve => server.close(() => resolve()));
+    }
+  });
+
   it('caps concurrent publisher writes while the broker is not reading', async () => {
     const path = await socketPath();
     const connections: net.Socket[] = [];
@@ -101,8 +125,10 @@ describe('UnixSocketPubSub', () => {
           results.some(result => result.status === 'rejected' && /publisher queue limit/.test(String(result.reason))),
         ).toBe(true);
       });
-      await client.close();
+      connections.forEach(socket => socket.resume());
       await Promise.all(writes);
+      expect(results.some(result => result.status === 'fulfilled')).toBe(true);
+      await client.close();
     } finally {
       connections.forEach(socket => socket.destroy());
       await new Promise<void>(resolve => server.close(() => resolve()));

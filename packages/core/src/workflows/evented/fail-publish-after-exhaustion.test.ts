@@ -33,7 +33,64 @@ const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Pr
   ],
 ];
 
-describe('nested workflow finish publication failure', () => {
+describe('workflow finish publication failure', () => {
+  it('rejects the waiting caller when a real socket cannot publish an oversized finish event', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-finish-cap-'));
+    const path = join(dir, 'events.sock');
+    const broker = new UnixSocketPubSub(path);
+    await broker.subscribe('broker-ready', () => {});
+    const pubsub = new UnixSocketPubSub(path);
+    const cappedPublisher = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 48 * 1024 });
+    const published: string[] = [];
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = async (topic, event, options) => {
+      if (topic === 'workflows-finish') {
+        published.push(event.type);
+        return cappedPublisher.publish(topic, event, options);
+      }
+      return publish(topic, event, options);
+    };
+    const workflow = createWorkflow({
+      id: 'oversized-finish',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ payload: z.string() }),
+    })
+      .then(
+        createStep({
+          id: 'large-output',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ payload: z.string() }),
+          execute: async () => ({ payload: 'x'.repeat(32 * 1024) }),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = await Promise.race([
+        run.start({ inputData: {} }).then(
+          () => 'RESOLVED',
+          error => (error as Error).message,
+        ),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      expect(result).toMatch(/publisher queue limit exceeded/);
+      expect(published).toContain('workflow.publish-failed');
+    } finally {
+      await mastra.stopWorkers();
+      await cappedPublisher.close();
+      await pubsub.close();
+      await broker.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
   it('does not advance the parent twice when a finish frame hits the publisher cap', async () => {
     const pubsub = new EventEmitterPubSub();
     let rejected = false;

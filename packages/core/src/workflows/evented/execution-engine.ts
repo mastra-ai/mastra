@@ -124,9 +124,13 @@ export class EventedExecutionEngine extends ExecutionEngine {
         return;
       }
 
-      if (['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type)) {
+      if (['workflow.end', 'workflow.fail', 'workflow.suspend', 'workflow.publish-failed'].includes(event.type)) {
         await ack?.();
         await pubsub.unsubscribe('workflows-finish', finishCb);
+        if (event.type === 'workflow.publish-failed') {
+          rejectResult(new Error(event.data.message));
+          return;
+        }
         // Re-hydrate serialized errors back to Error instances when workflow fails
         if (event.type === 'workflow.fail' && event.data.stepResults) {
           event.data.stepResults = hydrateSerializedStepErrors(event.data.stepResults);

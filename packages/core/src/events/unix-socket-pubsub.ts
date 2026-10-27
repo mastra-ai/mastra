@@ -69,6 +69,8 @@ type MembershipWaiter = {
   reject: (error: Error) => void;
 };
 
+export class PublisherQueueLimitError extends Error {}
+
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_PUBLISHER_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_INBOUND_FRAME_BYTES = 64 * 1024 * 1024;
@@ -1465,7 +1467,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     try {
       if (socket) {
         registerWaiter();
-        await writeFrame(socket, frame);
+        await this.#writePublisherFrame(socket, frame);
       } else {
         await this.#sendToBroker(frame, registerWaiter);
       }
@@ -1813,14 +1815,18 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
       // NOTE: keep this exact message in sync with isBrokerConnectionError.
       throw new Error('UnixSocketPubSub is not connected to a broker');
     }
+    await this.#writePublisherFrame(activeSocket, frame);
+  }
+
+  async #writePublisherFrame(socket: net.Socket, frame: ClientFrame) {
     const serialized = serializeFrame(frame);
     const bytes = Buffer.byteLength(serialized);
     if (this.#publisherQueuedBytes + bytes > this.#maxPublisherQueuedBytes) {
-      throw new Error('UnixSocketPubSub publisher queue limit exceeded');
+      throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded');
     }
     this.#publisherQueuedBytes += bytes;
     try {
-      await writeSerializedFrame(activeSocket, serialized);
+      await writeSerializedFrame(socket, serialized);
     } finally {
       this.#publisherQueuedBytes -= bytes;
     }

@@ -5,6 +5,7 @@ import { EventProcessor } from '../../../events/processor';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
+import { PublisherQueueLimitError } from '../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
@@ -1233,6 +1234,23 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
   }
 
+  private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
+    try {
+      await this.mastra.pubsub.publish('workflows-finish', event);
+    } catch (error) {
+      if (!(error instanceof PublisherQueueLimitError)) {
+        throw error;
+      }
+      // The result is too large to deliver. Notify the waiting caller without
+      // replaying the already-applied parent workflow transition.
+      await this.mastra.pubsub.publish('workflows-finish', {
+        type: 'workflow.publish-failed',
+        runId: event.runId,
+        data: { message: error.message },
+      });
+    }
+  }
+
   protected async processWorkflowEnd(args: ProcessorArgs & { deleteSnapshotAfterEnd?: boolean }) {
     // Keep cleanup intent local to this serialized handoff, not downstream notifications.
     const { deleteSnapshotAfterEnd, ...finishArgs } = args;
@@ -1362,7 +1380,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.end',
       runId,
       data: { ...finishArgs, workflow: undefined, state: finalState },
@@ -1470,7 +1488,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.suspend',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
@@ -1594,7 +1612,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.mastra.pubsub.publish('workflows-finish', {
+    await this.publishFinishEvent({
       type: 'workflow.fail',
       runId,
       data: { ...args, workflow: undefined, state: finalState },
