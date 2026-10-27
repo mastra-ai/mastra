@@ -63,7 +63,7 @@ import { EventClientActions } from './actions/events';
 import { ProgressClientActions } from './actions/progress';
 import { PromptClientActions } from './actions/prompt';
 import { ResourceClientActions } from './actions/resource';
-import { isReconnectableMCPError } from './error-utils';
+import { isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
 import type { DeliveryDriver } from './events/mode';
 import { EventStreamRouter } from './events/stream-router';
 import { EventSubscription } from './events/subscription';
@@ -182,17 +182,18 @@ function shouldDetachPersistentTransportRequest(init?: RequestInit): boolean {
   }
 }
 
-/**
- * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
- * server identifies a push stream by that id, and the SDK doesn't return it to the caller.
- */
 const TASK_WAIT_ERROR_IDS = {
   timeout: 'MCP_CLIENT_TOOL_TASK_TIMEOUT',
   expired: 'MCP_CLIENT_TOOL_TASK_EXPIRED',
   input_unhandled: 'MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED',
   input_unsupported: 'MCP_CLIENT_TOOL_TASK_INPUT_UNSUPPORTED',
+  unreachable: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED',
 } as const satisfies Record<TaskWaitError['reason'], Uppercase<string>>;
 
+/**
+ * Reports the JSON-RPC id of each `events/stream` request as it goes out on `transport`. The
+ * server identifies a push stream by that id, and the SDK doesn't return it to the caller.
+ */
 function observeEventStreamRequests(transport: Transport, onSent: (id: string) => void): void {
   const send = transport.send.bind(transport);
   transport.send = (message, options) => {
@@ -1892,7 +1893,7 @@ export class InternalMastraMCPClient extends MastraBase {
           get: (taskId, options) => this.taskRequester.get(taskId, options),
           update: (taskId, responses, options) => this.taskRequester.update(taskId, responses, options),
           cancel: taskId => this.taskRequester.cancel(taskId),
-          isRecoverable: isReconnectableMCPError,
+          isRecoverable: isRecoverableTaskPollError,
           recover: () => this.reconnectAfterTransportFailure(this.transport, this.lifecycleGeneration),
         },
         task,
@@ -1905,8 +1906,9 @@ export class InternalMastraMCPClient extends MastraBase {
       );
     } catch (error) {
       if (signal?.aborted) throw error;
-      if (error instanceof TaskWaitError) throw fail(TASK_WAIT_ERROR_IDS[error.reason], error.message);
-      throw fail('MCP_CLIENT_TOOL_TASK_POLL_FAILED', `Lost track of MCP task ${task.taskId}`, error);
+      if (error instanceof TaskWaitError) throw fail(TASK_WAIT_ERROR_IDS[error.reason], error.message, error.cause);
+      const reason = error instanceof Error ? error.message : String(error);
+      throw fail('MCP_CLIENT_TOOL_TASK_POLL_FAILED', `Polling MCP task ${task.taskId} failed: ${reason}`, error);
     }
 
     switch (terminal.status) {

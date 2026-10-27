@@ -12,7 +12,8 @@ export interface TaskWaitPort {
   cancel(taskId: string): Promise<void>;
   /**
    * Restores the connection after a polling request failed on the transport. Resolves when the
-   * next poll may be sent; rejects to give up.
+   * next poll may be sent. While the server is down this may reject with an error `isRecoverable`
+   * accepts; the outage then continues. Any other rejection ends the wait.
    */
   recover(error: unknown): Promise<void>;
   /** Whether a polling failure is a transport problem worth recovering from. */
@@ -27,8 +28,11 @@ export interface TaskWaitOptions {
   pollIntervalMs?: number;
   /** Stops waiting, and cancels the remote task, after this long. */
   maxWaitMs?: number;
-  /** Consecutive transport failures tolerated while polling. */
-  maxRecoveries?: number;
+  /**
+   * How long polling keeps retrying while the server can't be reached (restart, deploy, proxy 5xx).
+   * The wait also ends earlier at `maxWaitMs` or the task's TTL. Default 5 minutes.
+   */
+  maxOutageMs?: number;
   /** For tests. */
   sleep?: (ms: number, signal?: AbortSignal) => Promise<void>;
   now?: () => number;
@@ -37,14 +41,18 @@ export interface TaskWaitOptions {
 /** Why a task wait stopped without a terminal task. */
 export class TaskWaitError extends Error {
   constructor(
-    readonly reason: 'timeout' | 'input_unhandled' | 'input_unsupported' | 'expired',
+    readonly reason: 'timeout' | 'input_unhandled' | 'input_unsupported' | 'expired' | 'unreachable',
     message: string,
     readonly task: MCPTask,
+    cause?: unknown,
   ) {
-    super(message);
+    super(message, cause === undefined ? undefined : { cause });
     this.name = 'TaskWaitError';
   }
 }
+
+const DEFAULT_MAX_OUTAGE_MS = 5 * 60_000;
+const MAX_OUTAGE_BACKOFF_MS = 30_000;
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -73,7 +81,7 @@ export async function waitForTask(
 ): Promise<MCPTerminalTask> {
   const sleep = options.sleep ?? defaultSleep;
   const now = options.now ?? Date.now;
-  const maxRecoveries = options.maxRecoveries ?? 3;
+  const maxOutageMs = options.maxOutageMs ?? DEFAULT_MAX_OUTAGE_MS;
   const deadline = options.maxWaitMs === undefined ? undefined : now() + options.maxWaitMs;
   const answered = new Set<string>();
   let cancelSent = false;
@@ -87,7 +95,6 @@ export async function waitForTask(
 
   try {
     let task: MCPDetailedTask | MCPTask = created;
-    let failures = 0;
     for (;;) {
       options.signal?.throwIfAborted();
       if (isTerminalTaskStatus(task.status)) return task as MCPTerminalTask;
@@ -122,17 +129,43 @@ export async function waitForTask(
       task = await poll();
     }
 
+    // A recoverable failure starts an outage: reconnect, back off, and poll again until the server
+    // answers or the task could no longer be alive (maxWaitMs, TTL, or maxOutageMs).
     async function poll(): Promise<MCPDetailedTask> {
+      let outageStartedAt: number | undefined;
+      let backoff: number | undefined;
       for (;;) {
         try {
-          const next = await port.get(created.taskId, { signal: options.signal });
-          failures = 0;
-          return next;
+          return await port.get(created.taskId, { signal: options.signal });
         } catch (error) {
           options.signal?.throwIfAborted();
-          if (!port.isRecoverable(error) || failures >= maxRecoveries) throw error;
-          failures++;
-          await port.recover(error);
+          if (!port.isRecoverable(error)) throw error;
+          const at = now();
+          outageStartedAt ??= at;
+          if (deadline !== undefined && at >= deadline) {
+            cancel();
+            throw new TaskWaitError('timeout', `Gave up on MCP task ${task.taskId} after ${options.maxWaitMs}ms`, task);
+          }
+          const ttlEnd = task.ttlMs === null ? Infinity : Date.parse(task.createdAt) + task.ttlMs;
+          const giveUpAt = Math.min(outageStartedAt + maxOutageMs, ttlEnd);
+          if (at >= giveUpAt) {
+            const seconds = Math.round((at - outageStartedAt) / 1000);
+            throw new TaskWaitError(
+              'unreachable',
+              `Couldn't reach the MCP server for ${seconds}s while waiting for task ${task.taskId}; the task may still finish on the server`,
+              task,
+              error,
+            );
+          }
+          try {
+            await port.recover(error);
+          } catch (recoverError) {
+            // Reconnecting fails the same way while the server is down; anything else ends the wait.
+            if (!port.isRecoverable(recoverError)) throw recoverError;
+          }
+          const interval = task.pollIntervalMs ?? options.pollIntervalMs ?? DEFAULT_TASK_POLL_INTERVAL_MS;
+          backoff = Math.min(MAX_OUTAGE_BACKOFF_MS, backoff === undefined ? interval : backoff * 2);
+          await sleep(Math.max(0, Math.min(backoff, giveUpAt - at, (deadline ?? Infinity) - at)), options.signal);
         }
       }
     }

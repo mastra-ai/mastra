@@ -105,6 +105,42 @@ describe('MCPClient with MCP Tasks', () => {
     await waitFor(() => methods().includes('tasks/cancel'));
   });
 
+  it('keeps waiting for a task while the server restarts', async () => {
+    const { call } = await connect();
+
+    const pending = call('gated');
+    await waitFor(() => methods().includes('tasks/get'));
+    await server!.restart(1_500);
+    server!.release();
+
+    expect(await pending).toMatchObject({ content: [{ text: 'released' }] });
+    expect(server!.runs.gated).toBe(1);
+  });
+
+  it('keeps waiting for a task while a proxy answers 503 for the server', async () => {
+    const { call } = await connect();
+
+    const pending = call('gated');
+    await waitFor(() => methods().includes('tasks/get'));
+    server!.setGatewayStatus(503);
+    await new Promise(resolve => setTimeout(resolve, 1_500));
+    server!.setGatewayStatus(undefined);
+    server!.release();
+
+    expect(await pending).toMatchObject({ content: [{ text: 'released' }] });
+    expect(methods().filter(method => method === 'tools/call')).toHaveLength(1);
+  });
+
+  it('fails at once when the server no longer knows the task', async () => {
+    const { call } = await connect();
+
+    const pending = caught(call('gated'));
+    await waitFor(() => methods().includes('tasks/get'));
+    server!.store.close();
+
+    expect(await pending).toMatchObject({ id: 'MCP_CLIENT_TOOL_TASK_POLL_FAILED' });
+  });
+
   it('reports a tool error inside a completed task like a synchronous tool error', async () => {
     const { call } = await connect();
 

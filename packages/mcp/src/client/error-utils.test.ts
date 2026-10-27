@@ -1,7 +1,7 @@
 import { SdkErrorCode, SdkHttpError } from '@modelcontextprotocol/client';
 import { describe, expect, it } from 'vitest';
 
-import { getMCPDiscoveryErrorDetails, isReconnectableMCPError } from './error-utils';
+import { getMCPDiscoveryErrorDetails, isReconnectableMCPError, isRecoverableTaskPollError } from './error-utils';
 
 describe('getMCPDiscoveryErrorDetails', () => {
   it('preserves MCP SDK 2 HTTP status and transport code through wrapped causes', () => {
@@ -21,9 +21,7 @@ describe('getMCPDiscoveryErrorDetails', () => {
 
   it('recognizes legacy status fields and data-wrapped status', () => {
     expect(
-      getMCPDiscoveryErrorDetails(
-        Object.assign(new Error('legacy status'), { statusCode: 429, code: 'RATE_LIMITED' }),
-      ),
+      getMCPDiscoveryErrorDetails(Object.assign(new Error('legacy status'), { statusCode: 429, code: 'RATE_LIMITED' })),
     ).toEqual({
       message: 'legacy status (HTTP 429)',
       httpStatus: 429,
@@ -137,5 +135,27 @@ describe('isReconnectableMCPError', () => {
     }
     expect(isReconnectableMCPError('fetch failed')).toBe(false);
     expect(isReconnectableMCPError(undefined)).toBe(false);
+  });
+});
+
+describe('isRecoverableTaskPollError', () => {
+  const httpError = (status: number) =>
+    new SdkHttpError(SdkErrorCode.ClientHttpNotImplemented, `Error POSTing to endpoint (HTTP ${status})`, { status });
+
+  it('retries gateway errors while a server restarts behind a proxy', () => {
+    for (const status of [502, 503, 504]) {
+      expect(isRecoverableTaskPollError(httpError(status)), String(status)).toBe(true);
+      expect(isRecoverableTaskPollError(new Error('poll failed', { cause: httpError(status) })), String(status)).toBe(
+        true,
+      );
+    }
+    expect(isReconnectableMCPError(httpError(503))).toBe(false);
+  });
+
+  it('keeps the reconnectable failures and rejects other server errors', () => {
+    expect(isRecoverableTaskPollError(new Error('connect ECONNREFUSED 127.0.0.1:1'))).toBe(true);
+    expect(isRecoverableTaskPollError(httpError(500))).toBe(false);
+    expect(isRecoverableTaskPollError(new Error('Task not found'))).toBe(false);
+    expect(isRecoverableTaskPollError('fetch failed')).toBe(false);
   });
 });

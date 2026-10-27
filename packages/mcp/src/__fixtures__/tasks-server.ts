@@ -29,6 +29,10 @@ export interface TasksFixtureServer {
   runs: Record<string, number>;
   /** Finishes the `gated` tool's current task. */
   release: () => void;
+  /** Stops listening for `downMs`, then listens again on the same port with the same task store. */
+  restart: (downMs: number) => Promise<void>;
+  /** Answers every request with this HTTP status, like a proxy in front of a restarting server; `undefined` restores. */
+  setGatewayStatus: (status: number | undefined) => void;
   close: () => Promise<void>;
 }
 
@@ -51,6 +55,7 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
   const runs: Record<string, number> = {};
   const requests: SentRequest[] = [];
   let releaseGated: (() => void) | undefined;
+  let gatewayStatus: number | undefined;
 
   const declaredTasks = (ctx: ServerContext) =>
     hasTasksCapability(
@@ -148,6 +153,11 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
 
   const handler = toNodeHandler(createMcpHandler(createServerForRequest, { legacy: 'reject' }));
   const httpServer: HttpServer = createServer(async (req, res) => {
+    if (gatewayStatus !== undefined) {
+      req.resume();
+      res.writeHead(gatewayStatus).end('upstream unavailable');
+      return;
+    }
     const body = await readJson(req);
     if (body && typeof body === 'object' && 'method' in body) {
       const params = (body.params ?? {}) as Record<string, unknown>;
@@ -170,6 +180,15 @@ export async function startTasksFixtureServer(options: { pollIntervalMs?: number
     requests,
     runs,
     release: () => releaseGated?.(),
+    restart: async downMs => {
+      httpServer.closeAllConnections();
+      await new Promise(resolve => httpServer.close(resolve));
+      await new Promise(resolve => setTimeout(resolve, downMs));
+      await new Promise<void>(resolve => httpServer.listen(port, '127.0.0.1', () => resolve()));
+    },
+    setGatewayStatus: status => {
+      gatewayStatus = status;
+    },
     close: async () => {
       store.close();
       httpServer.closeAllConnections();
