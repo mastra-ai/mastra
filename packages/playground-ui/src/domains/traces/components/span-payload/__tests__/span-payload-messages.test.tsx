@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { formatSkillsCatalog } from '@mastra/core/processors';
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { SpanInputRenderer } from '../span-input-renderers';
@@ -107,6 +108,57 @@ describe('SpanPayloadMessages', () => {
         />,
       );
       expect(screen.getByText('Reasoning was redacted by the provider.')).toBeTruthy();
+    });
+  });
+  describe('when a system message carries the skills catalog', () => {
+    const catalog = formatSkillsCatalog([
+      {
+        name: 'tailwind-v4',
+        description: 'Tailwind <v4> & CSS-first config',
+        location: '/skills/tailwind-v4/SKILL.md',
+        source: 'local',
+      },
+      { name: 'grill-me', description: 'Stress-test a plan', location: '/skills/grill-me/SKILL.md', source: 'local' },
+    ]);
+    const items = (container: HTMLElement) =>
+      Array.from(container.querySelectorAll('[data-slot="span-skills"] li'), item => item.textContent);
+
+    it('lists the skills by name and description instead of the raw XML', () => {
+      const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: catalog }]} />);
+      expect(items(container)).toEqual(['grill-meStress-test a plan', 'tailwind-v4Tailwind <v4> & CSS-first config']);
+      expect(container.textContent).not.toContain('available_skills');
+      expect(container.textContent).not.toContain('SKILL.md');
+      expect(container.querySelectorAll('[data-slot="span-skills"] a')).toHaveLength(0);
+    });
+
+    it('names the message once when it is only the catalog', () => {
+      const { container } = render(<SpanPayloadMessages value={[{ role: 'system', content: catalog }]} />);
+      const labels = Array.from(container.querySelectorAll('[data-role="system"] > span'), label => label.textContent);
+      expect(labels).toEqual(['system · Skills (2)']);
+    });
+
+    it('keeps the text around the catalog', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[
+            {
+              role: 'system',
+              content: { format: 2, parts: [{ type: 'text', text: `You are Michel.\n\n${catalog}\n\nBe brief.` }] },
+            },
+          ]}
+        />,
+      );
+      expect(container.textContent).toMatch(/^systemYou are Michel\.Skills \(2\).*Be brief\.$/);
+    });
+
+    it('leaves a catalog it cannot read as text', () => {
+      const { container } = render(
+        <SpanPayloadMessages
+          value={[{ role: 'system', content: '<available_skills>\nnothing\n</available_skills>' }]}
+        />,
+      );
+      expect(container.querySelector('[data-slot="span-skills"]')).toBeNull();
+      expect(container.textContent).toContain('nothing');
     });
   });
   describe('when user and assistant messages are recorded', () => {

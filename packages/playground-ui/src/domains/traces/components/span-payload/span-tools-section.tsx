@@ -1,5 +1,6 @@
 import { useTools } from '@mastra/react/hooks/tools';
 import type { SpanRecord } from '../../types';
+import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
 import { getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
@@ -27,33 +28,27 @@ function SpanToolList({ tools }: { tools: SpanTool[] }) {
   const registered = useRegisteredToolIds();
 
   return (
-    <ul data-slot="span-tools" className="flex max-h-48 flex-col gap-2 overflow-y-auto">
-      {tools.map(tool => {
+    <SpanPayloadList
+      slot="span-tools"
+      items={tools.map(tool => {
         const registeredId = registered.get(tool.id);
         // Workspace, skill and agent-only tools are not in the registry, so they have no page to open.
         const href = registeredId ? paths.toolLink(registeredId) : '';
-        return (
-          <li key={tool.id} className="flex min-w-0 flex-col">
-            {href ? (
-              <Link href={href} className="w-fit max-w-full truncate text-foreground hover:underline">
-                <Txt as="span" variant="body-sm">
-                  {tool.id}
-                </Txt>
-              </Link>
-            ) : (
-              <Txt as="span" variant="body-sm" tone="ink" className="truncate">
+        return {
+          key: tool.id,
+          description: tool.description,
+          name: href ? (
+            <Link href={href} className="w-fit max-w-full truncate text-foreground hover:underline">
+              <Txt as="span" variant="label">
                 {tool.id}
               </Txt>
-            )}
-            {tool.description && (
-              <Txt as="span" variant="caption" tone="muted" className="line-clamp-2" title={tool.description}>
-                {tool.description}
-              </Txt>
-            )}
-          </li>
-        );
+            </Link>
+          ) : (
+            <SpanPayloadListName>{tool.id}</SpanPayloadListName>
+          ),
+        };
       })}
-    </ul>
+    />
   );
 }
 

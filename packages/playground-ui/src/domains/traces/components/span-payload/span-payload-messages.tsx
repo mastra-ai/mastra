@@ -1,9 +1,17 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import type { SpanInputMessage } from '@mastra/core/observability';
 import type { ReactNode } from 'react';
+import { parseAvailableSkills } from './available-skills';
+import type { AvailableSkill } from './available-skills';
 import { SpanPayloadAttachment } from './span-payload-attachment';
 import { SpanPayloadJson } from './span-payload-json';
-import { SpanPayloadMarkdown, SpanPayloadLabel } from './span-payload-primitives';
+import {
+  SpanPayloadField,
+  SpanPayloadLabel,
+  SpanPayloadList,
+  SpanPayloadListName,
+  SpanPayloadMarkdown,
+} from './span-payload-primitives';
 import { SpanPayloadTool } from './span-payload-tool';
 import { SignalDetails } from './span-signal-details';
 import { SignalBadge } from '@/domains/chat/messages/signal-badge';
@@ -24,8 +32,43 @@ function dedent(text: string): string {
   return (Number.isFinite(indent) ? lines.map(line => line.slice(indent)).join('\n') : text).trim();
 }
 
+function SkillList({ skills }: { skills: AvailableSkill[] }) {
+  return (
+    <SpanPayloadList
+      slot="span-skills"
+      items={skills.map(skill => ({
+        key: skill.name,
+        description: skill.description,
+        name: <SpanPayloadListName>{skill.name}</SpanPayloadListName>,
+      }))}
+    />
+  );
+}
+
+/** The skills catalog when it is all a message says, so the message label can name it. */
+function catalogOnly(parts: unknown[]): AvailableSkill[] | undefined {
+  if (parts.length !== 1) return undefined;
+  const [part] = parts;
+  const text = typeof part === 'string' ? part : isRecord(part) && part.type === 'text' ? part.text : undefined;
+  const catalog = typeof text === 'string' ? parseAvailableSkills(text) : undefined;
+  return catalog && !catalog.before.trim() && !catalog.after.trim() ? catalog.skills : undefined;
+}
+
 function MessageText({ text }: { text: string }) {
-  return <SpanPayloadMarkdown>{dedent(text)}</SpanPayloadMarkdown>;
+  const catalog = parseAvailableSkills(text);
+  if (!catalog) return <SpanPayloadMarkdown>{dedent(text)}</SpanPayloadMarkdown>;
+
+  const before = dedent(catalog.before);
+  const after = dedent(catalog.after);
+  return (
+    <div className="flex flex-col gap-3">
+      {before && <SpanPayloadMarkdown>{before}</SpanPayloadMarkdown>}
+      <SpanPayloadField label={`Skills (${catalog.skills.length})`}>
+        <SkillList skills={catalog.skills} />
+      </SpanPayloadField>
+      {after && <SpanPayloadMarkdown>{after}</SpanPayloadMarkdown>}
+    </div>
+  );
 }
 
 /**
@@ -175,11 +218,14 @@ function SpanMessage({ message, footer }: { message: unknown; footer?: ReactNode
     parts.every(
       part => isRecord(part) && part.type === 'tool-result' && typeof part.toolName === 'string' && part.toolName,
     );
+  const skills = catalogOnly(parts);
 
   return (
     <div data-role={role} className="flex min-w-0 flex-col gap-2">
-      <SpanPayloadLabel>{hasToolResultLabels ? 'Tool result' : role}</SpanPayloadLabel>
-      {body}
+      <SpanPayloadLabel>
+        {hasToolResultLabels ? 'Tool result' : skills ? `${role} · Skills (${skills.length})` : role}
+      </SpanPayloadLabel>
+      {skills ? <SkillList skills={skills} /> : body}
     </div>
   );
 }
