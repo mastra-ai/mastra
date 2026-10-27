@@ -46,7 +46,7 @@ const TRACE_COUNT_OPERATORS: TraceFilterOperatorId[] = ['is', 'isNot', 'gt', 'gt
 
 const THREAD_FILTER_BAR_LABELS: Record<string, string> = {
   ...TRACE_FILTER_BAR_LABELS,
-  traceCount: 'Trace count',
+  traceCount: 'Messages',
   timeToFirstChunkMs: 'Time to first chunk (ms)',
   executionSource: 'Execution source',
   entityType: 'Primitive type',

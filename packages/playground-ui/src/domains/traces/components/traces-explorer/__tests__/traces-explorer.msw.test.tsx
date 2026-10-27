@@ -296,7 +296,7 @@ describe('TracesExplorer', () => {
       expect(screen.getByText('Book a table for two')).toBeTruthy();
     });
 
-    it('has no thread trace-count column', async () => {
+    it('has no thread message-count column', async () => {
       localStorage.clear();
       setExplorerHandlers();
 
@@ -304,8 +304,7 @@ describe('TracesExplorer', () => {
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
       expect(screen.getByText('Status')).toBeTruthy();
-      // The page's sr-only <h1> is also named "Traces"; only a column header would be a non-heading.
-      expect(screen.queryByText('Traces', { ignore: 'h1, script, style' })).toBeNull();
+      expect(screen.queryByText('Messages')).toBeNull();
     });
   });
 

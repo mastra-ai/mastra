@@ -217,10 +217,10 @@ export function TracesListView({
         )}
         {hasTraceColumn(columnPreferences, 'traceCount') && (
           <TracesDataList.TopCellWithTooltip
-            tooltip="All traces in this thread, not just those in the selected time range"
+            tooltip="Messages sent in this thread, counting the whole thread, not just the selected time range"
             className="justify-end text-right"
           >
-            Traces
+            Messages
           </TracesDataList.TopCellWithTooltip>
         )}
         {hasTraceColumn(columnPreferences, 'timeToFirstChunk') &&

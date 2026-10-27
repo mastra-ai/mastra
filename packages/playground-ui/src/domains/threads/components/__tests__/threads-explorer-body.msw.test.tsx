@@ -61,18 +61,18 @@ describe('ThreadsExplorerBody', () => {
       expect(screen.getByText('Support Agent')).toBeTruthy();
     });
 
-    it("shows each thread's trace count", async () => {
+    it("shows each thread's message count", async () => {
       setHandlers(threadRowsPage);
 
       renderBody();
 
       const weatherRow = await screen.findByRole('button', { name: /Weather Agent/ });
       const supportRow = screen.getByRole('button', { name: /Support Agent/ });
-      expect(screen.getByText('Traces')).toBeTruthy();
+      expect(screen.getByText('Messages')).toBeTruthy();
       expect(
         screen.getByRole('button', {
-          name: 'About Traces',
-          description: 'All traces in this thread, not just those in the selected time range',
+          name: 'About Messages',
+          description: 'Messages sent in this thread, counting the whole thread, not just the selected time range',
         }),
       ).toBeTruthy();
       expect(within(weatherRow).getByText('2')).toBeTruthy();

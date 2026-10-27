@@ -2,4 +2,6 @@
 '@mastra/playground-ui': patch
 ---
 
-Added a Traces column to the Threads list showing how many traces each thread has. The count covers the whole thread, not only the traces in the selected time range.
+Added a Messages column to the Threads list showing how many messages each thread has. The count covers the whole thread, not only the selected time range. The matching Threads filter is now called Messages instead of Trace count.
+
+Column headers that explain themselves in a tooltip, such as TTFC, now show an info icon so the explanation is easy to find.
