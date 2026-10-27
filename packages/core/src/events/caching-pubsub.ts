@@ -249,9 +249,9 @@ export class CachingPubSub extends PubSub {
     // an offset past the log's end, the cursor sits above the counter, so the
     // counter cannot tell the transport's retained frame 0 from the first frame
     // of a new segment; a new segment writes a new entry 0 with a different id.
-    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0).catch(() => [])) as Event[])[0]?.id;
+    const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0)) as Event[])[0]?.id;
     const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
-    let firstId = typeof logLength === 'number' ? await readFirstId() : undefined;
+    let firstId = typeof logLength === 'number' ? await readFirstId().catch(() => undefined) : undefined;
     let closed = false;
     let warnedUnnumbered = false;
     // Set only while a backfill (or the initial history read) is in flight.
@@ -323,14 +323,24 @@ export class CachingPubSub extends PubSub {
           // A cache read failure must not turn a duplicate into a nack loop;
           // fall through to the drop path in that case.
           const allocated = await this.cache.get(this.getCounterKey(topic)).catch(() => undefined);
-          const currentFirstId = firstId !== undefined ? await readFirstId() : undefined;
+          // A failed id read is unknown, not unchanged: fall back to the
+          // counter, which risks re-sending frames rather than losing them.
+          let compareIds = firstId !== undefined;
+          let currentFirstId: string | undefined;
+          if (compareIds) {
+            try {
+              currentFirstId = await readFirstId();
+            } catch {
+              compareIds = false;
+            }
+          }
           if (closed) return ack?.();
 
           const restarted =
             typeof allocated === 'number' &&
-            (firstId !== undefined ? currentFirstId !== undefined && currentFirstId !== firstId : allocated < next);
+            (compareIds ? currentFirstId !== undefined && currentFirstId !== firstId : allocated < next);
           if (restarted) {
-            firstId = currentFirstId;
+            firstId = compareIds ? currentFirstId : await readFirstId().catch(() => undefined);
             this.logWarn(
               `[CachingPubSub] Log for ${topic} restarted at 0 while the subscriber cursor was at ${next}; ` +
                 `the retained log expired or was cleared. Resyncing from the start of the new segment.`,

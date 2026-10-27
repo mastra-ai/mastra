@@ -1605,6 +1605,33 @@ describe('CachingPubSub', () => {
       expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
     });
 
+    it('falls back to the counter when reading the new frame 0 id fails', async () => {
+      const inner = new RetainingPubSub();
+      const shared = new InMemoryServerCache();
+      const warn = vi.fn();
+      inner.retained.set(topic, [await append(shared, 0)]);
+
+      const subscriber = new CachingPubSub(inner, shared, { logger: { warn } as unknown as IMastraLogger });
+      const received: number[] = [];
+      await subscriber.subscribeFromOffset(topic, 5, event => {
+        received.push(event.index!);
+      });
+      await flush();
+
+      await shared.delete(`pubsub:${topic}`);
+      await shared.delete(`pubsub:${topic}:counter`);
+      const frames = [];
+      for (const n of [0, 1]) frames.push(await append(shared, n, `segment-2-${n}`));
+      // The restart check's read of entry 0 fails once.
+      vi.spyOn(shared, 'listFromTo').mockRejectedValueOnce(new Error('cache unavailable'));
+      for (const frame of frames) await inner.publish(topic, frame);
+      await flush();
+
+      expect(received).toEqual([0, 1]);
+      expect(warn).toHaveBeenCalledTimes(1);
+      expect(warn.mock.calls[0]![0]).toContain('restarted at 0');
+    });
+
     it('delivers the new segment from the log when a stale copy of the old frame 0 signals the restart', async () => {
       const inner = new RetainingPubSub();
       const shared = new InMemoryServerCache();
