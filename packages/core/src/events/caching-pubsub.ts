@@ -245,18 +245,12 @@ export class CachingPubSub extends PubSub {
     const cacheKey = this.getCacheKey(topic);
 
     let next = offset;
-    // How far the log is known to reach. An offset past the log's end is a
-    // position it has not reached yet, so the restart check in `reconcile`
-    // compares the counter against this rather than the cursor; otherwise the
-    // transport's retained frame 0 looks like a log restart and the whole run
-    // replays.
-    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
-    let reached = typeof logLength === 'number' ? Math.min(offset, logLength) : offset;
-    // The id the log stored for its frame 0 when this subscriber attached. The
-    // counter alone cannot tell a retained copy of that frame from the first
-    // frame of a new segment once the new counter catches up with `reached`;
-    // a new segment writes a new entry 0 with a different id.
+    // The id the log stored for its frame 0 when this subscriber attached. With
+    // an offset past the log's end, the cursor sits above the counter, so the
+    // counter cannot tell the transport's retained frame 0 from the first frame
+    // of a new segment; a new segment writes a new entry 0 with a different id.
     const readFirstId = async () => ((await this.cache.listFromTo(cacheKey, 0, 0).catch(() => [])) as Event[])[0]?.id;
+    const logLength = offset > 0 ? await this.cache.get(this.getCounterKey(topic)).catch(() => undefined) : undefined;
     let firstId = typeof logLength === 'number' ? await readFirstId() : undefined;
     let closed = false;
     let warnedUnnumbered = false;
@@ -272,7 +266,6 @@ export class CachingPubSub extends PubSub {
     const emit = (event: Event, ack?: () => Promise<void>, nack?: () => Promise<void>) => {
       if (typeof event.index === 'number') {
         next = event.index + 1;
-        reached = Math.max(reached, next);
       }
       return cb(event, ack, nack);
     };
@@ -305,8 +298,9 @@ export class CachingPubSub extends PubSub {
           warnedUnnumbered = true;
           this.logWarn(
             `[CachingPubSub] Frames on ${topic} are not numbered, so resuming from offset ${offset} cannot ` +
-              `replay or skip them by position. Configure a server cache shared by every process ` +
-              `(for example RedisServerCache) to resume streams reliably.`,
+              `replay or skip them by position. Either the publisher failed to append them to the server cache ` +
+              `(check for cache errors), or it does not share a server cache with this process (configure one ` +
+              `shared by every process, for example RedisServerCache).`,
           );
         }
         return cb(event, ack, nack);
@@ -317,12 +311,13 @@ export class CachingPubSub extends PubSub {
       if (seq < next) {
         if (seq !== 0) return ack?.();
 
-        // Index 0 while the cursor has already advanced means the log this
-        // subscriber was reading is gone: it expired (or was cleared) and the
-        // run resumed, restarting numbering at 0. Dropping it would swallow
-        // every frame of the new segment, since all of their indices sit below
-        // the stale cursor. Confirm against the counter — it restarts with the
-        // log, so in a continuous log it can never be below our cursor.
+        // Index 0 below the cursor can mean the log this subscriber was reading
+        // is gone: it expired (or was cleared) and the run resumed, restarting
+        // numbering at 0. Dropping it would swallow every frame of the new
+        // segment, since all of their indices sit below the stale cursor.
+        // Confirm by frame 0's id when one was captured on attach; otherwise by
+        // the counter, which restarts with the log and so cannot sit below the
+        // cursor in a continuous log.
         deferred = true;
         return (async () => {
           // A cache read failure must not turn a duplicate into a nack loop;
@@ -333,9 +328,7 @@ export class CachingPubSub extends PubSub {
 
           const restarted =
             typeof allocated === 'number' &&
-            (firstId !== undefined
-              ? currentFirstId !== undefined && currentFirstId !== firstId
-              : allocated < Math.min(next, reached));
+            (firstId !== undefined ? currentFirstId !== undefined && currentFirstId !== firstId : allocated < next);
           if (restarted) {
             firstId = currentFirstId;
             this.logWarn(

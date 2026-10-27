@@ -1592,8 +1592,9 @@ describe('CachingPubSub', () => {
       await flush();
       expect(received).toEqual([]);
 
-      // The log expires and the resumed run numbers a new segment from 0. Its
-      // counter matches the old log's length, so only frame 0's identity shows the restart.
+      // The log expires and the resumed run numbers a new segment from 0. The
+      // subscriber captured the old frame 0's id on attach, so the new frame 0's
+      // different id is what shows the restart.
       await shared.delete(`pubsub:${topic}`);
       await shared.delete(`pubsub:${topic}:counter`);
       for (const n of [0, 1]) await inner.publish(topic, await append(shared, n, `segment-2-${n}`));
