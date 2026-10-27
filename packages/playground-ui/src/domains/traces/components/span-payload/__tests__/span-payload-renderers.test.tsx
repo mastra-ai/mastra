@@ -218,6 +218,17 @@ describe('SpanDataPanelView integration', () => {
     expect(sectionTitles()).toEqual(['Output', 'Input']);
   });
 
+  it('reads a successful root span as its input, then its output, with no summary on top', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunMessagesSpan.spanId} span={agentRunMessagesSpan} />);
+    expect(slot('span-outcome')).toBeNull();
+    expect(sectionTitles().slice(0, 2)).toEqual(['Input', 'Output']);
+  });
+
+  it('still sums up a root span whose run was stopped', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunTripwireSpan.spanId} span={agentRunTripwireSpan} />);
+    expect(slot('span-outcome')).not.toBeNull();
+  });
+
   it('leads with the error of a failed span, once', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
     expect(slot('span-outcome')?.textContent).toContain('getWeather failed');

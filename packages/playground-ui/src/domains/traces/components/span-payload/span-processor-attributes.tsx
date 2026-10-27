@@ -1,7 +1,7 @@
 import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
-import { Fragment } from 'react';
 import type { SpanRecord } from '../../types';
+import { getSpanChanges } from '../span-outcome.utils';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
 import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
@@ -12,116 +12,95 @@ import { Txt } from '@/ds/components/Txt/Txt';
 import { pluralize } from '@/lib/string';
 import { formatDuration } from '@/utils/duration';
 
-/** Mutation kinds, named by where the change landed in what the model reads. */
-const MUTATION_LABELS: Record<string, string> = {
-  add: 'Added to the conversation',
-  addSystem: 'Added to the system prompt',
-  removeByIds: 'Removed from the conversation',
-  clear: 'Cleared the conversation',
-};
-
 type Mutation = NonNullable<ProcessorPipelineDescription['messageListMutations']>[number];
 
-const describeMutation = (mutation: Pick<Mutation, 'source' | 'tag' | 'count'>) =>
-  [
-    mutation.source,
-    mutation.tag,
-    mutation.count !== undefined ? `${mutation.count} message${mutation.count === 1 ? '' : 's'}` : undefined,
-  ]
-    .filter(Boolean)
-    .join(' · ');
+const messages = (count: number | undefined) => (count === undefined ? 'messages' : pluralize(count, 'message'));
+
+/** What a recorded change did to the message list, as one sentence. */
+function describeMutation(mutation: Exclude<Mutation, null | undefined>): string {
+  const { type, source, count, tag } = mutation;
+  switch (type) {
+    case 'add':
+      if (source === 'memory') return `Added ${messages(count)} from memory to the conversation`;
+      if (source === 'input') return `Added ${messages(count)} to this turn's input`;
+      if (source === 'response') return `Added ${messages(count)} to the model's response`;
+      if (source === 'context') return `Added ${messages(count)} of context to the conversation`;
+      if (source === 'system') return `Added ${messages(count)} to the system prompt`;
+      return `Added ${messages(count)} to the conversation`;
+    case 'addSystem':
+      return `Added ${count && count > 1 ? messages(count) : 'a'}${tag ? ` "${tag}"` : ''}${count && count > 1 ? '' : ' message'} to the system prompt`;
+    case 'clear':
+      if (source === 'input') return `Took ${messages(count)} from this turn's input out of the conversation`;
+      if (source === 'response') return `Took ${messages(count)} from the model's response out of the conversation`;
+      return `Cleared the whole conversation (${messages(count)})`;
+    case 'removeByIds':
+      if (source === 'system') return `Removed ${messages(count ?? mutation.ids?.length)} from the system prompt`;
+      return `Removed ${messages(count ?? mutation.ids?.length)} from the conversation`;
+    default:
+      return `${String(type)}${source ? ` (${source})` : ''}`;
+  }
+}
 
 /**
- * Splits the mutation log: changes that only carry a count are added up per
- * type, source and tag into one row each; changes carrying a message, removed
- * ids, or an unreadable entry keep their own detailed item.
+ * The recorded changes in the order they happened. Back-to-back changes of the same
+ * kind that only carry a count (e.g. two single-message adds from memory) read as one step.
  */
-function groupMutations(mutations: readonly Mutation[]) {
-  const rows = new Map<string, { label: string; source?: string; tag?: string; count?: number }>();
-  const detailed: Mutation[] = [];
-
+function toSteps(mutations: readonly Mutation[]) {
+  const steps: Mutation[] = [];
   for (const mutation of mutations) {
-    if (typeof mutation !== 'object' || mutation === null) {
-      detailed.push(mutation);
+    const previous = steps.at(-1);
+    if (isCountOnly(previous) && isCountOnly(mutation) && isSameKind(previous, mutation)) {
+      steps[steps.length - 1] = { ...previous, count: previous.count + mutation.count };
       continue;
     }
-    if (mutation.message !== undefined || (mutation.ids && mutation.ids.length > 0)) {
-      detailed.push(mutation);
-      continue;
-    }
-    const key = JSON.stringify([mutation.type, mutation.source, mutation.tag]);
-    const row = rows.get(key);
-    if (row) {
-      row.count = row.count === undefined || mutation.count === undefined ? undefined : row.count + mutation.count;
-    } else {
-      rows.set(key, {
-        label: MUTATION_LABELS[mutation.type] ?? mutation.type,
-        source: mutation.source,
-        tag: mutation.tag,
-        count: mutation.count,
-      });
-    }
+    steps.push(mutation);
   }
-
-  return { rows: [...rows.values()], detailed };
+  return steps;
 }
 
-/** One sentence per kind of change, stated once above the entries it covers. */
-const MUTATION_HEADINGS: Record<string, (count: number) => string> = {
-  add: count => `Added ${pluralize(count, 'message')} to the conversation`,
-  addSystem: count => `Added ${pluralize(count, 'message')} to the system prompt`,
-  removeByIds: () => 'Removed from the conversation',
-  clear: () => 'Cleared the conversation',
-};
+type CountOnlyMutation = Exclude<Mutation, null | undefined> & { count: number };
 
-/** Groups detailed changes by kind, in the order each kind first appears. */
-function groupByKind(mutations: readonly Mutation[]) {
-  const groups = new Map<string, Mutation[]>();
-  for (const mutation of mutations) {
-    const kind = typeof mutation === 'object' && mutation !== null ? mutation.type : 'unreadable';
-    groups.set(kind, [...(groups.get(kind) ?? []), mutation]);
-  }
-  return [...groups.entries()];
-}
+const isCountOnly = (mutation: Mutation | undefined): mutation is CountOnlyMutation =>
+  typeof mutation === 'object' &&
+  mutation !== null &&
+  mutation.count !== undefined &&
+  mutation.message === undefined &&
+  !(mutation.ids && mutation.ids.length > 0);
 
-function Mutations({ mutations }: { mutations: readonly Mutation[] }) {
+const isSameKind = (a: CountOnlyMutation, b: CountOnlyMutation) =>
+  a.type === b.type && a.source === b.source && a.tag === b.tag;
+
+function MutationSteps({ mutations }: { mutations: readonly Mutation[] }) {
   return (
-    <div data-slot="span-processor-mutations" className="flex flex-col gap-4">
-      {groupByKind(mutations).map(([kind, entries]) => (
-        <section key={kind} className="flex flex-col gap-2">
-          <Txt as="h4" variant="body-sm" tone="ink" className="font-medium">
-            {MUTATION_HEADINGS[kind]?.(entries.length) ?? kind}
+    <ol data-slot="span-processor-mutations" className="flex list-none flex-col divide-y divide-border">
+      {toSteps(mutations).map((mutation, index) => (
+        <li key={index} className="flex gap-3 py-3 first:pt-0 last:pb-0">
+          <Txt as="span" variant="body-sm" tone="faint" font="mono" className="tabular-nums">
+            {index + 1}.
           </Txt>
-          <ol className="flex flex-col divide-y divide-border">
-            {entries.map((mutation, index) => {
-              if (typeof mutation !== 'object' || mutation === null) {
-                return (
-                  <li key={index} className="py-3 first:pt-0 last:pb-0">
-                    <SpanPayloadJson value={mutation} />
-                  </li>
-                );
-              }
-              const context = describeMutation(mutation);
-              return (
-                <li key={index} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
-                  {context && (
-                    <Txt as="span" variant="meta" tone="muted">
-                      {context}
-                    </Txt>
-                  )}
-                  {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
-                  {mutation.ids && mutation.ids.length > 0 && (
-                    <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>
-                      <SpanPayloadJson value={mutation.ids} />
-                    </SpanPayloadCollapsible>
-                  )}
-                </li>
-              );
-            })}
-          </ol>
-        </section>
+          <div className="flex min-w-0 flex-1 flex-col gap-2">
+            {typeof mutation === 'object' && mutation !== null ? (
+              <>
+                {/* An added message speaks for itself; anything else needs saying what happened to it. */}
+                {(mutation.message === undefined || mutation.type === 'removeByIds') && (
+                  <Txt as="p" variant="body-sm" tone="ink" data-slot="span-processor-mutation-step">
+                    {describeMutation(mutation)}
+                  </Txt>
+                )}
+                {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
+                {mutation.ids && mutation.ids.length > 0 && (
+                  <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>
+                    <SpanPayloadJson value={mutation.ids} />
+                  </SpanPayloadCollapsible>
+                )}
+              </>
+            ) : (
+              <SpanPayloadJson value={mutation} />
+            )}
+          </div>
+        </li>
       ))}
-    </div>
+    </ol>
   );
 }
 
@@ -131,24 +110,14 @@ export interface SpanProcessorAttributesProps {
   hideMutations?: boolean;
 }
 
-/** What a pipeline span changed in the message list; `null` when it changed nothing. */
+/** What a pipeline span changed in the message list, step by step; `null` when it changed nothing. */
 export function SpanProcessorMutations({ span }: { span: SpanRecord }) {
-  const mutations = groupMutations(describeProcessorPipeline(asCoreSpan(span))?.messageListMutations ?? []);
-  if (mutations.rows.length === 0 && mutations.detailed.length === 0) return null;
+  const mutations = getSpanChanges(span);
+  if (mutations.length === 0) return null;
 
   return (
-    <div data-slot="span-processor-changes" className="flex flex-col gap-3">
-      {mutations.rows.length > 0 && (
-        <DataKeysAndValues>
-          {mutations.rows.map(row => (
-            <Fragment key={JSON.stringify([row.label, row.source, row.tag])}>
-              <DataKeysAndValues.Key>{row.label}</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{describeMutation(row)}</DataKeysAndValues.Value>
-            </Fragment>
-          ))}
-        </DataKeysAndValues>
-      )}
-      {mutations.detailed.length > 0 && <Mutations mutations={mutations.detailed} />}
+    <div data-slot="span-processor-changes">
+      <MutationSteps mutations={mutations} />
     </div>
   );
 }
@@ -167,7 +136,7 @@ export function SpanProcessorAttributes({ span, hideMutations = false }: SpanPro
   const { stepNumber, retryCount, messageId } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
-  const mutations = groupMutations(hideMutations ? [] : (messageListMutations ?? []));
+  const mutations = hideMutations ? [] : (messageListMutations ?? []);
 
   return (
     <div data-slot="span-processor-attributes" className="flex flex-col gap-3">
@@ -224,12 +193,6 @@ export function SpanProcessorAttributes({ span, hideMutations = false }: SpanPro
             </DataKeysAndValues.Value>
           </>
         )}
-        {mutations.rows.map(row => (
-          <Fragment key={JSON.stringify([row.label, row.source, row.tag])}>
-            <DataKeysAndValues.Key>{row.label}</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{describeMutation(row)}</DataKeysAndValues.Value>
-          </Fragment>
-        ))}
       </DataKeysAndValues>
 
       {tripwireAbort && (
@@ -249,9 +212,9 @@ export function SpanProcessorAttributes({ span, hideMutations = false }: SpanPro
         </Notice>
       )}
 
-      {mutations.detailed.length > 0 && (
+      {mutations.length > 0 && (
         <SpanPayloadField label="Message list changes">
-          <Mutations mutations={mutations.detailed} />
+          <MutationSteps mutations={mutations} />
         </SpanPayloadField>
       )}
 

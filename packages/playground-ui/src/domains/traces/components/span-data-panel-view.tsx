@@ -1,11 +1,11 @@
-import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
+import { SpanType, describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
 import { ArrowLeftRightIcon, BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
 import { SpanOutcomeSummary } from './span-outcome';
-import { getSpanOutcome } from './span-outcome.utils';
+import { getSpanChanges, getSpanOutcome } from './span-outcome.utils';
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
@@ -162,12 +162,15 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  const isRoot = isAnchor ?? span.parentSpanId == null;
   const hasContext =
-    (isAnchor ?? span.parentSpanId == null) &&
+    isRoot &&
     Boolean(
       span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
     );
   const outcome = getSpanOutcome(span);
+  // The root span's input and output already tell its story; only a failed or stopped run needs a summary on top.
+  const showOutcome = outcome != null && (!isRoot || outcome.tone === 'error' || outcome.tone === 'warning');
   const outputPayload = getSpanOutputPayload(span);
   const pipeline = describeProcessorPipeline(asCoreSpan(span));
   const evidence = outcome?.evidence === 'output' && outputPayload == null ? undefined : outcome?.evidence;
@@ -179,7 +182,7 @@ function SpanDataPanelContent({
       </SpanPayloadSection>
     ),
     changes: evidence === 'changes' && (
-      <SpanPayloadSection title="Changes" icon={<ArrowLeftRightIcon />} raw={pipeline?.messageListMutations} hasPreview>
+      <SpanPayloadSection title="Changes" icon={<ArrowLeftRightIcon />} raw={getSpanChanges(span)} hasPreview emphasis>
         <SpanProcessorMutations span={span} />
       </SpanPayloadSection>
     ),
@@ -221,14 +224,21 @@ function SpanDataPanelContent({
     ),
   };
   // What proves the outcome leads; a pipeline step that changed nothing is best explained by its attributes.
-  const lead = [
-    ...new Set<SpanSection>(['error', ...(evidence ? [evidence] : pipeline ? ['attributes' as const] : [])]),
-  ];
+  // A root span or a processor reads as a request and its result: input, then output, then what changed between them.
+  const proof: SpanSection[] =
+    isRoot || span.spanType === SpanType.PROCESSOR_RUN
+      ? ['input', 'output', ...(evidence === 'changes' ? (['changes'] as const) : [])]
+      : evidence
+        ? [evidence]
+        : pipeline
+          ? ['attributes']
+          : [];
+  const lead = [...new Set<SpanSection>(['error', ...proof])];
   const rest = SECTION_ORDER.filter(section => !lead.includes(section));
 
   const detailsBody = (
     <>
-      {outcome && <SpanOutcomeSummary outcome={outcome} showDetail={!evidence} className="mb-3" />}
+      {showOutcome && <SpanOutcomeSummary outcome={outcome} showDetail={!evidence} className="mb-3" />}
 
       {isTokenLimitExceeded(span) && (
         <div className="mb-3">
@@ -248,7 +258,7 @@ function SpanDataPanelContent({
           <DataKeysAndValues>
             {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
              *  lightweight payload, so they only have values once the full span is loaded. */}
-            {(isAnchor ?? span.parentSpanId == null) && (
+            {isRoot && (
               <>
                 {span.tags && span.tags.length > 0 && (
                   <>

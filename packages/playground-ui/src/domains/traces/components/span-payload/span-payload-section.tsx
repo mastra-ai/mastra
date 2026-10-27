@@ -31,6 +31,8 @@ export interface SpanPayloadSectionProps {
   /** `panel` matches `DataPanel.CodeSection`; `details` matches `DataDetailsPanel.CodeSection`. */
   layout?: 'panel' | 'details';
   defaultView?: SpanPayloadView;
+  /** Marks the section that proves what the span did, so it stands out from the payloads around it. */
+  emphasis?: boolean;
   className?: string;
 }
 
@@ -80,6 +82,7 @@ export function SpanPayloadSection({
   framed = true,
   layout = 'panel',
   defaultView = 'rich',
+  emphasis = false,
   className,
 }: SpanPayloadSectionProps) {
   const [view, setView] = useState<SpanPayloadView>(defaultView);
@@ -94,13 +97,21 @@ export function SpanPayloadSection({
     <div
       data-slot="span-payload-section"
       data-view={showJson ? 'raw' : 'rich'}
-      className={cn('flex min-w-0 flex-col gap-2', className)}
+      data-emphasis={emphasis || undefined}
+      className={cn('group/payload flex min-w-0 flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <DataPanelSectionHeading icon={icon} className={layout === 'details' ? 'text-meta' : undefined}>
+        <DataPanelSectionHeading
+          icon={icon}
+          className={cn(
+            layout === 'details' && 'text-meta',
+            emphasis && 'font-medium text-foreground [&>svg]:text-info-indicator',
+          )}
+        >
           {title}
         </DataPanelSectionHeading>
-        <div className="ml-auto flex items-center gap-1">
+        {/* Revealed on hover or keyboard focus; `pointer-fine` only, since a touch screen has no hover. */}
+        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
           {hasRich && <ViewToggle view={view} onChange={setView} />}
           <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
         </div>

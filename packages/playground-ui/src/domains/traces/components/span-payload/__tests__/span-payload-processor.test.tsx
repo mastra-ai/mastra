@@ -39,6 +39,11 @@ const section = (title: string) => {
   return found;
 };
 
+const sectionTitles = () =>
+  [...document.querySelectorAll('[data-slot="span-payload-section"]')].map(
+    found => found.firstElementChild?.firstElementChild?.textContent,
+  );
+
 const LAYOUTS = [
   ['data panel', (span: SpanRecord) => <SpanDataPanelView traceId="t" spanId="s" span={span} />],
   ['details', (span: SpanRecord) => <SpanDetailsView traceId="t" spanId="s" span={span} />],
@@ -133,6 +138,11 @@ describe('SpanPayloadProcessor', () => {
   });
 });
 
+const steps = () =>
+  Array.from(
+    slot('span-processor-mutations')?.querySelectorAll('[data-slot="span-processor-mutation-step"]') ?? [],
+  ).map(step => step.textContent);
+
 describe('SpanProcessorAttributes', () => {
   it('shows the pipeline facts as labelled values', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
@@ -161,9 +171,9 @@ describe('SpanProcessorAttributes', () => {
     await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('msg-step-0'));
   });
 
-  it('shows message-list changes as readable actions', () => {
+  it('tells each message-list change as a numbered step', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
-    expect(valueOf('Added to the system prompt')).toBe('context-note · 1 message');
+    expect(steps()).toEqual(['Added a "context-note" message to the system prompt']);
   });
 
   it('adds up identical changes into a single row', () => {
@@ -179,15 +189,38 @@ describe('SpanProcessorAttributes', () => {
       },
     });
     render(<SpanProcessorAttributes span={span} />);
-    const rows = screen.getAllByText('Added to the conversation').map(key => key.nextElementSibling?.textContent);
-    expect(rows).toEqual(['memory · 2 messages', 'input · 1 message']);
-    expect(slot('span-processor-mutations')).toBeNull();
+    expect(steps()).toEqual([
+      'Added 2 messages from memory to the conversation',
+      "Added 1 message to this turn's input",
+    ]);
+  });
+
+  it('keeps the order the changes happened in', () => {
+    const span = makeSpan({
+      ...processorInputSpan,
+      attributes: {
+        processorPhase: 'inputStep',
+        messageListMutations: [
+          { type: 'clear', source: 'input', count: 1 },
+          { type: 'clear', source: 'response', count: 1 },
+          { type: 'add', source: 'memory', count: 2 },
+        ],
+      },
+    });
+    render(<SpanProcessorAttributes span={span} />);
+    expect(steps()).toEqual([
+      "Took 1 message from this turn's input out of the conversation",
+      "Took 1 message from the model's response out of the conversation",
+      'Added 2 messages from memory to the conversation',
+    ]);
   });
 
   it('shows cleared and removed messages, with the removed ids collapsed', () => {
     render(<SpanProcessorAttributes span={processorClearedMessagesSpan} />);
-    expect(valueOf('Cleared the conversation')).toBe('2 messages');
-    expect(screen.getByText(/^Removed from the conversation/)).toBeTruthy();
+    expect(steps()).toEqual([
+      'Cleared the whole conversation (2 messages)',
+      'Removed 2 messages from the conversation',
+    ]);
     fireEvent.click(screen.getByText('Removed ids (2)'));
     expect(slot('span-processor-mutations')?.textContent).toContain('msg-1');
   });
@@ -219,7 +252,7 @@ describe('SpanProcessorAttributes', () => {
       attributes: { processorPhase: 'input', messageListMutations: [null, { type: 'clear', count: 2 }] },
     });
     render(<SpanProcessorAttributes span={span} />);
-    expect(screen.getByText('Cleared the conversation')).toBeTruthy();
+    expect(screen.getByText('Cleared the whole conversation (2 messages)')).toBeTruthy();
     expect(slot('span-processor-mutations')?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
   });
 
@@ -237,12 +270,45 @@ describe('processor spans in the data panel', () => {
     expect(screen.queryByRole('button', { name: /Input & output|^Input$/ })).toBeNull();
   });
 
-  it('leads with the messages a processor added, not again in the attributes', () => {
+  it('shows the messages a processor added right after its input and output, not again in the attributes', () => {
     render(<SpanDataPanelView traceId="t" spanId="s" span={processorSystemMutationSpan} />);
     expect(slot('span-outcome')?.querySelector('[data-slot="span-processor-changes"]')).toBeNull();
-    const [first] = document.querySelectorAll('[data-slot="span-payload-section"]');
-    expect(first?.querySelector('[data-slot="span-processor-changes"]')?.textContent).toContain('Answer briefly.');
+    expect(
+      sectionTitles()
+        .filter(title => title !== 'Output')
+        .slice(0, 2),
+    ).toEqual(['Input', 'Changes']);
+    expect(slot('span-processor-changes')?.textContent).toContain('Answer briefly.');
     expect(slot('span-processor-attributes')?.textContent).not.toContain('to the system prompt');
+  });
+
+  it('reads a processor as input, output, then what it changed in the system prompt', () => {
+    const span = makeSpan({
+      ...processorInputSpan,
+      attributes: { processorPhase: 'input' },
+      input: {
+        messages: [{ role: 'user', content: 'Plan dinner' }],
+        systemMessages: [
+          { role: 'system', content: 'You are Michel.' },
+          { role: 'system', content: 'Old task list.' },
+        ],
+      },
+      output: {
+        systemMessages: [
+          { role: 'system', content: 'You are Michel.' },
+          { role: 'system', content: 'Task list state may appear.' },
+        ],
+      },
+    });
+    render(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
+
+    expect(sectionTitles().slice(0, 3)).toEqual(['Input', 'Output', 'Changes']);
+
+    const changes = section('Changes');
+    expect(steps()).toEqual(['Removed 1 message from the system prompt']);
+    expect(changes.textContent).toContain('Old task list.');
+    expect(changes.textContent).toContain('Task list state may appear.');
+    expect(changes.textContent).not.toContain('You are Michel.');
   });
 });
 
@@ -257,7 +323,9 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     render(renderView(processorSystemMutationSpan));
     const attributes = section('Attributes');
     // The data panel shows the change in the span outcome, ahead of the attributes.
-    expect(screen.getByRole('heading', { name: 'Added 1 message to the system prompt' })).toBeTruthy();
+    // A change that carries its message shows the message, not a sentence about it.
+    expect(steps()).toEqual([]);
+    expect(slot('span-processor-mutations')?.textContent).toContain('Answer briefly.');
 
     fireEvent.click(within(attributes).getByRole('button', { name: 'JSON', exact: true }));
     expect(attributes.textContent).toContain('messageListMutations');

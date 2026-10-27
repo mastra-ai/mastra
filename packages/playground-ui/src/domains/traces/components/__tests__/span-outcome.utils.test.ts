@@ -1,6 +1,6 @@
 import { SpanType } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
-import { getSpanOutcome } from '../span-outcome.utils';
+import { getSpanOutcome, getSystemPromptChanges } from '../span-outcome.utils';
 import {
   agentRunAbortedSpan,
   agentRunTripwireSpan,
@@ -151,7 +151,29 @@ describe('getSpanOutcome', () => {
       });
     });
 
-    it('shows the rewritten output when a processor rewrote messages in place', () => {
+    it('names what a processor added to the system prompt without recording a mutation', () => {
+      const span = makeSpan({
+        spanType: SpanType.PROCESSOR_RUN,
+        entityName: 'task-state',
+        attributes: { processorPhase: 'input' },
+        input: conversation,
+        output: {
+          systemMessages: [...conversation.systemMessages, { role: 'system', content: 'Task list state may appear.' }],
+        },
+      });
+
+      expect(getSpanOutcome(span)).toMatchObject({
+        headline: 'task-state added 1 message to the system prompt',
+        tone: 'change',
+        evidence: 'changes',
+      });
+      expect(getSystemPromptChanges(span)).toEqual({
+        added: [{ role: 'system', content: 'Task list state may appear.' }],
+        removed: [],
+      });
+    });
+
+    it('names both sides when a processor replaced a system message', () => {
       const span = makeSpan({
         spanType: SpanType.PROCESSOR_RUN,
         entityName: 'language',
@@ -161,9 +183,8 @@ describe('getSpanOutcome', () => {
       });
 
       expect(getSpanOutcome(span)).toMatchObject({
-        headline: 'language rewrote the system messages',
-        tone: 'change',
-        evidence: 'output',
+        headline: 'language added 1 message to the system prompt, removed 1 message from the system prompt',
+        evidence: 'changes',
       });
     });
 

@@ -120,6 +120,59 @@ function describeTally({ added, addedSystem, removed }: MutationTally): string |
   return parts.length > 0 ? parts.join(', ') : undefined;
 }
 
+export interface SystemPromptChanges {
+  added: unknown[];
+  removed: unknown[];
+}
+
+/** `from` entries with no equal entry left in `against`, matching each entry at most once. */
+function unmatched(from: unknown[], against: unknown[]): unknown[] {
+  const pool = against.map(message => JSON.stringify(message));
+  return from.filter(message => {
+    const index = pool.indexOf(JSON.stringify(message));
+    if (index === -1) return true;
+    pool.splice(index, 1);
+    return false;
+  });
+}
+
+/**
+ * The system messages a pipeline span added to or dropped from the prompt, found by comparing
+ * the `systemMessages` it received with the ones it returned. A processor that rewrites the
+ * system prompt directly records no message-list mutation, so this is the only trace of it.
+ */
+export function getSystemPromptChanges(span: SpanRecord): SystemPromptChanges {
+  const after = isRecord(span.output) ? span.output.systemMessages : undefined;
+  if (!Array.isArray(after)) return { added: [], removed: [] };
+  const before = isRecord(span.input) && Array.isArray(span.input.systemMessages) ? span.input.systemMessages : [];
+  return { added: unmatched(after, before), removed: unmatched(before, after) };
+}
+
+/** "added 1 message to the system prompt", or `undefined` when the prompt is unchanged. */
+function describeSystemPromptChanges({ added, removed }: SystemPromptChanges): string | undefined {
+  const parts = [
+    added.length > 0 && `added ${pluralize(added.length, 'message')} to the system prompt`,
+    removed.length > 0 && `removed ${pluralize(removed.length, 'message')} from the system prompt`,
+  ].filter((part): part is string => typeof part === 'string');
+  return parts.length > 0 ? parts.join(', ') : undefined;
+}
+
+type PipelineMutation = NonNullable<ProcessorPipelineDescription['messageListMutations']>[number];
+
+/**
+ * What a pipeline span changed in the message list. Recorded mutations win; a processor that
+ * rewrote the system prompt directly records none, so its changes come from diffing input and output.
+ */
+export function getSpanChanges(span: SpanRecord): PipelineMutation[] {
+  const recorded = describeProcessorPipeline(asCoreSpan(span))?.messageListMutations ?? [];
+  if (recorded.length > 0) return recorded;
+  const prompt = getSystemPromptChanges(span);
+  return [
+    ...prompt.removed.map(message => ({ type: 'removeByIds' as const, source: 'system', count: 1, message })),
+    ...prompt.added.map(message => ({ type: 'addSystem' as const, message })),
+  ];
+}
+
 const CHANGED_LABELS: Record<string, string> = { messages: 'messages', systemMessages: 'system messages' };
 
 /** Output keys whose value differs from the same key in the input, ignoring a no-op `shortCircuited`. */
@@ -207,6 +260,11 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
       headline: `${processor} returned a response itself, so the model was not called`,
       tone: 'warning',
     };
+  }
+
+  const promptSentence = describeSystemPromptChanges(getSystemPromptChanges(span));
+  if (promptSentence) {
+    return { ...base, headline: `${processor} ${promptSentence}`, tone: 'change', evidence: 'changes' };
   }
 
   const changedFields = changedKeys(span.input, span.output);
