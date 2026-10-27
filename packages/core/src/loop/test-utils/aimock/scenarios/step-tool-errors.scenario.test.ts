@@ -12,8 +12,9 @@ import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScena
  * still account for every call, matching the AI SDK step contract:
  * - `toolCalls` lists every call
  * - `toolResults` holds only the successful results
- * - `content` holds every tool-call, then a tool-result or tool-error per call,
- *   in call order, so failures can be paired with `toolCalls`
+ * - `content` holds every tool-call, then a tool-result per call in call order;
+ *   a failed call stays a tool-result whose output is `error-text`, as on main
+ *   (moving failures to tool-error parts is deferred to #28541)
  */
 
 const MISSING = 'missing.png';
@@ -102,13 +103,13 @@ function expectToolStep(step: LLMStepResult | undefined, calls: Call[], label: s
     ),
     ...calls.map(call =>
       fails(call)
-        ? {
-            type: 'tool-error',
+        ? expect.objectContaining({
+            type: 'tool-result',
             toolCallId: call.id,
             toolName: 'readImage',
             input: { path: call.path },
-            error: expect.stringContaining(`image not found: ${MISSING}`),
-          }
+            output: { type: 'error-text', value: expect.stringContaining(`image not found: ${MISSING}`) },
+          })
         : expect.objectContaining({
             type: 'tool-result',
             toolCallId: call.id,

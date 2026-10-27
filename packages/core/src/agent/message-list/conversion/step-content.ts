@@ -203,16 +203,6 @@ export class StepContentExtractor {
     }
 
     return latest.content.map(c => {
-      if (c.type === 'tool-result' && (c.output?.type === 'error-text' || c.output?.type === 'error-json')) {
-        return {
-          type: 'tool-error',
-          input: findToolCallArgs(dbMessages, c.toolCallId),
-          error: c.output.value,
-          toolCallId: c.toolCallId,
-          toolName: c.toolName,
-        } satisfies AIV5Type.StaticToolError<any>;
-      }
-
       if (c.type === 'tool-result') {
         return {
           type: 'tool-result',
