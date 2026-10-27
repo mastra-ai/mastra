@@ -14,7 +14,7 @@ import type {
   DeleteVectorsParams,
 } from '@mastra/core/vector';
 import type { Bucket, Cluster, Collection, Scope } from 'couchbase';
-import { MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
+import { DocumentNotFoundError, MutateInSpec, connect, SearchRequest, VectorQuery, VectorSearch } from 'couchbase';
 
 type MastraMetric = 'cosine' | 'euclidean' | 'dotproduct';
 type CouchbaseMetric = 'cosine' | 'l2_norm' | 'dot_product';
@@ -537,11 +537,27 @@ export class CouchbaseVector extends MastraVector {
       });
     }
 
-    if (ids.length === 0) return;
+    if (ids.length === 0) {
+      throw new MastraError({
+        id: createVectorErrorId('COUCHBASE', 'DELETE_VECTORS', 'EMPTY_IDS'),
+        text: 'Cannot delete vectors with an empty ids array',
+        domain: ErrorDomain.STORAGE,
+        category: ErrorCategory.USER,
+        details: { indexName },
+      });
+    }
 
     try {
       const collection = await this.getCollection();
-      await Promise.all(ids.map(id => collection.remove(id)));
+      await Promise.all(
+        ids.map(async id => {
+          try {
+            await collection.remove(id);
+          } catch (error) {
+            if (!(error instanceof DocumentNotFoundError)) throw error;
+          }
+        }),
+      );
     } catch (error) {
       throw new MastraError(
         {

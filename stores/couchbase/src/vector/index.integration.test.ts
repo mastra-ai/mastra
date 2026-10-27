@@ -538,6 +538,14 @@ describe('Integration Testing CouchbaseVector', async () => {
       await expect(collection.get(ids[1])).rejects.toThrow();
       await expect(collection.get(ids[2])).resolves.toHaveProperty('content.embedding', testVectors[2]);
     });
+
+    it('should ignore missing IDs and delete the existing vectors', async () => {
+      const ids = await couchbase_client.upsert({ indexName: test_indexName, vectors: testVectors });
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['missing-vector-id', ids[0]] });
+
+      await expect(collection.get(ids[0])).rejects.toThrow();
+      await expect(collection.get(ids[1])).resolves.toHaveProperty('content.embedding', testVectors[1]);
+    });
   });
 
   describe('Error Cases and Edge Cases', () => {

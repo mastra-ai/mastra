@@ -283,7 +283,7 @@ Deletes a single vector by its ID from the index.
 
 ### `deleteVectors()`
 
-Deletes vectors by ID from the configured Couchbase collection. Pass `ids` to remove multiple documents; an empty array removes none. Filter-based deletion isn't supported and throws a `MastraError`. Providing both `ids` and `filter`, or neither, also throws.
+Deletes vectors by ID from the configured Couchbase collection. Pass a non-empty `ids` array to remove multiple documents. Missing IDs are ignored. Filter-based deletion isn't supported and throws a `MastraError`. Providing an empty `ids` array, both `ids` and `filter`, or neither, also throws.
 
 ```typescript
 await store.deleteVectors({ indexName: 'my_index', ids: ['vec_1', 'vec_2'] })
@@ -304,7 +304,8 @@ await store.deleteVectors({ indexName: 'my_index', ids: ['vec_1', 'vec_2'] })
   {
     name: 'filter',
     type: 'VectorFilter',
-    description: 'Not supported for Couchbase; passing a filter throws an error',
+    isOptional: true,
+    description: 'Not supported for Couchbase. Passing a filter throws an error',
   },
 ]}
 />
@@ -360,7 +361,7 @@ try {
 
 - Index creation delays may impact immediate querying after creation.
 - Vector dimension is enforced at ingest only after `createIndex()` creates a new index on the same `CouchbaseVector` instance. Calling `createIndex()` for an index that already exists doesn't turn on the ingest check. When the check is on, `upsert()` and `updateVector()` throw on a dimension mismatch. `query()` always checks the query vector against the index dimension.
-- `deleteVectors()` supports deletion by ID only; metadata-filter deletion isn't supported.
+- `deleteVectors()` supports deletion by ID only. Metadata-filter deletion isn't supported.
 - Vector insertion and index updates are eventually consistent. Strong consistency isn't guaranteed immediately after writes.
 
 ## Related

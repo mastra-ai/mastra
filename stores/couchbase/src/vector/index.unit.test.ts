@@ -1,3 +1,4 @@
+import { DocumentNotFoundError } from 'couchbase';
 import { describe, it, expect, beforeAll, afterAll, afterEach, vi, beforeEach } from 'vitest';
 import { CouchbaseVector, DISTANCE_MAPPING } from './index';
 
@@ -117,8 +118,10 @@ const mockVectorQueryCreateFn = vi.hoisted(() =>
   }),
 );
 
-vi.mock('couchbase', () => {
+vi.mock('couchbase', async importOriginal => {
+  const actual = await importOriginal<typeof import('couchbase')>();
   return {
+    ...actual,
     connect: mockCouchbaseConnectFn,
     SearchRequest: {
       create: mockSearchRequestCreateFn,
@@ -503,10 +506,20 @@ describe('Unit Testing CouchbaseVector', () => {
       expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_2');
     });
 
-    it('should not remove any documents for an empty ID list', async () => {
-      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: [] });
-
+    it('should reject an empty ID list without removing documents', async () => {
+      await expect(couchbase_client.deleteVectors({ indexName: test_indexName, ids: [] })).rejects.toThrow(
+        /empty ids array/i,
+      );
       expect(mockCollectionRemoveFn).not.toHaveBeenCalled();
+    });
+
+    it('should ignore missing IDs while deleting existing vectors', async () => {
+      mockCollectionRemoveFn.mockRejectedValueOnce(new DocumentNotFoundError('document not found'));
+      await couchbase_client.deleteVectors({ indexName: test_indexName, ids: ['missing', 'test_id_1'] });
+
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('missing');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledWith('test_id_1');
     });
 
     it('should reject filter-based deletion without removing documents', async () => {
