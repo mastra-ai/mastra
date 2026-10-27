@@ -1177,11 +1177,16 @@ describe('Scheduler', () => {
       });
       const listDue = vi.spyOn(store, 'listDueSchedules');
 
+      const stSpy = vi.spyOn(globalThis, 'setTimeout');
+
       await scheduler.start();
       await wait(250);
       expect(listDue).toHaveBeenCalledOnce();
+      // No timer is armed at all: an idle scheduler waits for a wake.
+      expect(stSpy.mock.calls.some(call => (call[1] ?? 0) >= 60_000)).toBe(false);
 
       await scheduler.stop();
+      stSpy.mockRestore();
     });
 
     it('sleeps until the earliest schedule is due, then fires it', async () => {

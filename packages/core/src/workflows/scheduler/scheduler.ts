@@ -11,13 +11,8 @@ const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
 const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
-/**
- * Longest the scheduler sleeps when nothing is due soon. Schedules created or
- * changed through Mastra wake it at once; this bound only covers rows written
- * straight to storage. Kept above 10 minutes so hosts that idle a server after
- * 10 minutes without network traffic can do so.
- */
-const MAX_IDLE_SLEEP_MS = 15 * 60_000;
+/** Longest delay `setTimeout` accepts; larger values fire immediately. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
 /**
  * Drives cron-based workflow triggers.
@@ -186,7 +181,7 @@ export class Scheduler extends MastraBase {
   }
 
   async #loopOnce(): Promise<void> {
-    let delay: number;
+    let delay: number | undefined;
     do {
       this.#wakeRequested = false;
       await this.#runTick();
@@ -196,6 +191,8 @@ export class Scheduler extends MastraBase {
     if (this.#stopping || !this.#started) return;
 
     this.#clearTimer();
+    // No active schedules: stay idle until `wake()`.
+    if (delay === undefined) return;
     this.#timerHandle = setTimeout(() => {
       this.#timerHandle = undefined;
       this.wake();
@@ -211,10 +208,11 @@ export class Scheduler extends MastraBase {
    * schedules are due (fires, retries, skipped targets), on storage errors,
    * and for a scheduler explicitly enabled with `enabled: true` (a dedicated
    * scheduler that must find rows written by processes it shares no pubsub
-   * with). Otherwise waits for the earliest active `nextFireAt`, never longer
-   * than MAX_IDLE_SLEEP_MS, and relies on `wake()` for new schedules.
+   * with). Otherwise waits for the earliest active `nextFireAt` and relies on
+   * `wake()` for new schedules; with no active schedules it returns undefined
+   * and no timer is armed, so an idle app never touches storage.
    */
-  async #nextDelay(): Promise<number> {
+  async #nextDelay(): Promise<number | undefined> {
     const interval = this.#config.tickIntervalMs;
     if (this.#config.enabled === true || this.#lastTickBusy) return interval;
     let active: Schedule[];
@@ -224,9 +222,9 @@ export class Scheduler extends MastraBase {
       this.logger.error('Failed to list active schedules', { error: err });
       return interval;
     }
+    if (active.length === 0) return undefined;
     const earliest = active.reduce((min, schedule) => Math.min(min, schedule.nextFireAt), Infinity);
-    const untilDue = earliest - Date.now();
-    return Math.max(interval, Math.min(untilDue, MAX_IDLE_SLEEP_MS));
+    return Math.max(interval, Math.min(earliest - Date.now(), MAX_TIMER_DELAY_MS));
   }
 
   #clearTimer(): void {
