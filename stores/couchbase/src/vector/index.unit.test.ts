@@ -550,6 +550,37 @@ describe('Unit Testing CouchbaseVector', () => {
       );
     });
 
+    it('should wait for all removals before reporting a failure', async () => {
+      let finishSecondRemoval!: () => void;
+      mockCollectionRemoveFn.mockImplementation(id => {
+        if (id === 'test_id_1') return Promise.reject(new Error('KV removal failed'));
+        return new Promise(resolve => {
+          finishSecondRemoval = () => resolve({});
+        });
+      });
+
+      let failureReported = false;
+      const deletion = couchbase_client
+        .deleteVectors({ indexName: test_indexName, ids: ['test_id_1', 'test_id_2'] })
+        .catch(error => {
+          failureReported = true;
+          return error;
+        });
+
+      try {
+        await vi.waitFor(() => expect(finishSecondRemoval).toBeDefined());
+        await new Promise(resolve => setTimeout(resolve, 0));
+        expect(failureReported).toBe(false);
+      } finally {
+        finishSecondRemoval?.();
+      }
+
+      const error = await deletion;
+      expect(error).toBeInstanceOf(Error);
+      expect(error.message).toContain('KV removal failed');
+      expect(mockCollectionRemoveFn).toHaveBeenCalledTimes(2);
+    });
+
     it('should throw error for invalid vector dimension', async () => {
       await couchbase_client.createIndex({ indexName: test_indexName, dimension: 4 });
       clearAllMocks();

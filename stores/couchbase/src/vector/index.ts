@@ -549,7 +549,7 @@ export class CouchbaseVector extends MastraVector {
 
     try {
       const collection = await this.getCollection();
-      await Promise.all(
+      const results = await Promise.allSettled(
         ids.map(async id => {
           try {
             await collection.remove(id);
@@ -558,6 +558,8 @@ export class CouchbaseVector extends MastraVector {
           }
         }),
       );
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure?.status === 'rejected') throw failure.reason;
     } catch (error) {
       throw new MastraError(
         {
