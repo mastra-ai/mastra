@@ -1,19 +1,22 @@
 // @vitest-environment jsdom
 import type { QuerySpansResult } from '@mastra/client-js';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
   emptyEntityNames,
   emptyEnvironments,
   emptySpanRows,
+  endedSpan,
   firstListedSpan,
+  spanHeadPage,
   spanQueryCapabilities,
   spanRowsPage,
 } from '../../__tests__/fixtures/spans';
 import type { SpanSelection } from '../span-detail-panel';
 import { SpansExplorerBody } from '../spans-explorer-body';
 import type { SpansExplorerPanelArgs } from '../spans-explorer-body';
+import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/list-polling';
 import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
 import { useFixedChartSize } from '@/test/chart-size';
@@ -91,6 +94,33 @@ describe('SpansExplorerBody', () => {
           ],
         }),
       );
+    });
+  });
+
+  describe('when a span ends while the page is open', () => {
+    afterEach(() => {
+      vi.useRealTimers();
+    });
+
+    it('appears in the list on the next poll', async () => {
+      setHandlers(spanRowsPage);
+      server.use(
+        http.post(SPANS_QUERY_URL, async ({ request }) => {
+          const body = (await request.json()) as { orderBy?: Array<{ field: string }> };
+          return HttpResponse.json(body.orderBy?.[0]?.field === 'endedAt' ? spanHeadPage : spanRowsPage);
+        }),
+      );
+      vi.useFakeTimers({ toFake: ['setInterval', 'clearInterval'], shouldAdvanceTime: true });
+
+      renderBody();
+      await screen.findByText('agent run: weather');
+      expect(screen.queryByText(endedSpan.name)).toBeNull();
+
+      await act(async () => {
+        await vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_POLL_INTERVAL_MS);
+      });
+
+      expect(await screen.findByText(endedSpan.name)).toBeTruthy();
     });
   });
 
