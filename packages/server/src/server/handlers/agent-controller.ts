@@ -266,14 +266,6 @@ const sendMessageBodySchema = z.object({
   message: z.string(),
   requestContext: bodyRequestContextSchema,
   files: messageFilesSchema,
-  /**
-   * Scopes for this message's run. Refused with 403 unless every tag's type is in the
-   * controller's `allowedMessageScopeTypes` (empty by default).
-   */
-  scopes: z
-    .array(z.union([z.string(), z.object({ tag: z.string(), access: z.literal('read') })]))
-    .max(8)
-    .optional(),
 });
 const steerBodySchema = z.object({
   message: z.string(),
@@ -771,16 +763,9 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
   tags: ['AgentController', 'Streaming'],
   requiresAuth: true,
   requiresPermission: 'agent-controller:execute',
-  handler: async ({ mastra, controllerId, sessionId, message, files, scopes, requestContext }) => {
+  handler: async ({ mastra, controllerId, sessionId, message, files, requestContext }) => {
     try {
       const controller = getAgentControllerOrThrow(mastra, controllerId);
-      if (scopes?.length) {
-        try {
-          controller.assertRemoteMessageScopesAllowed(scopes);
-        } catch (error) {
-          throw new HTTPException(403, { message: (error as Error).message });
-        }
-      }
       const session = await getSession(controller, sessionId, requestContext);
       // Forward the server middleware's requestContext so identity injected in
       // `server.middleware` reaches dynamic instructions and tools (same as the
@@ -792,7 +777,6 @@ export const SEND_AGENT_CONTROLLER_MESSAGE_ROUTE = createRoute({
           files,
           requestContext,
           ...(author ? { author } : {}),
-          ...(scopes?.length ? { scopes } : {}),
         }),
         session,
         mastra,

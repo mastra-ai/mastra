@@ -697,28 +697,18 @@ export class AgentControllerSession extends BaseResource {
    * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
    * `sendMessage({ content: 'What is in this image?', files })`.
    * Pass `options.requestContext` to merge custom context into the run's request context.
-   * Pass `scopes` for the message's run; the server refuses tag types its controller's
-   * `allowedMessageScopeTypes` doesn't list (none by default).
    */
   async sendMessage(
-    message:
-      | string
-      | {
-          content: string;
-          files?: Array<{ data: string; mediaType: string; filename?: string }>;
-          scopes?: Array<string | { tag: string; access: 'read' }>;
-        },
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
     options?: AgentControllerRequestOptions,
   ): Promise<void> {
-    const { content, files, scopes } =
-      typeof message === 'string' ? { content: message, files: undefined, scopes: undefined } : message;
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(`${this.base()}/messages`, {
       method: 'POST',
       body: {
         message: content,
         ...(files?.length ? { files } : {}),
-        ...(scopes?.length ? { scopes } : {}),
         ...(requestContext ? { requestContext } : {}),
       },
     });

@@ -401,65 +401,26 @@ describe('agent-controller routes', () => {
       expect(await controller.getSession('never-started')).toBeUndefined();
       expect(await controller.queryThreads({ resourceId: 'never-started' })).toEqual([]);
     });
-  });
 
-  describe('per-message scopes on SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
-    // Scope tags are authority, so a remote caller may name only the tag types the
-    // controller allows (none by default).
-    async function routeSession(target: Mastra, resourceId: string) {
-      const controller = target.getAgentController('code')!;
+    // Scopes are authority: a remote caller never names them. Hosts derive them from
+    // trusted request context through the agent's `scopes` function instead.
+    it('never passes scopes from the request body to the session', async () => {
+      const controller = mastra.getAgentController('code')!;
       await controller.init();
-      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-    }
-
-    it('refuses any scopes with 403 when the controller allows no message scope types', async () => {
-      const session = await routeSession(mastra, 'user-scopes-default');
+      const session = await controller.createSession({ resourceId: 'user-scopes', id: 'user-scopes', ownerId: 'code' });
       const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
 
       await expect(
         SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
           mastra,
           controllerId: 'code',
-          sessionId: 'user-scopes-default',
+          sessionId: 'user-scopes',
           message: 'hello',
-          scopes: ['request:r1'],
+          scopes: ['org:other'],
         } as any),
-      ).rejects.toMatchObject({ status: 403, message: expect.stringContaining('"request:r1"') });
-      expect(spy).not.toHaveBeenCalled();
-    });
-
-    it('passes allowed scopes to the session and refuses a tag of another type', async () => {
-      const storage = new InMemoryStore();
-      const controller = new AgentController({
-        id: 'code',
-        storage,
-        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
-        allowedMessageScopeTypes: ['request'],
-      });
-      const allowing = new Mastra({ agentControllers: { code: controller }, storage });
-      const session = await routeSession(allowing, 'user-scopes-allowed');
-      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
-      const send = (scopes: unknown) =>
-        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
-          mastra: allowing,
-          controllerId: 'code',
-          sessionId: 'user-scopes-allowed',
-          message: 'hello',
-          scopes,
-        } as any);
-
-      await expect(send(['request:r1', { tag: 'request:r0', access: 'read' }])).resolves.toEqual({ ok: true });
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ content: 'hello', scopes: ['request:r1', { tag: 'request:r0', access: 'read' }] }),
-      );
-
-      spy.mockClear();
-      await expect(send(['request:r2', 'org:acme'])).rejects.toMatchObject({
-        status: 403,
-        message: expect.stringContaining('"org:acme"'),
-      });
-      expect(spy).not.toHaveBeenCalled();
+      ).resolves.toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]![0]).not.toHaveProperty('scopes');
     });
   });
 

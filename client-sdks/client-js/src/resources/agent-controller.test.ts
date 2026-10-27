@@ -111,14 +111,6 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
-  it('sends a message with scopes for its run', async () => {
-    mockJson({ ok: true });
-    const scopes = ['request:r25', { tag: 'org:self', access: 'read' as const }];
-    await client.getAgentController('code').session('user-1').sendMessage({ content: 'fix it', scopes });
-    const [, init] = lastCall();
-    expect(JSON.parse(init.body as string)).toEqual({ message: 'fix it', scopes });
-  });
-
   it('steers and follows up with file attachments', async () => {
     const session = client.getAgentController('code').session('user-1');
     const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
