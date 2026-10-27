@@ -1,8 +1,24 @@
 import { z } from 'zod';
+import { isCanonicalCurrency, minorUnitDigits } from './currency.ts';
+
+const RequiredTextSchema = z.string().refine(value => value.trim().length > 0, 'Must not be blank');
+const InvoiceDateSchema = z
+  .string()
+  .refine(
+    value =>
+      /^\d{4}-\d{2}-\d{2}$/.test(value) &&
+      !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
+      new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value,
+    'invoiceDate must be yyyy-mm-dd',
+  );
+const CurrencySchema = z
+  .string()
+  .refine(isCanonicalCurrency, 'currency must be a canonical uppercase ISO 4217 code')
+  .refine(value => minorUnitDigits(value) !== null, 'currency must define ISO 4217 minor units');
 
 const LineItemSchema = z.object({
   sku: z.string().nullable(),
-  description: z.string(),
+  description: RequiredTextSchema,
   qty: z.number().finite(),
   unitPrice: z.number().finite(),
   lineTotal: z.number().finite().nullable(),
@@ -12,12 +28,12 @@ const FieldConfidenceSchema = z.object({
   confidence: z.number().min(0).max(1),
 });
 export const ExtractedInvoiceSchema = z.object({
-  invoiceNumber: z.string(),
-  vendorName: z.string(),
+  invoiceNumber: RequiredTextSchema,
+  vendorName: RequiredTextSchema,
   vendorTaxId: z.string().nullable(),
   poNumber: z.string().nullable(),
-  invoiceDate: z.string(),
-  currency: z.string(),
+  invoiceDate: InvoiceDateSchema,
+  currency: CurrencySchema,
   subtotal: z.number().finite().nullable(),
   tax: z.number().finite().nullable(),
   total: z.number().finite(),
@@ -80,12 +96,12 @@ const NormalizedLineSchema = z.object({
 });
 export const NormalizedInvoiceSchema = z.object({
   document: DocumentRefSchema,
-  invoiceNumber: z.string(),
-  vendorName: z.string(),
+  invoiceNumber: RequiredTextSchema,
+  vendorName: RequiredTextSchema,
   vendorTaxId: z.string().nullable(),
   poNumber: z.string().nullable(),
-  invoiceDate: z.string(),
-  currency: z.string(),
+  invoiceDate: InvoiceDateSchema,
+  currency: CurrencySchema,
   subtotalMinor: MoneySchema.nullable(),
   taxMinor: MoneySchema.nullable(),
   totalMinor: MoneySchema,
@@ -113,7 +129,7 @@ export const PurchaseOrderSchema = z.object({
   id: z.string(),
   poNumber: z.string(),
   vendorId: z.string(),
-  currency: z.string(),
+  currency: CurrencySchema,
   totalMinor: MoneySchema,
   lines: z.array(PurchaseOrderLineSchema),
 });
@@ -127,8 +143,8 @@ export const PriorInvoiceSchema = z.object({
   id: z.string(),
   vendorId: z.string(),
   invoiceNumber: z.string().nullable(),
-  invoiceDate: z.string(),
-  currency: z.string(),
+  invoiceDate: InvoiceDateSchema,
+  currency: CurrencySchema,
   totalMinor: MoneySchema,
 });
 export type PriorInvoice = z.infer<typeof PriorInvoiceSchema>;

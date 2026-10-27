@@ -1,12 +1,7 @@
 import Decimal from 'decimal.js';
 import { ExtractedInvoiceSchema, type ExtractedInvoice, type InvoiceDraft, type NormalizedInvoice } from './schema.ts';
-import { isCanonicalCurrency, minorUnitDigits } from './money.ts';
+import { isCanonicalCurrency, minorUnitDigits } from './currency.ts';
 
-const isDate = (value: string) =>
-  /^\d{4}-\d{2}-\d{2}$/.test(value) &&
-  !Number.isNaN(Date.parse(`${value}T00:00:00Z`)) &&
-  new Date(`${value}T00:00:00Z`).toISOString().slice(0, 10) === value;
-const blank = (value: string) => value.trim().length === 0;
 const hasMinorUnitPrecision = (value: number, digits: number) => new Decimal(value).decimalPlaces() <= digits;
 // Unit prices may be sub-minor-unit rates; posted extended amounts must obey the currency scale.
 const reconciles = (parts: Array<number | Decimal>, total: number, digits: number) => {
@@ -35,13 +30,6 @@ export function validateExtraction(draft: InvoiceDraft): {
     };
   const invoice = parsed.data;
   const issues: string[] = [];
-  for (const field of ['invoiceNumber', 'vendorName', 'invoiceDate', 'currency'] as const)
-    if (blank(invoice[field])) issues.push(`${field} is required`);
-  if (!isDate(invoice.invoiceDate)) issues.push('invoiceDate must be yyyy-mm-dd');
-  invoice.lines.forEach((line, index) => {
-    if (blank(line.description)) issues.push(`lines.${index}.description is required`);
-  });
-
   const canonicalCurrency = isCanonicalCurrency(invoice.currency);
   const digits = minorUnitDigits(invoice.currency);
   const lineAmounts: Array<number | Decimal> = invoice.lines.map(

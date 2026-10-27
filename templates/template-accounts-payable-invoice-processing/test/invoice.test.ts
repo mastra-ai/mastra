@@ -6,7 +6,7 @@ import { makeInvoiceMatch } from '../src/mastra/invoice/controls/matching.ts';
 import { makePolicyRouting } from '../src/mastra/invoice/controls/policy.ts';
 import { makeVendorValidation } from '../src/mastra/invoice/controls/vendor.ts';
 import { normalizeInvoice, toMajorUnits, toMinorUnits } from '../src/mastra/invoice/money.ts';
-import type { ExtractedInvoice } from '../src/mastra/invoice/schema.ts';
+import { ExtractedInvoiceSchema, type ExtractedInvoice } from '../src/mastra/invoice/schema.ts';
 import { validateExtraction } from '../src/mastra/invoice/validation.ts';
 
 const confidence = [
@@ -89,6 +89,26 @@ const normalized = normalizeInvoice({
 });
 
 describe('invoice validation and money', () => {
+  // PR #28532, CodeRabbit 4383787348: direct workflow input must enforce field formats.
+  it('rejects blank identities, invalid calendar dates and unsupported currencies at the workflow schema', () => {
+    for (const invalid of [
+      { invoiceNumber: '   ' },
+      { vendorName: '' },
+      { invoiceDate: '2026-02-30' },
+      { invoiceDate: 'not-a-date' },
+      { currency: 'usd' },
+      { currency: 'XAU' },
+      { lines: [{ ...invoice.lines[0]!, description: ' ' }] },
+    ])
+      assert.equal(
+        ExtractedInvoiceSchema.safeParse({ ...invoice, ...invalid }).success,
+        false,
+        JSON.stringify(invalid),
+      );
+    assert.equal(ExtractedInvoiceSchema.safeParse(invoice).success, true);
+    assert.equal(validateExtraction({ ...invoice, invoiceNumber: ' ' }).extracted, null);
+  });
+
   it('validates reconciliation, dates, and ISO currency precision', () => {
     assert.deepEqual(validateExtraction(invoice), { extracted: invoice, issues: [] });
     assert.equal(validateExtraction({ ...invoice, vendorTaxId: undefined }).extracted?.vendorTaxId, null);
