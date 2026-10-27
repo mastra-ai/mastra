@@ -11,15 +11,15 @@
     "MiniMax-M3.1-Flash"
   ],
   "reasoning": {
-    "MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
     "MiniMax-M3.1-Flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "MiniMax-M3": [
+      {
+        "type": "toggle"
       }
     ]
   }

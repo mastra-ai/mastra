@@ -33,7 +33,7 @@
     "hf:zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "hf:Qwen/Qwen3.6-27B": [
+    "hf:zai-org/GLM-4.7-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
@@ -43,12 +43,6 @@
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "hf:zai-org/GLM-4.7-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ],
     "hf:zai-org/GLM-5.3-Flash": [
@@ -63,6 +57,12 @@
         "values": ["none", "high", "xhigh"]
       }
     ],
+    "hf:MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "hf:moonshotai/Kimi-K3": [
       {
         "type": "effort",
@@ -75,25 +75,25 @@
         "values": ["low", "medium", "high"]
       }
     ],
+    "hf:Qwen/Qwen3.6-27B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "xhigh", "max"]

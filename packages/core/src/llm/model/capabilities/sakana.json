@@ -3,13 +3,12 @@
   "temperature": ["sakana-namazu"],
   "structuredOutput": ["fugu", "fugu-ultra", "fugu-ultra-20260615", "sakana-namazu"],
   "reasoning": {
-    "fugu": [
+    "sakana-namazu": [
       {
-        "type": "effort",
-        "values": ["high", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "fugu-ultra": [
+    "fugu": [
       {
         "type": "effort",
         "values": ["high", "xhigh"]
@@ -21,9 +20,10 @@
         "values": ["high", "xhigh"]
       }
     ],
-    "sakana-namazu": [
+    "fugu-ultra": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "xhigh"]
       }
     ]
   }
