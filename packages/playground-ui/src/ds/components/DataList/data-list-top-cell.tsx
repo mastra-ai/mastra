@@ -4,7 +4,7 @@ import { useDataListReorder } from './data-list-reorder-context';
 import { dataListStickyStartStyles } from './shared';
 import type { DataListSticky } from './shared';
 import { Checkbox } from '@/ds/components/Checkbox';
-import { Tooltip, TooltipTrigger, TooltipContent } from '@/ds/components/Tooltip';
+import { InfoTooltip } from '@/ds/components/Tooltip';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -112,16 +112,24 @@ export type DataListTopCellWithTooltipProps = {
   children: ReactNode;
   tooltip: ReactNode;
   className?: string;
+  /** Names the column in the info icon's accessible label. Defaults to `children` when it is a string. */
+  label?: string;
 };
 
-export function DataListTopCellWithTooltip({ children, tooltip, className }: DataListTopCellWithTooltipProps) {
+/** A header cell with an info icon after its title that explains the column in a tooltip. */
+export function DataListTopCellWithTooltip({
+  children,
+  tooltip,
+  className,
+  label = typeof children === 'string' ? children : 'this column',
+}: DataListTopCellWithTooltipProps) {
   return (
-    <Tooltip>
-      <TooltipTrigger>
-        <DataListTopCell className={className}>{children}</DataListTopCell>
-      </TooltipTrigger>
-      <TooltipContent>{tooltip}</TooltipContent>
-    </Tooltip>
+    <DataListTopCell className={cn('gap-1 overflow-visible', className)}>
+      <span className="min-w-0 truncate">{children}</span>
+      <InfoTooltip aria-label={`About ${label}`} contentClassName="max-w-72">
+        {tooltip}
+      </InfoTooltip>
+    </DataListTopCell>
   );
 }
 
@@ -160,7 +168,11 @@ export function DataListTopCellSmart({
 
   if (tooltipText) {
     return (
-      <DataListTopCellWithTooltip tooltip={tooltipText} className={cn('flex [&_svg]:size-[1.3em]', className)}>
+      <DataListTopCellWithTooltip
+        tooltip={tooltipText}
+        label={typeof long === 'string' ? long : tooltipText}
+        className={cn('flex [&_svg]:size-[1.3em]', className)}
+      >
         {content}
       </DataListTopCellWithTooltip>
     );
