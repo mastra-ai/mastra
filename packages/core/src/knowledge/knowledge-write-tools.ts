@@ -13,7 +13,6 @@ import { createTool } from '../tools';
 import type { KnowledgeOwnerLookup } from './knowledge-tools';
 import { requireScopeAccess, resolveNamedScope } from './knowledge-tools';
 
-const CURATOR_IDENTITY = 'subconscious:curate';
 const scopeTagsSchema: JSONSchema7 = {
   type: 'array',
   items: { type: 'string', minLength: 3 },
@@ -75,7 +74,7 @@ export interface KnowledgeWriteToolsOptions {
   /** What the run reaches through ownership on scopes it doesn't hold. */
   owner?: KnowledgeOwnerLookup;
   sourceThreadId: string;
-  /** Stamped as `metadata.source` on every record written, e.g. `agent:<id>`. */
+  /** Stamped as `metadata.source` on every record written and as `deletedBy` on removals, e.g. `agent:<id>`. */
   source?: string;
 }
 
@@ -371,7 +370,7 @@ export function createKnowledgeWriteTools(
         const record = await store.getKnowledge({ id: (input as { recordId: string }).recordId, includeDeleted: true });
         if (!record) throw new Error(`KnowledgeRecord not found: ${(input as { recordId: string }).recordId}`);
         requireVisible(record.scope, options, 'KnowledgeRecord', 'edit');
-        return store.removeKnowledge({ id: record.id, deletedBy: CURATOR_IDENTITY });
+        return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
       },
     }),
     // Single-field edits use dedicated tools rather than one tool with an optional pair, because

@@ -7,11 +7,15 @@ async function setup() {
   const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-scopes' }), pins: true });
   const store = await knowledge.getStorage();
   const host = { getKnowledgeStore: () => knowledge.getStorage() };
-  const tools = (scope: string[], readOnly: string[] = []) =>
-    createPinnedTools(host, { scope, readOnly, sourceThreadId: 't', maxPins: 20, maxTokens: 500 }) as Record<
-      string,
-      { execute: (input: unknown, context?: unknown) => Promise<any> }
-    >;
+  const tools = (scope: string[], readOnly: string[] = [], source?: string) =>
+    createPinnedTools(host, {
+      scope,
+      readOnly,
+      sourceThreadId: 't',
+      maxPins: 20,
+      maxTokens: 500,
+      ...(source ? { source } : {}),
+    }) as Record<string, { execute: (input: unknown, context?: unknown) => Promise<any> }>;
   return { store, tools };
 }
 
@@ -50,5 +54,21 @@ describe('pins across scopes', () => {
       .catch(error => error);
     expect(String(refused?.message ?? refused)).toContain('"org:self" is read-only for this run.');
     expect((await listPinnedKnowledge({ store, scope: member })).pins).toHaveLength(1);
+  });
+
+  it('records the agent that unpinned or replaced a pin as deletedBy', async () => {
+    const { store, tools } = await setup();
+    const agentTools = tools(member, [], 'agent:alex');
+    await agentTools.knowledge_pin!.execute({ text: 'Alex: first.' });
+    await agentTools.knowledge_pin!.execute({ text: 'Alex: second.' });
+    const [first, second] = (await listPinnedKnowledge({ store, scope: member })).pins;
+
+    await agentTools.knowledge_unpin!.execute({ recordId: first!.id });
+    await agentTools.knowledge_edit_pin!.execute({ recordId: second!.id, text: 'Alex: second, edited.' });
+
+    for (const id of [first!.id, second!.id]) {
+      const removed = await store.getKnowledge({ id, includeDeleted: true });
+      expect(removed?.deletedBy).toBe('agent:alex');
+    }
   });
 });
