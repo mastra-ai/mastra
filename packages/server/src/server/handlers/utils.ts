@@ -276,6 +276,7 @@ export async function enforceThreadAccess({
     resourceId: thread?.resourceId ?? effectiveResourceId,
     requestContext,
     permission,
+    fgaProvider,
   });
 }
 

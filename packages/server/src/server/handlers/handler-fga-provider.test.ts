@@ -6,7 +6,7 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MASTRA_AUTH_MODE_KEY } from '../constants';
 import { createTestServerContext } from './test-utils';
-import { getHandlerFGAProvider } from './utils';
+import { enforceThreadAccess, getHandlerFGAProvider } from './utils';
 import { LIST_WORKFLOWS_ROUTE } from './workflows';
 
 function buildMastra() {
@@ -116,5 +116,28 @@ describe('handler FGA provider selection', () => {
 
     expect(Object.keys(result).sort()).toEqual(['allowed', 'hidden']);
     expect(getHandlerFGAProvider(mastra, contextFor('server'))).toBeUndefined();
+  });
+  it('checks thread access against the studio provider, not the server provider', async () => {
+    const mastra = buildMastra();
+    const serverFga = { require: vi.fn(async () => {}) };
+    const studioFga = { require: vi.fn(async () => {}) };
+    vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: serverFga } as any);
+    vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: studioFga } as any);
+
+    await enforceThreadAccess({ mastra, requestContext: contextFor('studio'), threadId: 'thread-1' });
+
+    expect(studioFga.require).toHaveBeenCalledTimes(1);
+    expect(serverFga.require).not.toHaveBeenCalled();
+  });
+
+  it('checks thread access with a studio-only provider', async () => {
+    const mastra = buildMastra();
+    const studioFga = { require: vi.fn(async () => {}) };
+    vi.spyOn(mastra, 'getServer').mockReturnValue({} as any);
+    vi.spyOn(mastra, 'getStudio').mockReturnValue({ fga: studioFga } as any);
+
+    await enforceThreadAccess({ mastra, requestContext: contextFor('studio'), threadId: 'thread-1' });
+
+    expect(studioFga.require).toHaveBeenCalledTimes(1);
   });
 });
