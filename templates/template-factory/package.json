@@ -8,14 +8,15 @@
     "dev": "mastra factory dev",
     "check": "tsc --noEmit",
     "build": "mastra build",
-    "start": "mastra start"
+    "start": "mastra start",
+    "deploy": "mastra deploy"
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "type": "module",
   "engines": {
-    "node": ">=22.13.0"
+    "node": ">=22.19.0"
   },
   "dependencies": {
     "@mastra/core": "latest",
