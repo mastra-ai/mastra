@@ -617,7 +617,8 @@ export interface WorkflowOptions {
    * supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and can't be
    * combined with `pruneSnapshot`. Steps read earlier results with
    * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
-   * they were created with: resuming a run after changing this option throws.
+   * they were created with: a run resumed after this option changes continues
+   * in its stored version.
    *
    * @experimental
    */

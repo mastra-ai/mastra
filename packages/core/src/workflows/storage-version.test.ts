@@ -143,28 +143,26 @@ describe('storageVersion per run', () => {
     execute.mockRestore();
   });
 
-  it('refuses to continue a v1 run through a v2 definition and leaves it untouched', async () => {
+  it('finishes a v1 run resumed through a v2 definition in v1', async () => {
     const storage = new MockStore();
     const v1 = gateWorkflow(1);
     host(storage, v1);
     const run = await v1.createRun();
     expect((await run.start({ inputData: {} })).status).toBe('suspended');
 
-    const store = (await storage.getStore('workflows'))!;
-    const before = structuredClone(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId }));
-
     const v2 = gateWorkflow(2);
     host(storage, v2);
-    await expect(v2.createRun({ runId: run.runId })).rejects.toThrow(
-      /was created with storageVersion: 1, but the workflow now sets storageVersion: 2/,
-    );
+    const continued = await v2.createRun({ runId: run.runId });
+    expect(continued.storageVersion).toBe(1);
+    expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
 
+    const store = (await storage.getStore('workflows'))!;
     expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 2 })).toBeNull();
-    expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId })).toEqual(before);
-
-    // The rejected run isn't cached, so the original definition can still resume it.
-    const resumed = await (await v1.createRun({ runId: run.runId })).resume({ step: 'gate', resumeData: true });
-    expect(resumed.status).toBe('success');
+    expect(
+      (await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 }))?.status,
+    ).toBe('success');
+    // New runs of the v2 definition still take v2.
+    expect((await v2.createRun()).storageVersion).toBe(2);
   });
 
   it('runs, suspends and resumes a v2 run from journal entries', async () => {
@@ -459,20 +457,42 @@ describe('storageVersion per run', () => {
     expect((result as any).error.message).toMatch(/Use `await getStepResultAsync\("a"\)` instead/);
   });
 
-  it('refuses to continue a v2 run through a v1 definition', async () => {
+  it('finishes a v2 run resumed through a v1 definition in v2', async () => {
     const storage = new MockStore();
     const v2 = gateWorkflow(2);
     host(storage, v2);
     const run = await v2.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
 
     const v1 = gateWorkflow(1);
     host(storage, v1);
-    await expect(v1.createRun({ runId: run.runId })).rejects.toThrow(
-      /was created with storageVersion: 2, but the workflow now sets storageVersion: 1/,
-    );
+    const continued = await v1.createRun({ runId: run.runId });
+    expect(continued.storageVersion).toBe(2);
+    expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
 
     const store = (await storage.getStore('workflows'))!;
     expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 })).toBeNull();
+    expect(
+      (await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 2 }))?.status,
+    ).toBe('success');
+  });
+
+  it('keeps a v1 run on v1 when storageVersion: 2 is set on a store without run journals', async () => {
+    const storage = new MockStore();
+    const v1 = gateWorkflow(1);
+    host(storage, v1);
+    const run = await v1.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(false);
+
+    const v2 = gateWorkflow(2);
+    host(storage, v2);
+    const continued = await v2.createRun({ runId: run.runId });
+    expect(continued.storageVersion).toBe(1);
+    expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
+    await expect(v2.createRun()).rejects.toThrow(/storage adapter/i);
   });
 });
 
@@ -1664,6 +1684,35 @@ describe('storage v2 nested runs', () => {
     const v1 = await resumeDirectly(1);
     expect(v1.status).toBe('success');
     expect(await resumeDirectly(2)).toEqual(v1);
+  });
+
+  it('resumes a nested run directly in the version it was stored with after both workflows switch', async () => {
+    const suspendThenResume = async (resumeWith: 1 | 2) => {
+      const storage = new MockStore();
+      const before = suspendingNested(1);
+      new Mastra({ logger: false, storage, workflows: before });
+      await (
+        await before.outer.createRun({ runId: 'run-1' })
+      ).start({
+        inputData: { n: 0 },
+        initialState: { items: [PAD] },
+      });
+
+      const after = suspendingNested(resumeWith);
+      new Mastra({ logger: false, storage, workflows: after });
+      const nested = await after.inner.createRun({ runId: 'run-1' });
+      const resumed = await nested.resume({ step: 'inner-wait', resumeData: true });
+      return {
+        storageVersion: nested.storageVersion,
+        status: resumed.status,
+        v2Runs: (storage.stores.workflows as any).db.workflowRunHeaders.size,
+        stored: await storedStates(storage, 1),
+      };
+    };
+
+    const unchanged = await suspendThenResume(1);
+    expect(unchanged).toMatchObject({ storageVersion: 1, status: 'success', v2Runs: 0 });
+    expect(await suspendThenResume(2)).toEqual(unchanged);
   });
 
   it("reads a finished nested run as its parent's current state plus the nested run's changes", async () => {
