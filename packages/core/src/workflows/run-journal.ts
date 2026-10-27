@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '../error';
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
 import { summarizeStepResult } from '../storage/domains/workflows/journal';
-import type { StepResultSummary } from '../storage/domains/workflows/journal';
+import type { StateRef, StepResultSummary } from '../storage/domains/workflows/journal';
 import { diffState } from '../storage/domains/workflows/state-patch';
 import type { StatePatchOp } from '../storage/domains/workflows/state-patch';
 import { getStepResult, getStepResultAsync } from './step';
@@ -35,16 +35,20 @@ export function isStepResultStub(value: unknown): boolean {
 }
 
 /**
- * What a storage v2 parent hands a nested workflow step about its state.
+ * A version of a stored run state (possibly another run's), and a JSON copy of that state, which
+ * is shared and never edited.
  *
  * @internal
  */
-export type ParentStateLink = {
-  /** The parent's stored state for a nested run that starts from `state`; undefined when it stores a full copy. */
-  inheritableState: (state: unknown) => Record<string, unknown> | undefined;
-  /** The step is inside a parallel, branch or foreach block (`RunJournal`'s `copyStateOnPause`). */
-  copyStateOnPause: boolean;
-};
+export type StateBase = { ref: StateRef; state: Record<string, unknown> };
+
+/**
+ * What a storage v2 parent hands a nested workflow step: a stored version of the parent's state
+ * for a nested run starting from `state` to build on, undefined when it stores a full copy.
+ *
+ * @internal
+ */
+export type ParentStateLink = (state: unknown) => Promise<StateBase | undefined>;
 
 /**
  * Tracks what a storage-v2 run has written, so each engine write sends only the
@@ -79,12 +83,24 @@ export class RunJournal {
   #written: Map<string, unknown>;
   /** A JSON copy of the stored state. Replaced on each write, never edited. */
   #writtenState: Record<string, unknown> | undefined;
+  /**
+   * The stored state version `#writtenState` is, when known. Before the checkpoint of a nested run
+   * built on its parent's state, a version of the parent's state.
+   */
+  #writtenRef: StateRef | undefined;
+  /** The version a nested run's checkpoint builds on (`inherited`). */
+  #inheritedRef: StateRef | undefined;
   /** JSON size of the patches stored after the latest full state. */
   #patchBytes: number;
+  /** The latest draft of the live state written for nested runs to build on, since the last state write. */
+  #draft: StateBase | undefined;
+  /** JSON size of the draft patches chained since the latest full draft or state write. */
+  #draftBytes = 0;
+  /** Serializes `baseFor`, so concurrent nested starts share one draft. */
+  #drafting: Promise<unknown> = Promise.resolve();
   #needsCheckpoint: boolean;
-  readonly #copyStateOnPause: boolean;
-  /** This journal stored a full state that later writes build on, so the stored state no longer reads the parent's. */
-  #ownsState = false;
+  /** A resumed drive's start state version, until an append has recorded it. */
+  #startStateSeq: number | undefined;
   /** Store writes sent and not yet settled, and whether one of them is a boundary write. */
   #inFlight = 0;
   #boundaryInFlight = false;
@@ -94,16 +110,11 @@ export class RunJournal {
    * @param seed The step results already in storage (a resumed or restarted run's loaded snapshot
    * context). Without it, the first boundary write is a checkpoint that replaces whatever is stored.
    * @param state The state already in storage, with `seed`.
-   * @param statePatchBytes What the store reported for `state` (`StoredWorkflowRun.statePatchBytes`).
-   * @param inheritedState For a nested run that starts from its parent's stored state (the parent
-   * journal's `inheritableState`): the checkpoint stores only the changes to it, and the store reads
-   * the parent's state as the base.
-   * @param copyStateOnPause For a nested run inside a parallel, branch or foreach block: a write
-   * that pauses the run (`suspended`, `paused`) stores the full state. A sibling can change the
-   * parent's stored state while the run is paused, and the run's patches only rebuild its state on
-   * the base they were diffed against. While the run is running, the parent writes nothing, because
-   * the engine makes no boundary write while a block's steps run. Once the full state is stored, later
-   * writes build on it, so a pause stores it again only if this journal has not stored one yet.
+   * @param storedState What the store reported for `state`: its `lastSeq`, and its `statePatchBytes`.
+   * @param inherited For a nested run that starts from a version of its parent's state (the parent
+   * journal's `baseFor`): the checkpoint stores that version as the base, and only the changes to it.
+   * @param resumed Set for a resume: the run's new drive starts from `storedState`, which the first
+   * append records as the run's `startStateSeq`.
    */
   constructor({
     store,
@@ -111,44 +122,82 @@ export class RunJournal {
     runId,
     seed,
     state,
-    statePatchBytes,
-    inheritedState,
-    copyStateOnPause,
+    storedState,
+    inherited,
+    resumed,
   }: {
     store: WorkflowsStorage | undefined;
     workflowName: string;
     runId: string;
     seed?: Record<string, unknown>;
     state?: unknown;
-    statePatchBytes?: number;
-    inheritedState?: Record<string, unknown>;
-    copyStateOnPause?: boolean;
+    storedState?: { seq: number; patchBytes: number };
+    inherited?: StateBase;
+    resumed?: boolean;
   }) {
     this.store = store;
     this.workflowName = workflowName;
     this.runId = runId;
-    this.#copyStateOnPause = !!copyStateOnPause;
     this.#needsCheckpoint = !seed;
     this.#written = new Map(seed ? Object.entries(seed) : []);
-    // The checkpoint replaces the stored state, so without an inherited base it writes the full state.
-    this.#writtenState = inheritedState ?? (seed && state !== undefined ? normalizeState(state).state : undefined);
-    this.#patchBytes = statePatchBytes ?? 0;
+    if (inherited) {
+      this.#writtenState = inherited.state;
+      this.#writtenRef = inherited.ref;
+      this.#inheritedRef = inherited.ref;
+    } else if (seed && state !== undefined) {
+      this.#writtenState = normalizeState(state).state;
+      if (storedState) this.#writtenRef = { workflowName, runId, seq: storedState.seq };
+    }
+    this.#patchBytes = storedState?.patchBytes ?? 0;
+    if (resumed && seed) this.#startStateSeq = storedState?.seq;
   }
 
   /**
-   * The stored state, for a nested run starting from `state` to store only its changes to. The
-   * object is shared and never edited.
+   * A stored version of this run's state, for a nested run starting from `state` to build on: the
+   * stored state or the latest draft when `state` matches it, else a new draft of `state` (a patch
+   * on the latest version, or the full state once the draft patches would outgrow it). Undefined
+   * when there is nothing to build on (no store, the run isn't stored, a state that isn't JSON).
    *
-   * The changes `state` has that are not stored yet (a skipped write, a block step's `setState`)
-   * become part of the nested run's changes. With `exact`, there must be none: a nested step outside
-   * a block keeps this base while it is paused, and the write that pauses this run then stores those
-   * changes merged with the nested run's state. A key the nested run's `stateSchema` dropped would
-   * come back when its state is rebuilt on that, since its patches only delete what the base had.
+   * Drafts don't change the run's state, so a restart never reads them: they only hold the live
+   * state that a block's earlier steps changed, so the nested runs of a foreach or a loop each store
+   * only their own changes.
    */
-  inheritableState(state: unknown, { exact }: { exact: boolean }): Record<string, unknown> | undefined {
-    const written = this.#writtenState;
-    if (written === undefined || !exact) return written;
-    return diffState(written, normalizeState(state).state).length ? undefined : written;
+  baseFor(state: unknown): Promise<StateBase | undefined> {
+    const result = this.#drafting.then(() => this.#baseFor(state));
+    this.#drafting = result.catch(() => undefined);
+    return result;
+  }
+
+  async #baseFor(state: unknown): Promise<StateBase | undefined> {
+    const store = this.store;
+    if (!store || this.#closed) return undefined;
+    let next: { state: Record<string, unknown>; bytes: number };
+    try {
+      next = normalizeState(state);
+    } catch {
+      return undefined;
+    }
+    const current: StateBase | undefined =
+      this.#draft ?? (this.#writtenRef && this.#writtenState && { ref: this.#writtenRef, state: this.#writtenState });
+    const ops = current && diffState(current.state, next.state);
+    if (current && !ops!.length) return current;
+
+    const own = current && current.ref.workflowName === this.workflowName && current.ref.runId === this.runId;
+    const opsBytes = ops ? JSON.stringify(ops).length : 0;
+    const chained = own && this.#draftBytes + opsBytes <= next.bytes;
+    let seq: number;
+    try {
+      ({ seq } = await store.appendWorkflowRunStateDraft({
+        workflowName: this.workflowName,
+        runId: this.runId,
+        ...(chained ? { on: { seq: current!.ref.seq, draft: current!.ref.draft }, ops: ops! } : { state: next.state }),
+      }));
+    } catch {
+      return undefined;
+    }
+    this.#draftBytes = chained ? this.#draftBytes + opsBytes : 0;
+    this.#draft = { ref: { workflowName: this.workflowName, runId: this.runId, seq, draft: true }, state: next.state };
+    return this.#draft;
   }
 
   /**
@@ -229,18 +278,24 @@ export class RunJournal {
     let writtenState = this.#writtenState;
     let patchBytes = this.#patchBytes;
     let state: Record<string, unknown> | undefined;
+    let stateBase: StateRef | undefined;
     let statePatch: StatePatchOp[] | undefined;
     if (boundary) {
       const next = normalizeState(value);
-      const pausing = snapshot.status === 'suspended' || snapshot.status === 'paused';
-      if (writtenState === undefined || (pausing && this.#copyStateOnPause && !this.#ownsState)) {
+      if (writtenState === undefined || (checkpoint && !this.#inheritedRef)) {
         state = next.state;
       } else {
+        if (checkpoint) {
+          // The checkpoint starts the state over, from the inherited version.
+          stateBase = this.#inheritedRef;
+          patchBytes = 0;
+        }
         const ops = diffState(writtenState, next.state);
         if (ops.length) {
           const opsBytes = JSON.stringify(ops).length;
           if (patchBytes + opsBytes > next.bytes) {
             state = next.state;
+            stateBase = undefined;
           } else {
             statePatch = ops;
             patchBytes += opsBytes;
@@ -254,13 +309,15 @@ export class RunJournal {
     this.#needsCheckpoint = false;
     this.#inFlight++;
     if (boundary) this.#boundaryInFlight = true;
+    let lastSeq: number | undefined;
+    const startStateSeq = this.#startStateSeq;
     try {
       const run = { workflowName: this.workflowName, runId: this.runId, resourceId, header, steps, state, statePatch };
-      if (checkpoint) {
-        await store.writeWorkflowRunCheckpoint(run);
-      } else {
-        await store.appendWorkflowRunEntries(run);
-      }
+      const written = checkpoint
+        ? await store.writeWorkflowRunCheckpoint({ ...run, stateBase })
+        : await store.appendWorkflowRunEntries({ ...run, startStateSeq });
+      lastSeq = written?.lastSeq;
+      this.#startStateSeq = undefined;
     } catch (error) {
       if (checkpoint) this.#needsCheckpoint = true;
       throw error;
@@ -271,11 +328,18 @@ export class RunJournal {
     for (const stepId of sent) {
       this.#written.set(stepId, steps[stepId]);
     }
+    if (checkpoint || state || statePatch) {
+      this.#writtenRef =
+        lastSeq === undefined ? undefined : { workflowName: this.workflowName, runId: this.runId, seq: lastSeq };
+    }
+    if (checkpoint) this.#inheritedRef = undefined;
+    // The stored state is the live state now, so drafts of it are stale.
+    if (boundary) {
+      this.#draft = undefined;
+      this.#draftBytes = 0;
+    }
     this.#writtenState = writtenState;
     this.#patchBytes = patchBytes;
-    // A checkpoint without the full state replaces every stored entry, so the run reads its parent's state again.
-    if (state) this.#ownsState = true;
-    else if (checkpoint) this.#ownsState = false;
   }
 
   /**

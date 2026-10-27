@@ -11,7 +11,7 @@ import type {
 import { runFencingNotSupportedError } from '../../run-fencing';
 import type { UpdateWorkflowStateOptions, WorkflowRun, WorkflowRuns, StorageListWorkflowRunsInput } from '../../types';
 import { StorageDomain } from '../base';
-import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
+import type { StateRef, StateVersion, StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunHeader } from './journal';
 import type { StatePatchOp } from './state-patch';
 
 function runJournalNotSupportedError(adapter: string): MastraError {
@@ -127,10 +127,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * `successfulSteps: 'summary'`, successful steps come back as summaries
    * (`summarizeStepResult`) and are listed in `summarizedStepIds`.
    *
-   * The state is the latest full state entry with every later state patch applied in `seq`
-   * order (`materializeState`). Without a full state entry, the patches apply to the state of the
-   * run in `header.parentWorkflow` (resolved by this same rule; `{}` when it isn't stored), or to
-   * `{}` for a run without a parent. `statePatchBytes` reports the size of the applied patches.
+   * The state is rebuilt by `materializeState`: the latest `state` or `state-base` entry with every
+   * later state patch applied in `seq` order. A `state-base` entry names another run's state version,
+   * resolved by this same rule (`{}` when that run isn't stored). `statePatchBytes` reports the size
+   * of the run's own applied patches.
    * @experimental
    */
   async loadWorkflowRun(_args: {
@@ -169,10 +169,10 @@ export abstract class WorkflowsStorage extends StorageDomain {
   }
 
   /**
-   * Replace all of a storage v2 run's entries with one per step, in the given order, then
-   * the full state or a state patch when given (at most one of them; a nested run that inherits
-   * its parent's state stores no full state). Writes the header, creating the run if it isn't
-   * stored.
+   * Replace a storage v2 run's step entries with one per step, in the given order, and start its
+   * state over: from `state`, or from `stateBase` with `statePatch` applied, or from `{}`. Earlier
+   * state entries are kept, so a nested run built on an earlier version of this run's state still
+   * reads it. Writes the header, creating the run if it isn't stored. Returns the run's `lastSeq`.
    * @experimental
    */
   async writeWorkflowRunCheckpoint(_args: {
@@ -182,15 +182,18 @@ export abstract class WorkflowsStorage extends StorageDomain {
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
+    stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<void> {
+  }): Promise<{ lastSeq: number }> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 
   /**
    * Append one entry per given step to a storage v2 run, then the full state or a state patch
    * when given (at most one of them). Writes the header, creating the run if it isn't stored.
+   * With `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
+   * Returns the run's `lastSeq`.
    * @experimental
    */
   async appendWorkflowRunEntries(_args: {
@@ -201,8 +204,35 @@ export abstract class WorkflowsStorage extends StorageDomain {
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
     statePatch?: StatePatchOp[];
+    startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<void> {
+  }): Promise<{ lastSeq: number }> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * A storage v2 run's state as of `seq`, rebuilt like `loadWorkflowRun`'s. Null when the run isn't stored.
+   * @experimental
+   */
+  async loadWorkflowRunState(_args: {
+    workflowName: string;
+    runId: string;
+    seq: number;
+  }): Promise<Record<string, any> | null> {
+    throw runJournalNotSupportedError(this.constructor.name);
+  }
+
+  /**
+   * Append a draft of a stored storage v2 run's state: `ops` applied to the version `on`, or a full
+   * `state`. A draft doesn't change the run's state; nested runs build on it. Returns its `seq`.
+   * @experimental
+   */
+  async appendWorkflowRunStateDraft(
+    _args: { workflowName: string; runId: string } & (
+      | { on: StateVersion; ops: StatePatchOp[] }
+      | { state: Record<string, any> }
+    ),
+  ): Promise<{ seq: number }> {
     throw runJournalNotSupportedError(this.constructor.name);
   }
 

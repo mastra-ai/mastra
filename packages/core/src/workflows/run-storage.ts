@@ -1,5 +1,5 @@
 import type { WorkflowsStorage } from '../storage/domains/workflows/base';
-import type { StepResultSummary, WorkflowRunHeader } from '../storage/domains/workflows/journal';
+import type { StateRef, StepResultSummary, WorkflowRunHeader } from '../storage/domains/workflows/journal';
 import type { UpdateWorkflowStateOptions } from '../storage/types';
 import { stubStepResult } from './run-journal';
 import type { WorkflowRunState } from './types';
@@ -20,15 +20,23 @@ export interface RunStorage {
   /** Fully materialized, for restart and time travel. */
   loadFull(): Promise<WorkflowRunState | null>;
   /**
-   * The pending/waiting snapshot written before the engine runs. With `inheritsState` (a storage v2
-   * nested run starting from its parent's stored state), the state isn't stored: the parent's is
-   * read in its place.
+   * The pending/waiting snapshot written before the engine runs. With `stateBase` (a storage v2
+   * nested run starting from a stored version of its parent's state), the state is stored as that
+   * version instead of a copy.
    */
-  writeInitial(snapshot: WorkflowRunState, resourceId?: string, opts?: { inheritsState?: boolean }): Promise<void>;
+  writeInitial(snapshot: WorkflowRunState, resourceId?: string, opts?: { stateBase?: StateRef }): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
-  /** What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`. */
-  statePatchBytes(snapshot: WorkflowRunState): number | undefined;
+  /**
+   * What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`:
+   * the run's `lastSeq` it is as of, and its `statePatchBytes`.
+   */
+  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number } | undefined;
+  /**
+   * The state the run's current drive started from: as of its latest checkpoint, or as of the
+   * resume that started the drive. Undefined for v1, or when the run or that version isn't stored.
+   */
+  loadDriveStartState(): Promise<Record<string, any> | undefined>;
 }
 
 type RunStorageArgs = {
@@ -126,7 +134,11 @@ class RunStorageV1 implements RunStorage {
     );
   }
 
-  statePatchBytes(): undefined {
+  storedState(): undefined {
+    return undefined;
+  }
+
+  async loadDriveStartState(): Promise<undefined> {
     return undefined;
   }
 }
@@ -134,7 +146,7 @@ class RunStorageV1 implements RunStorage {
 // Keyed by the loaded snapshot, not the RunStorage: the parent-claim path loads a parent's
 // snapshot through a throwaway RunStorage, and the parent Run's own RunStorage releases it.
 const claimedSeqs = new WeakMap<WorkflowRunState, number>();
-const loadedStatePatchBytes = new WeakMap<WorkflowRunState, number>();
+const storedStates = new WeakMap<WorkflowRunState, { seq: number; patchBytes: number }>();
 
 class RunStorageV2 implements RunStorage {
   readonly #workflowName: string;
@@ -160,7 +172,7 @@ class RunStorageV2 implements RunStorage {
     }
     const snapshot = { ...run.header, context, value: run.state } as WorkflowRunState;
     claimedSeqs.set(snapshot, run.lastSeq);
-    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
+    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes });
     return snapshot;
   }
 
@@ -200,14 +212,14 @@ class RunStorageV2 implements RunStorage {
     });
     if (!run) return null;
     const snapshot = { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
-    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
+    storedStates.set(snapshot, { seq: run.lastSeq, patchBytes: run.statePatchBytes });
     return snapshot;
   }
 
   async writeInitial(
     snapshot: WorkflowRunState,
     resourceId?: string,
-    { inheritsState = false }: { inheritsState?: boolean } = {},
+    { stateBase }: { stateBase?: StateRef } = {},
   ): Promise<void> {
     const store = await this.#getStore();
     const { context, value, ...header } = snapshot;
@@ -217,12 +229,20 @@ class RunStorageV2 implements RunStorage {
       resourceId,
       header,
       steps: context,
-      state: inheritsState ? undefined : value,
+      ...(stateBase ? { stateBase } : { state: value }),
     });
   }
 
-  statePatchBytes(snapshot: WorkflowRunState): number | undefined {
-    return loadedStatePatchBytes.get(snapshot);
+  storedState(snapshot: WorkflowRunState): { seq: number; patchBytes: number } | undefined {
+    return storedStates.get(snapshot);
+  }
+
+  async loadDriveStartState(): Promise<Record<string, any> | undefined> {
+    const store = await this.#getStore();
+    const args = { workflowName: this.#workflowName, runId: this.#runId };
+    const seq = (await store?.loadWorkflowRunHeader(args))?.startStateSeq;
+    if (seq === undefined) return undefined;
+    return (await store!.loadWorkflowRunState({ ...args, seq })) ?? undefined;
   }
 
   async isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean> {

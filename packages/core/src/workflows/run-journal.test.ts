@@ -208,7 +208,11 @@ describe('RunJournal state writes', () => {
   /** The run as the in-memory store holds it, and the JSON size of its patches after the latest full state. */
   async function stored(store: WorkflowsInMemory) {
     const loaded = (await store.loadWorkflowRun({ ...run, successfulSteps: 'full' }))!;
-    return { state: loaded.state, statePatchBytes: loaded.statePatchBytes };
+    return {
+      state: loaded.state,
+      statePatchBytes: loaded.statePatchBytes,
+      storedState: { seq: loaded.lastSeq, patchBytes: loaded.statePatchBytes },
+    };
   }
 
   it.each(['running', 'suspended', 'success', 'failed', 'canceled', 'waiting', 'paused'] as const)(
@@ -281,7 +285,9 @@ describe('RunJournal state writes', () => {
       expect(now.state).toEqual(state);
       expect(now.statePatchBytes).toBeLessThanOrEqual(size);
       // A resume or restart every other write continues from what the store reports.
-      if (i % 2 === 0) journal = new RunJournal({ store: memory, ...run, seed: {}, ...now });
+      if (i % 2 === 0) {
+        journal = new RunJournal({ store: memory, ...run, seed: {}, state: now.state, storedState: now.storedState });
+      }
     }
   });
 

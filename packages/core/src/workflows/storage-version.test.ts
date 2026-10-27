@@ -1107,6 +1107,19 @@ function recordStateSends(storage: InstanceType<typeof MockStore>) {
   store.writeWorkflowRunCheckpoint = async args => (record(true, args), checkpoint(args));
   const append = store.appendWorkflowRunEntries.bind(store);
   store.appendWorkflowRunEntries = async args => (record(false, args), append(args));
+  const draft = store.appendWorkflowRunStateDraft.bind(store);
+  store.appendWorkflowRunStateDraft = async args => {
+    const sent = 'state' in args ? args.state : args.ops;
+    sends.push({
+      workflowName: args.workflowName,
+      runId: args.runId,
+      status: 'draft',
+      checkpoint: false,
+      state: 'state' in args ? 'full' : 'patch',
+      bytes: JSON.stringify(sent).length,
+    });
+    return draft(args);
+  };
   return sends;
 }
 
@@ -1194,6 +1207,62 @@ describe('storage v2 nested runs', () => {
       expect(sent).toBeLessThanOrEqual(2.5 * final);
     }
   });
+
+  it.each([1, 4])(
+    'stores bytes linear in the state for a foreach (concurrency %s) over a nested run',
+    async concurrency => {
+      const sentFor = async (count: number) => {
+        const storage = new MockStore();
+        const sends = recordStateSends(storage);
+        const inner = createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion: 2 },
+        })
+          .then(
+            createStep({
+              id: 'a',
+              inputSchema: num,
+              outputSchema: num,
+              stateSchema: items,
+              execute: async ({ inputData, state, setState }) => {
+                await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
+                return inputData;
+              },
+            }),
+          )
+          .commit();
+        const outer = createWorkflow({
+          id: 'outer',
+          inputSchema: z.array(num),
+          outputSchema: z.any(),
+          stateSchema: items,
+          options: { storageVersion: 2 },
+        })
+          .foreach(inner, { concurrency })
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { outer } });
+        const result = await (
+          await outer.createRun()
+        ).start({
+          inputData: Array.from({ length: count }, (_, n) => ({ n })),
+          initialState: { items: [] },
+          outputOptions: { includeState: true },
+        });
+        expect(result.status).toBe('success');
+        expect(result.state!.items).toHaveLength(count);
+        return { sent: sends.reduce((sum, { bytes }) => sum + bytes, 0), final: JSON.stringify(result.state).length };
+      };
+
+      // Copying the parent's state into every iteration would send about count / 2 times the final state.
+      for (const count of [8, 32]) {
+        const { sent, final } = await sentFor(count);
+        expect(sent).toBeLessThanOrEqual(4 * final);
+      }
+    },
+  );
 
   describe.each(['restart', 'restartAllActiveWorkflowRuns'] as const)('a nested run that died mid-step', how => {
     it(`rebuilds its state from the parent's stored state on ${how}, as v1 does`, async () => {
@@ -1314,7 +1383,7 @@ describe('storage v2 nested runs', () => {
     },
   );
 
-  describe('copies the state into a nested run outside a block whose parent has not stored the state it starts from', () => {
+  describe('a nested run whose parent has not stored the state it starts from', () => {
     const inner = () =>
       createWorkflow({
         id: 'inner',
@@ -1342,7 +1411,9 @@ describe('storage v2 nested runs', () => {
             .then(appendItem('before'))
             .then(inner())
             .commit(),
-        checkpoints: [['full', 'full']],
+        // The parent drafts the state it hasn't stored, and the nested run builds on the draft.
+        checkpoints: [['none', 'none']],
+        drafts: ['draft patch'],
         state: [PAD, 'before:0', 'inner-add:1'],
       },
       'the parent is on storage v1': {
@@ -1357,12 +1428,14 @@ describe('storage v2 nested runs', () => {
             .then(appendItem('before'))
             .then(inner())
             .commit(),
+        // Nothing to build on: the nested run copies the state.
         checkpoints: [['full', 'full']],
+        drafts: [],
         state: [PAD, 'before:0', 'inner-add:1'],
       },
     };
 
-    it.each(Object.entries(cases))('when %s', async (_, { build, checkpoints, state }) => {
+    it.each(Object.entries(cases))('when %s', async (_, { build, checkpoints, drafts, state }) => {
       const storage = new MockStore();
       const sends = recordStateSends(storage);
       const outer = build();
@@ -1376,6 +1449,7 @@ describe('storage v2 nested runs', () => {
       });
       expect(result.status).toBe('success');
       expect(innerCheckpoints(sends)).toEqual(checkpoints);
+      expect(sends.filter(sent => sent.status === 'draft').map(sent => `draft ${sent.state}`)).toEqual(drafts);
       expect(result.state).toEqual({ items: state });
     });
   });
@@ -1615,22 +1689,33 @@ describe('storage v2 nested runs', () => {
       return Object.values(byRun);
     }
 
-    it("builds on the parent's stored state, and stores its full state once when it pauses", async () => {
+    it("builds on the parent's stored state, and stores no full state when it pauses", async () => {
       const [inner, inner2] = await nestedSends('a parallel of two nested runs that suspend, resumed one at a time');
       const suspended = ['pending none', 'running none', 'running none', 'running patch', 'running none'];
       const resumed = ['running none', 'running patch', 'running none', 'running patch', 'success none'];
-      expect(inner).toEqual([...suspended, 'suspended full', 'suspended none', ...resumed]);
+      // The pin to the parent's state version holds while it pauses, so the pause stores no copy.
+      expect(inner).toEqual([...suspended, 'suspended none', 'suspended none', ...resumed]);
       expect(inner2).toEqual(inner);
     });
 
-    it("builds a foreach iteration on the parent's stored state and the earlier iterations' changes", async () => {
-      const runs = await nestedSends('a foreach over a nested run that does not suspend');
+    it("builds a foreach iteration on a draft of the parent's state with the earlier iterations' changes", async () => {
+      const storage = new MockStore();
+      const sends = recordStateSends(storage);
+      await drive(2, scenarios['a foreach over a nested run that does not suspend']!, storage);
       const ran = ['running none', 'running patch', 'running none', 'running patch', 'running none', 'running patch'];
-      expect(runs).toEqual([
+      const byRun: Record<string, string[]> = {};
+      for (const { workflowName, runId, status, state } of sends) {
+        (byRun[`${workflowName}/${runId}`] ??= []).push(`${status} ${state}`);
+      }
+      const { 'outer/run-1': outer, ...inner } = byRun;
+      // Each later iteration starts on a draft that holds the earlier iterations' changes, so it
+      // stores no patch of its own to catch up.
+      expect(Object.values(inner)).toEqual([
         ['pending none', 'running none', ...ran, 'success none'],
-        ['pending none', 'running patch', ...ran, 'success none'],
-        ['pending none', 'running patch', ...ran, 'success none'],
+        ['pending none', 'running none', ...ran, 'success none'],
+        ['pending none', 'running none', ...ran, 'success none'],
       ]);
+      expect(outer!.filter(sent => sent.startsWith('draft'))).toEqual(['draft patch', 'draft patch']);
     });
 
     it('stores no full state for a nested step outside a block when it pauses', async () => {
@@ -1724,7 +1809,7 @@ describe('storage v2 nested runs', () => {
     expect(await resumeDirectly(2)).toEqual(v1);
   });
 
-  it("reads a finished nested run as its parent's current state plus the nested run's changes", async () => {
+  it('reads a finished nested run as the state it ran on plus its changes, as v1 stores it', async () => {
     const run = async (storageVersion: 1 | 2) => {
       const storage = new MockStore();
       const inner = createWorkflow({
@@ -1752,14 +1837,146 @@ describe('storage v2 nested runs', () => {
       return storedStates(storage, storageVersion);
     };
 
-    // v1 copies the state into the nested run; v2 stores the nested run's changes on top of the parent's state.
-    expect((await run(1))['inner/run-1']).toEqual({
-      status: 'success',
-      state: { items: [PAD, 'before:0', 'inner-add:1'] },
+    // v2 builds the nested run on the parent's state version it started from, so the parent's
+    // later changes don't show in it.
+    const v1 = (await run(1))['inner/run-1'];
+    expect(v1).toEqual({ status: 'success', state: { items: [PAD, 'before:0', 'inner-add:1'] } });
+    expect((await run(2))['inner/run-1']).toEqual(v1);
+  });
+
+  it('keeps the state of a suspended nested run after its parent is deleted, as v1 does', async () => {
+    const run = async (storageVersion: 1 | 2) => {
+      const storage = new MockStore();
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-a'))
+        .then(appendItem('inner-wait', { suspends: true }))
+        .commit();
+      const outer = createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('before'))
+        .then(inner)
+        .commit();
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      await (await outer.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+      await storage.stores.workflows!.deleteWorkflowRunById({ workflowName: 'outer', runId: 'run-1' });
+      return storedStates(storage, storageVersion);
+    };
+
+    const v1 = await run(1);
+    expect(v1).toEqual({ 'inner/run-1': { status: 'suspended', state: { items: [PAD, 'before:0', 'inner-a:1'] } } });
+    expect(await run(2)).toEqual(v1);
+  });
+});
+
+describe('a nested run hands back only its changes', () => {
+  const slow = (ms: number) => () => new Promise(resolve => setTimeout(resolve, ms));
+  const innerOf = (
+    storageVersion: 1 | 2,
+    steps: ReturnType<typeof appendItem>[],
+    stateSchema: typeof items | undefined = items,
+  ) =>
+    steps
+      .reduce(
+        (wf, step) => wf.then(step),
+        createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema,
+          options: { storageVersion },
+        }) as any,
+      )
+      .commit();
+  const outerOf = (storageVersion: 1 | 2, inputSchema: z.ZodType = num) =>
+    createWorkflow({
+      id: 'outer',
+      inputSchema,
+      outputSchema: z.any(),
+      stateSchema: items,
+      options: { storageVersion },
     });
-    expect((await run(2))['inner/run-1']).toEqual({
-      status: 'success',
-      state: { items: [PAD, 'before:0', 'inner-add:1', 'after:2'] },
+  const foreachOver = (concurrency: number, stateSchema?: typeof items) => (v: 1 | 2) =>
+    outerOf(v, z.array(num))
+      .foreach(innerOf(v, [appendItem('a', { onRun: slow(5) })], stateSchema), { concurrency })
+      .commit();
+
+  const cases: Record<
+    string,
+    {
+      build: (storageVersion: 1 | 2) => AnyWorkflow;
+      inputData: unknown;
+      resumes?: (string | string[])[];
+      items: string[];
+      unordered?: boolean;
+    }
+  > = {
+    'keeping a parallel sibling that resumed first': {
+      build: v =>
+        outerOf(v)
+          .parallel([
+            appendItem('p', { suspends: true }),
+            innerOf(v, [appendItem('inner-a'), appendItem('inner-wait', { suspends: true })]),
+          ])
+          .commit(),
+      inputData: { n: 0 },
+      resumes: ['p', ['inner', 'inner-wait']],
+      items: ['inner-a:0', 'p:0', 'inner-wait:1'],
+    },
+    'keeping a parallel sibling that changed the state while it ran': {
+      build: v =>
+        outerOf(v)
+          .parallel([appendItem('p', { onRun: slow(10) }), innerOf(v, [appendItem('inner-a', { onRun: slow(30) })])])
+          .commit(),
+      inputData: { n: 0 },
+      items: ['p:0', 'inner-a:0'],
+    },
+    ...Object.fromEntries(
+      [1, 2, 3].map(concurrency => [
+        `keeping the other iterations of a foreach, ${concurrency} at a time`,
+        {
+          build: foreachOver(concurrency),
+          inputData: [{ n: 0 }, { n: 1 }, { n: 2 }],
+          items: ['a:0', 'a:1', 'a:2'],
+          unordered: true,
+        },
+      ]),
+    ),
+    'keeping the other iterations of a foreach over a nested run without a state schema': {
+      build: foreachOver(2, undefined),
+      inputData: [{ n: 0 }, { n: 1 }, { n: 2 }],
+      items: ['a:0', 'a:1', 'a:2'],
+      unordered: true,
+    },
+  };
+
+  describe.each([1, 2] as const)('on v%s', storageVersion => {
+    it.each(Object.entries(cases))('%s', async (_, { build, inputData, resumes = [], items: expected, unordered }) => {
+      const outer = build(storageVersion);
+      new Mastra({ logger: false, storage: new MockStore(), workflows: { outer } });
+      const run = await outer.createRun();
+      let result = await run.start({
+        inputData,
+        initialState: { items: [PAD] },
+        outputOptions: { includeState: true },
+      });
+      for (const step of resumes) {
+        result = await run.resume({ step, resumeData: true, outputOptions: { includeState: true } } as any);
+      }
+      expect(result.status).toBe('success');
+      const [pad, ...appended] = (result.state as { items: string[] }).items;
+      expect(pad).toBe(PAD);
+      expect(unordered ? appended.sort() : appended).toEqual(expected);
     });
   });
 });
@@ -1830,6 +2047,110 @@ describe('a re-driven nested step whose nested run already finished', () => {
     const state = { items: [PAD, 'inner-wait:0', 'inner-b:1'] };
     expect(result.state).toEqual(state);
     expect((await storedStates(storage, storageVersion))['outer/run-1']).toEqual({ status: 'success', state });
+  });
+
+  it("hands back only the changes since the resume on v2, keeping a parallel sibling's", async () => {
+    const buildParallel = (storageVersion: 1 | 2) => {
+      const inner = createWorkflow({
+        id: 'inner',
+        inputSchema: num,
+        outputSchema: num,
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .then(appendItem('inner-a'))
+        .then(appendItem('inner-wait', { suspends: true }))
+        .then(appendItem('inner-b'))
+        .commit();
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: z.any(),
+        stateSchema: items,
+        options: { storageVersion },
+      })
+        .parallel([appendItem('p'), inner])
+        .commit();
+    };
+    const start = async (storage: InstanceType<typeof MockStore>) => {
+      const outer = buildParallel(2);
+      new Mastra({ logger: false, storage, workflows: { outer } });
+      const run = await outer.createRun({ runId: 'run-1' });
+      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [PAD] } })).status).toBe('suspended');
+      return run;
+    };
+
+    const uninterrupted = await (
+      await start(new MockStore())
+    ).resume({ step: ['inner', 'inner-wait'], resumeData: true, outputOptions: { includeState: true } });
+    expect(uninterrupted.state).toEqual({ items: [PAD, 'p:0', 'inner-a:0', 'inner-wait:1', 'inner-b:2'] });
+
+    const storage = new MockStore();
+    const run = await start(storage);
+    const dead = dieAfterNestedSuccess(storage);
+    void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
+    await dead;
+    const outer = buildParallel(2);
+    new Mastra({ logger: false, storage, workflows: { outer } });
+    const result = await (await outer.createRun({ runId: 'run-1' })).restart({ outputOptions: { includeState: true } });
+
+    expect(result.status).toBe('success');
+    expect(result.state).toEqual(uninterrupted.state);
+    expect((await storedStates(storage, 2))['outer/run-1']).toEqual({ status: 'success', state: uninterrupted.state });
+  });
+});
+
+describe('a restarted v2 nested run', () => {
+  it("hands back only its own changes, keeping a parallel sibling's", async () => {
+    let dying = true;
+    let died = false;
+    const build = () => {
+      const nested = (id: string, ...steps: ReturnType<typeof appendItem>[]) =>
+        steps
+          .reduce(
+            (wf, s) => wf.then(s),
+            createWorkflow({
+              id,
+              inputSchema: num,
+              outputSchema: num,
+              stateSchema: items,
+              options: { storageVersion: 2 },
+            }) as any,
+          )
+          .commit();
+      const dies = () => {
+        if (!dying) return;
+        died = true;
+        return new Promise<never>(() => {});
+      };
+      return createWorkflow({
+        id: 'outer',
+        inputSchema: num,
+        outputSchema: z.any(),
+        stateSchema: items,
+        options: { storageVersion: 2 },
+      })
+        .parallel([
+          nested('done', appendItem('done-a')),
+          nested('inner', appendItem('inner-a'), appendItem('inner-b', { onRun: dies })),
+        ])
+        .commit();
+    };
+    const storage = new MockStore();
+    const first = build();
+    new Mastra({ logger: false, storage, workflows: { outer: first } });
+    void (await first.createRun({ runId: 'run-1' })).start({ inputData: { n: 0 }, initialState: { items: [PAD] } });
+    await vi.waitFor(() => expect(died).toBe(true));
+
+    dying = false;
+    const outer = build();
+    new Mastra({ logger: false, storage, workflows: { outer } });
+    const result = await (await outer.createRun({ runId: 'run-1' })).restart({ outputOptions: { includeState: true } });
+
+    expect(result.status).toBe('success');
+    const state = { items: [PAD, 'done-a:0', 'inner-a:0', 'inner-b:1'] };
+    expect(result.state).toEqual(state);
+    expect((await storedStates(storage, 2))['outer/run-1']).toEqual({ status: 'success', state });
   });
 });
 
