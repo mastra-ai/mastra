@@ -143,4 +143,86 @@ describe('Repositories settings', () => {
     expect(manage).toHaveAttribute('href', 'https://projects.mastra.ai');
     expect(screen.queryByText('Worker token')).not.toBeInTheDocument();
   });
+
+  it('keeps linked repositories visible and labels the wait while available repositories load', async () => {
+    let releaseStatus!: () => void;
+    const statusGate = new Promise<void>(resolve => (releaseStatus = resolve));
+    let releaseRepos!: () => void;
+    const reposGate = new Promise<void>(resolve => (releaseRepos = resolve));
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'personal-factory' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              integrationId: 'github',
+              installationId: 'inst-1',
+              repositories: [
+                {
+                  id: 'repo-1',
+                  branch: 'main',
+                  sandboxWorkdir: '~/agent',
+                  repository: { slug: 'octo/agent', defaultBranch: 'main' },
+                },
+              ],
+            },
+          ],
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/status`, async () => {
+        await statusGate;
+        return HttpResponse.json({ enabled: true, connected: true, reason: 'ready', installations: [] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, accounts: [], reason: 'disabled' }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () =>
+        HttpResponse.json({ configured: false, reviewerConfigured: false }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/repos`, async () => {
+        await reposGate;
+        return HttpResponse.json({
+          repos: [
+            {
+              id: 99,
+              fullName: 'octo/hello',
+              name: 'hello',
+              owner: 'octo',
+              defaultBranch: 'main',
+              private: false,
+              installationId: 7,
+              installationStorageId: 'inst-7',
+              sandboxProvider: 'none',
+              sandboxWorkdir: '~/hello',
+            },
+          ],
+        });
+      }),
+    );
+
+    renderRepositoriesSettings();
+
+    // Linked repositories render before the provider status resolves.
+    expect(await screen.findByText('octo/agent')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading source control status' })).not.toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading repositories' })).toHaveTextContent(
+      'Loading available repositories…',
+    );
+    expect(screen.getByText('Available')).toBeInTheDocument();
+
+    releaseStatus();
+    expect(await screen.findByRole('button', { name: /Refresh/ })).toBeInTheDocument();
+    expect(screen.getByRole('status', { name: 'Loading repositories' })).toBeInTheDocument();
+
+    releaseRepos();
+    expect(await screen.findByText('octo/hello')).toBeInTheDocument();
+    expect(screen.queryByRole('status', { name: 'Loading repositories' })).not.toBeInTheDocument();
+    expect(screen.getByText('octo/agent')).toBeInTheDocument();
+  });
 });

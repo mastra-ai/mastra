@@ -10,14 +10,20 @@ import { getModelReasoningOptions } from '@mastra/core/llm';
 import type * as CoreLlm from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { Hono } from 'hono';
-import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
+import { http, HttpResponse } from 'msw';
+import { setupServer } from 'msw/node';
+import { afterAll, afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
 import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
 import { buildProviderAccess, ConfigRoutes, listProviders, resolveDeploymentModelProviders } from './config.js';
-import { registerTenantCredentialResolver, resetTenantCredentialResolverForTests } from './tenant-credentials.js';
+import {
+  registerTenantCredentialResolver,
+  resetTenantCredentialResolverForTests,
+  TenantCredentialStore,
+} from './tenant-credentials.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 vi.mock('@mastra/core/llm', async importOriginal => ({
@@ -530,6 +536,62 @@ describe('provider key routes with a tenant', () => {
     const forB = await buildApp(userB).request('/web/config/providers');
     const providersB = (await forB.json()).providers;
     expect(providersB.find((p: { provider: string }) => p.provider === 'anthropic')?.source).toBe('none');
+  });
+
+  describe('a personal sign-in whose token can no longer be renewed', () => {
+    const tenant = { orgId: 'org1', userId: 'user-a' };
+    const anthropic = setupServer();
+
+    const tokenUrl = 'https://console.anthropic.com/v1/oauth/token';
+
+    const listedAnthropic = async () => {
+      const listed = await buildApp(userA).request('/web/config/providers');
+      return (await listed.json()).providers.find((p: { provider: string }) => p.provider === 'anthropic');
+    };
+
+    beforeAll(() => anthropic.listen({ onUnhandledRequest: 'error' }));
+    afterEach(() => anthropic.resetHandlers());
+    afterAll(() => anthropic.close());
+
+    beforeEach(async () => {
+      await seed.credentials.setCredential(tenant, 'anthropic', {
+        type: 'oauth',
+        access: 'a-old',
+        refresh: 'r-old',
+        expires: Date.now() - 1000,
+      });
+      anthropic.use(http.post(tokenUrl, () => HttpResponse.json({ error: 'invalid_grant' }, { status: 400 })));
+      await new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user').getApiKey('anthropic');
+    });
+
+    it('shows as expired instead of signed in', async () => {
+      expect(await listedAnthropic()).toMatchObject({ userCredential: 'oauth', userCredentialExpired: true });
+    });
+
+    it('stops showing as expired once the user signs in again', async () => {
+      await seed.credentials.setCredential(tenant, 'anthropic', {
+        type: 'oauth',
+        access: 'a-new',
+        refresh: 'r-new',
+        expires: Date.now() + 3_600_000,
+      });
+
+      expect(await listedAnthropic()).not.toHaveProperty('userCredentialExpired');
+    });
+
+    it('stops showing as expired once a later renewal succeeds', async () => {
+      anthropic.use(
+        http.post(tokenUrl, () =>
+          HttpResponse.json({ access_token: 'a-renewed', refresh_token: 'r-renewed', expires_in: 3600 }),
+        ),
+      );
+      const renewed = await new TenantCredentialStore('org1', 'user-a', seed.credentials, 'user').getApiKey(
+        'anthropic',
+      );
+
+      expect(renewed).toBe('a-renewed');
+      expect(await listedAnthropic()).not.toHaveProperty('userCredentialExpired');
+    });
   });
 
   it('never touches the file-backed AuthStorage in tenant mode', async () => {

@@ -187,14 +187,13 @@ export class BrowserViewer extends MastraBrowser {
       if (!this.threadManager.isBrowserRunning()) {
         await super.launch();
       }
-    } else {
+    } else if (!this.threadManager.isBrowserRunning(effectiveThreadId)) {
       // For thread scope, launch for this specific thread
-      if (!this.threadManager.isBrowserRunning(effectiveThreadId)) {
-        await this.threadManager.getManagerForThread(effectiveThreadId);
-        // Set status to ready so isBrowserRunning() returns true
-        // (base class launch() does this, but we bypass it for thread scope)
-        this.status = 'ready';
-      }
+
+      await this.threadManager.getManagerForThread(effectiveThreadId);
+      // Set status to ready so isBrowserRunning() returns true
+      // (base class launch() does this, but we bypass it for thread scope)
+      this.status = 'ready';
     }
   }
 
