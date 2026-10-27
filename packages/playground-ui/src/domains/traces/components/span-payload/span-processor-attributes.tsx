@@ -9,14 +9,15 @@ import { asCoreSpan, getProcessorRunContext } from './span-payload-registry';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { Notice } from '@/ds/components/Notice';
 import { Txt } from '@/ds/components/Txt/Txt';
+import { pluralize } from '@/lib/string';
 import { formatDuration } from '@/utils/duration';
 
-/** Mutation kinds as actions a reader recognises. */
+/** Mutation kinds, named by where the change landed in what the model reads. */
 const MUTATION_LABELS: Record<string, string> = {
-  add: 'Added messages',
-  addSystem: 'Added system message',
-  removeByIds: 'Removed messages',
-  clear: 'Cleared messages',
+  add: 'Added to the conversation',
+  addSystem: 'Added to the system prompt',
+  removeByIds: 'Removed from the conversation',
+  clear: 'Cleared the conversation',
 };
 
 type Mutation = NonNullable<ProcessorPipelineDescription['messageListMutations']>[number];
@@ -65,46 +66,91 @@ function groupMutations(mutations: readonly Mutation[]) {
   return { rows: [...rows.values()], detailed };
 }
 
+/** One sentence per kind of change, stated once above the entries it covers. */
+const MUTATION_HEADINGS: Record<string, (count: number) => string> = {
+  add: count => `Added ${pluralize(count, 'message')} to the conversation`,
+  addSystem: count => `Added ${pluralize(count, 'message')} to the system prompt`,
+  removeByIds: () => 'Removed from the conversation',
+  clear: () => 'Cleared the conversation',
+};
+
+/** Groups detailed changes by kind, in the order each kind first appears. */
+function groupByKind(mutations: readonly Mutation[]) {
+  const groups = new Map<string, Mutation[]>();
+  for (const mutation of mutations) {
+    const kind = typeof mutation === 'object' && mutation !== null ? mutation.type : 'unreadable';
+    groups.set(kind, [...(groups.get(kind) ?? []), mutation]);
+  }
+  return [...groups.entries()];
+}
+
 function Mutations({ mutations }: { mutations: readonly Mutation[] }) {
   return (
-    <ul data-slot="span-processor-mutations" className="flex flex-col gap-1.5">
-      {mutations.map((mutation, index) => {
-        if (typeof mutation !== 'object' || mutation === null) {
-          return (
-            <li key={index}>
-              <SpanPayloadJson value={mutation} />
-            </li>
-          );
-        }
-        const detail = describeMutation(mutation);
-
-        return (
-          <li key={index} className="flex flex-col gap-2">
-            <div className="flex flex-wrap items-center gap-2">
-              <Txt tone="ink" as="span" variant="body">
-                {MUTATION_LABELS[mutation.type] ?? mutation.type}
-              </Txt>
-              {detail && (
-                <Txt as="span" variant="meta" tone="faint">
-                  {detail}
-                </Txt>
-              )}
-            </div>
-            {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
-            {mutation.ids && mutation.ids.length > 0 && (
-              <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>
-                <SpanPayloadJson value={mutation.ids} />
-              </SpanPayloadCollapsible>
-            )}
-          </li>
-        );
-      })}
-    </ul>
+    <div data-slot="span-processor-mutations" className="flex flex-col gap-4">
+      {groupByKind(mutations).map(([kind, entries]) => (
+        <section key={kind} className="flex flex-col gap-2">
+          <Txt as="h4" variant="body-sm" tone="ink" className="font-medium">
+            {MUTATION_HEADINGS[kind]?.(entries.length) ?? kind}
+          </Txt>
+          <ol className="flex flex-col divide-y divide-border">
+            {entries.map((mutation, index) => {
+              if (typeof mutation !== 'object' || mutation === null) {
+                return (
+                  <li key={index} className="py-3 first:pt-0 last:pb-0">
+                    <SpanPayloadJson value={mutation} />
+                  </li>
+                );
+              }
+              const context = describeMutation(mutation);
+              return (
+                <li key={index} className="flex flex-col gap-2 py-3 first:pt-0 last:pb-0">
+                  {context && (
+                    <Txt as="span" variant="meta" tone="muted">
+                      {context}
+                    </Txt>
+                  )}
+                  {mutation.message !== undefined && <SpanPayloadMessages value={[mutation.message]} />}
+                  {mutation.ids && mutation.ids.length > 0 && (
+                    <SpanPayloadCollapsible label={`Removed ids (${mutation.ids.length})`}>
+                      <SpanPayloadJson value={mutation.ids} />
+                    </SpanPayloadCollapsible>
+                  )}
+                </li>
+              );
+            })}
+          </ol>
+        </section>
+      ))}
+    </div>
   );
 }
 
 export interface SpanProcessorAttributesProps {
   span: SpanRecord;
+  /** Leave the message list changes out, when the span outcome already shows them. */
+  hideMutations?: boolean;
+}
+
+/** What a pipeline span changed in the message list; `null` when it changed nothing. */
+export function SpanProcessorMutations({ span }: { span: SpanRecord }) {
+  const mutations = groupMutations(describeProcessorPipeline(asCoreSpan(span))?.messageListMutations ?? []);
+  if (mutations.rows.length === 0 && mutations.detailed.length === 0) return null;
+
+  return (
+    <div data-slot="span-processor-changes" className="flex flex-col gap-3">
+      {mutations.rows.length > 0 && (
+        <DataKeysAndValues>
+          {mutations.rows.map(row => (
+            <Fragment key={JSON.stringify([row.label, row.source, row.tag])}>
+              <DataKeysAndValues.Key>{row.label}</DataKeysAndValues.Key>
+              <DataKeysAndValues.Value>{describeMutation(row)}</DataKeysAndValues.Value>
+            </Fragment>
+          ))}
+        </DataKeysAndValues>
+      )}
+      {mutations.detailed.length > 0 && <Mutations mutations={mutations.detailed} />}
+    </div>
+  );
 }
 
 /**
@@ -112,7 +158,7 @@ export interface SpanProcessorAttributesProps {
  * `describeProcessorPipeline` decides which keys are known, so "Other attributes"
  * holds only what this view does not show.
  */
-export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) {
+export function SpanProcessorAttributes({ span, hideMutations = false }: SpanProcessorAttributesProps) {
   const pipeline = describeProcessorPipeline(asCoreSpan(span));
   if (!pipeline) return null;
 
@@ -121,7 +167,7 @@ export function SpanProcessorAttributes({ span }: SpanProcessorAttributesProps) 
   const { stepNumber, retryCount, messageId } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
   const processorName = span.entityName ?? span.entityId;
   const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
-  const mutations = groupMutations(messageListMutations ?? []);
+  const mutations = groupMutations(hideMutations ? [] : (messageListMutations ?? []));
 
   return (
     <div data-slot="span-processor-attributes" className="flex flex-col gap-3">

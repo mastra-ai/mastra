@@ -7,4 +7,8 @@ export { SpanPayloadMessages, type SpanPayloadMessagesProps } from './span-paylo
 export { SpanPayloadJson, type SpanPayloadJsonProps } from './span-payload-json';
 export type { PayloadRegistry } from './span-payload-registry';
 export { SpanPayloadProcessor, type SpanPayloadProcessorProps } from './span-payload-processor';
-export { SpanProcessorAttributes, type SpanProcessorAttributesProps } from './span-processor-attributes';
+export {
+  SpanProcessorAttributes,
+  SpanProcessorMutations,
+  type SpanProcessorAttributesProps,
+} from './span-processor-attributes';

@@ -31,6 +31,10 @@ afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
 const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
+const sectionTitles = () =>
+  [...document.querySelectorAll('[data-slot="span-payload-section"]')].map(
+    section => section.firstElementChild?.firstElementChild?.textContent,
+  );
 
 describe('Span metadata JSON sections', () => {
   it.each([SpanDataPanelView, SpanDetailsView])('uses the standard JSON renderer without a preview toggle', View => {
@@ -208,6 +212,19 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
 });
 
 describe('SpanDataPanelView integration', () => {
+  it('sums up a tool call in one line and leads with its output', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={toolCallSpan.spanId} span={toolCallSpan} />);
+    expect(slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]')).toBeNull();
+    expect(sectionTitles()).toEqual(['Output', 'Input']);
+  });
+
+  it('leads with the error of a failed span, once', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
+    expect(slot('span-outcome')?.textContent).toContain('getWeather failed');
+    expect(sectionTitles()[0]).toBe('Error');
+    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+  });
+
   it('shows rich payloads and the error banner for a span', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
     expect(slot('span-error')).not.toBeNull();

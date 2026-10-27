@@ -64,7 +64,7 @@ export function SpanToolsSection({ span, layout }: SpanToolsSectionProps) {
 
   return (
     <SpanPayloadSection
-      title={`Tools (${spanTools.tools.length})`}
+      title={`Available tools (${spanTools.tools.length})`}
       icon={<ToolsIcon />}
       raw={spanTools.raw}
       layout={layout}
