@@ -97,6 +97,7 @@ import {
   getEffectiveThreadId,
   applyEffectiveThreadId,
   enforceThreadAccess,
+  getHandlerFGAProvider,
   mergeBodyRequestContext,
   validateThreadOwnership,
   validateRunOwnership,
@@ -1366,7 +1367,7 @@ export const LIST_AGENTS_ROUTE = createRoute({
       }
 
       // Filter agents by FGA if configured
-      const fgaProvider = mastra.getServer?.()?.fga;
+      const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
         const agentList = Object.values(serializedAgents) as unknown as Array<{ id: string }>;
