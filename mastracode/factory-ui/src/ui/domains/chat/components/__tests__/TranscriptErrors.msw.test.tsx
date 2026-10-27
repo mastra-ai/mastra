@@ -1,5 +1,5 @@
 import type { MastraDBMessage } from '@mastra/client-js';
-import { screen, waitFor } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
@@ -97,8 +97,9 @@ describe('chat run errors', () => {
     expect(screen.queryByText('AI_APICallError')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Error details' }));
-    expect(await screen.findByText(/AI_APICallError/)).toBeVisible();
-    const copyButton = screen.getByRole('button', { name: 'Copy error details' });
+    const details = await screen.findByRole('dialog', { name: 'Error details' });
+    expect(within(details).getByText(/AI_APICallError/)).toBeVisible();
+    const copyButton = within(details).getByRole('button', { name: 'Copy error details' });
     await user.click(copyButton);
     await user.unhover(copyButton);
     const copied = JSON.parse(await navigator.clipboard.readText());

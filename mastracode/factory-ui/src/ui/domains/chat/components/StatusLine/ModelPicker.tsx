@@ -1,5 +1,4 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { Notice } from '@mastra/playground-ui/components/Notice';
 import {
   Command,
   CommandEmpty,
@@ -10,7 +9,6 @@ import {
   CommandSeparator,
 } from '@mastra/playground-ui/components/Command';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
-import type { PopoverTriggerProps } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
@@ -96,12 +94,12 @@ type ModelSwitch = ReturnType<typeof useModelSwitch>;
 
 interface ModelMenuProps {
   modelSwitch: ModelSwitch;
-  trigger: Pick<PopoverTriggerProps, 'variant' | 'size' | 'className' | 'render'>;
+  triggerClassName?: string;
   triggerAriaLabel?: string;
   children: ReactNode;
 }
 
-function ModelMenu({ modelSwitch, trigger, triggerAriaLabel, children }: ModelMenuProps) {
+function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useOrganizationScopedFactory();
@@ -115,7 +113,9 @@ function ModelMenu({ modelSwitch, trigger, triggerAriaLabel, children }: ModelMe
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
-        {...trigger}
+        variant="ghost"
+        size="sm"
+        className={triggerClassName}
         type="button"
         disabled={locked}
         aria-label={triggerAriaLabel}
@@ -248,11 +248,7 @@ export function ModelPicker() {
       <ModelMenu
         modelSwitch={modelSwitch}
         triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-        trigger={{
-          variant: 'ghost',
-          size: 'sm',
-          className: notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-        }}
+        triggerClassName={notConfigured ? 'text-destructive-foreground' : undefined}
       >
         <span className="max-w-48 truncate">
           {label}
@@ -266,9 +262,5 @@ export function ModelPicker() {
 export function ChangeModelAction() {
   const modelSwitch = useModelSwitch();
   if (!modelSwitch.switchable || !modelSwitch.modelsQuery.data?.length) return null;
-  return (
-    <ModelMenu modelSwitch={modelSwitch} trigger={{ render: <Notice.Button /> }}>
-      Change model
-    </ModelMenu>
-  );
+  return <ModelMenu modelSwitch={modelSwitch}>Change model</ModelMenu>;
 }

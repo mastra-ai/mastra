@@ -1,7 +1,16 @@
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CodeBlock } from '@mastra/playground-ui/components/CodeBlock';
-import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import {
+  Dialog,
+  DialogBody,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogTrigger,
+} from '@mastra/playground-ui/components/Dialog';
 import { Notice } from '@mastra/playground-ui/components/Notice';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 import { describeRunError } from '@mastra/factory/run-error';
 import type { RunErrorRecovery } from '@mastra/factory/run-error';
@@ -37,19 +46,38 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
     <Notice
       variant="destructive"
       title={title}
-      action={recoveries.map(recovery => {
-        const RecoveryAction = RECOVERY_ACTIONS[recovery];
-        return <RecoveryAction key={recovery} />;
-      })}
+      action={
+        <>
+          {recoveries.map(recovery => {
+            const RecoveryAction = RECOVERY_ACTIONS[recovery];
+            return <RecoveryAction key={recovery} />;
+          })}
+          <Dialog>
+            <DialogTrigger
+              render={
+                <Button variant="ghost" size="sm" className="ms-auto">
+                  Error details
+                </Button>
+              }
+            />
+            <DialogContent size="lg">
+              <DialogHeader>
+                <DialogTitle>Error details</DialogTitle>
+              </DialogHeader>
+              <DialogBody>
+                <CodeBlock code={diagnostics} lang="json" copyTooltip="Copy error details" />
+              </DialogBody>
+            </DialogContent>
+          </Dialog>
+        </>
+      }
     >
       <Notice.Message>{message}</Notice.Message>
-      {model && <Notice.Message className="text-muted-foreground">Model: {formatModelName(model)}</Notice.Message>}
-      <Collapsible>
-        <CollapsibleTrigger render={<Notice.Button>Error details</Notice.Button>} />
-        <CollapsibleContent>
-          <CodeBlock code={diagnostics} lang="json" copyTooltip="Copy error details" />
-        </CollapsibleContent>
-      </Collapsible>
+      {model && (
+        <Txt variant="body-sm" tone="muted">
+          Model: {formatModelName(model)}
+        </Txt>
+      )}
     </Notice>
   );
 }
