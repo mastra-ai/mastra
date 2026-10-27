@@ -915,8 +915,12 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       // skipLibCheck would hide an unresolved bundled `@internal/*` specifier (the base class would
       // silently become `any`), so assert the installed declarations have none.
       for (const pkg of ['core', 'deployer']) {
-        const distDir = join(appDir, 'node_modules', '@mastra', pkg, 'dist');
-        const declarations = await glob('**/*.d.ts', { cwd: distDir, absolute: true });
+        const packageDir = join(appDir, 'node_modules', '@mastra', pkg);
+        const declarations = await glob('**/*.d.ts', {
+          cwd: packageDir,
+          absolute: true,
+          ignore: ['node_modules/**'],
+        });
         expect(declarations.length).toBeGreaterThan(0);
         for (const file of declarations) {
           expect(await readFile(file, 'utf-8'), file).not.toMatch(/['"]@internal\//);
