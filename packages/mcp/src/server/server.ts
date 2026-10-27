@@ -79,6 +79,7 @@ import { WebhookDispatcher } from './events/webhook-dispatcher';
 import {
   INPUT_KEY,
   callerTrace,
+  clientLabelOf,
   hashArguments,
   principalOf,
   readContinuation,
@@ -1131,7 +1132,7 @@ export class MCPServer extends MCPServerBase {
       ...(resume && { resume }),
     };
     const params = { ttlMs: taskMode.ttlMs, principal: principalOf(ctx, requestContext), context };
-    const { store, task } = await this.createTask(params, initialAttempt !== undefined);
+    const { store, task } = await this.createTask(ctx, requestContext, params, initialAttempt !== undefined);
     store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
@@ -1152,13 +1153,15 @@ export class MCPServer extends MCPServerBase {
 
   /** Creates a task durably. `pinned` keeps its first attempt on this worker, which already runs it. */
   private async createTask(
+    ctx: ServerContext,
+    requestContext: RequestContext,
     params: MCPTaskCreateParams,
     pinned: boolean,
   ): Promise<{ store: MCPTaskStore; task: MCPTask }> {
     const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
     const task =
       store instanceof BackgroundTaskMCPTaskStore
-        ? await store.create(params, { pinToWorker: pinned })
+        ? await store.create(params, { pinToWorker: pinned, clientLabel: clientLabelOf(ctx, requestContext) })
         : await store.create(params);
     return { store, task };
   }
@@ -1292,7 +1295,7 @@ export class MCPServer extends MCPServerBase {
 
     if (taskMode.mode === 'always') {
       // The task exists before the run does: if creating it fails, nothing ran.
-      const { store, task } = await this.createTask(params, true);
+      const { store, task } = await this.createTask(ctx, requestContext, params, true);
       const live = start();
       store.run(task.taskId, this.workflowTaskWork(context), {
         initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
@@ -1324,7 +1327,7 @@ export class MCPServer extends MCPServerBase {
       if (outcome?.status === 'completed') return outcome.result;
     }
     try {
-      const { store, task } = await this.createTask(params, true);
+      const { store, task } = await this.createTask(ctx, requestContext, params, true);
       store.run(task.taskId, this.workflowTaskWork(context), {
         initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
       });

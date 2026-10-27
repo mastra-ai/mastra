@@ -85,14 +85,39 @@ export async function toRequestContext(
  * never share a principal. A token refreshed mid-round therefore starts over.
  */
 export function principalOf(ctx: ServerContext, requestContext: RequestContext): string {
+  return callerOf(ctx, requestContext).principal;
+}
+
+/**
+ * A readable name for the caller, for operators debugging a server: the principal, except that a
+ * token principal keeps only a short prefix of the token's hash. Never a credential, so it can be
+ * stored and shown; it is not unique enough to authorize anything.
+ */
+export function clientLabelOf(ctx: ServerContext, requestContext: RequestContext): string {
+  return callerOf(ctx, requestContext).label;
+}
+
+const TOKEN_LABEL_HASH_LENGTH = 8;
+
+function callerOf(ctx: ServerContext, requestContext: RequestContext): { principal: string; label: string } {
   const authInfo = ctx.http?.authInfo;
-  if (!authInfo) return 'anonymous';
+  if (!authInfo) return { principal: 'anonymous', label: 'anonymous' };
   const subject = authInfo.extra?.sub ?? authInfo.extra?.subject;
-  if (typeof subject === 'string' && subject) return `${authInfo.clientId}:sub:${subject}`;
+  if (typeof subject === 'string' && subject) {
+    const principal = `${authInfo.clientId}:sub:${subject}`;
+    return { principal, label: principal };
+  }
   const user = requestContext.get('user');
   const userId = user && typeof user === 'object' ? (user as { id?: unknown }).id : undefined;
-  if (typeof userId === 'string' && userId) return `${authInfo.clientId}:user:${userId}`;
-  return `${authInfo.clientId}:token:${createHash('sha256').update(authInfo.token).digest('base64url')}`;
+  if (typeof userId === 'string' && userId) {
+    const principal = `${authInfo.clientId}:user:${userId}`;
+    return { principal, label: principal };
+  }
+  const tokenHash = createHash('sha256').update(authInfo.token).digest('base64url');
+  return {
+    principal: `${authInfo.clientId}:token:${tokenHash}`,
+    label: `${authInfo.clientId}:token:${tokenHash.slice(0, TOKEN_LABEL_HASH_LENGTH)}`,
+  };
 }
 
 export function hashArguments(value: unknown): string {
