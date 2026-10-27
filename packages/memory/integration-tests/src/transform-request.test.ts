@@ -9,6 +9,7 @@ describe('transformRequest', () => {
   it.each([
     ['Oct 25 2026:', 'Nov 2 2028:'],
     ['Date: Oct 25, 2026', 'Date: Nov 2, 2028'],
+    ['Date: Oct 25, 2026 (yesterday)', 'Date: Nov 2, 2028 (3 years ago)'],
   ])('keeps replay hashes stable when the OM heading changes from %s to %s', (first, later) => {
     const hash = (heading: string) => {
       const request = {
@@ -23,6 +24,7 @@ describe('transformRequest', () => {
         .digest('hex');
     };
     expect(hash(first)).toBe(hash(later));
+    expect(hash(`Previous observations:\n${first}`)).toBe(hash(`Previous observations:\n${later}`));
   });
 
   it.each(['Oct 25 2026:', 'Date: Oct 25, 2026'])('preserves ordinary user text containing %s', date => {
