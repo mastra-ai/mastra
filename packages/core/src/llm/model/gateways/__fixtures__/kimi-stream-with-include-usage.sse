@@ -63,4 +63,3 @@ data: {"id":"chatcmpl-e8qWO8r100gVAYWOeOGdjWhT","object":"chat.completion.chunk"
 data: {"id":"chatcmpl-e8qWO8r100gVAYWOeOGdjWhT","object":"chat.completion.chunk","created":1792972738,"model":"k3.1-pro","choices":[],"usage":{"prompt_tokens":91,"completion_tokens":32,"total_tokens":123,"cached_tokens":91,"completion_tokens_details":{"reasoning_tokens":29},"prompt_tokens_details":{"cached_tokens":91}}}
 
 data: [DONE]
-

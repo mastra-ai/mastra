@@ -61,4 +61,3 @@ data: {"id":"chatcmpl-gPx6AFmlByHe7gHcdDSEhhCV","object":"chat.completion.chunk"
 data: {"id":"chatcmpl-gPx6AFmlByHe7gHcdDSEhhCV","object":"chat.completion.chunk","created":1792972365,"model":"k3.1-pro","choices":[{"index":0,"delta":{},"finish_reason":"length","usage":{"prompt_tokens":91,"completion_tokens":32,"total_tokens":123,"cached_tokens":91,"completion_tokens_details":{"reasoning_tokens":29},"prompt_tokens_details":{"cached_tokens":91}}}],"system_fingerprint":"fpv0_ceed8d7b"}
 
 data: [DONE]
-
