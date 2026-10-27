@@ -4,9 +4,11 @@ import type { ReactNode } from 'react';
 import { SpanPayloadJson } from './span-payload-json';
 import { Button } from '@/ds/components/Button';
 import { Card, CardContent } from '@/ds/components/Card';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
 import { CollapsibleBox, useCollapsibleBox } from '@/ds/components/CollapsibleBox';
 import { CopyButton } from '@/ds/components/CopyButton';
 import { DataPanelSectionHeading } from '@/ds/components/DataPanel/data-panel-section-heading';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
 import { cn } from '@/lib/utils';
 
 export type SpanPayloadView = 'rich' | 'raw';
@@ -33,6 +35,8 @@ export interface SpanPayloadSectionProps {
   defaultView?: SpanPayloadView;
   /** Marks the section that proves what the span did, so it stands out from the payloads around it. */
   emphasis?: boolean;
+  /** Replaces the title heading, e.g. with the sentence of the notice the section sits in. */
+  heading?: ReactNode;
   className?: string;
 }
 
@@ -83,6 +87,7 @@ export function SpanPayloadSection({
   layout = 'panel',
   defaultView = 'rich',
   emphasis = false,
+  heading,
   className,
 }: SpanPayloadSectionProps) {
   const [view, setView] = useState<SpanPayloadView>(defaultView);
@@ -101,15 +106,17 @@ export function SpanPayloadSection({
       className={cn('group/payload flex min-w-0 flex-col gap-2', className)}
     >
       <div className="flex flex-wrap items-center justify-between gap-2">
-        <DataPanelSectionHeading
-          icon={icon}
-          className={cn(
-            layout === 'details' && 'text-meta',
-            emphasis && 'font-medium text-foreground [&>svg]:text-info-indicator',
-          )}
-        >
-          {title}
-        </DataPanelSectionHeading>
+        {heading ?? (
+          <DataPanelSectionHeading
+            icon={icon}
+            className={cn(
+              layout === 'details' && 'text-meta',
+              emphasis && 'font-medium text-foreground [&>svg]:text-info-indicator',
+            )}
+          >
+            {title}
+          </DataPanelSectionHeading>
+        )}
         {/* Revealed on hover or keyboard focus; `pointer-fine` only, since a touch screen has no hover. */}
         <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
           {hasRich && <ViewToggle view={view} onChange={setView} />}
@@ -138,5 +145,46 @@ export function SpanPayloadSection({
         )}
       </div>
     </div>
+  );
+}
+
+export interface SpanPayloadJsonSectionProps {
+  title: string;
+  icon?: ReactNode;
+  /** The payload as stored; shown as JSON. */
+  raw: unknown;
+  /** `panel` matches `DataPanel.CodeSection`; `details` matches `DataDetailsPanel.CodeSection`. */
+  layout?: 'panel' | 'details';
+}
+
+/**
+ * A span payload that is only worth reading as stored, like metadata or attributes.
+ * Folded behind its heading by default, and shown in full as JSON once opened.
+ */
+export function SpanPayloadJsonSection({ title, icon, raw, layout = 'panel' }: SpanPayloadJsonSectionProps) {
+  if (raw == null) return null;
+
+  return (
+    <Collapsible data-slot="span-payload-section" data-view="raw" className="group/payload flex min-w-0 flex-col gap-2">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <CollapsibleTrigger className="flex items-center gap-1 rounded-sm">
+          <DisclosureChevron direction="right" className="size-3 text-placeholder" />
+          <DataPanelSectionHeading icon={icon} className={cn(layout === 'details' && 'text-meta')}>
+            {title}
+          </DataPanelSectionHeading>
+        </CollapsibleTrigger>
+        {/* Revealed on hover or keyboard focus; `pointer-fine` only, since a touch screen has no hover. */}
+        <div className="ml-auto flex items-center gap-1 group-focus-within/payload:opacity-100 group-hover/payload:opacity-100 motion-safe:transition-opacity pointer-fine:opacity-0">
+          <CopyButton content={JSON.stringify(raw, null, 2)} variant="ghost" />
+        </div>
+      </div>
+      <CollapsibleContent>
+        <Card data-slot="span-payload-card" className="min-w-0 overflow-hidden">
+          <CardContent>
+            <SpanPayloadJson value={raw} bare />
+          </CardContent>
+        </Card>
+      </CollapsibleContent>
+    </Collapsible>
   );
 }

@@ -1,16 +1,11 @@
-import { describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
 import type { SpanRecord } from '../../types';
 import { getSpanChanges } from '../span-outcome.utils';
 import { SpanPayloadJson } from './span-payload-json';
 import { SpanPayloadMessages } from './span-payload-messages';
-import { SpanPayloadCollapsible, SpanPayloadField } from './span-payload-primitives';
-import { asCoreSpan, getProcessorRunContext } from './span-payload-registry';
-import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { Notice } from '@/ds/components/Notice';
+import { SpanPayloadCollapsible } from './span-payload-primitives';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { pluralize } from '@/lib/string';
-import { formatDuration } from '@/utils/duration';
 
 type Mutation = NonNullable<ProcessorPipelineDescription['messageListMutations']>[number];
 
@@ -71,13 +66,17 @@ const isSameKind = (a: CountOnlyMutation, b: CountOnlyMutation) =>
   a.type === b.type && a.source === b.source && a.tag === b.tag;
 
 function MutationSteps({ mutations }: { mutations: readonly Mutation[] }) {
+  const steps = toSteps(mutations);
   return (
     <ol data-slot="span-processor-mutations" className="flex list-none flex-col divide-y divide-border">
-      {toSteps(mutations).map((mutation, index) => (
+      {steps.map((mutation, index) => (
         <li key={index} className="flex gap-3 py-3 first:pt-0 last:pb-0">
-          <Txt as="span" variant="body-sm" tone="faint" font="mono" className="tabular-nums">
-            {index + 1}.
-          </Txt>
+          {/* Numbers only help to read several steps in order. */}
+          {steps.length > 1 && (
+            <Txt as="span" variant="body-sm" tone="faint" font="mono" className="tabular-nums">
+              {index + 1}.
+            </Txt>
+          )}
           <div className="flex min-w-0 flex-1 flex-col gap-2">
             {typeof mutation === 'object' && mutation !== null ? (
               <>
@@ -104,12 +103,6 @@ function MutationSteps({ mutations }: { mutations: readonly Mutation[] }) {
   );
 }
 
-export interface SpanProcessorAttributesProps {
-  span: SpanRecord;
-  /** Leave the message list changes out, when the span outcome already shows them. */
-  hideMutations?: boolean;
-}
-
 /** What a pipeline span changed in the message list, step by step; `null` when it changed nothing. */
 export function SpanProcessorMutations({ span }: { span: SpanRecord }) {
   const mutations = getSpanChanges(span);
@@ -118,111 +111,6 @@ export function SpanProcessorMutations({ span }: { span: SpanRecord }) {
   return (
     <div data-slot="span-processor-changes">
       <MutationSteps mutations={mutations} />
-    </div>
-  );
-}
-
-/**
- * The runner-owned attributes of a processor span, as labelled values.
- * `describeProcessorPipeline` decides which keys are known, so "Other attributes"
- * holds only what this view does not show.
- */
-export function SpanProcessorAttributes({ span, hideMutations = false }: SpanProcessorAttributesProps) {
-  const pipeline = describeProcessorPipeline(asCoreSpan(span));
-  if (!pipeline) return null;
-
-  const { phaseLabel, executor, processorIndex, hookDurationMs, messageListMutations, tripwireAbort, rest } = pipeline;
-  const input = describeSpanInput(asCoreSpan(span));
-  const { stepNumber, retryCount, messageId } = input?.type === 'processor' ? getProcessorRunContext(input.value) : {};
-  const processorName = span.entityName ?? span.entityId;
-  const hookDuration = hookDurationMs === undefined ? undefined : formatDuration(hookDurationMs);
-  const mutations = hideMutations ? [] : (messageListMutations ?? []);
-
-  return (
-    <div data-slot="span-processor-attributes" className="flex flex-col gap-3">
-      <DataKeysAndValues>
-        {processorName && (
-          <>
-            <DataKeysAndValues.Key>Processor</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{processorName}</DataKeysAndValues.Value>
-          </>
-        )}
-        <>
-          <DataKeysAndValues.Key>Phase</DataKeysAndValues.Key>
-          <DataKeysAndValues.Value>{phaseLabel}</DataKeysAndValues.Value>
-        </>
-        {executor && (
-          <>
-            <DataKeysAndValues.Key>Executor</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{executor === 'workflow' ? 'Workflow' : 'Legacy'}</DataKeysAndValues.Value>
-          </>
-        )}
-        {processorIndex !== undefined && (
-          <>
-            <DataKeysAndValues.Key>Pipeline position</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{processorIndex + 1}</DataKeysAndValues.Value>
-          </>
-        )}
-        {stepNumber !== undefined && (
-          <>
-            <DataKeysAndValues.Key>Step</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{stepNumber}</DataKeysAndValues.Value>
-          </>
-        )}
-        {retryCount !== undefined && (
-          <>
-            <DataKeysAndValues.Key>Retries</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>{retryCount}</DataKeysAndValues.Value>
-          </>
-        )}
-        {messageId !== undefined && (
-          <>
-            <DataKeysAndValues.Key>Assistant message id</DataKeysAndValues.Key>
-            <DataKeysAndValues.ValueWithCopyBtn copyValue={messageId} copyTooltip="Copy assistant message id">
-              {messageId.slice(0, 6)}
-            </DataKeysAndValues.ValueWithCopyBtn>
-          </>
-        )}
-        {hookDuration && (
-          <>
-            <DataKeysAndValues.Key>Hook duration</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value>
-              <Txt as="span" variant="body-sm" font="mono">
-                {hookDuration}
-              </Txt>
-            </DataKeysAndValues.Value>
-          </>
-        )}
-      </DataKeysAndValues>
-
-      {tripwireAbort && (
-        <Notice variant="destructive" title="Tripwire">
-          {tripwireAbort.reason && <Notice.Message>{tripwireAbort.reason}</Notice.Message>}
-          {tripwireAbort.retry !== undefined && (
-            <DataKeysAndValues>
-              <DataKeysAndValues.Key>Retry</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{tripwireAbort.retry ? 'Yes' : 'No'}</DataKeysAndValues.Value>
-            </DataKeysAndValues>
-          )}
-          {tripwireAbort.metadata !== undefined && (
-            <SpanPayloadCollapsible label="Metadata">
-              <SpanPayloadJson value={tripwireAbort.metadata} />
-            </SpanPayloadCollapsible>
-          )}
-        </Notice>
-      )}
-
-      {mutations.length > 0 && (
-        <SpanPayloadField label="Message list changes">
-          <MutationSteps mutations={mutations} />
-        </SpanPayloadField>
-      )}
-
-      {rest && (
-        <SpanPayloadCollapsible label="Other attributes">
-          <SpanPayloadJson value={rest} />
-        </SpanPayloadCollapsible>
-      )}
     </div>
   );
 }

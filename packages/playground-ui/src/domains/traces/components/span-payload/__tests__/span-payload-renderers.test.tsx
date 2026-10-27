@@ -37,15 +37,19 @@ const sectionTitles = () =>
   );
 
 describe('Span metadata JSON sections', () => {
-  it.each([SpanDataPanelView, SpanDetailsView])('uses the standard JSON renderer without a preview toggle', View => {
+  it.each([SpanDataPanelView, SpanDetailsView])('shows them folded, and as JSON only once opened', View => {
     const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };
     render(<View span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
+    expect(document.body.textContent).not.toContain('metadata-value');
+    expect(document.body.textContent).not.toContain('attribute-value');
 
     for (const title of ['Metadata', 'Attributes']) {
-      const section = screen.getByText(title).closest('[data-slot="span-payload-section"]');
+      const trigger = screen.getByRole('button', { name: title });
+      fireEvent.click(trigger);
+      const section = trigger.closest('[data-slot="span-payload-section"]');
       expect(section?.querySelector('[data-slot="span-payload-json"] .cm-foldGutter')).not.toBeNull();
       expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
-      expect(section?.querySelector('button')).not.toBeNull();
+      expect(section?.querySelector('[data-slot="collapsible-box"]')).toBeNull();
     }
     expect(document.body.textContent).toContain('metadata-value');
     expect(document.body.textContent).toContain('attribute-value');

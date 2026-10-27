@@ -64,33 +64,6 @@ export function getSpanOutputPayload(span: SpanRecord): unknown {
   return span.output;
 }
 
-const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-
-export interface ProcessorRunContext {
-  stepNumber?: number;
-  retryCount?: number;
-  /** The assistant message the step is producing, not the user message that started the run. */
-  messageId?: string;
-}
-
-/**
- * Where in the generation the hook ran. The runner hands these values to every
- * hook, so they are recorded in `input`, but they describe the run rather than
- * what the processor read: Attributes shows them and the input preview skips them.
- * A key is present only when it holds a well-formed value, so a malformed one stays in the input.
- */
-export function getProcessorRunContext(input: ProcessorSpanPayload<ProcessorRunInputByPhase>): ProcessorRunContext {
-  const { data } = input;
-  const stepNumber = 'stepNumber' in data ? data.stepNumber : undefined;
-  const retryCount = 'retryCount' in data ? data.retryCount : undefined;
-  const messageId = 'messageId' in data ? data.messageId : undefined;
-  return {
-    ...(isCount(stepNumber) ? { stepNumber } : {}),
-    ...(isCount(retryCount) ? { retryCount } : {}),
-    ...(typeof messageId === 'string' && messageId.length > 0 ? { messageId } : {}),
-  };
-}
-
 /** A tool offered to the model, with the id the tool registry knows it by. */
 /** Who a tool hands the work to when an agent exposes a workflow or sub-agent as a tool. */
 export interface DelegatedTool {

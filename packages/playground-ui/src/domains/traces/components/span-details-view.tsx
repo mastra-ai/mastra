@@ -1,14 +1,16 @@
-import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
-import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { describeSpanOutput } from '@mastra/core/observability';
+import { ArrowLeftRightIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
+import { getSpanChanges } from './span-outcome.utils';
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
   getSpanOutputPayload,
   hasSpanInputPreview,
   SpanOutputRenderer,
+  SpanPayloadJsonSection,
   SpanPayloadSection,
-  SpanProcessorAttributes,
+  SpanProcessorMutations,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanToolsSection } from './span-payload/span-tools-section';
@@ -88,25 +90,20 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
+          {getSpanChanges(span).length > 0 && (
+            <SpanPayloadSection
+              title="Changes"
+              icon={<ArrowLeftRightIcon />}
+              raw={getSpanChanges(span)}
+              layout="details"
+              emphasis
+            >
+              <SpanProcessorMutations span={span} />
+            </SpanPayloadSection>
+          )}
           <SpanToolsSection span={span} layout="details" />
-          <SpanPayloadSection
-            title="Metadata"
-            icon={<BracesIcon />}
-            raw={span.metadata}
-            hasPreview={false}
-            layout="details"
-          >
-            {null}
-          </SpanPayloadSection>
-          <SpanPayloadSection
-            title="Attributes"
-            icon={<BracesIcon />}
-            raw={span.attributes}
-            hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
-            layout="details"
-          >
-            <SpanProcessorAttributes span={span} />
-          </SpanPayloadSection>
+          <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} layout="details" />
+          <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} layout="details" />
         </DataDetailsPanel.Content>
       )}
     </DataDetailsPanel>

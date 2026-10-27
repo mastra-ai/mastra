@@ -13,7 +13,7 @@ import {
   hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
-  SpanProcessorAttributes,
+  SpanPayloadJsonSection,
   SpanProcessorMutations,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
@@ -181,7 +181,7 @@ function SpanDataPanelContent({
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
     ),
-    changes: evidence === 'changes' && (
+    changes: evidence === 'changes' && !showOutcome && (
       <SpanPayloadSection title="Changes" icon={<ArrowLeftRightIcon />} raw={getSpanChanges(span)} hasPreview emphasis>
         <SpanProcessorMutations span={span} />
       </SpanPayloadSection>
@@ -207,38 +207,39 @@ function SpanDataPanelContent({
       </SpanPayloadSection>
     ),
     tools: <SpanToolsSection span={span} />,
-    metadata: (
-      <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
-        {null}
-      </SpanPayloadSection>
-    ),
-    attributes: (
-      <SpanPayloadSection
-        title="Attributes"
-        icon={<BracesIcon />}
-        raw={span.attributes}
-        hasPreview={pipeline !== undefined}
-      >
-        <SpanProcessorAttributes span={span} hideMutations={evidence === 'changes'} />
-      </SpanPayloadSection>
-    ),
+    metadata: <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} />,
+    attributes: <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} />,
   };
-  // What proves the outcome leads; a pipeline step that changed nothing is best explained by its attributes.
-  // A root span or a processor reads as a request and its result: input, then output, then what changed between them.
+  // What proves the outcome leads.
+  // A root span or a processor leads with what it changed, then reads as a request and its result: input, then output.
   const proof: SpanSection[] =
     isRoot || span.spanType === SpanType.PROCESSOR_RUN
-      ? ['input', 'output', ...(evidence === 'changes' ? (['changes'] as const) : [])]
+      ? [...(evidence === 'changes' ? (['changes'] as const) : []), 'input', 'output']
       : evidence
         ? [evidence]
-        : pipeline
-          ? ['attributes']
-          : [];
+        : [];
   const lead = [...new Set<SpanSection>(['error', ...proof])];
   const rest = SECTION_ORDER.filter(section => !lead.includes(section));
 
   const detailsBody = (
     <>
-      {showOutcome && <SpanOutcomeSummary outcome={outcome} showDetail={!evidence} className="mb-3" />}
+      {showOutcome && (
+        <SpanOutcomeSummary
+          outcome={outcome}
+          showDetail={!evidence}
+          className="mb-3"
+          // The changes prove the headline, so they sit in the notice under it rather than in a section of their own.
+          renderProof={
+            evidence === 'changes'
+              ? headline => (
+                  <SpanPayloadSection title="Changes" heading={headline} raw={getSpanChanges(span)} hasPreview>
+                    <SpanProcessorMutations span={span} />
+                  </SpanPayloadSection>
+                )
+              : undefined
+          }
+        />
+      )}
 
       {isTokenLimitExceeded(span) && (
         <div className="mb-3">

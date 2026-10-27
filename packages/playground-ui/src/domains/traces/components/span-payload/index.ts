@@ -2,13 +2,15 @@ export { SpanInputRenderer, type SpanInputRendererProps } from './span-input-ren
 export { getSpanOutputPayload, hasSpanInputPreview } from './span-payload-registry';
 export { SpanOutputRenderer, type SpanOutputRendererProps } from './span-output-renderers';
 export { SpanErrorRenderer, type SpanErrorRendererProps } from './span-error-renderer';
-export { SpanPayloadSection, type SpanPayloadSectionProps, type SpanPayloadView } from './span-payload-section';
+export {
+  SpanPayloadJsonSection,
+  SpanPayloadSection,
+  type SpanPayloadJsonSectionProps,
+  type SpanPayloadSectionProps,
+  type SpanPayloadView,
+} from './span-payload-section';
 export { SpanPayloadMessages, type SpanPayloadMessagesProps } from './span-payload-messages';
 export { SpanPayloadJson, type SpanPayloadJsonProps } from './span-payload-json';
 export type { PayloadRegistry } from './span-payload-registry';
 export { SpanPayloadProcessor, type SpanPayloadProcessorProps } from './span-payload-processor';
-export {
-  SpanProcessorAttributes,
-  SpanProcessorMutations,
-  type SpanProcessorAttributesProps,
-} from './span-processor-attributes';
+export { SpanProcessorMutations } from './span-processor-mutations';
