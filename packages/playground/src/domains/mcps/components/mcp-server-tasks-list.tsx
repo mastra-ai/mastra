@@ -242,7 +242,7 @@ function McpTaskRow({
           type="button"
           variant="ghost"
           size="sm"
-          className="font-mono"
+          className="w-full justify-start font-mono"
           tooltip="Show only this client's tasks"
           aria-label={`Show only tasks from client ${clientName(task)}`}
           onClick={event => {
