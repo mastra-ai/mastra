@@ -5305,14 +5305,19 @@ export class DurableAgent<
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
       const initialFilter = createSupersededEventFilter(history);
       let refreshedFilter: Promise<typeof initialFilter> | undefined;
-      // Subscription can replay a newer claim than the snapshot above. Read the
-      // log again before delivering its first event, while deliveries are ordered.
-      const keepReplayEvent = async (event: AgentStreamEvent) => {
+      let currentFilter: typeof initialFilter | undefined;
+      // Subscription can replay a newer claim than the snapshot above. Refresh
+      // before the first replayed event; live events and later deliveries stay synchronous.
+      const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
+        if (!history.length || (event.index !== undefined && event.index >= history.length && !refreshedFilter)) {
+          return initialFilter(event);
+        }
+        if (currentFilter) return currentFilter(event);
         refreshedFilter ??= this.pubsub
           .getHistory(AGENT_STREAM_TOPIC(runId), 0)
-          .then(entries => createSupersededEventFilter(entries as AgentStreamEvent[]))
-          .catch(() => initialFilter);
-        return (await refreshedFilter)(event);
+          .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
+          .catch(() => (currentFilter = initialFilter));
+        return refreshedFilter.then(filter => filter(event));
       };
       if (!offset) return { keepReplayEvent };
       const skipped = history.slice(0, offset);
@@ -5439,9 +5444,7 @@ export class DurableAgent<
     let activityVersion = 0;
 
     const deliver = (event: AgentStreamEvent) => {
-      activityVersion++;
       if (
-        !subscribed ||
         event.type === AgentStreamEventTypes.OWNERSHIP_CLAIMED ||
         event.type === AgentStreamEventTypes.ITERATION_START
       )
@@ -5458,10 +5461,26 @@ export class DurableAgent<
     };
     // Acks every delivery, dropped ones included, so a durable backend doesn't
     // keep them pending.
-    const callback = withAck(async event => {
+    const callback = withAck(event => {
+      if (!subscribed) return;
+      activityVersion++;
       const streamEvent = event as unknown as AgentStreamEvent;
-      if (replayFloor.keepReplayEvent && !(await replayFloor.keepReplayEvent(streamEvent))) return;
-      if (await keepGeneration(streamEvent)) deliver(streamEvent);
+      const filterGeneration = () => {
+        const keep = keepGeneration(streamEvent);
+        if (typeof keep === 'boolean') {
+          if (keep) deliver(streamEvent);
+          return;
+        }
+        return keep.then(kept => {
+          if (kept) deliver(streamEvent);
+        });
+      };
+      const keepReplay = replayFloor.keepReplayEvent?.(streamEvent);
+      if (keepReplay === undefined || keepReplay === true) return filterGeneration();
+      if (keepReplay === false) return;
+      return keepReplay.then(keep => {
+        if (keep) return filterGeneration();
+      });
     });
 
     await (options.offset !== undefined
