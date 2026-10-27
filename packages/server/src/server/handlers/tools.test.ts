@@ -41,6 +41,55 @@ describe('Tools Handlers', () => {
     vi.clearAllMocks();
   });
 
+  describe.each(['registered', 'agent'] as const)('%s tool execution', source => {
+    it('runs the tool with request data and request-scoped context', async () => {
+      const requestContext = new RequestContext();
+      requestContext.set('tenant', 'tenant-123');
+      const tool = createTool({
+        id: 'context-tool',
+        description: 'Reads request-scoped execution context',
+        execute: async (input, context) => ({
+          input,
+          tenant: context?.requestContext?.get('tenant'),
+          hasMastra: context?.mastra === mastra,
+          runId: context?.workflow?.runId,
+        }),
+      });
+      const agent = new Agent({
+        id: 'context-agent',
+        name: 'context-agent',
+        instructions: 'Use the context tool',
+        model: openai('gpt-4o'),
+        tools: { [tool.id]: tool },
+      });
+      const mastra = new Mastra({ logger: false, agents: { [agent.id]: agent } });
+      const serverContext = { ...createTestServerContext({ mastra }), requestContext };
+      const data = { test: 'data' };
+      const result =
+        source === 'registered'
+          ? await EXECUTE_TOOL_ROUTE.handler({
+              ...serverContext,
+              registeredTools: { [tool.id]: tool },
+              toolId: tool.id,
+              runId: 'test-run',
+              data,
+            })
+          : await EXECUTE_AGENT_TOOL_ROUTE.handler({
+              ...serverContext,
+              agentId: agent.id,
+              toolId: tool.id,
+              data,
+            });
+
+      expect(result).toEqual({
+        input: data,
+        tenant: 'tenant-123',
+        hasMastra: true,
+        runId: source === 'registered' ? 'test-run' : undefined,
+      });
+    });
+  });
+
   describe('listToolsHandler', () => {
     it('should return empty object when no tools are provided', async () => {
       const mastra = new Mastra({ logger: false });
@@ -341,34 +390,6 @@ describe('Tools Handlers', () => {
       ).rejects.toThrow('Argument "data" is required');
     });
 
-    it('should execute regular tool successfully', async () => {
-      const mockResult = { success: true };
-      const mockMastra = new Mastra();
-      mockExecute.mockResolvedValue(mockResult);
-      const context = { test: 'data' };
-
-      const result = await EXECUTE_TOOL_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        registeredTools: mockTools,
-        toolId: mockTool.id,
-        runId: 'test-run',
-        data: context,
-      });
-
-      expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(context, {
-        mastra: mockMastra,
-        requestContext: expect.any(RequestContext),
-        tracingContext: {
-          currentSpan: undefined,
-        },
-        workflow: {
-          runId: 'test-run',
-          suspend: expect.any(Function),
-        },
-      });
-    });
-
     it.skip('should execute Vercel tool successfully', async () => {
       const mockMastra = new Mastra();
       const mockResult = { success: true };
@@ -571,36 +592,6 @@ describe('Tools Handlers', () => {
           data: {},
         }),
       ).rejects.toThrow('Tool is not executable');
-    });
-
-    it('should execute regular tool successfully', async () => {
-      const mockResult = { success: true };
-      const mockMastra = new Mastra({
-        logger: false,
-        agents: {
-          'test-agent': mockAgent as any,
-        },
-      });
-      mockExecute.mockResolvedValue(mockResult);
-
-      const context = {
-        test: 'data',
-      };
-      const result = await EXECUTE_AGENT_TOOL_ROUTE.handler({
-        ...createTestServerContext({ mastra: mockMastra }),
-        agentId: 'test-agent',
-        toolId: mockTool.id,
-        data: context,
-      });
-
-      expect(result).toEqual(mockResult);
-      expect(mockExecute).toHaveBeenCalledWith(context, {
-        mastra: mockMastra,
-        requestContext: expect.any(RequestContext),
-        tracingContext: {
-          currentSpan: undefined,
-        },
-      });
     });
 
     it.skip('should execute Vercel tool successfully', async () => {
