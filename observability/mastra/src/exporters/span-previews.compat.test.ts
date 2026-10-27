@@ -41,6 +41,8 @@ describe.each(['esm', 'cjs'] as const)('preview compatibility (%s)', format => {
         format,
         dts: false,
         treeshake: true,
+        // Keep core at the package boundary so the fixtures also apply when run from the repository root.
+        external: [/^@mastra\/core(?:\/|$)/],
         outputOptions: {
           paths: { '@mastra/core/observability': compatibilityModule, '@mastra/core/storage': forbiddenStorageModule },
         },
