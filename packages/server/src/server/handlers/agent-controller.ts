@@ -651,26 +651,24 @@ type ProviderCallError = Error & {
 const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
 
 /** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError({
-  name,
-  message,
-  statusCode,
-  responseBody,
-  responseHeaders,
-  requestBodyValues,
-}: ProviderCallError): WireError {
-  const wire: WireError = { name, message };
-  if (typeof statusCode === 'number') wire.statusCode = statusCode;
-  if (typeof responseBody === 'string' && responseBody.trim()) {
-    wire.responseBody =
-      responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
-        ? `${responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
-        : responseBody;
+function toWireError(error: ProviderCallError): WireError {
+  const wire: WireError = { name: error.name, message: error.message };
+  try {
+    const { statusCode, responseBody, responseHeaders, requestBodyValues } = error;
+    if (typeof statusCode === 'number' && Number.isInteger(statusCode)) wire.statusCode = statusCode;
+    if (typeof responseBody === 'string' && responseBody.trim()) {
+      wire.responseBody =
+        responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
+          ? `${responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
+          : responseBody;
+    }
+    const requestId = responseHeaders?.['request-id'] ?? responseHeaders?.['x-request-id'];
+    if (typeof requestId === 'string' && requestId.trim()) wire.requestId = requestId.trim();
+    const modelId = requestBodyValues?.model;
+    if (typeof modelId === 'string' && modelId.trim()) wire.modelId = modelId.trim();
+  } catch {
+    // A field that throws on read costs its details, never the stream.
   }
-  const requestId = responseHeaders?.['request-id'] ?? responseHeaders?.['x-request-id'];
-  if (typeof requestId === 'string' && requestId) wire.requestId = requestId;
-  const modelId = requestBodyValues?.model;
-  if (typeof modelId === 'string' && modelId) wire.modelId = modelId;
   return wire;
 }
 
