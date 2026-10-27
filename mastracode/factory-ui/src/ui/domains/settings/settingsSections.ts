@@ -44,7 +44,7 @@ type SettingsTarget = { section: SettingsSection; anchor?: ModelDefaultsAnchor }
 const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
   ['personal-models', { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal }],
   ['factory-memory', { section: 'memory' }],
-  ['environment', { section: 'factory' }],
+  ['environment', { section: 'repositories' }],
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {

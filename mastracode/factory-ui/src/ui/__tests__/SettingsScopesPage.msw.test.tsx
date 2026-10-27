@@ -151,7 +151,7 @@ describe('Settings ownership', () => {
     expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('aria-current', 'page');
   });
 
-  it('sends retired Environment links to Manage Factory', async () => {
+  it('sends retired Environment links to Repositories, where pre-clone and repository commands now live', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/environment`, () =>
         HttpResponse.json({ environment: environmentPayload() }),
@@ -159,9 +159,9 @@ describe('Settings ownership', () => {
     );
     const router = renderSettings('environment');
 
-    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
-    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/factory');
-    expect(screen.getByRole('link', { name: 'Manage Factory' })).toHaveAttribute('aria-current', 'page');
+    expect(await screen.findByRole('button', { name: 'Show settings for acme/web' })).toBeInTheDocument();
+    expect(router.state.location.pathname).toBe('/factories/fp-1/settings/repositories');
+    expect(screen.getByRole('link', { name: 'Repositories' })).toHaveAttribute('aria-current', 'page');
   });
 
   it('lets a Personal-routed Factory with no Factory default start chats once the user picks a personal default', async () => {
