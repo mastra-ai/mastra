@@ -1,12 +1,3 @@
-/**
- * BDD coverage for the repository link mutation. Every place that links a
- * repository to a Factory (onboarding, the wizard, Settings › Repositories)
- * routes through it, so this is where "a linked repository feeds the board"
- * is guaranteed.
- *
- * Drives the real services + React Query cache; only the network is mocked
- * (MSW) on the ApiConfig base URL the test providers inject.
- */
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 
@@ -15,7 +6,12 @@ import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '..
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import type { GitLabRepository } from '../../ui/domains/factory/services/gitlab';
 import type { GithubRepo } from '../../ui/domains/workspaces/services/github';
-import { useFactoriesQuery, useLinkRepositoryMutation } from '../useFactories';
+import {
+  environmentPayload,
+  environmentRepository,
+} from '../../ui/domains/settings/components/__tests__/fixtures/environment';
+import { useFactoryEnvironmentQuery } from '../useFactoryEnvironment';
+import { useFactoryQuery, useLinkRepositoryMutation } from '../useFactories';
 import { useIntakeConfigQuery } from '../useIntakeConfig';
 
 const CONFIG_URL = `${TEST_BASE_URL}/web/intake/config`;
@@ -64,7 +60,6 @@ function stubRepositoryLink() {
   );
 }
 
-/** Stateful intake config: each PUT becomes what the next GET returns. */
 function stubIntakeConfig(initial: Partial<IntakeConfig>) {
   let config: Partial<IntakeConfig> = initial;
   const saved: IntakeConfig[] = [];
@@ -227,29 +222,52 @@ describe('useLinkRepositoryMutation', () => {
     expect(saved).toEqual([]);
   });
 
-  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory list still refreshes', async () => {
-    stubRepositoryLink();
-    let factoryListReads = 0;
+  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory repositories still refresh', async () => {
+    let linked = false;
+    const projectRepository = {
+      id: 'ghp_1',
+      branch: 'main',
+      sandboxWorkdir: '/workspace/hello',
+      repository: { slug: 'octo/hello', defaultBranch: 'main' },
+    };
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
-        factoryListReads += 1;
-        return HttpResponse.json({ projects: [] });
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
+        HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Acme' }] }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [{ id: 'conn-1', installationId: 'inst-7', repositories: linked ? [projectRepository] : [] }],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () => {
+        linked = true;
+        return HttpResponse.json({ projectRepository });
       }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/environment`, () =>
+        HttpResponse.json({
+          environment: environmentPayload({
+            repositories: linked ? [environmentRepository({ projectRepositoryId: 'ghp_1', slug: 'octo/hello' })] : [],
+          }),
+        }),
+      ),
       http.get(CONFIG_URL, () => HttpResponse.json({ config: {} })),
       http.put(CONFIG_URL, () => HttpResponse.json({ error: 'invalid_config' }, { status: 400 })),
     );
 
     const { client, result } = renderHookWithProviders(() => ({
       link: useLinkRepositoryMutation(),
-      factories: useFactoriesQuery(),
+      factory: useFactoryQuery('fp-1'),
+      environment: useFactoryEnvironmentQuery('fp-1'),
     }));
     await waitForMutationsIdle(client);
-    expect(factoryListReads).toBe(1);
+    expect(result.current.factory.data?.repositories).toEqual([]);
+    expect(result.current.environment.data?.repositories).toEqual([]);
 
     result.current.link.mutate({ factoryProjectId: 'fp-1', repo });
 
     await waitForMutationsIdle(client);
     expect(result.current.link.error?.message).toBe('invalid_config');
-    expect(factoryListReads).toBe(2);
+    expect(result.current.factory.data?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
+    expect(result.current.environment.data?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
   });
 });

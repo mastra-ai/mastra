@@ -11,15 +11,12 @@ import {
   useUpdateAgentControllerSettingsMutation,
 } from '../../../../hooks/useUpdateAgentControllerSettingsMutation';
 import { AGENT_CONTROLLER_ID } from '../../chat/services/constants';
-import { ConnectedAccountsSection } from './ConnectedAccountsSection';
-import { EnvironmentSection } from './EnvironmentSection';
+import { ConnectionsSection } from './ConnectionsSection';
 import { AccountSettingsSection } from './AccountSettingsSection';
 import { FactoryManagementSection } from './FactoryManagementSection';
 import { FactorySkillsSection } from './FactorySkillsSection';
 import { IntakeSection } from './IntakeSection';
-import { McpClientsSection } from './McpClientsSection';
 import { RepositoriesSection } from './RepositoriesSection';
-import { SettingsSubsection } from './SettingsSubsection';
 import { BehaviorSettings, GeneralSettings } from './SettingsPanel.parts';
 import { MemorySettings } from './MemorySettings';
 import { ModelsSettings } from './models/ModelsSettings';
@@ -60,20 +57,8 @@ export function SettingsPanel() {
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}
-      {section === 'connections' && (
-        <div className="flex flex-col gap-8">
-          <SettingsSubsection
-            scope="personal"
-            title="Connected accounts"
-            description="Connect your account to use Factory from Slack."
-          >
-            <ConnectedAccountsSection />
-          </SettingsSubsection>
-          <McpClientsSection />
-        </div>
-      )}
+      {section === 'connections' && <ConnectionsSection />}
       {section === 'repositories' && <RepositoriesSection />}
-      {section === 'environment' && <EnvironmentSection />}
       {section === 'intake' && <IntakeSection />}
       {section === 'models' && factoryId && <ModelsSettings factoryId={factoryId} />}
       {section === 'memory' && factoryId && <MemorySettings factoryId={factoryId} sessionId={sessionId} />}
