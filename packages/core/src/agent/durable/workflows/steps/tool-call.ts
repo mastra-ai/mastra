@@ -13,6 +13,7 @@ import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
@@ -1933,23 +1934,13 @@ export function createDurableToolCallStep() {
         }).finally(settleRunTool);
 
         ownership?.throwIfLost();
-        if (outcome.status === 'aborted') {
-          // Mid-flight cancellation: leave the call incomplete (no result/error,
-          // no chunk emission) so the mapping step doesn't fake-complete it on
-          // resume. Mirrors the non-durable tool-call step.
-          return {
-            ...typedInput,
-            aborted: true,
-          };
-        }
-
         if (outcome.status === 'error') {
           // Route through the catch below so error serialization and the
           // tool-error chunk emission stay on the single existing path.
           throw outcome.error;
         }
 
-        let result = outcome.result;
+        let result = outcome.status === 'aborted' ? TOOL_ABORT_NOTICE : outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
@@ -1959,7 +1950,7 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput) {
+        if (toModelOutput && outcome.status === 'success') {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
@@ -2158,6 +2149,7 @@ export function createDurableToolCallStep() {
           ...typedInput,
           providerMetadata,
           result,
+          ...(outcome.status === 'aborted' ? { aborted: true } : {}),
           modelOutputComputed,
           ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),

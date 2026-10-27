@@ -102,7 +102,9 @@ import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
+import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
+import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import type { TranscriptStep } from '../../shared/transcript-step';
 import { getTranscriptStepContent } from '../../shared/transcript-step';
 import { isMastraTimeoutError } from '../../timeout';
@@ -1367,6 +1369,20 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         await commitCarriedEagerWork(currentMessageId);
       };
 
+      const recoveryProcessorRunner = outputProcessors?.length
+        ? new ProcessorRunner({
+            inputProcessors: [],
+            outputProcessors,
+            logger: logger || new ConsoleLogger({ level: 'error' }),
+            agentName: agentId,
+            processorStates,
+          })
+        : undefined;
+      const recoveryObservability = createObservabilityContext(modelSpanTracker?.getTracingContext());
+      const recoveryWriter = outputWriter
+        ? { custom: async (data: { type: string }) => outputWriter(data as ChunkType<OUTPUT>) }
+        : undefined;
+
       const commitCarriedEagerWork = async (messageId: string) => {
         const completed = eagerCoordinator?.takeCarriedWork() ?? [];
         if (!completed.length) return [];
@@ -1399,34 +1415,51 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             type: 'tool-call',
             payload: { toolCallId: work.toolCallId, toolName: work.toolName, args: work.args },
           };
-          // An incomplete call is written as the call alone, left in history as incomplete.
-          for (const chunk of work.incomplete
-            ? [call]
-            : [
-                call,
-                'error' in work
-                  ? {
-                      type: 'tool-error',
-                      payload: {
-                        toolCallId: work.toolCallId,
-                        toolName: work.toolName,
-                        args: work.args,
-                        error: work.error,
-                      },
-                    }
-                  : {
-                      type: 'tool-result',
-                      payload: {
-                        toolCallId: work.toolCallId,
-                        toolName: work.toolName,
-                        args: work.args,
-                        result: work.result,
-                      },
-                    },
-              ]) {
-            chunks.push(
-              (await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions)) as CollectedChunk,
-            );
+          // A started call without an outcome gets an explicit cancellation notice.
+          for (const chunk of [
+            call,
+            'error' in work
+              ? {
+                  type: 'tool-error',
+                  payload: {
+                    toolCallId: work.toolCallId,
+                    toolName: work.toolName,
+                    args: work.args,
+                    error: work.error,
+                  },
+                }
+              : {
+                  type: 'tool-result',
+                  payload: {
+                    toolCallId: work.toolCallId,
+                    toolName: work.toolName,
+                    args: work.args,
+                    result: work.incomplete ? TOOL_ABORT_NOTICE : work.result,
+                  },
+                },
+          ]) {
+            const transformed = await addToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT>, transformOptions);
+            if (transformed.type === 'tool-result' && recoveryProcessorRunner) {
+              await recoveryProcessorRunner.runProcessToolResult({
+                steps: inputData.output?.steps ?? [],
+                messages: messageList.get.all.db(),
+                messageList,
+                stepNumber: inputData.output?.steps?.length ?? 0,
+                toolName: work.toolName,
+                toolCallId: work.toolCallId,
+                toolArgs: work.args,
+                result: transformed.payload.result,
+                providerExecuted: false,
+                ...recoveryObservability,
+                requestContext,
+                retryCount: 0,
+                writer: recoveryWriter,
+                abortSignal: options?.abortSignal,
+              });
+              const processedResult = readToolResultFromMessageList(messageList, work.toolCallId);
+              if (processedResult !== undefined) transformed.payload.result = processedResult;
+            }
+            chunks.push(transformed as CollectedChunk);
           }
         }
         const messages = buildMessagesFromChunks({
@@ -1442,35 +1475,40 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       };
 
       /**
-       * The run was aborted. Like the default pipeline, which waits for a started tool
-       * before it emits `abort`, every eager call that has started is waited out,
-       * whether or not it observes its signal: abort is cooperative, and a tool that
-       * ignores it still does its side effect. Each outcome is then committed and
-       * streamed, so the aborted run records it. Work that never started is dropped.
+       * Keep outcomes returned during the run's bounded cancellation window.
+       * Calls still running at the deadline get a cancellation notice; work that
+       * never started is dropped.
        */
       const settleEagerWorkOnAbort = async (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>) => {
         if (!eagerCoordinator) return;
-        eagerCoordinator.stop({ permanent: true });
-        await eagerCoordinator.settleRunning();
-        const completed = eagerCoordinator.stop({ permanent: true, cancelRunning: true });
-        if (completed.length) eagerCoordinator.carryDiscardedWork(completed);
+        await eagerCoordinator.settleOnAbort();
         for (const chunk of await commitCarriedEagerWork(currentMessageId)) {
           if (chunk.type === 'tool-call') continue;
-          safeEnqueue(controller, { ...chunk, runId, from: ChunkFrom.AGENT } as ChunkType<OUTPUT>);
+          await processAndEmitChunk({ ...chunk, runId, from: ChunkFrom.AGENT } as ChunkType<OUTPUT>, {
+            runner: recoveryProcessorRunner,
+            processorStates,
+            observabilityContext: recoveryObservability,
+            requestContext,
+            messageList,
+            streamWriter: recoveryWriter,
+            emitChunk: processed => {
+              safeEnqueue(controller, processed);
+            },
+          });
         }
       };
 
       if (eagerCoordinator) {
         writeScoped(scopeCtx, EAGER_TOOL_EXECUTION_KEY, 'eagerToolExecutionCoordinator', eagerCoordinator);
         // A caller abort stops further eager dispatch permanently. Work already running is
-        // left to finish: the abort exit waits it out and commits it. Registered once for
+        // given a bounded window to finish and be committed. Registered once for
         // the whole run rather than per iteration, so long loops do not pile up listeners.
         if (!eagerAbortListenerRegistered && runAbortSignal) {
           eagerAbortListenerRegistered = true;
           // `runAbortSignal` is owned by this run (see `workflows/stream.ts`), which unlinks
           // it from the caller's signal when the run ends, so this listener cannot outlive
           // the run even when the caller reuses one signal across many runs.
-          runAbortSignal.addEventListener('abort', () => eagerCoordinator.stop({ permanent: true }), { once: true });
+          runAbortSignal.addEventListener('abort', () => void eagerCoordinator.settleOnAbort(), { once: true });
         }
         // A stop caused by one bad turn (tripwire, model error, retry) must not disable
         // eager dispatch for the rest of the run: the next turn is a fresh model call.
