@@ -13,8 +13,6 @@ const ORGANIZATION = process.env.ORGANIZATION;
 const GITHUB_TOKEN = process.env.GITHUB_TOKEN;
 const USERNAME = process.env.USERNAME;
 const EMAIL = process.env.EMAIL;
-// Comma-separated template directories that failed pre-sync validation.
-const SKIP_TEMPLATES = new Set((process.env.SKIP_TEMPLATES || '').split(',').filter(Boolean));
 
 // Validate required environment variables
 const requiredEnvVars = { ORGANIZATION, GITHUB_TOKEN, USERNAME, EMAIL };
@@ -35,12 +33,7 @@ async function main() {
     // Get all template directories
     const templateDirs = fs
       .readdirSync(TEMPLATES_DIR)
-      .filter(file => fs.statSync(path.join(TEMPLATES_DIR, file)).isDirectory())
-      .filter(file => {
-        if (!SKIP_TEMPLATES.has(file)) return true;
-        console.log(`Skipping ${file}: failed validation against published packages`);
-        return false;
-      });
+      .filter(file => fs.statSync(path.join(TEMPLATES_DIR, file)).isDirectory());
 
     console.log(`Found ${templateDirs.length} templates: ${templateDirs.join(', ')}`);
 

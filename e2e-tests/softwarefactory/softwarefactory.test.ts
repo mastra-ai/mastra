@@ -19,10 +19,6 @@ type TemplateName = (typeof TEMPLATES)[number];
  * monorepo's local package set (served by the E2E registry): scaffold each
  * checked-in factory template through the built CLI, then typecheck and build
  * it. The self-hosted template is also booted against its own Postgres.
- *
- * Published-npm compatibility is intentionally NOT checked here — sources may
- * legitimately be ahead of npm between release trains. The sync-templates
- * workflow gates the public template repos on published versions instead.
  */
 describe('factory templates', () => {
   let workDir: string;

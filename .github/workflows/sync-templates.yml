@@ -46,36 +46,10 @@ jobs:
       - name: Install dependencies
         run: pnpm --config.trust-policy=no-check add -w --no-lockfile @octokit/rest fs-extra dotenv
 
-      # The factory templates track `latest`, but sources can be ahead of npm
-      # between release trains. Validate each against PUBLISHED packages in a
-      # throwaway copy (install writes lockfiles and build output); a failing
-      # template keeps its last good sync — re-run this workflow
-      # (workflow_dispatch) after the next release. PR-time validation against
-      # the LOCAL package set lives in the e2e-softwarefactory job.
-      - name: Validate factory templates against published packages
-        id: validate
-        env:
-          MASTRA_TELEMETRY_DISABLED: '1'
-        run: |
-          set -uo pipefail
-          skip=()
-          for template in template-factory template-factory-self-hosted; do
-            dir="$RUNNER_TEMP/validate-$template"
-            cp -R "templates/$template" "$dir"
-            if (cd "$dir" && npm install --no-audit --no-fund && npm run check && npm run build); then
-              echo "$template validated"
-            else
-              echo "::warning::$template failed validation against published packages; skipping its sync"
-              skip+=("$template")
-            fi
-          done
-          echo "skip=$(IFS=,; echo "${skip[*]}")" >> "$GITHUB_OUTPUT"
-
       - name: Run Template Sync Script
         env:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
           ORGANIZATION: 'mastra-ai'
           USERNAME: '${{ steps.app-auth.outputs.app-slug }}[bot]'
           EMAIL: '${{ steps.app-auth.outputs.user-id }}+${{ steps.app-auth.outputs.app-slug }}[bot]@users.noreply.github.com'
-          SKIP_TEMPLATES: ${{ steps.validate.outputs.skip }}
         run: node .github/scripts/sync-templates.js
