@@ -35,7 +35,7 @@ export function StarterUnblockArt({ id }: { id: string }) {
       </mask>
       <g mask={`url(#${id}-nut)`}>
         <g
-          className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
+          className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
           style={hoverStyle}
         >
           <path

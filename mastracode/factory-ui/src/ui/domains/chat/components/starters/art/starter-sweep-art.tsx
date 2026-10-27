@@ -23,11 +23,11 @@ export function StarterSweepArt() {
   return (
     <g strokeWidth="0.9">
       <g
-        className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
+        className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
         style={hoverStyle}
       >
         <g
-          className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
+          className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
           style={hoverStyle2}
         >
           <path
@@ -49,11 +49,11 @@ export function StarterSweepArt() {
         </g>
       </g>
       <g
-        className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
+        className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
         style={hoverStyle3}
       >
         <g
-          className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
+          className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
           style={hoverStyle4}
         >
           <path
@@ -75,11 +75,11 @@ export function StarterSweepArt() {
         </g>
       </g>
       <g
-        className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
+        className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[translate:var(--hover-shift)] motion-safe:group-has-focus-visible/starter:[translate:var(--hover-shift)]"
         style={hoverStyle5}
       >
         <g
-          className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
+          className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
           style={hoverStyle6}
         >
           <path

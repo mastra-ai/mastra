@@ -10,7 +10,7 @@ export function StarterStaleArt() {
   return (
     <g strokeWidth="0.9">
       <g
-        className="motion-safe:transition-[translate,transform] motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
+        className="motion-safe:duration-slow motion-safe:ease-out-custom motion-safe:transition-[translate,transform] motion-safe:group-hover/starter:[transform:var(--hover-transform)] motion-safe:group-has-focus-visible/starter:[transform:var(--hover-transform)]"
         style={hoverStyle}
       >
         <path
