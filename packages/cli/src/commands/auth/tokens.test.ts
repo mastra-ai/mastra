@@ -86,7 +86,7 @@ describe('createToken', () => {
     );
   });
 
-  it('sends a permission once even when the flag repeats it', async () => {
+  it('sends each permission once when the same one is passed twice', async () => {
     const { createToken } = await import('./tokens.js');
 
     await createToken('tok', 'org_1', 'ci', ['databases:write', 'databases:write']);
