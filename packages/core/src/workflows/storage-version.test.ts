@@ -1256,6 +1256,64 @@ describe('storage v2 nested runs', () => {
     });
   });
 
+  it.each([1, 2] as const)(
+    'restarts a registered nested run only through its parent on boot on v%s',
+    async storageVersion => {
+      let innerBRuns = 0;
+      const build = (died?: () => void) => {
+        const inner = createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion },
+        })
+          .then(appendItem('inner-a'))
+          .then(
+            appendItem('inner-b', {
+              // Slow, so two drives at once would overlap here.
+              onRun: died
+                ? () => (died(), new Promise(() => {}))
+                : () => (innerBRuns++, new Promise(resolve => setTimeout(resolve, 20))),
+            }),
+          )
+          .commit();
+        const outer = createWorkflow({
+          id: 'outer',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion },
+        })
+          .then(appendItem('before'))
+          .then(inner)
+          .commit();
+        return { outer, inner };
+      };
+      const storage = new MockStore();
+      const store = storage.stores.workflows!;
+      const persist = store.persistWorkflowSnapshot.bind(store);
+      store.persistWorkflowSnapshot = args => persist({ ...args, snapshot: cloneRunData(args.snapshot) });
+      let died = false;
+      const first = build(() => (died = true));
+      new Mastra({ logger: false, storage, workflows: first });
+      void (await first.outer.createRun({ runId: 'run-1' })).start({
+        inputData: { n: 0 },
+        initialState: { items: [PAD] },
+      });
+      await vi.waitFor(() => expect(died).toBe(true));
+
+      await new Mastra({ logger: false, storage, workflows: build() }).restartAllActiveWorkflowRuns();
+
+      expect(innerBRuns).toBe(1);
+      const state = { items: [PAD, 'before:0', 'inner-a:1', 'inner-b:2'] };
+      expect(await storedStates(storage, storageVersion)).toEqual({
+        'outer/run-1': { status: 'success', state },
+        'inner/run-1': { status: 'success', state },
+      });
+    },
+  );
+
   describe('copies the state into a nested run outside a block whose parent has not stored the state it starts from', () => {
     const inner = () =>
       createWorkflow({
