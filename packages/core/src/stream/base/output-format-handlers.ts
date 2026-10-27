@@ -715,7 +715,7 @@ export function createObjectStreamTransformer<OUTPUT = undefined>({
   });
 
   async function finalize(controller: TransformStreamDefaultController<ChunkType<OUTPUT>>) {
-    if (!accumulatedText?.trim() || finalResult) {
+    if (!accumulatedText?.trim() || finalResult || finishReason === 'error') {
       return;
     }
 

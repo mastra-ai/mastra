@@ -15,7 +15,7 @@ import {
   escapeUnescapedControlCharsInJsonStrings,
 } from './output-format-handlers';
 
-function finishChunk(reason: 'stop' | 'length' | 'content-filter'): ChunkType<unknown> {
+function finishChunk(reason: 'stop' | 'length' | 'content-filter' | 'error'): ChunkType<unknown> {
   return {
     type: 'finish',
     runId: 'test-run',
@@ -142,6 +142,24 @@ describe('output-format-handlers', () => {
       );
       return chunks;
     }
+
+    it.each(['strict', 'warn', 'fallback'] as const)(
+      'does not publish an answer for an error finish with the %s strategy',
+      async errorStrategy => {
+        for (const text of ['{"name":"Ana","items":[]}', 'not JSON']) {
+          const finish = finishChunk('error') as ChunkType<z.infer<typeof schema>>;
+          const chunks = await transform(
+            text,
+            { structuredOutput: { schema, errorStrategy, fallbackValue: { name: 'fallback', items: [] } } },
+            [finish],
+          );
+
+          expect(chunks.filter(chunk => chunk.type === 'object-result')).toEqual([]);
+          expect(chunks.filter(chunk => chunk.type === 'error')).toEqual([]);
+          expect(chunks.at(-1)).toEqual(finish);
+        }
+      },
+    );
 
     it.each(['length', 'content-filter'] as const)('rejects schema-valid JSON repaired after %s', async reason => {
       const chunks = await transform('{"name":"Ana","items":["lettuce","carrot"', { structuredOutput: { schema } }, [
