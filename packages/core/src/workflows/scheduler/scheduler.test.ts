@@ -461,8 +461,16 @@ describe('Scheduler', () => {
         createdAt: fireAt,
         updatedAt: fireAt,
       });
-      await new Scheduler({ schedulesStore: store, pubsub }).tick();
+      const logger = { ...noopLogger, info: vi.fn() };
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+      scheduler.__setLogger(logger);
+      await scheduler.tick();
       const runId = `sched_publication-control_${fireAt}`;
+      const identity = { scheduleId: 'publication-control', runId, scheduledFireAt: fireAt };
+      expect(logger.info.mock.calls).toEqual([
+        ['Claimed schedule occurrence', identity],
+        ['Published schedule occurrence', identity],
+      ]);
       expect(await store.getSchedule('publication-control')).toMatchObject({
         status: terminal ? 'completed' : 'active',
         nextFireAt: terminal ? fireAt : fireAt + 60_000,
@@ -489,9 +497,11 @@ describe('Scheduler', () => {
       const pubsub = new EventEmitterPubSub();
       const { events } =
         targetType === 'workflow' ? await captureWorkflowsTopic(pubsub) : await captureAgentSchedulesTopic(pubsub);
-      const publish = vi.spyOn(pubsub, 'publish').mockRejectedValueOnce(new Error('broker unavailable'));
-      const logger = { ...noopLogger, error: vi.fn() };
-      const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+      const originalPublish = pubsub.publish.bind(pubsub);
+      const publish = vi.spyOn(pubsub, 'publish').mockRejectedValue(new Error('broker unavailable'));
+      const logger = { ...noopLogger, info: vi.fn(), error: vi.fn() };
+      const onError = vi.fn();
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
       scheduler.__setLogger(logger);
       await store.createSchedule({
         id: 'publication-failure',
@@ -507,7 +517,24 @@ describe('Scheduler', () => {
         updatedAt: fireAt,
       });
 
-      await scheduler.tick();
+      const tick = scheduler.tick();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith('Claimed schedule occurrence', {
+        scheduleId: 'publication-failure',
+        runId: `sched_publication-failure_${fireAt}`,
+        scheduledFireAt: fireAt,
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(publish).toHaveBeenCalledTimes(2);
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(200);
+      await tick;
+      expect(onError).toHaveBeenCalledExactlyOnceWith(expect.any(Error), { scheduleId: 'publication-failure' });
+      expect(logger.info).not.toHaveBeenCalledWith('Published schedule occurrence', expect.anything());
       expect(await store.getSchedule('publication-failure')).toMatchObject({
         status: terminal ? 'completed' : 'active',
         nextFireAt: terminal ? fireAt : fireAt + 60_000,
@@ -523,18 +550,19 @@ describe('Scheduler', () => {
           scheduledFireAt: fireAt,
           runId: `sched_publication-failure_${fireAt}`,
           publicationOutcome: 'unknown',
-          automaticRetry: false,
+          automaticReplay: false,
         }),
       );
 
       const replacement = new Scheduler({ schedulesStore: store, pubsub });
       await replacement.tick();
-      expect(publish).toHaveBeenCalledTimes(1);
+      expect(publish).toHaveBeenCalledTimes(3);
       expect(events).toHaveLength(0);
+      publish.mockImplementation(originalPublish);
       vi.setSystemTime(fireAt + 60_001);
       await replacement.tick();
       expect(events).toHaveLength(terminal ? 0 : 1);
-      expect(publish).toHaveBeenCalledTimes(terminal ? 1 : 2);
+      expect(publish).toHaveBeenCalledTimes(terminal ? 3 : 4);
       if (!terminal) {
         expect(await store.getSchedule('publication-failure')).toMatchObject({
           nextFireAt: fireAt + 120_000,

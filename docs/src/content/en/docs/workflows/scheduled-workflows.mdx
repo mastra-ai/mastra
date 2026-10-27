@@ -45,7 +45,7 @@ A separate "register schedule" call won't happen. The scheduler reads `schedule`
 
 ## Delivery guarantees
 
-Scheduled workflow publication is best-effort. Because each occurrence is claimed before its start event is published, a publication failure or process crash can skip that occurrence. Skipped occurrences aren't automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence, which doesn't confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+Scheduled workflow publication is best-effort. Each occurrence is claimed before its start event is published, with up to three publication attempts. Exhausted attempts or a publisher crash can skip that occurrence. Skipped occurrences aren't automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence, which doesn't confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
 
 ## Execution engine
 
@@ -125,7 +125,7 @@ The scheduler attempts to record a trigger row with the run ID, scheduled time, 
 - The run's start time and duration.
 - A link to the run's full graph view at `/workflows/:workflowId/graph/:runId`.
 - A `pending` badge for triggers whose run record hasn't been written yet, due to a race between trigger publish and run snapshot.
-- A `publish failed` badge with the publish error when publication rejects. The outcome is unknown: the transport may have accepted the event before returning the error.
+- A `publish failed` badge with the final publish error after all three attempts fail. The outcome is unknown: the transport may have accepted the event before returning the error.
 
 Triggers in a non-terminal state cause the panel to poll every five seconds until they reach a terminal state. The list paginates, so long-running schedules don't load thousands of rows up front.
 

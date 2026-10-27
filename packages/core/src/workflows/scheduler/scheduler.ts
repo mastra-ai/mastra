@@ -471,6 +471,12 @@ export class Scheduler extends MastraBase {
       return;
     }
 
+    this.logger.info('Claimed schedule occurrence', {
+      scheduleId: schedule.id,
+      runId,
+      scheduledFireAt: schedule.nextFireAt,
+    });
+
     let triggerStatus: ScheduleTrigger['outcome'] = 'published';
     let triggerError: string | undefined;
 
@@ -484,6 +490,11 @@ export class Scheduler extends MastraBase {
           await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
         }
       }
+      this.logger.info('Published schedule occurrence', {
+        scheduleId: schedule.id,
+        runId,
+        scheduledFireAt: schedule.nextFireAt,
+      });
     } catch (err) {
       triggerStatus = 'failed';
       triggerError = err instanceof Error ? err.message : String(err);
@@ -493,7 +504,7 @@ export class Scheduler extends MastraBase {
         targetType: schedule.target.type,
         scheduledFireAt: schedule.nextFireAt,
         publicationOutcome: 'unknown',
-        automaticRetry: false,
+        automaticReplay: false,
         error: err,
       });
       this.#notifyError(err, schedule.id);
