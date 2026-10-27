@@ -62,9 +62,9 @@ The invoice-reading agent has no approval tool. Invoice text and chat messages c
 
 ### Human approval and production authentication
 
-Set `AP_API_TOKEN` and `AP_APPROVAL_TOKEN` to distinct random secrets of at least 32 characters, and set `AP_APPROVER_ID` to the human reviewer's identity. Generate each secret separately with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Keep the approver secret outside invoice text, agent prompts, tools, and reader clients. Serve production traffic over HTTPS.
+Set `AP_API_TOKEN`, `AP_APPROVAL_TOKEN`, and `AP_WORKFLOW_SIGNING_KEY` to distinct random secrets of at least 32 characters, and set `AP_APPROVER_ID` to the human reviewer's identity. Generate each secret separately with `node -e "console.log(require('node:crypto').randomBytes(32).toString('base64url'))"`. Keep the approver secret outside invoice text, agent prompts, tools, and reader clients. Keep the workflow signing key exclusively on the server; human approval clients must not receive it. Serve production traffic over HTTPS.
 
-With `NODE_ENV=production`, startup requires all three settings and configures Mastra `SimpleAuth` for the server. The reader token authenticates API/Studio access; it cannot approve invoices. Missing authentication configuration prevents production startup. In local development, agent access can remain unauthenticated when tokens are absent, but the human approval endpoint stays disabled.
+With `NODE_ENV=production`, startup requires all four settings and configures Mastra `SimpleAuth` for the server. The reader token authenticates API/Studio access; it cannot approve invoices. Missing authentication configuration prevents production startup. In local development, agent access can remain unauthenticated when tokens are absent, but the human approval endpoint stays disabled.
 
 After inspecting the original invoice, send the returned `runId` and `invoiceDigest` from a human-controlled client:
 
@@ -76,6 +76,8 @@ curl -X POST "http://localhost:4111/invoice-approvals/$RUN_ID" \
 ```
 
 Use `approved: false` to reject. The endpoint rejects reader credentials, stale digests, completed runs, and caller-supplied reviewer identities. The workflow also rejects unsigned or forged decisions sent through generic resume APIs. Successful decisions record `AP_APPROVER_ID` and the server timestamp; the proof is valid for one run and digest for five minutes.
+
+Remote worker step execution is disabled for this application. Each invoice step also verifies a server-issued proof bound to its run and complete input, so invoking an individual step cannot bypass submission validation, assessment, or approval. These workflow proofs survive restarts with the same `AP_WORKFLOW_SIGNING_KEY`; rotating that key invalidates pending runs, which must be resubmitted for review. Development without a configured signing key uses a temporary process key, so pending runs must also be resubmitted after restarting. Keep the standard in-process workflow execution when adapting the template.
 
 ## About Mastra templates
 

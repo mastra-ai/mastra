@@ -45,9 +45,12 @@ export async function handleInvoiceApproval(
   return Response.json({ runId, status: result.status, result: result.status === 'success' ? result.result : null });
 }
 
-export function createInvoiceApprovalRoute(auth: SimpleAuth<InvoiceUser> | undefined) {
+export function createInvoiceApprovalRoute(
+  auth: SimpleAuth<InvoiceUser> | undefined,
+  workflow: typeof invoiceWorkflow = invoiceWorkflow,
+) {
   return registerApiRoute('/invoice-approvals/:runId', {
     method: 'POST',
-    handler: context => handleInvoiceApproval(context.req.raw, context.req.param('runId'), invoiceWorkflow, auth),
+    handler: context => handleInvoiceApproval(context.req.raw, context.req.param('runId'), workflow, auth),
   });
 }

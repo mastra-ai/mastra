@@ -28,6 +28,7 @@
     "zod": "^4.2.0"
   },
   "devDependencies": {
+    "@mastra/deployer": "latest",
     "@types/node": "^22.0.0",
     "mastra": "latest",
     "oxfmt": "0.74.0",

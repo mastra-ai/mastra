@@ -82,6 +82,7 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
     AP_API_TOKEN: 'test-reader-credential-00000000000000000000',
     AP_APPROVAL_TOKEN: 'test-human-credential-00000000000000000000',
     AP_APPROVER_ID: 'human-reviewer',
+    AP_WORKFLOW_SIGNING_KEY: 'test-server-only-signing-key-00000000000000',
     ...options.env,
   };
   return {
@@ -106,6 +107,7 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         approvalPending?: boolean;
         httpStatus?: number;
         registeredTools?: string[];
+        results?: Array<{ status: string; error?: { message?: string } }>;
         suspendPayload?: Record<
           string,
           {
@@ -587,6 +589,62 @@ it('requires human SimpleAuth credentials and the reviewed digest on the approva
   }
 });
 
+// Superagent 4384150128: remote step commands must not bypass submission or approval.
+it.each(['reader', 'approver', 'development'])(
+  'cannot post a forged invoice through the generic step-execution HTTP API: %s',
+  async credential => {
+    const test = await scenario(
+      credential === 'development'
+        ? {
+            env: {
+              NODE_ENV: 'development',
+              AP_API_TOKEN: '',
+              AP_APPROVAL_TOKEN: '',
+              AP_APPROVER_ID: '',
+            },
+          }
+        : {},
+    );
+    try {
+      const pending = await test.run({ tool: true });
+      const response = await test.run({
+        stepAttack: 'http',
+        sourceRunId: pending.runId,
+        credential: credential === 'development' ? 'none' : credential,
+      });
+      assert.equal(response.httpStatus, 403);
+      assert.equal((await test.state()).bills.length, 0);
+    } finally {
+      await test.close();
+    }
+  },
+);
+
+it('refuses forged intermediate steps even when invoked directly by the worker', async () => {
+  const test = await scenario();
+  try {
+    const pending = await test.run({ tool: true });
+    for (const target of [
+      { targetRunId: 'nonexistent-run' },
+      { targetRunId: pending.runId },
+      { targetRunId: 'nonexistent-run', replay: true },
+    ]) {
+      const attack = await test.run({ stepAttack: 'worker', sourceRunId: pending.runId, ...target });
+      assert.equal((await test.state()).bills.length, 0);
+      assert.equal(attack.results?.length, target.replay ? 2 : 3);
+      for (const result of attack.results ?? []) {
+        assert.equal(result.status, 'failed');
+        assert.match(result.error?.message ?? '', /server-issued authorization/);
+      }
+    }
+    const approved = await test.run({ runId: pending.runId, approved: true });
+    assert.equal(approved.result?.executionStatus, 'posted');
+    assert.equal((await test.state()).bills.length, 1);
+  } finally {
+    await test.close();
+  }
+});
+
 // CodeRabbit 4384033309: invalid proof must not consume a human's pending approval.
 it.each(['forged', 'incomplete'])(
   'keeps an approval pending after an invalid resume and accepts the human decision: %s',
@@ -630,7 +688,18 @@ it.each(['forged', 'incomplete'])(
 it('requires distinct SimpleAuth reader and human credentials before production can start', async () => {
   const apiToken = 'production-reader-credential-00000000000000';
   const approvalToken = 'production-human-credential-00000000000000';
+  const workflowSigningKey = 'production-server-only-signing-key-00000000';
   assert.throws(() => createInvoiceAuth({ NODE_ENV: 'production' }), /Production requires/);
+  assert.throws(
+    () =>
+      createInvoiceAuth({
+        NODE_ENV: 'production',
+        AP_API_TOKEN: apiToken,
+        AP_APPROVAL_TOKEN: approvalToken,
+        AP_APPROVER_ID: 'human-reviewer',
+      }),
+    /AP_WORKFLOW_SIGNING_KEY/,
+  );
   assert.throws(
     () =>
       createInvoiceAuth({
@@ -638,14 +707,27 @@ it('requires distinct SimpleAuth reader and human credentials before production 
         AP_API_TOKEN: apiToken,
         AP_APPROVAL_TOKEN: apiToken,
         AP_APPROVER_ID: 'human-reviewer',
+        AP_WORKFLOW_SIGNING_KEY: workflowSigningKey,
       }),
     /must be different/,
+  );
+  assert.throws(
+    () =>
+      createInvoiceAuth({
+        NODE_ENV: 'production',
+        AP_API_TOKEN: apiToken,
+        AP_APPROVAL_TOKEN: approvalToken,
+        AP_APPROVER_ID: 'human-reviewer',
+        AP_WORKFLOW_SIGNING_KEY: approvalToken,
+      }),
+    /signing key must be different/,
   );
   const auth = createInvoiceAuth({
     NODE_ENV: 'production',
     AP_API_TOKEN: apiToken,
     AP_APPROVAL_TOKEN: approvalToken,
     AP_APPROVER_ID: 'human-reviewer',
+    AP_WORKFLOW_SIGNING_KEY: workflowSigningKey,
   });
   assert.ok(auth);
   const request = new Request('http://127.0.0.1/api/agents');
