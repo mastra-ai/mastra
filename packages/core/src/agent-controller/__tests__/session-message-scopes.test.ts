@@ -157,4 +157,69 @@ describe.each([false, true])('per-message scopes, durable=%s', durable => {
     expect(h.calls[1]!.prompt).not.toContain('Task three');
     expect(h.calls[2]!.prompt).toContain('Task three');
   });
+
+  it('starts a queued message in its own run with its own scopes', async () => {
+    const h = await createHarness(`queue-${durable}`, durable);
+    const { sent: first } = await h.startFirst(['request:r1']);
+
+    await h.session.queueMessage({ content: 'Queued task', scopes: ['request:r2'] });
+    h.releaseFirst();
+    await first;
+    await vi.waitFor(() => expect(h.calls).toHaveLength(2), { timeout: 5_000 });
+
+    expect(h.calls[1]).toMatchObject({ tags: ['request:r2'] });
+    expect(h.calls[1]!.prompt).toContain('Queued task');
+  });
+
+  it('starts a queued signal in its own run with its own scopes', async () => {
+    const h = await createHarness(`queue-signal-${durable}`, durable);
+    const { sent: first } = await h.startFirst(['request:r1']);
+
+    await h.session.queueSignal(
+      { type: 'reactive', tagName: 'task', contents: 'Queued signal task' },
+      { scopes: ['request:r2'] },
+    );
+    h.releaseFirst();
+    await first;
+    await vi.waitFor(() => expect(h.calls).toHaveLength(2), { timeout: 5_000 });
+
+    expect(h.calls[1]).toMatchObject({ tags: ['request:r2'] });
+    expect(h.calls[1]!.prompt).toContain('Queued signal task');
+  });
+
+  it('steers into a new run with the steering message scopes', async () => {
+    const h = await createHarness(`steer-${durable}`, durable);
+    const { sent: first } = await h.startFirst(['request:r1']);
+
+    const steered = h.session.steer({ content: 'Change course', scopes: ['request:r2'] });
+    h.releaseFirst();
+    await first.catch(() => {});
+    expect(await settlesWithin(steered, 5_000)).toBe(true);
+
+    await vi.waitFor(() => expect(h.calls.some(c => c.prompt.includes('Change course'))).toBe(true), {
+      timeout: 5_000,
+    });
+    const call = h.calls.find(c => c.prompt.includes('Change course'));
+    expect(call).toMatchObject({ tags: ['request:r2'] });
+  });
+
+  it('delivers a scoped notification in its own run after a run started with other scopes', async () => {
+    const h = await createHarness(`notify-${durable}`, durable);
+    const { sent: first } = await h.startFirst(['request:r1']);
+
+    await h.session.sendNotificationSignal(
+      { source: 'test', kind: 'ping', priority: 'high', summary: 'Notified task' },
+      { scopes: ['request:r2'] },
+    );
+    expect(h.calls).toHaveLength(1);
+    h.releaseFirst();
+    await first;
+    await vi.waitFor(() => expect(h.calls.some(c => c.prompt.includes('notification-summary'))).toBe(true), {
+      timeout: 5_000,
+    });
+
+    const call = h.calls.find(c => c.prompt.includes('notification-summary'));
+    expect(call).toMatchObject({ tags: ['request:r2'] });
+    expect(h.calls[0]!.prompt).not.toContain('notification-summary');
+  });
 });

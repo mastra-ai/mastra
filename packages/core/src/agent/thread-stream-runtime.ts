@@ -27,7 +27,7 @@ import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
-import { resolveAgentScopes } from './scopes';
+import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import type { AgentScopeEntry } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
@@ -6845,8 +6845,20 @@ export class AgentThreadStreamRuntime {
       abortSignal: undefined,
     };
     const queuedScopes = resolveThreadTargetScopes(target, { resourceId, threadId }, agent.getMastraInstance?.());
+    // A queued run naming scopes holds exactly those (they already include
+    // `ifIdle.streamOptions.scopes`), never the active run's it would otherwise fall back to.
+    // Falling back to the active run's options, drop what pins them to that run's scopes:
+    // its request context carries them, and a durable agent skips re-resolving options
+    // carrying its (symbol-keyed) resolved marker.
+    const inherited = target.ifIdle?.streamOptions ? undefined : baseQueuedStreamOptions;
     const queuedStreamOptions = queuedScopes
-      ? { ...baseQueuedStreamOptions, scopes: unionScopes(baseQueuedStreamOptions.scopes, queuedScopes) }
+      ? {
+          ...(inherited ? Object.fromEntries(Object.entries(inherited)) : baseQueuedStreamOptions),
+          scopes: queuedScopes,
+          ...(inherited?.requestContext
+            ? { requestContext: deriveAgentRunRequestContext(inherited.requestContext, []) }
+            : {}),
+        }
       : baseQueuedStreamOptions;
 
     if (activeRecord || state.activeThreadRunIds.has(key)) {
