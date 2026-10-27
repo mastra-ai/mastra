@@ -91,6 +91,17 @@ export function getProcessorRunContext(input: ProcessorSpanPayload<ProcessorRunI
 }
 
 /** A tool offered to the model, with the id the tool registry knows it by. */
+const WORKFLOW_TOOL_PREFIX = 'workflow-';
+
+/**
+ * The workflow behind a tool name, if it is one. Agents expose each workflow they
+ * own as a tool named `workflow-<key>`, and the workflow page resolves that key.
+ */
+export function getWorkflowToolId(toolName: string): string | undefined {
+  if (!toolName.startsWith(WORKFLOW_TOOL_PREFIX)) return undefined;
+  return toolName.slice(WORKFLOW_TOOL_PREFIX.length) || undefined;
+}
+
 export interface SpanTool {
   id: string;
   description?: string;

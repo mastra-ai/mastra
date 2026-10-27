@@ -14,6 +14,7 @@ import {
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
 import { getProcessorRunContext, hasItems } from './span-payload-registry';
+import { SpanToolNameValue } from './span-payload-tool';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 type Scalar = string | number | boolean;
@@ -129,7 +130,9 @@ export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcesso
             return (
               <Fragment key={field.key}>
                 <DataKeysAndValues.Key>{field.label}</DataKeysAndValues.Key>
-                {'copy' in field ? (
+                {field.key === 'toolName' ? (
+                  <SpanToolNameValue toolName={String(scalar)} />
+                ) : 'copy' in field ? (
                   <DataKeysAndValues.ValueWithCopyBtn copyValue={String(scalar)}>
                     {formatScalar(scalar)}
                   </DataKeysAndValues.ValueWithCopyBtn>

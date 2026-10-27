@@ -7,6 +7,7 @@ import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives
 import { SpanPayloadProcessorInput } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
+import { SpanToolNameValue } from './span-payload-tool';
 import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
@@ -26,7 +27,7 @@ function SpanAgentRunResumeRenderer({ value }: { value: AgentRunResumeInput }) {
             {toolName !== undefined && (
               <>
                 <DataKeysAndValues.Key>Tool</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{String(toolName)}</DataKeysAndValues.Value>
+                <SpanToolNameValue toolName={String(toolName)} />
               </>
             )}
             {toolCallId !== undefined && (
