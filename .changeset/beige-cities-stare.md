@@ -2,4 +2,4 @@
 '@mastra/factory': patch
 ---
 
-Added an `actions` filter to the project audit log route, so the Factory UI fetches only the events it shows. Names outside the audit registry are dropped, and a request naming none of them gets a 400 `unknown_actions` instead of every event.
+The Factory activity summary now loads only the events it shows, through a new `actions` filter on the project audit route. Unknown action names are ignored, and a request naming only unknown actions returns a 400 `unknown_actions` error instead of every event.
