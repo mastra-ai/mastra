@@ -642,7 +642,6 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
   return event;
 }
 
-
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
   method: 'GET',
   path: '/agent-controller/:controllerId/sessions/:sessionId/stream',

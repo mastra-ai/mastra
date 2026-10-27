@@ -20,7 +20,6 @@ export interface RunErrorIdentity {
   message: string;
 }
 
-
 const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error details to investigate.';
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
