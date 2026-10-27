@@ -5,7 +5,7 @@
 
 Changes to an experimental, upcoming memory feature.
 
-`experimental_subconscious` and the Memory `knowledge` option are removed; attach Knowledge to the agent instead.
+`experimental_subconscious` and the Memory `knowledge` option are removed: setting either now throws, saying to attach Knowledge to the agent instead (`knowledge: false` is still accepted). `Subconscious` and `KnowledgeSemanticIndexCoordinator` stay exported from `@mastra/memory` so older code still loads, and throw when constructed. `@mastra/core/knowledge` exports `Knowledge` with its option and result types and the Knowledge storage domain; the tool, pin and semantic-index helpers are internal.
 
 Agent `scopes` are read-only unless marked writable: `scopes: ['org:acme', { scope: 'team:core', access: 'write' }]` lets the run read both and write only to `team:core`. `resource:` and `thread:` scopes, the run's Memory identity, are always writable. When the agent, the call and the request context name the same scope with different access, read-only wins.
 
