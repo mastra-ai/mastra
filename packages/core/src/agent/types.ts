@@ -351,7 +351,8 @@ export interface SendAgentStreamResumeResult {
 export type SendAgentStateSignalOptions<OUTPUT = unknown> = SendAgentSignalOptions<OUTPUT>;
 
 export type SendAgentStateSignalResult<OUTPUT = unknown> =
-  (SendAgentSignalResult<OUTPUT> & { skipped?: false }) | { skipped: true; reason: 'unchanged'; signal?: undefined };
+  | (SendAgentSignalResult<OUTPUT> & { skipped?: false })
+  | { skipped: true; reason: 'unchanged'; signal?: undefined };
 
 export type AgentNotificationSignal = SendNotificationSignalInput;
 
@@ -455,7 +456,8 @@ export interface AgentThreadSubscription<
 export type ToolsetsInput = Record<string, ToolsInput>;
 
 type FallbackFields<OUTPUT = undefined> =
-  { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never } | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
+  | { errorStrategy?: 'strict' | 'warn'; fallbackValue?: never }
+  | { errorStrategy: 'fallback'; fallbackValue: OUTPUT };
 
 export type StructuredOutputOptionsBase<OUTPUT = {}> = {
   /** Model to use for the internal structuring agent. If not provided, falls back to the agent's model */
