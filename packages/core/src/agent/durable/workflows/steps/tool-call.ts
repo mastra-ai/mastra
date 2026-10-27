@@ -239,7 +239,8 @@ class DurableChunkPublishError extends Error {
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
- * processed chunk, or `null` if a processor blocked it.
+ * processed chunk, or `null` if a processor blocked it. `onEmit` sees every
+ * chunk emitted, including parts a processor stashed for reprocessing.
  *
  * Thin glue over the shared per-chunk pipeline core; mirrors the regular
  * agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
@@ -254,6 +255,7 @@ async function processChunkThroughOutputProcessors(
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
   collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
+  onEmit?: (chunk: ChunkType) => void,
 ): Promise<ChunkType | null> {
   const runner =
     registryEntry?.outputProcessors?.length && registryEntry.processorStates
@@ -294,6 +296,7 @@ async function processChunkThroughOutputProcessors(
         }
       : undefined,
     emitChunk: async c => {
+      onEmit?.(c);
       if (pubsub) {
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
@@ -2097,6 +2100,7 @@ export function createDurableToolCallStep() {
         // tool-result with undefined would produce a spurious entry that
         // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
         let transformMetadata: DurableToolCallOutput['transformMetadata'];
+        let resultEmitted = false;
         let resultHidden = false;
         if (pubsub && !wasSuspended) {
           try {
@@ -2121,7 +2125,7 @@ export function createDurableToolCallStep() {
             transformMetadata = (resultChunk as { metadata?: Record<string, any> })
               .metadata as DurableToolCallOutput['transformMetadata'];
             // Runs through output processors (tripwire/blocking/redaction) and emits
-            const emitted = await processChunkThroughOutputProcessors(
+            await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
               pubsub,
@@ -2131,8 +2135,12 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
               collectProcessorDataPart,
+              chunk => {
+                if (chunk.type === 'tool-result' && chunk.payload.toolCallId === toolCallId) resultEmitted = true;
+              },
             );
-            resultHidden = emitted === null;
+            // A processor can drop the result, or stash it and emit it right after.
+            resultHidden = !resultEmitted;
           } catch (emitError) {
             ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {

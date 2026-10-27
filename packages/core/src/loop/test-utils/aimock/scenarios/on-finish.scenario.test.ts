@@ -2,6 +2,7 @@ import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import type { Processor } from '../../../../processors';
+import { REPROCESS_PART_KEY } from '../../../../processors/stream-reprocess';
 import type { LLMStepResult, MastraOnFinishCallbackArgs, ToolResultChunk } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import {
@@ -540,9 +541,10 @@ describeForAllEngines(
     // A resumed stream restores the run's earlier tool results from storage.
     // Results the stream never emitted must stay out of the callback. The plain
     // Agent still restores a processor-hidden result on resume, so the hidden
-    // case covers the durable engines only.
-    it.each(isDurableEngineVariant(engine) ? (['hidden', 'client'] as const) : (['client'] as const))(
-      'does not restore a %s result after approval',
+    // case covers the durable engines only. A result a processor stashes and
+    // emits right after (the reprocess path) was emitted, so it stays.
+    it.each(isDurableEngineVariant(engine) ? (['hidden', 'client', 'reprocessed'] as const) : (['client'] as const))(
+      'restores only emitted results after approval (%s lookup)',
       async kind => {
         const shared = await createSharedAgent(getMock(), {
           engine,
@@ -551,7 +553,7 @@ describeForAllEngines(
               id: 'lookup',
               description: 'Find an item.',
               inputSchema: z.object({}),
-              ...(kind === 'hidden' ? { execute: async () => ({ secret: 'private' }) } : {}),
+              ...(kind !== 'client' ? { execute: async () => ({ secret: 'private' }) } : {}),
             }),
             purchase: createTool({
               id: 'purchase',
@@ -567,6 +569,17 @@ describeForAllEngines(
           processOutputStream: async ({ part }) =>
             part.type === 'tool-result' && part.payload.toolName === 'lookup' ? null : part,
         };
+        const deferLookup: Processor = {
+          id: 'defer-lookup',
+          processOutputStream: async ({ part, state }) => {
+            if (part.type !== 'tool-result' || part.payload.toolName !== 'lookup' || state.deferred) return part;
+            state.deferred = true;
+            state[REPROCESS_PART_KEY] = part;
+            return null;
+          },
+        };
+        const outputProcessors = { hidden: [hideLookup], reprocessed: [deferLookup], client: undefined }[kind];
+        const expected = kind === 'reprocessed' ? ['lookup-1', 'purchase-1'] : ['purchase-1'];
         let finish: MastraOnFinishCallbackArgs | undefined;
         let resumed: any;
         try {
@@ -576,7 +589,7 @@ describeForAllEngines(
             sharedAgent: shared,
             prompt: 'Find and buy an item.',
             maxSteps: 4,
-            ...(kind === 'hidden' ? { outputProcessors: [hideLookup] } : {}),
+            ...(outputProcessors ? { outputProcessors } : {}),
             fixtures: llm => {
               llm.on(
                 { endpoint: 'chat', sequenceIndex: 0 },
@@ -601,10 +614,10 @@ describeForAllEngines(
             /* drain the resumed segment */
           }
           await expect.poll(() => finish).toBeDefined();
-          expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(['purchase-1']);
-          expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual([
-            'purchase-1',
-          ]);
+          expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(expected);
+          expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual(
+            expected,
+          );
         } finally {
           resumed?.cleanup?.();
           if (engine !== 'inngest') await shared.mastra.shutdown({ drainTimeout: 1000 });
