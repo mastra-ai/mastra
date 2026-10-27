@@ -28,6 +28,7 @@ async function readNextRun(iterator: AsyncIterator<any>) {
     const next = await iterator.next();
     if (next.done) return { runId, text, done: true };
     const part = next.value;
+    if (part.type === 'thread-run-status') continue;
     runId ??= part.runId;
     if (part.type === 'text-delta') text += part.payload.text;
     if (part.type === 'finish' || part.type === 'error' || part.type === 'abort') {
@@ -90,6 +91,39 @@ describeForAllEngines('AIMock scenario: thread subscriptions observe stream runs
 
     first.unsubscribe();
     second.unsubscribe();
+  });
+
+  it('reports success after the last output without ending the thread subscription', async () => {
+    const { shared, run } = await setup();
+    await (
+      await run('status-warmup', 'status-user')
+    ).output.text;
+    const subscription = await shared.agent.subscribeToThread({ threadId: 'status-thread', resourceId: 'status-user' });
+    const iterator = subscription.stream[Symbol.asyncIterator]();
+    try {
+      for (let i = 0; i < 2; i++) {
+        const outcome = (async () => {
+          let text = '';
+          for (;;) {
+            const next = await iterator.next();
+            expect(next.done).toBe(false);
+            const chunk = next.value;
+            if (chunk.type === 'text-delta') text += chunk.payload.text;
+            if (chunk.type === 'thread-run-status') return { text, runId: chunk.runId, status: chunk.payload.status };
+          }
+        })();
+        const { output } = await run('status-thread', 'status-user');
+        await output.text;
+        await expect(withTimeout(outcome, 'subscriber received output but no run outcome')).resolves.toEqual({
+          text: 'thread response',
+          runId: output.runId,
+          status: 'success',
+        });
+      }
+    } finally {
+      subscription.unsubscribe();
+      await iterator.return?.();
+    }
   });
 
   it('isolates subscriptions by resource and thread id', async () => {

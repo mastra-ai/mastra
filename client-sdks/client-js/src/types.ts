@@ -33,7 +33,7 @@ import type {
   StorageConditionalField,
   StoredProcessorGraph,
 } from '@mastra/core/storage';
-import type { ChunkType, ThreadHistoryChunk } from '@mastra/core/stream';
+import type { ChunkType, ThreadHistoryChunk, ThreadRunStatusChunk } from '@mastra/core/stream';
 import type { QueryResult } from '@mastra/core/vector';
 import type { SerializedStepFlowEntry, WorkflowResult, WorkflowRunStatus, WorkflowState } from '@mastra/core/workflows';
 import type { PublicSchema } from '@mastra/schema-compat/schema';
@@ -173,7 +173,7 @@ export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
 export interface ProcessAgentThreadStreamOptions {
   /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
-  onChunk: (chunk: ChunkType | ThreadHistoryChunk) => void | Promise<void>;
+  onChunk: (chunk: ChunkType | ThreadHistoryChunk | ThreadRunStatusChunk) => void | Promise<void>;
   reconnect?:
     | boolean
     | {

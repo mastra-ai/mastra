@@ -107,7 +107,7 @@ describe.each([
     const { agent } = setup(delayBacklog);
     await drain(await agent.stream('hello', { memory }));
 
-    expect(await historyThenParts(agent)).toEqual(['thread-history']);
+    expect(await historyThenParts(agent)).toEqual(['thread-history', 'thread-run-status']);
   });
 
   it('an approved and completed tool run does not replay its approval', async () => {
@@ -116,7 +116,7 @@ describe.each([
     expect(await drain(first)).toContain('tool-call-approval');
     await drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
 
-    expect(await historyThenParts(agent)).toEqual(['thread-history']);
+    expect(await historyThenParts(agent)).toEqual(['thread-history', 'thread-run-status']);
   });
 
   it('does not replay an older completed run outside the perPage window', async () => {
@@ -124,13 +124,17 @@ describe.each([
     await drain(await agent.stream('hello', { memory }));
     await drain(await agent.stream('hello again', { memory }));
 
-    expect(await historyThenParts(agent, { perPage: 1 })).toEqual(['thread-history']);
+    expect(await historyThenParts(agent, { perPage: 1 })).toEqual([
+      'thread-history',
+      'thread-run-status',
+      'thread-run-status',
+    ]);
   });
 
   it('still emits the approval of a run waiting on it', async () => {
     const { agent } = setup(delayBacklog);
     await drain(await agent.stream('use the tool', { memory, requireToolApproval: true }));
 
-    expect(await historyThenParts(agent)).toEqual(['thread-history', 'tool-call-approval']);
+    expect(await historyThenParts(agent)).toEqual(['thread-history', 'tool-call-approval', 'thread-run-status']);
   });
 });
