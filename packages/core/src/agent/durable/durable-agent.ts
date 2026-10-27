@@ -902,6 +902,7 @@ export class DurableAgent<
       instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
+      notifications: agent.__getNotificationConfig(),
     });
 
     this.#wrappedAgent = agent;
@@ -2292,6 +2293,7 @@ export class DurableAgent<
     // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
     // side effects — mirrors Agent.__fork().
     if (this.#mastra) {
+      fork.__inheritMastraForFork(this.#mastra);
       fork.#mastra = this.#mastra;
     }
     fork.#innerPubsub = this.#innerPubsub;
