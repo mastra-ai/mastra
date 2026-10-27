@@ -19,7 +19,7 @@ import { AgentChannels } from '../agent-channels';
 import { getChatModule } from '../chat-lazy';
 import { ChannelSessionRejectedError } from '../errors';
 import { matchesDomain, extractUrls } from '../inline-media';
-import type { ChannelContext, ChannelHandler } from '../types';
+import type { ChannelAdapterBaseConfig, ChannelContext, ChannelHandler } from '../types';
 
 // Minimal mock adapter that satisfies the Chat SDK's Adapter interface
 function createMockAdapter(name: string) {
@@ -2269,7 +2269,7 @@ describe('AgentChannels', () => {
         options: {
           platform?: string;
           threadId?: string;
-          formatError?: (error: Error) => string;
+          formatError?: ChannelAdapterBaseConfig['formatError'];
           logger?: IMastraLogger;
         } = {},
       ) {
@@ -2343,13 +2343,13 @@ describe('AgentChannels', () => {
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('❌ Error: plain string');
       });
 
-      it('passes the original Error to the custom formatter', async () => {
+      it("passes the original Error and the run's request context to the custom formatter", async () => {
         const error = new Error('failure');
         const formatError = vi.fn(() => 'custom feedback');
         const f = await fixture(error, { formatError });
         await f.run();
         expect(f.record().error.message).toBe('failure');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
         expect(f.thread.post).toHaveBeenCalledExactlyOnceWith('custom feedback');
       });
 
@@ -2452,7 +2452,7 @@ describe('AgentChannels', () => {
         });
         expect(toJSON).not.toHaveBeenCalled();
         expect(format(...f.output.mock.calls[0]!)).not.toContain('SENTINEL');
-        expect(formatError).toHaveBeenCalledExactlyOnceWith(error);
+        expect(formatError).toHaveBeenCalledExactlyOnceWith(error, { requestContext: expect.any(RequestContext) });
       });
 
       it('does not serialize non-string Mastra classification fields', async () => {

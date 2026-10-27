@@ -1348,6 +1348,87 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
+    it('carries the provider status, body, request id and requested model a saved error keeps', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-facts',
+        id: 'user-err-facts',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-facts',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const responseBody = '{"error":{"type":"permission_error","message":"Your API key does not have permission."}}';
+      const providerError = Object.assign(new Error('Bad Request'), {
+        name: 'AI_APICallError',
+        statusCode: 403,
+        responseBody,
+        responseHeaders: { 'x-request-id': 'req_123' },
+        requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'secret prompt' }] },
+      });
+      session.emit({ type: 'error', error: providerError, errorType: 'provider' } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(received)).error).toEqual({
+        name: 'AI_APICallError',
+        message: 'Bad Request',
+        statusCode: 403,
+        responseBody,
+        requestId: 'req_123',
+        modelId: 'claude-opus-4-5',
+      });
+    });
+
+    it('keeps the stream open when a provider detail of an error cannot be read', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-unreadable',
+        id: 'user-err-unreadable',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-unreadable',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const unreadable = Object.defineProperty(new Error('Bad Request'), 'responseHeaders', {
+        get() {
+          throw new TypeError('Body has already been consumed.');
+        },
+      });
+      session.emit({ type: 'error', error: unreadable, errorType: 'provider' } as any);
+      session.emit({ type: 'agent_end', reason: 'error' } as any);
+
+      const delivered: any[] = [];
+      while (delivered.at(-1)?.type !== 'agent_end') {
+        const { value } = await reader.read();
+        const type = (value as any)?.type;
+        if (type === 'error' || type === 'agent_end') delivered.push(value);
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(delivered))).toEqual([
+        { type: 'error', error: { name: 'Error', message: 'Bad Request' }, errorType: 'provider' },
+        { type: 'agent_end', reason: 'error' },
+      ]);
+    });
+
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
