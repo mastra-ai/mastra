@@ -5304,7 +5304,11 @@ export class DurableAgent<
   async #readReplayFloor(
     runId: string,
     offset: number | undefined,
-  ): Promise<Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'>> {
+  ): Promise<
+    Pick<DurableStreamAdapterOptions, 'minGeneration' | 'rereadMinGeneration' | 'keepReplayEvent'> & {
+      refreshReplayFilter?: () => Promise<unknown>;
+    }
+  > {
     try {
       const history = (await this.pubsub.getHistory(AGENT_STREAM_TOPIC(runId), 0)) as AgentStreamEvent[];
       const initialFilter = createSupersededEventFilter(history);
@@ -5312,21 +5316,19 @@ export class DurableAgent<
       let currentFilter: typeof initialFilter | undefined;
       // Subscription can replay a newer claim than the snapshot above. Refresh
       // before the first replayed event; live events and later deliveries stay synchronous.
-      const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
-        if (
-          event.index === undefined ||
-          (!offset && (!history.length || (event.index >= history.length && !refreshedFilter)))
-        ) {
-          return initialFilter(event);
-        }
-        if (currentFilter) return currentFilter(event);
+      const refreshReplayFilter = () => {
         refreshedFilter ??= this.pubsub
           .getHistory(AGENT_STREAM_TOPIC(runId), 0)
           .then(entries => (currentFilter = createSupersededEventFilter(entries as AgentStreamEvent[])))
           .catch(() => (currentFilter = initialFilter));
-        return refreshedFilter.then(filter => filter(event));
+        return refreshedFilter;
       };
-      if (!offset) return { keepReplayEvent };
+      const keepReplayEvent = (event: AgentStreamEvent): boolean | Promise<boolean> => {
+        if (event.index === undefined) return (currentFilter ?? initialFilter)(event);
+        if (currentFilter) return currentFilter(event);
+        return refreshReplayFilter().then(filter => filter(event));
+      };
+      if (!offset) return { keepReplayEvent, refreshReplayFilter };
       const skipped = history.slice(0, offset);
       if (skipped.length === offset) {
         let floor: number | undefined;
@@ -5334,9 +5336,9 @@ export class DurableAgent<
           const generation = event.generation;
           if (typeof generation === 'number' && (floor === undefined || generation > floor)) floor = generation;
         }
-        return { minGeneration: floor, keepReplayEvent };
+        return { minGeneration: floor, keepReplayEvent, refreshReplayFilter };
       }
-      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent };
+      return { minGeneration: await readRunGeneration(this.#mastra, runId), keepReplayEvent, refreshReplayFilter };
     } catch (error) {
       this.logger.warn(`[DurableAgent] Couldn't read the claim of run ${runId}; observing it without a floor`, {
         error,
@@ -5493,6 +5495,7 @@ export class DurableAgent<
     await (options.offset !== undefined
       ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
       : this.pubsub.subscribeWithReplay(topic, callback));
+    await replayFloor.refreshReplayFilter?.();
 
     const unsubscribe = async () => {
       if (!subscribed) return;
