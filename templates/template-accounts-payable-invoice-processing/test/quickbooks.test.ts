@@ -255,7 +255,8 @@ describe('QuickBooks provider', () => {
 
     try {
       const { createInvoiceRuntime } = await import('../src/mastra/accounting/providers.ts');
-      const { createInvoiceWorkflow, signInvoiceSubmission } = await import('../src/mastra/workflows/invoice.ts');
+      const { createInvoiceWorkflow, signInvoiceSubmission, ApprovalRequestSchema } =
+        await import('../src/mastra/workflows/invoice.ts');
       let screeningMatches = false;
       const runtime = createInvoiceRuntime({
         ...makeQuickBooksProvider(client),
@@ -315,14 +316,25 @@ describe('QuickBooks provider', () => {
         },
       });
       assert.equal(pending.status, 'suspended');
+      const approvalRequest = Object.values(pending.suspendPayload ?? {})
+        .map(value => ApprovalRequestSchema.safeParse(value))
+        .find(value => value.success)?.data;
+      assert.ok(approvalRequest);
+      const { signHumanApproval } = await import('../src/mastra/approvals/decision.ts');
       const result = await run.resume({
         step: 'approve-invoice',
-        resumeData: { approved: true, comment: 'Approved in Studio' },
+        resumeData: signHumanApproval({
+          approved: true,
+          runId: run.runId,
+          invoiceDigest: approvalRequest.invoiceDigest,
+          reviewerId: 'human-reviewer',
+          comment: 'Human reviewed',
+        }),
       });
 
       assert.equal(result.status, 'success');
       assert.equal(result.result?.executionStatus, 'posted');
-      assert.equal(result.result?.approval.reviewerId, 'mastra-studio');
+      assert.equal(result.result?.approval.reviewerId, 'human-reviewer');
       assert.equal(result.result?.posting?.providerId, 'quickbooks-mcp');
       assert.equal(result.result?.posting?.externalBillId, 'workflow-bill');
       assert.equal(calls.filter(name => name === 'create-bill').length, 1);

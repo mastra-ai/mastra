@@ -6,6 +6,8 @@ import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
 import { accountsPayableAgent } from './agents/accounts-payable.ts';
 import { invoiceWorkflow } from './workflows/invoice.ts';
+import { createInvoiceAuth } from './server/auth.ts';
+import { createInvoiceApprovalRoute } from './server/approval.ts';
 
 export const defaultStoragePath = resolve(fileURLToPath(new URL('../../', import.meta.url)), 'data/mastra.db');
 const configuredStorageUrl = process.env.MASTRA_DB_URL?.trim() || undefined;
@@ -19,7 +21,9 @@ const applicationStorage = new LibSQLStore({
   id: 'ap-invoice-storage',
   url: configuredStorageUrl ?? `file:${defaultStoragePath}`,
 });
+const invoiceAuth = createInvoiceAuth();
 export const mastra = new Mastra({
+  server: { auth: invoiceAuth, apiRoutes: [createInvoiceApprovalRoute(invoiceAuth)] },
   agents: { accountsPayableAgent },
   workflows: { invoiceWorkflow },
   storage: applicationStorage,

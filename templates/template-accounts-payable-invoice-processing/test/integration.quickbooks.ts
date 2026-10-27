@@ -186,6 +186,9 @@ it(
             env: {
               ...process.env,
               AP_ALLOW_UNSCREENED_VENDORS: 'true',
+              AP_API_TOKEN: 'sandbox-test-reader-00000000000000000000',
+              AP_APPROVAL_TOKEN: 'sandbox-test-human-00000000000000000000',
+              AP_APPROVER_ID: 'sandbox-test-reviewer',
               AP_APPROVAL_THRESHOLD_MINOR: '100000',
               QBO_MCP_ENABLE_POSTING: 'true',
               QBO_MCP_SINGLE_WRITER: 'true',

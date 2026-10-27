@@ -20,6 +20,7 @@ import { makeDuplicateDetection } from '../invoice/controls/duplicates.ts';
 import { makeInvoiceMatch } from '../invoice/controls/matching.ts';
 import { makePolicyRouting } from '../invoice/controls/policy.ts';
 import { makeVendorValidation } from '../invoice/controls/vendor.ts';
+import { HumanApprovalDecisionSchema, isHumanApproval } from '../approvals/decision.ts';
 
 const submissionSecret = randomBytes(32);
 
@@ -64,11 +65,6 @@ const makeAssessmentStep = (runtime: InvoiceRuntime) => {
     },
   });
 };
-
-const approvalDecisionSchema = z.object({
-  approved: z.boolean(),
-  comment: z.string().trim().max(1000).optional(),
-});
 
 export const ApprovalRequestSchema = z.object({
   invoiceNumber: z.string(),
@@ -126,8 +122,8 @@ const approvalStep = createStep({
   inputSchema: FinalAssessmentSchema,
   outputSchema: InvoiceResultSchema,
   suspendSchema: ApprovalRequestSchema,
-  resumeSchema: approvalDecisionSchema,
-  execute: async ({ inputData, resumeData, suspend }) => {
+  resumeSchema: HumanApprovalDecisionSchema,
+  execute: async ({ inputData, resumeData, suspend, runId }) => {
     if (inputData.disposition === 'auto_post') {
       return workflowResult(
         inputData,
@@ -155,10 +151,13 @@ const approvalStep = createStep({
       });
     }
 
+    if (!isHumanApproval(resumeData, runId, invoiceDigest(inputData)))
+      throw new Error('A current authenticated human decision bound to this run and invoice is required');
+
     const approval = approvalEvidence(inputData, {
       status: resumeData.approved ? 'approved' : 'rejected',
-      reviewerId: 'mastra-studio',
-      decidedAt: new Date().toISOString(),
+      reviewerId: resumeData.reviewerId,
+      decidedAt: resumeData.decidedAt,
       comment: resumeData.comment ?? null,
     });
 
