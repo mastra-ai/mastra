@@ -199,11 +199,11 @@ const agent = new Agent({
   },
   {
     name: 'formatError',
-    type: '(error: Error) => PostableMessage',
+    type: '(error: Error, context: { requestContext?: RequestContext }) => PostableMessage',
     isOptional: true,
     defaultValue: '"❌ Error: <error.message>"',
     description:
-      'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
+      "Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error. `context.requestContext` is the failed run's request context, so the message can link back to whatever the run belongs to.",
   },
   {
     name: 'formatToolCall',

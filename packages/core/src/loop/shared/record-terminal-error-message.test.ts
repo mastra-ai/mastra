@@ -30,15 +30,20 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps name, message and provider HTTP details, nothing else', () => {
+  it('keeps name, message, provider HTTP details and the requested model, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
       cause: new Error('inner'),
       url: 'https://api.example.com/v1?key=secret',
-      requestBodyValues: { prompt: 'secret prompt' },
+      requestBodyValues: { model: 'claude-opus-4-5', prompt: 'secret prompt' },
     });
 
-    expect(toPersistedErrorIdentity(error)).toEqual({ name: 'TypeError', message: 'boom', statusCode: 429 });
+    expect(toPersistedErrorIdentity(error)).toEqual({
+      name: 'TypeError',
+      message: 'boom',
+      statusCode: 429,
+      modelId: 'claude-opus-4-5',
+    });
   });
 
   it('keeps a bounded response body and the provider request id', () => {

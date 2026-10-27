@@ -39,6 +39,7 @@ function DraftChatModelsProvider({ children }: ChatModelsProviderProps) {
   const value: ChatModelsApi = {
     activeModelId: draftModelId ?? defaultModelId ?? fallbackModelQuery.data,
     defaultModelId,
+    pendingModelId: undefined,
     isLoading:
       factoryProjectQuery.isPending ||
       (personalDefaultUsed && defaultModelQuery.isPending) ||
@@ -70,7 +71,11 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
     ? (('defaultModelId' in sessionModelsQuery.data ? sessionModelsQuery.data.defaultModelId : localDefaultModelId) ??
       undefined)
     : undefined;
-  const { mutateAsync: switchModel } = useSwitchAgentControllerModelMutation({
+  const {
+    mutateAsync: switchModel,
+    isPending: switching,
+    variables: switchingTo,
+  } = useSwitchAgentControllerModelMutation({
     agentControllerId: AGENT_CONTROLLER_ID,
     sessionId,
     baseUrl,
@@ -79,6 +84,7 @@ function LiveChatModelsProvider({ children }: ChatModelsProviderProps) {
   const value: ChatModelsApi = {
     activeModelId: state?.modelId,
     defaultModelId,
+    pendingModelId: switching ? switchingTo?.modelId : undefined,
     isLoading: sessionModelsQuery.isPending,
     error: sessionModelsQuery.error ?? undefined,
     setModel: modelId => switchModel({ modelId }),

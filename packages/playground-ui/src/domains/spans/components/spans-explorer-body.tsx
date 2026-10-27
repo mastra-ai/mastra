@@ -12,10 +12,12 @@ import {
   observabilityListQueryOptions,
   useObservabilityListFilters,
 } from '@/domains/observability/hooks/use-observability-list-filters';
+import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type SpansExplorerPanelArgs = {
@@ -38,6 +40,7 @@ export type SpansExplorerBodyProps = {
 export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }: SpansExplorerBodyProps) {
   const filters = useObservabilityListFilters();
   const { timeRange, tokens, groups, sort } = filters;
+  const columns = useTraceColumnPreferences({ scope: 'spans' });
 
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
@@ -89,6 +92,9 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
                 disabled={isLoading}
               />
             </ActionRow.Start>
+            <ActionRow.End>
+              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
+            </ActionRow.End>
           </ActionRow>
         }
         error={
@@ -108,6 +114,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         <TracesListView
           listId="all-spans"
           traces={rows}
+          columnPreferences={columns.preferences}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
