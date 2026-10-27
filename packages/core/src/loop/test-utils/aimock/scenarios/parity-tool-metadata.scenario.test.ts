@@ -290,12 +290,16 @@ describeForAllEngines('tool-result provider metadata in public streams', engine 
   const getMock = useLoopScenarioAimock();
 
   it('keeps model-facing output in metadata while exposing the raw tool result', async () => {
+    const mapperInputs: unknown[] = [];
     const echo = createTool({
       id: 'echo',
       description: 'Echo a number',
       inputSchema: z.object({ n: z.number() }),
       execute: async ({ n }) => ({ n, secret: 'raw' }),
-      toModelOutput: () => ({ type: 'text' as const, value: 'mapped:1' }),
+      toModelOutput: output => {
+        mapperInputs.push(output);
+        return { type: 'text' as const, value: 'mapped:1' };
+      },
     });
     const { output, requests, chunks } = await runLoopScenario({
       engine,
@@ -315,6 +319,8 @@ describeForAllEngines('tool-result provider metadata in public streams', engine 
 
     expect(await output.text).toBe('Done.');
     expect(requests).toHaveLength(2);
+    expect(mapperInputs.length).toBeGreaterThan(0);
+    for (const input of mapperInputs) expect(input).toEqual({ n: 1, secret: 'raw' });
     const toolMessage = requests[1]!.body?.messages.find(message => message.role === 'tool');
     expect(JSON.stringify(toolMessage)).toContain('mapped:1');
     expect(JSON.stringify(toolMessage)).not.toContain('"secret"');
