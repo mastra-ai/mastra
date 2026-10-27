@@ -36,15 +36,18 @@ import {
 import type { KnowledgeScopeTypesConfig, MaterializeKnowledgeScopeInput } from './reconcile';
 import { KnowledgeSemanticIndexCoordinator } from './semantic-index';
 
-function resolvePins(pins: KnowledgeConfig['pins']): false | { maxPins: number; maxTokens: number } {
+function resolvePins(pins: KnowledgeConfig['pinnedContext']): false | { maxPins: number; maxTokens: number } {
   if (!pins) return false;
   const options = pins === true ? {} : pins;
   const maxTokens = options.maxTokens ?? DEFAULT_PINNED_MAX_TOKENS;
   if (maxTokens > MAX_PINNED_MAX_TOKENS) {
-    throw new Error(`Knowledge pins.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
+    throw new Error(`Knowledge pinnedContext.maxTokens is at most ${MAX_PINNED_MAX_TOKENS}.`);
   }
   return { maxPins: options.maxPins ?? DEFAULT_MAX_PINS, maxTokens };
 }
+
+/** Overrides which tool groups `createTools` and `getInstructions` cover. */
+type KnowledgeToolSelection = { read?: boolean; write?: boolean; pinnedContext?: boolean };
 
 /** @experimental Knowledge APIs are experimental and may change without notice. */
 export class Knowledge extends MastraBase {
@@ -78,8 +81,8 @@ export class Knowledge extends MastraBase {
     this.#vector = config.vector;
     this.#embedder = config.embedder;
     this.#embedderOptions = config.embedderOptions;
-    this.#tools = { read: config.tools?.read ?? true, write: config.tools?.write ?? false };
-    this.#pins = resolvePins(config.pins);
+    this.#tools = { read: Boolean(config.tools), write: config.tools === true };
+    this.#pins = resolvePins(config.pinnedContext);
     this.#instructions = config.instructions;
     this.#structure = config.structure ? validateKnowledgeStructurePlan(structuredClone(config.structure)) : undefined;
     this.#scopeTypes = validateKnowledgeScopeTypes(structuredClone(config.scopes));
@@ -123,31 +126,28 @@ export class Knowledge extends MastraBase {
     };
   }
 
-  #groups(override?: { read?: boolean; write?: boolean; pins?: boolean }): KnowledgeToolGroups {
+  #groups(override?: KnowledgeToolSelection): KnowledgeToolGroups {
+    const pinnedContext = override?.pinnedContext;
     return {
       read: override?.read ?? this.#tools.read,
       write: override?.write ?? this.#tools.write,
-      pins: override?.pins === false ? false : this.#pins || (override?.pins ? resolvePins(true) : false),
+      pins: pinnedContext === false ? false : this.#pins || (pinnedContext ? resolvePins(true) : false),
     };
   }
 
   /** Tools for explicit wiring; defaults to the groups configured on this Knowledge. */
-  createTools(options?: {
-    read?: boolean;
-    write?: boolean;
-    pins?: boolean;
-  }): Record<string, ToolAction<any, any, any>> {
+  createTools(options?: KnowledgeToolSelection): Record<string, ToolAction<any, any, any>> {
     return buildKnowledgeTools(this.#toolHost(), this.#groups(options));
   }
 
   /** The usage block that goes with `createTools(options)`. */
-  getInstructions(options?: { read?: boolean; write?: boolean; pins?: boolean }): string {
+  getInstructions(options?: KnowledgeToolSelection): string {
     const groups = this.#groups(options);
     return buildKnowledgeInstructions({ ...groups, pins: Boolean(groups.pins) }, this.#instructions);
   }
 
-  /** Whether attached agents get pins delivered every turn. */
-  get pinsEnabled(): boolean {
+  /** Whether attached agents get pinned context delivered every turn. */
+  get pinnedContextEnabled(): boolean {
     return this.#pins !== false;
   }
 
@@ -495,13 +495,9 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
-export * from './knowledge-tools';
-export * from './knowledge-write-tools';
-export * from './pinned';
-export * from './pinned-state-processor';
-export * from './semantic-index';
-export * from './instructions';
-export type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
+export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './instructions';
+/** @internal Used by Mastra Code's Factory Knowledge routes. */
+export { listPinnedKnowledge } from './pinned';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

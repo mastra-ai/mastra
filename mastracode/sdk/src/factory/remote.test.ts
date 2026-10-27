@@ -64,14 +64,6 @@ describe('RemoteSession', () => {
     expect(session.mode.resolve()).toMatchObject({ name: 'Build', metadata: { color: '#fff' } });
   });
 
-  it("forwards a message's scopes to the Factory, which decides whether to accept them", async () => {
-    const { session, remote } = await connected();
-    await session.sendMessage({ content: 'fix it', scopes: ['request:r25'] });
-    expect(remote.sendMessage).toHaveBeenCalledWith({ content: 'fix it', files: undefined, scopes: ['request:r25'] });
-    await session.sendMessage({ content: 'plain' });
-    expect(remote.sendMessage).toHaveBeenLastCalledWith({ content: 'plain', files: undefined });
-  });
-
   it('forwards attachments with a sent message', async () => {
     const { session, remote } = await connected();
     const files = [{ data: 'aGk=', mediaType: 'text/plain', filename: 'a.txt' }];

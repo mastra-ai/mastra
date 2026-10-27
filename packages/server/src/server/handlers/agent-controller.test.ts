@@ -401,65 +401,26 @@ describe('agent-controller routes', () => {
       expect(await controller.getSession('never-started')).toBeUndefined();
       expect(await controller.queryThreads({ resourceId: 'never-started' })).toEqual([]);
     });
-  });
 
-  describe('per-message scopes on SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
-    // Scope tags are authority, so a remote caller may name only the tag types the
-    // controller allows (none by default).
-    async function routeSession(target: Mastra, resourceId: string) {
-      const controller = target.getAgentController('code')!;
+    // Scopes are authority: a remote caller never names them. Hosts derive them from
+    // trusted request context through the agent's `scopes` function instead.
+    it('never passes scopes from the request body to the session', async () => {
+      const controller = mastra.getAgentController('code')!;
       await controller.init();
-      return controller.createSession({ resourceId, id: resourceId, ownerId: controller.id });
-    }
-
-    it('refuses any scopes with 403 when the controller allows no message scope types', async () => {
-      const session = await routeSession(mastra, 'user-scopes-default');
+      const session = await controller.createSession({ resourceId: 'user-scopes', id: 'user-scopes', ownerId: 'code' });
       const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
 
       await expect(
         SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
           mastra,
           controllerId: 'code',
-          sessionId: 'user-scopes-default',
+          sessionId: 'user-scopes',
           message: 'hello',
-          scopes: ['request:r1'],
+          scopes: ['org:other'],
         } as any),
-      ).rejects.toMatchObject({ status: 403, message: expect.stringContaining('"request:r1"') });
-      expect(spy).not.toHaveBeenCalled();
-    });
-
-    it('passes allowed scopes to the session and refuses a tag of another type', async () => {
-      const storage = new InMemoryStore();
-      const controller = new AgentController({
-        id: 'code',
-        storage,
-        workspace: new Workspace({ name: 'test-workspace', skills: ['/tmp/test-skills'] }),
-        modes: [{ id: 'build', name: 'Build', default: true, agent: makeAgent() }],
-        allowedMessageScopeTypes: ['request'],
-      });
-      const allowing = new Mastra({ agentControllers: { code: controller }, storage });
-      const session = await routeSession(allowing, 'user-scopes-allowed');
-      const spy = vi.spyOn(session, 'sendMessage').mockResolvedValue(undefined);
-      const send = (scopes: unknown) =>
-        SEND_AGENT_CONTROLLER_MESSAGE_ROUTE.handler({
-          mastra: allowing,
-          controllerId: 'code',
-          sessionId: 'user-scopes-allowed',
-          message: 'hello',
-          scopes,
-        } as any);
-
-      await expect(send(['request:r1', { tag: 'request:r0', access: 'read' }])).resolves.toEqual({ ok: true });
-      expect(spy).toHaveBeenCalledWith(
-        expect.objectContaining({ content: 'hello', scopes: ['request:r1', { tag: 'request:r0', access: 'read' }] }),
-      );
-
-      spy.mockClear();
-      await expect(send(['request:r2', 'org:acme'])).rejects.toMatchObject({
-        status: 403,
-        message: expect.stringContaining('"org:acme"'),
-      });
-      expect(spy).not.toHaveBeenCalled();
+      ).resolves.toEqual({ ok: true });
+      expect(spy).toHaveBeenCalledTimes(1);
+      expect(spy.mock.calls[0]![0]).not.toHaveProperty('scopes');
     });
   });
 
@@ -1200,6 +1161,67 @@ describe('agent-controller routes', () => {
   });
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
+    it('parses displayState=false as false rather than a truthy string', () => {
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'false' }).displayState).toBe(
+        false,
+      );
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'true' }).displayState).toBe(
+        true,
+      );
+    });
+
+    it('omits display state snapshots when displayState=false but preserves other events', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-no-snapshots',
+        id: 'user-no-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      session.emit({ type: 'agent_start' } as any);
+      session.emit({ type: 'agent_end' } as any);
+      const first = await reader.read();
+      const second = await reader.read();
+      await reader.cancel();
+
+      expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
+    });
+
+    it('still sends live display state changes by default', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-snapshots',
+        id: 'user-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-snapshots',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const initial = await reader.read();
+      session.emit({ type: 'agent_start' } as any);
+      const event = await reader.read();
+      const snapshot = await reader.read();
+      await reader.cancel();
+
+      expect((initial.value as any).type).toBe('display_state_changed');
+      expect(event.value).toEqual({ type: 'agent_start' });
+      expect((snapshot.value as any).type).toBe('display_state_changed');
+    });
+
     it('delivers session events to the SSE stream', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
@@ -1345,6 +1367,89 @@ describe('agent-controller routes', () => {
       expect(received.error).toEqual({ name: 'Error', message: 'model quota exhausted' });
       expect(JSON.parse(JSON.stringify(received)).error.message).toBe('model quota exhausted');
       expect(received.errorType).toBe('provider');
+    });
+
+    it('carries the same provider details, requested model, codes and reason a saved error keeps', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-facts',
+        id: 'user-err-facts',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-facts',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const responseBody = '{"error":{"type":"permission_error","message":"Your API key does not have permission."}}';
+      const providerError = Object.assign(new Error('Bad Request'), {
+        name: 'AI_APICallError',
+        statusCode: 403,
+        responseBody,
+        responseHeaders: { 'x-request-id': 'req_123' },
+        requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'secret prompt' }] },
+      });
+      session.emit({ type: 'error', error: providerError, errorType: 'provider' } as any);
+
+      let received: any;
+      for (let i = 0; i < 10 && received === undefined; i++) {
+        const { value } = await reader.read();
+        if (value && typeof value === 'object' && (value as any).type === 'error') received = value;
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(received)).error).toEqual({
+        name: 'AI_APICallError',
+        message: 'Bad Request',
+        statusCode: 403,
+        responseBody,
+        requestId: 'req_123',
+        modelId: 'claude-opus-4-5',
+        codes: ['permission_error'],
+        reason: 'Your API key does not have permission.',
+      });
+    });
+
+    it('keeps the stream open when a provider detail of an error cannot be read', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-err-unreadable',
+        id: 'user-err-unreadable',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-err-unreadable',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+
+      const reader = stream.getReader();
+      const unreadable = Object.defineProperty(new Error('Bad Request'), 'responseHeaders', {
+        get() {
+          throw new TypeError('Body has already been consumed.');
+        },
+      });
+      session.emit({ type: 'error', error: unreadable, errorType: 'provider' } as any);
+      session.emit({ type: 'agent_end', reason: 'error' } as any);
+
+      const delivered: any[] = [];
+      while (delivered.at(-1)?.type !== 'agent_end') {
+        const { value } = await reader.read();
+        const type = (value as any)?.type;
+        if (type === 'error' || type === 'agent_end') delivered.push(value);
+      }
+      await reader.cancel();
+
+      expect(JSON.parse(JSON.stringify(delivered))).toEqual([
+        { type: 'error', error: { name: 'Error', message: 'Bad Request' }, errorType: 'provider' },
+        { type: 'agent_end', reason: 'error' },
+      ]);
     });
 
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {

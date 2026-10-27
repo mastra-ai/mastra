@@ -2,7 +2,6 @@ import { Agent } from '../agent';
 import { DurableStepIds } from '../agent/durable/constants';
 import { MessageList } from '../agent/message-list';
 import type { MastraDBMessage, MastraMessageContentV2 } from '../agent/message-list/state/types';
-import type { AgentScopeEntry } from '../agent/scopes';
 import { isUserAuthoredMessage } from '../agent/signals';
 import type { ActiveThreadRun } from '../agent/thread-stream-runtime';
 import type { AgentInstructions, ToolsInput, ToolsetsInput } from '../agent/types';
@@ -1617,25 +1616,12 @@ export class AgentController<TState = {}> {
   // Mode Management
   // ===========================================================================
 
-  /**
-   * Refuses per-message scopes a remote caller may not send: every tag's type must be in
-   * `allowedMessageScopeTypes`. Throws naming the first tag refused.
-   */
-  assertRemoteMessageScopesAllowed(scopes: AgentScopeEntry[]): void {
-    const allowed = new Set(this.config.allowedMessageScopeTypes ?? []);
-    for (const entry of scopes) {
-      const tag = typeof entry === 'string' ? entry : entry.tag;
-      const type = tag.slice(0, Math.max(0, tag.indexOf(':')));
-      if (!type || !allowed.has(type)) {
-        throw new Error(
-          `This host doesn't accept message scope "${tag}": allowed tag types are ${allowed.size ? [...allowed].map(t => `"${t}"`).join(', ') : 'none'}.`,
-        );
-      }
-    }
-  }
-
   listModes(): AgentControllerMode[] {
     return this.config.modes;
+  }
+
+  getDefaultMode(): AgentControllerMode {
+    return this.#defaultMode;
   }
 
   private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {

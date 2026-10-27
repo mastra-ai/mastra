@@ -38,6 +38,8 @@
         "entityId": "test-agent",
         "attributes": {
           "instructions": "You are a helpful assistant",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
           "completionStartTime": "<date>"
         },
         "metadata": {
@@ -116,6 +118,8 @@
                 "entityId": "validator-agent",
                 "attributes": {
                   "instructions": "You validate input messages",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "completionStartTime": "<date>"
                 },
                 "metadata": {
@@ -205,6 +209,8 @@
                         "entityId": "validator-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
                           "usage": {
@@ -504,6 +510,8 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-2>",
                   "completionStartTime": "<date>",
                   "usage": {
@@ -790,6 +798,8 @@
                 "entityId": "summarizer-agent",
                 "attributes": {
                   "instructions": "You summarize text concisely",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "completionStartTime": "<date>"
                 },
                 "metadata": {
@@ -879,6 +889,8 @@
                         "entityId": "summarizer-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-3>",
                           "completionStartTime": "<date>",
                           "usage": {

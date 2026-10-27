@@ -48,6 +48,10 @@ export default defineConfig({
     'no-useless-catch': 'error',
     'no-unneeded-ternary': 'error',
     'no-useless-concat': 'error',
+    'no-multi-str': 'error',
+    'no-useless-computed-key': 'error',
+    'operator-assignment': 'error',
+    'prefer-numeric-literals': 'error',
     'no-restricted-globals': ['error', 'global'],
     'no-unexpected-multiline': 'error',
     'no-warning-comments': [
@@ -64,6 +68,14 @@ export default defineConfig({
       },
     ],
     'unicorn/prefer-node-protocol': 'error',
+    'unicorn/prefer-optional-catch-binding': 'error',
+    'unicorn/prefer-bigint-literals': 'error',
+    'unicorn/consistent-template-literal-escape': 'error',
+    'typescript/no-confusing-non-null-assertion': 'error',
+    // Keep JSX children as written: only simplify literal props.
+    'react/jsx-curly-brace-presence': ['error', { props: 'never', children: 'ignore' }],
+    'react/jsx-boolean-value': ['error', 'never'],
+    'react/self-closing-comp': 'error',
     'react/jsx-key': 'warn',
     'mastra/import-order': [
       'error',

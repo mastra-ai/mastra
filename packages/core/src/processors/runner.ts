@@ -47,6 +47,7 @@ import {
   summarizeProcessorToolsForSpan,
   summarizeToolChoiceForSpan,
 } from './span-payload';
+import { runsStateSignalWithoutMemory } from './state-signal-without-memory';
 import type { ProcessorStepOutput } from './step-schema';
 import { isFailedStreamChunk, REPROCESS_PART_KEY, takeHeldParts } from './stream-reprocess';
 import { needsTrailingAssistantGuard, TrailingAssistantGuard } from './trailing-assistant-guard';
@@ -498,7 +499,7 @@ export class ProcessorRunner {
     const resolvedThreadId = threadId ?? memoryContext?.thread?.id;
     const resolvedResourceId = resourceId ?? memoryContext?.resourceId;
 
-    if (!resolvedMemory && processor.stateSignalWithoutMemory) {
+    if (!resolvedMemory && runsStateSignalWithoutMemory(processor)) {
       await this.runComputeStateSignalInRun({
         processor,
         computeStateSignal,
@@ -2101,7 +2102,7 @@ export class ProcessorRunner {
             const resolvedMemory = args.memory;
             const resolvedThreadId = args.threadId ?? memoryContext?.thread?.id;
             const resolvedResourceId = args.resourceId ?? memoryContext?.resourceId;
-            if (!resolvedMemory && processor.stateSignalWithoutMemory) {
+            if (!resolvedMemory && runsStateSignalWithoutMemory(processor)) {
               const sent = await applyStateSignalInRun({
                 input: stateSignal,
                 threadId: resolvedThreadId ?? '',

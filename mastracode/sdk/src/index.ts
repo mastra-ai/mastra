@@ -17,6 +17,7 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
+import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
@@ -99,7 +100,7 @@ import { createOutcomeScorer, createEfficiencyScorer } from './evals/scorers/ind
 import { resolveExperimentalAgent, validateExperimentalAgent, wrapExperimentalAgent } from './experimental-agent.js';
 import { HookManager } from './hooks/index.js';
 import { createKnowledgeInspector as createScopedKnowledgeInspector } from './knowledge-inspector.js';
-import { knowledgeUnresolvedScopes, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { knowledgeUnresolvedScopes, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 import { createMcpManager } from './mcp/index.js';
 import type { McpServerConfig } from './mcp/index.js';
 import type { ProviderAccess } from './onboarding/packs.js';
@@ -183,7 +184,6 @@ const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write ep
 // budget before the account-rotation processor classifies them as a persistent
 // outage (hop). Must stay aligned with `classifyRotationError`'s 5xx check.
 const isTransientServerStatus = (status: number) => status >= 500 && status < 600;
-const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
  * Matcher for transient connection failures. Cause-chain traversal is handled
@@ -222,6 +222,8 @@ function isTransientConnectionError(error: unknown): boolean {
 
 function isTransientServerError(error: unknown): boolean {
   if (!error) return false;
+  const kind = classifyProviderError(error);
+  if (kind === 'context_overflow') return false;
 
   const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
   if (
@@ -231,8 +233,7 @@ function isTransientServerError(error: unknown): boolean {
     return true;
   }
 
-  const message = error instanceof Error ? error.message : undefined;
-  return typeof message === 'string' && TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN.test(message);
+  return kind === 'unavailable';
 }
 
 function getTransientRetryDelay(retryCount: number): number {
@@ -351,14 +352,20 @@ export interface MastraCodeConfig {
   /** Pre-built vector store instance for recall search. Skips the default vector store creation. */
   vector?: MastraVector;
   /**
-   * Knowledge for the code agent. `instance` is attached to the agent (read, write and pin tools
-   * per its own options) and registered on the mounted Mastra runtime under `key` (default
-   * `'default'`). `scopes` are the tags every run acts with, e.g. `['team:acme:support']` or
-   * `[{ tag: 'org:acme', access: 'read' }]`; local sessions add `org:local` only when none are
-   * given, Factory sessions always add their `org:` and `project:` tags. `false` turns Knowledge
-   * off even when `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`.
+   * Knowledge for the code agent, attached like an Agent's `knowledge`. Unset, it follows the
+   * `signals.experimentalKnowledge` global setting (off; on means `true`). `false` keeps it off
+   * whatever the setting. `true` uses a Knowledge on Mastra Code's own storage with the read, write and pin tools, writing to a
+   * shared `org:local` scope (the TUI's `/settings` Knowledge toggle). A `Knowledge` instance is
+   * attached as configured and registered on the mounted Mastra under its `id`; pass
+   * `{ key, instance }` to register it under another key.
    */
-  knowledge?: false | { instance: Knowledge; key?: string; scopes?: AgentScopeEntry[] };
+  knowledge?: false | true | Knowledge | { key: string; instance: Knowledge };
+  /**
+   * The scopes every Knowledge run acts with, like an Agent's `scopes`: a plain scope such as
+   * `'org:acme'` is read-only, `{ scope: 'team:core', access: 'write' }` is writable. Factory
+   * sessions always add writable `org:` and `project:` scopes.
+   */
+  scopes?: AgentScopeEntry[];
   /** Observational memory scope. Default: auto-detected from env/config files, falls back to 'thread' */
   omScope?: 'thread' | 'resource';
   /** Path to a custom settings.json file. Default: global settings */
@@ -855,32 +862,26 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     closeVector: vector instanceof LibSQLVector ? () => vector.close() : undefined,
   });
 
-  // The old flag turned Subconscious on only at '1'; anything else never did anything.
-  if (process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS === '1') {
-    console.warn(
-      'MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS no longer does anything: Subconscious was removed. Set MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1 to turn on Knowledge.',
-    );
-  }
-  const knowledgeConfig = config?.knowledge || undefined;
-  const configuredKnowledgeKey = knowledgeConfig?.key?.trim();
-  if (knowledgeConfig?.key !== undefined && !configuredKnowledgeKey) {
+  const knowledgeOption = config?.knowledge ?? (globalSettings.signals?.experimentalKnowledge ? true : undefined);
+  const knowledgeEntry =
+    !knowledgeOption || knowledgeOption === true || knowledgeOption instanceof Knowledge ? undefined : knowledgeOption;
+  const entryKey = knowledgeEntry?.key.trim();
+  if (knowledgeEntry && !entryKey) {
     throw new Error('knowledge.key must be a non-empty string.');
   }
   const knowledge =
-    config?.knowledge === false
-      ? undefined
-      : (knowledgeConfig?.instance ??
-        (process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1'
-          ? new Knowledge({
-              id: 'mastracode',
-              name: 'MastraCode Knowledge',
-              storage,
-              tools: { read: true, write: true },
-              pins: true,
-            })
-          : undefined));
-  const knowledgeKey = configuredKnowledgeKey ?? 'default';
-  const knowledgeHostScopes = knowledgeConfig?.scopes ?? [];
+    knowledgeOption === true
+      ? new Knowledge({ id: 'mastracode', name: 'MastraCode Knowledge', storage, tools: true, pinnedContext: true })
+      : knowledgeOption instanceof Knowledge
+        ? knowledgeOption
+        : knowledgeEntry?.instance;
+  const knowledgeKey = entryKey ?? knowledge?.id ?? 'default';
+  const knowledgeHostScopes: AgentScopeEntry[] = [
+    ...(config?.scopes ?? []),
+    ...(knowledgeOption === true && !(config?.scopes ?? []).length
+      ? [{ scope: `org:${LOCAL_KNOWLEDGE_ORG_ID}`, access: 'write' as const }]
+      : []),
+  ];
   const dynamicMemory =
     config?.memory === undefined
       ? getDynamicMemory(storage, vector, config?.settingsPath, {
@@ -1329,7 +1330,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
     ...(knowledge
       ? {
           knowledge,
-          // The session's tags (Factory org + project, or the local default) join the host's.
+          // Factory sessions add their org + project tags to the host's scopes.
           // An unresolved Factory session keeps only identity tags, so its writes stay private to
           // the run, matching the inspector, which refuses to read for it.
           scopes: ({ requestContext }) => {
@@ -2129,7 +2130,7 @@ export async function bootLocalAgentController(config?: MastraCodeConfig) {
   let knowledgeInspectorUnavailableReason: string | undefined;
   if (!base.knowledge) {
     knowledgeInspectorUnavailableReason =
-      'Knowledge is off. Set MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1 or pass a `knowledge` instance to createMastraCode.';
+      'Knowledge is off. Turn it on in /settings, or pass `knowledge` to createMastraCode.';
   } else {
     try {
       knowledgeInspector = await base.createKnowledgeInspector(session);
@@ -2313,7 +2314,7 @@ export async function prepareAgentControllerMount(
  */
 export const createMastraCode = bootLocalAgentController;
 export * from './knowledge-inspector.js';
-export { LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+export { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 
 /**
  * Programmatic headless API. `runMC` runs an already-built controller/session
