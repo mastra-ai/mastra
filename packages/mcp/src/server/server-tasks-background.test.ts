@@ -1,5 +1,6 @@
 import { spawn } from 'node:child_process';
 import type { ChildProcess } from 'node:child_process';
+import { createHash } from 'node:crypto';
 import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
@@ -220,8 +221,8 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     return result.taskId as string;
   }
 
-  async function requester(url: URL) {
-    const client = await connectClient(url, {}, { 'x-test-user': 'alice' });
+  async function requester(url: URL, user = 'alice') {
+    const client = await connectClient(url, {}, { 'x-test-user': user });
     clients.push(client);
     return new TaskRequester(client);
   }
@@ -664,6 +665,32 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect(text).not.toContain(taskId);
       expect(text).not.toContain('alice-token');
     }
+  });
+
+  it("stores only a hash of the caller's principal, and still serves the task to that caller alone", async () => {
+    const a = await instance({ tools: { approve: 'always' } });
+    const b = await instance({ tools: { approve: 'always' } });
+    const taskId = await call(a.url, 'approve', { item: 'invoice' });
+    const waiting = await waitFor(await requester(b.url), taskId, 'input_required');
+
+    // What `principalOf` resolves for alice's token (no subject, no user).
+    const principal = `alice:token:${createHash('sha256').update('alice-token').digest('base64url')}`;
+    const [row] = await rows(a.mastra);
+    expect(row!.resourceId).toMatch(/^mcp-server:tasks:/);
+    expect(JSON.stringify([row!.resourceId, row!.metadata, row!.args])).not.toContain(principal);
+    expect(JSON.stringify(row)).not.toContain(principal);
+
+    // Another caller gets the same "not found" from either instance, and can't answer or cancel.
+    const [key] = Object.keys(waiting.inputRequests ?? {});
+    for (const url of [a.url, b.url]) {
+      const asBob = await requester(url, 'bob');
+      await expect(asBob.get(taskId)).rejects.toMatchObject({ code: -32602 });
+      await expect(
+        asBob.update(taskId, { [key!]: { action: 'accept', content: { approver: 'bob' } } }),
+      ).rejects.toMatchObject({ code: -32602 });
+      await expect(asBob.cancel(taskId)).rejects.toMatchObject({ code: -32602 });
+    }
+    expect(await waitFor(await requester(a.url), taskId, 'input_required')).toMatchObject({ status: 'input_required' });
   });
 
   it('keeps tasks in memory, with a warning, when the storage cannot expire rows', async () => {

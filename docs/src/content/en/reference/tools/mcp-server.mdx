@@ -2118,7 +2118,7 @@ Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<s
 
 - They don't belong to any agent, thread or memory, so they never appear in an agent's conversation.
 - The `/background-tasks` routes don't return them to a caller scoped to a resource. Callers without a resource scope can list them, as can the global `onTaskComplete` and `onTaskFailed` hooks. Check `task.agentId.startsWith('mcp-server:')` in hooks that only expect agent tasks.
-- A row stores a hash of the task id, not the id itself, and the request context without the bearer token. `authInfo.extra` and `user` are stored unchanged, so they're visible to anyone who can read the row.
+- A row stores hashes of the task id and of the caller's principal, not the values themselves, and the request context without the bearer token. `authInfo.extra` and `user` are stored unchanged, so they're visible to anyone who can read the row.
 
 ### Recovery after a crash
 

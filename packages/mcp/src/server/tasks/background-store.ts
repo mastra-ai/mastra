@@ -34,7 +34,8 @@ export interface BackgroundTaskMCPTaskStoreOptions {
 /** The MCP side of a task, kept in the row's `metadata`. */
 export interface BackgroundTaskEnvelope {
   v: 1;
-  principal: string;
+  /** The caller's principal, hashed with {@link principalKeyOf}. */
+  principalKey: string;
   ttlMs: number | null;
   pollIntervalMs?: number;
   recover: boolean;
@@ -76,6 +77,11 @@ export function taskKeyOf(taskId: string): string {
   return createHash('sha256').update(taskId).digest('base64url');
 }
 
+/** How a principal is stored. Principals can carry user and subject ids, so only their hash is kept. */
+export function principalKeyOf(principal: string): string {
+  return createHash('sha256').update(principal).digest('base64url');
+}
+
 /** Running, or pending but pinned (`pinToWorker`) to the worker that holds its attempt. */
 function isOwned(row: BackgroundTask): boolean {
   return row.status === 'running' || (row.status === 'pending' && Boolean(row.ownerId));
@@ -87,7 +93,7 @@ function isTerminalRow(row: BackgroundTask): boolean {
 
 function envelopeOf(row: BackgroundTask): BackgroundTaskEnvelope | undefined {
   const metadata = row.metadata as Partial<BackgroundTaskEnvelope> | undefined;
-  return metadata?.v === ENVELOPE_VERSION && typeof metadata.principal === 'string'
+  return metadata?.v === ENVELOPE_VERSION && typeof metadata.principalKey === 'string'
     ? (metadata as BackgroundTaskEnvelope)
     : undefined;
 }
@@ -243,9 +249,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     const taskId = createTaskId();
     const taskKey = taskKeyOf(taskId);
     const recover = this.#recoverFor(context.toolName);
+    const principalKey = principalKeyOf(params.principal);
     const envelope: BackgroundTaskEnvelope = {
       v: ENVELOPE_VERSION,
-      principal: params.principal,
+      principalKey,
       ttlMs: params.ttlMs,
       ...(params.pollIntervalMs !== undefined && { pollIntervalMs: params.pollIntervalMs }),
       recover,
@@ -279,7 +286,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
           toolCallId: taskKey,
           args: args as unknown as Record<string, unknown>,
           agentId: this.#owner,
-          resourceId: `${this.#owner}:${params.principal}`,
+          resourceId: `${this.#owner}:${principalKey}`,
           timeoutMs: params.ttlMs === null ? MAX_TIMEOUT_MS : Math.min(Math.max(params.ttlMs, 1), MAX_TIMEOUT_MS),
           maxRetries: recover ? 1 : 0,
           expiresAt: params.ttlMs === null ? NEVER : new Date(createdAt + params.ttlMs),
@@ -545,15 +552,16 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     taskId: string,
     access: MCPTaskAccess,
   ): Promise<{ row: BackgroundTask; envelope: BackgroundTaskEnvelope } | undefined> {
+    const principalKey = principalKeyOf(access.principal);
     const { tasks } = await this.#manager.listTasks({
       agentId: this.#owner,
-      resourceId: `${this.#owner}:${access.principal}`,
+      resourceId: `${this.#owner}:${principalKey}`,
       toolCallId: taskKeyOf(taskId),
       perPage: 1,
     });
     const row = tasks[0];
     const envelope = row && envelopeOf(row);
-    if (!row || !envelope || envelope.principal !== access.principal) return undefined;
+    if (!row || !envelope || envelope.principalKey !== principalKey) return undefined;
     // Terminal past its deadline: gone, whether or not cleanup has deleted the row yet.
     if (isTerminalRow(row) && row.expiresAt && row.expiresAt.getTime() + EXPIRED_RETENTION_MS <= Date.now()) {
       return undefined;
