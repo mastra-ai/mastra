@@ -211,6 +211,7 @@ const durableLLMOutputSchema = z.object({
   metadata: z.any(),
   processorRetryCount: z.number().optional(),
   processorRetryFeedback: z.string().optional(),
+  releasedToolResultIds: z.array(z.string()).optional(),
   state: z.any(),
   // Step index used in this execution (for tracking)
   stepIndex: z.number().optional(),
@@ -1665,6 +1666,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // provider tool results.
             let toolResultTripwire: TripWire | null = null;
             let outputStreamBlocked = false;
+            // Tool results of earlier steps a processor held until this stream ended.
+            const releasedToolResultIds: string[] = [];
             let toolResultRunner: ProcessorRunner | undefined;
             const getToolResultRunner = (): ProcessorRunner => {
               toolResultRunner ??= new ProcessorRunner({
@@ -2395,6 +2398,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   if (r.part == null) continue;
                   trackOpenReasoning(r.part, openReasoningIds);
                   await emitChunkEvent(pubsub, runId, r.part, true);
+                  if (r.part.type === 'tool-result') releasedToolResultIds.push(r.part.payload.toolCallId);
                   collectedChunks.push({
                     type: r.part.type,
                     payload: 'payload' in r.part ? r.part.payload : undefined,
@@ -2850,6 +2854,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               // stamp and emit the actual post-policy continuation decision.
               deferredStepFinishChunk: deferredStepFinishChunk ?? undefined,
               completionStartTime: recordCompletionStartTime(),
+              ...(releasedToolResultIds.length ? { releasedToolResultIds } : {}),
             };
 
             // 16. End step span only if there are NO tool calls

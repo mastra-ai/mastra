@@ -3,7 +3,7 @@ import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import type { Processor } from '../../../../processors';
-import { REPROCESS_PART_KEY } from '../../../../processors/stream-reprocess';
+import { FLUSH_HELD_PARTS_KEY, REPROCESS_PART_KEY } from '../../../../processors/stream-reprocess';
 import type { LLMStepResult, MastraOnFinishCallbackArgs, ToolResultChunk } from '../../../../stream/types';
 import { createTool } from '../../../../tools';
 import {
@@ -546,12 +546,14 @@ describeForAllEngines(
     // emits right after (the reprocess path) was emitted, so it stays. A
     // result whose publish failed never reached the stream, so it is left out
     // (Inngest publishes through its own pubsub, so that case can't run there).
+    // A result a processor holds until the stream ends was emitted too, whether
+    // the approval call is in the same step or the next one.
     it.each(
       isDurableEngineVariant(engine)
         ? engine === 'inngest'
-          ? (['hidden', 'client', 'reprocessed'] as const)
-          : (['hidden', 'client', 'reprocessed', 'unpublished'] as const)
-        : (['client'] as const),
+          ? (['hidden', 'client', 'reprocessed', 'held', 'held-next-step'] as const)
+          : (['hidden', 'client', 'reprocessed', 'held', 'held-next-step', 'unpublished'] as const)
+        : (['client', 'held', 'held-next-step'] as const),
     )('restores only emitted results after approval (%s lookup)', async kind => {
       // Publishing the lookup result fails once; the rest goes through.
       let failedPublish = false;
@@ -601,8 +603,28 @@ describeForAllEngines(
           return null;
         },
       };
-      const outputProcessors = { hidden: [hideLookup], reprocessed: [deferLookup], client: undefined }[kind];
-      const expected = kind === 'reprocessed' ? ['lookup-1', 'purchase-1'] : ['purchase-1'];
+      // Holds the lookup result until the stream ends, like a batching processor.
+      const holdLookup: Processor = {
+        id: 'hold-lookup',
+        processOutputStream: async ({ part, state }) => {
+          if (part.type !== 'tool-result' || part.payload.toolName !== 'lookup') return part;
+          state[FLUSH_HELD_PARTS_KEY] = () => {
+            delete state[FLUSH_HELD_PARTS_KEY];
+            return [part];
+          };
+          return null;
+        },
+      };
+      const outputProcessors = {
+        hidden: [hideLookup],
+        reprocessed: [deferLookup],
+        held: [holdLookup],
+        'held-next-step': [holdLookup],
+        client: undefined,
+      }[kind];
+      const expected = ['reprocessed', 'held', 'held-next-step'].includes(kind)
+        ? ['lookup-1', 'purchase-1']
+        : ['purchase-1'];
       let finish: MastraOnFinishCallbackArgs | undefined;
       let resumed: any;
       try {
@@ -614,6 +636,18 @@ describeForAllEngines(
           maxSteps: 4,
           ...(outputProcessors ? { outputProcessors } : {}),
           fixtures: llm => {
+            if (kind === 'held-next-step') {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                { toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }] },
+              );
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 1 },
+                { toolCalls: [{ id: 'purchase-1', name: 'purchase', arguments: {} }] },
+              );
+              llm.on({ endpoint: 'chat', sequenceIndex: 2 }, { content: 'Purchased.' });
+              return;
+            }
             llm.on(
               { endpoint: 'chat', sequenceIndex: 0 },
               {

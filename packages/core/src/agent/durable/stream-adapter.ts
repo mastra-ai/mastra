@@ -186,7 +186,7 @@ async function withBufferedStepResponses(
   const offset = runSteps.length - (trailingAborted ? 1 : 0) - buffered.length;
   const historicalCallIds = new Set(initialToolCalls.map(call => call.payload.toolCallId));
   const partialStream = streamOffset === 'latest' || (typeof streamOffset === 'number' && streamOffset > 0);
-  return runSteps.map((step, i) => {
+  const steps = runSteps.map((step, i) => {
     const stored = step as Record<string, unknown>;
     const match = i >= offset ? buffered[i - offset] : undefined;
     if (!match && !runId) return step;
@@ -212,6 +212,35 @@ async function withBufferedStepResponses(
         : {}),
     };
   });
+  return runId ? withLateToolResultsInPlace(steps as Record<string, unknown>[]) : steps;
+}
+
+/**
+ * An output processor can hold a tool result until a later step's stream ends,
+ * so the emitted chunk is buffered with that later step. The result belongs to
+ * the step that made the call: keep it there, with the payload that was emitted.
+ */
+function withLateToolResultsInPlace(steps: Record<string, unknown>[]): Record<string, unknown>[] {
+  const owner = new Map<string, number>();
+  const result = [...steps];
+  result.forEach((step, i) => {
+    const toolResults = step.toolResults as ToolResultChunk[] | undefined;
+    if (!toolResults?.length) return;
+    const own = toolResults.filter(chunk => {
+      const earlier = owner.get(chunk.payload.toolCallId);
+      if (earlier === undefined) {
+        owner.set(chunk.payload.toolCallId, i);
+        return true;
+      }
+      const earlierStep = result[earlier]!;
+      earlierStep.toolResults = (earlierStep.toolResults as ToolResultChunk[]).map(r =>
+        r.payload.toolCallId === chunk.payload.toolCallId ? chunk : r,
+      );
+      return false;
+    });
+    if (own.length !== toolResults.length) result[i] = { ...step, toolResults: own };
+  });
+  return result;
 }
 
 function normalizeUsage(raw?: Record<string, unknown>): LanguageModelUsage {

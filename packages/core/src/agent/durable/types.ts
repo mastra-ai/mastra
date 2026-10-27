@@ -410,6 +410,8 @@ export interface DurableLLMStepOutput {
   processorRetryCount?: number;
   /** Processor retry feedback message */
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps that an output processor held until this step's stream ended */
+  releasedToolResultIds?: string[];
   /** Updated serializable state */
   state: SerializableDurableState;
   /** Exported model_generation span data (only set when there are tool calls) */
@@ -571,6 +573,8 @@ export interface DurableAgenticExecutionOutput {
   /** Processor retry tracking */
   processorRetryCount?: number;
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps emitted at the end of this iteration's stream */
+  releasedToolResultIds?: string[];
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
