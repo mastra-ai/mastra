@@ -35,6 +35,12 @@
     "grok-build-0.1"
   ],
   "reasoning": {
+    "grok-4.7": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
     "grok-4.5": [
       {
         "type": "effort",
@@ -48,12 +54,6 @@
       }
     ],
     "grok-4.6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "grok-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]

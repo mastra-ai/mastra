@@ -6,15 +6,16 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  getSpanOutputPayload,
   hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanSummaryDescription } from './span-summary-description';
-import { SpanTokenUsage } from './span-token-usage';
-import type { TokenUsage } from './span-token-usage';
+import { SpanToolsSection } from './span-payload/span-tools-section';
+import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
+import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
 import { Button } from '@/ds/components/Button';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
@@ -24,7 +25,7 @@ import { Tab, TabContent, TabList, Tabs } from '@/ds/components/Tabs';
 import { cn } from '@/lib/utils';
 
 // Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
-const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto px-2 py-3';
+const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-2';
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -32,6 +33,7 @@ export interface SpanDataPanelViewProps {
   /** Full span record. Caller fetches via useSpanDetail. */
   span: SpanRecord | undefined;
   isLoading?: boolean;
+  /** Previous/next buttons show only when one is provided; omit both where a span tree already navigates. */
   onPrevious?: () => void;
   onNext?: () => void;
   /** When provided, an × button in the header closes the span column. */
@@ -86,6 +88,7 @@ export function SpanDataPanelView({
             Span
             <TraceIdButton id={spanId} maxLength={6} ellipsis={false} />
           </DataPanel.Heading>
+          {span?.runId && <SpanRunId runId={span.runId} />}
           {span && <SpanSummaryDescription span={span} />}
         </DataPanel.HeaderContent>
         <DataPanel.HeaderActions>
@@ -101,12 +104,14 @@ export function SpanDataPanelView({
               <ExternalLinkIcon />
             </Button>
           )}
-          <DataPanel.NextPrevNav
-            onPrevious={onPrevious}
-            onNext={onNext}
-            previousLabel="Go to previous span"
-            nextLabel="Go to next span"
-          />
+          {(onPrevious || onNext) && (
+            <DataPanel.NextPrevNav
+              onPrevious={onPrevious}
+              onNext={onNext}
+              previousLabel="Go to previous span"
+              nextLabel="Go to next span"
+            />
+          )}
           {onClose && <DataPanel.CloseButton icon="x" onClick={onClose} label="Close span" tooltip="Close span" />}
         </DataPanel.HeaderActions>
       </DataPanel.Header>
@@ -150,8 +155,6 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
-  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
-  const usage = span.attributes?.usage as TokenUsage | undefined;
   const hasContext =
     (isAnchor ?? span.parentSpanId == null) &&
     Boolean(
@@ -172,7 +175,7 @@ function SpanDataPanelContent({
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
 
-      {usage && <SpanTokenUsage usage={usage} className="mb-3" />}
+      <SpanModelSummary span={span} className="mb-4" />
 
       {hasContext && (
         <DataKeysAndValues>
@@ -255,11 +258,12 @@ function SpanDataPanelContent({
         <SpanPayloadSection
           title="Output"
           icon={<FileOutputIcon />}
-          raw={span.output}
+          raw={getSpanOutputPayload(span)}
           hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
         >
           <SpanOutputRenderer span={span} />
         </SpanPayloadSection>
+        <SpanToolsSection span={span} />
         <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
           {null}
         </SpanPayloadSection>

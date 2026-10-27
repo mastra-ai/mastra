@@ -48,6 +48,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           logger: rest.logger,
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
+          agent: rest.agent,
         })
       : undefined;
 

@@ -800,13 +800,18 @@ export const transitiveOnlyRoute = registerApiRoute('/transitive-only', {
           join(fixturePath, 'apps', 'custom', 'src', 'mastra', 'api', 'route', 'optimized-dependencies.ts'),
           `import { registerApiRoute } from '@mastra/core/server';
 import { camelCase } from 'lodash';
-import { getDaysInMonth } from 'date-fns';
+import { getDaysInMonth, isLeapYear } from 'date-fns';
+import { basename, join } from 'node:path';
+import { pathToFileURL } from 'node:url';
+import { toPath } from 'unicorn-magic';
 
 export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependencies', {
   method: 'GET',
   handler: async c => c.json({
     label: camelCase('virtual dependency entries'),
     days: getDaysInMonth(new Date('2026-02-10T12:00:00Z')),
+    externalFile: basename(toPath(pathToFileURL(join(process.cwd(), 'optimized-entry.txt')))),
+    leapYear: isLeapYear(new Date('2028-02-10T12:00:00Z')),
   }),
 });
 `,
@@ -966,10 +971,22 @@ export const optimizedDependenciesRoute = registerApiRoute('/optimized-dependenc
       expect(hasWorkspaceMappedPath).toBeFalsy();
     });
 
+    it('should resolve tsconfig paths to files with dots in their names', async () => {
+      const inputFile = join(fixturePath, 'apps', 'custom', '.mastra', 'output', 'index.mjs');
+      const content = await readFile(inputFile, 'utf-8');
+
+      expect(content).not.toContain('@/api/route/test.response');
+    });
+
     it('should preserve exports from multiple optimized dependency entries', async () => {
       const response = await fetch(`http://localhost:${port}/optimized-dependencies`);
       expect(response.status).toBe(200);
-      expect(await response.json()).toEqual({ label: 'virtualDependencyEntries', days: 28 });
+      expect(await response.json()).toEqual({
+        label: 'virtualDependencyEntries',
+        days: 28,
+        externalFile: 'optimized-entry.txt',
+        leapYear: true,
+      });
     });
 
     it('should keep deprecated externals out of optimized dependency bundles', async () => {
@@ -2210,6 +2227,7 @@ assert.equal(subpathOnlyValue, 'c');`,
           const outputRoot = join(appDir, '.mastra', 'output');
 
           await removeOutputDir(isolatedFixturePath);
+          await expect(readFile(join(appDir, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           const skipBuild = await execa(pkgManager, ['build'], {
             cwd: appDir,
             env: { ...process.env, MASTRA_BUILD_SKIP_INSTALL: 'true' },
@@ -2219,6 +2237,7 @@ assert.equal(subpathOnlyValue, 'c');`,
 
           expect(skipBuild.exitCode).toBe(0);
           expect(skipOutput).toContain('Skipping dependency installation (MASTRA_BUILD_SKIP_INSTALL set)');
+          await expect(readFile(join(outputRoot, '.npmrc'), 'utf-8')).rejects.toMatchObject({ code: 'ENOENT' });
           // No dependencies installed and no lockfile generated anywhere in the build output.
           expect(await findInDir(outputRoot, 'node_modules')).toBe(false);
           expect(await findInDir(outputRoot, 'package-lock.json')).toBe(false);

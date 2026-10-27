@@ -141,7 +141,7 @@ export function candidateSourceKeyForItem(item: WorkItem): string | undefined {
     typeof item.metadata.githubRepositoryId === 'number' ? item.metadata.githubRepositoryId : undefined;
   if (item.source === 'github-issue') return githubSourceKey('issue', itemNumber, repositoryId);
   if (item.source === 'github-pr') return githubSourceKey('pull-request', itemNumber, repositoryId);
-  return;
+  return undefined;
 }
 
 /** Aria label for the icon-only external link next to a card title. */

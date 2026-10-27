@@ -450,9 +450,7 @@ export abstract class Bundler extends MastraBase implements IBundler {
     try {
       await stat(sourceDotNpmRcPath);
       await copy(sourceDotNpmRcPath, targetDotNpmRcPath);
-    } catch {
-      return;
-    }
+    } catch {}
   }
 
   /**

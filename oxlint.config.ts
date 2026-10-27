@@ -42,6 +42,8 @@ export default defineConfig({
   ],
   rules: {
     'no-dupe-keys': 'error',
+    'no-useless-return': 'error',
+    'no-lonely-if': 'error',
     'no-extra-boolean-cast': 'error',
     'no-useless-catch': 'error',
     'no-unneeded-ternary': 'error',
@@ -158,6 +160,7 @@ export default defineConfig({
       files: ['**/*.{ts,tsx}'],
       rules: {
         'typescript/no-meaningless-void-operator': 'error',
+        'typescript/no-unnecessary-template-expression': 'error',
         'typescript/prefer-reduce-type-parameter': 'error',
         'typescript/no-floating-promises': 'error',
         'typescript/no-misused-promises': ['error', { checksVoidReturn: false }],

@@ -430,10 +430,8 @@ function findExternalImporter(
   for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
-    } else {
-      if (id.endsWith('.mjs')) {
-        capturedFiles.add(id);
-      }
+    } else if (id.endsWith('.mjs')) {
+      capturedFiles.add(id);
     }
   }
 

@@ -39,6 +39,7 @@ import type {
   ToolPayloadTransformTarget,
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
@@ -629,7 +630,7 @@ export interface AgentStreamEvent<T = unknown> {
    */
   index?: number;
   /**
-   * The `chunk` event's chunk already ran through the run's output processors
+   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
   outputProcessed?: boolean;
@@ -819,6 +820,8 @@ export interface RunRegistryEntry {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** Processor state map (carried across steps) */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this run, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
   /** Background task manager instance (non-serializable) */
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
@@ -899,6 +902,12 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
   /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This
