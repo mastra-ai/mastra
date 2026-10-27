@@ -191,6 +191,9 @@ export class BackgroundTasksStorageMongoDB extends BackgroundTasksStorage {
     if (options?.expectedLeaseExpiresAt !== undefined) {
       filter.leaseExpiresAt = options.expectedLeaseExpiresAt?.toISOString() ?? null;
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      filter.suspendedAt = options.expectedSuspendedAt?.toISOString() ?? null;
+    }
 
     const collection = await this.getCollection();
     const result = await collection.updateOne(filter, { $set });

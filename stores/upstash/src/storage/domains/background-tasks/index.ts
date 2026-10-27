@@ -126,6 +126,9 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
         if ARGV[5] == '1' then
           if normalize(record.leaseExpiresAt) ~= normalize(cjson.decode(ARGV[6])) then return 0 end
         end
+        if ARGV[7] == '1' then
+          if normalize(record.suspendedAt) ~= normalize(cjson.decode(ARGV[8])) then return 0 end
+        end
         local patch = cjson.decode(ARGV[2])
         for field, value in pairs(patch) do record[field] = value end
         redis.call('SET', KEYS[1], cjson.encode(record))
@@ -139,6 +142,8 @@ export class BackgroundTasksUpstash extends BackgroundTasksStorage {
         JSON.stringify(options?.expectedOwnerId ?? null),
         options?.expectedLeaseExpiresAt !== undefined ? '1' : '0',
         JSON.stringify(options?.expectedLeaseExpiresAt?.toISOString() ?? null),
+        options?.expectedSuspendedAt !== undefined ? '1' : '0',
+        JSON.stringify(options?.expectedSuspendedAt?.toISOString() ?? null),
       ],
     );
     return Number(result) === 1;
