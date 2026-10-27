@@ -316,6 +316,46 @@ phases: {
 
 **Remaining limitations:** Throughput and lead-time metrics still count completions by Work's `done` phase. `factory-ui` still renders the built-in stage and role pipeline.
 
+### Phase runners, automatic starts and exit tools
+
+Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
+
+- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
+- `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
+- `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`. When the phase's agent completes it, the card moves to the first of `nextPhases`. With `autoApprove`, the tool is approved without a person (for every card, or only cards matching `autoApproveWhen`); `submit_plan` must report an approved plan before the card moves.
+
+Rules test a card's facts: `item.labels`, `item.title`, `item.author`, `source.kind` and `source.integration`.
+
+```typescript
+const LOW_EFFORT = {
+  operator: 'AND',
+  conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
+} as const;
+
+const releaseBoard = defineBoard({
+  id: 'release',
+  name: 'Release',
+  initialPhase: 'queued',
+  phases: {
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning'] },
+    planning: {
+      name: 'Planning',
+      kind: 'working',
+      runner: { context: 'release', skill: 'release-plan' },
+      autoStart: true,
+      autoStartWhen: LOW_EFFORT,
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
+      nextPhases: ['shipping', 'canceled'],
+    },
+    shipping: { name: 'Shipping', kind: 'working', runner: { context: 'release' }, nextPhases: ['shipped'] },
+    shipped: { name: 'Shipped', kind: 'terminal' },
+    canceled: { name: 'Canceled', kind: 'terminal' },
+  },
+});
+```
+
+**Migration:** Nothing breaks. The old fields keep working and are deprecated: `title` → `name`, `role` → `runner.context`, `next` and `outcomes` → `nextPhases`. `next` and `outcomes` may sit beside `nextPhases`; their targets are added to it, and outcome names keep working. Setting both `title` and `name`, or `role` and `runner.context`, is rejected. A defined board exposes both, so code reading `phase.title` or `phase.role` keeps working, and the board catalog (`GET /web/factory/projects/:id/boards`) returns the new fields beside the old ones. Card session keys do not change: a phase's context is its old role.
+
 ### Execute a custom board
 
 Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.

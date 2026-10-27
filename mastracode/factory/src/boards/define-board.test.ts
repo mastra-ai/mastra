@@ -201,15 +201,15 @@ describe('defineBoard', () => {
       expect(() => looseBoard({ queued: { title: 'Queued', kind: 'idle' } })).toThrow(BoardDefinitionError);
     });
 
-    it('rejects working phases without a valid role', () => {
-      const cases: unknown[] = [undefined, '', 'has space', 'x'.repeat(33), 42];
+    it('rejects working phases with an invalid role', () => {
+      const cases: unknown[] = ['', 'has space', 'x'.repeat(33), 42];
       for (const role of cases) {
         expect(() =>
           looseBoard({
             queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
             shipping: { title: 'Shipping', kind: 'working', role },
           }),
-        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid role.'));
+        ).toThrow(new BoardDefinitionError('Working phase "shipping" must declare a valid context.'));
       }
     });
 

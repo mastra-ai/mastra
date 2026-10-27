@@ -11,6 +11,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
@@ -902,6 +903,7 @@ export class FactoryDecisionDispatcher {
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
+    if (item && startsInAutoPhase(this.#boards, item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
@@ -1130,7 +1132,7 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: await this.#approveExitTool(session, record),
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -1588,14 +1590,22 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
-  /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
-  async #plansAreAutoApproved({
-    orgId,
-    factoryProjectId,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-  }): Promise<boolean> {
+  /**
+   * Whether the run answers its plan approvals itself: the project says so, or the card's phase
+   * ends with an auto-approved `submit_plan`. Any other auto-approved exit tool is allowed on the
+   * session, unless the session already has its own rule for that tool. Unset means off: a plan
+   * nobody asked us to answer is a plan someone should see.
+   */
+  async #approveExitTool(
+    session: BoundDispatcherSession,
+    { orgId, factoryProjectId, workItemId }: { orgId: string; factoryProjectId: string; workItemId: string | null },
+  ): Promise<boolean> {
+    const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
+    const exitTool = item ? autoApprovedExitTool(this.#boards, item) : undefined;
+    if (exitTool === 'submit_plan') return true;
+    if (exitTool !== undefined && session.permissions.getRules().tools[exitTool] === undefined) {
+      await session.permissions.setForTool({ toolName: exitTool, policy: 'allow' });
+    }
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
@@ -1792,7 +1802,7 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: await this.#approveExitTool(session, { ...record, workItemId: binding.workItemId }),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

@@ -1,7 +1,8 @@
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
+import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
@@ -190,7 +191,7 @@ function createSession(
       getId: vi.fn(() => 'session-1'),
       getOwnerId: vi.fn(() => 'user-1'),
     },
-    permissions: { setForTool: vi.fn(async () => {}) },
+    permissions: { setForTool: vi.fn(async () => {}), getRules: vi.fn(() => ({ tools: {} })) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       signalSends += 1;
@@ -6929,5 +6930,153 @@ describe('a skill run that ends in error (#27740)', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.lastError).toContain(runError);
+  });
+});
+
+describe('board phase automation', () => {
+  const LOW_EFFORT = {
+    operator: 'AND' as const,
+    conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'effort:low' }],
+  };
+
+  /** Work with the Building phase replaced, as a board author would declare it. */
+  function boardsWithBuilding(
+    fields: Partial<Extract<BoardPhaseDefinition<string>, { kind: 'working' }>>,
+  ): BoardRegistry {
+    const board = defineBoard({
+      id: 'work',
+      name: 'Work',
+      initialPhase: 'intake',
+      sourceClosed: workBoard.sourceClosed,
+      transitionPolicy: workBoard.transitionPolicy,
+      phases: { ...workBoard.phases, execute: { ...workBoard.phases.execute, ...fields } },
+    });
+    return new Map([
+      [board.id, board],
+      [reviewBoard.id, reviewBoard],
+    ]);
+  }
+
+  async function queueBuild(storage: WorkItemsStorage, labels: string[], key: string) {
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: key,
+    });
+    await storage.update({
+      orgId: 'org-1',
+      id: queued.item.id,
+      userId: 'user-1',
+      patch: { metadata: { authorTrusted: true, labels } },
+    });
+    await bindWorkRun(storage, queued.item.id);
+    return queued;
+  }
+
+  it('starts the run of a phase that starts on its own, only for the cards its rule matches', async () => {
+    const boards = boardsWithBuilding({ autoStart: true, autoStartWhen: LOW_EFFORT });
+    for (const [labels, expected] of [
+      [['effort:low'], 'succeeded'],
+      [['effort:high'], 'proposed'],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { transitionService } = await queueBuild(storage, [...labels], `auto-start-${labels[0]}`);
+      const { controller } = createSession();
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
+    }
+  });
+
+  it('never auto-starts a phase for a card from outside the write-access circle', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueBuild(storage, ['effort:low'], 'auto-start-outsider');
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { authorTrusted: false, labels: ['effort:low'] } },
+    });
+    const { controller } = createSession();
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      boards: boardsWithBuilding({ autoStart: true }),
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+  });
+
+  it("approves a phase's submit_plan only for the cards its rule matches", async () => {
+    const boards = boardsWithBuilding({
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
+    });
+    for (const [labels, approved] of [
+      [['effort:low'], true],
+      [['effort:high'], false],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { transitionService } = await queueBuild(storage, [...labels], `plan-${labels[0]}`);
+      const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        autoApprovePlans: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      if (approved) {
+        expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+          resumeData: { action: 'approved' },
+          toolCallId: 'call-plan',
+        });
+      } else {
+        expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+      }
+    }
+  });
+
+  it('allows any other auto-approved exit tool on the session, unless the session already decided', async () => {
+    const boards = boardsWithBuilding({ exitTool: { id: 'open_pull_request', autoApprove: true } });
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { transitionService } = await queueBuild(storage, [], 'exit-tool-allowed');
+    const { controller, session } = createSession();
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      boards,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(session.permissions.setForTool).toHaveBeenCalledWith({ toolName: 'open_pull_request', policy: 'allow' });
+
+    const decided = (await createFactoryStorageForTests()).workItems;
+    const second = await queueBuild(decided, [], 'exit-tool-decided');
+    const other = createSession();
+    other.session.permissions.getRules.mockReturnValue({ tools: { open_pull_request: 'ask' } } as never);
+    await new FactoryDecisionDispatcher({
+      controller: other.controller as never,
+      transitionService: second.transitionService,
+      storage: decided,
+      boards,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+    expect(other.session.permissions.setForTool).not.toHaveBeenCalled();
   });
 });

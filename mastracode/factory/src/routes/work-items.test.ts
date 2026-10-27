@@ -190,20 +190,33 @@ describe('installed board catalog', () => {
     expect(boards.map((entry: { id: string }) => entry.id)).toEqual(
       includeDefaultBoards ? ['work', 'review', 'release'] : ['release'],
     );
+    // Deprecated `title`/`role` stay beside their replacements for older clients.
     expect(boards.at(-1)).toEqual({
       id: 'release',
+      name: 'Release Preview',
       title: 'Release Preview',
       initialPhase: 'queued',
       phases: [
-        { id: 'queued', title: 'Queued', kind: 'resting', transitions: [{ outcome: null, to: 'preparing' }] },
+        {
+          id: 'queued',
+          name: 'Queued',
+          title: 'Queued',
+          kind: 'resting',
+          nextPhases: ['preparing'],
+          transitions: [{ outcome: null, to: 'preparing' }],
+        },
         {
           id: 'preparing',
+          name: 'Preparing',
           title: 'Preparing',
           kind: 'working',
+          nextPhases: ['shipped'],
+          context: 'release-preparer',
           role: 'release-preparer',
+          autoStart: false,
           transitions: [{ outcome: null, to: 'shipped' }],
         },
-        { id: 'shipped', title: 'Shipped', kind: 'terminal', transitions: [] },
+        { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
   });

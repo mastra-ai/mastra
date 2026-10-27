@@ -331,13 +331,27 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
           return c.json({
             boards: [...this.#boards].map(([id, board]) => ({
               id,
+              name: board.name,
               title: board.title,
+              ...(board.description !== undefined ? { description: board.description } : {}),
               initialPhase: board.initialPhase,
               phases: Object.entries(board.phases).map(([phaseId, phase]) => ({
                 id: phaseId,
+                name: phase.name,
                 title: phase.title,
+                ...(phase.description !== undefined ? { description: phase.description } : {}),
                 kind: phase.kind,
-                ...(phase.kind === 'working' ? { role: phase.role } : {}),
+                nextPhases: [...phase.nextPhases],
+                ...(phase.kind === 'working'
+                  ? {
+                      role: phase.role,
+                      context: phase.runner.context,
+                      autoStart: phase.autoStart === true,
+                      ...(phase.exitTool
+                        ? { exitTool: { id: phase.exitTool.id, autoApprove: phase.exitTool.autoApprove } }
+                        : {}),
+                    }
+                  : {}),
                 transitions: (board.transitions[phaseId] ?? []).map(({ outcome, to }) => ({ outcome, to })),
               })),
             })),
