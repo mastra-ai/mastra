@@ -30,7 +30,7 @@ export function StarterArt({ kind }: { kind: StarterKind }) {
       viewBox="0 0 120 120"
       fill="none"
       aria-hidden
-      className="text-foreground pointer-events-none absolute top-1.5 right-1.5 size-20 [--color-background:var(--color-card)] max-sm:hidden dark:[--color-background:var(--color-muted)] [&_*]:[vector-effect:non-scaling-stroke]"
+      className="text-muted-foreground pointer-events-none absolute top-1.5 right-1.5 size-20 opacity-60 [--color-background:var(--color-card)] max-sm:hidden dark:[--color-background:var(--color-muted)] [&_*]:[vector-effect:non-scaling-stroke]"
     >
       <Art id={id} />
     </svg>

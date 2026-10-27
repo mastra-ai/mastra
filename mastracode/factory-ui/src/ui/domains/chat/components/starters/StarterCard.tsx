@@ -30,7 +30,7 @@ export function StarterCard({ starter, index, count }: { starter: StarterPrompt;
       style={stagger}
     >
       <StarterArt kind={starter.kind} />
-      <Txt as="span" id={labelId} variant="body-sm" tone="ink" className="truncate font-medium sm:pr-18">
+      <Txt as="span" id={labelId} variant="body-sm" tone="muted" className="truncate sm:pr-18">
         {starter.label}
       </Txt>
       <span id={valueId} className="mt-1 flex min-w-0 items-baseline gap-1.5 sm:pr-18">
@@ -54,8 +54,8 @@ export function StarterCard({ starter, index, count }: { starter: StarterPrompt;
         aria-describedby={`${labelId} ${valueId}`}
         {...promptButton}
         className={cn(
-          textStyle({ variant: 'caption', tone: 'muted' }),
-          "group-hover/starter:text-foreground duration-fast ease-out-custom mt-auto flex cursor-pointer items-center gap-1 pt-2.5 text-left transition-colors after:absolute after:inset-0 after:content-[''] focus-visible:outline-none",
+          textStyle({ variant: 'body-sm', tone: 'ink' }),
+          "mt-auto flex cursor-pointer items-center gap-1 pt-2.5 text-left font-medium after:absolute after:inset-0 after:content-[''] focus-visible:outline-none",
         )}
       >
         {starter.action}

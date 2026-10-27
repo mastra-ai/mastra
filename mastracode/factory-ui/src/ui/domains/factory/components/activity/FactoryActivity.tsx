@@ -2,20 +2,19 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { textStyle } from '@mastra/playground-ui/primitives/text';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { ChevronDown, ScrollText, SquareKanban } from 'lucide-react';
+import { ChevronDown, ScrollText } from 'lucide-react';
 import { useId, useState } from 'react';
-import { Link } from 'react-router';
 
 import { traySurface } from '../../../../ui/tray';
 import { usePromptButton } from '../../../chat/hooks/usePromptButton';
 import { SESSION_STATUS_LABELS } from '../../../workspaces/services/sessionRows';
 import { useFactoryActivity } from '../../hooks/useFactoryActivity';
-import { PERIOD_DAYS } from '../../periodActivity';
+import { ACTIVITY_PERIOD_LABELS, PERIOD_DAYS } from '../../periodActivity';
 import type { ActivityPeriod } from '../../periodActivity';
-import { rememberedBoardPath } from '../../services/boardViews';
 import { countsLabel } from './activityFormat';
 import { ActivityChart } from './ActivityChart';
 import { ActivityPeriodMenu } from './ActivityPeriodMenu';
+import { ActivityReveal } from './ActivityReveal';
 import { ActivityTotals } from './ActivityTotals';
 
 const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
@@ -24,19 +23,21 @@ const RECAPS: Record<ActivityPeriod, { label: string; since: string }> = {
   month: { label: 'Recap the month', since: `in the last ${PERIOD_DAYS.month} days` },
 };
 
-const bandAction = cn(
-  textStyle({ variant: 'caption', tone: 'muted' }),
-  'hover:text-foreground duration-fast ease-out-custom flex shrink-0 cursor-pointer items-center gap-1 rounded-sm transition-colors motion-reduce:transition-none',
-  focusRing,
-);
-
 function RecapButton({ period }: { period: ActivityPeriod }) {
   const { label, since } = RECAPS[period];
   const promptButton = usePromptButton(
-    `Summarize what reached Done ${since}. Group it by theme and call out anything still waiting on someone.`,
+    `Summarize what reached Done ${since}, grouped by theme. Name anything that is still waiting on someone.`,
   );
   return (
-    <button type="button" {...promptButton} className={bandAction}>
+    <button
+      type="button"
+      {...promptButton}
+      className={cn(
+        textStyle({ variant: 'caption', tone: 'muted' }),
+        'hover:text-foreground duration-fast ease-out-custom flex shrink-0 cursor-pointer items-center gap-1 rounded-sm transition-colors motion-reduce:transition-none',
+        focusRing,
+      )}
+    >
       <ScrollText aria-hidden className="size-3.5" />
       {label}
     </button>
@@ -66,47 +67,49 @@ export function FactoryActivity({ factoryId }: { factoryId: string }) {
   const [open, setOpen] = useState(false);
   const headingId = useId();
   const chartId = useId();
+  const periodId = useId();
   const { hasCards, activity, runs, live } = useFactoryActivity(factoryId, period);
   if (!hasCards) return null;
   return (
-    <section aria-labelledby={headingId} className={cn(traySurface, 'px-1.5 pt-1.5')}>
-      <div className="group/band relative flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3.5 pt-2 pb-3.5 sm:px-4">
-        <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
-          <h2 id={headingId} className="relative z-10 m-0">
-            <ActivityPeriodMenu period={period} onPeriodChange={setPeriod} />
-          </h2>
-          <button
-            type="button"
-            aria-expanded={open}
-            aria-controls={chartId}
-            aria-label={countsLabel(activity.totals, runs)}
-            onClick={() => setOpen(was => !was)}
-            className="focus-visible:after:outline-border-focus after:rounded-card flex cursor-pointer items-center after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid"
-          >
-            <span className="relative z-10">
+    <section aria-labelledby={headingId}>
+      <h2 id={headingId} className="sr-only">
+        {ACTIVITY_PERIOD_LABELS[period]}
+      </h2>
+      <div className={cn(traySurface, 'px-1.5 pt-1.5')}>
+        <div className="group/band relative flex flex-wrap items-center justify-between gap-x-4 gap-y-2 px-3.5 pt-2 pb-3.5 sm:px-4">
+          <div className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-1">
+            <button
+              type="button"
+              aria-expanded={open}
+              aria-controls={`${chartId} ${periodId}`}
+              aria-label={countsLabel(activity.totals, runs)}
+              onClick={() => setOpen(was => !was)}
+              className="focus-visible:after:outline-border-focus after:rounded-card flex cursor-pointer items-center after:absolute after:inset-0 after:content-[''] focus-visible:outline-none focus-visible:after:outline-2 focus-visible:after:outline-solid"
+            >
               <ActivityTotals totals={activity.totals} runs={runs} swatches={open} />
-            </span>
-          </button>
-          <LiveSessions working={live.working} waiting={live.waiting} />
-        </div>
-        <div className="flex items-center gap-4">
-          <div className="relative z-10 flex shrink-0 items-center gap-4">
-            {activity.totals.shipped > 0 && <RecapButton period={period} />}
-            <Link to={rememberedBoardPath(factoryId, 'work')} className={bandAction}>
-              <SquareKanban aria-hidden className="size-3.5" />
-              All work
-            </Link>
+            </button>
+            <LiveSessions working={live.working} waiting={live.waiting} />
           </div>
-          <ChevronDown
-            aria-hidden
-            className={cn(
-              'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
-              open && 'rotate-180',
+          <div className="flex items-center gap-4">
+            {activity.totals.shipped > 0 && (
+              <div className="relative z-10">
+                <RecapButton period={period} />
+              </div>
             )}
-          />
+            <ChevronDown
+              aria-hidden
+              className={cn(
+                'text-muted-foreground duration-slow ease-out-custom size-3.5 transition-[rotate,color] group-has-[[aria-controls]:hover]/band:text-foreground motion-reduce:transition-none',
+                open && 'rotate-180',
+              )}
+            />
+          </div>
         </div>
+        <ActivityChart id={chartId} open={open} period={period} activity={activity} runs={runs} />
       </div>
-      <ActivityChart key={period} id={chartId} open={open} activity={activity} runs={runs} />
+      <ActivityReveal id={periodId} open={open} className="flex justify-end px-5 pt-2.5 pb-1 sm:px-5.5">
+        <ActivityPeriodMenu period={period} onPeriodChange={setPeriod} />
+      </ActivityReveal>
     </section>
   );
 }

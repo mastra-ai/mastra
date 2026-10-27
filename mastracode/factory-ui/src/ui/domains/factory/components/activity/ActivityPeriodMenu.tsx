@@ -26,7 +26,7 @@ export function ActivityPeriodMenu({
           <button
             type="button"
             className={cn(
-              textStyle({ variant: 'subheading', tone: 'muted' }),
+              textStyle({ variant: 'caption', tone: 'muted' }),
               'hover:text-foreground duration-fast ease-out-custom flex cursor-pointer items-center gap-1 rounded-sm transition-colors motion-reduce:transition-none',
               focusRing,
             )}
@@ -36,7 +36,7 @@ export function ActivityPeriodMenu({
         {ACTIVITY_PERIOD_LABELS[period]}
         <ChevronDown aria-hidden className="size-3.5" />
       </DropdownMenu.Trigger>
-      <DropdownMenu.Content align="start">
+      <DropdownMenu.Content align="end">
         <DropdownMenu.RadioOptions
           options={PERIOD_OPTIONS}
           value={period}

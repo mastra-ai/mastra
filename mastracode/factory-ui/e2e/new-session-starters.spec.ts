@@ -193,27 +193,52 @@ test.describe('New session page', () => {
     expect(await cardLayout(list)).toEqual({ rows: [2, 2, 1], spanned: true, textOnArt: [] });
   });
 
-  test('expands the week into a chart that names the slot under the pointer, its card kept inside the band', async ({
+  test('expands the week into one bar per busy slot and names the slot under the pointer, its card kept inside the band', async ({
     page,
   }) => {
+    const shownSlots = 43;
+    const busySlot = 23;
+    const arrived = '2026-10-24T09:00:00.000Z';
+    stubDraftRoute({
+      workItems: [
+        ...intake,
+        ...['a', 'b'].map(id => ({ ...workItem(`new-${id}`, `New card ${id}`, arrived, arrived), stages: ['intake'] })),
+      ],
+    });
     await page.clock.setFixedTime(new Date('2026-10-27T12:00:00Z'));
     await page.goto(NEW_SESSION);
     const band = page.getByRole('region', { name: 'This week' });
-    const toggle = band.getByRole('button', { name: /Shipped/ });
+    const toggle = band.getByRole('button', { name: /shipped/ });
+    await expect(toggle).toHaveAccessibleName(/^2 came in/);
     await toggle.focus();
     await page.keyboard.press('Enter');
     await expect(toggle).toHaveAttribute('aria-expanded', 'true');
-    const field = page.locator(`[id="${await toggle.getAttribute('aria-controls')}"] svg`);
+    const field = band.getByRole('img').locator('svg');
     await expect(field).toBeVisible();
     await settle(page);
     const fieldBox = await field.boundingBox();
     const bandBox = await band.boundingBox();
     if (!fieldBox || !bandBox) throw new Error('The chart did not lay out');
-    const shownSlots = 43;
+
+    const barStarts = await field.evaluate(svg => {
+      const box = svg.getBoundingClientRect();
+      const starts: number[] = [];
+      let lit = false;
+      for (let x = Math.ceil(box.left); x < box.right; x += 1) {
+        const hit = Boolean(document.elementFromPoint(x, box.bottom - 3)?.closest('[clip-path]'));
+        if (hit && !lit) starts.push(x);
+        lit = hit;
+      }
+      return starts;
+    });
+    expect(barStarts).toHaveLength(1);
+    expect(barStarts[0]).toBeGreaterThanOrEqual(fieldBox.x + (fieldBox.width * busySlot) / shownSlots);
+    expect(barStarts[0]).toBeLessThan(fieldBox.x + (fieldBox.width * (busySlot + 1)) / shownSlots);
 
     for (const [slot, day, hours] of [
       [0, 'Tue, Oct 20', '12 PM – 4 PM'],
       [2, 'Tue, Oct 20', '8 PM – 12 AM'],
+      [busySlot, 'Sat, Oct 24', '8 AM – 12 PM'],
       [42, 'Tue, Oct 27', '12 PM – 4 PM'],
     ] as const) {
       await page.mouse.move(

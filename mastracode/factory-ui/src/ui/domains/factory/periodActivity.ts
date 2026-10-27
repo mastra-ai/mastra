@@ -6,7 +6,7 @@ export type ActivityPeriod = 'today' | 'week' | 'month';
 export type ActivityKind = 'cameIn' | 'ran' | 'shipped';
 export type ActivityCounts = Record<ActivityKind, number>;
 
-export const ACTIVITY_KIND_ORDER: readonly ActivityKind[] = ['shipped', 'ran', 'cameIn'];
+export const ACTIVITY_KIND_ORDER: readonly ActivityKind[] = ['cameIn', 'ran', 'shipped'];
 
 export const ACTIVITY_PERIOD_LABELS: Record<ActivityPeriod, string> = {
   today: 'Today',

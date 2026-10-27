@@ -147,7 +147,7 @@ describe('starterPrompts', () => {
     });
   });
 
-  it('hands pull requests open over a month to close or revive instead of review', () => {
+  it('hands pull requests open over a month to a close-or-keep suggestion instead of review', () => {
     const cards = [
       pullRequest(1, ['intake'], { sourceCreatedAt: daysAgo(31) }),
       pullRequest(2, ['intake'], { sourceCreatedAt: daysAgo(90) }),
@@ -155,7 +155,7 @@ describe('starterPrompts', () => {
       pullRequest(4, ['intake'], { sourceCreatedAt: daysAgo(60), draft: true }),
     ];
 
-    expect(promptFor('stale', cards)).toMatchObject({ value: 2, action: 'Close or revive 2' });
+    expect(promptFor('stale', cards)).toMatchObject({ value: 2, action: 'Flag what to close' });
     expect(promptFor('review', cards)).toMatchObject({ value: 29, unit: 'days', action: 'Review it' });
   });
 
@@ -169,7 +169,7 @@ describe('starterPrompts', () => {
       card('building', { stages: ['execute'], triageType: 'feature request' }),
     ]);
 
-    expect(decide).toMatchObject({ label: 'Needs your decision', value: 2, action: 'Decide on the 2 oldest' });
+    expect(decide).toMatchObject({ label: 'Not yet accepted', value: 2, action: 'Help me decide' });
   });
 
   it('sweeps the area label with the most open cards, ignoring process labels and GitHub type labels', () => {
@@ -181,7 +181,7 @@ describe('starterPrompts', () => {
       ...['a', 'b', 'c'].map(id => card(`agents-done-${id}`, { stages: ['done'], metadata: { labels: ['Agents'] } })),
     ]);
 
-    expect(sweep).toMatchObject({ label: 'Waiting in Memory', value: 3 });
+    expect(sweep).toMatchObject({ label: 'Memory backlog', value: 3 });
   });
 
   it('offers no sweep for an area with fewer than three open cards', () => {
@@ -231,7 +231,7 @@ describe('starterPrompts', () => {
       [failedRun('failed', 'Sandbox quota exceeded'), { ...failedRun('queued', ''), status: 'pending' }],
     );
 
-    expect(unblock).toMatchObject({ label: 'Failed runs', value: 1, action: 'Unblock it' });
+    expect(unblock).toMatchObject({ label: 'Failed runs', value: 1, action: 'Debug and retry it' });
   });
 
   it('fixes review feedback only on open Factory pull requests whose verdict is still current', () => {

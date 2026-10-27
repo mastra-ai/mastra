@@ -149,12 +149,12 @@ describe('the new session page', () => {
       ),
     );
     await client.invalidateQueries({ queryKey: queryKeys.workItems(FACTORY_ID) });
-    await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan a fix for it' })).not.toBeInTheDocument());
+    await waitFor(() => expect(screen.queryByRole('button', { name: 'Plan a fix' })).not.toBeInTheDocument());
 
     expect(message).toHaveValue(previewed);
   });
 
-  it('totals what came in, what agents started and what shipped this week, offers a recap only when something shipped, and narrows to today on request', async () => {
+  it('totals what came in, what agents started and what shipped this week, offers a recap only when something shipped, and narrows to today without fetching again', async () => {
     vi.useFakeTimers({ toFake: ['Date'] });
     vi.setSystemTime(new Date(2026, 9, 27, 12));
     const daysAgo = (days: number) => new Date(2026, 9, 27 - days, 11);
@@ -169,28 +169,51 @@ describe('the new session page', () => {
         },
       ],
     });
+    let runRequests = 0;
     server.use(
-      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () =>
-        HttpResponse.json({
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/audit`, () => {
+        runRequests += 1;
+        return HttpResponse.json({
           events: [runStarted('today', daysAgo(0)), runStarted('this-week', daysAgo(5))],
           actors: {},
-        }),
-      ),
+        });
+      }),
     );
     const user = userEvent.setup();
     renderDraft();
-    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /Shipped/ });
+    const totals = (region: HTMLElement) => within(region).getByRole('button', { name: /shipped/ });
 
     const week = await screen.findByRole('region', { name: 'This week' });
-    await waitFor(() => expect(totals(week)).toHaveAccessibleName('Shipped: 1, Agents ran: 2, Came in: 2'));
+    await waitFor(() => expect(totals(week)).toHaveAccessibleName('2 came in, 2 agent runs, 1 shipped'));
     expect(within(week).getByRole('button', { name: 'Recap the week' })).toBeInTheDocument();
+    const weekRequests = runRequests;
 
+    await user.click(totals(week));
     await user.click(within(week).getByRole('button', { name: 'This week' }));
     await user.click(await screen.findByRole('menuitemradio', { name: 'Today' }));
 
     const today = await screen.findByRole('region', { name: 'Today' });
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
-    await waitFor(() => expect(totals(today)).toHaveAccessibleName('Shipped: 0, Agents ran: 1, Came in: 1'));
+    await waitFor(() => expect(totals(today)).toHaveAccessibleName('1 came in, 1 agent run, 0 shipped'));
     expect(within(today).queryByRole('button', { name: /^Recap/ })).not.toBeInTheDocument();
+    expect(runRequests).toBe(weekRequests);
+  });
+
+  it('says nothing happened instead of drawing an empty chart when the period is quiet', async () => {
+    vi.useFakeTimers({ toFake: ['Date'] });
+    vi.setSystemTime(new Date(2026, 9, 27, 12));
+    stubDraftRoute({
+      workItems: [{ ...card('arrived-last-month', ['intake']), createdAt: new Date(2026, 8, 1).toISOString() }],
+    });
+    const user = userEvent.setup();
+    renderDraft();
+
+    const week = await screen.findByRole('region', { name: 'This week' });
+    const totals = within(week).getByRole('button', { name: /shipped/ });
+    await waitFor(() => expect(totals).toHaveAccessibleName('0 came in, 0 agent runs, 0 shipped'));
+    await user.click(totals);
+
+    expect(within(week).getByText('Nothing came in, ran or shipped this week.')).toBeInTheDocument();
+    expect(within(week).queryByRole('img')).not.toBeInTheDocument();
   });
 });

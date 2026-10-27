@@ -1,11 +1,12 @@
-import { cn } from '@mastra/playground-ui/utils/cn';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useRef, useState } from 'react';
 
 import type { RunsState } from '../../hooks/useFactoryActivity';
-import { ACTIVITY_KIND_ORDER } from '../../periodActivity';
-import type { Activity, ActivityCounts } from '../../periodActivity';
+import { ACTIVITY_KIND_ORDER, ACTIVITY_PERIOD_LABELS } from '../../periodActivity';
+import type { Activity, ActivityCounts, ActivityPeriod } from '../../periodActivity';
 import { countsLabel, slotWhen } from './activityFormat';
-import { ActivityField } from './ActivityField';
+import { ActivityField, FIELD_HEIGHT } from './ActivityField';
+import { ActivityReveal } from './ActivityReveal';
 import { ActivitySlotCard } from './ActivitySlotCard';
 
 interface HoveredSlot {
@@ -19,7 +20,7 @@ function chartLabel({ slots, hoursPerSlot }: Activity, runs: RunsState) {
   for (const slot of slots) {
     const { day, hours } = slotWhen(slot, hoursPerSlot);
     const when = hoursPerSlot === 1 && hours ? hours : day;
-    const counts = byWhen.get(when) ?? { shipped: 0, ran: 0, cameIn: 0 };
+    const counts = byWhen.get(when) ?? { cameIn: 0, ran: 0, shipped: 0 };
     for (const kind of ACTIVITY_KIND_ORDER) counts[kind] += slot.counts[kind];
     byWhen.set(when, counts);
   }
@@ -29,51 +30,49 @@ function chartLabel({ slots, hoursPerSlot }: Activity, runs: RunsState) {
 export function ActivityChart({
   id,
   open,
+  period,
   activity,
   runs,
 }: {
   id: string;
   open: boolean;
+  period: ActivityPeriod;
   activity: Activity;
   runs: RunsState;
 }) {
   const frame = useRef<HTMLDivElement>(null);
   const [hovered, setHovered] = useState<HoveredSlot>();
   const hoveredSlot = hovered && activity.slots[hovered.index];
+  const quiet = runs.status === 'success' && ACTIVITY_KIND_ORDER.every(kind => activity.totals[kind] === 0);
   const hover = (index: number, clientX: number) => {
     const box = frame.current?.getBoundingClientRect();
     if (box) setHovered({ index, x: clientX - box.left, width: box.width });
   };
   return (
-    <div
-      ref={frame}
-      className={cn(
-        'duration-slow ease-out-custom relative grid transition-[grid-template-rows] motion-reduce:transition-none',
-        open ? 'grid-rows-[1fr]' : 'grid-rows-[0fr]',
-      )}
-    >
-      <div
-        id={id}
-        role="img"
-        aria-label={chartLabel(activity, runs)}
-        inert={!open}
-        className={cn(
-          'duration-slow ease-out-custom -mx-1.5 min-h-0 overflow-hidden transition-opacity motion-reduce:transition-none',
-          !open && 'opacity-0',
-        )}
-      >
+    <div ref={frame} className="relative">
+      <ActivityReveal id={id} open={open} className="-mx-1.5">
         <div className="px-1.5 pb-1.5">
           <div className="bg-card dark:bg-muted shadow-raised rounded-card p-3.5 sm:p-4">
-            <ActivityField
-              slots={activity.slots}
-              loading={runs.status === 'pending'}
-              hovered={hovered?.index}
-              onHover={hover}
-              onLeave={() => setHovered(undefined)}
-            />
+            {quiet ? (
+              <div className="flex items-center justify-center" style={{ height: FIELD_HEIGHT }}>
+                <Txt as="p" variant="body-sm" tone="muted" className="m-0">
+                  Nothing came in, ran or shipped {ACTIVITY_PERIOD_LABELS[period].toLowerCase()}.
+                </Txt>
+              </div>
+            ) : (
+              <div role="img" aria-label={chartLabel(activity, runs)}>
+                <ActivityField
+                  slots={activity.slots}
+                  loading={runs.status === 'pending'}
+                  hovered={hovered?.index}
+                  onHover={hover}
+                  onLeave={() => setHovered(undefined)}
+                />
+              </div>
+            )}
           </div>
         </div>
-      </div>
+      </ActivityReveal>
       {open && hovered && hoveredSlot && (
         <ActivitySlotCard
           slot={hoveredSlot}

@@ -1,4 +1,3 @@
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { cn } from '@mastra/playground-ui/utils/cn';
 
@@ -18,13 +17,14 @@ export function ActivityTotals({
   return (
     <Txt
       as="span"
-      variant="caption"
+      variant="body-sm"
       tone="muted"
-      className="m-0 flex flex-wrap items-center gap-x-3.5 gap-y-1 tabular-nums"
+      className="m-0 flex flex-wrap items-center gap-x-4 gap-y-1 tabular-nums"
     >
-      {ACTIVITY_KINDS.map(({ kind, label, icon: Icon, tone }) => (
-        <Tooltip key={kind}>
-          <TooltipTrigger render={<span className="inline-flex items-center gap-1.5" />}>
+      {ACTIVITY_KINDS.map(({ kind, icon: Icon, tone }) => {
+        const { count, noun } = totalOf(kind, totals, runs);
+        return (
+          <span key={kind} className="inline-flex items-center gap-1.5">
             <span
               aria-hidden
               className={cn(
@@ -33,11 +33,12 @@ export function ActivityTotals({
               )}
             />
             <Icon aria-hidden className="size-3.5" />
-            <span className="text-foreground">{totalOf(kind, totals, runs)}</span>
-          </TooltipTrigger>
-          <TooltipContent side="top">{label}</TooltipContent>
-        </Tooltip>
-      ))}
+            <span>
+              <span className="text-foreground">{count}</span> {noun}
+            </span>
+          </span>
+        );
+      })}
     </Txt>
   );
 }

@@ -1,6 +1,6 @@
 import { hasLabel, metadataLabels, pullRequestStatusForItem, sourceCreatedAt } from './boardItems';
 import { belongsToBoard, boardStages, itemAppearsInStage } from './boardStages';
-import { awaitsTriageDecision } from './cardPrimaryAction';
+import { awaitsTriageDecision, TRIAGE_DECISIONS } from './cardPrimaryAction';
 import { reviewVerdict } from './reviewVerdict';
 import type { FactoryDecisionSummary } from './services/decisions';
 import type { WorkItem } from './services/workItems';
@@ -36,17 +36,20 @@ const GITHUB_TYPE_LABELS = new Set([
   'question',
   'wontfix',
 ]);
+const TRIAGE_CHOICES = new Intl.ListFormat('en', { type: 'disjunction' }).format(
+  TRIAGE_DECISIONS.map(({ label }) => label),
+);
 
 const PROMPTS: Record<StarterKind, string> = {
-  unblock: `Find the open cards whose last Factory run failed, ${BATCH} at most. Work out why each run failed, retry the fixable ones, and tell me what the others need.`,
-  feedback: `Find the open Factory pull requests where the Factory review requested changes, ${BATCH} at most. Address each review comment, push the fixes, and re-request review.`,
-  review: `Start a review session for each of the ${BATCH} oldest open pull requests waiting in Intake on the Review board, opened in the last month.`,
-  decide: `Go through the ${BATCH} oldest cards on the Work board that triage classified but nobody has accepted yet. Summarize each in one line and recommend accepting, merging, or closing it. Change nothing until I say so.`,
-  triage: `Triage the ${BATCH} newest cards in Intake on the Work board that triage has not classified yet. Accept the obvious ones and flag the unclear ones for me.`,
-  bug: 'Pick the highest-impact open bug on the Work board that nobody has planned yet, and draft a plan to fix it.',
+  unblock: `Look at the open cards whose last run failed, ${BATCH} at most. For each one, find out why the run failed. Retry the ones you can fix, and tell me what the others need.`,
+  feedback: `Find Factory's open pull requests whose latest review asked for changes, ${BATCH} at most. Make the changes each review comment asks for, push them, and request a new review.`,
+  review: `Start a review session for each of the ${BATCH} oldest open pull requests in Intake on the Review board that were opened in the last month.`,
+  decide: `Go through the ${BATCH} oldest cards on the Work board that triage classified and nobody has accepted yet. For each one, say in a line what it is and suggest ${TRIAGE_CHOICES}, with your reason. Change nothing until I say so.`,
+  triage: `Triage the ${BATCH} newest untriaged cards in Intake on the Work board. Accept the clear ones and flag the rest for me.`,
+  bug: 'Of the open bugs on the Work board that nobody has planned yet, pick the one with the biggest impact and draft a plan to fix it.',
   sweep:
-    'Find the area label with the most open cards waiting on the Work board. Group those cards by root cause, flag duplicates, and draft a plan for the biggest group.',
-  stale: `Go through the ${BATCH} oldest pull requests that have waited in Intake on the Review board for over a month. For each one, recommend closing or reviving it and say why. Close nothing until I say so.`,
+    'Find the area label with the most open cards on the Work board that nobody has started yet. Group those cards by root cause, point out duplicates, and draft a plan for the biggest group.',
+  stale: `Go through the ${BATCH} oldest pull requests that have waited in Intake on the Review board for over a month. For each one, suggest closing it or keeping it open, and say why. Close nothing until I say so.`,
 };
 
 function upTo(total: number, verb: string): string {
@@ -90,7 +93,7 @@ function areaLabels(item: WorkItem): string[] {
 function unblock(cards: readonly WorkItem[], effectByItem: ReadonlyMap<string, FactoryDecisionSummary>) {
   const failed = cards.filter(item => effectByItem.get(item.id)?.status === 'failed' && isOpen(item)).length;
   if (failed === 0) return undefined;
-  return { label: 'Failed runs', value: failed, action: upTo(failed, 'Unblock') };
+  return { label: 'Failed runs', value: failed, action: upTo(failed, 'Debug and retry') };
 }
 
 function feedback(cards: readonly WorkItem[]) {
@@ -101,7 +104,7 @@ function feedback(cards: readonly WorkItem[]) {
     return verdict !== undefined && !verdict.approved && !verdict.outdated;
   }).length;
   if (changesRequested === 0) return undefined;
-  return { label: 'Changes requested', value: changesRequested, action: 'Fix the feedback' };
+  return { label: 'Changes requested', value: changesRequested, action: 'Make the changes' };
 }
 
 function review(cards: readonly WorkItem[], now: number) {
@@ -125,7 +128,7 @@ function decide(cards: readonly WorkItem[]) {
     item => notStarted(item) && awaitsTriageDecision(item, inIntake(item) ? 'intake' : 'triage'),
   ).length;
   if (undecided === 0) return undefined;
-  return { label: 'Needs your decision', value: undecided, action: theBatch(undecided, 'Decide on', 'oldest') };
+  return { label: 'Not yet accepted', value: undecided, action: 'Help me decide' };
 }
 
 function triage(cards: readonly WorkItem[]) {
@@ -145,7 +148,7 @@ function bug(cards: readonly WorkItem[]) {
   return {
     label: 'Bugs with no plan',
     value: unplanned,
-    action: unplanned === 1 ? 'Plan a fix for it' : 'Plan a fix for one',
+    action: unplanned === 1 ? 'Plan a fix' : 'Plan a fix for one',
   };
 }
 
@@ -157,14 +160,14 @@ function sweep(cards: readonly WorkItem[]) {
   const largest = [...byArea].sort(([a, x], [b, y]) => y - x || a.localeCompare(b))[0];
   if (largest === undefined || largest[1] < SWEEP_MIN) return undefined;
   const [area, waiting] = largest;
-  return { label: `Waiting in ${area}`, value: waiting, action: 'Sweep the area' };
+  return { label: `${area} backlog`, value: waiting, action: 'Group by root cause' };
 }
 
 function stale(cards: readonly WorkItem[], now: number) {
   const before = now - MONTH_MS;
   const forgotten = cards.filter(item => waitsForReview(item) && openedAt(item) < before).length;
   if (forgotten === 0) return undefined;
-  return { label: 'Stale pull requests', value: forgotten, action: upTo(forgotten, 'Close or revive') };
+  return { label: 'Stale pull requests', value: forgotten, action: 'Flag what to close' };
 }
 
 export function starterPrompts({

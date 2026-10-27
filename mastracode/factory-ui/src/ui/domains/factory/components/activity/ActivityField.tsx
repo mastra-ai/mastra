@@ -12,7 +12,7 @@ const BAR = 3;
 const RADIUS = BAR / 2;
 const DOT = 0.7;
 const GAP = 0.8;
-const HEIGHT = (LEVELS - 1) * PITCH + BAR;
+export const FIELD_HEIGHT = (LEVELS - 1) * PITCH + BAR;
 
 interface Band {
   kind: ActivityKind;
@@ -32,7 +32,7 @@ interface FieldPaths {
   lit: Record<ActivityKind, string>;
 }
 
-const EMPTY: Bar = { top: HEIGHT, bands: [] };
+const EMPTY: Bar = { top: FIELD_HEIGHT, bands: [] };
 
 function useColumnCount(ref: RefObject<HTMLElement | null>) {
   const [columns, setColumns] = useState(0);
@@ -53,9 +53,16 @@ function useColumnCount(ref: RefObject<HTMLElement | null>) {
 }
 
 const slotAt = (column: number, slots: number, columns: number) => Math.floor((column * slots) / columns);
+
+function slotCenter(index: number, slots: number, columns: number) {
+  const first = Math.ceil((index * columns) / slots);
+  const last = Math.ceil(((index + 1) * columns) / slots) - 1;
+  return Math.floor((first + last) / 2);
+}
+
 const total = (slot: ActivitySlot) => ACTIVITY_KIND_ORDER.reduce((sum, kind) => sum + slot.counts[kind], 0);
 const capsule = (x: number, top: number) =>
-  `M${x} ${top + RADIUS}a${RADIUS} ${RADIUS} 0 0 1 ${BAR} 0V${HEIGHT - RADIUS}a${RADIUS} ${RADIUS} 0 0 1 ${-BAR} 0Z`;
+  `M${x} ${top + RADIUS}a${RADIUS} ${RADIUS} 0 0 1 ${BAR} 0V${FIELD_HEIGHT - RADIUS}a${RADIUS} ${RADIUS} 0 0 1 ${-BAR} 0Z`;
 const band = (x: number, top: number, bottom: number) => `M${x} ${top}h${BAR}V${bottom}h${-BAR}Z`;
 const dot = (x: number, y: number) =>
   `M${x - DOT} ${y}a${DOT} ${DOT} 0 1 0 ${2 * DOT} 0a${DOT} ${DOT} 0 1 0 ${-2 * DOT} 0`;
@@ -63,11 +70,11 @@ const dot = (x: number, y: number) =>
 function bar(slot: ActivitySlot, peak: number): Bar {
   const sum = total(slot);
   if (sum === 0) return EMPTY;
-  const top = HEIGHT - Math.max(BAR, (sum / peak) * HEIGHT);
+  const top = FIELD_HEIGHT - Math.max(BAR, (sum / peak) * FIELD_HEIGHT);
   const bands: Band[] = [];
-  let bottom = HEIGHT;
+  let bottom = FIELD_HEIGHT;
   for (const kind of ACTIVITY_KIND_ORDER) {
-    const size = ((HEIGHT - top) * slot.counts[kind]) / sum;
+    const size = ((FIELD_HEIGHT - top) * slot.counts[kind]) / sum;
     if (size === 0) continue;
     bands.push({ kind, top: bottom - size, bottom });
     bottom -= size;
@@ -81,10 +88,10 @@ function paint(slots: readonly ActivitySlot[], columns: number, hovered: number 
   const outline: string[] = [];
   const unlit: string[] = [];
   const lifted: string[] = [];
-  const lit: Record<ActivityKind, string[]> = { shipped: [], ran: [], cameIn: [] };
+  const lit: Record<ActivityKind, string[]> = { cameIn: [], ran: [], shipped: [] };
   for (let column = 0; column < columns; column += 1) {
     const index = slotAt(column, slots.length, columns);
-    const { top, bands } = bars[index] ?? EMPTY;
+    const { top, bands } = column === slotCenter(index, slots.length, columns) ? (bars[index] ?? EMPTY) : EMPTY;
     const x = column * PITCH;
     if (bands.length > 0) outline.push(capsule(x, top));
     bands.forEach(({ kind, top: from, bottom: to }, position) => {
@@ -103,7 +110,7 @@ function paint(slots: readonly ActivitySlot[], columns: number, hovered: number 
     outline: outline.join(''),
     unlit: unlit.join(''),
     lifted: lifted.join(''),
-    lit: { shipped: lit.shipped.join(''), ran: lit.ran.join(''), cameIn: lit.cameIn.join('') },
+    lit: { cameIn: lit.cameIn.join(''), ran: lit.ran.join(''), shipped: lit.shipped.join('') },
   };
 }
 
@@ -130,16 +137,14 @@ export function ActivityField({
     const column = Math.min(columns - 1, Math.max(0, Math.floor(((event.clientX - box.left) / box.width) * columns)));
     const index = slotAt(column, slots.length, columns);
     if (index === hovered) return;
-    const first = Math.ceil((index * columns) / slots.length);
-    const last = Math.ceil(((index + 1) * columns) / slots.length) - 1;
-    const center = ((first + last) / 2) * PITCH + RADIUS;
+    const center = slotCenter(index, slots.length, columns) * PITCH + RADIUS;
     onHover(index, box.left + center * (box.width / viewWidth));
   };
   return (
     <div ref={frame}>
       <svg
         aria-hidden
-        viewBox={`0 0 ${viewWidth} ${HEIGHT}`}
+        viewBox={`0 0 ${viewWidth} ${FIELD_HEIGHT}`}
         onPointerMove={point}
         onPointerLeave={onLeave}
         className={cn('text-foreground block h-auto w-full', loading && 'motion-safe:animate-pulse')}
