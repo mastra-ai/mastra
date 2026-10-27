@@ -177,8 +177,61 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
   return { ...body, contents };
 }
 
+function normalizeObservationAges(body: unknown): unknown {
+  if (!isRecord(body)) return body;
+
+  const normalizeBlocks = (blocks: unknown[], implicitSystem = false) => {
+    let inObservations = false;
+    const normalizeText = (text: string): string =>
+      text
+        .split(/(^<(?:\/?observations|current-task|suggested-response)>$)/m)
+        .map(part => {
+          if (part === '<observations>') inObservations = true;
+          else if (['</observations>', '<current-task>', '<suggested-response>'].includes(part)) inObservations = false;
+          else if (inObservations) {
+            return part.replaceAll(
+              /(\(meaning [^()\n]+ - )(?:today|yesterday|tomorrow|\d+ (?:day|week|month|year)s? ago|in \d+ (?:day|week|month|year)s?)(?=\))/g,
+              '$1REDACTED_AGE',
+            );
+          }
+          return part;
+        })
+        .join('');
+    const normalizeContent = (content: unknown): unknown => {
+      if (typeof content === 'string') return normalizeText(content);
+      if (!Array.isArray(content)) return content;
+      return content.map(part =>
+        isRecord(part) && typeof part.text === 'string' ? { ...part, text: normalizeText(part.text) } : part,
+      );
+    };
+    return blocks.map(block => {
+      if (implicitSystem && typeof block === 'string') return normalizeText(block);
+      if (!isRecord(block)) return block;
+      if (!implicitSystem && block.role !== 'system' && block.role !== 'developer') {
+        inObservations = false;
+        return block;
+      }
+      return {
+        ...block,
+        ...(typeof block.text === 'string' ? { text: normalizeText(block.text) } : {}),
+        ...(block.content !== undefined ? { content: normalizeContent(block.content) } : {}),
+      };
+    });
+  };
+
+  const normalized = { ...body };
+  for (const key of ['input', 'messages']) {
+    if (Array.isArray(body[key])) normalized[key] = normalizeBlocks(body[key]);
+  }
+  if (Array.isArray(body.system)) normalized.system = normalizeBlocks(body.system, true);
+  else if (typeof body.system === 'string') normalized.system = normalizeBlocks([body.system], true)[0];
+  return normalized;
+}
+
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
-  let normalizedBody = normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body));
+  let normalizedBody = normalizeObservationAges(
+    normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body)),
+  );
   const { hostname } = new URL(url);
   if (hostname === 'generativelanguage.googleapis.com') {
     normalizedBody = normalizeGoogleToolCallMessages(normalizedBody);
