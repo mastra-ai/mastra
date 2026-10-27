@@ -10865,8 +10865,6 @@ export type PostObservabilityThreadsQuery_Response =
         outputPreview: string | null;
         errorPreview: string | null;
         traceCount: number;
-        model: string | null;
-        provider: string | null;
       }[];
       page: {
         next: string | null;

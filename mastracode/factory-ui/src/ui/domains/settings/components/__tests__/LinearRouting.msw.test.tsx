@@ -1,7 +1,3 @@
-/**
- * BDD coverage for Linear routing: a routed project can name which installed
- * board its issues land on, and the choice travels with every binding save.
- */
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -26,12 +22,15 @@ function stub(initial: IntakeSourceBinding[]) {
   const saved: unknown[] = [];
   server.use(
     http.get(`${TEST_BASE_URL}/web/intake/bindings`, () => HttpResponse.json({ bindings })),
-    http.put(`${TEST_BASE_URL}/web/intake/bindings`, async ({ request }) => {
-      const body = (await request.json()) as IntakeSourceBinding & { factoryProjectId: string | null };
-      saved.push(body);
-      bindings = body.factoryProjectId ? [{ ...body, factoryProjectId: body.factoryProjectId }] : [];
-      return HttpResponse.json({ bindings });
-    }),
+    http.put<never, IntakeSourceBinding & { factoryProjectId: string | null }>(
+      `${TEST_BASE_URL}/web/intake/bindings`,
+      async ({ request }) => {
+        const body = await request.json();
+        saved.push(body);
+        bindings = body.factoryProjectId ? [{ ...body, factoryProjectId: body.factoryProjectId }] : [];
+        return HttpResponse.json({ bindings });
+      },
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () =>
       HttpResponse.json({ boards: [...builtinBoardCatalog.boards, releaseBoard] }),
     ),
@@ -99,8 +98,6 @@ describe('LinearRouting board target', () => {
     await user.click(factory);
     await user.click(await screen.findByRole('option', { name: 'Globex' }));
 
-    // A board id belongs to one Factory's catalog; carrying it over could bind
-    // to a board the new Factory never installed.
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
   });
@@ -119,6 +116,39 @@ describe('LinearRouting board target', () => {
       expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
     );
     expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
+  });
+
+  it('offers a retry instead of editable routes when the routes fail to load', async () => {
+    const binding = { integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' };
+    stub([binding]);
+    let failBindings = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/intake/bindings`, () =>
+        failBindings ? new HttpResponse(null, { status: 500 }) : HttpResponse.json({ bindings: [binding] }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderRouting();
+
+    expect(await screen.findByText('Routing is unavailable')).toBeInTheDocument();
+    expect(screen.queryByRole('combobox', { name: 'Factory for Releases' })).not.toBeInTheDocument();
+    expect(screen.queryByText(/Not routed/)).not.toBeInTheDocument();
+
+    failBindings = false;
+    await user.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByRole('combobox', { name: 'Factory for Releases' })).toHaveTextContent('Acme');
+  });
+
+  it('keeps the board picker locked when the board catalog fails to load', async () => {
+    stub([{ integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' }]);
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:id/boards`, () => new HttpResponse(null, { status: 500 })),
+    );
+    renderRouting();
+
+    const picker = await screen.findByRole('combobox', { name: 'Board for Releases' });
+    await waitFor(() => expect(picker).toHaveTextContent('Boards unavailable'));
+    expect(picker).toBeDisabled();
   });
 
   describe('with many sources', () => {
@@ -164,7 +194,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       const { rerender } = renderMany();
 
-      await user.type(screen.getByRole('searchbox', { name: 'Search Linear routing' }), 'release');
+      await user.type(await screen.findByRole('searchbox', { name: 'Search Linear routing' }), 'release');
       await waitFor(() =>
         expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
       );
@@ -190,7 +220,7 @@ describe('LinearRouting board target', () => {
       const user = userEvent.setup();
       renderMany();
 
-      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
+      const search = await screen.findByRole('searchbox', { name: 'Search Linear routing' });
       await user.type(search, 'release');
       const factory = await screen.findByRole('combobox', { name: 'Factory for Release Tools' });
       await user.click(factory);
