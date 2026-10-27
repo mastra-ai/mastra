@@ -4,7 +4,7 @@ import { Knowledge } from '../index';
 import { createPinnedTools, listPinnedKnowledge } from '../pinned';
 
 async function setup() {
-  const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-scopes' }), pins: true });
+  const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-scopes' }), pinnedContext: true });
   const store = await knowledge.getStorage();
   const host = { getKnowledgeStore: () => knowledge.getStorage() };
   const tools = (scope: string[], readOnly: string[] = [], source?: string) =>

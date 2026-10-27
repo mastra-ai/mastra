@@ -80,7 +80,7 @@ describe.each([
   afterEach(() => globalRunRegistry.clear());
 
   it('keeps a read-only tag read-only after approval, so Knowledge writes naming it are refused', async () => {
-    const knowledge = new Knowledge({ id: `k-${kind}`, storage: new InMemoryStore(), tools: { write: true } });
+    const knowledge = new Knowledge({ id: `k-${kind}`, storage: new InMemoryStore(), tools: true });
     const store = await knowledge.getStorage();
     const created = vi.spyOn(store, 'createNode');
     let onResume: unknown;
