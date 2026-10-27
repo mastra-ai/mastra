@@ -30,6 +30,7 @@ export interface SettingsConfig {
   experimentalGithubSignals: boolean;
   experimentalCrossAgentSignals: boolean;
   experimentalScheduleTools: boolean;
+  experimentalKnowledge: boolean;
   experimentalAgent: ExperimentalAgent | null;
   backgroundToolsEnabled: boolean;
   webSearchProvider: WebSearchProviderSetting;
@@ -47,6 +48,7 @@ export interface SettingsCallbacks {
   onExperimentalGithubSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalCrossAgentSignalsChange: (enabled: boolean) => boolean | void | Promise<boolean | void>;
   onExperimentalScheduleToolsChange: (enabled: boolean) => void;
+  onExperimentalKnowledgeChange: (enabled: boolean) => void;
   onExperimentalAgentChange: (agent: ExperimentalAgent | null) => void;
   onBackgroundToolsChange: (enabled: boolean) => void;
   onWebSearchProviderChange: (provider: WebSearchProviderSetting) => void;
@@ -501,6 +503,32 @@ export class SettingsComponent extends Box implements Focusable {
               const enabled = value === 'on';
               callbacks.onExperimentalScheduleToolsChange(enabled);
               config.experimentalScheduleTools = enabled;
+              done(enabled ? 'On' : 'Off');
+            },
+            () => done(),
+          ),
+      },
+      {
+        id: 'experimentalKnowledge',
+        label: 'Experimental Knowledge',
+        description:
+          'Give the agent Knowledge it can search, write and pin, stored with Mastra Code (restart required).',
+        currentValue: config.experimentalKnowledge ? 'On' : 'Off',
+        submenu: (_currentValue, done) =>
+          new SelectSubmenu(
+            [
+              {
+                value: 'on',
+                label: '  On',
+                description: 'Add knowledge_search, knowledge_read, knowledge_record, knowledge_node and knowledge_pin',
+              },
+              { value: 'off', label: '  Off', description: 'No Knowledge tools or pinned context' },
+            ],
+            config.experimentalKnowledge ? 'on' : 'off',
+            value => {
+              const enabled = value === 'on';
+              callbacks.onExperimentalKnowledgeChange(enabled);
+              config.experimentalKnowledge = enabled;
               done(enabled ? 'On' : 'Off');
             },
             () => done(),

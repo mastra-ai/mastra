@@ -13,7 +13,7 @@ export async function handleKnowledgeCommand(ctx: SlashCommandContext): Promise<
   if (!inspector) {
     ctx.showError(
       ctx.knowledgeInspectorUnavailableReason ??
-        'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1.',
+        'Knowledge inspection is unavailable. Turn on Experimental Knowledge in /settings and restart Mastra Code.',
     );
     return;
   }

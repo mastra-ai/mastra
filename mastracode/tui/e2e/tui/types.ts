@@ -133,6 +133,7 @@ export type ScenarioName =
   | 'visible-commands'
   | 'integration-commands'
   | 'knowledge-browser'
+  | 'knowledge-settings'
   | 'lifecycle-hooks-configured'
   | 'lifecycle-hooks-events'
   | 'login-dialog-masked-input'

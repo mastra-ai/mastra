@@ -35,16 +35,8 @@ vi.mock('@mastra/code-sdk', () => ({
 }));
 
 describe('org-classification fail-open (projectless factory session, rejecting org-state write)', () => {
-  const envBefore = process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
-
   beforeEach(() => {
     prepareMock.mockClear();
-    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
-  });
-
-  afterEach(() => {
-    if (envBefore === undefined) delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
-    else process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = envBefore;
   });
 
   it('leaves the Knowledge session unresolved, never org:local, when the org seed write rejects', async () => {

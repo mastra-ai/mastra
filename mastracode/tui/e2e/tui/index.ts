@@ -102,6 +102,7 @@ import {
 } from './initial-prompt.js';
 import { integrationCommandsScenario } from './integration-commands.js';
 import { knowledgeBrowserScenario } from './knowledge-browser.js';
+import { knowledgeSettingsScenario } from './knowledge-settings.js';
 import { legacySettingsNoPromptScenario } from './legacy-settings-no-prompt.js';
 import { legacySettingsUpgradeScenario } from './legacy-settings-upgrade.js';
 import { legacyThreadModelRestoreScenario, savedThreadModelRestoreScenario } from './legacy-thread-model-restore.js';
@@ -385,6 +386,7 @@ export const scenarios: Record<ScenarioName, McE2eScenario> = {
   'notification-signal-rendering': notificationSignalRenderingScenario,
   'notify-input-request-hook': notifyInputRequestHookScenario,
   'knowledge-browser': knowledgeBrowserScenario,
+  'knowledge-settings': knowledgeSettingsScenario,
   'om-attachment-observation': omAttachmentObservationScenario,
   'om-auto-selection': omAutoSelectionScenario,
   'om-auto-preview-google-api-key': omAutoPreviewGoogleApiKeyScenario,

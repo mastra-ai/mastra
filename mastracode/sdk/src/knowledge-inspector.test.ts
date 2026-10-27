@@ -1,3 +1,4 @@
+import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { AgentControllerEvent, Session } from '@mastra/core/agent-controller';
 import { Knowledge } from '@mastra/core/knowledge';
 import { Mastra } from '@mastra/core/mastra';
@@ -9,9 +10,10 @@ import { createKnowledgeInspector, KnowledgeInspectorError } from './knowledge-i
 import { LOCAL_KNOWLEDGE_ORG_ID } from './knowledge-scope.js';
 import type { MastraCodeState } from './schema.js';
 
-// TUI/studio sessions curate under the fixed local org rung (see knowledge-scope.ts);
-// the inspector must read the same rung.
+// The built-in Knowledge (`knowledge: true`) writes under the fixed local org, which the host
+// passes as its scope; the inspector must read the same rung.
 const LOCAL_ORG = LOCAL_KNOWLEDGE_ORG_ID;
+const LOCAL_HOST: AgentScopeEntry[] = [{ scope: `org:${LOCAL_ORG}`, access: 'write' }];
 const orgScope = [`org:${LOCAL_ORG}`];
 const resourceScope = [...orgScope, 'resource:project-1'];
 const threadScope = [...resourceScope, 'thread:thread-1'];
@@ -70,7 +72,7 @@ function createSessionHarness(initialState: Partial<MastraCodeState> = {}) {
   };
 }
 
-async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes?: string[]) {
+async function createHarness(state: Partial<MastraCodeState> = {}, hostScopes: AgentScopeEntry[] = LOCAL_HOST) {
   const knowledge = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
   const storage = new MastraCompositeStore({ id: 'knowledge-inspector-test', domains: { knowledge } });
   const session = createSessionHarness(state);
@@ -416,7 +418,7 @@ describe('KnowledgeInspector', () => {
   });
 
   it('reads Factory sessions under their org and project tags, isolated from other projects', async () => {
-    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' });
+    const factory = await createHarness({ factoryOrgId: 'org-42', factoryProjectId: 'proj-7' }, []);
     await factory.knowledge.createNode({ name: 'Org node', kind: 'concept', scope: ['org:org-42'] });
     await factory.knowledge.createNode({
       name: 'Project node',
@@ -452,7 +454,7 @@ describe('KnowledgeInspector', () => {
   });
 
   it('rotates handles and cursors when the org is seeded mid-session', async () => {
-    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
+    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true }, []);
     await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
 
     factory.session.setState({ factoryProjectId: 'proj-7', factoryOrgId: 'org-42' });
@@ -480,7 +482,7 @@ describe('KnowledgeInspector', () => {
   });
 
   it('fails closed when a Factory-owned session has no resolved org', async () => {
-    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true });
+    const factory = await createHarness({ factoryProjectId: 'proj-7', factoryOrgUnresolved: true }, []);
     await expect(factory.inspector.getScopeTree()).rejects.toMatchObject({ code: 'unavailable' });
     await expect(factory.inspector.listNodes({ level: 'org' })).rejects.toMatchObject({ code: 'unavailable' });
   });
@@ -505,6 +507,7 @@ describe('KnowledgeInspector', () => {
       storage,
       knowledge,
       session: createSessionHarness().session,
+      hostScopes: LOCAL_HOST,
     });
 
     await expect(inspector?.listNodes({ level: 'resource' })).resolves.toMatchObject({
@@ -520,8 +523,8 @@ describe('KnowledgeInspector', () => {
     await (await first.getStorage()).createNode({ name: 'First', kind: 'note', scope: resourceScope });
     await (await second.getStorage()).createNode({ name: 'Second', kind: 'note', scope: resourceScope });
     const session = createSessionHarness().session;
-    const a = await createKnowledgeInspector({ storage, mastra, knowledge: 'first', session });
-    const b = await createKnowledgeInspector({ storage, mastra, knowledge: 'second', session });
+    const a = await createKnowledgeInspector({ storage, mastra, knowledge: 'first', session, hostScopes: LOCAL_HOST });
+    const b = await createKnowledgeInspector({ storage, mastra, knowledge: 'second', session, hostScopes: LOCAL_HOST });
     const firstPage = await a!.listNodes({ level: 'resource' });
     expect(firstPage.nodes.map(node => node.name)).toEqual(['First']);
     expect((await b!.listNodes({ level: 'resource' })).nodes.map(node => node.name)).toEqual(['Second']);

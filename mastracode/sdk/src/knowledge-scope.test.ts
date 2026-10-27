@@ -1,23 +1,13 @@
 import { describe, expect, it } from 'vitest';
 
-import { knowledgeSessionTags, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 
 describe('resolveKnowledgeSessionScopes', () => {
-  it('gives a local session with no host tags the fixed local org, regardless of project or machine', () => {
-    const expected = { resolved: true, scopes: [{ scope: 'org:local', access: 'write' }] };
-    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
-    expect(resolveKnowledgeSessionScopes(undefined)).toEqual(expected);
-    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never)).toEqual(expected);
-    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/other' } as never, ['resource:u1'])).toEqual({
+  it("acts with the host's scopes as given in a local session, adding no org", () => {
+    expect(resolveKnowledgeSessionScopes(undefined)).toEqual({ resolved: true, scopes: [] });
+    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never, ['resource:u1'])).toEqual({
       resolved: true,
-      scopes: ['resource:u1', { scope: 'org:local', access: 'write' }],
-    });
-  });
-
-  it('adds no org:local once the host gives any shared tag, read-only included', () => {
-    expect(resolveKnowledgeSessionScopes(undefined, ['team:self:x', 'agent:alex'])).toEqual({
-      resolved: true,
-      scopes: ['team:self:x', 'agent:alex'],
+      scopes: ['resource:u1'],
     });
     const member = [{ scope: 'org:self', access: 'read' as const }, 'team:self:x'];
     expect(resolveKnowledgeSessionScopes(undefined, member)).toEqual({ resolved: true, scopes: member });
