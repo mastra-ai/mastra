@@ -912,7 +912,8 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
               ? (rawExecOptions as AgentExecutionOptions<OUTPUT> & { [COMPLETION_POLICY_FROM_DEFAULTS]?: boolean })?.[
                   COMPLETION_POLICY_FROM_DEFAULTS
                 ] === true
-              : rawExecOptions?.isTaskComplete === undefined,
+              : rawExecOptions?.isTaskComplete?.scorers === undefined &&
+                rawExecOptions?.isTaskComplete?.onComplete === undefined,
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,

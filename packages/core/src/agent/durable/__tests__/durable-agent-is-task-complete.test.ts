@@ -142,6 +142,29 @@ describe('DurableAgent isTaskComplete', () => {
     expect(serialized.onComplete).toBeUndefined();
   });
 
+  it('tracks default scorers through settings-only overrides in direct preparation', async () => {
+    const scorer = passingScorer();
+    const baseAgent = new Agent({
+      id: 'task-complete-settings-agent',
+      name: 'Task Complete Settings Agent',
+      instructions: 'noop',
+      model: createTextModel('done') as LanguageModelV2,
+      defaultOptions: { isTaskComplete: { scorers: [scorer as any] } },
+    });
+    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+
+    const { workflowInput, registryEntry } = await durableAgent.prepare('hello', {
+      isTaskComplete: { strategy: 'any' },
+    });
+
+    expect(registryEntry.isTaskComplete?.scorers?.[0]).toBe(scorer);
+    expect(workflowInput.options.isTaskComplete).toMatchObject({
+      fromDefaults: true,
+      scorerNames: ['Durable Task Scorer'],
+      strategy: 'any',
+    });
+  });
+
   it('omits isTaskComplete from workflowInput when no policy is configured', async () => {
     const baseAgent = new Agent({
       id: 'no-task-complete-agent',

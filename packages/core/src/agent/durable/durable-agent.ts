@@ -2006,7 +2006,7 @@ export class DurableAgent<
     // Preserve both markers when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
     Object.defineProperty(scopedOptions, COMPLETION_POLICY_FROM_DEFAULTS, {
-      value: options?.isTaskComplete === undefined,
+      value: options?.isTaskComplete?.scorers === undefined && options?.isTaskComplete?.onComplete === undefined,
       enumerable: true,
     });
     return scopedOptions;

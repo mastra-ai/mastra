@@ -453,7 +453,7 @@ async function recoverFrom(
 }
 
 describe('DurableAgent crash recovery', () => {
-  it.each(['default', 'per-call'] as const)(
+  it.each(['default', 'settings-only', 'per-call'] as const)(
     'restores only %s completion scorers after restarting during a tool call',
     async policyOrigin => {
       const runId = `recover-task-completion-${policyOrigin}`;
@@ -541,7 +541,9 @@ describe('DurableAgent crash recovery', () => {
                     ],
                   },
                 }
-              : {}),
+              : policyOrigin === 'settings-only'
+                ? { isTaskComplete: { strategy: 'any' as const } }
+                : {}),
           }),
         ),
       );
@@ -551,21 +553,21 @@ describe('DurableAgent crash recovery', () => {
         const recovered = await scenario.restart(checkpoint);
         expect(recovered.executionError).toBeUndefined();
         expect(recovered.streamErrors).toEqual([]);
-        expect(recovered.text).toBe(policyOrigin === 'default' ? 'CONFIRMED' : 'DRAFT');
+        expect(recovered.text).toBe(policyOrigin !== 'per-call' ? 'CONFIRMED' : 'DRAFT');
         expect(recovered.chunkTypes.filter(type => type === 'is-task-complete')).toHaveLength(
-          policyOrigin === 'default' ? 2 : 0,
+          policyOrigin !== 'per-call' ? 2 : 0,
         );
         expect(scorerCalls).toEqual(
-          policyOrigin === 'default'
+          policyOrigin !== 'per-call'
             ? [
                 { generation: 2, answer: 'DRAFT' },
                 { generation: 2, answer: 'CONFIRMED' },
               ]
             : [],
         );
-        expect(modelAnswers).toEqual(policyOrigin === 'default' ? ['DRAFT', 'CONFIRMED'] : ['DRAFT']);
+        expect(modelAnswers).toEqual(policyOrigin !== 'per-call' ? ['DRAFT', 'CONFIRMED'] : ['DRAFT']);
         expect(warnings.filter(message => message.includes('cannot restore task-completion scorers'))).toHaveLength(
-          policyOrigin === 'default' ? 0 : 1,
+          policyOrigin !== 'per-call' ? 0 : 1,
         );
       } finally {
         original.releaseHold();
