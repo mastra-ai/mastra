@@ -2,7 +2,7 @@
 '@mastra/mcp': minor
 ---
 
-Added Mastra-storage-backed tasks to `MCPServer` (experimental). A server registered on a Mastra instance with background tasks enabled now keeps its tasks in Mastra storage, so any instance sharing that storage can answer `tasks/get`, `tasks/update` and `tasks/cancel` and run the task. Answers survive the instance that took them, and expired tasks are failed. Closes #28337.
+Added Mastra-storage-backed tasks to `MCPServer` (experimental). A server registered on a Mastra instance with background tasks enabled now keeps its tasks in Mastra storage, so any instance sharing that storage can answer `tasks/get`, `tasks/update` and `tasks/cancel` and run the task. Answers survive the instance that took them, and expired tasks are failed. Rows store hashes of the task id and of the caller's principal, never the values themselves or the bearer token, plus a readable `metadata.clientLabel` (client id with the subject, user id, or a short prefix of the token's hash) so operators can see which client sent a task. Closes #28337.
 
 Added the `recover` task option. When the server running a task stops, the task fails as lost by default; with `recover: true` another instance runs the tool again from the start. Only enable it for tools that are safe to repeat.
 
