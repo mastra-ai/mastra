@@ -21,7 +21,7 @@ import type { Tool } from '@mastra/core/tools';
 
 import { BrowserManager } from 'agent-browser';
 import type { BrowserLaunchOptions } from 'agent-browser';
-import type { Page, Locator } from 'playwright-core';
+import type { BrowserContext, Page, Locator } from 'playwright-core';
 import type {
   GotoInput,
   SnapshotInput,
@@ -44,6 +44,9 @@ import { createAgentBrowserTools } from './tools';
 import type { BrowserConfig } from './types';
 import { getBrowserPid } from './utils';
 
+/** A cookie for {@link AgentBrowser.setCookies}, in Playwright's `addCookies` shape. */
+export type BrowserCookie = Parameters<BrowserContext['addCookies']>[0][number];
+
 /** AgentBrowser accepts an optional thread-manager factory (see {@link CreateAgentBrowserThreadManager}). */
 export type AgentBrowserConfig = BrowserConfig & {
   createThreadManager?: CreateAgentBrowserThreadManager;
@@ -64,6 +67,8 @@ export class AgentBrowser extends MastraBrowser {
   private defaultTimeout = 30000;
   /** Pending PID lookups — awaited in disconnect handlers to avoid racing. */
   private pidLookups = new Set<Promise<void>>();
+  /** Cookies waiting for a thread's browser to start, by thread. */
+  private pendingCookies = new Map<string, BrowserCookie[]>();
   private readonly pendingCloseReasons = new Map<string, 'agent' | 'user' | 'process_restart' | 'error'>();
   private readonly activeUrlChangeSources = new Map<string, { url: string; source: 'agent' | 'user' }>();
 
@@ -159,7 +164,37 @@ export class AgentBrowser extends MastraBrowser {
       // Fall through to create a session for DEFAULT_THREAD_ID
     }
 
-    return this.threadManager.getManagerForThread(effectiveThreadId);
+    const manager = await this.threadManager.getManagerForThread(effectiveThreadId);
+    await this.addPendingCookies(manager, effectiveThreadId);
+    return manager;
+  }
+
+  private async addPendingCookies(manager: BrowserManager, threadId: string): Promise<void> {
+    const pending = this.pendingCookies.get(threadId);
+    const context = pending && manager.getContext();
+    if (!context) return;
+    this.pendingCookies.delete(threadId);
+    await context.addCookies(pending);
+  }
+
+  /**
+   * Add cookies to a thread's browser, so its pages can open sites that
+   * signed it in some other way (for example a preview that needs a sign-in
+   * the agent can't do itself). Cookies set before the browser starts are
+   * added when it does.
+   *
+   * @param cookies - Cookies in Playwright's `addCookies` shape
+   * @param threadId - Optional thread ID (defaults to current thread)
+   */
+  async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    const context = this.threadManager.getExistingManagerForThread(effectiveThreadId)?.getContext();
+    if (context) {
+      await context.addCookies(cookies);
+      return;
+    }
+    const pending = this.pendingCookies.get(effectiveThreadId) ?? [];
+    this.pendingCookies.set(effectiveThreadId, [...pending, ...cookies]);
   }
 
   // ---------------------------------------------------------------------------
@@ -413,9 +448,12 @@ export class AgentBrowser extends MastraBrowser {
     const threadId = explicitThreadId ?? this.getCurrentThread();
     // For thread scope, always use threadManager.getPageForThread
     if (scope === 'thread') {
-      return this.threadManager.getPageForThread(threadId);
+      const manager = await this.threadManager.getManagerForThread(threadId);
+      await this.addPendingCookies(manager, threadId);
+      return manager.getPage();
     }
     if (!this.sharedManager) throw new Error('Browser not launched');
+    await this.addPendingCookies(this.sharedManager, threadId);
     return this.sharedManager.getPage();
   }
 
