@@ -235,7 +235,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
       node: orgNode,
       text: 'Ship on Fridays only with sign-off.',
       scope: ['org:self'],
-      sourceThreadId: 'director',
+      sourceThreadId: 'lead',
       resolutionScope: ['org:self'],
       defaultScope: ['org:self'],
     });

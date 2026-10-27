@@ -45,7 +45,7 @@ const structure = {
     { address: 'repo:mastra', name: 'repo:mastra', parentAddresses: ['org:acme'] },
     { address: 'repo:mastra:issues', name: 'issues', parentAddresses: ['repo:mastra'] },
     { address: 'repo:mastra:prs', name: 'prs', parentAddresses: ['repo:mastra'] },
-    { address: 'resource:shipyard', name: 'Shipyard', parentAddresses: ['org:acme'] },
+    { address: 'resource:workspace', name: 'Workspace', parentAddresses: ['org:acme'] },
   ],
 };
 
@@ -53,7 +53,7 @@ function message(threadId: string): MastraDBMessage {
   return {
     id: randomUUID(),
     threadId,
-    resourceId: 'shipyard',
+    resourceId: 'workspace',
     role: 'user',
     createdAt: new Date('2026-08-28T00:00:00.000Z'),
     content: { format: 2, parts: [{ type: 'text', text: 'Maya Chen owns the Atlas refund launch.' }] },
@@ -76,7 +76,7 @@ function deterministicObservationModel(curate = false) {
               node: 'Atlas refund launch',
               kind: 'feature',
               text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
-              scope: ['org:acme', 'resource:shipyard'],
+              scope: ['org:acme', 'resource:workspace'],
             }),
           });
           controller.enqueue({
@@ -195,8 +195,8 @@ async function seedPublishedKnowledgeV1(
     'entity',
     'Atlas',
     'atlas',
-    '["shipyard"]',
-    'shipyard',
+    '["workspace"]',
+    'workspace',
     1,
     '2026-01-01T00:00:00.000Z',
   ] as const;
@@ -328,17 +328,17 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     );
 
     const threadId = `proof-${randomUUID()}`;
-    await first.memory.createThread({ threadId, resourceId: 'shipyard', title: 'Wave 1 proof' });
+    await first.memory.createThread({ threadId, resourceId: 'workspace', title: 'Wave 1 proof' });
     await (
       await first.agent.stream('Maya Chen owns the Atlas refund launch.', {
-        memory: { thread: threadId, resource: 'shipyard' },
+        memory: { thread: threadId, resource: 'workspace' },
       })
     ).consumeStream();
-    const visibleScope = ['org:acme', 'resource:shipyard'];
+    const visibleScope = ['org:acme', 'resource:workspace'];
     await first.memory.settled();
     expect(await first.knowledge.resolveNode({ name: 'Atlas refund launch', scope: visibleScope })).toMatchObject({
       kind: 'feature',
-      scope: ['org:acme', 'resource:shipyard'],
+      scope: ['org:acme', 'resource:workspace'],
     });
     expect(first.curator.doGenerate).not.toHaveBeenCalled();
     expect(first.curator.doStream).toHaveBeenCalled();
@@ -348,7 +348,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     expect(records.records[0]).toMatchObject({
       text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
       sourceThreadId: threadId,
-      scope: ['org:acme', 'resource:shipyard'],
+      scope: ['org:acme', 'resource:workspace'],
     });
     expect(records.records[0]?.capturedAt).toBeInstanceOf(Date);
     expect(await first.knowledge.listActivity({ scope: visibleScope, limit: 100 })).toEqual(
@@ -437,7 +437,7 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     // Ordinary memory keeps working on the upgraded database while Knowledge is unused.
     const plainMemory = new Memory({ storage });
     new Mastra({ memory: { default: plainMemory }, logger: false });
-    await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'shipyard', title: 'Kept' });
+    await plainMemory.createThread({ threadId: 'kept-thread', resourceId: 'workspace', title: 'Kept' });
     await plainMemory.saveMessages({ messages: [message('kept-thread')] });
 
     expect(await countV1Nodes()).toBe(1);
@@ -449,15 +449,15 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
     // Replacement removes the retired v1 cursor table from this store's own schema.
     if (hasTable) expect(await hasTable('mastra_knowledge_cursors')).toBe(false);
     const threadId = `upgrade-${randomUUID()}`;
-    await upgraded.memory.createThread({ threadId, resourceId: 'shipyard', title: 'After upgrade' });
+    await upgraded.memory.createThread({ threadId, resourceId: 'workspace', title: 'After upgrade' });
     await (
       await upgraded.agent.stream('Maya Chen owns the Atlas refund launch.', {
-        memory: { thread: threadId, resource: 'shipyard' },
+        memory: { thread: threadId, resource: 'workspace' },
       })
     ).consumeStream();
     await upgraded.memory.settled();
     expect(
-      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:shipyard'] }),
+      await upgraded.knowledge.resolveNode({ name: 'Atlas refund launch', scope: ['org:acme', 'resource:workspace'] }),
     ).toMatchObject({ kind: 'feature' });
     expect(await upgraded.memory.getThreadById({ threadId: 'kept-thread' })).toMatchObject({ title: 'Kept' });
   });
