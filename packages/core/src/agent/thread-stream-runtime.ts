@@ -4684,10 +4684,10 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * A run that failed, was canceled, or was aborted saved nothing that its
-   * topic entries could be replayed against, so reconnecting subscribers ignore
-   * them. They only matter to subscribers already reading the run live, so
-   * delete them once those have had time to read the outcome.
+   * Delay trimming failed, canceled, or aborted output so live subscribers can
+   * finish reading it. Keep compact terminal events and execution authority
+   * metadata so opted-in reconnecting subscribers can recover the outcome
+   * without replaying unsaved output.
    */
   #trimFailedRun(
     pubsub: PubSub | undefined,
@@ -5576,7 +5576,7 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     options: AgentSubscribeToThreadOptions,
     pubsub?: PubSub,
-  ): Promise<AgentThreadSubscription<OUTPUT, boolean>> {
+  ): Promise<AgentThreadSubscription<OUTPUT, boolean, boolean>> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider: leaseProvider, isFallback: hasFallbackLeaseProvider } =
       this.#resolveLeaseProvider(resolvedPubSub);
@@ -5627,6 +5627,7 @@ export class AgentThreadStreamRuntime {
       } else {
         settledRunIds.set(runId, streamId);
       }
+      if (!options.withRunStatus) return;
       statuses.push({
         streamId,
         chunk: { type: 'thread-run-status', runId, from: ChunkFrom.AGENT, payload: { status } },

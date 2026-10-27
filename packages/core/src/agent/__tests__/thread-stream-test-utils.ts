@@ -192,7 +192,7 @@ export async function collectThread(
 ) {
   const subscription = await runtime.subscribeToThread(
     harness.agent,
-    { threadId: harness.threadId, resourceId: harness.resourceId },
+    { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
     pubsub,
   );
   const collected: Array<{ type: string }> = [];

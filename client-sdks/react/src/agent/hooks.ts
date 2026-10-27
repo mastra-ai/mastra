@@ -653,7 +653,12 @@ export const useChat = ({
       const subscriptionAgent = clientWithAbort.getAgent(agentId, undefined, { stream: streamPath });
 
       _threadSubscriptionPromiseRef.current = subscriptionAgent
-        .subscribeToThread({ resourceId, threadId, ...(withInitialHistory ? { withInitialHistory } : {}) })
+        .subscribeToThread({
+          resourceId,
+          threadId,
+          withRunStatus: true,
+          ...(withInitialHistory ? { withInitialHistory } : {}),
+        })
         .then(response => {
           const subscription = response;
           if (_threadSubscriptionAbortRef.current !== subscriptionAbort) {

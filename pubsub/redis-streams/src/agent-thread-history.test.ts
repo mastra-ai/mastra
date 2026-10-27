@@ -109,7 +109,7 @@ describe('agent thread history over Redis', () => {
     await writer.close();
     const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
       makeAgent(() => []),
-      { resourceId, threadId, withInitialHistory: true },
+      { resourceId, threadId, withInitialHistory: true, withRunStatus: true },
       makePubSub(),
     );
     const chunks: any[] = [];
@@ -161,7 +161,7 @@ describe('agent thread history over Redis', () => {
       await writer.close();
       const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
         agent,
-        { ...ids, withInitialHistory: true },
+        { ...ids, withInitialHistory: true, withRunStatus: true },
         makePubSub(),
       );
       const chunks: any[] = [];
@@ -207,7 +207,7 @@ describe('agent thread history over Redis', () => {
     // "Restart": a new process with its own pubsub connection and runtime.
     const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
       agent,
-      { threadId, resourceId, withInitialHistory: true },
+      { threadId, resourceId, withInitialHistory: true, withRunStatus: true },
       makePubSub(),
     );
     const collected: any[] = [];
@@ -254,7 +254,7 @@ describe('agent thread history over Redis', () => {
 
     const subscription = await new AgentThreadStreamRuntime().subscribeToThread(
       agent,
-      { threadId, resourceId, withInitialHistory: true },
+      { threadId, resourceId, withInitialHistory: true, withRunStatus: true },
       makePubSub(),
     );
     const collected: any[] = [];

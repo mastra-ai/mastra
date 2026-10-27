@@ -50,7 +50,7 @@ function setup(stored: () => MastraDBMessage[]) {
   ) => {
     const subscription = await runtime.subscribeToThread(
       agent,
-      { threadId, resourceId, withInitialHistory },
+      { threadId, resourceId, withInitialHistory, withRunStatus: true },
       ctx.pubsub,
     );
     const collected: any[] = [];

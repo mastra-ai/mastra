@@ -76,7 +76,7 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       const response = await fetch(`${server.baseUrl}/api/agents/agent/threads/subscribe`, {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
-        body: JSON.stringify({ ...coordinates, withInitialHistory: true }),
+        body: JSON.stringify({ ...coordinates, withInitialHistory: true, withRunStatus: true }),
         signal: controller.signal,
       });
       expect(response.status).toBe(200);

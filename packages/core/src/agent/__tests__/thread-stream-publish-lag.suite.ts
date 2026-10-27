@@ -155,7 +155,12 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 
 /** Subscribe with history and collect chunk types until `until` settles. */
 async function join(agent: Agent<any, any, any, any>, until: Promise<unknown> = nextTicks(20), lastType?: string) {
-  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+  const subscription = await agent.subscribeToThread({
+    threadId,
+    resourceId,
+    withInitialHistory: true,
+    withRunStatus: true,
+  });
   const chunks: any[] = [];
   const consumed = (async () => {
     for await (const chunk of subscription.stream) chunks.push(chunk);
@@ -251,7 +256,7 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
 
     it('a subscriber listening across an approval sees the resumed half start again', async () => {
       const agent = setup({ durable, delayMs, tool: 'lookup' });
-      const subscription = await agent.subscribeToThread({ threadId, resourceId });
+      const subscription = await agent.subscribeToThread({ threadId, resourceId, withRunStatus: true });
       const types: string[] = [];
       const consumed = (async () => {
         for await (const chunk of subscription.stream) types.push(chunk.type);
@@ -320,7 +325,12 @@ export function definePublishLagSuite(name: string, backend: PublishLagBackend) 
 
       const resumed = drain(await agent.approveToolCall({ runId: first.runId, toolCallId: 'call-1' }));
       await toolStarted.promise;
-      const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+      const subscription = await agent.subscribeToThread({
+        threadId,
+        resourceId,
+        withInitialHistory: true,
+        withRunStatus: true,
+      });
       const chunks: any[] = [];
       const consumed = (async () => {
         for await (const chunk of subscription.stream) chunks.push(chunk);

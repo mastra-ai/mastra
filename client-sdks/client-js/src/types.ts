@@ -147,6 +147,8 @@ export interface SubscribeAgentThreadParams {
    * run parts; parts already covered by that history are not replayed.
    */
   withInitialHistory?: boolean | { perPage?: number };
+  /** Emit thread-run-status chunks, including retained outcomes. Defaults to false. */
+  withRunStatus?: boolean;
 }
 
 export type AbortAgentThreadParams = GeneratedRequest<Body<'POST /agents/:agentId/threads/abort'>>;
@@ -171,9 +173,11 @@ export type AgentSuspendedRun = ListAgentSuspendedRunsResponse['runs'][number];
 
 export type AgentSuspendedRunToolCall = AgentSuspendedRun['toolCalls'][number];
 
-export interface ProcessAgentThreadStreamOptions {
-  /** Receives a `thread-history` chunk first when the subscription requested `withInitialHistory`. */
-  onChunk: (chunk: ChunkType | ThreadHistoryChunk | ThreadRunStatusChunk) => void | Promise<void>;
+export interface ProcessAgentThreadStreamOptions<WITH_RUN_STATUS extends boolean = false> {
+  /** Receives history and run status chunks only when requested by the subscription. */
+  onChunk: (
+    chunk: ChunkType | ThreadHistoryChunk | (WITH_RUN_STATUS extends true ? ThreadRunStatusChunk : never),
+  ) => void | Promise<void>;
   reconnect?:
     | boolean
     | {

@@ -532,7 +532,11 @@ describe('Agent signal routes', () => {
     ];
     const agent = new Agent(mockClientOptions, 'test-agent');
     agent['request'] = vi.fn().mockResolvedValue(createSseResponse(chunks));
-    const subscription = await agent.subscribeToThread({ threadId: 'thread-123', withInitialHistory: true });
+    const subscription = await agent.subscribeToThread({
+      threadId: 'thread-123',
+      withInitialHistory: true,
+      withRunStatus: true,
+    });
     const received: unknown[] = [];
     await subscription.processDataStream({
       onChunk: chunk => {
@@ -540,6 +544,19 @@ describe('Agent signal routes', () => {
       },
     });
     expect(received).toEqual(chunks);
+    subscription.unsubscribe();
+  });
+
+  it.each([undefined, false, true])('forwards run outcomes only when opted in (%s)', async withRunStatus => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(createSseResponse([]));
+    agent['request'] = mockRequest;
+    const subscription = await agent.subscribeToThread({ threadId: 'thread-123', withRunStatus });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', ...(withRunStatus ? { withRunStatus: true } : {}) },
+      stream: true,
+    });
     subscription.unsubscribe();
   });
 

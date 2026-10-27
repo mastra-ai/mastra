@@ -12,20 +12,19 @@ describe('useChat thread outcomes (COR-1500)', () => {
     async status => {
       let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
       server.use(
-        http.post(
-          `${TEST_BASE_URL}/api/agents/agent-1/threads/subscribe`,
-          () =>
-            new HttpResponse(
-              new ReadableStream<Uint8Array>({
-                start(value) {
-                  controller = value;
-                },
-              }),
-              {
-                headers: { 'content-type': 'text/event-stream' },
+        http.post(`${TEST_BASE_URL}/api/agents/agent-1/threads/subscribe`, async ({ request }) => {
+          expect(await request.json()).toMatchObject({ withRunStatus: true });
+          return new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(value) {
+                controller = value;
               },
-            ),
-        ),
+            }),
+            {
+              headers: { 'content-type': 'text/event-stream' },
+            },
+          );
+        }),
       );
       const { result, unmount } = renderHookWithProviders(() =>
         useChat({ agentId: 'agent-1', resourceId: 'resource-1', threadId: 'thread-1', enableThreadSignals: true }),

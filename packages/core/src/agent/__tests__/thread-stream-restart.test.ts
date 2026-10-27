@@ -108,7 +108,12 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 
 /** What a reloaded page sees: the history chunk plus anything replayed after it. */
 async function reload(agent: Agent<any, any, any, any>) {
-  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+  const subscription = await agent.subscribeToThread({
+    threadId,
+    resourceId,
+    withInitialHistory: true,
+    withRunStatus: true,
+  });
   const chunks: any[] = [];
   const consumed = (async () => {
     for await (const chunk of subscription.stream) chunks.push(chunk);

@@ -1887,7 +1887,7 @@ export class SessionRunEngine {
           break;
         }
 
-        if (chunk.type === 'thread-history' || chunk.type === 'thread-run-status') continue;
+        if (chunk.type === 'thread-history') continue;
 
         const runId = ('runId' in chunk ? chunk.runId : undefined) ?? subscription.activeRunId();
         const abortedRunId = this.#session.stream.abortedRunId({ subscription });

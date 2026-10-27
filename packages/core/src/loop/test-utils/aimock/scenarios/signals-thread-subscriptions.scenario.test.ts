@@ -98,7 +98,11 @@ describeForAllEngines('AIMock scenario: thread subscriptions observe stream runs
     await (
       await run('status-warmup', 'status-user')
     ).output.text;
-    const subscription = await shared.agent.subscribeToThread({ threadId: 'status-thread', resourceId: 'status-user' });
+    const subscription = await shared.agent.subscribeToThread({
+      threadId: 'status-thread',
+      resourceId: 'status-user',
+      withRunStatus: true,
+    });
     const iterator = subscription.stream[Symbol.asyncIterator]();
     try {
       for (let i = 0; i < 2; i++) {

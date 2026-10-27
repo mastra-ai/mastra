@@ -3,7 +3,7 @@
  * and a retaining pubsub: stored history must cover everything a finished run
  * published, so nothing from it replays after the `thread-history` chunk.
  */
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, expectTypeOf, it } from 'vitest';
 import { z } from 'zod/v4';
 
 import { Mastra } from '../../mastra';
@@ -12,6 +12,7 @@ import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
+import type { AgentThreadSubscription } from '../types';
 import { convertArrayToReadableStream, MockLanguageModelV2 } from './mock-model';
 import { LeasePubSub, nextTicks } from './thread-stream-test-utils';
 
@@ -83,8 +84,9 @@ async function drain(stream: { fullStream: AsyncIterable<any> }) {
 async function historyThenParts(
   agent: Agent<any, any, any, any>,
   withInitialHistory: boolean | { perPage?: number } = true,
+  withRunStatus = true,
 ) {
-  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory });
+  const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory, withRunStatus });
   const types: string[] = [];
   const consumed = (async () => {
     for await (const chunk of subscription.stream) types.push((chunk as { type: string }).type);
@@ -103,7 +105,38 @@ describe.each([
   ['immediate', false],
   ['delayed', true],
 ])('subscribeToThread withInitialHistory with a real agent (%s backlog)', (_mode, delayBacklog) => {
-  it('a completed text run emits only thread-history', async () => {
+  it('does not emit run outcomes unless the subscriber opts in (COR-1500)', async () => {
+    const { agent } = setup(delayBacklog);
+    await drain(await agent.stream('hello', { memory }));
+    expect(await historyThenParts(agent, true, false)).toEqual(['thread-history']);
+    const subscription = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+    const types: string[] = [];
+    const consumed = (async () => {
+      for await (const chunk of subscription.stream) types.push(chunk.type);
+    })();
+    await nextTicks(20);
+    subscription.unsubscribe();
+    await consumed;
+    expect(types).toEqual(['thread-history']);
+  });
+
+  it('preserves inferred stream types unless each optional chunk is requested', async () => {
+    const { agent } = setup(delayBacklog);
+    const defaultSubscription = await agent.subscribeToThread({ threadId, resourceId });
+    expectTypeOf(defaultSubscription).toEqualTypeOf<AgentThreadSubscription<unknown>>();
+    defaultSubscription.unsubscribe();
+    const history = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true });
+    expectTypeOf(history).toEqualTypeOf<AgentThreadSubscription<unknown, true>>();
+    history.unsubscribe();
+    const status = await agent.subscribeToThread({ threadId, resourceId, withRunStatus: true });
+    expectTypeOf(status).toEqualTypeOf<AgentThreadSubscription<unknown, false, true>>();
+    status.unsubscribe();
+    const both = await agent.subscribeToThread({ threadId, resourceId, withInitialHistory: true, withRunStatus: true });
+    expectTypeOf(both).toEqualTypeOf<AgentThreadSubscription<unknown, true, true>>();
+    both.unsubscribe();
+  });
+
+  it('an opted-in completed text run emits history and its outcome', async () => {
     const { agent } = setup(delayBacklog);
     await drain(await agent.stream('hello', { memory }));
 
