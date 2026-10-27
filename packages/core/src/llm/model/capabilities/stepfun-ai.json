@@ -3,16 +3,10 @@
   "temperature": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-5-preview"],
   "structuredOutput": ["step-3.5-flash", "step-3.5-flash-2603", "step-3.7-flash", "step-5-preview"],
   "reasoning": {
-    "step-5-preview": [
+    "step-3.7-flash": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "step-3.5-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high"]
       }
     ],
     "step-3.5-flash-2603": [
@@ -21,7 +15,13 @@
         "values": ["low", "high"]
       }
     ],
-    "step-3.7-flash": [
+    "step-3.5-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high"]
+      }
+    ],
+    "step-5-preview": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

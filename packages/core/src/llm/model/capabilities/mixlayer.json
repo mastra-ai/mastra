@@ -17,7 +17,7 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.5-9b": [
+    "qwen/qwen3.5-397b-a17b": [
       {
         "type": "toggle"
       }
@@ -27,7 +27,7 @@
         "type": "toggle"
       }
     ],
-    "qwen/qwen3.5-397b-a17b": [
+    "qwen/qwen3.5-9b": [
       {
         "type": "toggle"
       }
