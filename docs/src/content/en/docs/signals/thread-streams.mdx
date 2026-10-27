@@ -72,9 +72,9 @@ const chunk = {
 
 `status` is `success`, `failed`, `aborted`, or `suspended`. Live output arrives before its status. A suspension is resumable: the same run can later produce more output and a final status. A run outcome doesn't close the thread subscription, which continues listening for later runs.
 
-With `withInitialHistory`, the first chunk's payload is `{ messages, hasMore, activeRunId }`. `activeRunId` identifies the run holding thread ownership during hydration, or is `null` when idle. This is a snapshot, not an outcome: don't infer success from an idle thread.
+With `withInitialHistory`, the first chunk's payload is `{ messages, hasMore, activeRunId }`. `activeRunId` identifies the run holding thread ownership during hydration, or is `null` when idle. Use `thread-run-status` to determine the outcome. An idle thread alone doesn't indicate success.
 
-Retained outcomes are delivered even when a run finished before you subscribed and its text is already in history. Final outcomes are deduplicated within one subscription; suspension notifications are deduplicated per execution segment. A reconnect creates a new subscription and may deliver the same outcome again. Group updates by `runId` rather than treating each delivery as a new answer.
+Retained outcomes are delivered even when a run finished before you subscribed and its text is already in history. Final outcomes are deduplicated within one subscription. Suspension notifications are deduplicated per execution segment. A reconnect creates a new subscription and may deliver the same outcome again. Group updates by `runId` rather than treating each delivery as a new answer.
 
 ### Approve tool calls
 
@@ -98,7 +98,7 @@ A reconnect can resume output that the shared [PubSub backend](/docs/server/pubs
 
 Stored messages aren't a recording of every streamed text fragment. Reconnecting doesn't replay completed stored output or reconstruct fragments that weren't retained.
 
-Outcome recovery is bounded by the PubSub backend's retention, not by the history page size. Redis Streams keeps compact terminal events and execution authority metadata when saved output is trimmed, but its configured stream length and idle TTL can still evict them. This isn't a permanent run audit log or a guaranteed time window. Upgrade both `@mastra/core` and `@mastra/redis-streams` for recovery after trimming; older adapters may delete terminal events with the output.
+Outcome recovery is bounded by the PubSub backend's retention, not by the history page size. Redis Streams keeps compact terminal events and execution authority metadata when saved output is trimmed, but its configured stream length and idle TTL can still evict them. This isn't a permanent run audit log or a guaranteed time window. Upgrade both `@mastra/core` and `@mastra/redis-streams` for recovery after trimming. Older adapters may delete terminal events with the output.
 
 ### SSE heartbeats for custom endpoints
 

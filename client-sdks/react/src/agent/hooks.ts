@@ -685,6 +685,17 @@ export const useChat = ({
                   });
                   return;
                 }
+                if (chunk.type === 'thread-run-status') {
+                  if (chunk.runId !== liveRunId.current) return;
+                  setIsRunning(false);
+                  if (chunk.payload.status !== 'suspended') {
+                    liveRunFinished.current = true;
+                    for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+                    pendingToolApprovalIdsRef.current.clear();
+                    setIsAwaitingToolApproval(false);
+                  }
+                  return;
+                }
                 return processStreamChunk(chunk);
               },
             })

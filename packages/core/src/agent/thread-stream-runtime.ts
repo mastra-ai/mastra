@@ -6441,7 +6441,8 @@ export class AgentThreadStreamRuntime {
           leaseOwner = nextOwner;
           if (stable) break;
         }
-        const snapshotRunId = leaseOwner && !settledRunIds.has(leaseOwner) ? leaseOwner : null;
+        const ownerRunId = leaseOwner?.split(RETAKE_LEASE_MARKER)[0];
+        const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;
         historyChunk = {
           type: 'thread-history',
           runId: '',
