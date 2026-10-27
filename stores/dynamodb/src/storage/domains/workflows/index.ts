@@ -8,6 +8,9 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   matchesExpectedWorkflowStatus,
   WorkflowsStorage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   ClaimRunOwnershipInput,
@@ -20,6 +23,10 @@ import type {
   WorkflowRuns,
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 import type { Service } from 'electrodb';
@@ -28,7 +35,7 @@ import { resolveDynamoDBConfig } from '../../db';
 import type { DynamoDBDomainConfig } from '../../db';
 import type { DynamoDBTtlConfig } from '../../index';
 import { getTtlProps } from '../../ttl';
-import { assertRunFence, goWithRunFence, retryOnTransactionConflict } from '../run-fencing';
+import { assertRunFence, goWithRunFence, retryOnTransactionConflict, pruneRunClaims } from '../run-fencing';
 import type { RunFenceCheck } from '../run-fencing';
 import { deleteTableData } from '../utils';
 
@@ -77,6 +84,15 @@ const MAX_RETRIES = 5;
 const BASE_DELAY_MS = 50;
 
 export class WorkflowStorageDynamoDB extends WorkflowsStorage {
+  /**
+   * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's record is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   private service: Service<Record<string, any>>;
   private ttlConfig?: DynamoDBTtlConfig;
 
@@ -93,6 +109,22 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
 
   override supportsRunFencing(): boolean {
     return true;
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowStorageDynamoDB.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.service, 'workflow_run_owner', 'updatedAt', Number(cutoff), limit),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -309,7 +341,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const now = new Date();
         let snapshot: WorkflowRunState;
@@ -423,7 +455,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         const existingSnapshot = existingRecord.data?.snapshot as WorkflowRunState | undefined;
         const { expectedStatus, ...state } = opts;
@@ -590,7 +622,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
           workflow_name: workflowName,
           run_id: runId,
         })
-        .go();
+        .go({ consistent: true });
 
       if (!result.data?.snapshot) {
         // Check snapshot exists
@@ -738,7 +770,7 @@ export class WorkflowStorageDynamoDB extends WorkflowsStorage {
             workflow_name: workflowName,
             run_id: runId,
           })
-          .go();
+          .go({ consistent: true });
 
         if (!result.data) {
           return null;

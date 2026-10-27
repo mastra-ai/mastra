@@ -274,7 +274,10 @@ export function signalToXmlMarkup(
   assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
   if (!signal.contents) return `<${tagName}${attributesXml} />`;
-  return `<${tagName}${attributesXml}>${escapeXml(signal.contents)}</${tagName}>`;
+  // Contents reach the model as written. Only the signal's own closing tag is escaped,
+  // so contents can't end the wrapper early.
+  const closingTag = new RegExp(`</${tagName.replaceAll('.', '\\.')}\\s*>`, 'gi');
+  return `<${tagName}${attributesXml}>${signal.contents.replace(closingTag, escapeXml)}</${tagName}>`;
 }
 
 // Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current
@@ -588,6 +591,32 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
 
   const candidate = input as Partial<CreatedAgentSignal>;
   return candidate.__isCreatedSignal === true;
+}
+
+/**
+ * Typed `AGENT_RUN` span attributes describing the signal that started a run. Returns
+ * `undefined` when the run input is not a created signal. Contents stay in the span input.
+ */
+export function signalSpanAttributes(input: unknown):
+  | {
+      id: string;
+      type: string;
+      tagName?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+    }
+  | undefined {
+  if (!isCreatedAgentSignal(input)) return undefined;
+  const attributes = input.attributes
+    ? Object.fromEntries(Object.entries(input.attributes).filter(([, value]) => value !== undefined))
+    : undefined;
+  return {
+    id: input.id,
+    type: input.type,
+    ...(input.tagName ? { tagName: input.tagName } : {}),
+    ...(attributes && Object.keys(attributes).length > 0
+      ? { attributes: attributes as Record<string, string | number | boolean | null> }
+      : {}),
+  };
 }
 
 export function createSignal(

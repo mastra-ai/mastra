@@ -205,9 +205,31 @@ describe('Memory', () => {
 
       const systemMessage = await memory.getSystemMessage({ threadId, resourceId });
 
-      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (AUTO-UPDATED)');
       expect(systemMessage).toContain('Location: Sooke');
       expect(systemMessage).not.toContain('calling the updateWorkingMemory tool');
+      // The app updates the memory, so the agent must not be told it can't (#28367)
+      expect(systemMessage).toContain('This memory is updated automatically after each response');
+      expect(systemMessage).toContain("Never say you can't save or update it");
+      expect(systemMessage).not.toContain('read-only in the current session');
+    });
+
+    it('keeps read-only wording when readOnly is set (#28367)', async () => {
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: { workingMemory: { enabled: true, agentManaged: false } },
+      });
+      const threadId = 'read-only-thread';
+      const resourceId = 'read-only-resource';
+      await memory.createThread({ threadId, resourceId });
+      await memory.updateWorkingMemory({ threadId, resourceId, workingMemory: '# User\n- Location: Sooke' });
+
+      const systemMessage = await memory.getSystemMessage({ threadId, resourceId, memoryConfig: { readOnly: true } });
+
+      expect(systemMessage).toContain('WORKING_MEMORY_SYSTEM_INSTRUCTION (READ-ONLY)');
+      expect(systemMessage).toContain('Location: Sooke');
+      expect(systemMessage).toContain('read-only in the current session - you cannot update it');
+      expect(systemMessage).not.toContain('updated automatically');
     });
 
     it('renders update instructions when agentManaged explicitly overrides manageWorkingMemory defaults', async () => {
@@ -309,6 +331,98 @@ describe('Memory', () => {
 
       expect(result).not.toBeNull();
       expect(result?.content.parts[0]).toEqual({ type: 'text', text: 'Hello  world' });
+    });
+
+    describe('Gemini thought signatures on parallel updateWorkingMemory calls (#27231)', () => {
+      const toolPart = (
+        toolCallId: string,
+        toolName: string,
+        providerMetadata?: Record<string, Record<string, any>>,
+      ) => ({
+        type: 'tool-invocation' as const,
+        toolInvocation: { state: 'result' as const, toolCallId, toolName, args: {}, result: { ok: true } },
+        ...(providerMetadata ? { providerMetadata } : {}),
+      });
+      const geminiMessage = (parts: MastraDBMessage['content']['parts']): MastraDBMessage => ({
+        id: 'assistant-gemini',
+        role: 'assistant',
+        createdAt: new Date('2026-01-01T00:00:01Z'),
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        content: { format: 2, parts },
+      });
+      const replayedToolCalls = (message: MastraDBMessage) =>
+        new MessageList({ threadId: 'thread-1', resourceId: 'resource-1' })
+          .add(message, 'memory')
+          .get.all.aiV5.prompt()
+          .flatMap(m => (m.role === 'assistant' && Array.isArray(m.content) ? m.content : []))
+          .filter(part => part.type === 'tool-call');
+
+      it('replays the first surviving call with the skip-validator signature', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_GEMINI' } }),
+            toolPart('call-1', 'lookupWeather'),
+            toolPart('call-2', 'lookupTime'),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'skip_thought_signature_validator' } }),
+          toolPart('call-2', 'lookupTime'),
+        ]);
+
+        const toolCalls = replayedToolCalls(result!);
+        expect(toolCalls.map(call => call.providerOptions?.google)).toEqual([
+          { thoughtSignature: 'skip_thought_signature_validator' },
+          undefined,
+        ]);
+      });
+
+      it('keeps a signature the surviving call already has', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_WM' } }),
+            toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_WEATHER' } }),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { google: { thoughtSignature: 'SIG_WEATHER' } }),
+        ]);
+      });
+
+      it('uses the removed call provider namespace and copies no other provider metadata', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', {
+              vertex: { thoughtSignature: 'SIG_VERTEX', extra: 'wm-only' },
+              openai: { itemId: 'fc_wm' },
+            }),
+            toolPart('call-1', 'lookupWeather'),
+          ]),
+        );
+        expect(result?.content.parts).toEqual([
+          { type: 'step-start' },
+          toolPart('call-1', 'lookupWeather', { vertex: { thoughtSignature: 'skip_thought_signature_validator' } }),
+        ]);
+      });
+
+      it('drops the signature with a step whose only call was updateWorkingMemory', () => {
+        const result = memory.testUpdateMessageToHideWorkingMemoryV2(
+          geminiMessage([
+            { type: 'step-start' },
+            toolPart('wm-1', 'updateWorkingMemory', { google: { thoughtSignature: 'SIG_WM_ONLY' } }),
+            { type: 'step-start' },
+            { type: 'text', text: 'Saved.' },
+          ]),
+        );
+        expect(result?.content.parts).toEqual([{ type: 'step-start' }, { type: 'text', text: 'Saved.' }]);
+        expect(replayedToolCalls(result!)).toEqual([]);
+      });
     });
 
     describe('signed reasoning around updateWorkingMemory calls (#22798)', () => {

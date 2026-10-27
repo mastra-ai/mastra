@@ -4,14 +4,13 @@ import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
 import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
 import { useTraceQueryAvailable } from '@mastra/playground-ui/domains/capabilities';
-import { useUrlSort } from '@mastra/playground-ui/sort/use-url-sort';
 import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from '@mastra/playground-ui/utils/errors';
 import { useDatasetExperiment, useDatasetExperimentResults, useExperiment } from '@mastra/react/hooks/datasets';
 import { useExperimentMetrics } from '@mastra/react/hooks/experiments';
 import { ArrowLeft } from 'lucide-react';
 import type { ReactNode } from 'react';
-import { useMemo, useState } from 'react';
-import { Link, useNavigate, useParams, useSearchParams } from 'react-router';
+import { useState } from 'react';
+import { Link, useNavigate, useParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
 import { DeleteExperimentDialog } from '@/domains/experiments/components/delete-experiment-dialog';
@@ -28,12 +27,11 @@ import {
   ExperimentCrumbStatusIcon,
 } from '@/domains/experiments/experiment-crumb';
 import { useExperimentResultsSelection } from '@/domains/experiments/hooks/use-experiment-results-selection';
-import { navCrumb, type CrumbDef } from '@/domains/navigation/crumbs';
+import { navCrumb } from '@/domains/navigation/crumbs';
+import type { CrumbDef } from '@/domains/navigation/crumbs';
 
 // Stable fallback so the selection hook's memoised filters don't churn while results load.
 const EMPTY_RESULTS: never[] = [];
-
-const RESULTS_SORT_KEYS = ['startedAt'] as const;
 
 function ExperimentPageShell({ crumbs, children }: { crumbs: CrumbDef[]; children?: ReactNode }) {
   return (
@@ -56,15 +54,6 @@ function ExperimentPage() {
   const [deleteDialogOpen, setDeleteDialogOpen] = useState(false);
   // Servers without the trace-query API don't expose feedback either.
   const traceQuery = useTraceQueryAvailable();
-  const [searchParams, setSearchParams] = useSearchParams();
-  const { sort, onSortChange } = useUrlSort({ searchParams, setSearchParams, allowedKeys: RESULTS_SORT_KEYS });
-  const orderBy = useMemo(
-    () =>
-      sort
-        ? { field: sort.key, direction: sort.direction === 'asc' ? ('ASC' as const) : ('DESC' as const) }
-        : undefined,
-    [sort],
-  );
 
   // Resolve datasetId from experimentId (the URL has only the experiment id).
   const {
@@ -97,7 +86,6 @@ function ExperimentPage() {
     datasetId,
     experimentId: experimentId ?? '',
     experimentStatus: experiment?.status,
-    orderBy,
     queryOptions: { enabled: Boolean(datasetId) && Boolean(experimentId) && isSettled },
   });
 
@@ -143,7 +131,7 @@ function ExperimentPage() {
         descriptionSlot={`No experiment with id "${experimentId}".`}
         actionSlot={
           <Button render={<Link to="/experiments" />} icon={<ArrowLeft />}>
-            Back to Experiments
+            Back to experiments
           </Button>
         }
       />
@@ -204,8 +192,6 @@ function ExperimentPage() {
                   selectedIds={selection.selectedIds}
                   onToggleSelect={selection.toggleSelect}
                   onToggleSelectAll={selection.toggleSelectAll}
-                  sort={sort}
-                  onSortChange={onSortChange}
                   supportsMetrics={supportsMetrics}
                 />
               </div>

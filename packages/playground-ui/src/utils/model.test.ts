@@ -1,5 +1,29 @@
 import { describe, expect, it } from 'vitest';
-import { formatModelName, formatProviderName, resolveModel } from './model';
+import { compareModelReleaseDates, formatModelName, formatProviderName, resolveModel } from './model';
+
+describe('compareModelReleaseDates', () => {
+  describe('when release dates are available', () => {
+    it('orders newer releases before older releases', () => {
+      expect(compareModelReleaseDates('2025-08-07', '2024-05-13')).toBeLessThan(0);
+      expect(compareModelReleaseDates('2024-05-13', '2025-08-07')).toBeGreaterThan(0);
+    });
+
+    it('leaves same-day releases tied for the caller to order by name', () => {
+      expect(compareModelReleaseDates('2025-08-07', '2025-08-07')).toBe(0);
+    });
+  });
+
+  describe('when dates are missing or invalid', () => {
+    it.each([undefined, '', 'unknown'])('puts %s after a dated model', date => {
+      expect(compareModelReleaseDates(date, '2025-08-07')).toBeGreaterThan(0);
+      expect(compareModelReleaseDates('2025-08-07', date)).toBeLessThan(0);
+    });
+
+    it('leaves undated models tied for the caller to order by name', () => {
+      expect(compareModelReleaseDates(undefined, 'unknown')).toBe(0);
+    });
+  });
+});
 
 describe('resolveModel', () => {
   it('splits the provider from the model and names both', () => {
@@ -44,6 +68,13 @@ describe('formatModelName', () => {
     ['llama-3.1-70b-instruct', 'Llama 3.1 70B Instruct'],
     ['deepseek-chat', 'DeepSeek Chat'],
     ['grok-4-fast', 'Grok 4 Fast'],
+    ['amazon-bedrock/anthropic.claude-sonnet-4-5', 'Claude Sonnet 4.5'],
+    ['us.anthropic.claude-sonnet-4-5-20250929-v1:0', 'Claude Sonnet 4.5'],
+    ['amazon-bedrock/anthropic.claude-3-5-sonnet-20241022-v2:0', 'Claude 3.5 Sonnet'],
+    ['amazon.nova-pro-v1:0', 'Nova Pro'],
+    ['meta.llama3-1-70b-instruct-v1:0', 'Llama 3.1 70B Instruct'],
+    ['meta.llama3-3-70b-instruct-v1:0', 'Llama 3.3 70B Instruct'],
+    ['meta.llama4-scout-17b-instruct-v1:0', 'Llama4 Scout 17B Instruct'],
   ])('%s reads as %s', (model, name) => {
     expect(formatModelName(model)).toBe(name);
   });

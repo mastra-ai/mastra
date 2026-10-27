@@ -33,6 +33,60 @@ describe('record-builders', () => {
       expect(buildCreateSpanRecord(span()).links).toBeNull();
       expect(buildUpdateSpanRecord(span()).links).toBeNull();
     });
+
+    it('derives time to first chunk, clamps clock skew to zero, and leaves it off updates until the first chunk arrived', () => {
+      const streamed = (ms: number): AnyExportedSpan => ({
+        ...span(),
+        attributes: { completionStartTime: new Date(span().startTime.getTime() + ms) },
+      });
+      expect(buildCreateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildUpdateSpanRecord(streamed(250)).timeToFirstChunkMs).toBe(250);
+      expect(buildCreateSpanRecord(streamed(0)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(streamed(-5)).timeToFirstChunkMs).toBe(0);
+      expect(buildCreateSpanRecord(span()).timeToFirstChunkMs).toBeNull();
+      expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
+    });
+
+    it('stores the version of the span own entity, not an inherited metadata version', () => {
+      const inherited: AnyExportedSpan = { ...span(), metadata: { entityVersionId: 'agent-v1' } };
+      expect(buildCreateSpanRecord(inherited).entityVersionId).toBeNull();
+      expect(buildCreateSpanRecord({ ...inherited, entityVersionId: 'tool-v2' }).entityVersionId).toBe('tool-v2');
+    });
+
+    it('stores the parent and root entity carried on the exported span, null when absent', () => {
+      const nested: AnyExportedSpan = {
+        ...span(),
+        isRootSpan: false,
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      };
+      expect(buildCreateSpanRecord(nested)).toMatchObject({
+        parentEntityType: EntityType.WORKFLOW_RUN,
+        parentEntityId: 'wf-1',
+        parentEntityName: 'triage',
+        parentEntityVersionId: 'wf-v1',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'agent-1',
+        rootEntityName: 'support',
+        rootEntityVersionId: 'agent-v1',
+      });
+      expect(buildCreateSpanRecord(span())).toMatchObject({
+        parentEntityType: null,
+        parentEntityId: null,
+        parentEntityName: null,
+        parentEntityVersionId: null,
+        rootEntityType: null,
+        rootEntityId: null,
+        rootEntityName: null,
+        rootEntityVersionId: null,
+      });
+    });
   });
 
   it('preserves exporter-supplied previews for create and update records', () => {

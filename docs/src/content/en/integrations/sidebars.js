@@ -901,6 +901,12 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'file-storage/neon',
+          label: 'Neon Object Storage',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
+        },
+        {
+          type: 'doc',
           id: 'file-storage/vercel-files',
           label: 'Vercel Files',
           customProps: {

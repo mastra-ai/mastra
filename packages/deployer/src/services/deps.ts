@@ -3,14 +3,158 @@ import fsPromises from 'node:fs/promises';
 import path, { dirname } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import { MastraBase } from '@mastra/core/base';
+import type { BundlerConfig } from '@mastra/core/bundler';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { readJSON, writeJSON, ensureFile } from 'fs-extra/esm';
 import type { PackageJson } from 'type-fest';
-import { parse } from 'yaml';
+import { parse, stringify } from 'yaml';
 
 import { createChildProcessLogger } from '../deploy/log.js';
 
 type PackageManager = 'npm' | 'yarn' | 'pnpm' | 'bun';
+
+/** Version used to pack private workspace packages whose package.json has no `version`. */
+export const WORKSPACE_PLACEHOLDER_VERSION = '0.0.0';
+
+// Write via temp file + rename so an interrupted write never leaves a truncated manifest.
+async function writeManifestAtomically(manifestPath: string, contents: string, inFlight?: Set<string>) {
+  const tmpPath = `${manifestPath}.${process.pid}.${Date.now()}.tmp`;
+  inFlight?.add(tmpPath);
+  try {
+    const { mode } = await fsPromises.stat(manifestPath);
+    await fsPromises.writeFile(tmpPath, contents, { mode });
+    await fsPromises.chmod(tmpPath, mode);
+    await fsPromises.rename(tmpPath, manifestPath);
+  } catch (error) {
+    await fsPromises.rm(tmpPath, { force: true });
+    throw error;
+  } finally {
+    inFlight?.delete(tmpPath);
+  }
+}
+
+/**
+ * Package managers refuse to pack a manifest without a version, and pnpm/bun also
+ * resolve `workspace:` ranges from the dependency's manifest. So every versionless
+ * package in `dirs` gets the placeholder version for the whole of `operation`, and
+ * the original manifests are restored afterwards — also on SIGINT/SIGTERM.
+ */
+export async function withPlaceholderVersions<T>(dirs: string[], operation: () => Promise<T>): Promise<T> {
+  const acquired: string[] = [];
+  try {
+    for (const dir of new Set(dirs.map(dir => path.resolve(dir)))) {
+      const manifestPath = path.join(dir, 'package.json');
+      let lease = placeholderLeases.get(manifestPath);
+      // A lease whose last owner is restoring it can't be joined; wait and start a fresh one.
+      while (lease?.releasing) {
+        await lease.releasing.catch(() => {});
+        lease = placeholderLeases.get(manifestPath);
+      }
+      if (lease) {
+        lease.refs++;
+      } else {
+        lease = { refs: 1, injected: false, ready: Promise.resolve() };
+        lease.ready = injectPlaceholderVersion(manifestPath, lease);
+        placeholderLeases.set(manifestPath, lease);
+        installSignalHandlers();
+      }
+      acquired.push(manifestPath);
+      await lease.ready;
+    }
+    return await operation();
+  } finally {
+    try {
+      for (const manifestPath of acquired) {
+        await releasePlaceholderVersion(manifestPath);
+      }
+    } finally {
+      if (placeholderLeases.size === 0) {
+        removeSignalHandlers();
+      }
+    }
+  }
+}
+
+interface PlaceholderLease {
+  refs: number;
+  original?: string;
+  injected: boolean;
+  ready: Promise<void>;
+  releasing?: Promise<void>;
+}
+
+// Shared across calls so one bundle can't restore a manifest another is still packing.
+const placeholderLeases = new Map<string, PlaceholderLease>();
+const inFlightTmpPaths = new Set<string>();
+
+async function injectPlaceholderVersion(manifestPath: string, lease: PlaceholderLease) {
+  const original = await fsPromises.readFile(manifestPath, 'utf-8').catch(() => undefined);
+  if (original === undefined) return;
+  let manifest: PackageJson;
+  try {
+    manifest = JSON.parse(original) as PackageJson;
+  } catch (error) {
+    throw new Error(`Failed to parse ${manifestPath}: ${(error as Error).message}`, { cause: error });
+  }
+  if (manifest.version) return;
+  lease.original = original;
+  // Mark before writing so a signal mid-write still restores this manifest.
+  lease.injected = true;
+  await writeManifestAtomically(
+    manifestPath,
+    JSON.stringify({ ...manifest, version: WORKSPACE_PLACEHOLDER_VERSION }, null, 2) + '\n',
+    inFlightTmpPaths,
+  );
+}
+
+async function releasePlaceholderVersion(manifestPath: string) {
+  const lease = placeholderLeases.get(manifestPath)!;
+  if (--lease.refs > 0) return;
+  lease.releasing = (async () => {
+    await lease.ready.catch(() => {});
+    try {
+      if (lease.injected) {
+        await writeManifestAtomically(manifestPath, lease.original!, inFlightTmpPaths);
+        lease.injected = false;
+      }
+    } finally {
+      placeholderLeases.delete(manifestPath);
+    }
+  })();
+  await lease.releasing;
+}
+
+function restorePlaceholderVersionsSync() {
+  // Removing in-flight temp files keeps them out of later tarballs and makes any
+  // pending rename fail instead of overwriting the restored manifest.
+  for (const tmpPath of inFlightTmpPaths) {
+    fs.rmSync(tmpPath, { force: true });
+  }
+  inFlightTmpPaths.clear();
+  for (const [manifestPath, lease] of placeholderLeases) {
+    if (lease.injected) {
+      fs.writeFileSync(manifestPath, lease.original!);
+      lease.injected = false;
+    }
+  }
+}
+
+function onPlaceholderSignal(signal: NodeJS.Signals) {
+  restorePlaceholderVersionsSync();
+  removeSignalHandlers();
+  process.kill(process.pid, signal);
+}
+
+function installSignalHandlers() {
+  if (process.listeners('SIGINT').includes(onPlaceholderSignal)) return;
+  process.once('SIGINT', onPlaceholderSignal);
+  process.once('SIGTERM', onPlaceholderSignal);
+}
+
+function removeSignalHandlers() {
+  process.off('SIGINT', onPlaceholderSignal);
+  process.off('SIGTERM', onPlaceholderSignal);
+}
 
 interface LockFileInfo {
   path: string;
@@ -25,6 +169,7 @@ interface ArchitectureOptions {
 }
 
 interface InstallOptions extends ArchitectureOptions {
+  pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'];
   pnpmOverrides?: Record<string, string>;
   pnpmNodeLinker?: 'hoisted';
   /** Patch key -> path relative to the output directory. */
@@ -46,6 +191,32 @@ const PNPM_CONFIG_KEYS_TO_COPY = new Set([
   'trustPolicyIgnoreAfter',
   'supportedArchitectures',
 ]);
+
+// supportedArchitectures is generated from deployer architecture targets, so it can't be set explicitly.
+// neverBuiltDependencies switches pnpm 10 into deny-list mode, which runs every build script it doesn't name.
+const PNPM_EXPLICIT_SETTING_KEYS = new Set(
+  [...PNPM_CONFIG_KEYS_TO_COPY, 'blockExoticSubdeps'].filter(
+    key => key !== 'supportedArchitectures' && key !== 'neverBuiltDependencies',
+  ),
+);
+
+function serializePnpmWorkspaceSettings(settings: BundlerConfig['pnpmWorkspaceSettings']) {
+  // Untyped JS configs can pass undefined; treat it as omitted so the copied source setting survives.
+  const definedSettings = Object.entries(settings ?? {}).filter(([, value]) => value !== undefined);
+  return definedSettings.map(([key, value]) => {
+    if (!PNPM_EXPLICIT_SETTING_KEYS.has(key)) {
+      throw new MastraError({
+        id: 'DEPLOYER_INVALID_PNPM_WORKSPACE_SETTING',
+        domain: ErrorDomain.DEPLOYER,
+        category: ErrorCategory.USER,
+        text: `pnpm workspace setting ${JSON.stringify(key)} isn't supported in bundler.pnpmWorkspaceSettings. Supported settings: ${[...PNPM_EXPLICIT_SETTING_KEYS].join(', ')}.`,
+      });
+    }
+    const block = stringify({ [key]: value }).trimEnd();
+    validatePnpmBuildApprovals(key, block);
+    return block;
+  });
+}
 
 function getTopLevelYamlKey(line: string) {
   const match = /^(?!\s)([\w-]+):/.exec(line);
@@ -146,6 +317,7 @@ export function parsePnpmPatchedDependencies(source: string): Record<string, str
 export function copyPnpmWorkspaceSettings(source: string, options: InstallOptions = {}) {
   const hasArchitecture = Boolean(options.os?.length || options.cpu?.length || options.libc?.length);
   const lines = source.split(/\r?\n/);
+  const customBlocks = serializePnpmWorkspaceSettings(options.pnpmWorkspaceSettings);
   const blocks: string[] = [];
 
   for (let index = 0; index < lines.length;) {
@@ -161,7 +333,11 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
       index += 1;
     }
 
-    if (!PNPM_CONFIG_KEYS_TO_COPY.has(key) || (key === 'supportedArchitectures' && hasArchitecture)) {
+    if (
+      !PNPM_CONFIG_KEYS_TO_COPY.has(key) ||
+      options.pnpmWorkspaceSettings?.[key] !== undefined ||
+      (key === 'supportedArchitectures' && hasArchitecture)
+    ) {
       continue;
     }
 
@@ -215,7 +391,7 @@ export function copyPnpmWorkspaceSettings(source: string, options: InstallOption
     blocks.push(`nodeLinker: ${options.pnpmNodeLinker}`);
   }
 
-  return ["packages:\n  - '.'", ...blocks].join('\n\n') + '\n';
+  return ["packages:\n  - '.'", ...blocks, ...customBlocks].join('\n\n') + '\n';
 }
 
 // Semver characters only; versions are interpolated into a shell command.
@@ -233,6 +409,33 @@ async function isYarnClassicLockfile(lockfilePath: string): Promise<boolean> {
     return /^# yarn lockfile v1\r?$/m.test(buffer.toString('utf-8', 0, bytesRead));
   } finally {
     await handle.close();
+  }
+}
+
+/**
+ * Removes overridden packages from every importer of a copied pnpm lockfile. When the Mastra app is the
+ * workspace root, the root importer still resolves its workspace dependencies to `link:` versions. pnpm
+ * keeps those versions although the output overrides them with packed tarballs, so the tarball is never
+ * installed and the dependency symlink dangles. Without the entries, pnpm resolves them from the overrides.
+ */
+async function dropPnpmImporterDependencies(lockfilePath: string, packageNames: string[]): Promise<void> {
+  const lockfile = parse(await fsPromises.readFile(lockfilePath, 'utf-8')) as {
+    importers?: Record<string, Record<string, Record<string, unknown> | undefined> | undefined>;
+  } | null;
+  let changed = false;
+  for (const importer of Object.values(lockfile?.importers ?? {})) {
+    for (const field of ['dependencies', 'devDependencies', 'optionalDependencies']) {
+      const dependencies = importer?.[field];
+      for (const name of packageNames) {
+        if (dependencies && name in dependencies) {
+          delete dependencies[name];
+          changed = true;
+        }
+      }
+    }
+  }
+  if (changed) {
+    await fsPromises.writeFile(lockfilePath, stringify(lockfile, { lineWidth: 0 }));
   }
 }
 
@@ -565,11 +768,13 @@ export class Deps extends MastraBase {
     architecture,
     pnpmOverrides,
     pnpmNodeLinker,
+    pnpmWorkspaceSettings,
   }: {
     dir?: string;
     architecture?: ArchitectureOptions;
     pnpmOverrides?: Record<string, string>;
     pnpmNodeLinker?: 'hoisted';
+    pnpmWorkspaceSettings?: BundlerConfig['pnpmWorkspaceSettings'];
   } = {}) {
     const pm = this.packageManager;
     let yarnClassic = false;
@@ -590,6 +795,9 @@ export class Deps extends MastraBase {
           await fsPromises.rm(destination, { force: true });
         } else {
           await fsPromises.copyFile(this.lockFile.path, destination);
+          if (pm === 'pnpm' && pnpmOverrides && Object.keys(pnpmOverrides).length > 0) {
+            await dropPnpmImporterDependencies(destination, Object.keys(pnpmOverrides));
+          }
         }
       }
 
@@ -603,7 +811,7 @@ export class Deps extends MastraBase {
 
     switch (pm) {
       case 'pnpm':
-        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker });
+        await this.writePnpmConfig(dir, { ...architecture, pnpmOverrides, pnpmNodeLinker, pnpmWorkspaceSettings });
         break;
       case 'yarn':
         // similar to --ignore-workspace but for yarn
@@ -708,13 +916,9 @@ export class Deps extends MastraBase {
   }
 
   public async getProjectName() {
-    try {
-      const packageJsonPath = path.join(this.rootDir, 'package.json');
-      const pkg = await readJSON(packageJsonPath);
-      return pkg.name;
-    } catch (err) {
-      throw err;
-    }
+    const packageJsonPath = path.join(this.rootDir, 'package.json');
+    const pkg = await readJSON(packageJsonPath);
+    return pkg.name;
   }
 
   public async getPackageVersion() {

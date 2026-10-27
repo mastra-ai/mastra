@@ -8,7 +8,6 @@ import { expect } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
-import { thinkingConfig } from '../../../../__tests__/fixtures/thinkingConfig';
 import { OverlaysProvider } from '../../../../lib/overlays';
 import { ChatSessionRouteProvider } from '../../Chat';
 import { ChatSessionBoundary } from '../../context/ChatSessionProvider';
@@ -39,6 +38,7 @@ interface PreparingSession {
   sessionLookups: number;
   controllerCreates: number;
   steerAttempts: number;
+  abortRequests: number;
 }
 
 interface StubPreparingSessionOptions {
@@ -90,6 +90,7 @@ export function stubPreparingSession({
     delivered: [],
     operations: [],
     steerAttempts: 0,
+    abortRequests: 0,
     controllerCreates: 0,
     sessionLookups: 0,
   };
@@ -103,7 +104,12 @@ export function stubPreparingSession({
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, () =>
       HttpResponse.json({
-        project: { id: FACTORY_ID, name: 'Preparing', defaultModelId: 'openai/gpt-4o-mini' },
+        project: {
+          id: FACTORY_ID,
+          name: 'Preparing',
+          defaultModelId: 'openai/gpt-4o-mini',
+          defaultThinkingLevel: 'medium',
+        },
       }),
     ),
     http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
@@ -117,8 +123,9 @@ export function stubPreparingSession({
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: 'openai/gpt-4o-mini' })),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: 'openai/gpt-4o-mini', thinkingLevel: null }),
+    ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryProjectId/source-control-connections`, () =>
       HttpResponse.json({
         connections: [
@@ -229,6 +236,10 @@ export function stubPreparingSession({
     }),
     http.post(`${API}/sessions/:resourceId/steer`, () => {
       result.steerAttempts += 1;
+      return HttpResponse.json({ ok: true });
+    }),
+    http.post(`${API}/sessions/:resourceId/abort`, () => {
+      result.abortRequests += 1;
       return HttpResponse.json({ ok: true });
     }),
   );

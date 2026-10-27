@@ -194,7 +194,7 @@ export class DatadogExporter extends BaseExporter {
     // Default to agentless mode (true) for consistency with other Mastra exporters
     // Only disable if explicitly set to false via config or env var
     const envAgentless = process.env.DD_LLMOBS_AGENTLESS_ENABLED?.toLowerCase();
-    const agentless = config.agentless ?? (envAgentless === 'false' || envAgentless === '0' ? false : true);
+    const agentless = config.agentless ?? !(envAgentless === 'false' || envAgentless === '0');
 
     // Validate required configuration
     if (!mlApp) {
@@ -249,7 +249,7 @@ export class DatadogExporter extends BaseExporter {
       switch (event.type) {
         case 'span_started':
           this.captureTraceContext(span);
-          return;
+          break;
 
         case 'span_updated':
           // No-op: completion-only pattern ignores mid-span updates
@@ -257,7 +257,7 @@ export class DatadogExporter extends BaseExporter {
 
         case 'span_ended':
           this.enqueueSpan(span);
-          return;
+          break;
       }
     } catch (error) {
       this.logger.error('Datadog exporter error', {

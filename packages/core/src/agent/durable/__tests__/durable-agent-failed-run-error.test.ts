@@ -13,7 +13,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Agent } from '../../agent';
-import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DURABLE_STOP_WHEN_ERROR_ID } from '../constants';
 import { DurableAgent } from '../durable-agent';
 import { EventedAgent } from '../evented-agent';
 
@@ -52,6 +52,54 @@ describe('durable workflow failed-status error surfacing', () => {
       });
       const errorEvent = received.find(event => event.type === AgentStreamEventTypes.ERROR);
       expect(errorEvent.data.error.message).toBe('preparation exploded');
+      expect(errorEvent.data.delivery).toBeUndefined();
+    } finally {
+      await pubsub.close();
+    }
+  });
+
+  it.each([
+    ['DurableAgent', DurableAgent],
+    ['EventedAgent', EventedAgent],
+  ] as const)('%s preserves marked stopWhen failures as reject-delivery events', async (_, AgentType) => {
+    const pubsub = new EventEmitterPubSub();
+    const baseAgent = new Agent({
+      id: 'failed-stop-when-agent',
+      name: 'failed-stop-when-agent',
+      instructions: 'test',
+      model: { provider: 'test', modelId: 'test', specificationVersion: 'v1' } as any,
+    });
+    const agent = new AgentType({ agent: baseAgent, pubsub });
+    vi.spyOn(agent, 'getWorkflow').mockReturnValue({
+      createRun: vi.fn().mockResolvedValue({
+        start: vi.fn().mockResolvedValue({
+          status: 'failed',
+          error: {
+            code: DURABLE_STOP_WHEN_ERROR_ID,
+            message: 'stopWhen failed',
+            details: { name: 'TypeError', message: 'stopWhen failed' },
+          },
+        }),
+      }),
+      deleteWorkflowRunById: vi.fn().mockResolvedValue(undefined),
+    } as any);
+
+    const runId = 'failed-stop-when-run';
+    const received: any[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      received.push(event);
+    });
+
+    try {
+      await (agent as any).executeWorkflow(runId, {} as any);
+      await vi.waitFor(() => {
+        expect(received.some(event => event.type === AgentStreamEventTypes.ERROR)).toBe(true);
+      });
+      const errorEvent = received.find(event => event.type === AgentStreamEventTypes.ERROR);
+      expect(errorEvent.data).toEqual({
+        error: { name: 'TypeError', message: 'stopWhen failed' },
+        delivery: 'reject',
+      });
     } finally {
       await pubsub.close();
     }

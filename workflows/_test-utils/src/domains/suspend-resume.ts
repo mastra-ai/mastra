@@ -1046,7 +1046,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
         return { value, condition };
       }
 
-      value = value + 1;
+      value += 1;
       condition = value >= 10;
 
       return { value, condition };
@@ -1833,7 +1833,7 @@ export function createSuspendResumeWorkflows(ctx: WorkflowCreatorContext) {
       // Small delay to simulate work
       await new Promise(resolve => setTimeout(resolve, 50));
 
-      value = value + 1;
+      value += 1;
       condition = value >= 10;
 
       return {
@@ -4679,7 +4679,7 @@ export function createSuspendResumeTests(ctx: WorkflowTestContext, registry?: Wo
     it.skipIf(ctx.skipTests.resumeStepExecutionPath || !ctx.resume)(
       'should not duplicate step IDs in stepExecutionPath after suspend/resume',
       async () => {
-        const { workflow, mocks, resetMocks } = registry!['basic-resume-workflow']!;
+        const { workflow, resetMocks } = registry!['basic-resume-workflow']!;
         resetMocks?.();
 
         const runId = `step-exec-path-test-${Date.now()}-${Math.random().toString(36).substring(7)}`;

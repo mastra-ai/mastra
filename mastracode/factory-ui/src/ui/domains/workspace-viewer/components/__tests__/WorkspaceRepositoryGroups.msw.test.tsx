@@ -1,21 +1,15 @@
 import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { describe, expect, it } from 'vitest';
 
+import type { WorkspaceChangePatches, WorkspaceChanges } from '../../../../../api/types';
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import { WorkspaceChangesPanel } from '../WorkspaceChangesPanel';
-import { WorkspaceFileBrowser } from '../WorkspaceFileBrowser';
-import {
-  WORKSPACE,
-  multiRepositoryChanges,
-  multiRepositoryFiles,
-  singleRepositoryChanges,
-  singleRepositoryFiles,
-} from './fixtures/workspace-repositories';
+import { WORKSPACE, multiRepositoryChanges, singleRepositoryChanges } from './fixtures/workspace-repositories';
 
-const DIFF_URL = `${TEST_BASE_URL}/web/workspace/changes/diff`;
+const PATCHES_URL = `${TEST_BASE_URL}/web/workspace/changes/patches`;
 
 Object.defineProperty(CSSStyleSheet.prototype, 'replaceSync', { value: () => {} });
 
@@ -29,153 +23,90 @@ function treeItemIds(container: HTMLElement) {
   );
 }
 
-function renderChanges(changes: typeof multiRepositoryChanges) {
-  const noop = () => {};
-  return renderWithProviders(
+async function openFileTree(changes: WorkspaceChanges) {
+  server.use(
+    http.get(PATCHES_URL, () => HttpResponse.json({ ...changes, scope: 'branch', patches: {}, omittedPatches: {} })),
+  );
+  const user = userEvent.setup();
+  renderWithProviders(
     <WorkspaceChangesPanel
       workspacePath={WORKSPACE}
       visible
-      changes={changes}
       repositoryProviders={{ 'mastra-ai/mastra': 'github', 'mastra-ai/platform': 'gitlab' }}
-      isLoading={false}
-      isRefreshing={false}
-      onRefresh={noop}
-      onBack={noop}
+      onBack={() => {}}
     />,
   );
-}
-
-function renderFiles(listing: typeof multiRepositoryFiles, onFileSelect = vi.fn()) {
-  const noop = () => {};
-  return renderWithProviders(
-    <WorkspaceFileBrowser
-      files={listing.files}
-      repositories={listing.repositories}
-      isLoading={false}
-      isRefreshing={false}
-      onRefresh={noop}
-      onFileSelect={onFileSelect}
-      openFolders={{}}
-      onFolderOpenChange={noop}
-      onBack={noop}
-    />,
-  );
+  await user.click(await screen.findByRole('button', { name: /^Jump to file/ }));
+  const tree = await screen.findByRole('dialog');
+  return { user, tree };
 }
 
 describe('workspace repository groups', () => {
-  it('renders one changes group per repository in payload order and requests diffs with the prefixed path', async () => {
-    const diffRequests: Array<string | null> = [];
-    server.use(
-      http.get(DIFF_URL, ({ request }) => {
-        const url = new URL(request.url);
-        diffRequests.push(url.search);
-        return HttpResponse.json({
-          workspacePath: WORKSPACE,
-          path: url.searchParams.get('path'),
-          patch: 'diff --git a/proof.txt b/proof.txt\n--- /dev/null\n+++ b/proof.txt\n@@ -0,0 +1 @@\n+proof\n',
-          truncated: false,
-        });
-      }),
-    );
-    const user = userEvent.setup();
+  it('lists one group per repository in payload order, keeping each file under its prefixed path', async () => {
+    const { tree } = await openFileTree(multiRepositoryChanges);
 
-    renderChanges(multiRepositoryChanges);
-
-    const panel = screen.getByTestId('workspace-changes-panel');
-    const groups = repositoryGroups(panel);
+    const groups = repositoryGroups(tree);
     expect(groups.map(group => group.textContent)).toEqual([
       expect.stringContaining('mastra-ai/mastra'),
       expect.stringContaining('mastra-ai/platform'),
       expect.stringContaining('mastra-ai/mastra-website'),
     ]);
-    // The icon follows the factory's provider for the slug; an unknown slug gets the GitHub icon.
-    expect(within(groups[0]!).getByTestId('repository-provider-github')).toBeInTheDocument();
-    expect(within(groups[1]!).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
-    expect(within(groups[2]!).getByTestId('repository-provider-github')).toBeInTheDocument();
+    expect(within(groups[0]).getByTestId('repository-provider-github')).toBeInTheDocument();
+    expect(within(groups[1]).getByTestId('repository-provider-gitlab')).toBeInTheDocument();
+    expect(within(groups[2]).getByTestId('repository-provider-github')).toBeInTheDocument();
     expect(groups[0]).toHaveTextContent('2 files');
     expect(groups[0]).toHaveTextContent('+6');
     expect(groups[0]).toHaveTextContent('−2');
     expect(groups[1]).toHaveTextContent('1 file');
     expect(groups[1]).toHaveTextContent('+3');
     expect(groups[2]).toHaveTextContent('0 files');
-    // The repository directory is stripped from the rows; the request path keeps it.
-    expect(treeItemIds(panel)).toEqual(['mastra/src/agent.ts', 'mastra/README.md', 'platform/proof.txt']);
-    expect(within(panel).queryByText('mastra')).not.toBeInTheDocument();
-    expect(within(panel).getByText('src')).toBeInTheDocument();
-
-    await user.click(within(panel).getByText('proof.txt'));
-
-    await within(await screen.findByTestId('workspace-changes-panel')).findByLabelText('Workspace change diff');
-    expect(diffRequests).toEqual([`?workspacePath=${WORKSPACE}&path=platform%2Fproof.txt`]);
+    expect(treeItemIds(tree)).toEqual(['mastra/src/agent.ts', 'mastra/README.md', 'platform/proof.txt']);
+    expect(within(tree).queryByText('mastra')).not.toBeInTheDocument();
+    expect(within(tree).getByText('src')).toBeInTheDocument();
   });
 
   it('collapses a repository group without touching the others', async () => {
-    const user = userEvent.setup();
-    renderChanges(multiRepositoryChanges);
+    const { user, tree } = await openFileTree(multiRepositoryChanges);
 
-    const panel = screen.getByTestId('workspace-changes-panel');
-    await user.click(within(panel).getByRole('button', { name: 'Hide files in mastra-ai/mastra' }));
+    await user.click(within(tree).getByRole('button', { name: 'Hide files in mastra-ai/mastra' }));
 
-    expect(treeItemIds(panel)).toEqual(['platform/proof.txt']);
-    expect(within(panel).getByRole('button', { name: 'Show files in mastra-ai/mastra' })).toHaveAttribute(
+    expect(treeItemIds(tree)).toEqual(['platform/proof.txt']);
+    expect(within(tree).getByRole('button', { name: 'Show files in mastra-ai/mastra' })).toHaveAttribute(
       'aria-expanded',
       'false',
     );
   });
 
-  it('renders one files group per repository and the root artifacts ungrouped', async () => {
-    const onFileSelect = vi.fn();
-    const user = userEvent.setup();
-    renderFiles(multiRepositoryFiles, onFileSelect);
+  it('renders a one-repository session without any group header', async () => {
+    const { tree } = await openFileTree(singleRepositoryChanges);
 
-    const panel = screen.getByLabelText('Workspace files');
-    const groups = repositoryGroups(panel);
-    // Files groups are named after the checkout directories, without an icon.
-    expect(groups.map(group => group.textContent)).toEqual([
-      expect.stringMatching(/^mastra\d/),
-      expect.stringMatching(/^platform\d/),
-      expect.stringMatching(/^mastra-website\d/),
-    ]);
-    expect(within(panel).queryByText('mastra-ai/mastra')).not.toBeInTheDocument();
-    expect(within(panel).queryByTestId('repository-provider-github')).not.toBeInTheDocument();
-    expect(groups[0]).toHaveTextContent('1 file');
-    expect(within(panel).getByText('4 files')).toBeInTheDocument();
-    // Repository folders never render as tree folders; the artifacts folder does, after the groups.
-    expect(treeItemIds(panel)).toEqual(['platform/proof.txt', 'mastra-website/proof.txt']);
-    expect(within(panel).queryByRole('treeitem', { name: /^platform$/ })).not.toBeInTheDocument();
-    const artifacts = within(panel).getByRole('button', { name: '.artifacts' });
-    expect(artifacts.compareDocumentPosition(groups[2]!) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
-
-    await user.click(within(panel).getAllByText('proof.txt')[0]!);
-    expect(onFileSelect).toHaveBeenCalledWith('platform/proof.txt');
+    expect(repositoryGroups(tree)).toHaveLength(0);
+    expect(treeItemIds(tree)).toEqual(['src/agent.ts', 'README.md']);
+    expect(within(tree).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
   });
 
-  it('renders a one-repository session without any group header, as before', () => {
-    const noop = () => {};
-    renderChanges(singleRepositoryChanges);
-    const changesPanel = screen.getByTestId('workspace-changes-panel');
-    expect(repositoryGroups(changesPanel)).toHaveLength(0);
-    expect(treeItemIds(changesPanel)).toEqual(['src/agent.ts', 'README.md']);
-    expect(within(changesPanel).getByRole('button', { name: 'src' })).toHaveAttribute('aria-expanded', 'true');
-    expect(within(changesPanel).getByText('agent.ts')).toBeInTheDocument();
-    expect(within(changesPanel).getByText('README.md')).toBeInTheDocument();
-
-    renderWithProviders(
-      <WorkspaceFileBrowser
-        files={singleRepositoryFiles.files}
-        repositories={singleRepositoryFiles.repositories}
-        isLoading={false}
-        isRefreshing={false}
-        onRefresh={noop}
-        onFileSelect={noop}
-        openFolders={{}}
-        onFolderOpenChange={noop}
-        onBack={noop}
-      />,
+  it('names a repository it could not read when the others have no changes', async () => {
+    server.use(
+      http.get(PATCHES_URL, () =>
+        HttpResponse.json({
+          workspacePath: WORKSPACE,
+          available: true,
+          changes: [],
+          scope: 'branch',
+          patches: {},
+          omittedPatches: {},
+          repositories: [
+            { slug: 'mastra-ai/mastra', prefix: 'mastra/', available: true, additions: 0, deletions: 0, changes: [] },
+            { slug: 'mastra-ai/platform', prefix: 'platform/', available: false, changes: [] },
+          ],
+        } satisfies WorkspaceChangePatches),
+      ),
     );
-    const filesPanel = screen.getByLabelText('Workspace files');
-    expect(repositoryGroups(filesPanel)).toHaveLength(0);
-    expect(treeItemIds(filesPanel)).toEqual(['README.md']);
-    expect(within(filesPanel).getByRole('button', { name: 'src' })).toBeInTheDocument();
+    renderWithProviders(
+      <WorkspaceChangesPanel workspacePath={WORKSPACE} visible repositoryProviders={{}} onBack={() => {}} />,
+    );
+
+    expect(await screen.findByText("Couldn't read changes in mastra-ai/platform")).toBeInTheDocument();
+    expect(screen.getByText('No changes')).toBeInTheDocument();
   });
 });

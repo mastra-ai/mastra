@@ -4,13 +4,13 @@ import type { StructuredOutputOptions } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { RequestContext } from '@mastra/core/di';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType, EntityType, getOrCreateSpan } from '@mastra/core/observability';
+import { SpanType, EntityType, getOrCreateSpan, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { TracingContext } from '@mastra/core/observability';
 import { executeWithContext } from '@mastra/core/observability/context-storage';
 
 // Core Mastra imports
 import type { Processor } from '@mastra/core/processors';
-import { MockStore } from '@mastra/core/storage';
+import { MockStore, buildCreateSpanRecord } from '@mastra/core/storage';
 import type { InferSchemaOutput } from '@mastra/core/stream';
 import type { ToolExecutionContext } from '@mastra/core/tools';
 import { createTool } from '@mastra/core/tools';
@@ -1109,6 +1109,238 @@ describe('Tracing Integration Tests', () => {
     });
   });
 
+  describe('time to first chunk isolation', () => {
+    /** Streams one word after `delayMs`, so each agent gets a distinct first-chunk clock. */
+    function delayedTextModel(delayMs: number, text: string) {
+      return new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, delayMs));
+          return {
+            stream: convertArrayToReadableStream([
+              { type: 'text-start', id: '1' },
+              { type: 'text-delta', id: '1', delta: text },
+              { type: 'text-end', id: '1' },
+              { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            ]),
+          };
+        },
+      });
+    }
+    const clockOf = (span: any) => span?.attributes?.completionStartTime?.getTime();
+
+    it('keeps the outer agent run on its own first chunk when a processor and a tool run nested agents', async () => {
+      const innerModel = delayedTextModel(5, 'inner');
+      class ReviewerProcessor implements Processor {
+        readonly id = 'reviewer';
+        readonly name = 'Reviewer';
+        readonly agent = new Agent({
+          id: 'reviewer-agent',
+          name: 'reviewer-agent',
+          instructions: 'x',
+          model: innerModel,
+        });
+
+        async processInput(args: { messages: MastraDBMessage[]; tracingContext?: TracingContext }) {
+          const result = await this.agent.stream('review', { tracingContext: args.tracingContext });
+          await result.consumeStream();
+          return args.messages;
+        }
+      }
+      const helper = new Agent({ id: 'helper-agent', name: 'helper-agent', instructions: 'x', model: innerModel });
+      const askHelper = createTool({
+        id: 'ask-helper',
+        description: 'ask the helper',
+        inputSchema: z.object({}),
+        execute: async (_input, context) => {
+          const result = await helper.stream('help', { tracingContext: context?.tracingContext });
+          return { text: await result.text };
+        },
+      });
+      let call = 0;
+      const outerModel = new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return {
+            stream: convertArrayToReadableStream(
+              call++ === 0
+                ? [
+                    { type: 'tool-call', toolCallId: 'c1', toolName: 'askHelper', input: '{}' },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'outer' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const outer = new Agent({
+        id: 'outer-agent',
+        name: 'outer-agent',
+        instructions: 'x',
+        model: outerModel,
+        tools: { askHelper },
+        inputProcessors: [new ReviewerProcessor()],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { outer } });
+
+      const result = await mastra.getAgent('outer').stream('go');
+      await result.consumeStream();
+
+      const runs = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const generations = testExporter.getSpansByType(SpanType.MODEL_GENERATION);
+      const runOf = (entityId: string) => runs.find(span => span.entityId === entityId)!;
+      const generationUnder = (run: { id: string }) => generations.find(span => span.parentSpanId === run.id)!;
+
+      for (const entityId of ['outer-agent', 'reviewer-agent', 'helper-agent']) {
+        const run = runOf(entityId);
+        expect(clockOf(run)).toBeTypeOf('number');
+        expect(clockOf(run)).toBe(clockOf(generationUnder(run)));
+      }
+      // The reviewer streams before the outer model, the helper after its first step;
+      // neither clock leaks onto the outer run.
+      expect(clockOf(runOf('reviewer-agent'))).toBeLessThan(clockOf(runOf('outer-agent'))!);
+      expect(clockOf(runOf('helper-agent'))).toBeGreaterThan(clockOf(runOf('outer-agent'))!);
+    });
+
+    it('ignores data chunks a processor writes before the model responds', async () => {
+      const progressProcessor: Processor = {
+        id: 'progress',
+        async processInputStep({ messages, writer }) {
+          await writer?.custom({ type: 'data-progress', data: { status: 'thinking' } });
+          return messages;
+        },
+      };
+      const agent = new Agent({
+        id: 'progress-agent',
+        name: 'progress-agent',
+        instructions: 'x',
+        model: delayedTextModel(40, 'hello'),
+        inputProcessors: [progressProcessor],
+      });
+      const mastra = new Mastra({ ...getBaseMastraConfig(testExporter), agents: { agent } });
+
+      const result = await mastra.getAgent('agent').stream('go');
+      await result.consumeStream();
+
+      const spans = [
+        ...testExporter.getSpansByType(SpanType.AGENT_RUN),
+        ...testExporter.getSpansByType(SpanType.MODEL_GENERATION),
+        ...testExporter.getSpansByType(SpanType.MODEL_STEP),
+        ...testExporter.getSpansByType(SpanType.MODEL_INFERENCE),
+      ];
+      expect(spans).toHaveLength(4);
+      for (const span of spans) {
+        expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
+      }
+    });
+
+    it('ignores a tool-call replayed for a background task on resume', async () => {
+      const research = createTool({
+        id: 'research',
+        description: 'research a topic',
+        inputSchema: z.object({}),
+        requireApproval: true,
+        background: { enabled: true },
+        execute: async () => ({ summary: 'done' }),
+      });
+      let call = 0;
+      const model = new MockLanguageModelV2({
+        doStream: async () => {
+          await new Promise(resolve => setTimeout(resolve, 40));
+          return {
+            stream: convertArrayToReadableStream(
+              call++ === 0
+                ? [
+                    {
+                      type: 'tool-call',
+                      toolCallId: 'c1',
+                      toolName: 'research',
+                      // Awaited, so the replayed tool-call lands before the next model call
+                      input: JSON.stringify({ _background: { disposition: 'awaited' } }),
+                    },
+                    {
+                      type: 'finish',
+                      finishReason: 'tool-calls',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ]
+                : [
+                    { type: 'text-start', id: '1' },
+                    { type: 'text-delta', id: '1', delta: 'done' },
+                    { type: 'text-end', id: '1' },
+                    {
+                      type: 'finish',
+                      finishReason: 'stop',
+                      usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+                    },
+                  ],
+            ),
+          };
+        },
+      });
+      const agent = new Agent({
+        id: 'bg-agent',
+        name: 'bg-agent',
+        instructions: 'x',
+        model,
+        tools: { research },
+        backgroundTasks: { tools: { research: true } },
+      });
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { agent },
+        backgroundTasks: { enabled: true },
+      });
+      await mastra.startEventEngine();
+
+      try {
+        const first = await mastra.getAgent('agent').stream('go');
+        let toolCallId: string | undefined;
+        for await (const chunk of first.fullStream) {
+          if (chunk.type === 'tool-call-approval') toolCallId = chunk.payload.toolCallId;
+        }
+        expect(toolCallId).toBeDefined();
+        const firstRunSpanIds = new Set(testExporter.getAllSpans().map(span => span.id));
+
+        const resumed = await mastra.getAgent('agent').approveToolCall({ runId: first.runId, toolCallId: toolCallId! });
+        await resumed.consumeStream();
+
+        const resumedSpans = <T extends SpanType>(type: T) =>
+          testExporter.getSpansByType(type).filter(span => !firstRunSpanIds.has(span.id));
+        const steps = resumedSpans(SpanType.MODEL_STEP);
+        const inferences = resumedSpans(SpanType.MODEL_INFERENCE);
+        // One step carries the resumed tool result, the other is the model call
+        expect(steps).toHaveLength(2);
+        expect(inferences).toHaveLength(2);
+        expect(inferences[1]!.input).toBeTruthy();
+
+        for (const span of [
+          ...resumedSpans(SpanType.AGENT_RUN),
+          ...resumedSpans(SpanType.MODEL_GENERATION),
+          steps[1]!,
+          inferences[1]!,
+        ]) {
+          expect(getTimeToFirstChunkMs(span)).toBeGreaterThanOrEqual(35);
+        }
+      } finally {
+        await mastra.backgroundTaskManager?.shutdown();
+        await mastra.stopEventEngine();
+      }
+    });
+  });
+
   describe.each(agentMethods)('agent launched inside workflow step using $name', ({ name, method, model }) => {
     it(`should trace spans correctly`, async () => {
       const testAgent = new Agent({
@@ -1925,6 +2157,104 @@ describe('Tracing Integration Tests', () => {
       const allSpans = testExporter.getAllSpans();
       const spansWithContext = allSpans.filter(s => s.requestContext);
       expect(spansWithContext.length).toBeGreaterThanOrEqual(1);
+
+      finalExpectations(testExporter);
+    });
+  });
+
+  describe('parent and root entity on exported spans', () => {
+    it('carries the owning parent and root entity from a real agent → tool span tree', async () => {
+      const testAgent = new Agent({
+        id: 'entity-agent',
+        name: 'Entity Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+
+      expect(agentSpan).toMatchObject({
+        entityType: EntityType.AGENT,
+        entityId: 'entity-agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+      expect(agentSpan?.parentEntityType).toBeUndefined();
+
+      expect(toolSpan).toMatchObject({
+        entityType: EntityType.TOOL,
+        entityId: 'calculator',
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+      });
+
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        parentEntityType: EntityType.AGENT,
+        parentEntityId: 'entity-agent',
+        parentEntityName: 'Entity Agent',
+        parentEntityVersionId: null,
+        rootEntityType: EntityType.AGENT,
+        rootEntityId: 'entity-agent',
+        rootEntityName: 'Entity Agent',
+        rootEntityVersionId: null,
+      });
+
+      finalExpectations(testExporter);
+    });
+
+    it('reports the agent version only on agent-owned spans and signals', async () => {
+      const testAgent = new Agent({
+        id: 'versioned-agent',
+        name: 'Versioned Agent',
+        instructions: 'You are a test agent',
+        model: mockModelV2,
+        tools: { calculator: calculatorTool },
+      });
+      testAgent.__setRawConfig({ resolvedVersionId: 'v3' });
+
+      const mastra = new Mastra({
+        ...getBaseMastraConfig(testExporter),
+        agents: { testAgent },
+      });
+
+      await mastra.getAgent('testAgent').generate('Calculate 5 + 3');
+
+      const [agentSpan] = testExporter.getSpansByType(SpanType.AGENT_RUN);
+      const [toolSpan] = testExporter.getSpansByType(SpanType.TOOL_CALL);
+      expect(agentSpan).toBeDefined();
+      expect(toolSpan).toBeDefined();
+      // The tool still inherits the agent's metadata
+      expect(toolSpan?.metadata?.entityVersionId).toBe('v3');
+
+      expect(buildCreateSpanRecord(agentSpan!).entityVersionId).toBe('v3');
+      expect(buildCreateSpanRecord(toolSpan!)).toMatchObject({
+        entityId: 'calculator',
+        entityVersionId: null,
+        parentEntityId: 'versioned-agent',
+        parentEntityVersionId: 'v3',
+      });
+
+      const [agentDuration] = testExporter.getMetricsByName('mastra_agent_duration_ms');
+      const [toolDuration] = testExporter.getMetricsByName('mastra_tool_duration_ms');
+      expect(agentDuration?.correlationContext?.entityVersionId).toBe('v3');
+      expect(toolDuration?.correlationContext).toMatchObject({ entityId: 'calculator', parentEntityVersionId: 'v3' });
+      expect(toolDuration?.correlationContext?.entityVersionId).toBeUndefined();
 
       finalExpectations(testExporter);
     });

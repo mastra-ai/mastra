@@ -1,8 +1,5 @@
-import {
-  assertActiveObservationsApplied,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
-} from '@internal/core/memory';
+import { assertActiveObservationsApplied } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import { MessageList } from '@mastra/core/agent';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
@@ -21,6 +18,9 @@ import {
   storageMessageMatchesMetadataFilter,
   TABLE_MEMORY_RUN_FENCES,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   BufferedObservationChunk,
@@ -42,12 +42,16 @@ import type {
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import type { ConvexAdminClient } from '../../client';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
-import { assertRunFence, raiseRunFence, retireRunFence } from '../../run-fencing';
+import { assertRunFence, raiseRunFence, retireRunFence, pruneRunClaims } from '../../run-fencing';
 import type { RunFenceCheck } from '../../run-fencing';
 import { TABLE_OBSERVATIONAL_MEMORY } from '../../types';
 import type { SerializedOMChunk, SerializedOMCurrentRecord } from '../../types';
@@ -208,6 +212,15 @@ function parseStoredOMRecord(doc: StoredOMRecord): ObservationalMemoryRecord {
 }
 
 export class MemoryConvex extends MemoryStorage {
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   override readonly supportsPartialThreadUpdate = true;
   readonly supportsObservationalMemory = true;
   readonly supportsObservationalMemoryHistorySearch = true;
@@ -244,6 +257,22 @@ export class MemoryConvex extends MemoryStorage {
 
   async init(): Promise<void> {
     // No-op for Convex; schema is managed server-side.
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryConvex.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.#client, TABLE_MEMORY_RUN_FENCES, 'retiredAt', Number(cutoff), limit),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

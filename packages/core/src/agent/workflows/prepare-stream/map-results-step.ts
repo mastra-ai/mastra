@@ -311,6 +311,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       actor: options.actor,
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
+      agentRunSpan: agentSpan,
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -498,6 +499,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
       processorStates: runScope.get(PROCESSOR_STATES_KEY),
+      agent: capabilities.agent,
     };
 
     // Park the assembled (class-instance- and closure-laden) options on the

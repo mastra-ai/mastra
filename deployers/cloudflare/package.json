@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-cloudflare",
-  "version": "1.2.37-alpha.1",
+  "version": "1.2.39-alpha.1",
   "description": "",
   "type": "module",
   "files": [
@@ -35,33 +35,33 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@babel/core": "^8.0.1",
+    "@babel/core": "^8.0.9",
     "@mastra/deployer": "workspace:^",
     "@rollup/plugin-virtual": "3.0.2",
     "cloudflare": "^5.2.0",
-    "rollup": "^4.61.1",
+    "rollup": "^4.65.0",
     "rollup-plugin-esbuild": "^6.2.1"
   },
   "devDependencies": {
-    "@babel/types": "^8.0.4",
+    "@babel/types": "^8.0.8",
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:",
-    "wrangler": "^4.147.0",
+    "wrangler": "^4.152.0",
     "zod": "^3.25.76"
   },
   "homepage": "https://mastra.ai",
@@ -74,7 +74,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "wrangler": "^4.0.0",
     "zod": "^3.25.0 || ^4.0.0"
   },

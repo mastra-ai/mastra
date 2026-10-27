@@ -2,14 +2,19 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { ModelDefaultRecord } from '../storage/domains/model-defaults/base.js';
 import type { SourceControlSession } from '../storage/domains/source-control/base.js';
-import {
-  hydrateSessionDefaultModel,
-  type DefaultModelHydrationDependencies,
-  type DefaultModelHydrationSession,
-} from './default-model-hydration.js';
+import { hydrateSessionDefaultModel } from './default-model-hydration.js';
+import type { DefaultModelHydrationDependencies, DefaultModelHydrationSession } from './default-model-hydration.js';
 
-const { primeTenant } = vi.hoisted(() => ({ primeTenant: vi.fn(async (_tenant: unknown) => undefined) }));
-vi.mock('../routes/tenant-credentials.js', () => ({ primeTenantCredentialsForTenant: primeTenant }));
+const { primeTenant, providerDefault } = vi.hoisted(() => ({
+  primeTenant: vi.fn(async (_tenant: unknown) => undefined),
+  providerDefault: vi.fn(
+    async (_tenant: unknown, _current: string | undefined): Promise<string | undefined> => undefined,
+  ),
+}));
+vi.mock('../routes/tenant-credentials.js', () => ({
+  primeTenantCredentialsForTenant: primeTenant,
+  resolveTenantProviderDefaultModel: providerDefault,
+}));
 
 const modelId = 'anthropic/claude-opus-5';
 
@@ -44,10 +49,10 @@ function sourceControlRow(): SourceControlSession {
   };
 }
 
-function createSession(state: Record<string, unknown> = {}): DefaultModelHydrationSession {
+function createSession(state: Record<string, unknown> = {}, resourceId = 'session-1'): DefaultModelHydrationSession {
   return {
-    identity: { getResourceId: () => 'session-1' },
-    model: { switch: vi.fn().mockResolvedValue(undefined), setDefault: vi.fn() },
+    identity: { getId: () => 'session-1', getResourceId: () => resourceId },
+    model: { get: () => 'openai/mode-default', switch: vi.fn().mockResolvedValue(undefined), setDefault: vi.fn() },
     state: {
       get: () => state,
       set: vi.fn(async (updates: Record<string, unknown>) => void Object.assign(state, updates)),
@@ -114,6 +119,74 @@ describe('hydrateSessionDefaultModel', () => {
       factoryModelScope: 'factory',
       factoryOwnerUserId: 'user-1',
     });
+  });
+
+  it("falls back to a connected provider's default model when no default was chosen", async () => {
+    providerDefault.mockResolvedValueOnce('anthropic/claude-fable-5');
+    const session = createSession();
+    const dependencies = createDependencies(null);
+
+    await hydrateSessionDefaultModel(session, dependencies);
+
+    expect(providerDefault).toHaveBeenCalledExactlyOnceWith(
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'user' },
+      'openai/mode-default',
+    );
+    expect(session.model.setDefault).toHaveBeenCalledExactlyOnceWith({ modelId: 'anthropic/claude-fable-5' });
+    expect(session.model.switch).toHaveBeenCalledExactlyOnceWith('anthropic/claude-fable-5');
+  });
+
+  it('checks the credentials the session is billed to: org credentials for Factory scope and hybrid runs', async () => {
+    providerDefault.mockClear();
+    const factoryScoped = createDependencies(null, 'factory');
+    vi.mocked(factoryScoped.projects.getById).mockResolvedValue({
+      id: 'factory-1',
+      orgId: 'org-1',
+      modelScope: 'factory',
+      defaultModelId: null,
+    } as never);
+    await hydrateSessionDefaultModel(createSession(), factoryScoped);
+    expect(providerDefault).toHaveBeenLastCalledWith(
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' },
+      'openai/mode-default',
+    );
+
+    // A hybrid Factory bills interactive sessions to the user.
+    await hydrateSessionDefaultModel(createSession(), createDependencies(null, 'hybrid'));
+    expect(providerDefault).toHaveBeenLastCalledWith(
+      { orgId: 'org-1', userId: 'user-1', credentialScope: 'user' },
+      'openai/mode-default',
+    );
+  });
+
+  it('keeps the session usable when the provider-default lookup fails', async () => {
+    providerDefault.mockRejectedValueOnce(new Error('credentials down'));
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const session = createSession();
+
+    await hydrateSessionDefaultModel(session, createDependencies(null));
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+    expect(session.state.set).toHaveBeenCalledWith(expect.objectContaining({ factoryModelScope: 'user' }));
+    expect(warn).toHaveBeenCalledWith(
+      '[Factory default-model hydration] Unable to resolve a provider default model.',
+      expect.any(Error),
+    );
+    warn.mockRestore();
+  });
+
+  it('keeps the current model when no default was chosen and no provider default applies', async () => {
+    const session = createSession();
+
+    await hydrateSessionDefaultModel(session, createDependencies(null));
+
+    expect(session.model.switch).not.toHaveBeenCalled();
+  });
+
+  it('never consults provider defaults when a default was chosen', async () => {
+    providerDefault.mockClear();
+    await hydrateSessionDefaultModel(createSession(), createDependencies());
+    expect(providerDefault).not.toHaveBeenCalled();
   });
 
   it('keeps the model of a chat that already has a user message when the session is recreated', async () => {
@@ -232,16 +305,18 @@ describe('hydrateSessionDefaultModel', () => {
   });
 
   it('does not apply a user default to active Factory run bindings before state is seeded', async () => {
-    const session = createSession();
+    const session = createSession({}, 'factory-1');
     const dependencies = createDependencies();
     vi.mocked(dependencies.workItems.findRunBindingByThread).mockResolvedValue({} as never);
 
     await hydrateSessionDefaultModel(session, dependencies);
 
+    // The run session sits on its Factory's resource; the binding is found by its session id.
+    expect(dependencies.sourceControl.getBySessionId).toHaveBeenCalledWith('session-1');
     expect(dependencies.workItems.findRunBindingByThread).toHaveBeenCalledExactlyOnceWith({
       orgId: 'org-1',
       threadId: 'session-1',
-      resourceId: 'session-1',
+      resourceId: 'factory-1',
       sessionId: 'session-1',
       rejectAmbiguous: true,
     });

@@ -131,3 +131,40 @@ export async function goWithRunFence(
     await backoff(attempt);
   }
 }
+
+/**
+ * Deletes up to `limit` items of a run claim entity whose epoch-ms `attribute`
+ * is older than `cutoff`. These entities have no index on the anchor, so this
+ * scans for them. Each delete repeats the cutoff as its condition, so an item
+ * claimed or raised again since the scan is kept.
+ */
+export async function pruneRunClaims(
+  service: Service<Record<string, any>>,
+  entityName: RunClaimEntity,
+  attribute: 'updatedAt' | 'retiredAt',
+  cutoff: number,
+  limit: number,
+): Promise<number> {
+  const entity = service.entities[entityName]!;
+  const olderThanCutoff = (attr: any, op: any) => op.lt(attr[attribute], cutoff);
+  let deleted = 0;
+  let cursor: string | null = null;
+  do {
+    const page: { data: Array<{ run_id: string }>; cursor: string | null } = await entity.scan
+      .where(olderThanCutoff)
+      .go({ cursor, limit: limit - deleted });
+    for (const item of page.data) {
+      try {
+        await retryOnTransactionConflict(() =>
+          entity.delete({ entity: entityName, run_id: item.run_id }).where(olderThanCutoff).go(),
+        );
+        deleted++;
+      } catch (error) {
+        if (!isConditionalCheckFailed(error)) throw error;
+      }
+      if (deleted >= limit) return deleted;
+    }
+    cursor = page.cursor;
+  } while (cursor);
+  return deleted;
+}

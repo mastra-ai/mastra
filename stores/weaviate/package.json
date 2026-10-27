@@ -1,6 +1,6 @@
 {
   "name": "@mastra/weaviate",
-  "version": "0.1.1",
+  "version": "0.1.4-alpha.0",
   "description": "Weaviate vector store provider for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -25,23 +25,22 @@
     "pretest": "docker compose up -d",
     "posttest": "docker compose down -v",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "weaviate-client": "^3.14.0"
+    "weaviate-client": "^3.15.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:",
     "vitest": "catalog:"

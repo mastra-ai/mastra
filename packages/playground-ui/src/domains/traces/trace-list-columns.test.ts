@@ -1,16 +1,24 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
+  TRACE_COLUMN_CATALOGS,
   TRACE_OPTIONAL_COLUMNS,
   TRACE_USAGE_COLUMNS,
+  addTraceCustomColumn,
+  addTraceMetadataColumn,
+  buildTraceListColumnKeys,
   buildTraceListColumns,
   formatTraceMetadataValue,
   hasTraceColumn,
   hasTraceUsageColumn,
   isTraceUsageColumn,
   parseTraceColumnPreferences,
+  removeTraceCustomColumn,
+  removeTraceMetadataColumn,
   serializeTraceColumnPreferences,
+  toggleTraceColumn,
 } from './trace-list-columns';
+import type { TraceColumnPreferences } from './trace-list-columns';
 
 describe('trace list columns', () => {
   describe('when saved preferences are missing or invalid', () => {
@@ -22,7 +30,7 @@ describe('trace list columns', () => {
     it('drops columns that are not strings at all', () => {
       expect(
         parseTraceColumnPreferences(
-          JSON.stringify({ version: 2, visibleColumns: ['input', 42, null, { id: 'duration' }] }),
+          JSON.stringify({ version: 4, visibleColumns: ['input', 42, null, { id: 'duration' }] }),
         ),
       ).toEqual({ visibleColumns: ['input'], customColumns: [], metadataKeys: [] });
     });
@@ -31,7 +39,7 @@ describe('trace list columns', () => {
       expect(
         parseTraceColumnPreferences(
           JSON.stringify({
-            version: 2,
+            version: 4,
             visibleColumns: ['input', 'unknown', 'duration'],
             customColumns: [],
             metadataKeys: ['tenant', '', 42, 'tenant'],
@@ -60,7 +68,13 @@ describe('trace list columns', () => {
   describe('when the grid is built', () => {
     it('keeps the existing default layout', () => {
       expect(buildTraceListColumns(DEFAULT_TRACE_COLUMN_PREFERENCES)).toBe(
-        '11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem',
+        '11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem',
+      );
+    });
+
+    it('gives Output its own flexible track and keeps Name bounded without Input', () => {
+      expect(buildTraceListColumns({ visibleColumns: ['output'], customColumns: [], metadataKeys: [] })).toBe(
+        '11rem 14rem minmax(8rem,1fr) 6rem',
       );
     });
 
@@ -72,6 +86,51 @@ describe('trace list columns', () => {
           metadataKeys: ['tenant'],
         }),
       ).toBe('11rem minmax(8rem,1fr) 6rem 7rem 8rem 8rem 8rem minmax(8rem,14rem)');
+    });
+
+    it('places model and provider after environment, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['provider', 'environment', 'model'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 8rem 10rem 8rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'environment',
+        'model',
+        'provider',
+      ]);
+    });
+
+    it('places time to first chunk right after duration, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['endTime', 'timeToFirstChunk', 'duration'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 7rem 11rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'duration',
+        'timeToFirstChunk',
+        'endTime',
+      ]);
+    });
+  });
+
+  describe('when saved preferences are missing for a list with its own defaults', () => {
+    it('falls back to those defaults', () => {
+      const spanDefaults = TRACE_COLUMN_CATALOGS.spans.defaults;
+      expect(parseTraceColumnPreferences(undefined, spanDefaults)).toBe(spanDefaults);
+      expect(parseTraceColumnPreferences('{not-json', spanDefaults)).toBe(spanDefaults);
+      expect(parseTraceColumnPreferences(JSON.stringify({ version: 4 }), spanDefaults).visibleColumns).toEqual(
+        spanDefaults.visibleColumns,
+      );
     });
   });
 
@@ -94,9 +153,13 @@ describe('trace list columns', () => {
       expect(TRACE_OPTIONAL_COLUMNS).toEqual([
         'type',
         'input',
+        'output',
         'duration',
+        'timeToFirstChunk',
         'endTime',
         'environment',
+        'model',
+        'provider',
         'inputTokens',
         'outputTokens',
         'totalTokens',
@@ -104,14 +167,32 @@ describe('trace list columns', () => {
       ]);
     });
 
+    it('offers traces their standard columns with usage and metadata', () => {
+      expect(TRACE_COLUMN_CATALOGS.traces).toEqual({
+        standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
+        usage: true,
+        metadata: true,
+        defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
+      });
+    });
+
+    it('offers spans their own columns, without usage or metadata they do not carry', () => {
+      expect(TRACE_COLUMN_CATALOGS.spans).toEqual({
+        standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
+        usage: false,
+        metadata: false,
+        defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+      });
+    });
+
     it('treats only the token and cost columns as usage columns', () => {
       expect(TRACE_USAGE_COLUMNS).toEqual(['inputTokens', 'outputTokens', 'totalTokens', 'estimatedCost']);
       expect(TRACE_OPTIONAL_COLUMNS.filter(isTraceUsageColumn)).toEqual([...TRACE_USAGE_COLUMNS]);
     });
 
-    it('shows type, input, duration and cost by default', () => {
+    it('shows type, input, output, duration and cost by default', () => {
       expect(DEFAULT_TRACE_COLUMN_PREFERENCES).toEqual({
-        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
         customColumns: [],
         metadataKeys: [],
       });
@@ -135,7 +216,7 @@ describe('trace list columns', () => {
     });
 
     it('drops a stale entity column from a current payload', () => {
-      expect(parseTraceColumnPreferences(JSON.stringify({ version: 2, visibleColumns: ['entity', 'input'] }))).toEqual({
+      expect(parseTraceColumnPreferences(JSON.stringify({ version: 4, visibleColumns: ['entity', 'input'] }))).toEqual({
         visibleColumns: ['input'],
         customColumns: [],
         metadataKeys: [],
@@ -169,7 +250,7 @@ describe('trace list columns', () => {
     it('drops duplicate columns and trims metadata keys', () => {
       expect(
         parseTraceColumnPreferences(
-          JSON.stringify({ version: 2, visibleColumns: ['input', 'input'], metadataKeys: [' tenant ', 'tenant'] }),
+          JSON.stringify({ version: 4, visibleColumns: ['input', 'input'], metadataKeys: [' tenant ', 'tenant'] }),
         ),
       ).toEqual({ visibleColumns: ['input'], customColumns: [], metadataKeys: ['tenant'] });
     });
@@ -179,7 +260,33 @@ describe('trace list columns', () => {
         parseTraceColumnPreferences(
           JSON.stringify({ version: 2, visibleColumns: ['input', 'duration'], metadataKeys: ['tenant'] }),
         ),
-      ).toEqual({ visibleColumns: ['input', 'duration'], customColumns: [], metadataKeys: ['tenant'] });
+      ).toEqual({ visibleColumns: ['input', 'output', 'duration'], customColumns: [], metadataKeys: ['tenant'] });
+    });
+
+    it('migrates a v3 payload by showing Output right after a visible Input', () => {
+      expect(
+        parseTraceColumnPreferences(
+          JSON.stringify({ version: 3, visibleColumns: ['type', 'input', 'duration'], customColumns: ['threadId'] }),
+        ),
+      ).toEqual({
+        visibleColumns: ['type', 'input', 'output', 'duration'],
+        customColumns: ['threadId'],
+        metadataKeys: [],
+      });
+    });
+
+    it('leaves Output hidden when a v3 payload had Input hidden', () => {
+      expect(
+        parseTraceColumnPreferences(JSON.stringify({ version: 3, visibleColumns: ['type', 'duration'] }))
+          .visibleColumns,
+      ).toEqual(['type', 'duration']);
+    });
+
+    it('keeps Output hidden once a v4 payload turns it off', () => {
+      expect(
+        parseTraceColumnPreferences(JSON.stringify({ version: 4, visibleColumns: ['input', 'duration'] }))
+          .visibleColumns,
+      ).toEqual(['input', 'duration']);
     });
 
     it('drops unknown custom column ids', () => {
@@ -200,8 +307,8 @@ describe('trace list columns', () => {
   describe('when preferences are written', () => {
     it('stamps the payload with its version', () => {
       expect(JSON.parse(serializeTraceColumnPreferences(DEFAULT_TRACE_COLUMN_PREFERENCES))).toEqual({
-        version: 3,
-        visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+        version: 4,
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
         customColumns: [],
         metadataKeys: [],
       });
@@ -290,6 +397,44 @@ describe('trace list columns', () => {
         hasTraceUsageColumn({ visibleColumns: ['input', 'outputTokens'], customColumns: [], metadataKeys: [] }),
       ).toBe(true);
       expect(hasTraceUsageColumn({ visibleColumns: [], customColumns: [], metadataKeys: [] })).toBe(false);
+    });
+  });
+
+  describe('when preferences are updated', () => {
+    const base: TraceColumnPreferences = {
+      visibleColumns: ['type', 'input'],
+      customColumns: ['threadId'],
+      metadataKeys: ['tenant'],
+    };
+
+    it('hides a visible column and shows a hidden one at the end', () => {
+      expect(toggleTraceColumn(base, 'input').visibleColumns).toEqual(['type']);
+      expect(toggleTraceColumn(base, 'duration').visibleColumns).toEqual(['type', 'input', 'duration']);
+    });
+
+    it('adds a custom column once', () => {
+      expect(addTraceCustomColumn(base, 'traceId').customColumns).toEqual(['threadId', 'traceId']);
+      expect(addTraceCustomColumn(base, 'threadId')).toBe(base);
+    });
+
+    it('removes a custom column', () => {
+      expect(removeTraceCustomColumn(base, 'threadId').customColumns).toEqual([]);
+    });
+
+    it('adds a trimmed metadata key once and ignores blank keys', () => {
+      expect(addTraceMetadataColumn(base, '  region ').metadataKeys).toEqual(['tenant', 'region']);
+      expect(addTraceMetadataColumn(base, ' tenant ')).toBe(base);
+      expect(addTraceMetadataColumn(base, '   ')).toBe(base);
+    });
+
+    it('removes a metadata key', () => {
+      expect(removeTraceMetadataColumn(base, 'tenant').metadataKeys).toEqual([]);
+    });
+
+    it('leaves the other parts of the preferences untouched', () => {
+      const next = toggleTraceColumn(base, 'duration');
+      expect(next.customColumns).toBe(base.customColumns);
+      expect(next.metadataKeys).toBe(base.metadataKeys);
     });
   });
 });

@@ -79,6 +79,7 @@ export {
 // DurableAgent class (base class for durable agents)
 export {
   DurableAgent,
+  applyReservedMemoryContextKeys,
   type DurableAgentConfig,
   type DurableAgentStreamOptions,
   type DurableAgentStreamResult,
@@ -96,9 +97,11 @@ export {
   runResumeDurableStreamUntilIdle,
   type DurableStreamUntilIdleDeps,
 } from './durable-stream-until-idle';
+export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
+export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state
 export {
@@ -108,8 +111,12 @@ export {
   getRunRegistryEntry,
   setRunRegistryEntry,
   deleteRunRegistryEntry,
+  takeRunScorerInstances,
   type ExtendedRunRegistryEntry,
 } from './run-registry';
+
+// Shared resumeGenerate argument normalization (Agent order + deprecated runId-first order)
+export { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 
 // Lets shared test suites simulate a process crash
 export { __resetExecutionFencesForTests } from './execution-fence';
@@ -126,6 +133,7 @@ export {
   emitStepFinishEvent,
   emitFinishEvent,
   emitErrorEvent,
+  emitAbortEvent,
   emitSuspendedEvent,
   type DurableAgentStreamOptions as StreamAdapterOptions,
   type DurableAgentStreamResult as StreamAdapterResult,
@@ -137,6 +145,7 @@ export {
   AGENT_CONTROL_TOPIC,
   AgentStreamEventTypes,
   AgentControlEventTypes,
+  DURABLE_STOP_WHEN_ERROR_ID,
   DurableAgentDefaults,
   DurableStepIds,
 } from './constants';
@@ -208,6 +217,8 @@ export {
   createDurableLLMExecutionStep,
   createDurableToolCallStep,
   createDurableLLMMappingStep,
+  createDurableIsTaskCompleteStep,
+  createDurableGoalStep,
 } from './workflows/steps';
 
 // Shared workflow utilities

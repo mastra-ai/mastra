@@ -147,6 +147,110 @@ describeForAllEngines(
       expect(text.length).toBeGreaterThan(0);
     });
 
+    // #26673: the model re-calls a plain tool under a new id and names the original call via
+    // `suspendedToolCallId`. The original suspension must be cleared so later turns stop asking
+    // the model to resume it.
+    it('clears the original suspension when a plain tool is auto-resumed under a new toolCallId', async () => {
+      const askUserTool = createTool({
+        id: 'ask-user',
+        description: 'Asks the user a question',
+        inputSchema: z.object({ question: z.string() }),
+        suspendSchema: z.object({ question: z.string() }),
+        resumeSchema: z.object({ answer: z.string() }),
+        execute: async (inputData, context) => {
+          if (!context?.agent?.resumeData) {
+            return context?.agent?.suspend({ question: inputData.question });
+          }
+          return { answer: context.agent.resumeData.answer };
+        },
+      });
+
+      const sharedMemory = new MockMemory();
+      const shared = await createSharedAgent(getMock(), {
+        tools: { askUserTool },
+        memory: sharedMemory,
+        defaultOptions: { autoResumeSuspendedTools: true },
+        engine,
+      });
+      const threadId = globalThis.crypto.randomUUID();
+      const resourceId = globalThis.crypto.randomUUID();
+
+      const first = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Book a room for me',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.onMessage(/book/i, {
+            toolCalls: [{ id: 'call-book', name: 'ask-user', arguments: { question: 'Which color?' } }],
+          });
+        },
+        collectChunks: true,
+      });
+      expect(first.chunks!.some(c => c.type === 'tool-call-suspended')).toBe(true);
+
+      const second = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Blue please',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            {
+              toolCalls: [
+                {
+                  id: 'call-book-2',
+                  name: 'ask-user',
+                  arguments: {
+                    question: 'Which color?',
+                    suspendedToolCallId: 'call-book',
+                    resumeData: { answer: 'blue' },
+                  },
+                },
+              ],
+            },
+          );
+          llm.on({ endpoint: 'chat', toolCallId: 'call-book-2', hasToolResult: true }, { content: 'Booked in blue.' });
+        },
+        collectChunks: true,
+      });
+
+      const acks = second.chunks!.filter(c => c.type === 'tool-call-resumed');
+      expect(acks.map(c => (c as any).payload.toolCallId)).toEqual(['call-book']);
+      const result = second.chunks!.find(c => c.type === 'tool-result') as any;
+      expect(result?.payload.result).toEqual({ answer: 'blue' });
+
+      const { messages } = await sharedMemory.recall({ threadId, resourceId });
+      const remaining = messages.flatMap(m => Object.keys((m.content.metadata as any)?.suspendedTools ?? {}));
+      expect(remaining).toEqual([]);
+
+      const third = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        sharedAgent: shared,
+        prompt: 'Thanks, anything else?',
+        memory: sharedMemory,
+        threadId,
+        resourceId,
+        fixtures: llm => {
+          llm.on({ endpoint: 'chat' }, { content: 'Nothing else.' });
+        },
+      });
+      const lastRequest = third.requests[third.requests.length - 1];
+      const systemText = (lastRequest?.body?.messages ?? [])
+        .filter((m: any) => m.role === 'system')
+        .map((m: any) => (typeof m.content === 'string' ? m.content : JSON.stringify(m.content)))
+        .join('\n');
+      expect(systemText).not.toContain('suspended tools');
+    });
+
     it('does NOT auto-resume when autoResumeSuspendedTools is false', async () => {
       let toolExecuted = false;
 

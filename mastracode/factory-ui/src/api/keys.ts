@@ -1,3 +1,5 @@
+import type { WorkspaceChangesScope } from './types';
+
 /**
  * Stable, scoped React Query keys for the settings API.
  *
@@ -17,7 +19,8 @@ export const INITIAL_THREAD_MESSAGE_LIMIT = 100;
 
 export interface AvailableModelsFilter {
   factoryProjectId?: string;
-  scope?: 'user';
+  scope?: 'org' | 'user';
+  sessionId?: string;
   resourceId?: string;
   threadId?: string;
 }
@@ -50,8 +53,6 @@ export const queryKeys = {
     ['github', 'pr', githubProjectId ?? null, number ?? null] as const,
   repositorySettings: (projectRepositoryId: string | undefined) =>
     ['source-control', 'repository-settings', projectRepositoryId ?? null] as const,
-  githubCommits: (projectRepositoryId: string | undefined, limit: number) =>
-    ['github', 'commits', projectRepositoryId ?? null, limit] as const,
   gitlabStatus: (baseUrl: string) => ['gitlab', 'status', baseUrl] as const,
   gitlabProjects: (baseUrl: string) => ['gitlab', 'projects', baseUrl] as const,
   gitlabIssuesAll: (baseUrl: string) => ['gitlab', 'issues', baseUrl] as const,
@@ -126,15 +127,8 @@ export const queryKeys = {
     ['factory', 'decisions', githubProjectId ?? null] as const,
   factoryDecisions: (githubProjectId: string | undefined, statusKey: string) =>
     ['factory', 'decisions', githubProjectId ?? null, statusKey] as const,
-  factoryAttentionRoot: (factoryProjectId: string | undefined) =>
-    ['factory', 'attention', factoryProjectId ?? null] as const,
-  factoryAttention: (factoryProjectId: string | undefined, view: string, limit: number, group = 'all') =>
-    [...queryKeys.factoryAttentionRoot(factoryProjectId), view, limit, group] as const,
-  factorySupervisorHealth: (factoryProjectId: string | undefined) =>
-    ['factory', 'supervisor', 'health', factoryProjectId ?? null] as const,
   factoryAudit: (githubProjectId: string | undefined, group: string, actorKey?: string) =>
     ['factory', 'audit', githubProjectId ?? null, group, actorKey ?? null] as const,
-  factoryAuditPortal: () => ['factory', 'audit-portal'] as const,
   sessions: (factoryId: string | undefined) => ['sessions', factoryId ?? null] as const,
   userSession: (sessionId: string | undefined) => ['user-session', sessionId ?? null] as const,
   providers: () => ['providers'] as const,
@@ -142,88 +136,63 @@ export const queryKeys = {
     filter ? (['available-models', filter] as const) : (['available-models'] as const),
   customProviders: () => ['custom-providers'] as const,
   defaultModel: () => ['default-model'] as const,
-  om: (resourceId: string | undefined, scope?: string, factoryId?: string) =>
-    ['om', resourceId ?? null, scope ?? null, factoryId ?? null] as const,
-  thinkingConfig: () => ['thinking-config'] as const,
+  om: (sessionId: string | undefined, factoryId?: string) => ['om', sessionId ?? null, factoryId ?? null] as const,
   factorySkills: () => ['factory', 'skills'] as const,
   fsList: (path: string | undefined) => ['fs-list', path ?? null] as const,
   artifactsList: (path: string | undefined) => ['artifacts-list', path ?? null] as const,
   workspaceRenderedList: (workspacePath: string | undefined, renderedRoot: string | undefined) =>
     ['workspace-rendered-list', workspacePath ?? null, renderedRoot ?? null] as const,
-  workspaceFiles: (workspacePath: string | undefined, threadId: string | undefined) =>
-    ['workspace-files', workspacePath ?? null, threadId ?? null] as const,
+  workspaceTreeScope: (workspacePath: string | undefined) => ['workspace-tree', workspacePath ?? null] as const,
+  workspaceTree: (workspacePath: string | undefined, path: string) =>
+    ['workspace-tree', workspacePath ?? null, path] as const,
   workspaceFileScope: (workspacePath: string | undefined) => ['workspace-file', workspacePath ?? null] as const,
-  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined, threadId?: string) =>
-    ['workspace-file', workspacePath ?? null, filePath ?? null, threadId ?? null] as const,
+  workspaceFile: (workspacePath: string | undefined, filePath: string | undefined) =>
+    ['workspace-file', workspacePath ?? null, filePath ?? null] as const,
   // Keyed by toolCallId so each plan (re)submission fetches the file fresh
   // instead of reusing the previous submission's cached content.
   planFile: (workspacePath: string | undefined, filePath: string | undefined, toolCallId: string | undefined) =>
     ['plan-file', workspacePath ?? null, filePath ?? null, toolCallId ?? null] as const,
   workspaceChanges: (workspacePath: string | undefined) => ['workspace-changes', workspacePath ?? null] as const,
-  workspaceDiff: (
-    workspacePath: string | undefined,
-    filePath: string | undefined,
-    previousFilePath: string | undefined,
-  ) => ['workspace-changes', workspacePath ?? null, 'diff', filePath ?? null, previousFilePath ?? null] as const,
-  // Sessions are scoped per worktree (projectPath), so every session-derived key
-  // includes the projectPath — two worktrees over the same resourceId are
-  // independent sessions with independent state.
-  agentControllerSession: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, projectPath ?? null] as const,
+  workspacePatches: (workspacePath: string | undefined, scope: WorkspaceChangesScope) =>
+    ['workspace-changes', workspacePath ?? null, 'patches', scope] as const,
+  // Session-derived keys are addressed by the session id: sessions that share a
+  // memory resource (a Factory's runs, a user's sessions) keep independent state.
+  agentControllerSession: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'sessions', sessionId ?? null] as const,
   // Keep connection state outside agentControllerSession: mutation hooks invalidate that prefix,
   // and a sync refetch would bump dataUpdatedAt and wipe the live transcript.
-  agentControllerConnection: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => ['agent-controller', agentControllerId ?? null, 'connection', resourceId ?? null, projectPath ?? null] as const,
-  agentControllerConnectionInit: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath), 'init'] as const,
+  agentControllerConnection: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'connection', sessionId ?? null] as const,
+  agentControllerConnectionInit: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerConnection(agentControllerId, sessionId), 'init'] as const,
   agentControllerConnectionState: (
     agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
+    sessionId: string | undefined,
     threadId?: string,
   ) =>
     [
-      ...queryKeys.agentControllerConnection(agentControllerId, resourceId, projectPath),
+      ...queryKeys.agentControllerConnection(agentControllerId, sessionId),
       'state',
       ...(threadId ? [threadId] : []),
     ] as const,
   // Session state must stay out of the key: it would reset the query on navigation, and a reset reads as every run going idle.
   agentControllerActivity: (agentControllerId: string | undefined, baseUrl: string) =>
     ['agent-controller', agentControllerId ?? null, 'activity', baseUrl] as const,
-  agentControllerSettings: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'settings'] as const,
-  agentControllerPermissions: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'permissions'] as const,
-  agentControllerThreads: (
-    agentControllerId: string | undefined,
-    resourceId: string | undefined,
-    projectPath: string | undefined,
-  ) => [...queryKeys.agentControllerSession(agentControllerId, resourceId, projectPath), 'threads'] as const,
-  // Prefix over every thread's messages for a resource — invalidation target
-  // when an SSE gap may have dropped events for any thread of the session.
-  agentControllerResourceThreadMessages: (agentControllerId: string | undefined, resourceId: string | undefined) =>
-    ['agent-controller', agentControllerId ?? null, 'sessions', resourceId ?? null, 'threads'] as const,
-  // Thread ids are unique across the resource, so messages are keyed by threadId
-  // alone (no projectPath) — caches survive worktree switches and seeding does
-  // not need to know the thread's scope.
+  agentControllerSettings: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'settings'] as const,
+  agentControllerPermissions: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'permissions'] as const,
+  agentControllerThreads: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    [...queryKeys.agentControllerSession(agentControllerId, sessionId), 'threads'] as const,
+  // Prefix over every thread's messages for a session — invalidation target
+  // when an SSE gap may have dropped events for any thread of the session. Kept
+  // outside agentControllerSession so session invalidation leaves transcripts alone.
+  agentControllerSessionThreadMessages: (agentControllerId: string | undefined, sessionId: string | undefined) =>
+    ['agent-controller', agentControllerId ?? null, 'thread-messages', sessionId ?? null] as const,
+  // Thread ids are unique, so messages are keyed by session and thread id.
   agentControllerThreadMessages: (
     agentControllerId: string | undefined,
-    resourceId: string | undefined,
+    sessionId: string | undefined,
     threadId: string | undefined,
     // The transcript is fetched as a bounded newest-N window; the limit is part
     // of the cache key so read (`useAgentControllerThreadMessages`) and write
@@ -233,7 +202,7 @@ export const queryKeys = {
     limit?: number,
   ) =>
     [
-      ...queryKeys.agentControllerResourceThreadMessages(agentControllerId, resourceId),
+      ...queryKeys.agentControllerSessionThreadMessages(agentControllerId, sessionId),
       threadId ?? null,
       'messages',
       ...(limit === undefined ? [] : [limit]),

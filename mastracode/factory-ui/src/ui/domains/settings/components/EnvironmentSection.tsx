@@ -17,7 +17,8 @@ import { settingsSectionPath } from '../settingsSections';
 import { BuildHistoryBlock } from './environment/BuildHistoryBlock';
 import { BuildStatusBlock } from './environment/BuildStatusBlock';
 import { BuildTriggersRows } from './environment/BuildTriggersBlock';
-import { RepositoriesBlock, type RepositoryProviders } from './environment/RepositoriesBlock';
+import { RepositoriesBlock } from './environment/RepositoriesBlock';
+import type { RepositoryProviders } from './environment/RepositoriesBlock';
 import { providerLine, SandboxBlock } from './environment/SandboxBlock';
 import { WorkspaceSetupBlock } from './environment/WorkspaceSetupBlock';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -76,7 +77,7 @@ function EnvironmentBlocks({
       <Notice variant="info">
         Link a repository first.{' '}
         <Link to={settingsSectionPath(factoryId, 'repositories')} className="underline">
-          Go to Repositories
+          Go to repositories
         </Link>
       </Notice>
     );

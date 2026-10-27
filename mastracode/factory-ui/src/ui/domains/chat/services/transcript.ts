@@ -3,6 +3,7 @@ import type { ActivityStatus } from '@mastra/playground-ui/components/ai/activit
 import type { AgentControllerEvent, AgentControllerTaskSnapshot } from '@mastra/client-js';
 import { isKnownAgentControllerEvent } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
+import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 
 import { sentByOther } from './message-author';
 
@@ -38,6 +39,7 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
+  error?: MastraErrorPart['error'];
 }
 
 export interface ApprovalPrompt {
@@ -170,8 +172,16 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
           ),
         ],
       };
-    case 'mergeWindow':
-      return mergeServerWindow(state, action.messages);
+    case 'mergeWindow': {
+      const merged = dropNoticesOfSavedErrors(mergeServerWindow(state, action.messages), action.messages);
+      // `pending` is otherwise cleared only by live stream events. When the
+      // stream missed the run (dropped, or the tab was hidden), the refetched
+      // window is what brings the reply in, so it has to clear `pending` too.
+      // Only a stored reply counts: a live, still-empty placeholder is not one.
+      if (!merged.pending) return merged;
+      const stored = new Set(claimOnScreenEntries(merged.entries, action.messages).values());
+      return answeredLatestUser(merged.entries, stored) ? { ...merged, pending: false } : merged;
+    }
     case 'clearPending':
       return { ...state, pending: false };
     case 'failLocalUser':
@@ -391,15 +401,27 @@ function applyEvent(state: TranscriptState, event: AgentControllerEvent, viewerI
 
     case 'info':
       return pushNotice(state, 'info', event.message);
-    case 'error':
-      return pushNotice(state, 'error', describeErrorEvent(event));
+    case 'error': {
+      const error = errorEventIdentity(event);
+      return pushNotice(state, 'error', error.message, error);
+    }
 
     default:
       return state;
   }
 }
 
-function describeErrorEvent(event: { error: { message?: string } | string; errorType?: string }): string {
+interface RunErrorEvent {
+  error: Partial<MastraErrorPart['error']> | string;
+  errorType?: string;
+}
+
+function errorEventIdentity(event: RunErrorEvent): MastraErrorPart['error'] {
+  const wire = typeof event.error === 'object' ? event.error : {};
+  return { ...wire, name: wire.name ?? 'Error', message: describeErrorEvent(event) };
+}
+
+function describeErrorEvent(event: RunErrorEvent): string {
   const message = typeof event.error === 'string' ? event.error : event.error?.message;
   if (message) return message;
   if (event.errorType) return `Run failed (${event.errorType}). Check the server logs for details.`;
@@ -517,6 +539,60 @@ function mergeServerWindow(state: TranscriptState, messages: MastraDBMessage[]):
   entries.push(...reconciled.entries.slice(cursor), ...messagesToEntries(missing));
 
   return { ...reconciled, entries };
+}
+
+function dropNoticesOfSavedErrors(state: TranscriptState, messages: MastraDBMessage[]): TranscriptState {
+  const savedByTurn = savedErrorsByTurn(state.entries, messages);
+  if (savedByTurn.size === 0) return state;
+
+  const entries: TimelineEntry[] = [];
+  let turn = -1;
+  for (const [index, entry] of state.entries.entries()) {
+    if (opensTurn(entry)) turn = index;
+    if (entry.kind === 'notice' && isSavedError(savedByTurn.get(turn), entry.error)) continue;
+    entries.push(entry);
+  }
+  return entries.length === state.entries.length ? state : { ...state, entries };
+}
+
+function savedErrorsByTurn(
+  entries: TimelineEntry[],
+  messages: MastraDBMessage[],
+): Map<number, MastraErrorPart['error'][]> {
+  const byTurn = new Map<number, MastraErrorPart['error'][]>();
+  if (!messages.some(message => message.content.parts.some(part => part.type === 'error'))) return byTurn;
+
+  let turn = -1;
+  for (const message of messages) {
+    if (toMessageEntry(message).message.role === 'user') {
+      turn = indexOfTurnOpener(entries, message);
+      continue;
+    }
+    if (turn === -1) continue;
+    const errors = message.content.parts.flatMap(part => (part.type === 'error' ? [part.error] : []));
+    if (errors.length > 0) byTurn.set(turn, [...(byTurn.get(turn) ?? []), ...errors]);
+  }
+  return byTurn;
+}
+
+function indexOfTurnOpener(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const index = entries.findIndex(
+    entry => entry.kind === 'message' && (entry.id === message.id || entry.message.id === message.id),
+  );
+  if (index !== -1) return index;
+  const texts = new Set(drawableTexts(message));
+  const copy = (entry: TimelineEntry) => isUnclaimedOptimisticCopy(entry, texts);
+  const first = entries.findIndex(copy);
+  return first === entries.findLastIndex(copy) ? first : -1;
+}
+
+function opensTurn(entry: TimelineEntry): boolean {
+  return entry.kind === 'message' && entry.message.role === 'user';
+}
+
+function isSavedError(saved: MastraErrorPart['error'][] | undefined, error: NoticeEntry['error']): boolean {
+  if (!saved || !error) return false;
+  return saved.some(part => part.name === error.name && part.message === error.message);
 }
 
 // SSE uses one assistant message per run; storage uses one per step.
@@ -802,6 +878,7 @@ function upsertMessage(
   if (message.role === 'assistant' && idx === -1) idx = indexOfSameTurn(entries, message);
   if (message.role === 'signal' && idx === -1 && !sentByOther(message, viewerId)) {
     idx = claimOnScreenEntries(entries, [message], isUnconfirmedSteer).get(message) ?? -1;
+    if (idx === -1) idx = indexOfUnclaimedOptimisticCopy(entries, message);
   }
   const prev = idx !== -1 ? entries[idx] : undefined;
   const prevEntry = prev?.kind === 'message' ? prev : undefined;
@@ -809,7 +886,15 @@ function upsertMessage(
     message.role === 'assistant'
       ? withoutToolPartsDrawnElsewhere(preserveRuntimeToolParts(message, prevEntry?.message), entries, idx)
       : undefined;
-  const nextMessage = filtered?.message ?? preserveOptimisticUserContent(message, prevEntry?.message, viewerId);
+  // The viewer's own message sent from another client (e.g. the TUI) has no optimistic copy to hide behind.
+  const ownSignalWithoutEcho = message.role === 'signal' && idx === -1;
+  const nextMessage =
+    filtered?.message ??
+    preserveOptimisticUserContent(
+      ownSignalWithoutEcho ? withRenderableSignalText(message) : message,
+      prevEntry?.message,
+      viewerId,
+    );
   const canonicalEntry = toMessageEntry(nextMessage, { streaming, runtimeTools: prevEntry?.runtimeTools, viewerId });
   // Changing the entry id remounts open cards.
   const entry = prevEntry
@@ -820,6 +905,22 @@ function upsertMessage(
   else entries[idx] = entry;
   const next = { ...state, entries };
   return message.role === 'assistant' ? reconcileToolResults(next, [message]) : next;
+}
+
+// A composer bubble keeps its local message id until its echo signal claims it, so each send is consumed once.
+function indexOfUnclaimedOptimisticCopy(entries: TimelineEntry[], message: MastraDBMessage): number {
+  const texts = new Set(drawableTexts(message));
+  return entries.findIndex(entry => isUnclaimedOptimisticCopy(entry, texts));
+}
+
+function isUnclaimedOptimisticCopy(entry: TimelineEntry, texts: Set<string>): boolean {
+  return (
+    entry.kind === 'message' &&
+    entry.message.role === 'user' &&
+    entry.id.startsWith('local-') &&
+    entry.message.id === entry.id &&
+    drawableTexts(entry.message).some(text => texts.has(text))
+  );
 }
 
 function withoutToolPartsDrawnElsewhere(
@@ -841,7 +942,7 @@ function withoutToolPartsDrawnElsewhere(
   });
   if (sourcePartIndexes.length === message.content.parts.length) return { message };
 
-  const parts = sourcePartIndexes.map(index => message.content.parts[index]!);
+  const parts = sourcePartIndexes.map(index => message.content.parts[index]);
   return { message: { ...message, content: { ...message.content, parts } }, sourcePartIndexes };
 }
 
@@ -919,6 +1020,16 @@ function latestAssistantIndex(entries: TimelineEntry[]): number {
     if (entry.kind === 'message' && entry.message.role === 'assistant') return i;
   }
   return -1;
+}
+
+function answeredLatestUser(entries: TimelineEntry[], stored: Set<number>): boolean {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.kind !== 'message') continue;
+    if (entry.message.role === 'assistant' && stored.has(i)) return true;
+    if (entry.message.role === 'user') return false;
+  }
+  return false;
 }
 
 function withTool(
@@ -1022,9 +1133,13 @@ function pushPrompt(state: TranscriptState, prompt: PromptEntry): TranscriptStat
   return { ...state, entries: [...state.entries, prompt] };
 }
 
-function pushNotice(state: TranscriptState, level: 'info' | 'error', text: string): TranscriptState {
-  return {
-    ...state,
-    entries: [...state.entries, { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text }],
-  };
+function pushNotice(
+  state: TranscriptState,
+  level: 'info' | 'error',
+  text: string,
+  error?: MastraErrorPart['error'],
+): TranscriptState {
+  const notice: NoticeEntry = { kind: 'notice', id: `notice-${Date.now()}-${noticeSeq++}`, level, text };
+  if (error) notice.error = error;
+  return { ...state, entries: [...state.entries, notice] };
 }

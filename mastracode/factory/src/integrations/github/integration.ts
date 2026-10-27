@@ -40,6 +40,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../capabilities/intake.js';
 import type {
+  CommitCheck,
   PullRequest,
   PullRequestComment,
   Review,
@@ -55,6 +56,7 @@ import { reconcileInterval, reconciliationEnabled } from './reconciliation-confi
 import { buildGithubRoutes, ingestLinkedRepositoryBacklog } from './routes.js';
 import { attachGithubReconciler, attachGithubRules } from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
+import type { GitIdentity } from './sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -63,9 +65,11 @@ import {
 import { settleOrAbort } from './settle-or-abort.js';
 import type { GithubSubscriptionStorage } from './subscriptions.js';
 
-type InputOf<TMethod extends keyof VersionControl> = VersionControl[TMethod] extends (input: infer TInput) => unknown
-  ? TInput
-  : never;
+type InputOf<TMethod extends keyof VersionControl> =
+  NonNullable<VersionControl[TMethod]> extends (input: infer TInput) => unknown ? TInput : never;
+
+const GITHUB_CHECK_TITLE_LIMIT = 255;
+const GITHUB_CHECK_TEXT_LIMIT = 65_535;
 
 /**
  * Normalize a PEM private key supplied via env. Env tooling tends to mangle
@@ -369,6 +373,7 @@ export class GithubIntegration implements FactoryIntegration {
     listRequestedReviewers: input => this.#listRequestedReviewers(input),
     requestReviewers: input => this.#requestReviewers(input),
     removeRequestedReviewers: input => this.#removeReviewers(input),
+    publishCommitCheck: input => this.#publishCommitCheck(input),
   };
   /**
    * The OAuth/install flow round-trips a signed `state` through GitHub, so a
@@ -422,6 +427,11 @@ export class GithubIntegration implements FactoryIntegration {
   /** App slug — the URL name used to build the install URL. */
   get slug(): string {
     return this.#slug;
+  }
+
+  /** Commit authorship for repositories opened by this App. */
+  get gitIdentity(): GitIdentity | undefined {
+    return { login: `${this.#slug}[bot]` };
   }
 
   /** Whether a GitHub login belongs to this integration's App. */
@@ -1109,6 +1119,38 @@ export class GithubIntegration implements FactoryIntegration {
       team_reviewers: input.teams ?? [],
     });
     return parseRequestedReviewers(data);
+  }
+
+  /**
+   * Always creates a new check run: GitHub shows the latest run per app and
+   * name on a commit, so a completed run supersedes an earlier in-progress one.
+   */
+  async #publishCommitCheck(input: InputOf<'publishCommitCheck'>): Promise<CommitCheck> {
+    const { octokit, parts } = this.#repositoryClient(input.connection, input.sourceId);
+    const { status } = input;
+    const { data } = await octokit.checks
+      .create({
+        ...parts,
+        name: input.name,
+        head_sha: input.headSha,
+        ...(status === 'in-progress'
+          ? { status: 'in_progress' as const }
+          : { status: 'completed' as const, conclusion: status, completed_at: new Date().toISOString() }),
+        output: {
+          title: input.title.slice(0, GITHUB_CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, GITHUB_CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, GITHUB_CHECK_TEXT_LIMIT) } : {}),
+        },
+      })
+      .catch((error: unknown) => {
+        if ((error as { status?: number } | null)?.status === 403) {
+          throw new Error(
+            'github cannot publish commit checks: the GitHub App lacks the "checks: write" permission; nothing was published.',
+          );
+        }
+        throw error;
+      });
+    return { id: String(data.id), name: data.name, headSha: data.head_sha, status: input.status, url: data.html_url };
   }
 
   /** Add labels to an issue (deduplicated; no-op on empty/malformed input). */

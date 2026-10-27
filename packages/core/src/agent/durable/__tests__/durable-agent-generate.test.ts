@@ -6,10 +6,12 @@
  * the underlying `MastraModelOutput` into the shared `FullOutput` shape, so
  * the tests focus on:
  *
- *  - returning a populated `FullOutput` for a simple text turn
- *  - re-throwing errors instead of returning them on `error`
- *  - generate → suspend (requireToolApproval) → resumeGenerate round-trip
- *  - cleanup happens (registry entry removed) on success and on error
+ *  - generate → suspend (requireToolApproval) → resumeGenerate round-trip,
+ *    with both the Agent and the deprecated argument order
+ *  - cleanup happens (registry entry removed) on success
+ *
+ * FullOutput text/usage and error rethrow run on every engine in the aimock
+ * scenarios usage-reporting and callbacks-default-options.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -100,25 +102,6 @@ describe('DurableAgent.generate()', () => {
     await pubsub.close();
   });
 
-  it('returns a FullOutput with text + usage for a plain text turn', async () => {
-    const model = createTextModel('Hello from durable generate');
-    const baseAgent = new Agent({
-      id: 'generate-text-agent',
-      name: 'Generate Text Agent',
-      instructions: 'Be brief.',
-      model: model as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    const out = await durableAgent.generate('hi');
-
-    expect(out.text).toBe('Hello from durable generate');
-    expect(out.finishReason).toBe('stop');
-    expect(out.usage?.totalTokens).toBe(18);
-    expect(out.error).toBeUndefined();
-    expect(out.runId).toBeDefined();
-  });
-
   it('cleans up the registry entry after success', async () => {
     const model = createTextModel('done');
     const baseAgent = new Agent({
@@ -135,23 +118,6 @@ describe('DurableAgent.generate()', () => {
     // generate() owns the run and tears it down on its way out.
     expect(globalRunRegistry.get(out.runId!)).toBeUndefined();
   });
-
-  it('rethrows MastraModelOutput errors instead of swallowing them on FullOutput.error', async () => {
-    const failingModel = new MockLanguageModelV2({
-      doStream: async () => {
-        throw new Error('model exploded');
-      },
-    });
-    const baseAgent = new Agent({
-      id: 'generate-error-agent',
-      name: 'Generate Error Agent',
-      instructions: 'Test errors',
-      model: failingModel as LanguageModelV2,
-    });
-    const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
-
-    await expect(durableAgent.generate('boom')).rejects.toThrow(/model exploded/);
-  });
 });
 
 describe('DurableAgent.resumeGenerate()', () => {
@@ -165,7 +131,10 @@ describe('DurableAgent.resumeGenerate()', () => {
     await pubsub.close();
   });
 
-  it('drives a generate → tool-approval suspend → resumeGenerate round-trip', async () => {
+  it.each([
+    ['Agent order: resumeGenerate(resumeData, { runId })', 'agent'],
+    ['deprecated order: resumeGenerate(runId, resumeData)', 'legacy'],
+  ] as const)('drives a generate → tool-approval suspend → resumeGenerate round-trip (%s)', async (_label, order) => {
     const model = createToolCallThenTextModel('searchTool', { query: 'mastra' }, 'Found: mastra');
     const searchTool = createTool({
       id: 'searchTool',
@@ -202,7 +171,11 @@ describe('DurableAgent.resumeGenerate()', () => {
     expect(first.runId).toBeDefined();
 
     // Second turn: approve and drain to a final answer via resumeGenerate.
-    const second = await durableAgent.resumeGenerate(first.runId!, { approved: true });
+    // Code typed against the base `Agent` must be able to resume a durable agent.
+    const second =
+      order === 'agent'
+        ? await (durableAgent as unknown as Agent).resumeGenerate({ approved: true }, { runId: first.runId! })
+        : await durableAgent.resumeGenerate(first.runId!, { approved: true });
 
     expect(second.text).toBe('Found: mastra');
     expect(second.finishReason).toBe('stop');

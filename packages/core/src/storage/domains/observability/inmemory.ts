@@ -80,6 +80,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   CreateSpanRecord,
   GetRootSpanArgs,
@@ -1175,6 +1176,17 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    const updated: BatchUpdateUnendedSpansResponse['updated'] = [];
+    for (const record of args.records) {
+      const span = this.db.traces.get(record.traceId)?.spans[record.spanId];
+      if (!span || span.endedAt != null) continue;
+      await this.updateSpan(record);
+      updated.push({ traceId: record.traceId, spanId: record.spanId });
+    }
+    return { updated };
+  }
+
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
@@ -1323,6 +1335,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
     if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
     if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
+    if (Array.isArray(filters.experimentIds) && !filters.experimentIds.includes(m.experimentId)) return false;
     if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && m.environment !== filters.environment) return false;
     const metricExecutionSource = m.executionSource ?? m.source ?? null;

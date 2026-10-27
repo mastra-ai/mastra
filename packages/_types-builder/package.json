@@ -1,6 +1,6 @@
 {
   "name": "@internal/types-builder",
-  "version": "0.0.118",
+  "version": "0.0.120",
   "description": "",
   "type": "module",
   "main": "src/index.js",
@@ -28,10 +28,10 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@microsoft/api-extractor": "^7.57.7",
+    "@microsoft/api-extractor": "catalog:",
+    "local-pkg": "^1.2.1",
+    "resolve.exports": "^2.0.4",
     "tinyglobby": "^0.2.17",
-    "local-pkg": "^1.1.2",
-    "resolve.exports": "^2.0.3",
     "ts-morph": "^27.0.2",
     "typescript": "catalog:ts6"
   },

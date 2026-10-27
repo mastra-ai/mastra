@@ -24,7 +24,7 @@ import { isRunLocalTopic } from '../events/topics';
 import type { Event, EventCallback } from '../events/types';
 import type { Harness } from '../harness';
 import { AvailableHooks, deregisterHook, registerHook } from '../hooks';
-import { Knowledge } from '../knowledge';
+import type { Knowledge } from '../knowledge';
 import { LicenseClient } from '../license';
 import type { MastraModelGatewayInterface } from '../llm/model/gateways';
 import { getGatewayId } from '../llm/model/gateways';
@@ -46,6 +46,7 @@ import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
+  hasPendingDeferredNotifications,
   NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
 } from '../notifications/workflow';
 import type {
@@ -805,6 +806,7 @@ const DURABLE_RECOVERY_RECHECK_JITTER_MS = 5_000;
 // DURABLE_RECOVERY_RECHECK_MAX_RETRIES times.
 const DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS = 30_000;
 const DURABLE_RECOVERY_RECHECK_MAX_RETRIES = 5;
+const DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS = 30_000;
 
 /**
  * Registers and coordinates agents, workflows, storage, and other Mastra services.
@@ -875,7 +877,7 @@ export class Mastra<
     durableAgents: 'off',
   };
   #durableRecoveryRechecks = new Map<string, ReturnType<typeof setTimeout>>();
-  #durableRecoveryRechecksInFlight = new Set<Promise<void>>();
+  #durableRecoveryRechecksInFlight = new Set<Promise<unknown>>();
   #shuttingDown = false;
   #scorers?: TScorers;
   #classifiers?: TClassifiers;
@@ -963,9 +965,8 @@ export class Mastra<
    */
   #schedulerRequested = false;
   /**
-   * Set once `__ensureNotificationDispatchReady()` has upserted the dispatcher
-   * schedule row and requested the scheduler. Makes repeated deferred
-   * notification creates free after the first one.
+   * Set once `__ensureNotificationDispatchReady()` has requested the
+   * scheduler in this process, so later deferrals only verify the row.
    */
   #notificationDispatchReady = false;
   /**
@@ -1098,8 +1099,8 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1107,7 +1108,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1120,8 +1121,13 @@ export class Mastra<
                   if (rId && rId.startsWith('sched_wf_')) return true;
                   if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
-                })();
-                if (isOwnedHere) {
+                };
+                if (isOwnedHere()) {
+                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                    );
+                  }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
                   // transport. Say so instead of hanging silently.
@@ -1711,16 +1717,15 @@ export class Mastra<
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
       this.#loggerExplicit = true;
+    } else if (config?.logger) {
+      logger = config.logger;
+      this.#loggerExplicit = true;
     } else {
-      if (config?.logger) {
-        logger = config.logger;
-        this.#loggerExplicit = true;
-      } else {
-        const levelOnEnv =
-          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
-      }
+      const levelOnEnv =
+        process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+      logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
     }
+
     this.#logger = logger;
 
     this.#idGenerator = config?.idGenerator;
@@ -2426,6 +2431,10 @@ export class Mastra<
     }
 
     await this.#registerFsAgentSchedules(schedulesStore, allRows);
+
+    // A running scheduler sleeps until its earliest fire; re-arm it for rows
+    // registered after it started. No-op before it starts.
+    this.#findSchedulerWorker()?.scheduler?.wake();
   }
 
   /**
@@ -3986,16 +3995,16 @@ export class Mastra<
    * Whether this internal workflow event must stay in this process. A
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
-   * stay local while this process runs workflow workers (so runs stay pinned
-   * to the process that started them) and only cross processes when it
-   * can't run them itself. Its `workflows-finish` events always cross, since
+   * stay local on stores without atomic occurrence guards. Guarded stores
+   * allow workers to publish reclaimable continuations through the broker.
+   * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string, guarded: boolean): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
-    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
+    return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -4236,20 +4245,71 @@ export class Mastra<
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
-    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, async runSnapshot => {
-      try {
-        const workflow = this.getWorkflowById(runSnapshot.workflowName);
-        const run = await workflow.createRun({ runId: runSnapshot.runId });
-        await run.restart();
-        this.#logger.debug('Restarted workflow run', { workflow: runSnapshot.workflowName, runId: runSnapshot.runId });
-      } catch (error) {
-        this.#logger.error('Failed to restart workflow run', {
-          workflow: runSnapshot.workflowName,
-          runId: runSnapshot.runId,
-          error,
+    await runWithConcurrency(runs, this.#recoveryConfig.workflowConcurrency, runSnapshot =>
+      this.#restartWorkflowRun(runSnapshot.workflowName, runSnapshot.runId),
+    );
+  }
+
+  /**
+   * Restarts one active run. A run whose ownership lease is still live belongs to another
+   * process (or to this one before a crash), so it is skipped and re-checked once the lease
+   * could have lapsed: a live owner keeps renewing it, an orphaned run is then recovered.
+   * A re-check that throws is retried with backoff; `recheck.failures` counts the
+   * consecutive ones.
+   */
+  async #restartWorkflowRun(workflowName: string, runId: string, recheck?: { failures: number }): Promise<void> {
+    try {
+      const workflow = this.getWorkflowById(workflowName);
+      const run = await workflow.createRun({ runId });
+      // A re-check can find the run already settled or suspended by its owner.
+      if (recheck && run.workflowRunStatus !== 'running' && run.workflowRunStatus !== 'waiting') return;
+      await run.restart();
+      this.#logger.debug('Restarted workflow run', { workflow: workflowName, runId });
+    } catch (error) {
+      if (error instanceof MastraError && error.id === 'WORKFLOW_RESTART_RUN_OWNED') {
+        this.#logger.debug('Skipped restarting workflow run owned by a live process', {
+          workflow: workflowName,
+          runId,
         });
+        const leaseExpiresAt = error.details?.leaseExpiresAt;
+        const retryAt = typeof leaseExpiresAt === 'string' ? Date.parse(leaseExpiresAt) : NaN;
+        this.#scheduleWorkflowRecoveryRecheck(workflowName, runId, Number.isNaN(retryAt) ? Date.now() : retryAt);
+        return;
       }
-    });
+      const context = { workflow: workflowName, runId, error };
+      if (!recheck) {
+        this.#logger.error('Failed to restart workflow run', context);
+        return;
+      }
+      if (recheck.failures >= DURABLE_RECOVERY_RECHECK_MAX_RETRIES) {
+        this.#logger.error(
+          'Failed to re-check workflow run for recovery; leaving it for the next boot or a manual restart()',
+          context,
+        );
+        return;
+      }
+      this.#logger.warn('Failed to re-check workflow run for recovery; retrying', context);
+      this.#scheduleWorkflowRecoveryRecheck(
+        workflowName,
+        runId,
+        Date.now() + DURABLE_RECOVERY_RECHECK_RETRY_BASE_MS * 2 ** recheck.failures,
+        recheck.failures + 1,
+      );
+    }
+  }
+
+  #scheduleWorkflowRecoveryRecheck(workflowName: string, runId: string, retryAt: number, failures = 0): void {
+    if (this.#shuttingDown) return;
+    const key = JSON.stringify(['workflow', workflowName, runId]);
+    clearTimeout(this.#durableRecoveryRechecks.get(key));
+    const delay = Math.max(0, retryAt - Date.now()) + Math.random() * DURABLE_RECOVERY_RECHECK_JITTER_MS;
+    const timer = setTimeout(() => {
+      this.#durableRecoveryRechecks.delete(key);
+      if (this.#shuttingDown) return;
+      void this.#trackDurableRecovery(this.#restartWorkflowRun(workflowName, runId, { failures }));
+    }, delay);
+    timer.unref?.();
+    this.#durableRecoveryRechecks.set(key, timer);
   }
 
   /**
@@ -4317,40 +4377,63 @@ export class Mastra<
       `Recovering active durable-agent runs across ${durableAgents.length} agent${durableAgents.length > 1 ? 's' : ''}`,
     );
 
-    let recovered = 0;
-    let succeeded = 0;
-    let failed = 0;
-    let skipped = 0;
+    return this.#trackDurableRecovery(
+      (async () => {
+        let recovered = 0;
+        let succeeded = 0;
+        let failed = 0;
+        let skipped = 0;
 
-    for (const agent of durableAgents) {
-      try {
-        const result = await agent.recoverActiveRuns();
-        for (const run of result.recovered) {
-          if (run.status === 'skipped') {
-            skipped++;
-            this.#scheduleDurableRecoveryRecheck(agent, run);
-          } else {
-            recovered++;
+        await runWithConcurrency(durableAgents, DEFAULT_RESTART_CONCURRENCY, async agent => {
+          if (this.#shuttingDown) return;
+          try {
+            const result = await agent.recoverActiveRuns();
+            for (const run of result.recovered) {
+              if (run.status === 'skipped') {
+                skipped++;
+                this.#scheduleDurableRecoveryRecheck(agent, run);
+              } else {
+                recovered++;
+              }
+            }
+            succeeded += result.succeeded;
+            failed += result.failed;
+          } catch (error) {
+            this.#logger.error('Failed to recover active runs for durable agent', {
+              agentId: agent.id,
+              error,
+            });
           }
-        }
-        succeeded += result.succeeded;
-        failed += result.failed;
-      } catch (error) {
-        this.#logger.error('Failed to recover active runs for durable agent', {
-          agentId: agent.id,
-          error,
         });
-      }
-    }
 
-    return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
+        return { agents: durableAgents.length, recovered, succeeded, failed, skipped };
+      })(),
+    );
+  }
+
+  #trackDurableRecovery<T>(promise: Promise<T>): Promise<T> {
+    this.#durableRecoveryRechecksInFlight.add(promise);
+    const remove = () => this.#durableRecoveryRechecksInFlight.delete(promise);
+    void promise.then(remove, remove);
+    return promise;
+  }
+
+  /** @internal Bound waiting, not execution; shutdown must still drain the original attempt. */
+  __awaitDurableRecoveryAttempt<T>(promise: Promise<T>, description: string): Promise<{ value: T } | undefined> {
+    return this.#awaitBounded(
+      this.#trackDurableRecovery(promise).then(value => ({ value })),
+      DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS,
+      description,
+      `Durable recovery timed out after ${DURABLE_RECOVERY_ATTEMPT_TIMEOUT_MS}ms waiting for ${description}; the attempt continues in the background`,
+    );
   }
 
   /**
-   * Re-check a run another execution drove when it was skipped, once that
-   * execution's claim could have lapsed. Runs this process drives carry no
-   * `retryAt` and are not re-checked. A re-check that throws is retried with
-   * backoff; `failures` counts the consecutive ones.
+   * Re-check skipped runs after a foreign claim could have lapsed or a
+   * recovery wait timed out. Timed-out originals keep their ownership and
+   * defer rechecks until settlement without starting duplicate executions.
+   * A re-check that throws is retried with backoff; `failures` counts the
+   * consecutive ones.
    */
   #scheduleDurableRecoveryRecheck(
     agent: DurableAgentLike,
@@ -5593,6 +5676,8 @@ export class Mastra<
       tools[tool.id] = schemas;
     }
     const classifiers: NonNullable<WorkflowRegistryIndex['classifiers']> = {};
+    const refusedAnswerDescription =
+      "When the model refuses the question, the answer is { type: 'refusal' } with no choice, score, probability, or probabilities.";
     for (const [key, classifier] of Object.entries(this.listClassifiers() ?? {})) {
       const questions = classifier.questions
         ? Object.fromEntries(
@@ -5606,6 +5691,8 @@ export class Mastra<
             ]),
           )
         : undefined;
+      // A decision model may refuse any question. A refused answer is `{ type: 'refusal' }`
+      // with no payload fields, so only `type` is required.
       const answerProperties = questions
         ? Object.fromEntries(
             Object.entries(questions).map(([questionId, question]) => [
@@ -5614,7 +5701,7 @@ export class Mastra<
                 ? {
                     type: 'object',
                     properties: {
-                      type: { type: 'string', enum: ['choice'] },
+                      type: { type: 'string', enum: ['choice', 'refusal'] },
                       choice: { type: 'string', enum: question.choices },
                       probabilities: {
                         type: 'object',
@@ -5622,13 +5709,14 @@ export class Mastra<
                         additionalProperties: false,
                       },
                     },
-                    required: ['type', 'choice'],
+                    required: ['type'],
+                    description: refusedAnswerDescription,
                   }
                 : question.type === 'score'
                   ? {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['score'] },
+                        type: { type: 'string', enum: ['score', 'refusal'] },
                         score: { type: 'number', minimum: question.min, maximum: question.max },
                         probabilities: {
                           type: 'object',
@@ -5641,15 +5729,17 @@ export class Mastra<
                           additionalProperties: false,
                         },
                       },
-                      required: ['type', 'score'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     }
                   : {
                       type: 'object',
                       properties: {
-                        type: { type: 'string', enum: ['boolean'] },
+                        type: { type: 'string', enum: ['boolean', 'refusal'] },
                         probability: { type: 'number', minimum: 0, maximum: 1 },
                       },
-                      required: ['type', 'probability'],
+                      required: ['type'],
+                      description: refusedAnswerDescription,
                     },
             ]),
           )
@@ -5975,7 +6065,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe for cross-process scheduler wakes. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -5992,6 +6082,9 @@ export class Mastra<
         // here would race that loop and start the scheduler twice.
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
+          // A running scheduler sleeps until its earliest fire; the new or
+          // changed schedule may be due sooner.
+          this.#findSchedulerWorker()?.scheduler?.wake();
         }
         await ack?.();
       } catch (err) {
@@ -6005,7 +6098,8 @@ export class Mastra<
     try {
       // Wake events are transient hints; the awaited boot probe below is the
       // durable recovery path. Starting from latest avoids replaying retained
-      // wakes and starting the scheduler when no schedule rows remain.
+      // wakes and starting the scheduler when no schedule rows remain. The
+      // subscription stays wired while the scheduler runs, to re-arm it.
       await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
     } catch (err) {
       // Allow a later startWorkers() call to retry a transient subscribe error.
@@ -6034,10 +6128,16 @@ export class Mastra<
       if (!schedulesStore) return;
 
       const rows = await schedulesStore.listSchedules();
-      // A leftover dispatcher row must not wake the scheduler when dispatch
-      // has since been disabled — nothing would consume it.
-      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
-      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      let hasWork = rows.some(row => row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      // A leftover dispatcher row is only work while deferred notifications
+      // are pending. Otherwise its once-a-minute cron would keep the scheduler
+      // polling storage forever, and nothing would consume it when dispatch
+      // has since been disabled.
+      const dispatchEnabled = this.#notificationDispatchConfig?.enabled !== false;
+      if (!hasWork && dispatchEnabled && rows.some(row => row.id === NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) {
+        const notifications = await this.#storage.getStore('notifications');
+        hasWork = notifications ? await hasPendingDeferredNotifications(notifications) : false;
+      }
       if (hasWork) this.#schedulerRequested = true;
     } catch (err) {
       this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
@@ -6051,13 +6151,17 @@ export class Mastra<
    * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
    * processes that publish notifications without running workers locally.
    *
+   * The row is read on every call rather than memoized: the dispatcher deletes
+   * it once nothing is pending (`__releaseNotificationDispatchIfIdle()`),
+   * possibly from another process, and the next deferral must re-arm it.
+   *
    * @internal
    */
   async __ensureNotificationDispatchReady(): Promise<void> {
-    if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
     if (!this.#storage) return;
 
+    let created = false;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
@@ -6067,6 +6171,7 @@ export class Mastra<
       if (!existing) {
         try {
           await schedulesStore.createSchedule(desired);
+          created = true;
         } catch (err) {
           // Another instance may have created the row concurrently — only
           // rethrow if it's still missing.
@@ -6086,18 +6191,52 @@ export class Mastra<
         }
       }
     } catch (err) {
-      // Leave #notificationDispatchReady unset so the next deferred
-      // notification retries the upsert.
+      // The next deferred notification retries the upsert.
       this.#logger?.warn?.('Failed to ensure notification dispatch schedule', err as any);
       return;
     }
 
+    // Request the scheduler once per process, and wake schedulers everywhere
+    // whenever the row is (re)created.
+    if (this.#notificationDispatchReady && !created) return;
     this.#notificationDispatchReady = true;
     this.#schedulerRequested = true;
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
     await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+  }
+
+  /**
+   * Called by the dispatcher after each pass. When no deferred notification is
+   * pending, deletes the dispatcher schedule row so its cron stops firing and
+   * an idle app stops polling storage. The next deferral re-creates it.
+   *
+   * @internal
+   */
+  async __releaseNotificationDispatchIfIdle(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const [schedulesStore, notifications] = await Promise.all([
+        this.#storage.getStore('schedules'),
+        this.#storage.getStore('notifications'),
+      ]);
+      if (!schedulesStore || !notifications) return;
+      if (await hasPendingDeferredNotifications(notifications)) return;
+
+      await schedulesStore.deleteSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      this.#notificationDispatchReady = false;
+
+      // A deferral elsewhere may have written its record and seen the row
+      // just before the delete. It won't re-create the row, so re-check after
+      // deleting and re-arm on its behalf.
+      if (await hasPendingDeferredNotifications(notifications)) {
+        await this.__ensureNotificationDispatchReady();
+      }
+    } catch (err) {
+      // Leaving the row in place only costs extra dispatch passes.
+      this.#logger?.warn?.('Failed to release idle notification dispatch schedule', err as any);
+    }
   }
 
   /**
@@ -6158,9 +6297,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -7020,7 +7156,11 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A filter-selected scheduler is dedicated: keep it polling like an
+        // explicitly enabled one, since it may share no pubsub with producers.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
@@ -7119,11 +7259,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 
@@ -7348,7 +7483,12 @@ export class Mastra<
    * budget is exhausted — the work keeps running in the background so teardown
    * stays best-effort but bounded.
    */
-  async #awaitBounded<T>(promise: Promise<T>, timeoutMs: number, description: string): Promise<T | undefined> {
+  async #awaitBounded<T>(
+    promise: Promise<T>,
+    timeoutMs: number,
+    description: string,
+    timeoutMessage = `Shutdown drain timed out after ${timeoutMs}ms; abandoning ${description}`,
+  ): Promise<T | undefined> {
     let timeoutHandle: ReturnType<typeof setTimeout> | undefined;
     try {
       const outcome = await Promise.race([
@@ -7358,7 +7498,7 @@ export class Mastra<
         }),
       ]);
       if (outcome.timedOut) {
-        this.#logger?.warn(`Shutdown drain timed out after ${timeoutMs}ms; abandoning ${description}`);
+        this.#logger?.warn(timeoutMessage);
         return undefined;
       }
       return outcome.value;

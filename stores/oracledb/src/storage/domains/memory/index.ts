@@ -1,8 +1,5 @@
-import {
-  assertActiveObservationsApplied,
-  type UpdateActiveObservationsResult,
-  type UpdateBufferedObservationsResult,
-} from '@internal/core/memory';
+import { assertActiveObservationsApplied } from '@internal/core/memory';
+import type { UpdateActiveObservationsResult, UpdateBufferedObservationsResult } from '@internal/core/memory';
 import type { MastraMessageContentV2 } from '@mastra/core/agent';
 import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraDBMessage, StorageThreadType } from '@mastra/core/memory';
@@ -15,6 +12,9 @@ import {
   TABLE_OBSERVATIONAL_MEMORY,
   TABLE_RESOURCES,
   TABLE_THREADS,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   CreateObservationalMemoryInput,
@@ -39,6 +39,10 @@ import type {
   UpdateBufferedObservationsInput,
   UpdateBufferedReflectionInput,
   UpdateObservationalMemoryConfigInput,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { isOracleErrorCode, normalizeBatchSize } from '../../../shared/connection';
@@ -113,6 +117,15 @@ export class MemoryOracle extends MemoryStorage {
     TABLE_MEMORY_RUN_FENCES,
   ] as const;
 
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays NULL until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   private readonly db: OracleDB;
   private readonly schemaName?: string;
   private readonly messageBatchSize: number;
@@ -174,6 +187,22 @@ export class MemoryOracle extends MemoryStorage {
    */
   async backfillObservationalMemorySupersededBy(): Promise<void> {
     await this.ctx.db.withConnection(connection => backfillObservationalMemorySupersededBy(this.ctx, connection));
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryOracle.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (target, cutoff, limit) =>
+        this.db.pruneBatch({ tableName: target.table as TABLE_NAMES, column: target.column, cutoff, limit }),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

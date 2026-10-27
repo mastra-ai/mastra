@@ -6,7 +6,7 @@ import type {
   ProcessorStreamWriter,
 } from '@mastra/core/processors';
 
-import { withOmInternalThreadId } from '../internal-request-context';
+import { withOwnThreadIds } from '../internal-request-context';
 import { publishSubconsciousError } from './activity';
 import { getRemindMessageMetadata, getRemindMessageText, REMIND_MESSAGE_METADATA_KEY } from './remind-protocol';
 
@@ -200,7 +200,7 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
           behavior: 'wake',
           streamOptions: {
             memory: { thread: this.options.threadId, resource: this.options.resourceId },
-            requestContext: withOmInternalThreadId(args.requestContext, reminderAgent.id),
+            requestContext: withOwnThreadIds(args.requestContext, this.options.threadId, this.options.resourceId),
             maxSteps: this.options.maxSteps,
           },
         },

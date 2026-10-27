@@ -4,6 +4,9 @@ import {
   normalizePerPage,
   resolveRunFence,
   WorkflowsStorage,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   ClaimRunOwnershipInput,
@@ -17,13 +20,23 @@ import type {
   WorkflowRun,
   WorkflowRuns,
   UpdateWorkflowStateOptions,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
 
 import type { ConvexAdminClient } from '../../client';
 import { ConvexDB, resolveConvexConfig } from '../../db';
 import type { ConvexDomainConfig } from '../../db';
-import { claimRunOwnership, getRunOwnership, releaseRunOwnership, renewRunOwnership } from '../../run-fencing';
+import {
+  claimRunOwnership,
+  getRunOwnership,
+  releaseRunOwnership,
+  renewRunOwnership,
+  pruneRunClaims,
+} from '../../run-fencing';
 import type { RunFenceCheck } from '../../run-fencing';
 
 type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snapshot'> & {
@@ -33,6 +46,15 @@ type RawWorkflowRun = Omit<StorageWorkflowRun, 'createdAt' | 'updatedAt' | 'snap
 };
 
 export class WorkflowsConvex extends WorkflowsStorage {
+  /**
+   * Tables `prune()` can clean up. Run ownership records anchor on `updatedAt` (epoch ms), which every
+   * claim, renewal and release refreshes, so a live execution's record is never
+   * older than its renew interval.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runOwnership: { table: TABLE_WORKFLOW_RUN_OWNERS, column: 'updatedAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   #db: ConvexDB;
   #client: ConvexAdminClient;
   constructor(config: ConvexDomainConfig) {
@@ -51,6 +73,22 @@ export class WorkflowsConvex extends WorkflowsStorage {
 
   async init(): Promise<void> {
     // No-op for Convex; schema is managed server-side.
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: WorkflowsConvex.retentionTables,
+      order: ['runOwnership'],
+    });
+    return executeRetentionPrune({
+      domain: 'workflows',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        pruneRunClaims(this.#client, TABLE_WORKFLOW_RUN_OWNERS, 'updatedAt', Number(cutoff), limit),
+    });
   }
 
   async dangerouslyClearAll(): Promise<void> {

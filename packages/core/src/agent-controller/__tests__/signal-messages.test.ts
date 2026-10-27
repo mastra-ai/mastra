@@ -43,6 +43,10 @@ function createAgentMock(activeRunId: () => string | null) {
       accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
       signal: message,
     })),
+    queueSignal: vi.fn((signal: any, _options?: any) => ({
+      accepted: Promise.resolve({ action: 'deliver' as const, runId: 'run-1' }),
+      signal,
+    })),
   };
 }
 
@@ -711,6 +715,53 @@ describe('AgentController signal messages', () => {
     const queuedRequestContext = (agent.queueMessage.mock.calls[0]?.[1] as any).ifIdle.streamOptions.requestContext;
     expect(queuedRequestContext).not.toBe(requestContext);
     expect(requestContext.get('controller')).toBeUndefined();
+  });
+
+  it('delegates queued typed signals with request context to Agent.queueSignal', async () => {
+    const activeRunId: string | null = 'run-1';
+    const agent = createAgentMock(() => activeRunId);
+    const controller = new AgentController({
+      workspace: createMockWorkspace(),
+      id: 'controller-queued-signal',
+      resourceId: 'resource-1',
+      modes: [{ id: 'default', name: 'Default', default: true, agent: agent as any }],
+    });
+    await controller.init();
+    const session = await controller.createSession({ id: 'test-session', ownerId: 'test-owner' });
+    const threadId = session.thread.getId()!;
+    session.run.ensureAbortController();
+    session.run.setRunId({ runId: 'run-1' });
+    session.stream.attach({
+      subscription: createSubscription(() => activeRunId) as any,
+      key: `agent-1:resource-1:${threadId}`,
+    });
+    const requestContext = new RequestContext();
+    const signal = {
+      type: 'reactive' as const,
+      tagName: 'skill',
+      attributes: { name: 'factory-triage' },
+      contents: 'Triage the card.',
+    };
+
+    await session.queueSignal(signal, { requestContext });
+
+    expect(agent.queueSignal).toHaveBeenCalledWith(
+      signal,
+      expect.objectContaining({
+        resourceId: 'resource-1',
+        threadId,
+        ifIdle: expect.objectContaining({
+          streamOptions: expect.objectContaining({
+            requestContext: expect.any(RequestContext),
+            abortSignal: expect.any(AbortSignal),
+          }),
+        }),
+      }),
+    );
+    const queuedAbortSignal = (agent.queueSignal.mock.calls[0]?.[1] as any).ifIdle.streamOptions.abortSignal;
+    expect(queuedAbortSignal).not.toBe(session.run.getAbortSignal?.());
+    expect(agent.queueMessage).not.toHaveBeenCalled();
+    expect(agent.sendSignal).not.toHaveBeenCalled();
   });
 
   it('queues active follow-ups with file attachments as message parts', async () => {

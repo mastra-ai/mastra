@@ -1,3 +1,4 @@
+// Hits the real Speechify API. Needs SPEECHIFY_API_KEY in the environment.
 import { writeFileSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { Readable } from 'node:stream';
@@ -5,96 +6,68 @@ import { describe, expect, it, beforeAll } from 'vitest';
 
 import { SpeechifyVoice } from './index';
 
-describe('SpeechifyVoice Integration Tests', () => {
+async function drain(stream: NodeJS.ReadableStream): Promise<Buffer> {
+  const chunks: Buffer[] = [];
+  for await (const chunk of stream) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
+  }
+  return Buffer.concat(chunks);
+}
+
+describe.skipIf(!process.env.SPEECHIFY_API_KEY)('SpeechifyVoice Integration Tests', () => {
   let voice: SpeechifyVoice;
   const outputDir = path.join(process.cwd(), 'test-outputs');
 
   beforeAll(() => {
-    // Create output directory if it doesn't exist
-    try {
-      mkdirSync(outputDir, { recursive: true });
-    } catch (err) {
-      console.error('Failed to create output directory', err);
-    }
-
-    voice = new SpeechifyVoice({
-      speechModel: {
-        name: 'simba-multilingual',
-      },
-      speaker: 'george',
-    });
+    mkdirSync(outputDir, { recursive: true });
+    // Defaults: simba-3.5 with the harper_32 voice.
+    voice = new SpeechifyVoice();
   });
 
   describe('voices', () => {
-    it('should list available voices', async () => {
+    it('lists the live catalog', async () => {
       const voices = await voice.getSpeakers();
-      expect(voices).toBeInstanceOf(Array);
       expect(voices.length).toBeGreaterThan(0);
-      expect(voices[0]).toHaveProperty('voiceId');
-    });
+      const harper = voices.find(entry => entry.voiceId === 'harper_32');
+      expect(harper?.models).toContain('simba-3.5');
+    }, 30000);
   });
 
   describe('speech', () => {
-    it('should generate audio and save to file from text input', async () => {
-      const result = await voice.speak('Hello from Mastra Voice - Speechify');
-      const outputPath = path.join(outputDir, 'speechify-speech-test.mp3');
-      const chunks: Buffer[] = [];
-      for await (const chunk of result) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
+    it('generates audio from text with the defaults', async () => {
+      const audio = await drain(await voice.speak('Hello from Mastra Voice - Speechify'));
+      expect(audio.length).toBeGreaterThan(0);
+      writeFileSync(path.join(outputDir, 'speechify-speech-test.mp3'), audio);
+    }, 20000);
 
-      const audioBuffer = Buffer.concat(chunks);
-      expect(audioBuffer.length).toBeGreaterThan(0);
-      writeFileSync(outputPath, audioBuffer);
-    }, 10000);
+    it('speaks another language on simba-3.5 with the same voice', async () => {
+      const audio = await drain(await voice.speak('Olá, este é um teste em português.', { language: 'pt-BR' }));
+      expect(audio.length).toBeGreaterThan(0);
+      writeFileSync(path.join(outputDir, 'speechify-speech-test-pt-br.mp3'), audio);
+    }, 20000);
 
-    it('should work with different parameters', async () => {
-      const result = await voice.speak('Test with parameters', { speaker: 'george' });
-      const chunks: Buffer[] = [];
-      for await (const chunk of result) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-      const audioBuffer = Buffer.concat(chunks);
-      const outputPath = path.join(outputDir, 'speechify-speech-test-params.mp3');
-      writeFileSync(outputPath, audioBuffer);
-    }, 10000);
+    it('honours a per-request model and voice', async () => {
+      const audio = await drain(await voice.speak('Test with parameters', { model: 'simba-3.2', speaker: 'wyatt_32' }));
+      expect(audio.length).toBeGreaterThan(0);
+    }, 20000);
 
-    it('should generate audio from a stream input', async () => {
-      const inputStream = Readable.from(['Hello from stream input - Speechify']);
-      const result = await voice.speak(inputStream);
-      const chunks: Buffer[] = [];
-      for await (const chunk of result) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
+    it('returns Ogg when asked', async () => {
+      const audio = await drain(await voice.speak('Ogg container test', { audioFormat: 'ogg' }));
+      expect(audio.subarray(0, 4).toString('ascii')).toBe('OggS');
+    }, 20000);
 
-      const audioBuffer = Buffer.concat(chunks);
-      expect(audioBuffer.length).toBeGreaterThan(0);
-      const outputPath = path.join(outputDir, 'speechify-speech-test-stream.mp3');
-      writeFileSync(outputPath, audioBuffer);
-    }, 10000);
-
-    it('should generate audio using default SpeechifyVoice instance', async () => {
-      const defaultVoice = new SpeechifyVoice();
-      const result = await defaultVoice.speak('Hello from default SpeechifyVoice instance');
-      const chunks: Buffer[] = [];
-      for await (const chunk of result) {
-        chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk));
-      }
-
-      const audioBuffer = Buffer.concat(chunks);
-      expect(audioBuffer.length).toBeGreaterThan(0);
-      const outputPath = path.join(outputDir, 'speechify-speech-test-default.mp3');
-      writeFileSync(outputPath, audioBuffer);
-    }, 10000);
+    it('generates audio from a stream input', async () => {
+      const audio = await drain(await voice.speak(Readable.from(['Hello from stream input - Speechify'])));
+      expect(audio.length).toBeGreaterThan(0);
+    }, 20000);
   });
 
-  // Error cases
   describe('error handling', () => {
-    it('should handle empty text', async () => {
+    it('rejects empty text', async () => {
       await expect(voice.speak('')).rejects.toThrow();
     });
 
-    it('should handle invalid voice', async () => {
+    it('rejects an unknown voice', async () => {
       await expect(voice.speak('Test', { speaker: 'invalid_voice' })).rejects.toThrow();
     });
   });

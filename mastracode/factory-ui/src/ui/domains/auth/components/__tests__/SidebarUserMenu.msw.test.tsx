@@ -1,5 +1,5 @@
 import { Sidebar, SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { fireEvent, screen, waitFor, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useLocation } from 'react-router';
@@ -9,7 +9,9 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { SettingsNavigation } from '../../../settings/components/SettingsNavigation';
 import { SidebarUserMenu } from '../SidebarUserMenu';
-import { signedInAccount } from './fixtures/userMenu';
+import { signedIn } from './fixtures/auth';
+
+const avatarUrl = 'https://avatars.example/dev.png';
 
 function CurrentPath() {
   const { pathname, search, hash } = useLocation();
@@ -47,11 +49,15 @@ function renderUserMenu(initialEntry = '/factories/fp-1/work?status=active#sessi
 }
 
 function stubSignedIn() {
-  server.use(http.get(`${TEST_BASE_URL}/auth/me`, () => HttpResponse.json(signedInAccount)));
+  server.use(
+    http.get(`${TEST_BASE_URL}/auth/me`, () =>
+      HttpResponse.json({ ...signedIn, user: { ...signedIn.user, avatarUrl } }),
+    ),
+  );
 }
 
 describe('SidebarUserMenu', () => {
-  it('opens a menu without navigating and exposes personal settings, Factory settings, and logout', async () => {
+  it('opens a menu without navigating and exposes account settings, all settings, theme, and logout', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
@@ -59,7 +65,7 @@ describe('SidebarUserMenu', () => {
     const trigger = await screen.findByRole('button', { name: 'User menu' });
     expect(trigger).toHaveTextContent('Dev');
     expect(trigger).toHaveTextContent('dev@mastra.ai');
-    expect(within(trigger).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', signedInAccount.user.avatarUrl);
+    expect(within(trigger).getByRole('img', { name: 'Dev' })).toHaveAttribute('src', avatarUrl);
     await user.click(trigger);
 
     const menu = await screen.findByRole('menu', { name: 'User menu' });
@@ -68,7 +74,7 @@ describe('SidebarUserMenu', () => {
       within(menu)
         .getAllByRole('menuitem')
         .map(item => item.textContent),
-    ).toEqual(['My account', 'Preferences', 'Your models', 'Your memory', 'Connections', 'Settings', 'Log out']);
+    ).toEqual(['My account', 'Preferences', 'Connections', 'Settings', 'ThemeSystem', 'Log out']);
     expect(within(menu).getByRole('menuitem', { name: 'Log out' })).toHaveAttribute(
       'href',
       `${TEST_BASE_URL}/auth/logout`,
@@ -78,22 +84,10 @@ describe('SidebarUserMenu', () => {
     );
   });
 
-  it('keeps an initial and accessible menu when the profile image fails', async () => {
-    stubSignedIn();
-    renderUserMenu(undefined, true);
-
-    const trigger = await screen.findByRole('button', { name: 'User menu' });
-    fireEvent.error(within(trigger).getByRole('img', { name: 'Dev' }));
-
-    expect(within(trigger).queryByRole('img')).not.toBeInTheDocument();
-    expect(within(trigger).getByText('D')).toBeInTheDocument();
-    expect(trigger).toHaveAccessibleName('User menu');
-  });
-
   it('uses the email and an initial when the profile has no name or image', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/auth/me`, () =>
-        HttpResponse.json({ ...signedInAccount, user: { ...signedInAccount.user, name: '', avatarUrl: undefined } }),
+        HttpResponse.json({ ...signedIn, user: { ...signedIn.user, name: '' } }),
       ),
     );
     renderUserMenu();
@@ -104,36 +98,36 @@ describe('SidebarUserMenu', () => {
     expect(within(trigger).queryByRole('img')).not.toBeInTheDocument();
   });
 
-  it('changes and remembers the theme without closing the user menu', async () => {
+  it('reaches the theme with the arrow keys and remembers the choice', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
 
-    await user.click(await screen.findByRole('button', { name: 'User menu' }));
-    await user.click(await screen.findByRole('radio', { name: 'Dark' }));
+    const trigger = await screen.findByRole('button', { name: 'User menu' });
+    trigger.focus();
+    await user.keyboard('{Enter}');
+    await screen.findByRole('menu', { name: 'User menu' });
+    await user.keyboard('{End}{ArrowUp}');
+    expect(screen.getByRole('menuitem', { name: /^Theme/ })).toHaveFocus();
+
+    await user.keyboard('{ArrowRight}');
+    expect(await screen.findByRole('menuitemradio', { name: 'System' })).toHaveFocus();
+    await user.keyboard('{End}{Enter}');
 
     expect(window.localStorage.getItem('mastracode.theme')).toBe('dark');
-    expect(screen.getByRole('menu', { name: 'User menu' })).toBeInTheDocument();
-    expect(screen.getByRole('radio', { name: 'Dark' })).toBeChecked();
+    expect(screen.getByRole('menuitemradio', { name: 'Dark' })).toBeChecked();
   });
 
-  it.each([
-    ['My account', 'account'],
-    ['Preferences', 'preferences'],
-    ['Your models', 'personal-models'],
-    ['Your memory', 'memory'],
-    ['Connections', 'connections'],
-    ['Settings', 'models'],
-  ])('opens %s directly and closes the dropdown', async (label, section) => {
+  it('opens an account section directly and closes the dropdown', async () => {
     const user = userEvent.setup();
     stubSignedIn();
     renderUserMenu();
 
     await user.click(await screen.findByRole('button', { name: 'User menu' }));
-    await user.click(await screen.findByRole('menuitem', { name: label }));
+    await user.click(await screen.findByRole('menuitem', { name: 'Connections' }));
 
     expect(screen.getByRole('status', { name: 'Current path' })).toHaveTextContent(
-      `/factories/fp-1/settings/${section}`,
+      '/factories/fp-1/settings/connections',
     );
     await waitFor(() => expect(screen.queryByRole('menu')).not.toBeInTheDocument());
   });

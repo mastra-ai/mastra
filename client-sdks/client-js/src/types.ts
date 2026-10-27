@@ -1,4 +1,3 @@
-import type { JSONValue, ToolInvocationUIPart } from '@ai-sdk/ui-utils';
 import type {
   AgentExecutionOptions,
   MultiPrimitiveExecutionOptions,
@@ -44,6 +43,7 @@ import type { ZodSchema as ZodSchemaV3 } from 'zod/v3';
 import type { ZodType as ZodTypeV4 } from 'zod/v4';
 
 import type { Body, PathParams, QueryParams, RouteKey, RouteResponse, Simplify } from './route-types.generated.js';
+import type { JSONValue, ToolInvocationUIPart } from './utils/ai-sdk-v4';
 
 export type ZodSchema = ZodSchemaV3 | ZodTypeV4;
 
@@ -57,7 +57,7 @@ export type PartProviderMetadata = Record<string, Record<string, JSONValue>>;
 export type MaybeProviderMetadata = { providerMetadata?: PartProviderMetadata };
 
 /**
- * `ToolInvocationUIPart` from `@ai-sdk/ui-utils` has no `providerMetadata` field, but the
+ * `ToolInvocationUIPart` from the AI SDK v4 UI types has no `providerMetadata` field, but the
  * server reads provider metadata from the part itself (not from the nested `toolInvocation`),
  * so the SDK has to be able to set it there.
  */
@@ -136,6 +136,8 @@ export type SendAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId
 export type SendAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/send-message'>>;
 
 export type QueueAgentMessageParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-message'>>;
+
+export type QueueAgentSignalParams = GeneratedRequest<Body<'POST /agents/:agentId/queue-signal'>>;
 
 export interface SubscribeAgentThreadParams {
   resourceId?: string;
@@ -672,6 +674,21 @@ export type McpServerToolListResponse = GeneratedResponse<'GET /mcp/:serverId/to
  * when the tool asked for input (answer with `resumeData` and the echoed `suspendPayload`).
  */
 export type McpToolExecuteResponse = RouteResponse<'POST /mcp/:serverId/tools/:toolId/execute'>;
+
+/** Event types an MCP server declares, plus whether test emit is served (experimental). */
+export type McpServerEventListResponse = GeneratedResponse<'GET /mcp/:serverId/events'>;
+
+/** One declared MCP server event type (experimental). */
+export type McpServerEventInfo = McpServerEventListResponse['events'][number];
+
+/** Result of polling an MCP server event type (experimental). */
+export type McpServerEventPollResponse = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/poll'>;
+
+/** One occurrence of an MCP server event (experimental). */
+export type McpServerEventOccurrence = McpServerEventPollResponse['events'][number];
+
+/** A frame yielded by `streamMcpServerEvent` (experimental). */
+export type McpServerEventStreamFrame = GeneratedResponse<'POST /mcp/:serverId/events/:eventName/stream'>;
 
 /**
  * Client version of ScoreRowData with dates serialized as strings (from JSON)
@@ -2489,7 +2506,7 @@ export type AgentControllerInfo = GeneratedResponse<'GET /agent-controller'>['ag
 
 export type CreateAgentControllerSessionResponse = GeneratedResponse<'POST /agent-controller/:controllerId/sessions'>;
 
-export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId'>;
+export type AgentControllerSessionState = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId'>;
 
 /**
  * Agent behavior settings, mirroring the TUI's `/settings` toggles. An absent
@@ -2522,24 +2539,24 @@ export type AgentControllerActiveRun =
  * sharing the resourceId.
  */
 export type AgentControllerThreadInfo =
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/threads'>['threads'][number];
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/threads'>['threads'][number];
 
 /** A thread as returned by `createThread()` and `cloneThread()`. */
 export type CreateAgentControllerThreadResponse =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/threads'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/threads'>;
 
 export type AgentControllerWorkspaceStatus = GeneratedResponse<'GET /agent-controller/:controllerId/workspace'>;
 
 export type AgentControllerGoalRecord = NonNullable<
-  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/goal'>['goal']
+  GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/goal'>['goal']
 >;
 
 /** Per-category and per-tool approval policies. */
-export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:resourceId/permissions'>;
+export type PermissionRules = GeneratedResponse<'GET /agent-controller/:controllerId/sessions/:sessionId/permissions'>;
 
 export type SendNotificationInput = GeneratedRequest<
-  Body<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>
+  Body<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>
 >;
 
 export type SendNotificationResult =
-  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:resourceId/notifications'>;
+  GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;

@@ -30,7 +30,10 @@
         "entityId": "child-span-agent",
         "attributes": {
           "instructions": "You use tools that create child spans",
-          "availableTools": ["childSpanTool"]
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "availableTools": ["childSpanTool"],
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -78,10 +81,10 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -146,7 +149,10 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -341,6 +347,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools that create child spans"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use child span tool to process test-data"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -481,7 +497,10 @@
                 "entityId": "child-span-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -740,6 +759,24 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You use tools that create child spans"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Use child span tool to process test-data"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: childSpanTool]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: childSpanTool]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []

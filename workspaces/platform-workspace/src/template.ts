@@ -1,4 +1,5 @@
-import { PlatformClient, type PlatformClientOptions } from './client.js';
+import { PlatformClient } from './client.js';
+import type { PlatformClientOptions } from './client.js';
 
 export type JsonPrimitive = null | boolean | number | string;
 export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue };
@@ -6,6 +7,7 @@ export type JsonValue = JsonPrimitive | JsonValue[] | { [key: string]: JsonValue
 export type SandboxTemplateMethod =
   | 'cpuCount'
   | 'memoryMB'
+  | 'docker'
   | 'runCmd'
   | 'setWorkdir'
   | 'setEnvs'
@@ -82,6 +84,12 @@ export interface SandboxTemplateBuilder {
    * resource limits.
    */
   memoryMB(memoryMB: number): SandboxTemplateBuilder;
+  /**
+   * Install Docker Engine and Compose in the E2B template. The daemon is
+   * socket-activated, so it starts on the first Docker API call. E2B
+   * recommends at least 2,048 MB of memory for Docker.
+   */
+  docker(): SandboxTemplateBuilder;
   /** Start or reuse this template's provider build without provisioning a sandbox. */
   build(options?: SandboxTemplateBuildOptions): Promise<SandboxTemplateBuildResult>;
   runCmd(command: string | string[]): SandboxTemplateBuilder;
@@ -137,6 +145,10 @@ class SerializableSandboxTemplateBuilder implements SandboxTemplateBuilder {
 
   memoryMB(memoryMB: number): SandboxTemplateBuilder {
     return this.#append('memoryMB', [validateResourceValue(memoryMB, 'memoryMB')]);
+  }
+
+  docker(): SandboxTemplateBuilder {
+    return this.#append('docker', [true]);
   }
 
   async build(options: SandboxTemplateBuildOptions = {}): Promise<SandboxTemplateBuildResult> {

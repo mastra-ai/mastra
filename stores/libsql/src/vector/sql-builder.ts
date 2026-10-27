@@ -499,7 +499,7 @@ function handleLogicalOperator(
   const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
   const conditions = Array.isArray(value)
     ? value.flatMap(f => {
-        const entries = !!f ? Object.entries(f) : [];
+        const entries = f ? Object.entries(f) : [];
         const branch = entries.map(([k, v]) => buildCondition(k, v, key));
         if (branch.length <= 1) return branch;
         // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.

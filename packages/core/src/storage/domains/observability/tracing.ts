@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/span-previews';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
@@ -142,6 +143,13 @@ export const spanRecordSchema = z
     inputPreview: z.string().nullish().describe('Short text preview of the span input'),
     outputPreview: z.string().nullish().describe('Short text preview of the span output'),
     errorPreview: z.string().nullish().describe('Short text preview of the span error'),
+
+    // Derived from `attributes.completionStartTime` when an exporter builds the record, so stores
+    // persist it without computing it themselves.
+    timeToFirstChunkMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
 
     // Database timestamps
     ...dbTimestamps,
@@ -464,8 +472,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum generated preview length, before the trailing `…`. Supplied previews have no cap. */
-export const PREVIEW_MAX_LENGTH = 100;
+export { PREVIEW_MAX_LENGTH } from '../../../observability/span-previews';
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
 export const INPUT_PREVIEW_MAX_LENGTH = PREVIEW_MAX_LENGTH;
@@ -475,15 +482,6 @@ const outputPreviewField = z.string().describe('Short text preview of the span o
 const errorPreviewField = z.string().describe('Short text preview of the span error');
 
 type PreviewMessage = { role?: unknown; content?: unknown };
-
-function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= maxLength) return trimmed;
-  // Never end on half of a surrogate pair.
-  const end = maxLength > 0 && /[\uD800-\uDBFF]/.test(trimmed[maxLength - 1]!) ? maxLength - 1 : maxLength;
-  return `${trimmed.slice(0, end)}…`;
-}
 
 function isMessage(value: unknown): value is PreviewMessage {
   return value != null && typeof value === 'object' && typeof (value as PreviewMessage).role === 'string';
@@ -514,6 +512,26 @@ function textFromContent(content: unknown): string {
     .join(' ');
 }
 
+/**
+ * Preview of an agent signal recorded as a run's input (`agent.sendSignal()`): a user signal previews
+ * as its text, any other signal as its text labelled by what it is (`Skill <name>: …`, `<tag>: …`).
+ */
+function signalText(value: object): string | null {
+  const signal = value as Record<string, unknown>;
+  if (signal.__isCreatedSignal !== true || !('contents' in signal)) return null;
+  const text = textFromContent(signal.contents).trim();
+  const type = signal.type;
+  if (type === 'user' || type === 'user-message') return text || null;
+
+  const attributes = signal.attributes as Record<string, unknown> | undefined;
+  const tagName = typeof signal.tagName === 'string' ? signal.tagName : undefined;
+  const label =
+    tagName === 'skill' && typeof attributes?.name === 'string'
+      ? `Skill ${attributes.name}`
+      : (tagName ?? (typeof type === 'string' ? type : 'signal'));
+  return text ? `${label}: ${text}` : label;
+}
+
 function lastMessageText(messages: PreviewMessage[], accept: (role: string) => boolean): string | null {
   for (let i = messages.length - 1; i >= 0; i--) {
     const message = messages[i];
@@ -540,6 +558,8 @@ function textField(value: object): string | null {
  * - A string previews as itself.
  * - A message list (a bare array, or a `messages` array, of objects with a string `role`)
  *   previews as the last user message's text, else the last non-system message's text.
+ * - An agent signal (a run started by `agent.sendSignal()`) previews as its contents; a non-user
+ *   signal is labelled by its tag, or `Skill <name>` for a skill.
  * - An object with a non-blank `text` or `message` string previews as that string.
  * - Anything else previews as its compact JSON.
  *
@@ -563,7 +583,7 @@ function previewOf(value: unknown, serialized: string | null | undefined, maxLen
   }
 
   if (typeof value === 'object' && !Array.isArray(value)) {
-    const text = textField(value);
+    const text = signalText(value) ?? textField(value);
     if (text != null) return truncatePreview(text, maxLength);
   }
 
@@ -591,7 +611,7 @@ function previewOfJson(json: string | null | undefined, maxLength: number): stri
 
 /**
  * The preview a store writes for one payload: an upstream preview when the span record carries
- * a nonblank one, otherwise one built from the payload. Both are capped the same way, at
+ * a string (including an intentionally empty one), otherwise one built from the payload. Both are capped the same way, at
  * {@link PREVIEW_MAX_LENGTH} characters plus `…`, so an exporter can't store an unbounded preview.
  * `''` means there is nothing to preview.
  */
@@ -600,7 +620,8 @@ export function buildStoredPreview(
   value: unknown,
   serialized?: string | null,
 ): string {
-  return (upstream ? truncatePreview(upstream) : null) ?? buildPreview(value, serialized) ?? '';
+  if (upstream != null) return truncatePreview(upstream) ?? '';
+  return buildPreview(value, serialized) ?? '';
 }
 
 /**
@@ -989,6 +1010,11 @@ export const batchUpdateSpansArgsSchema = z
 
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
+
+/** Result of a conditional batch span update: the spans whose rows were changed. */
+export interface BatchUpdateUnendedSpansResponse {
+  updated: Array<{ traceId: string; spanId: string }>;
+}
 
 /** Maximum number of trace IDs accepted by a single batch delete request. */
 export const BATCH_DELETE_TRACES_MAX_IDS = 1000;

@@ -1,32 +1,9 @@
-import { skipToken, useInfiniteQuery, useQuery } from '@tanstack/react-query';
+import { skipToken, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
 import { queryKeys } from '../api/keys';
-import { fetchAuditEvents, fetchAuditPortalLink } from '../ui/domains/factory/services/audit';
+import { fetchAuditEvents } from '../ui/domains/factory/services/audit';
 import type { AuditEventPage } from '../ui/domains/factory/services/audit';
-
-export function useAuditEvents(
-  factoryProjectId: string | undefined,
-  group: string,
-  namespaces: string[] | undefined,
-  limit?: number,
-  actorIds: string[] = [],
-) {
-  const { baseUrl } = useApiConfig();
-  const actorKey = actorIds.toSorted().join(',');
-  const initialPageParam: string | undefined = undefined;
-  const queryFn = factoryProjectId
-    ? ({ pageParam, signal }: { pageParam: string | undefined; signal: AbortSignal }) =>
-        fetchAuditEvents(baseUrl, factoryProjectId, { namespaces, actorIds, before: pageParam, limit, signal })
-    : skipToken;
-  return useInfiniteQuery({
-    queryKey: queryKeys.factoryAudit(factoryProjectId, group, actorKey),
-    queryFn,
-    initialPageParam,
-    getNextPageParam: (lastPage: AuditEventPage) => lastPage.nextCursor,
-    staleTime: 15_000,
-  });
-}
 
 // The route cannot filter by actor, so an unbounded read replays the project's whole history on every mount.
 // A card older than the window keeps the creator its own metadata carries.
@@ -65,16 +42,5 @@ export function useRecentAuditEvents(
     queryKey: queryKeys.factoryAudit(factoryProjectId, `${group}:recent`, actorKey),
     queryFn,
     staleTime: 15_000,
-  });
-}
-
-export function useAuditPortalLink(enabled: boolean) {
-  const { baseUrl } = useApiConfig();
-  return useQuery({
-    queryKey: queryKeys.factoryAuditPortal(),
-    queryFn: () => fetchAuditPortalLink(baseUrl),
-    enabled,
-    staleTime: Infinity,
-    retry: false,
   });
 }

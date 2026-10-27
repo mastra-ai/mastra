@@ -1,9 +1,20 @@
 // @vitest-environment jsdom
 import { cleanup, fireEvent, render, screen } from '@testing-library/react';
-import { afterEach, assert, beforeAll, describe, expect, it, vi } from 'vitest';
+import userEvent from '@testing-library/user-event';
+import { http, HttpResponse } from 'msw';
+import { afterEach, assert, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { TracesListView } from '../traces-list-view';
 import type { TracesListViewTrace } from '../traces-list-view';
+import {
+  FAILED_SPAN_ID,
+  FAILED_TRACE_ID,
+  errorPreview,
+  failedSpanDetail,
+  fullErrorMessage,
+} from './fixtures/trace-error-cell';
+import { server } from '@/test/msw-server';
+import { TEST_BASE_URL, renderWithProviders } from '@/test/render';
 
 // jsdom implements neither ResizeObserver nor element layout; without both the
 // virtualizer sees a zero-height scroll container and renders no rows. The stub
@@ -25,14 +36,17 @@ beforeAll(() => {
             devicePixelContentBoxSize: [{ inlineSize: 800, blockSize: 600 }],
           },
         ],
-        this as unknown as ResizeObserver,
+        this,
       );
     }
     unobserve() {}
     disconnect() {}
   }
-  globalThis.ResizeObserver = ResizeObserverStub as unknown as typeof ResizeObserver;
+  globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
+  // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
 });
@@ -76,13 +90,14 @@ describe('TracesListView columns', () => {
         'Primitive type',
         'Primitive name',
         'Input',
+        'Output',
         'Status',
         'Duration',
         'Est. cost',
       ]);
       expect(screen.queryByText('Created')).toBeNull();
       expect(screen.queryByText('Entity')).toBeNull();
-      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) 6rem 7rem 8rem');
+      expect(grid.style.gridTemplateColumns).toBe('11rem 7rem 14rem minmax(8rem,1fr) minmax(8rem,1fr) 6rem 7rem 8rem');
     });
   });
 
@@ -150,6 +165,39 @@ describe('TracesListView — status column', () => {
   });
 });
 
+describe('TracesListView — time to first chunk column', () => {
+  const ttfcOnly = { visibleColumns: ['timeToFirstChunk'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFC right after Status', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFC']);
+  });
+
+  it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttfcOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstChunkMs: 412 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstChunkMs: 1830 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstChunkMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttfc = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttfc).toEqual(['412ms', '1.83s', '', '']);
+  });
+});
+
 describe('TracesListView — name column', () => {
   it('shows the primitive name, falling back to the span name', () => {
     render(
@@ -186,6 +234,61 @@ describe('TracesListView — type column', () => {
       expect(screen.getByText('weatherAgent')).not.toBeNull();
       expect(screen.getByText('fetchWeather')).not.toBeNull();
     });
+  });
+});
+
+describe('TracesListView — failed row error', () => {
+  const failedRow = makeTrace({
+    traceId: FAILED_TRACE_ID,
+    spanId: FAILED_SPAN_ID,
+    status: 'error',
+    errorPreview,
+  });
+
+  beforeEach(() => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json(failedSpanDetail),
+      ),
+    );
+  });
+
+  it('shows the full error from the span when hovering the cut-off preview', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText(fullErrorMessage)).not.toBeNull();
+    expect(screen.getByText('AI_APICallError')).not.toBeNull();
+  });
+
+  it('keeps the preview and says so when the full error fails to load', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/:spanId`, () =>
+        HttpResponse.json({ error: 'Internal Server Error' }, { status: 500 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={vi.fn()} />);
+
+    await user.hover(screen.getByText(errorPreview));
+
+    expect(await screen.findByText("Couldn't load the full error.")).not.toBeNull();
+    expect(screen.getAllByText(errorPreview)).toHaveLength(2);
+  });
+
+  it('copies the error from the card without opening the trace', async () => {
+    const user = userEvent.setup();
+    const onTraceClick = vi.fn();
+    renderWithProviders(<TracesListView traces={[failedRow]} onTraceClick={onTraceClick} />);
+
+    await user.hover(screen.getByText(errorPreview));
+    await screen.findByText(fullErrorMessage);
+    await user.click(screen.getByRole('button', { name: 'Copy error' }));
+
+    expect(await navigator.clipboard.readText()).toBe(fullErrorMessage);
+    expect(onTraceClick).not.toHaveBeenCalled();
   });
 });
 
@@ -347,6 +450,26 @@ describe('TracesListView — empty and loading', () => {
 
     render(<TracesListView traces={[]} filtersApplied onTraceClick={vi.fn()} />);
     expect(screen.getByText('No traces found for applied filters')).toBeTruthy();
+  });
+
+  it('names spans in the empty messages of a span list', () => {
+    render(<TracesListView traces={[]} resource="spans" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="spans" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found for applied filters')).toBeTruthy();
+  });
+
+  it('names threads in the empty messages of a thread list', () => {
+    render(<TracesListView traces={[]} resource="threads" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="threads" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found for applied filters')).toBeTruthy();
   });
 });
 

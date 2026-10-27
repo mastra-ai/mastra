@@ -35,6 +35,11 @@ export type { InlineLinkEntry } from './inline-media';
  */
 export type PostableMessage = string | CardElement | { markdown: string };
 
+/** What `formatError` knows about the failure beyond the error itself. */
+export interface ChannelErrorContext {
+  requestContext?: RequestContext;
+}
+
 /** Per-adapter configuration shared across all `toolDisplay` modes. */
 export interface ChannelAdapterBaseConfig {
   adapter: Adapter<any, any>;
@@ -55,10 +60,12 @@ export interface ChannelAdapterBaseConfig {
   /**
    * Override how errors are rendered in the chat.
    * Return a user-friendly message instead of exposing the raw error.
+   * `context.requestContext` is the failed run's request context, so a host can
+   * link the message back to whatever the run belongs to.
    *
    * @default `"❌ Error: <error.message>"`
    */
-  formatError?: (error: Error) => PostableMessage;
+  formatError?: (error: Error, context: ChannelErrorContext) => PostableMessage;
 
   /**
    * Dialect for the agent's final reply text.
@@ -72,6 +79,16 @@ export interface ChannelAdapterBaseConfig {
    * notices are unaffected.
    */
   textFormat?: 'markdown' | 'plain';
+
+  /**
+   * Whether the agent's reply text is posted to the channel.
+   * - `'show'` (default) - reply text streams (or posts) to the thread as it does today.
+   * - `'hidden'` - reply text is never posted. The agent's own messages reach the
+   *   channel only through tools you give it (for example a reply tool that posts to the thread).
+   *
+   * Tool display, approval prompts, error messages, and typing status are unaffected.
+   */
+  textDisplay?: 'show' | 'hidden';
 
   /**
    * What to do with buffered (not-yet-posted) reply text when a run is aborted.
@@ -95,6 +112,9 @@ export interface ChannelAdapterBaseConfig {
    * @default `true` for Slack, Discord, Teams, Google Chat and Telegram; `false` otherwise.
    */
   approvalButtons?: boolean;
+
+  /** Who may approve or deny a tool call in a shared channel. Defaults to the requester. */
+  toolApprovers?: 'requester' | 'anyone';
 
   /**
    * Show platform typing indicators (and adaptive status text where supported,
@@ -221,6 +241,7 @@ export type ToolDisplayEvent =
    * Fired once after the user approves an approval card. Only `post` results
    * are honored: the returned message replaces the approval card in place.
    * Returning nothing (or a blank message) keeps the default "Approved" card.
+   * `byUser` is the approving user's name, or undefined in DMs.
    */
   | {
       kind: 'approved';
@@ -229,6 +250,7 @@ export type ToolDisplayEvent =
       displayName: string;
       argsSummary: string;
       args: unknown;
+      byUser?: string;
     }
   /**
    * Fired once after the user denies an approval card. Only `post` results
@@ -487,6 +509,8 @@ export interface ResolveResourceIdContext {
   message: Message;
   /** The built-in default: `${platform}:${message.author.userId}`. Return this to keep current behavior. */
   defaultResourceId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -511,6 +535,8 @@ export interface ResolveThreadIdContext {
   resourceId: string;
   /** The built-in default: a random UUID. Return this to keep current behavior. */
   defaultThreadId: string;
+  /** The per-message request context. Values set by channel handlers before `defaultHandler` runs are visible here. */
+  requestContext: RequestContext;
 }
 
 /**
@@ -533,6 +559,13 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onMention?: ChannelHandlerConfig;
+
+  /**
+   * Handler for messages that neither mention the bot nor belong to a subscribed thread.
+   * Opt-in: registered only when a function is supplied; omitted or false ignores these messages.
+   * Calling defaultHandler runs the agent, posts the response, and subscribes the thread.
+   */
+  onMessage?: ChannelHandlerConfig;
 
   /**
    * Handler for messages in subscribed threads.

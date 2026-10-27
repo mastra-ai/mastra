@@ -2,8 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { ArrowUpDown, CircleDashed, Clock, MessagesSquare, Plus, UserRound } from 'lucide-react';
-import { useNavigate, useParams } from 'react-router';
+import { ArrowUpDown, CircleDashed, Clock, UserRound } from 'lucide-react';
+import { useParams } from 'react-router';
 
 import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
@@ -32,12 +32,11 @@ import { DeleteSessionDialog } from './DeleteSessionDialog';
 import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
-import { SessionListProperties } from './SessionListProperties';
+import { PropertiesMenu } from '../../../ui/PropertiesMenu';
 
 export function SessionsSection() {
   const { factoryId, sessionId: routeSessionId } = useParams<{ factoryId: string; sessionId: string }>();
-  const { baseUrl, resourceId, sessionEnabled } = useChatSessionContext();
-  const navigate = useNavigate();
+  const { baseUrl, sessionId, sessionEnabled } = useChatSessionContext();
   const { rows, hasRepositories, loaded, loadFailed, retry } = useSessionListRows(factoryId);
   const catalog = useBoardCatalog(factoryId);
   const {
@@ -51,8 +50,8 @@ export function SessionsSection() {
     resetView,
   } = useSessionListView();
   const viewerUserId = useFactoryAuth().data?.user?.userId;
-  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters(viewerUserId);
-  const deletion = useSessionDeletion(factoryId, resourceId);
+  const { filters, activeFilterCount, changeFilters, resetFilters } = useSessionFilters();
+  const deletion = useSessionDeletion(factoryId);
 
   const sortedRows = rows.toSorted(compareSessionRows(view.sort));
   const filteredRows = filterSessionRows(sortedRows, filters, viewerUserId);
@@ -60,10 +59,9 @@ export function SessionsSection() {
   const defaultHeadings = sessionGroupHeadings(sortedRows, view.groupBy, groupContext);
   const menuGroups = orderGroupHeadings(defaultHeadings, groupOrderKeys);
   const groups = groupSessionRows(filteredRows, view.groupBy, menuGroups, hiddenGroupKeys);
-  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(resourceId);
+  const chatSessionOpen = sessionEnabled && Boolean(routeSessionId) && Boolean(sessionId);
   const mergedBySessionId = useWorkspacePullRequestMerges({
     baseUrl,
-    resourceId,
     targets: pullRequestMergeTargets(groups.flatMap(group => collapsedRowsKeepingActive(group.rows))),
     enabled: chatSessionOpen,
   });
@@ -72,8 +70,6 @@ export function SessionsSection() {
     rowCount: rows.length,
     filteredCount: filteredRows.length,
     groupCount: groups.length,
-    activeFilterCount,
-    viewerKnown: Boolean(viewerUserId),
   });
 
   const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
@@ -82,65 +78,53 @@ export function SessionsSection() {
   return (
     <section className="flex flex-col gap-2" aria-label="Sessions">
       <Sidebar.NavHeader
-        icon={<MessagesSquare />}
+        className="mt-0"
         action={
-          <div className="flex items-center gap-0.5">
-            {hasRepositories && (
-              <Button
-                variant="ghost"
-                size="icon-sm"
-                aria-label="New user session"
-                onClick={() => void navigate(`/factories/${factoryId}/user/new/${crypto.randomUUID()}`)}
-                disabled={deletion.deleting}
-              >
-                <Plus size={15} />
-              </Button>
-            )}
-            <SessionListProperties
-              changedCount={changedSettingCount + activeFilterCount}
-              onReset={() => {
-                resetView();
-                resetFilters();
-              }}
-            >
-              <DropdownMenu.RadioSub
-                label="Sort"
-                icon={<ArrowUpDown aria-hidden />}
-                options={SESSION_SORT_OPTIONS}
-                value={view.sort}
-                onValueChange={sort => updateView({ sort })}
-              />
-              <DropdownMenu.RadioSub
-                label="Owner"
-                icon={<UserRound aria-hidden />}
-                options={sessionOwnerOptions(rows, viewerUserId)}
-                value={filters.owner}
-                onValueChange={owner => changeFilters({ owner })}
-              />
-              <DropdownMenu.RadioSub
-                label="Status"
-                icon={<CircleDashed aria-hidden />}
-                options={SESSION_STATUS_OPTIONS}
-                value={filters.status}
-                onValueChange={status => changeFilters({ status })}
-              />
-              <DropdownMenu.RadioSub
-                label="Updated"
-                icon={<Clock aria-hidden />}
-                options={SESSION_UPDATED_OPTIONS}
-                value={filters.updated}
-                onValueChange={updated => changeFilters({ updated })}
-              />
-              <SessionGroupMenu
-                groupBy={view.groupBy}
-                onGroupByChange={groupBy => updateView({ groupBy })}
-                groups={menuGroups}
-                hiddenKeys={hiddenGroupKeys}
-                onVisibilityChange={changeGroupVisibility}
-                onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
-              />
-            </SessionListProperties>
-          </div>
+          <PropertiesMenu
+            label="Sessions properties"
+            changedCount={changedSettingCount + activeFilterCount}
+            onReset={() => {
+              resetView();
+              resetFilters();
+            }}
+          >
+            <DropdownMenu.RadioSub
+              label="Sort"
+              icon={<ArrowUpDown aria-hidden />}
+              options={SESSION_SORT_OPTIONS}
+              value={view.sort}
+              onValueChange={sort => updateView({ sort })}
+            />
+            <DropdownMenu.RadioSub
+              label="Owner"
+              icon={<UserRound aria-hidden />}
+              options={sessionOwnerOptions(rows, viewerUserId)}
+              value={filters.owner}
+              onValueChange={owner => changeFilters({ owner })}
+            />
+            <DropdownMenu.RadioSub
+              label="Status"
+              icon={<CircleDashed aria-hidden />}
+              options={SESSION_STATUS_OPTIONS}
+              value={filters.status}
+              onValueChange={status => changeFilters({ status })}
+            />
+            <DropdownMenu.RadioSub
+              label="Updated"
+              icon={<Clock aria-hidden />}
+              options={SESSION_UPDATED_OPTIONS}
+              value={filters.updated}
+              onValueChange={updated => changeFilters({ updated })}
+            />
+            <SessionGroupMenu
+              groupBy={view.groupBy}
+              onGroupByChange={groupBy => updateView({ groupBy })}
+              groups={menuGroups}
+              hiddenKeys={hiddenGroupKeys}
+              onVisibilityChange={changeGroupVisibility}
+              onOrderChange={keys => changeGroupOrder(keys, defaultHeadings)}
+            />
+          </PropertiesMenu>
         }
       >
         Sessions
@@ -197,17 +181,12 @@ function emptyListMessage({
   rowCount,
   filteredCount,
   groupCount,
-  activeFilterCount,
-  viewerKnown,
 }: {
   rowCount: number;
   filteredCount: number;
   groupCount: number;
-  activeFilterCount: number;
-  viewerKnown: boolean;
 }): string | undefined {
   if (filteredCount > 0) return groupCount === 0 ? 'All groups with sessions are hidden' : undefined;
   if (rowCount === 0) return 'No sessions yet';
-  if (activeFilterCount === 0 && viewerKnown) return 'No sessions of your own.';
   return 'No sessions match these filters';
 }

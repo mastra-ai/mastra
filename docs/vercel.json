@@ -1,4 +1,6 @@
 {
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "installCommand": "pnpm install --frozen-lockfile",
   "headers": [
     {
       "source": "/(.*)",
@@ -15,6 +17,16 @@
     }
   ],
   "redirects": [
+    {
+      "source": "/docs/mastra-platform/connect/end-user-connections",
+      "destination": "/docs/mastra-platform/connect/overview",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes",
+      "destination": "/reference/connect/tools",
+      "permanent": false
+    },
     {
       "source": "/docs/workspace/overview",
       "destination": "/docs/sandbox/overview",
@@ -232,12 +244,12 @@
     },
     {
       "source": "/docs/agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
@@ -2107,12 +2119,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals",
-      "destination": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers",
-      "destination": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
       "permanent": true
     },
     {
@@ -2239,6 +2251,36 @@
       "source": "/reference/agents/getTools",
       "destination": "/reference/agents/listTools",
       "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query",
+      "destination": "/reference/observability/tracing/advanced-queries",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events",
+      "destination": "/docs/connections/mcp#mcp-events",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals",
+      "destination": "/docs/signals/overview",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers",
+      "destination": "/docs/signals/signal-providers",
+      "permanent": true
+    },
+    {
+      "source": "/docs/mastra-platform/connect/end-user-connections/llms.txt",
+      "destination": "/docs/mastra-platform/connect/overview/llms.txt",
+      "permanent": false
+    },
+    {
+      "source": "/reference/connect/user-connect-routes/llms.txt",
+      "destination": "/reference/connect/tools/llms.txt",
+      "permanent": false
     },
     {
       "source": "/docs/workspace/overview/llms.txt",
@@ -2437,12 +2479,12 @@
     },
     {
       "source": "/docs/agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
@@ -3942,12 +3984,12 @@
     },
     {
       "source": "/docs/long-running-agents/signals/llms.txt",
-      "destination": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
       "permanent": true
     },
     {
       "source": "/docs/long-running-agents/signal-providers/llms.txt",
-      "destination": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     },
     {
@@ -4073,6 +4115,26 @@
     {
       "source": "/reference/agents/getTools/llms.txt",
       "destination": "/reference/agents/listTools/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/reference/observability/tracing/trace-query/llms.txt",
+      "destination": "/reference/observability/tracing/advanced-queries/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/guides/mcp-events/llms.txt",
+      "destination": "/docs/connections/mcp/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signals/llms.txt",
+      "destination": "/docs/signals/overview/llms.txt",
+      "permanent": true
+    },
+    {
+      "source": "/docs/harness/signal-providers/llms.txt",
+      "destination": "/docs/signals/signal-providers/llms.txt",
       "permanent": true
     }
   ]

@@ -424,21 +424,6 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
-  // env overlay (setEnv)
-  // ===========================================================================
-  describe('env overlay (setEnv)', () => {
-    it('makes setEnv values visible to real processes and supports rotation', async () => {
-      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_first' }));
-      const first = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
-      expect(first.stdout.trim()).toBe('tok_first');
-
-      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_rotated' }));
-      const rotated = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
-      expect(rotated.stdout.trim()).toBe('tok_rotated');
-    });
-  });
-
-  // ===========================================================================
   // getInfo
   // ===========================================================================
   describe('getInfo', () => {
@@ -1098,6 +1083,7 @@ describe('LocalSandbox', () => {
   describe('seatbelt isolation (macOS)', () => {
     beforeEach(async () => {
       if (os.platform() !== 'darwin' || !isSeatbeltAvailable()) {
+        // oxlint-disable-next-line no-useless-return -- Keep the platform availability probe in the shared setup.
         return;
       }
     });

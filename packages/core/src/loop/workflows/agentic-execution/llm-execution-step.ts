@@ -3,9 +3,10 @@ import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { StepResult, ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
-import type { StructuredOutputOptions } from '../../../agent';
+import type { Agent, StructuredOutputOptions } from '../../../agent';
 import type { MessageList } from '../../../agent/message-list';
 import { isDownloadAssetsError } from '../../../agent/message-list/prompt/download-assets';
+import { startRunStep } from '../../../agent/run-lease-fence';
 import { createSignal } from '../../../agent/signals';
 import { TripWire } from '../../../agent/trip-wire';
 import { isSupportedLanguageModel, supportedLanguageModelSpecifications } from '../../../agent/utils';
@@ -14,7 +15,7 @@ import { getErrorFromUnknown } from '../../../error/utils.js';
 import type { MastraModelSettings } from '../../../llm/model/model-settings';
 import { validateModelTimeoutSettings } from '../../../llm/model/model-settings';
 import { mergeProviderOptions } from '../../../llm/model/provider-options';
-import { ModelRouterLanguageModel } from '../../../llm/model/router';
+import { ModelRouterLanguageModel, resolveApiProviderId } from '../../../llm/model/router';
 import type { MastraLanguageModel, SharedProviderOptions } from '../../../llm/model/shared.types';
 import type { IMastraLogger } from '../../../logger';
 import { ConsoleLogger } from '../../../logger';
@@ -40,7 +41,10 @@ import { PrepareStepProcessor } from '../../../processors/processors/prepare-ste
 import { resolveMaxProcessorRetries } from '../../../processors/retry-budget';
 import type { ProcessorState } from '../../../processors/runner';
 import { ProcessorRunner } from '../../../processors/runner';
-import { needsTrailingAssistantGuard } from '../../../processors/trailing-assistant-guard';
+import {
+  needsTrailingAssistantGuard,
+  removeTrailingAssistantGuardContinuations,
+} from '../../../processors/trailing-assistant-guard';
 import { RequestContext } from '../../../request-context';
 import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
@@ -65,7 +69,7 @@ import { findProviderToolByName, inferProviderExecuted } from '../../../tools/pr
 import type { ToolToConvert } from '../../../tools/tool-builder/builder';
 import { withToolTitle } from '../../../tools/tool-title';
 import { getNeedsApprovalFn, getProviderToolName, isMastraTool, isProviderTool } from '../../../tools/toolchecks';
-import { createMastraProxy, makeCoreTool } from '../../../utils';
+import { createMastraProxy, makeProcessorCoreTool } from '../../../utils';
 import { createStep } from '../../../workflows/workflow';
 import type { Workspace } from '../../../workspace/workspace';
 import type { RunScopeContext } from '../../run-scope-access';
@@ -154,6 +158,8 @@ type ProcessOutputStreamResult = {
 };
 
 type ProcessOutputStreamOptions<OUTPUT = undefined> = {
+  /** Caller-owned buffer, so chunks streamed before a throw are still available to the caller. */
+  collectedChunks?: CollectedChunk[];
   tools?: ToolSet;
   /** Reasoning blocks the client has seen open; maintained when interruption is possible. */
   openReasoningIds?: Set<string>;
@@ -179,6 +185,7 @@ type ProcessOutputStreamOptions<OUTPUT = undefined> = {
   outputProcessors?: OutputProcessorOrWorkflow[];
   processorStates?: Map<string, ProcessorState>;
   agentId?: string;
+  agent?: Agent<any, any, any, any>;
   processorRetryCount?: number;
   outputWriter?: (chunk: ChunkType, options?: { messageId?: string }) => Promise<void> | void;
   requestContext?: RequestContext;
@@ -521,6 +528,7 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
 }
 
 async function processOutputStream<OUTPUT = undefined>({
+  collectedChunks = [],
   tools,
   messageId,
   messageList,
@@ -536,6 +544,7 @@ async function processOutputStream<OUTPUT = undefined>({
   outputProcessors,
   processorStates,
   agentId,
+  agent,
   processorRetryCount,
   outputWriter,
   requestContext,
@@ -552,7 +561,6 @@ async function processOutputStream<OUTPUT = undefined>({
   openReasoningIds,
 }: ProcessOutputStreamOptions<OUTPUT>): Promise<ProcessOutputStreamResult> {
   let transportSet = false;
-  const collectedChunks: CollectedChunk[] = [];
   let hasStepContent = false;
   let toolResultTripwire: TripWire | null = null;
   let toolResultProcessorRunner: ProcessorRunner | null = null;
@@ -563,6 +571,7 @@ async function processOutputStream<OUTPUT = undefined>({
       outputProcessors: outputProcessors ?? [],
       logger: logger || new ConsoleLogger({ level: 'error' }),
       agentName: agentId || 'unknown',
+      agent,
       processorStates,
     });
     return toolResultProcessorRunner;
@@ -835,16 +844,20 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     switch (chunk.type) {
-      case 'response-metadata':
+      case 'response-metadata': {
+        // Providers may split metadata across several chunks (e.g. id first, modelId later),
+        // so keep earlier values for fields a chunk omits.
+        const previous = runState.state.responseMetadata;
         runState.setState({
           responseMetadata: {
-            id: chunk.payload.id,
-            timestamp: chunk.payload.timestamp,
-            modelId: chunk.payload.modelId,
-            headers: chunk.payload.headers,
+            id: chunk.payload.id ?? previous?.id,
+            timestamp: chunk.payload.timestamp ?? previous?.timestamp,
+            modelId: chunk.payload.modelId ?? previous?.modelId,
+            headers: chunk.payload.headers ?? previous?.headers,
           },
         });
         break;
+      }
 
       case 'tool-call-input-streaming-start': {
         const tool = toolInputStartToolDef || resolveDirectOrIdTool(chunk.payload.toolName);
@@ -1240,6 +1253,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   hasConfiguredErrorProcessors,
   logger,
   agentId,
+  agent,
   downloadRetries,
   downloadConcurrency,
   processorStates,
@@ -1263,7 +1277,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
   eagerCoordinator?: EagerToolExecutionCoordinator;
   eagerToolCallStep?: { execute: (context: any) => Promise<unknown> };
 }) {
-  const initialUntaggedSystemMessages = messageList.getSystemMessages();
+  // Captured on the first step execution rather than here: a resumed run
+  // restores its saved message list (including processor-added untagged system
+  // messages, #24844) after this closure is built.
+  let initialUntaggedSystemMessages: ReturnType<MessageList['getSystemMessages']> | undefined;
   const configuredToolCallConcurrency = resolveConfiguredToolCallConcurrency(toolCallConcurrency);
 
   let currentIteration = 0;
@@ -1530,6 +1547,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       let rawResponse: any;
       let activeFallbackModelIndex = inputData.fallbackModelIndex || 0;
       let executedStepModel: string | undefined;
+      // Set when the last model's input step processors throw. The turn ends in that
+      // error instead of failing the run, so it is saved like any other failed turn.
+      let terminalInputStepFailure: { error: unknown; attemptMessageId: string } | undefined;
+      // Builds the attempt's streamed chunks into the message list. Set only while those
+      // chunks are not materialized yet, which is the case when the stream threw.
+      let materializeFailedAttempt: (() => void) | undefined;
       const maxErrorProcessorRetries = resolveMaxProcessorRetries({
         maxProcessorRetries,
         hasErrorProcessors: Boolean(errorProcessors?.length),
@@ -1537,6 +1560,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         agentId,
         logger,
       });
+      // A run that loses its thread lease while a request streams lets the request finish before it stops.
+      let settleRequest = () => {};
       const execution = await executeStreamWithFallbackModels<{
         outputStream: MastraModelOutput<OUTPUT>;
         runState: AgenticRunState;
@@ -1553,6 +1578,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         throwIfInterrupted,
       )(async (modelConfig, isLastModel) => {
         activeFallbackModelIndex = models.findIndex(candidate => candidate.id === modelConfig.id);
+        materializeFailedAttempt = undefined;
+        settleRequest();
+        settleRequest = startRunStep(options?.abortSignal);
         const model = modelConfig.model;
         const modelHeaders = modelConfig.headers;
 
@@ -1570,9 +1598,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
         // Reset the mutable untagged bucket before each step execution. Tagged
         // processor-owned buckets remain on messageList and are assembled later.
-        if (initialUntaggedSystemMessages) {
-          messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
-        }
+        initialUntaggedSystemMessages ??= messageList.getSystemMessages();
+        messageList.replaceAllSystemMessages(initialUntaggedSystemMessages);
 
         // Per-model modelSettings shallow-merge on top of call-time modelSettings,
         // resolved once here so that input processors see (and can override) the
@@ -1659,6 +1686,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // Captured before processors can rotate the active response id.
+        const inputStepAttemptMessageId = currentMessageId;
         const inputStepProcessors = [
           ...(inputProcessors || []),
           ...(options?.prepareStep ? [new PrepareStepProcessor({ prepareStep: options.prepareStep })] : []),
@@ -1669,6 +1698,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors: [],
             logger: logger || new ConsoleLogger({ level: 'error' }),
             agentName: agentId || 'unknown',
+            agent,
             processorStates,
           });
 
@@ -1795,7 +1825,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               const convertedTools: Record<string, unknown> = {};
               for (const [name, tool] of Object.entries(currentStep.tools)) {
                 if (isMastraTool(tool)) {
-                  convertedTools[name] = makeCoreTool(
+                  convertedTools[name] = makeProcessorCoreTool(
                     tool as unknown as ToolToConvert,
                     {
                       name,
@@ -1845,6 +1875,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               });
             }
             logger?.error('Error in processInputStep processors:', error);
+            // Earlier models fall through to the next one, which reruns the processors.
+            if (isLastModel) terminalInputStepFailure = { error, attemptMessageId: inputStepAttemptMessageId };
             throw error;
           }
         }
@@ -1891,6 +1923,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           downloadError = error;
           return [];
         });
+        removeTrailingAssistantGuardContinuations(messageList);
         await persistUnavailableAttachments({
           messageList,
           memory: readScoped(scopeCtx, MEMORY_KEY, 'memory'),
@@ -1903,6 +1936,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors: [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
         const requestStepWriter: ProcessorStreamWriter | undefined = outputWriter
@@ -1934,6 +1968,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             const requestStepResult = await requestStepRunner.runProcessLLMRequest({
               prompt: inputMessages,
               model: currentStep.model,
+              apiProviderId: await resolveApiProviderId(currentStep.model),
               messageList,
               workspace: currentStep.workspace,
               stepNumber: inputData.output?.steps?.length || 0,
@@ -2039,7 +2074,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           // tools / availableTools / toolChoice reflect any per-step mutations.
           // availableTools is derived from the serialized definitions so the
           // two can't disagree. Skipped when tracing is off or the trace was
-          // not sampled (a no-op span still hands out a tracker).
+          // not sampled (a no-op span still hands out a tracker). The prompt is
+          // passed at creation so MODEL_INFERENCE records what this call sent.
           const inferenceTools = modelSpanTracker?.getTracingContext()?.currentSpan?.isValid
             ? getToolDefinitionsForTracing({
                 tools: currentStep.tools,
@@ -2057,7 +2093,13 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             toolChoice: currentStep.toolChoice as ModelInferenceContext['toolChoice'],
             responseFormat: currentStep.structuredOutput ? 'json_schema' : undefined,
           });
-          modelSpanTracker?.startInference?.();
+          modelSpanTracker?.startInference?.({
+            request: {},
+            inputMessages,
+            messageId: currentStep.messageId,
+            modelId: currentStep.model.modelId,
+            provider: currentStep.model.provider,
+          });
           const inferenceStartedAt = Date.now();
 
           modelResult = executeWithContextSync({
@@ -2065,6 +2107,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             fn: () =>
               execute({
                 runId,
+                // The request failed: a run that lost its lease meanwhile stops now instead of retrying it. Nothing
+                // runs while the retry waits, so a lease lost during that wait stops the run too.
+                onRequestFailed: () => settleRequest(),
+                onRequestRetry: () => {
+                  settleRequest = startRunStep(options?.abortSignal);
+                },
                 model: currentStep.model,
                 providerOptions: currentStep.providerOptions,
                 inputMessages,
@@ -2111,6 +2159,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                       warnings: warnings || [],
                       messageId: currentStep.messageId,
                       startedAt: inferenceStartedAt,
+                      modelId: currentStep.model.modelId,
+                      provider: currentStep.model.provider,
                     },
                   };
                 },
@@ -2156,8 +2206,10 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             // per-chunk processor pass; the deferred-error branch below runs
             // processors on the error once recovery has been ruled out.
             deferErrorChunks: true,
-            tracingContext,
+            // Stream processors run per step, so their spans belong under the step span.
+            tracingContext: modelSpanTracker?.getTracingContext() ?? tracingContext,
             processorStates,
+            agent,
             requestContext,
             abortSignal: options?.abortSignal,
           },
@@ -2182,8 +2234,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         let toolResultTripwireFromStream: TripWire | null = null;
+        const attemptChunks: CollectedChunk[] = [];
+        // Same build as the success path below, for a stream that throws before reaching it.
+        materializeFailedAttempt = () => {
+          for (const msg of buildMessagesFromChunks({
+            chunks: attemptChunks,
+            messageId: currentStep.messageId,
+            responseModelMetadata: buildResponseModelMetadata(
+              runState,
+              currentStep.model,
+              modelSpanTracker?.getTracingContext() ?? tracingContext,
+            ),
+            tools: currentStep.tools,
+          })) {
+            messageList.add(msg, 'response');
+          }
+        };
         try {
           const { collectedChunks, toolResultTripwire: streamToolResultTripwire } = await processOutputStream({
+            collectedChunks: attemptChunks,
             outputStream,
             openReasoningIds: subscribePendingSignals ? openReasoningIds : undefined,
             includeRawChunks,
@@ -2205,6 +2274,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             outputProcessors,
             processorStates,
             agentId,
+            agent,
             processorRetryCount: inputData.processorRetryCount,
             outputWriter,
             requestContext,
@@ -2410,6 +2480,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           for (const msg of builtMessages) {
             messageList.add(msg, 'response');
           }
+          materializeFailedAttempt = undefined;
 
           // Apply structuredOutput metadata to the assistant message.
           // MastraModelOutput's finish handler runs during the stream before messages
@@ -2583,6 +2654,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -2661,6 +2733,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           }
         }
 
+        // The response has streamed: a run whose lease was lost meanwhile stops here, before another step.
+        settleRequest();
         // Handle abort detected via signal check in processOutputStream (loop broke early).
         // The model may not have thrown an AbortError (e.g. it continued streaming despite abort),
         // so this handles the case where processOutputStream completed normally via `break`.
@@ -2688,9 +2762,43 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         };
       })
         .catch(error => {
+          if (terminalInputStepFailure && error === terminalInputStepFailure.error) return;
           if (!interruption.signal.aborted) throw error;
         })
-        .finally(() => stopListening?.());
+        .finally(() => {
+          settleRequest();
+          stopListening?.();
+        });
+
+      if (!execution && terminalInputStepFailure) {
+        const error = getErrorFromUnknown(terminalInputStepFailure.error, {
+          fallbackMessage: 'Unknown error in input processor',
+        });
+        recordTerminalErrorMessage({
+          messageList,
+          attemptId: terminalInputStepFailure.attemptMessageId,
+          activeId: currentMessageId,
+          error,
+        });
+        safeEnqueue(controller, { type: 'error', runId, from: ChunkFrom.AGENT, payload: { error } });
+        await options?.onError?.({ error });
+        return bail({
+          messageId: currentMessageId,
+          stepResult: { reason: 'error', isContinued: false, warnings: [] },
+          metadata: {},
+          output: {
+            text: '',
+            toolCalls: [],
+            usage: inputData.output?.usage ?? {},
+            steps: inputData.output?.steps ?? [],
+          },
+          messages: {
+            all: messageList.get.all.aiV5.model(),
+            user: messageList.get.input.aiV5.model(),
+            nonUser: messageList.get.response.aiV5.model(),
+          },
+        });
+      }
 
       if (!execution) {
         // Discard what this request left behind, then hand the loop an empty, continuing
@@ -2833,6 +2941,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           errorProcessors: errorProcessors || [],
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
@@ -2863,6 +2972,18 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             return currentMessageId;
           },
         });
+
+        // A processor cancelled by the run's abort rejects, which the runner reports as no retry.
+        if (options?.abortSignal?.aborted) {
+          cleanupProviderToolSpans(true);
+          await options.onAbort?.({
+            steps: inputData?.output?.steps ?? [],
+            text: runState.state.partialText,
+          });
+          await settleEagerWorkOnAbort(controller);
+          safeEnqueue(controller, { type: 'abort', runId, from: ChunkFrom.AGENT, payload: {} });
+          return bailFromExecution('abort');
+        }
 
         if (errorResult.retry && canRetryError) {
           apiErrorRetryResult = errorResult;
@@ -2999,6 +3120,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
               errorProcessors: errorProcessors || [],
               logger: logger || new ConsoleLogger({ level: 'error' }),
               agentName: agentId || 'unknown',
+              agent,
               processorStates,
             });
 
@@ -3022,6 +3144,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // in thread history as an `error` part on this attempt's assistant record
         // (creating one when the attempt produced no output). The streamed chunk,
         // onError callback and result.error keep the original error identity.
+        // Output streamed before a mid-stream failure is kept next to the error.
+        materializeFailedAttempt?.();
+        materializeFailedAttempt = undefined;
         recordTerminalErrorMessage({
           messageList,
           attemptId: attemptMessageId,
@@ -3068,6 +3193,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           outputProcessors,
           logger: logger || new ConsoleLogger({ level: 'error' }),
           agentName: agentId || 'unknown',
+          agent,
           processorStates,
         });
 
@@ -3180,8 +3306,12 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         finishReason !== 'error' &&
         finishReason !== 'length' &&
         finishReason !== 'content-filter';
-      const shouldContinue =
-        shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || !TERMINAL_FINISH_REASONS.includes(finishReason)));
+      // A non-terminal finish reason only re-enters the loop when the step produced tool calls
+      // (matching the durable engine). Without tool calls (e.g. openai-compatible reports 'other'
+      // when the stream omits finish_reason) re-sending the same request would duplicate the
+      // answer until maxSteps. See: https://github.com/mastra-ai/mastra/issues/26811
+      const hasToolCallContinuation = toolCalls.length > 0 && !TERMINAL_FINISH_REASONS.includes(finishReason);
+      const shouldContinue = shouldRetry || (!tripwireTriggered && (hasPendingToolCalls || hasToolCallContinuation));
 
       // Fail abandoned provider calls before creating snapshots so persisted history
       // cannot retain pending calls after a terminal error. Only target this step's IDs.

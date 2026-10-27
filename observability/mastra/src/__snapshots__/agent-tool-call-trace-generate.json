@@ -30,7 +30,10 @@
         "attributes": {
           "conversationId": "test-thread-id",
           "instructions": "You are a test agent",
-          "availableTools": ["calculator", "apiCall", "workflowExecutor"]
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -151,10 +154,10 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -223,7 +226,10 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -501,6 +507,16 @@
                       "threadId": "test-thread-id",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Calculate 5 + 3"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -628,7 +644,10 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -976,6 +995,24 @@
                       "threadId": "test-thread-id",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Calculate 5 + 3"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: calculator]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: calculator]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []

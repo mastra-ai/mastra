@@ -1,9 +1,13 @@
 export const TRACE_OPTIONAL_COLUMNS = [
   'type',
   'input',
+  'output',
   'duration',
+  'timeToFirstChunk',
   'endTime',
   'environment',
+  'model',
+  'provider',
   'inputTokens',
   'outputTokens',
   'totalTokens',
@@ -41,15 +45,44 @@ import type { TraceUsageSummary } from '@mastra/react/hooks/traces';
 export type { TraceUsageSummary };
 
 export const DEFAULT_TRACE_COLUMN_PREFERENCES: TraceColumnPreferences = {
-  visibleColumns: ['type', 'input', 'duration', 'estimatedCost'],
+  visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
   customColumns: [],
   metadataKeys: [],
 };
 
+/** A list a column selection belongs to. Each list only offers the columns its rows carry. */
+export type TraceColumnScope = 'traces' | 'spans';
+
+export type TraceColumnCatalog = {
+  /** Plain columns offered in the picker, in menu order. */
+  readonly standardColumns: readonly TraceOptionalColumn[];
+  /** Whether rows carry token and cost usage. */
+  readonly usage: boolean;
+  /** Whether rows carry metadata that can be shown as columns. */
+  readonly metadata: boolean;
+  readonly defaults: TraceColumnPreferences;
+};
+
+export const TRACE_COLUMN_CATALOGS: Record<TraceColumnScope, TraceColumnCatalog> = {
+  traces: {
+    standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
+    usage: true,
+    metadata: true,
+    defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
+  },
+  spans: {
+    standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
+    usage: false,
+    metadata: false,
+    defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
+  },
+};
+
 // v2: 'entity' became 'type' and moved before Name; duration + cost joined the defaults.
 // v3: added `customColumns`; a v2 payload is migrated rather than reset.
-const TRACE_COLUMN_PREFERENCES_VERSION = 3;
-const TRACE_COLUMN_PREFERENCES_MIGRATABLE_VERSIONS = new Set<unknown>([2, TRACE_COLUMN_PREFERENCES_VERSION]);
+// v4: added 'output', shown after 'input' for anyone who had Input visible.
+const TRACE_COLUMN_PREFERENCES_VERSION = 4;
+const TRACE_COLUMN_PREFERENCES_MIGRATABLE_VERSIONS = new Set<unknown>([2, 3, TRACE_COLUMN_PREFERENCES_VERSION]);
 const TRACE_COLUMN_SET = new Set<string>(TRACE_OPTIONAL_COLUMNS);
 const TRACE_USAGE_COLUMN_SET = new Set<TraceOptionalColumn>(TRACE_USAGE_COLUMNS);
 const TRACE_CUSTOM_COLUMN_SET = new Set<string>(TRACE_CUSTOM_COLUMN_FIELDS);
@@ -77,18 +110,25 @@ function uniqueMetadataKeys(value: unknown): string[] {
   return [...new Set(keys)];
 }
 
-export function parseTraceColumnPreferences(serialized: string | undefined): TraceColumnPreferences {
-  if (!serialized) return DEFAULT_TRACE_COLUMN_PREFERENCES;
+export function parseTraceColumnPreferences(
+  serialized: string | undefined,
+  defaults: TraceColumnPreferences = DEFAULT_TRACE_COLUMN_PREFERENCES,
+): TraceColumnPreferences {
+  if (!serialized) return defaults;
 
   try {
     const parsed: unknown = JSON.parse(serialized);
     if (!isRecord(parsed) || !TRACE_COLUMN_PREFERENCES_MIGRATABLE_VERSIONS.has(parsed.version)) {
-      return DEFAULT_TRACE_COLUMN_PREFERENCES;
+      return defaults;
     }
 
     const visibleColumns = Array.isArray(parsed.visibleColumns)
       ? [...new Set(parsed.visibleColumns.filter(isTraceOptionalColumn))]
-      : [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns];
+      : [...defaults.visibleColumns];
+    if (parsed.version !== TRACE_COLUMN_PREFERENCES_VERSION && !visibleColumns.includes('output')) {
+      const input = visibleColumns.indexOf('input');
+      if (input !== -1) visibleColumns.splice(input + 1, 0, 'output');
+    }
     const customColumns = Array.isArray(parsed.customColumns)
       ? [...new Set(parsed.customColumns.filter(isTraceCustomColumn))]
       : [];
@@ -99,7 +139,7 @@ export function parseTraceColumnPreferences(serialized: string | undefined): Tra
       metadataKeys: uniqueMetadataKeys(parsed.metadataKeys),
     };
   } catch {
-    return DEFAULT_TRACE_COLUMN_PREFERENCES;
+    return defaults;
   }
 }
 
@@ -119,8 +159,17 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('type')) keys.push('type');
   keys.push('name');
   if (visible.has('input')) keys.push('input');
+  if (visible.has('output')) keys.push('output');
   keys.push('status');
-  for (const column of ['duration', 'endTime', 'environment', ...TRACE_USAGE_COLUMNS] as const) {
+  for (const column of [
+    'duration',
+    'timeToFirstChunk',
+    'endTime',
+    'environment',
+    'model',
+    'provider',
+    ...TRACE_USAGE_COLUMNS,
+  ] as const) {
     if (visible.has(column)) keys.push(column);
   }
   keys.push(...preferences.customColumns.map(field => `custom:${field}`));
@@ -130,19 +179,24 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
 
 export function buildTraceListColumns(preferences: TraceColumnPreferences): string {
   const visible = new Set(preferences.visibleColumns);
-  // Name is bounded when Input is visible so Input (1fr) absorbs the free space;
-  // without Input, Name is the flexible track that fills the grid.
+  // Name is bounded when Input or Output is visible so they (1fr each) absorb the free space;
+  // without either, Name is the flexible track that fills the grid.
   const columns = ['11rem'];
+  const hasPreview = visible.has('input') || visible.has('output');
 
   if (visible.has('type')) columns.push('7rem');
-  columns.push(visible.has('input') ? '14rem' : 'minmax(8rem,1fr)');
+  columns.push(hasPreview ? '14rem' : 'minmax(8rem,1fr)');
   if (visible.has('input')) columns.push('minmax(8rem,1fr)');
+  if (visible.has('output')) columns.push('minmax(8rem,1fr)');
 
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
+  if (visible.has('timeToFirstChunk')) columns.push('7rem');
   if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
+  if (visible.has('model')) columns.push('10rem');
+  if (visible.has('provider')) columns.push('8rem');
   if (visible.has('inputTokens')) columns.push('8rem');
   if (visible.has('outputTokens')) columns.push('8rem');
   if (visible.has('totalTokens')) columns.push('8rem');
@@ -188,6 +242,43 @@ export function formatTraceMetadataValue(
 
 export function hasTraceColumn(preferences: TraceColumnPreferences, column: TraceOptionalColumn): boolean {
   return preferences.visibleColumns.includes(column);
+}
+
+export function toggleTraceColumn(
+  preferences: TraceColumnPreferences,
+  column: TraceOptionalColumn,
+): TraceColumnPreferences {
+  return {
+    ...preferences,
+    visibleColumns: preferences.visibleColumns.includes(column)
+      ? preferences.visibleColumns.filter(visibleColumn => visibleColumn !== column)
+      : [...preferences.visibleColumns, column],
+  };
+}
+
+export function addTraceCustomColumn(
+  preferences: TraceColumnPreferences,
+  field: TraceCustomColumn,
+): TraceColumnPreferences {
+  if (preferences.customColumns.includes(field)) return preferences;
+  return { ...preferences, customColumns: [...preferences.customColumns, field] };
+}
+
+export function removeTraceCustomColumn(
+  preferences: TraceColumnPreferences,
+  field: TraceCustomColumn,
+): TraceColumnPreferences {
+  return { ...preferences, customColumns: preferences.customColumns.filter(customColumn => customColumn !== field) };
+}
+
+export function addTraceMetadataColumn(preferences: TraceColumnPreferences, key: string): TraceColumnPreferences {
+  const normalizedKey = key.trim();
+  if (!normalizedKey || preferences.metadataKeys.includes(normalizedKey)) return preferences;
+  return { ...preferences, metadataKeys: [...preferences.metadataKeys, normalizedKey] };
+}
+
+export function removeTraceMetadataColumn(preferences: TraceColumnPreferences, key: string): TraceColumnPreferences {
+  return { ...preferences, metadataKeys: preferences.metadataKeys.filter(metadataKey => metadataKey !== key) };
 }
 
 export function hasTraceUsageColumn(preferences: TraceColumnPreferences): boolean {

@@ -37,7 +37,10 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "You are a helpful assistant"
+          "instructions": "You are a helpful assistant",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -114,7 +117,10 @@
                 "entityType": "agent",
                 "entityId": "validator-agent",
                 "attributes": {
-                  "instructions": "You validate input messages"
+                  "instructions": "You validate input messages",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -144,10 +150,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -203,7 +209,10 @@
                         "entityId": "validator-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -374,6 +383,16 @@
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You validate input messages"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Validate:   Hello! How are you?  "
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []
@@ -432,10 +451,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -491,7 +510,10 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-2>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -662,6 +684,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a helpful assistant"
+                      },
+                      {
+                        "role": "user",
+                        "content": "  Hello! How are you?  "
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []
@@ -767,7 +799,10 @@
                 "entityType": "agent",
                 "entityId": "summarizer-agent",
                 "attributes": {
-                  "instructions": "You summarize text concisely"
+                  "instructions": "You summarize text concisely",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -797,10 +832,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -856,7 +891,10 @@
                         "entityId": "summarizer-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-3>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -1027,6 +1065,16 @@
                               "runId": "<runId-3>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You summarize text concisely"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Summarize: Mock V2 generate response"
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []

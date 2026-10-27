@@ -1,7 +1,6 @@
 import { useSpanDetail, useTraceSpans } from '@mastra/react/hooks/traces';
 import { SpanDataPanelView } from '@/domains/traces/components/span-data-panel-view';
 import { TraceDetailsView } from '@/domains/traces/components/trace-details-view';
-import { useTraceSpanNavigation } from '@/domains/traces/hooks/use-trace-span-navigation';
 import { cn } from '@/lib/utils';
 
 export interface TopicTraceDetailsPanelProps {
@@ -23,11 +22,6 @@ export function TopicTraceDetailsPanel({
     spanId: selectedSpanId,
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });
-  const { handlePreviousSpan, handleNextSpan } = useTraceSpanNavigation(
-    traceSpans.data?.spans,
-    selectedSpanId,
-    spanId => onSpanSelect?.(spanId),
-  );
 
   if (!traceId) return null;
 
@@ -52,8 +46,6 @@ export function TopicTraceDetailsPanel({
           spanId={selectedSpanId}
           span={spanDetail.data?.span}
           isLoading={spanDetail.isLoading}
-          onPrevious={handlePreviousSpan}
-          onNext={handleNextSpan}
           onClose={onSpanSelect ? () => onSpanSelect(undefined) : undefined}
         />
       ) : null}

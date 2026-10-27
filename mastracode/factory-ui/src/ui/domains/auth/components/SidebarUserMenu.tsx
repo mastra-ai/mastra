@@ -3,13 +3,16 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
-import { ThemeToggle } from '@mastra/playground-ui/components/ThemeToggle';
+import { useTheme } from '@mastra/playground-ui/components/ThemeProvider';
+import { THEME_OPTIONS } from '@mastra/playground-ui/components/ThemeToggle';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Bot, Brain, Cable, CircleUserRound, LogOut, Palette, Settings } from 'lucide-react';
-import { Link, useLocation, useMatch, useParams } from 'react-router';
+import { LogOut, Settings, SunMoon } from 'lucide-react';
+import { Link, useLocation, useParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
+import { ACCOUNT_SETTINGS_GROUP } from '../../settings/components/SettingsNavigation';
+import { useSettingsOpen } from '../../settings/hooks/useSettingsOpen';
 import { settingsSectionPath } from '../../settings/settingsSections';
 import { clearMastraCodeStorage, logoutUrl } from '../services/auth';
 
@@ -18,8 +21,9 @@ export function SidebarUserMenu() {
   const { baseUrl } = useApiConfig();
   const { factoryId } = useParams<{ factoryId: string }>();
   const location = useLocation();
-  const settingsOpen = !!useMatch('/factories/:factoryId/settings/*');
+  const settingsOpen = useSettingsOpen();
   const { state: sidebarState, setOpenMobile } = useSidebar();
+  const { theme, setTheme } = useTheme();
 
   if (!factoryId) return null;
 
@@ -34,33 +38,32 @@ export function SidebarUserMenu() {
 
   const account = auth.data;
   const signedIn = account?.authEnabled && account.authenticated;
-  const identity = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
+  const triggerLabel = signedIn ? account.user?.name?.trim() || account.user?.email || 'User' : 'Settings';
   const email = signedIn ? account.user?.email : undefined;
   const menuLabel = signedIn ? 'User menu' : 'Settings menu';
-  // Switching sections from the menu must retain the original Back to app destination.
-  const settingsState = settingsOpen ? location.state : { from: location };
-  const closeMobileNavigation = () => setOpenMobile(false);
+  const accountSettings = ACCOUNT_SETTINGS_GROUP.items.filter(item => signedIn || item.id !== 'account');
+  const backToAppState = settingsOpen ? location.state : { from: location };
 
   return (
     <DropdownMenu>
       <Sidebar.NavLink asChild link={{ name: menuLabel, url: '#' }} isActive={settingsOpen}>
         <DropdownMenu.Trigger
-          id="settings-trigger"
+          id="user-menu-trigger"
           render={<button type="button" />}
           aria-label={menuLabel}
           className={signedIn ? 'h-auto min-h-10 py-1.5' : undefined}
         >
           {signedIn ? (
-            <Avatar key={account.user?.avatarUrl} src={account.user?.avatarUrl} name={identity} size="sm" />
+            <Avatar src={account.user?.avatarUrl} name={triggerLabel} size="sm" />
           ) : (
             <Settings aria-hidden="true" />
           )}
           <Sidebar.NavLabel>
             <span className="flex min-w-0 flex-col">
               <Txt as="span" variant="label" tone="ink" className="truncate">
-                {identity}
+                {triggerLabel}
               </Txt>
-              {email && email !== identity && (
+              {email && email !== triggerLabel && (
                 <Txt as="span" variant="meta" tone="muted" className="truncate">
                   {email}
                 </Txt>
@@ -74,70 +77,43 @@ export function SidebarUserMenu() {
         {signedIn && (
           <>
             <div className="min-w-0 px-3 py-2">
-              <Txt variant="caption" tone="muted" className="truncate" title={email ?? identity}>
-                {email ?? identity}
+              <Txt variant="caption" tone="muted" className="truncate" title={email ?? triggerLabel}>
+                {email ?? triggerLabel}
               </Txt>
             </div>
             <DropdownMenu.Separator />
           </>
         )}
-        <DropdownMenu.Label>Your settings</DropdownMenu.Label>
-        {signedIn && (
+        <DropdownMenu.Label>{ACCOUNT_SETTINGS_GROUP.label}</DropdownMenu.Label>
+        {accountSettings.map(({ id, label, icon: Icon }) => (
           <DropdownMenu.Item
-            render={<Link to={settingsSectionPath(factoryId, 'account')} state={settingsState} />}
-            onSelect={closeMobileNavigation}
+            key={id}
+            render={<Link to={settingsSectionPath(factoryId, id)} state={backToAppState} />}
+            onClick={() => setOpenMobile(false)}
           >
-            <CircleUserRound aria-hidden="true" />
-            My account
+            <Icon aria-hidden="true" />
+            {label}
           </DropdownMenu.Item>
-        )}
-        <DropdownMenu.Item
-          render={<Link to={settingsSectionPath(factoryId, 'preferences')} state={settingsState} />}
-          onSelect={closeMobileNavigation}
-        >
-          <Palette aria-hidden="true" />
-          Preferences
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          render={<Link to={settingsSectionPath(factoryId, 'personal-models')} state={settingsState} />}
-          onSelect={closeMobileNavigation}
-        >
-          <Bot aria-hidden="true" />
-          Your models
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          render={<Link to={settingsSectionPath(factoryId, 'memory')} state={settingsState} />}
-          onSelect={closeMobileNavigation}
-        >
-          <Brain aria-hidden="true" />
-          Your memory
-        </DropdownMenu.Item>
-        <DropdownMenu.Item
-          render={<Link to={settingsSectionPath(factoryId, 'connections')} state={settingsState} />}
-          onSelect={closeMobileNavigation}
-        >
-          <Cable aria-hidden="true" />
-          Connections
-        </DropdownMenu.Item>
+        ))}
         <DropdownMenu.Separator />
         <DropdownMenu.Item
-          render={<Link to={settingsSectionPath(factoryId, 'models')} state={settingsState} />}
-          onSelect={closeMobileNavigation}
+          render={<Link to={settingsSectionPath(factoryId, 'models')} state={backToAppState} />}
+          onClick={() => setOpenMobile(false)}
         >
           <Settings aria-hidden="true" />
           Settings
         </DropdownMenu.Item>
-        <DropdownMenu.Separator />
-        <div className="flex items-center justify-between gap-3 px-3 py-1">
-          <Txt as="span" variant="caption" tone="muted">
-            Theme
-          </Txt>
-          <ThemeToggle size="sm" />
-        </div>
+        <DropdownMenu.RadioSub
+          label="Theme"
+          icon={<SunMoon aria-hidden="true" />}
+          options={THEME_OPTIONS}
+          value={theme}
+          onValueChange={setTheme}
+        />
         {signedIn && (
           <>
             <DropdownMenu.Separator />
-            <DropdownMenu.Item render={<a href={logoutUrl(baseUrl)} />} onSelect={clearMastraCodeStorage}>
+            <DropdownMenu.Item render={<a href={logoutUrl(baseUrl)} />} onClick={clearMastraCodeStorage}>
               <LogOut aria-hidden="true" />
               Log out
             </DropdownMenu.Item>

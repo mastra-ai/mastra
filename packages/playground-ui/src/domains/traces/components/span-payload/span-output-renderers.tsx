@@ -18,8 +18,8 @@ import {
 import { SpanPayloadProcessor } from './span-payload-processor';
 import { asCoreSpan, hasItems, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
+import { SpanToolNameValue } from './span-payload-tool';
 import { ReasoningActivity } from '@/ds/components/ai/activity';
-import { Card, CardContent } from '@/ds/components/Card';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 import { InlineCode } from '@/ds/components/InlineCode/inline-code';
 import { Notice } from '@/ds/components/Notice';
@@ -42,7 +42,7 @@ function SpanInterruptedRenderer({ value }: { value: InterruptedSpanOutput }) {
           {value.toolName !== undefined && (
             <>
               <DataKeysAndValues.Key>Tool</DataKeysAndValues.Key>
-              <DataKeysAndValues.Value>{value.toolName}</DataKeysAndValues.Value>
+              <SpanToolNameValue toolName={value.toolName} />
             </>
           )}
           {value.toolCallId !== undefined && (
@@ -180,11 +180,5 @@ export function SpanOutputRenderer({ span }: SpanOutputRendererProps) {
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;
   const Renderer = pickRenderer(SPAN_OUTPUT_RENDERERS, description);
-  return (
-    <Card data-slot="span-output-card" className="min-w-0">
-      <CardContent>
-        <Renderer value={description.value} />
-      </CardContent>
-    </Card>
-  );
+  return <Renderer value={description.value} />;
 }

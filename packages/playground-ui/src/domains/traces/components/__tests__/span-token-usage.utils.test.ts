@@ -1,120 +1,73 @@
 // @vitest-environment jsdom
 import type { UsageStats } from '@mastra/core/observability';
-import { assert, describe, expect, it } from 'vitest';
-import { getTokenUsageView } from '../span-token-usage.utils';
+import { SpanType } from '@mastra/core/observability';
+import { describe, expect, it } from 'vitest';
+import { getModelFacts, getTokenUsageRows } from '../span-token-usage.utils';
 
-const getRequiredTokenUsageView = (usage: UsageStats) => {
-  const view = getTokenUsageView(usage);
-  assert(view, 'Expected token usage view');
-  return view;
-};
-
-describe('getTokenUsageView', () => {
-  it('returns null when usage is undefined', () => {
-    expect(getTokenUsageView(undefined)).toBeNull();
+describe('getTokenUsageRows', () => {
+  it('returns null when no side reports a token count', () => {
+    expect(getTokenUsageRows(undefined)).toBeNull();
+    expect(getTokenUsageRows({})).toBeNull();
+    expect(getTokenUsageRows({ inputDetails: { text: 50 } })).toBeNull();
   });
 
-  it('returns null when usage is null', () => {
-    expect(getTokenUsageView(null)).toBeNull();
+  it('gives each side its total and its non-zero breakdown', () => {
+    expect(
+      getTokenUsageRows({
+        inputTokens: 6606,
+        outputTokens: 365,
+        inputDetails: { cacheRead: 5632, cacheWrite: 0, text: 974 },
+        outputDetails: { reasoning: 256, text: 109 },
+      }),
+    ).toEqual([
+      { label: 'Input', total: 6606, breakdown: '5,632 cached · 974 text' },
+      { label: 'Output', total: 365, breakdown: '256 reasoning · 109 text' },
+    ]);
   });
 
-  it('returns null when usage is an empty object', () => {
-    expect(getTokenUsageView({} as UsageStats)).toBeNull();
+  it('only lists the sides that report a count', () => {
+    expect(getTokenUsageRows({ inputTokens: 100, outputDetails: { text: 50 } })).toEqual([
+      { label: 'Input', total: 100, breakdown: undefined },
+    ]);
+  });
+});
+
+describe('getModelFacts', () => {
+  const modelSpan = {
+    spanType: SpanType.MODEL_GENERATION,
+    startedAt: '2026-10-26T11:28:14.930Z',
+    endedAt: '2026-10-26T11:28:20.504Z',
+    attributes: {
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      finishReason: 'stop',
+      completionStartTime: '2026-10-26T11:28:16.376Z',
+      usage: { inputTokens: 6606, outputTokens: 365 },
+    },
+  };
+
+  it('reads the model, how it finished, the time to first token and the output speed', () => {
+    expect(getModelFacts(modelSpan)).toEqual({
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      finishReason: 'stop',
+      firstToken: '1.45s',
+      speed: '88 tok/s',
+    });
   });
 
-  it('returns null when only details are present (no top-level token counts)', () => {
-    const usage = {
-      inputDetails: { text: 50 },
-      outputDetails: { text: 20 },
-    } as UsageStats;
-    expect(getTokenUsageView(usage)).toBeNull();
+  it('leaves out the timings when the span never streamed a first chunk', () => {
+    const { completionStartTime: _, ...attributes } = modelSpan.attributes;
+    expect(getModelFacts({ ...modelSpan, attributes })).toEqual({
+      model: 'gpt-5-mini',
+      provider: 'openai',
+      finishReason: 'stop',
+      firstToken: undefined,
+      speed: undefined,
+    });
   });
 
-  it('renders both columns when only the input side is present, with output defaulting to 0', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100 } as UsageStats);
-    expect(view.inputValue).toBe(100);
-    expect(view.outputValue).toBe(0);
-    expect(view.total).toBe(100);
-    expect(view.showSplit).toBe(true);
-    expect(view.inputPct).toBe(100);
-    expect(view.outputPct).toBe(0);
-    expect(view.inputDetails).toBeUndefined();
-    expect(view.outputDetails).toBeUndefined();
-  });
-
-  it('drops details on a side that has no top-level token count', () => {
-    const view = getRequiredTokenUsageView({
-      inputTokens: 100,
-      outputDetails: { text: 50 },
-    } as UsageStats);
-    expect(view.outputValue).toBe(0);
-    expect(view.outputDetails).toBeUndefined();
-  });
-
-  it('keeps details on a side that has a top-level token count', () => {
-    const view = getRequiredTokenUsageView({
-      inputTokens: 100,
-      inputDetails: { text: 80, cacheRead: 20 },
-      outputTokens: 25,
-    } as UsageStats);
-    expect(view.inputDetails).toEqual({ text: 80, cacheRead: 20 });
-    expect(view.outputDetails).toBeUndefined();
-  });
-
-  it('keeps output details when the output side has a top-level token count', () => {
-    const view = getRequiredTokenUsageView({
-      inputTokens: 100,
-      outputTokens: 25,
-      outputDetails: { text: 20, reasoning: 5 },
-    } as UsageStats);
-    expect(view.outputDetails).toEqual({ text: 20, reasoning: 5 });
-  });
-
-  it('keeps a details object that mixes numeric and non-numeric entries', () => {
-    const view = getRequiredTokenUsageView({
-      inputTokens: 100,
-      inputDetails: { text: 80, cacheRead: undefined } as unknown as UsageStats['inputDetails'],
-    } as UsageStats);
-    expect(view.inputDetails).toEqual({ text: 80, cacheRead: undefined });
-  });
-
-  it('treats a details object with no numeric values as absent', () => {
-    const view = getRequiredTokenUsageView({
-      inputTokens: 100,
-      inputDetails: { text: undefined } as unknown as UsageStats['inputDetails'],
-    } as UsageStats);
-    expect(view.inputDetails).toBeUndefined();
-  });
-
-  it('renders both columns at 0 with no split bar when both totals are 0', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 0, outputTokens: 0 } as UsageStats);
-    expect(view.inputValue).toBe(0);
-    expect(view.outputValue).toBe(0);
-    expect(view.total).toBe(0);
-    expect(view.showSplit).toBe(false);
-    expect(view.inputPct).toBe(0);
-    expect(view.outputPct).toBe(0);
-  });
-
-  it('splits 50/50 when input and output are equal', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 100 } as UsageStats);
-    expect(view.total).toBe(200);
-    expect(view.inputPct).toBe(50);
-    expect(view.outputPct).toBe(50);
-  });
-
-  it('produces percentages that always sum to 100 for asymmetric inputs', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 1000, outputTokens: 250 } as UsageStats);
-    expect(view.total).toBe(1250);
-    expect(view.inputPct).toBe(80);
-    expect(view.outputPct).toBe(20);
-    expect(view.inputPct + view.outputPct).toBe(100);
-  });
-
-  it('handles one side at 0 with the other positive (100/0 split)', () => {
-    const view = getRequiredTokenUsageView({ inputTokens: 100, outputTokens: 0 } as UsageStats);
-    expect(view.showSplit).toBe(true);
-    expect(view.inputPct).toBe(100);
-    expect(view.outputPct).toBe(0);
+  it('gives nothing for spans that are not model calls', () => {
+    expect(getModelFacts({ ...modelSpan, spanType: SpanType.AGENT_RUN })).toEqual({});
   });
 });

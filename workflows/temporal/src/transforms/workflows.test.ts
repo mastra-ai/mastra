@@ -147,7 +147,7 @@ describe('workflow transform', () => {
 
     expect(result).toContain('const fetchWeatherWorkflow =');
     expect(result).toContain('const weatherWorkflow =');
-    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow", "fetch-weather")');
     expect(result).not.toContain('.then("subWorkflow")');
   });
 
@@ -162,6 +162,7 @@ describe('workflow transform', () => {
 
     expect(result).toContain('type: "childWorkflow"');
     expect(result).toContain('workflowType: "childWorkflow"');
+    expect(result).toContain('id: "child"');
     expect(result).not.toContain('.parallel(["child"])');
   });
 

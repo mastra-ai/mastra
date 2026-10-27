@@ -21,7 +21,10 @@
         "entityType": "agent",
         "entityId": "delayed-agent",
         "attributes": {
-          "instructions": "You are a test agent"
+          "instructions": "You are a test agent",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -51,10 +54,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "resp-1",
-              "responseModel": "",
-              "completionStartTime": "<date>",
+              "responseModel": "mock-model-id",
               "usage": {
                 "inputTokens": 10,
                 "outputTokens": 5,
@@ -110,7 +113,10 @@
                 "entityId": "delayed-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 5,
@@ -272,12 +278,23 @@
                         }
                       },
                       "finishReason": "stop",
-                      "completionStartTime": "<date>"
+                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id"
                     },
                     "metadata": {
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Hello"
+                      }
+                    ],
                     "output": {
                       "text": "Hello world",
                       "toolCalls": []

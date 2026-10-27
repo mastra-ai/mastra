@@ -6,8 +6,8 @@ import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
-import { thinkingConfig } from '../../__tests__/fixtures/thinkingConfig';
 import { createAppRoutes } from '../../router';
+import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
@@ -18,12 +18,13 @@ const REPOSITORY_ID = 'repository-draft-handoff';
 const DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000001';
 const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
 
-const createdSession = {
+const createdSession: FactoryUserSession = {
   id: 'row-draft',
   sessionId: DRAFT_SESSION_ID,
   projectRepositoryId: REPOSITORY_ID,
   orgId: 'org-1',
   userId: 'user-1',
+  visibility: 'private',
   title: 'fix the login bug',
   branch: `user/session-${DRAFT_SESSION_ID}`,
   baseBranch: 'main',
@@ -43,7 +44,7 @@ interface DraftRoute {
 }
 
 interface DraftRouteOptions {
-  factoryProjectGate?: Promise<void>;
+  modelDefaultsGate?: Promise<void>;
   defaultModelId?: string | null;
   /** Messages the session thread holds once it exists. */
   persistedMessages?: unknown[];
@@ -55,7 +56,7 @@ function readSentMessage(body: unknown): string {
 }
 
 function stubDraftRoute({
-  factoryProjectGate,
+  modelDefaultsGate,
   defaultModelId = null,
   persistedMessages = [],
 }: DraftRouteOptions = {}): DraftRoute {
@@ -89,9 +90,15 @@ function stubDraftRoute({
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
-      await factoryProjectGate;
+      await modelDefaultsGate;
       return HttpResponse.json({
-        project: { id: FACTORY_ID, name: 'Acme Factory', defaultModelId: 'openai/gpt-4o-mini' },
+        project: {
+          id: FACTORY_ID,
+          name: 'Acme Factory',
+          modelScope: 'hybrid',
+          defaultModelId: 'openai/gpt-4o-mini',
+          defaultThinkingLevel: 'medium',
+        },
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
@@ -115,13 +122,15 @@ function stubDraftRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, async () => {
+      await modelDefaultsGate;
+      return HttpResponse.json({ modelId: defaultModelId, thinkingLevel: null });
+    }),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
         models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/thinking`, () => HttpResponse.json(thinkingConfig)),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
     http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
       route.createBodies.push(await request.json());
@@ -193,7 +202,7 @@ function stubDraftRoute({
 
 describe('a user session draft on the real thread route', () => {
   it('given a new draft, when the first prompt is sent, then the session starts without a mode picker or mode switch', async () => {
-    const route = stubDraftRoute();
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -207,13 +216,15 @@ describe('a user session draft on the real thread route', () => {
     await user.keyboard('{Enter}');
 
     await waitFor(() =>
-      expect(route.createBodies).toEqual([{ sessionId: DRAFT_SESSION_ID, title: 'fix the login bug' }]),
+      expect(route.createBodies).toEqual([
+        { sessionId: DRAFT_SESSION_ID, title: 'fix the login bug', visibility: 'private' },
+      ]),
     );
     await waitFor(() =>
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -282,7 +293,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -306,12 +317,12 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · global default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the global default.')).toBeInTheDocument();
+    expect(await screen.findByText('Follows the Built-in default.')).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 
@@ -323,11 +334,11 @@ describe('a user session draft on the real thread route', () => {
   });
 
   it('keeps typing free while the draft model resolves, but holds the send', async () => {
-    let releaseFactoryProject = () => {};
-    const factoryProjectGate = new Promise<void>(resolve => {
-      releaseFactoryProject = resolve;
+    let releaseModelDefaults = () => {};
+    const modelDefaultsGate = new Promise<void>(resolve => {
+      releaseModelDefaults = resolve;
     });
-    const route = stubDraftRoute({ factoryProjectGate });
+    const route = stubDraftRoute({ modelDefaultsGate, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -345,7 +356,7 @@ describe('a user session draft on the real thread route', () => {
     expect(message).toHaveValue('fix the login bug');
     expect(route.createBodies).toEqual([]);
 
-    releaseFactoryProject();
+    releaseModelDefaults();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(message).toHaveValue('fix the login bug');

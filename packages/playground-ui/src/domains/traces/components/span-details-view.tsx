@@ -1,15 +1,18 @@
-import { describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
+import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
 import { BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
 import {
   SpanErrorRenderer,
   SpanInputRenderer,
+  getSpanOutputPayload,
+  hasSpanInputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanProcessorAttributes,
 } from './span-payload';
 import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanSummaryDescription } from './span-summary-description';
+import { SpanToolsSection } from './span-payload/span-tools-section';
+import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
 import { DataDetailsPanel } from '@/ds/components/DataDetailsPanel';
 
@@ -37,7 +40,12 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             Span
             <TraceIdButton id={spanId} />
           </DataDetailsPanel.Heading>
-          {span && <SpanSummaryDescription span={span} />}
+          {span && (
+            <div className="flex min-w-0 items-center gap-1">
+              {span.runId && <SpanRunId runId={span.runId} />}
+              <SpanSummaryDescription span={span} />
+            </div>
+          )}
         </div>
         <DataDetailsPanel.CloseButton onClick={onClose} />
       </DataDetailsPanel.Header>
@@ -58,7 +66,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             </>
           )}
 
-          <SpanPayloadSection title="Error" raw={span.error} layout="details" className="mb-3">
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false} className="mb-3">
             <SpanErrorRenderer span={span} />
           </SpanPayloadSection>
 
@@ -66,7 +74,7 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             title="Input"
             icon={<FileInputIcon />}
             raw={span.input}
-            hasPreview={describeSpanInput(asCoreSpan(span))?.type !== 'json'}
+            hasPreview={hasSpanInputPreview(span)}
             layout="details"
           >
             <SpanInputRenderer span={span} />
@@ -74,12 +82,13 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
           <SpanPayloadSection
             title="Output"
             icon={<FileOutputIcon />}
-            raw={span.output}
+            raw={getSpanOutputPayload(span)}
             hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
             layout="details"
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
+          <SpanToolsSection span={span} layout="details" />
           <SpanPayloadSection
             title="Metadata"
             icon={<BracesIcon />}

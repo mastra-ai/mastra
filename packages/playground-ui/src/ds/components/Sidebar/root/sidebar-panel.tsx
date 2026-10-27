@@ -160,7 +160,7 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           expand();
           setWidth(maxWidth);
           commit();
-          return;
+          break;
         }
       }
     },
@@ -248,9 +248,14 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
   return (
     <div
       className={cn(
-        'sidebar-layout group/sidebar t-resize relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
+        'sidebar-layout group/sidebar relative min-h-0 shrink-0 self-stretch bg-sidebar text-foreground',
         'w-(--sidebar-width)',
-        'in-data-[sidebar-gesture=active]:transition-none',
+        // Utilities rather than the global `t-resize` class: that one is unlayered CSS, so it would beat
+        // `transition-none` and keep animating the width behind the cursor while dragging
+        // The two `transition-none` are important: an app that runs its own Tailwind after this stylesheet
+        // (Platform) emits `transition-[width]` again later in the cascade, which would otherwise win
+        'transition-[width] duration-(--resize-dur) ease-(--resize-ease) motion-reduce:transition-none!',
+        'in-data-[sidebar-gesture=active]:transition-none!',
         className,
 
         isHidden && 'border-r-0 border-transparent',
@@ -262,6 +267,10 @@ export function SidebarPanel({ children, className, mobileMode = 'drawer' }: Sid
           'transition-opacity duration-200 motion-reduce:transition-none',
           // Inset on every side, like the mobile drawer's container, so the header and footer never touch an edge.
           'p-2',
+          // Collapsed, lay the rail out at its final width from the first frame: `--sidebar-width` is
+          // already the rail width while the panel still animates down to it, so items that center
+          // themselves (the credits meter, an avatar) don't start mid-panel and slide across
+          isCollapsed && !isHidden && 'w-(--sidebar-width)',
           isHidden && 'pointer-events-none p-0 opacity-0',
         )}
       >

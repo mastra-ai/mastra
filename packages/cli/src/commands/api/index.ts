@@ -272,6 +272,62 @@ export function registerApiCommand(program: CommanderCommand): void {
       },
     ],
   });
+  addAction(trace, 'aggregate', 'POST /observability/traces/aggregate', {
+    description: 'Aggregate observability traces into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Count traces and error rate per entity over 7 days',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["count","errorRate"]}'`,
+      },
+      {
+        description: 'Top 10 entities by cost, with total tokens',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"groupBy":["entityName"],"measures":["tokens.total.sum","cost.sum"],"orderBy":{"field":"cost.sum","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Daily trace count and p95 duration for one agent',
+        command: `mastra api trace aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}},"interval":"1d","measures":["count","duration.p95"]}'`,
+      },
+    ],
+  });
+
+  const span = api.command('span').description('Query and aggregate observability spans');
+  addAction(span, 'query', 'POST /observability/spans/query', {
+    description: 'Query observability spans with advanced predicates',
+    input: 'required',
+    examples: [
+      {
+        description: 'Query failed tool calls in the last day',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-07T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},{"op":"eq","left":{"path":"status"},"right":{"literal":"error"}}]}}'`,
+      },
+      {
+        description: 'Query runs of one agent, including runs nested under other agents or workflows',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50}}'`,
+      },
+      {
+        description: 'Fetch the next page by passing data.page.next as page.after',
+        command: `mastra api span query '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"and","args":[{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},{"op":"eq","left":{"path":"entityName"},"right":{"literal":"weather-agent"}}]},"page":{"limit":50,"after":"NEXT_CURSOR"}}'`,
+      },
+    ],
+  });
+  addAction(span, 'aggregate', 'POST /observability/spans/aggregate', {
+    description: 'Aggregate observability spans into grouped measures',
+    input: 'required',
+    examples: [
+      {
+        description: 'Daily agent runs by status',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"agent_run"}},"groupBy":["status"],"interval":"1d","measures":["count"]}'`,
+      },
+      {
+        description: 'Tools with the highest error rate, with call count and p95 duration',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"tool_call"}},"groupBy":["entityName"],"measures":["count","errorRate","duration.p95"],"orderBy":{"field":"errorRate","direction":"desc"},"limit":10}'`,
+      },
+      {
+        description: 'Model tokens and cost per root entity',
+        command: `mastra api span aggregate '{"timeRange":{"from":"2026-08-01T00:00:00.000Z","to":"2026-08-08T00:00:00.000Z"},"where":{"op":"eq","left":{"path":"spanType"},"right":{"literal":"model_generation"}},"groupBy":["rootEntityName"],"measures":["tokens.total.sum","cost.sum"]}'`,
+      },
+    ],
+  });
 
   const log = api.command('log').description('Inspect runtime logs');
   addAction(log, 'list', 'GET /observability/logs', {
@@ -646,16 +702,6 @@ export function registerApiCommand(program: CommanderCommand): void {
     routePlacement: 'origin',
   });
 
-  const factorySupervisor = factory.command('supervisor').description('Inspect the Factory supervisor');
-  addAction(factorySupervisor, 'session', FACTORY_API_ROUTE_CATALOG.supervisorSession, {
-    description: 'Get or create the deterministic Factory supervisor session',
-    routePlacement: 'origin',
-  });
-  addAction(factorySupervisor, 'health', FACTORY_API_ROUTE_CATALOG.supervisorHealth, {
-    description: 'Run the deterministic Factory supervisor health check',
-    routePlacement: 'origin',
-  });
-
   const learning = api
     .command('learning')
     .description('Query Trace Intelligence themes across agent traces (Mastra platform)');
@@ -794,7 +840,10 @@ function addAction(
   for (const positional of descriptor.positionals) {
     // Keep identity args optional at Commander level so `--schema` can run without real IDs.
     // Actual requests still validate IDs before making an HTTP request.
-    command.argument(`[${positional}]`);
+    command.argument(
+      `[${positional}]`,
+      `${positional} (required for real requests; optional here to inspect the request schema without IDs)`,
+    );
   }
   if (descriptor.acceptsInput) {
     // Keep JSON input optional at Commander level so `--schema` can run without sample input;

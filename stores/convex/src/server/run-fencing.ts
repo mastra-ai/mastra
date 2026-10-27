@@ -22,6 +22,7 @@ const RUN_CLAIM_OPS = new Set<string>([
   'getRunOwnership',
   'raiseRunFence',
   'retireRunFence',
+  'pruneRunClaims',
   'fenced',
 ]);
 const RUN_CLAIM_TABLES = new Set<string>(['mastra_workflow_run_owners', 'mastra_memory_run_fences']);
@@ -150,6 +151,18 @@ export async function handleRunClaimOperation(
       const current = doc?.record ?? null;
       if (!holds(current, fence)) return reply(false, current, now);
       return reply(true, await writeClaim(ctx, tableName, doc, { ...current, retiredAt: now }), now);
+    }
+
+    case 'pruneRunClaims': {
+      const { tableName, column, cutoff, limit } = request;
+      // A null or missing anchor sorts below every number, so require it to be set.
+      const docs: ClaimDoc[] = await ctx.db
+        .query(CLAIMS_TABLE)
+        .withIndex('by_table_primary', (q: any) => q.eq('table', tableName))
+        .filter((q: any) => q.and(q.gt(q.field(`record.${column}`), null), q.lt(q.field(`record.${column}`), cutoff)))
+        .take(limit);
+      for (const doc of docs) await ctx.db.delete(doc._id);
+      return { ok: true, result: docs.length };
     }
 
     case 'fenced': {

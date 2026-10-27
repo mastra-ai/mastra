@@ -1,4 +1,4 @@
-import { DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
+import { DURABLE_STOP_WHEN_ERROR_ID, DurableAgentDefaults, globalRunRegistry } from '@mastra/core/agent/durable';
 
 import { MessageList } from '@mastra/core/agent/message-list';
 import { Mastra } from '@mastra/core/mastra';
@@ -177,43 +177,47 @@ describe('createInngestDurableAgenticWorkflow step-finish emission', () => {
     }
   });
 
-  it('emits the completed step-finish before a stopWhen decision error propagates', async () => {
+  it('marks a stopWhen error without emitting the deferred step-finish', async () => {
     const condition = conditionFor(3);
     const published: any[] = [];
-    const policyError = new Error('stopWhen failed');
-
-    await expect(
-      condition({
-        inputData: {
-          runId: 'run-stop-when-error',
-          iterationCount: 1,
-          options: {},
-          accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
-          lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
-          deferredStepFinishChunk: {
-            type: 'step-finish',
-            runId: 'run-stop-when-error',
-            payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
-          },
-        },
-        engine: {
-          step: {
-            run: vi.fn(async (id: string, fn: () => Promise<boolean>) => {
-              if (id.startsWith('stop-when-')) throw policyError;
-              return fn();
-            }),
-          },
-        },
-        [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
-      }),
-    ).rejects.toBe(policyError);
-
-    expect(published.map(event => event.data)).toMatchObject([
-      {
-        type: 'step-finish',
-        payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+    const runId = 'run-stop-when-error';
+    const mastra = new Mastra({ logger: false });
+    globalRunRegistry.set(runId, {
+      mastra,
+      stopWhen: () => {
+        throw new TypeError('stopWhen failed');
       },
-    ]);
+    });
+
+    try {
+      await expect(
+        condition({
+          inputData: {
+            runId,
+            iterationCount: 1,
+            options: {},
+            accumulatedSteps: [{ text: '', toolCalls: [], toolResults: [] }],
+            lastStepResult: { reason: 'tool-calls', isContinued: true, warnings: [] },
+            deferredStepFinishChunk: {
+              type: 'step-finish',
+              runId,
+              payload: { stepResult: { reason: 'tool-calls', isContinued: true } },
+            },
+          },
+          mastra,
+          engine: { step: { run: async (_id: string, fn: () => Promise<boolean>) => fn() } },
+          [PUBSUB_SYMBOL]: { publish: vi.fn(async (_topic: string, event: any) => void published.push(event)) },
+        }),
+      ).rejects.toMatchObject({
+        id: DURABLE_STOP_WHEN_ERROR_ID,
+        message: 'stopWhen failed',
+        details: { name: 'TypeError', message: 'stopWhen failed' },
+      });
+    } finally {
+      globalRunRegistry.delete(runId);
+    }
+
+    expect(published).toEqual([]);
   });
 });
 

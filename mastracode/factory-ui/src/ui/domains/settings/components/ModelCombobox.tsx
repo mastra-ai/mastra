@@ -1,15 +1,21 @@
 import { Combobox } from '@mastra/playground-ui/components/Combobox';
-import type { ComboboxOption } from '@mastra/playground-ui/components/Combobox';
+import type { ComboboxOption, ComboboxSingleProps } from '@mastra/playground-ui/components/Combobox';
+import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { Box, Sparkles } from 'lucide-react';
 import { useMemo } from 'react';
 
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
+import { DEFAULT_SOURCE_LABELS } from '../../chat/services/thinkingLevels';
 import { ProviderBrandIcon } from '../../workspaces/components/ProviderBrandIcon';
-import { formatModelName, modelProvider } from './model-display-name';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 /** Value the picker reports when the caller's `auto` choice is picked. */
 const AUTO_VALUE = 'auto';
+
+function modelProvider(id: string): string {
+  const slash = id.indexOf('/');
+  return slash > 0 ? id.slice(0, slash) : '';
+}
 
 function modelOption(id: string, provider: string): ComboboxOption {
   const name = formatModelName(id);
@@ -56,21 +62,36 @@ export function ModelCombobox({
   value,
   onValueChange,
   auto,
+  fallbackModelId,
   placeholder,
   disabled,
   className,
+  variant,
+  size,
+  'aria-label': ariaLabel,
 }: {
   models: AvailableModelOption[];
   value: string;
   onValueChange: (value: string) => void;
   auto?: { effectiveModelId?: string | null };
+  fallbackModelId?: string;
   placeholder?: string;
   disabled?: boolean;
   className?: string;
+  variant?: ComboboxSingleProps['variant'];
+  size?: ComboboxSingleProps['size'];
+  'aria-label'?: string;
 }) {
   const autoEffectiveModelId = auto ? (auto.effectiveModelId ?? null) : undefined;
   const options = useMemo(() => {
-    const catalog = models.map(m => modelOption(m.id, m.provider));
+    const catalog = models
+      .toSorted(
+        (a, b) =>
+          a.provider.localeCompare(b.provider) ||
+          compareModelReleaseDates(a.releaseDate, b.releaseDate) ||
+          a.id.localeCompare(b.id),
+      )
+      .map(m => modelOption(m.id, m.provider));
     const known = new Set(catalog.map(o => o.value));
     const autoChoice = autoEffectiveModelId === undefined ? [] : [autoOption(autoEffectiveModelId)];
     const isAutoValue = autoChoice.length > 0 && value === AUTO_VALUE;
@@ -83,12 +104,19 @@ export function ModelCombobox({
       options={options}
       value={value}
       onValueChange={onValueChange}
-      placeholder={placeholder ?? 'Select model…'}
+      placeholder={
+        fallbackModelId
+          ? `${formatModelName(fallbackModelId)} · ${DEFAULT_SOURCE_LABELS['built-in']}`
+          : (placeholder ?? 'Select model…')
+      }
       searchPlaceholder="Search models…"
       emptyText="No matching model."
       allowCustomValue
       disabled={disabled}
       className={className}
+      variant={variant}
+      size={size}
+      aria-label={ariaLabel}
     />
   );
 }

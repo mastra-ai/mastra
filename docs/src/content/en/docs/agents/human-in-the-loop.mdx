@@ -41,7 +41,7 @@ const deleteTool = createTool({
 const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { deleteTool },
 })
 
@@ -153,7 +153,8 @@ const stream = await agent.stream('Clean up old records', {
       },
     })
 
-    return result.answers.requiresApproval.probability >= 0.7
+    // A refused question has no probability, so it falls back to requiring approval.
+    return (result.answers.requiresApproval.probability ?? 1) >= 0.7
   },
 })
 ```
@@ -329,6 +330,9 @@ Instead of pausing every tool call at the agent level, you can mark individual t
 Set `requireApproval: true` on a tool definition. The tool pauses before execution regardless of whether `requireToolApproval` is set on the agent:
 
 ```typescript title="src/mastra/tools/test-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 export const testTool = createTool({
   id: 'test-tool',
   description: 'Fetches weather for a location',
@@ -377,6 +381,9 @@ const handleApproval = async () => {
 With this approach, neither the agent nor the tool uses `requireApproval`. Instead, the tool's `execute` function calls `suspend()` to pause at a specific point and return context or confirmation prompts to the user. This is useful when approval depends on runtime conditions rather than being unconditional.
 
 ```typescript title="src/mastra/tools/test-tool-b.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 export const testToolB = createTool({
   id: 'test-tool-b',
   description: 'Fetches weather for a location',
@@ -428,6 +435,19 @@ const handleResume = async () => {
 }
 ```
 
+With `generate()`, the result has `finishReason: 'suspended'`. The tool's data from `suspend()` is in `suspendPayload.suspendPayload`. Call `resumeGenerate()` with the `resumeSchema` data and `runId`:
+
+```typescript
+const output = await agent.generate("What's the weather in London?")
+
+if (output.finishReason === 'suspended') {
+  console.log(output.suspendPayload.suspendPayload) // { reason: 'Approval required.' }
+
+  const resumed = await agent.resumeGenerate({ approved: true }, { runId: output.runId! })
+  console.log(resumed.text)
+}
+```
+
 When a suspended or approval-gated tool call resumes, the stream emits a `tool-call-resumed` chunk with the same `toolCallId` before the call's `tool-result`. Its `payload.kind` is `'suspension'` or `'approval'`, and the payload repeats the original `args`, `suspendPayload`, and `resumeSchema`. The chunk is only emitted when a real suspension or approval request is cleared.
 
 With `@mastra/ai-sdk`, it arrives as a `data-tool-call-suspended` part (or `data-tool-call-approval` part for approvals) with `resumed: true`, which replaces the original part and keeps its payload. Use this signal to mark a question as answered. Don't infer it from the shape of the tool output: when the suspension came from a sub-agent, the output of the delegation call is the sub-agent's result, not your answer.
@@ -444,7 +464,7 @@ const agent = new Agent({
   id: 'my-agent',
   name: 'My Agent',
   instructions: 'You are a helpful assistant',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { weatherTool },
   memory: new Memory(),
   defaultOptions: {
@@ -627,7 +647,7 @@ const dataAgent = new Agent({
   id: 'data-agent',
   name: 'Data Agent',
   description: 'Handles database queries and user data retrieval',
-  model: '__GATEWAY_OPENAI_MODEL_MINI__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   tools: { findUserTool },
 })
 
@@ -675,6 +695,9 @@ for await (const chunk of stream.fullStream) {
 Tools can also use [`suspend()`](#approval-using-suspend) to pause execution and return context to the user. This approach works through the supervisor delegation chain the same way `requireApproval` does: the suspension surfaces at the supervisor level:
 
 ```typescript title="src/mastra/tools/conditional-tool.ts"
+import { createTool } from '@mastra/core/tools'
+import { z } from 'zod'
+
 const conditionalTool = createTool({
   id: 'conditional-operation',
   description: 'Performs an operation that may require confirmation',

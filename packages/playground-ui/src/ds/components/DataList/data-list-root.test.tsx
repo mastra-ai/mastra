@@ -17,6 +17,41 @@ const Header = () => (
 );
 
 describe('DataListRoot', () => {
+  it.each([true, false])('preserves custom root rendering and state-based styles with scrollable=%s', scrollable => {
+    const ref = createRef<HTMLDivElement>();
+    const scrollRef = createRef<HTMLDivElement>();
+    render(
+      <DataList
+        ref={ref}
+        columns="1fr"
+        scrollable={scrollable}
+        scrollRef={scrollRef}
+        render={<section aria-label="Styled list" />}
+        style={state => ({ paddingTop: state.hasOverflowY ? '4px' : '12px' })}
+        maxHeight="300px"
+        autoScroll={false}
+        scrollButtons={false}
+        revealScrollbarOnHover={false}
+      >
+        <DataList.RowButton>
+          <DataList.Cell>First row</DataList.Cell>
+        </DataList.RowButton>
+      </DataList>,
+    );
+
+    const root = screen.getByLabelText('Styled list');
+    expect(root.tagName).toBe('SECTION');
+    expect(ref.current).toBe(root);
+    expect(root.style.paddingTop).toBe('12px');
+    expect(root.hasAttribute('maxheight')).toBe(false);
+    expect(root.hasAttribute('autoscroll')).toBe(false);
+    expect(root.hasAttribute('scrollbuttons')).toBe(false);
+    expect(root.hasAttribute('revealscrollbaronhover')).toBe(false);
+    // Parent-scrolled lists must not introduce another clipping viewport.
+    if (scrollable) expect(scrollRef.current).not.toBeNull();
+    else expect(scrollRef.current).toBeNull();
+  });
+
   describe('unified treatment — ScrollArea (overlay scrollbar + horizontal mask)', () => {
     it('frames the list and separates its uniform rows', () => {
       const { container } = render(
@@ -362,6 +397,22 @@ describe('DataListRoot', () => {
       );
       fireEvent.click(screen.getByRole('button', { name: /Name.*sorted descending.*sort ascending/i }));
       expect(onSortChange).toHaveBeenLastCalledWith('asc', 'name');
+    });
+
+    it('names the sort button with the label when the visible header is not plain text', () => {
+      render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="ttfc" label="Time to first chunk" onSortChange={vi.fn()}>
+              <abbr>TTFC</abbr>
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      expect(screen.getByRole('button').getAttribute('aria-label')).toBe(
+        'Time to first chunk, not sorted, sort ascending',
+      );
     });
   });
 });

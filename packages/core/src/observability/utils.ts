@@ -250,7 +250,26 @@ export function getEntityTypeForSpan(span: {
       return EntityType.MCP_SERVER;
     case SpanType.PROCESSOR_RUN:
       return EntityType.OUTPUT_PROCESSOR;
+    case SpanType.CLASSIFIER_EVALUATION:
+      return EntityType.CLASSIFIER;
     default:
       return undefined;
   }
+}
+
+/**
+ * Time to first chunk in milliseconds for any span whose attributes carry
+ * `completionStartTime`, measured from that span's own start. Undefined when
+ * the span never saw a chunk.
+ */
+export function getTimeToFirstChunkMs(span: {
+  startTime: Date | string;
+  attributes?: object | undefined;
+}): number | undefined {
+  const completionStartTime = (span.attributes as { completionStartTime?: Date | string } | undefined)
+    ?.completionStartTime;
+  if (!completionStartTime) return undefined;
+  const ms = new Date(completionStartTime).getTime() - new Date(span.startTime).getTime();
+  // Clock skew between workers (durable runs) can put the first chunk before the start.
+  return Number.isNaN(ms) ? undefined : Math.max(0, ms);
 }

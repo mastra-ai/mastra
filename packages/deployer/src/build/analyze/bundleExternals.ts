@@ -169,13 +169,10 @@ async function getInputPlugins(
 
   return [
     virtual(
-      Array.from(virtualDependencies.entries()).reduce(
-        (acc, [dep, virtualDep]) => {
-          acc[`#virtual-${dep}`] = virtualDep.virtual;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
+      Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+        acc[`#virtual-${dep}`] = virtualDep.virtual;
+        return acc;
+      }, {}),
     ),
     moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
     tsConfigPaths({ cwd: projectRoot }),
@@ -354,13 +351,10 @@ async function buildExternalDependencies(
 
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: Array.from(virtualDependencies.entries()).reduce(
-      (acc, [dep, virtualDep]) => {
-        acc[virtualDep.name] = `#virtual-${dep}`;
-        return acc;
-      },
-      {} as Record<string, string>,
-    ),
+    input: Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+      acc[virtualDep.name] = `#virtual-${dep}`;
+      return acc;
+    }, {}),
     external: rollupExternals,
     treeshake: noBundling ? false : 'safest',
     plugins,
@@ -397,21 +391,7 @@ async function buildExternalDependencies(
           }
         }
 
-        if (importedFromPackages.size > 1) {
-          throw new MastraBaseError({
-            id: 'DEPLOYER_BUNDLE_EXTERNALS_SHARED_CHUNK',
-            domain: ErrorDomain.DEPLOYER,
-            category: ErrorCategory.USER,
-            details: {
-              chunkName: chunkInfo.name,
-              packages: JSON.stringify(Array.from(importedFromPackages)),
-            },
-            text: `Please open an issue. We found a shared chunk "${
-              chunkInfo.name
-            }" used by multiple workspace packages: ${Array.from(importedFromPackages).join(', ')}.`,
-          });
-        }
-
+        // A chunk spanning multiple workspace packages has no single owning cache dir, so it falls through to the output dir.
         if (importedFromPackages.size === 1) {
           const [pkgName] = importedFromPackages;
           const workspaceLocation = workspaceMap.get(pkgName!)!.location;
@@ -450,10 +430,8 @@ function findExternalImporter(
   for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
-    } else {
-      if (id.endsWith('.mjs')) {
-        capturedFiles.add(id);
-      }
+    } else if (id.endsWith('.mjs')) {
+      capturedFiles.add(id);
     }
   }
 

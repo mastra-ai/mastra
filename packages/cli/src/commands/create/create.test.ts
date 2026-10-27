@@ -683,10 +683,14 @@ describe('managed observability', () => {
         projectName: 'my-project',
         resolveVersionTag: vi.fn().mockResolvedValue('latest'),
         analytics: { trackEvent } as never,
+        loginSource: 'create-mastra',
       }),
     ).resolves.toBeUndefined();
 
-    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), { skipOnInput: true });
+    expect(credentials.getToken).toHaveBeenCalledWith(expect.any(AbortSignal), {
+      skipOnInput: true,
+      source: 'create-mastra',
+    });
     expect(prompts.log.info).toHaveBeenCalledWith('Skipping Mastra platform setup.');
     expect(publishStagedProject).toHaveBeenCalledOnce();
     expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
@@ -929,8 +933,8 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      primaryModel: 'anthropic/claude-sonnet-5',
-      observationalModel: 'anthropic/claude-haiku-4-5',
+      primaryModel: 'anthropic/claude-sonnet-5-5',
+      observationalModel: 'anthropic/claude-haiku-5-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyWritten: false,
       adaptationFailed: false,
@@ -952,8 +956,8 @@ describe('create materialization lifecycle', () => {
     const { adaptDefaultTemplate } = await import('./provider-adapter');
     vi.mocked(adaptDefaultTemplate).mockResolvedValueOnce({
       displayName: 'Anthropic',
-      primaryModel: 'anthropic/claude-sonnet-5',
-      observationalModel: 'anthropic/claude-haiku-4-5',
+      primaryModel: 'anthropic/claude-sonnet-5-5',
+      observationalModel: 'anthropic/claude-haiku-5-5',
       apiKeyEnv: 'ANTHROPIC_API_KEY',
       apiKeyWritten: false,
       adaptationFailed: true,

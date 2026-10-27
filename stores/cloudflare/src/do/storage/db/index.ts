@@ -75,6 +75,34 @@ export class DODB extends MastraBase {
    * Execute a SQL query using Durable Objects SqlStorage.
    * SqlStorage.exec() is synchronous but we wrap in Promise for interface compatibility.
    */
+  /**
+   * Delete up to `limit` rows keyed by `runId` whose epoch-ms `column` is older
+   * than `cutoff`. Used to prune the run fencing tables.
+   */
+  async pruneRunRows({
+    tableName,
+    column,
+    cutoff,
+    limit,
+  }: {
+    tableName: TABLE_NAMES;
+    column: string;
+    cutoff: number;
+    limit: number;
+  }): Promise<number> {
+    if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
+      throw new Error(`Invalid retention identifier: ${tableName}.${column}`);
+    }
+    const table = this.getTableName(tableName);
+    const rows = (await this.executeQuery({
+      sql: `DELETE FROM ${table} WHERE runId IN (
+        SELECT runId FROM ${table} WHERE ${column} < ? ORDER BY ${column} LIMIT ?
+      ) RETURNING runId`,
+      params: [cutoff, limit],
+    })) as Record<string, unknown>[] | null;
+    return Array.isArray(rows) ? rows.length : 0;
+  }
+
   async executeQuery(options: SqlQueryOptions): Promise<Record<string, unknown>[] | Record<string, unknown> | null> {
     const { sql, params = [], first = false } = options;
 
@@ -456,16 +484,13 @@ export class DODB extends MastraBase {
               return this.serializeValue(value);
             });
 
-            const recordToUpsert = columns.reduce(
-              (acc, col) => {
-                // Don't update conflict keys or createdAt on conflict
-                if (col !== 'createdAt' && !conflictKeys.includes(col)) {
-                  acc[col] = `excluded.${col}`;
-                }
-                return acc;
-              },
-              {} as Record<string, string>,
-            );
+            const recordToUpsert = columns.reduce<Record<string, string>>((acc, col) => {
+              // Don't update conflict keys or createdAt on conflict
+              if (col !== 'createdAt' && !conflictKeys.includes(col)) {
+                acc[col] = `excluded.${col}`;
+              }
+              return acc;
+            }, {});
 
             const query = createSqlBuilder().insert(
               fullTableName,

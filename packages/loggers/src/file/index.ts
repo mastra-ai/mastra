@@ -4,6 +4,7 @@ import { createInterface } from 'node:readline';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { LoggerTransport } from '@mastra/core/logger';
 import type { BaseLogMessage, LogLevel } from '@mastra/core/logger';
+import { normalizePagination } from '../pagination';
 
 export class FileTransport extends LoggerTransport {
   path: string;
@@ -82,6 +83,7 @@ export class FileTransport extends LoggerTransport {
     perPage: number;
     hasMore: boolean;
   }> {
+    normalizePagination(params?.page, params?.perPage);
     try {
       return await this.#queryLogs(params || {});
     } catch (error) {
@@ -120,6 +122,7 @@ export class FileTransport extends LoggerTransport {
     perPage: number;
     hasMore: boolean;
   }> {
+    normalizePagination(page, perPage);
     try {
       return await this.#queryLogs({ runId, fromDate, toDate, logLevel, filters, page, perPage });
     } catch (error) {
@@ -158,10 +161,7 @@ export class FileTransport extends LoggerTransport {
     page?: number;
     perPage?: number;
   }) {
-    const page = pageInput === 0 ? 1 : (pageInput ?? 1);
-    const perPage = (perPageInput ?? 100) || 100;
-    const start = (page - 1) * perPage;
-    const end = start + perPage;
+    const { page, perPage, start, end } = normalizePagination(pageInput, perPageInput);
     const filterEntries = Object.entries(filters ?? {});
 
     const logs: BaseLogMessage[] = [];

@@ -8,7 +8,7 @@ toc_max_heading_level: 2
 
 # Session
 
-A `Session` is the isolated runtime for one resource and optional scope. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
+A `Session` is the isolated runtime registered under one session id. Several sessions can share a resource, which owns their stored threads and resource-scoped memory. It owns its event bus, thread binding, state, mode and model selections, run control, approvals, suspensions, follow-ups, and display state. The [`AgentController`](/reference/agent-controller/agent-controller-class) supplies shared agents, configuration, storage, workspaces, and services.
 
 Create sessions through `controller.createSession()`. Direct construction and controller wiring methods aren't application APIs.
 
@@ -166,6 +166,19 @@ The author persists under `content.metadata.signal.author`. Read it with `getMes
 
 Queue a message for the next run, or send it immediately while the session is idle. Author metadata persists with the queued message.
 
+#### `queueSignal(signal, { requestContext?, tracingContext?, tracingOptions? }?)`
+
+Queue a typed signal for the next run, or send it immediately while the session is idle. The signal keeps its `type`, `tagName`, and `attributes`. Set `signal.author` to record an author, because the session doesn't stamp one from `requestContext` as it does for `queueMessage()`.
+
+```typescript
+await session.queueSignal({
+  type: 'reactive',
+  tagName: 'skill',
+  attributes: { name: 'triage' },
+  contents: 'Triage the new issue.',
+})
+```
+
 #### `steer({ content, files?, requestContext?, author? })`
 
 Abort the active run, then send `content` as a new message. Pass `files` to attach files in the same shape as `sendMessage()`: `{ data, mediaType, filename? }`, where `data` is raw text or a base64 data URL for text files, and base64 for binary files.
@@ -207,7 +220,7 @@ session.abort()
 
 #### `getWorkspace()`
 
-Return the workspace resolved for this session. This preserves session-level overrides and workspaces selected from the session scope.
+Return the workspace resolved for this session. This preserves session-level overrides.
 
 A workspace is optional. When neither the session nor the `AgentController` configures one, the session still runs without filesystem or sandbox access, and this returns `undefined`. Check the result before using it.
 
@@ -295,7 +308,7 @@ Resume a suspended tool with application-provided data. Supply `toolCallId` for 
 
 An addressed resume uses the source thread's mode, model, and thread-owned preferences, without selecting that thread or replacing the active thread's subscription. Tool state callbacks remain bound to the source even if you switch threads during execution. Host-owned custom state and permission rules remain shared.
 
-After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable; it doesn't finish another thread's active run.
+After a process restart, a full address can recover a persisted suspension through the controller's configured agents. Recovery requires a uniquely identified originating agent and the existing resume authorization checks. A setup failure leaves the prompt retryable without finishing another thread's active run.
 
 ```typescript
 await session.respondToToolSuspension({
@@ -369,7 +382,7 @@ Create a thread, bind the session to it, and open its event stream. Pass `reques
 
 For a session created with `createInitialThread: false`, explicit mode, model, and thread-preference selections made before its first binding seed the first new thread. This also applies to `ensureId()` and the first message. Failed creation leaves those selections available for retry.
 
-After the session has bound a conversation, creating another thread uses controller defaults, not the previous conversation's choices. Clearing or deleting the binding doesn't restore the first-thread behavior. Opening an existing thread restores that thread's settings instead of applying unbound startup selections.
+After the session has bound a conversation, each new thread uses controller defaults rather than the previous conversation's choices, even if you clear or delete the binding. Opening an existing thread restores that thread's settings instead of applying unbound startup selections.
 
 ```typescript
 const thread = await session.thread.create({
@@ -445,13 +458,14 @@ const ownerId = await session.thread.getOwner()
 
 Returns: `Promise<string | undefined>`
 
-### `session.thread.transferOwnership({ toOwnerId })`
+### `session.thread.transferOwnership({ toOwnerId, threadId? })`
 
-Store `toOwnerId` in the active thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change.
+Store `toOwnerId` in the thread's `metadata.ownerId` and emit `thread_owner_changed`. The original `metadata.createdBy` value doesn't change. Without `threadId`, this transfers the active thread. With `threadId`, it transfers that thread of the session's resource and the active thread stays the same.
 
 ```typescript
 await session.thread.transferOwnership({
   toOwnerId: 'user-456',
+  threadId: 'thread-123',
 })
 ```
 
@@ -574,7 +588,7 @@ const mode = session.mode.resolve()
 
 ### `session.mode.switch({ modeId })`
 
-Switch to another mode and persist the mode on the active thread. The session emits `mode_changed`. Switching modes doesn't change the active model; switch the model separately when your host assigns different models to different modes.
+Switch to another mode, persist the mode on the active thread, and emit `mode_changed`. The active model stays the same unless you switch it separately, which is necessary when your host assigns different models to different modes.
 
 ```typescript
 await session.mode.switch({ modeId: 'build' })
@@ -880,7 +894,7 @@ Thread-owned preferences include thinking level, observational memory settings, 
 
 A queued write keeps its source thread through asynchronous updates and validation. Switching from A to B while a write is pending doesn't apply A's preferences to B. Host-field updates still affect the host. A retained run and the active view of the same thread share update ordering. A resumed run sees edits made while it was parked. Events without a source address that affect the conversation display are emitted only while that source is active.
 
-Inside a tool's controller request context, `state` is a snapshot taken when the context was built. Use `getState()` or `session.state.get()` to read the latest source-thread state after a write.
+Inside a tool's controller request context, `sessionId`, `resourceId`, and `threadId` identify the session, its resource, and its active thread. `state` is a snapshot taken when the context was built. Use `getState()` or `session.state.get()` to read the latest source-thread state after a write.
 
 ### `session.state.get()`
 
@@ -913,7 +927,7 @@ const added = await session.state.update(current => ({
 
 A `Session` is a live runtime object. Its event bus, arbitrary custom state, permission rules, permission grants, follow-ups, and active stream don't automatically survive controller or process recreation. The host must restore the host-owned state it needs.
 
-Configured storage persists threads and messages along with token usage, while thread settings restore mode, model, and supported preferences. Restored settings can include thinking level, observational memory, and subagent model selections with per-agent-type overrides. Persisted suspended runs can be recovered using their full suspension address and originating agent; this doesn't make arbitrary custom state durable.
+Configured storage persists threads and messages along with token usage, while thread settings restore mode, model, and supported preferences. Restored settings can include thinking level, observational memory, and subagent model selections with per-agent-type overrides. Persisted suspended runs can be recovered using their full suspension address and originating agent, but arbitrary custom state still requires host-managed persistence.
 
 While a run retains a source-thread view, successful in-memory preference writes remain available when returning to that thread even if best-effort metadata persistence fails. A cold restart can recover only persisted settings and controller defaults.
 

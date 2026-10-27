@@ -84,7 +84,7 @@ export const Variants: Story = {
 export const CustomRender: Story = {
   render: () => (
     <DropdownMenu>
-      <DropdownMenu.Trigger render={<Button size="md">Open Menu</Button>} />
+      <DropdownMenu.Trigger render={<Button size="md">Open menu</Button>} />
       {menuItems}
     </DropdownMenu>
   ),
@@ -103,6 +103,21 @@ export const Compact: Story = {
           <Settings />
           Settings
         </DropdownMenu.Item>
+      </DropdownMenu.Content>
+    </DropdownMenu>
+  ),
+};
+
+export const CompactWithManyItems: Story = {
+  render: () => (
+    <DropdownMenu>
+      <DropdownMenu.Trigger render={<Button size="sm">Open long menu</Button>} />
+      <DropdownMenu.Content size="sm" className="w-40 min-w-0">
+        {Array.from({ length: 30 }, (_, i) => (
+          <DropdownMenu.Item key={i} size="sm">
+            Item {i + 1}
+          </DropdownMenu.Item>
+        ))}
       </DropdownMenu.Content>
     </DropdownMenu>
   ),
@@ -175,7 +190,7 @@ export const WithLabelsAndGroups: Story = {
           </DropdownMenu.Item>
           <DropdownMenu.Item>
             <Plus />
-            <span>New Team</span>
+            <span>New team</span>
             <DropdownMenu.Shortcut>Ctrl+T</DropdownMenu.Shortcut>
           </DropdownMenu.Item>
         </DropdownMenu.Group>
@@ -203,10 +218,10 @@ export const WithCheckboxItems: Story = {
           <DropdownMenu.Label>Appearance</DropdownMenu.Label>
           <DropdownMenu.Separator />
           <DropdownMenu.CheckboxItem checked={showStatusBar} onCheckedChange={setShowStatusBar}>
-            Status Bar
+            Status bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showActivityBar} onCheckedChange={setShowActivityBar}>
-            Activity Bar
+            Activity bar
           </DropdownMenu.CheckboxItem>
           <DropdownMenu.CheckboxItem checked={showPanel} onCheckedChange={setShowPanel}>
             Panel
@@ -448,6 +463,9 @@ export const KitchenSink: Story = {
             <DropdownMenu.RadioItem value="small">Radio small</DropdownMenu.RadioItem>
             <DropdownMenu.RadioItem value="medium">Radio medium</DropdownMenu.RadioItem>
           </DropdownMenu.RadioGroup>
+          <DropdownMenu.Separator />
+          <DropdownMenu.Label inset>Inset label</DropdownMenu.Label>
+          <DropdownMenu.Item inset>Inset item</DropdownMenu.Item>
           <DropdownMenu.Separator />
           <DropdownMenu.Sub>
             <DropdownMenu.SubTrigger>

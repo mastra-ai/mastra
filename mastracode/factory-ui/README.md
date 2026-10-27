@@ -16,7 +16,25 @@ Keep policy, validation, and persistence in [`@mastra/factory`](../factory/READM
 
 ## Onboarding
 
-The first-Factory wizard keeps repository and model choices in a session-scoped draft (never credentials) until the final review. Confirming creates the Factory, links the repository, and saves its default model; a failed save keeps the pending Factory so retrying resumes it instead of creating another. Integration and provider connections are authorized as soon as they are connected. Members without shared credentials pick a personal model, which becomes both the Factory default and their own default.
+The onboarding Setup step offers three equal choices, one per existing `modelScope` creation value:
+
+| Choice                           | Scope     | Factory work                                  | Interactive sessions                             |
+| -------------------------------- | --------- | --------------------------------------------- | ------------------------------------------------ |
+| Company account                  | `factory` | Organization credentials and Factory default  | Organization credentials and Factory default     |
+| Company work · personal sessions | `hybrid`  | Organization credentials and Factory default  | Session owner's personal credentials and default |
+| Personal accounts                | `user`    | Work owner's personal credentials and default | Session owner's personal credentials and default |
+
+There is no fallback between account scopes. Each teammate configures their own personal account. Onboarding asks for one connection in `factory` or `user`, and a separate connection for each scope in `hybrid`. Existing scoped connections can be reused. Only organization key admins can add shared credentials; members can use connections already configured by an admin. When no company connection exists and the member cannot add one, Setup only offers personal accounts. Scope changes happen only in Setup, never as a side effect of a later step. Local servers without web authentication skip Setup and create a `factory` Factory, so sessions and Factory work share the model chosen in their single connection step.
+
+Model pickers and final confirmation use `/web/config/models?scope=org` or `?scope=user`; live session catalogs still resolve the session owner and policy before considering settings filters. Credentials are saved when connected. Factory creation and the applicable default-model writes happen on final confirmation; setting a personal default also affects other work using that person's default.
+
+The session-storage draft contains choices, never credentials. Legacy drafts without `modelScope` return to Setup with their repository and model preserved. Failed creation resumes the pending Factory; changing its scope recreates that unfinished Factory rather than bypassing the admin-only scope update. Preview fixtures and screenshot tooling stay outside this package.
+
+## Board views
+
+Boards open as a list grouped by workflow status. Click a status heading, or focus it and press Enter or Space, to collapse or expand its issues. Counts and create actions remain available when a group is collapsed; creating an issue or following an issue link reveals its group.
+
+Saved views can use either the list or Kanban layout. Existing saved views keep their selected layout.
 
 ## Board activity
 
@@ -24,21 +42,25 @@ Cards on the **Work** and **Review** boards show the last person recorded in the
 
 Factory stores actor names and profile images in audit event metadata when events are written. For older events without that metadata, Factory resolves actor profiles through the configured authentication provider and falls back to the stored actor ID and an initial.
 
-## Needs attention
+## Navigation
 
-**Needs attention** is a project-member action center. The footer previews unresolved terminal automation failures and shows proposed runs as one approval-queue total rather than one notification per proposal. Failures are reconciled against canonical Factory state before they become queryable: an accepted transition is `succeeded`, obsolete work is `superseded`, and only unresolved `failed` decisions remain.
+Opening a Factory lands on its first board. The retired Activity, Overview, Attention, Metrics, and Audit URLs also open that Factory's board landing. Activity and Audit log are no longer offered in the sidebar or global search.
 
-`/factories/:factoryId/attention` provides Open, Unread, and Archived failure views plus a link to the existing approval queue. **Go to** opens the failed decision's matching role session; if that role has no session, it opens the correct Work or Review board and highlights the linked card. Retry appears only for typed failures whose policy allows it.
+Activity's unread badge, open-item dot, and attention chime are retired, including alerts for failed runs, mentions, and waiting agents. The Needs you and followed-discussion lists and their inbox read, archive, and restore actions are also removed. Board cards still offer failed-decision retries and proposal approval and dismissal.
 
-Read and archive are per-user. Retry, reconciliation, approval, and dismissal update canonical decision state for every member. A later terminal failure increments the decision's occurrence and reappears unread without allowing a delayed receipt from the previous occurrence to hide it.
+Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows.
 
-Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows. Failure sounds establish a silent initial baseline and use a cross-tab lock so one occurrence plays once.
+## Session titles
+
+Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none. Older sessions that still show the generic `slack conversation` label keep it until observational memory retitles the conversation or the owner regenerates the title.
+
+Owners can choose **Regenerate title** from a web or Slack session's sidebar menu to name it from its stored conversation. Regeneration uses the existing title model and does not start a workspace. Automatic naming failures leave the conversation usable; an explicit regeneration reports its error.
 
 ## User menu and settings
 
-The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, **Your models**, **Your memory**, and **Connections**. **Settings** opens the shared Factory model settings, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session. Deployments without authentication show a **Settings** menu without account or logout actions.
+The sidebar footer shows your profile picture (or an initial), name, and email. It opens a user menu with shortcuts to **My account**, **Preferences**, and **Connections**. **Settings** opens **Models**, the theme control switches between system, light, and dark appearance, and **Log out** ends the current session.
 
-Settings pages keep their existing URLs and searchable navigation. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
+Settings navigation groups pages by topic: **Account**, **Agent** (Models, Memory, Skills, Behavior), and **Factory**. **Models** picks the Factory's routing (`user`, `hybrid`, or `factory`) and shows the personal and Factory defaults side by side; the defaults the routing leaves unused fold behind a **Settings** toggle, which `#personal-defaults` / `#factory-defaults` links open, so they can be set up before switching routing. Chats never borrow from the defaults their routing leaves unused. Without a chosen model, a session starts on the built-in default model its keys can run, which the empty model picker shows as **Built-in default**; the New session page asks for a provider or a model only when no key can run it. Without a personal thinking level, a personal chat starts at medium. **Memory** holds personal and Factory observational memory. Retired `personal-models` and `factory-memory` URLs redirect to Models and Memory, and navigation stays searchable. **Back to app** returns to the page where settings was opened, including its filters, even after switching sections through the user menu.
 
 ## Tests
 

@@ -1,7 +1,7 @@
 {
   "name": "@mastra/s3",
-  "version": "0.6.3",
-  "description": "S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, MinIO)",
+  "version": "0.6.5-alpha.1",
+  "description": "S3-compatible filesystem provider for Mastra workspaces (AWS S3, Cloudflare R2, Neon Object Storage, MinIO)",
   "type": "module",
   "main": "dist/index.js",
   "types": "dist/index.d.ts",
@@ -28,24 +28,23 @@
     "test": "S3_ENDPOINT=http://localhost:9000 S3_ACCESS_KEY_ID=minioadmin S3_SECRET_ACCESS_KEY=minioadmin S3_BUCKET=test-bucket S3_REGION=us-east-1 vitest run ./src/**/*.integration.test.ts",
     "posttest": "docker compose down -v",
     "test:cloud": "vitest run ./src/**/*.integration.test.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@aws-sdk/client-s3": "^3.1095.0"
+    "@aws-sdk/client-s3": "^3.1156.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

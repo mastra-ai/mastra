@@ -59,7 +59,7 @@ describe('PlatformFactorySandbox', () => {
   beforeEach(() => vi.stubEnv('SANDBOX_PROVIDER', 'e2b'));
   afterEach(() => vi.unstubAllEnvs());
 
-  it('is a branded FactorySandbox describing cpu, memory and idle timeout', () => {
+  it('is a branded FactorySandbox describing cpu, memory, docker and idle timeout', () => {
     const sandbox = new PlatformFactorySandbox({ accessToken: 'sk_test', projectId: 'proj_1' });
     expect(isFactorySandbox(sandbox)).toBe(true);
     const description = describeFactorySandbox(sandbox);
@@ -67,6 +67,7 @@ describe('PlatformFactorySandbox', () => {
     expect(Object.keys(description.settingsSchema.properties ?? {})).toEqual([
       'cpuCount',
       'memoryMb',
+      'docker',
       'idleTimeoutMinutes',
     ]);
     expect(description.capabilities).toEqual({ template: true, builds: { available: true, history: false } });
@@ -96,10 +97,16 @@ describe('PlatformFactorySandbox', () => {
           (schema as { default?: unknown }).default,
         ]),
       );
-    expect(defaults(new PlatformFactorySandbox())).toEqual({ cpuCount: 2, memoryMb: 1024, idleTimeoutMinutes: 5 });
+    expect(defaults(new PlatformFactorySandbox())).toEqual({
+      cpuCount: 2,
+      memoryMb: 1024,
+      docker: false,
+      idleTimeoutMinutes: 5,
+    });
     expect(defaults(new PlatformFactorySandbox({ defaults: { cpuCount: 4 } }))).toEqual({
       cpuCount: 4,
       memoryMb: 1024,
+      docker: false,
       idleTimeoutMinutes: 5,
     });
   });
@@ -136,6 +143,25 @@ describe('PlatformFactorySandbox', () => {
     const explicit = await identity(createRepoTemplate({ ...ctx, cpuCount: 2, memoryMB: 8192 }));
     expect(withSetting.definition).toEqual(explicit.definition);
     expect(withSetting.definition).not.toEqual(withDefaults.definition);
+  });
+
+  it('adds a docker operation only when the docker setting is on', async () => {
+    const sandbox = new PlatformFactorySandbox({});
+    for (const ctx of [listContext(), singleContext(), { sessionId: 's', getRepositoryAccess: undefined }]) {
+      const off = await identity(sandbox.template(ctx, {}));
+      const explicitOff = await identity(sandbox.template(ctx, { docker: false }));
+      const on = await identity(sandbox.template(ctx, { docker: true }));
+      expect(explicitOff.definition).toEqual(off.definition);
+      expect(off.definition.operations.map(operation => operation.method)).not.toContain('docker');
+      expect(on.definition.operations).toContainEqual({ method: 'docker', args: [true] });
+      expect(on.definition.operations.filter(operation => operation.method !== 'docker')).toEqual(
+        off.definition.operations,
+      );
+    }
+    const viaDefault = await identity(
+      new PlatformFactorySandbox({ defaults: { docker: true } }).template(listContext(), {}),
+    );
+    expect(viaDefault.definition.operations).toContainEqual({ method: 'docker', args: [true] });
   });
 
   it('returns a resources-only template for a session without repositories', async () => {

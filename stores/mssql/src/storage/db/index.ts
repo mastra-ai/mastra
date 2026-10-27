@@ -363,7 +363,7 @@ export class MssqlDB extends MastraBase {
   }: {
     tableName: TABLE_NAMES;
     column: string;
-    cutoff: Date;
+    cutoff: Date | number;
     limit: number;
   }): Promise<number> {
     if (!/^[A-Za-z_][A-Za-z0-9_]*$/.test(column)) {
@@ -373,7 +373,7 @@ export class MssqlDB extends MastraBase {
     const result = await this.pool
       .request()
       .input('limit', sql.Int, limit)
-      .input('cutoff', sql.DateTime2, cutoff)
+      .input('cutoff', typeof cutoff === 'number' ? sql.BigInt : sql.DateTime2, cutoff)
       .query(`DELETE TOP (@limit) FROM ${fullTableName} WHERE [${column}] < @cutoff`);
     return result.rowsAffected[0] ?? 0;
   }

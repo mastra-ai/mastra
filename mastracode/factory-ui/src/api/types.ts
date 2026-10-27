@@ -9,6 +9,7 @@
  * `import type` keeps this module type-only — no server runtime code is pulled
  * into the shared/platform-agnostic bundle.
  */
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import type { z } from 'zod';
 import type { FACTORY_ROUTE_CONTRACTS } from '@mastra/factory/routes/contracts';
 
@@ -21,8 +22,6 @@ import type {
   OMConfigInfo,
   ProviderInfo,
   ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
 } from '@mastra/factory/routes/config';
 import type {
   ArtifactEntry,
@@ -30,38 +29,37 @@ import type {
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 } from '@mastra/factory/routes/fs';
 
-export type {
-  ProviderInfo,
-  CustomProviderInfo,
-  OMConfigInfo,
-  ProviderOMDefaultsResponse,
-  ThinkingConfigInfo,
-  UpdateThinkingConfigResponse,
-};
+export type { ProviderInfo, CustomProviderInfo, OMConfigInfo, ProviderOMDefaultsResponse };
 export type {
   ArtifactEntry,
   ArtifactListing,
   DirectoryEntry,
   DirectoryListing,
   WorkspaceChange,
+  WorkspaceChangePatches,
   WorkspaceChanges,
   WorkspaceChangesRepository,
+  WorkspaceChangesScope,
   WorkspaceChangeStatus,
-  WorkspaceDiff,
   WorkspaceFile,
-  WorkspaceFilesListing,
+  WorkspaceTreeEntry,
+  WorkspaceTreeListing,
   WorkspaceRenderedEntry,
   WorkspaceRenderedListing,
+  WorkspacePatchOmission,
 };
 
 // ── GET response envelopes ─────────────────────────────────────────────────
@@ -78,6 +76,7 @@ export interface CustomProvidersResponse {
 
 export interface DefaultModelResponse {
   modelId: string | null;
+  thinkingLevel: ThinkingLevelSetting | null;
 }
 
 export interface OMResponse {

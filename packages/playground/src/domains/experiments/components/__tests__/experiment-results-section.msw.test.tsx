@@ -1,6 +1,5 @@
 import type { DatasetExperimentResult } from '@mastra/client-js';
 import type { ExperimentStatus } from '@mastra/core/storage';
-import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import { cleanup, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
@@ -87,12 +86,12 @@ describe('ExperimentResultsSection', () => {
     });
   });
 
-  describe('when a result has a start time', () => {
-    it('shows when it was created like the other lists, without seconds', () => {
-      renderSection([agentTracedResult]);
-      expect(screen.getByTestId('result-created-res-agent-traced').textContent).toBe(
-        formatDate(agentTracedResult.startedAt, 'date-time'),
-      );
+  describe('when a result has a start time and tags', () => {
+    it('shows neither a Created nor a Tags column', () => {
+      renderSection([{ ...agentTracedResult, tags: ['alpha'] }]);
+      expect(screen.queryByText('Created')).toBeNull();
+      expect(screen.queryByText('Tags')).toBeNull();
+      expect(screen.queryByText('alpha')).toBeNull();
     });
   });
 
@@ -129,7 +128,7 @@ describe('ExperimentResultsSection', () => {
 
     it('shows the cost of each traced item', async () => {
       renderSection([agentTracedResult], 'completed', { supportsMetrics: true });
-      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.0015'));
+      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.002'));
     });
 
     it('shows the input plus output tokens of each traced item', async () => {
@@ -139,7 +138,7 @@ describe('ExperimentResultsSection', () => {
 
     it('leaves usage empty for items without a trace', async () => {
       renderSection([agentTracedResult, workflowResult], 'completed', { supportsMetrics: true });
-      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.0015'));
+      await waitFor(() => expect(screen.getByTestId('result-cost-res-agent-traced').textContent).toBe('$0.002'));
       expect(screen.getByTestId('result-cost-res-workflow').textContent).toBe('-');
       expect(screen.getByTestId('result-tokens-res-workflow').textContent).toBe('-');
     });

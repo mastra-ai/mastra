@@ -1,6 +1,6 @@
 {
   "name": "@internal/workspace",
-  "version": "0.0.15",
+  "version": "0.0.17",
   "description": "Internal conventions shared by Mastra sandbox providers and their consumers",
   "private": true,
   "type": "module",
@@ -26,17 +26,18 @@
     "build": "tsdown --silent --config tsdown.config.ts",
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix .",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
     "typecheck": "tsc --noEmit -p tsconfig.build.json"
   },
   "license": "Apache-2.0",
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
-    "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "@internal/workspace-test-utils": "workspace:*",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
@@ -51,5 +52,8 @@
   },
   "engines": {
     "node": ">=22.13.0"
+  },
+  "peerDependencies": {
+    "@mastra/core": "*"
   }
 }

@@ -2,7 +2,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useProvidersQuery } from '../../../../hooks/use-providers';
-import { providerDisplayName } from './provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 
 /**
  * Warns when a factory-wide default model is backed only by the caller's

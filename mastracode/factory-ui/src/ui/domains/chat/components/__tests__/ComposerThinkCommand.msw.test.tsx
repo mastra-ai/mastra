@@ -11,8 +11,8 @@ import { Composer } from '../Composer';
 import { Transcript } from '../Transcript';
 import { OVERLAY_FACTORY_ID, OverlayTestProviders, useOverlayControllerHandlers } from './overlay-test-utils';
 
-const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:resourceId`;
-const THINKING_CONFIG_API = `${TEST_BASE_URL}/web/config/thinking`;
+const SESSION_API = `${TEST_BASE_URL}/api/agent-controller/code/sessions/:sessionId`;
+const FACTORY_API = `${TEST_BASE_URL}/web/factory/projects/${OVERLAY_FACTORY_ID}`;
 
 function useThinkingHandlers({
   initialThinkingLevel = 'medium',
@@ -29,20 +29,18 @@ function useThinkingHandlers({
     http.get(SESSION_API, ({ params }) =>
       HttpResponse.json({
         controllerId: 'code',
-        resourceId: params.resourceId,
+        sessionId: params.sessionId,
         modeId: 'build',
         modelId,
         threadId: 'thread-test',
         settings: { yolo: false, thinkingLevel, notifications: 'bell', smartEditing: true },
       }),
     ),
-    http.get(THINKING_CONFIG_API, () =>
+    http.get(FACTORY_API, () =>
       failThinkingConfig
         ? new HttpResponse(null, { status: 503 })
         : HttpResponse.json({
-            levels: ['off', 'low', 'medium', 'high', 'xhigh', 'max'],
-            globalDefault: 'low',
-            editable: true,
+            project: { id: OVERLAY_FACTORY_ID, name: 'Overlay', modelScope: 'factory', defaultThinkingLevel: 'low' },
           }),
     ),
     http.put(`${SESSION_API}/state`, async ({ request }) => {
@@ -70,7 +68,7 @@ function useThinkingHandlers({
 beforeEach(useOverlayControllerHandlers);
 
 describe('the /think command', () => {
-  it('given a session override, when /think reports and clears it, then the fallback is the global default', async () => {
+  it('given a session override, when /think reports and clears it, then the fallback is the Factory default', async () => {
     const stateUpdates = useThinkingHandlers();
     const user = userEvent.setup();
     const { client } = renderWithProviders(
@@ -87,7 +85,7 @@ describe('the /think command', () => {
 
     expect(await screen.findByRole('region', { name: '/think options' })).toBeInTheDocument();
     expect(await screen.findByRole('option', { name: /^Medium/ })).toHaveAttribute('aria-current', 'true');
-    expect(screen.getByRole('option', { name: /^Default/ })).toHaveTextContent('Global default');
+    expect(screen.getByRole('option', { name: /^Default/ })).toHaveTextContent('Factory default');
     await user.click(screen.getByRole('option', { name: 'High' }));
 
     await waitForMutationsIdle(client);
@@ -99,7 +97,7 @@ describe('the /think command', () => {
     await user.keyboard('{Enter}');
 
     expect(
-      await screen.findByText('Thinking level: high (session override). Default: low (global default).'),
+      await screen.findByText('Thinking level: high (session override). Default: low (Factory default).'),
     ).toBeInTheDocument();
 
     await user.type(input, '/think');
@@ -109,7 +107,7 @@ describe('the /think command', () => {
 
     await waitForMutationsIdle(client);
     expect(stateUpdates).toContainEqual({ state: { thinkingLevel: null } });
-    expect(await screen.findByText('Thinking level set to default: low (global default).')).toBeInTheDocument();
+    expect(await screen.findByText('Thinking level set to default: low (Factory default).')).toBeInTheDocument();
     expect(input).toHaveValue('');
   });
 
@@ -161,7 +159,8 @@ describe('the /think command', () => {
           client.getQueryData(
             queryKeys.availableModels({
               factoryProjectId: OVERLAY_FACTORY_ID,
-              resourceId: 'session-overlay',
+              sessionId: 'session-overlay',
+              resourceId: 'user-overlay',
               threadId: 'thread-test',
             }),
           ),

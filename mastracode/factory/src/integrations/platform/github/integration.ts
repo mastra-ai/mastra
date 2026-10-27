@@ -14,6 +14,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type {
+  CommitCheck,
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
   CreateReviewCommentInput,
@@ -27,6 +28,7 @@ import type {
   MergePullRequestInput,
   PullRequest,
   PullRequestComment,
+  PublishCommitCheckInput,
   PullRequestRef,
   RepositoryAccess,
   Review,
@@ -60,6 +62,7 @@ import { reconcileInterval, reconciliationEnabled } from '../../github/reconcili
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
+import type { GitIdentity } from '../../github/sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -159,6 +162,8 @@ const PAGE_SIZE = 30;
 // keeps each sweep's API cost flat on repositories with a large backlog.
 const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
+const CHECK_TITLE_LIMIT = 255;
+const CHECK_TEXT_LIMIT = 65_535;
 /**
  * Slug of the GitHub App this integration posts as. Platform credentials do not
  * carry their own identity, so Factory cannot otherwise recognise its own
@@ -555,6 +560,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     listRequestedReviewers: input => this.#requestedReviewers('GET', input),
     requestReviewers: input => this.#requestedReviewers('POST', input),
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
+    publishCommitCheck: input => this.#publishCommitCheck(input),
   };
 
   constructor(
@@ -597,6 +603,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+  }
+
+  /** Commit authorship follows the Platform App's authoritative writer identity. */
+  get gitIdentity(): GitIdentity | undefined {
+    const login = this.identity.login;
+    return login ? { login } : undefined;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -1494,6 +1506,29 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { actingUserId: input.actingUserId },
     );
     return parseReview(review);
+  }
+
+  async #publishCommitCheck(input: PublishCommitCheckInput): Promise<CommitCheck> {
+    requireGithubConnection(input.connection);
+    // Every call creates a new run; GitHub shows the latest run per app and name.
+    const run = await this.#client.request<{ id: number; htmlUrl: string }>(
+      'POST',
+      repositoryPath(input.sourceId, 'check-runs'),
+      {
+        name: input.name,
+        headSha: input.headSha,
+        ...(input.status === 'in-progress'
+          ? { status: 'in_progress' }
+          : { status: 'completed', conclusion: input.status }),
+        output: {
+          title: input.title.slice(0, CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+        },
+      },
+      { actingUserId: input.actingUserId },
+    );
+    return { id: String(run.id), name: input.name, headSha: input.headSha, status: input.status, url: run.htmlUrl };
   }
 
   async #updateReview(input: UpdateReviewInput) {

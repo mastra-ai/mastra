@@ -7,7 +7,7 @@ description: "Browse CoreWeave model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/wandb.svg" alt="CoreWeave logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CoreWeave
 
-Access 20 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
+Access 23 CoreWeave models through Mastra's model router. Authentication is handled automatically using the `WANDB_API_KEY` environment variable.
 
 Learn more in the [CoreWeave documentation](https://docs.wandb.ai).
 
@@ -90,7 +90,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.15,
+    "inputCost": 0.13,
     "outputCost": 0.65
   },
   {
@@ -126,7 +126,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 131072,
     "maxOutput": 131072,
-    "inputCost": 0.1,
+    "inputCost": 0.06,
     "outputCost": 0.15
   },
   {
@@ -186,8 +186,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.71,
-    "outputCost": 3.5
+    "inputCost": 0.6,
+    "outputCost": 3
   },
   {
     "model": "wandb/nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B",
@@ -212,6 +212,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 262144,
     "inputCost": 0.07,
     "outputCost": 0.2
+  },
+  {
+    "model": "wandb/nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.15,
+    "outputCost": 0.5
   },
   {
     "model": "wandb/openai/gpt-oss-120b",
@@ -246,8 +258,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 262144,
     "maxOutput": 262144,
-    "inputCost": 0.25,
-    "outputCost": 1.25
+    "inputCost": 0.1,
+    "outputCost": 0.95
   },
   {
     "model": "wandb/Qwen/Qwen3.8-27B",
@@ -262,6 +274,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 3
   },
   {
+    "model": "wandb/reflection/Beam-1.0-501B-A23B",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 0.3,
+    "outputCost": 1
+  },
+  {
     "model": "wandb/zai-org/GLM-5.2",
     "imageInput": false,
     "audioInput": false,
@@ -274,6 +298,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 2.42
   },
   {
+    "model": "wandb/zai-org/GLM-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 1048576,
+    "inputCost": 1.2,
+    "outputCost": 4
+  },
+  {
     "model": "wandb/zai-org/GLM-5.3-Flash",
     "imageInput": true,
     "audioInput": false,
@@ -282,8 +318,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1048576,
     "maxOutput": 1048576,
-    "inputCost": 0.15,
-    "outputCost": 0.5
+    "inputCost": 0.12,
+    "outputCost": 0.38
   }
 ]}
 />
@@ -295,6 +331,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -312,6 +350,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

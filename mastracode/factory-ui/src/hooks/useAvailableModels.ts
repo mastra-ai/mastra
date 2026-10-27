@@ -1,42 +1,40 @@
 import type { ModelReasoningOption } from '@mastra/core/llm';
+import type { ModelCatalogEntry } from '@mastra/factory/routes/config';
 import { queryOptions, useQuery } from '@tanstack/react-query';
 
 import { useApiConfig } from '../api/config';
-import { queryKeys, type AvailableModelsFilter } from '../api/keys';
-import {
-  fetchSessionModelCatalog,
-  sessionModelCatalogQueryOptions,
-  type SessionModelCatalog,
-  type SessionModelCatalogTarget,
-} from './useSessionModelCatalog';
+import { queryKeys } from '../api/keys';
+import type { AvailableModelsFilter } from '../api/keys';
+import { fetchSessionModelCatalog, sessionModelCatalogQueryOptions } from './useSessionModelCatalog';
+import type { SessionModelCatalog, SessionModelCatalogTarget } from './useSessionModelCatalog';
 
 /** One selectable model from `GET /web/config/models` (credentialed providers only). */
-export interface AvailableModelOption {
-  id: string;
-  provider: string;
-  modelName: string;
-  hasApiKey: boolean;
-  reasoningOptions?: ModelReasoningOption[];
-}
+export type AvailableModelOption = ModelCatalogEntry;
 
 export interface AvailableModelsTarget extends AvailableModelsFilter {
   enabled?: boolean;
 }
 
-async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarget) {
-  const query =
-    target?.scope === 'user'
-      ? '?scope=user'
-      : target?.factoryProjectId
-        ? `?factoryId=${encodeURIComponent(target.factoryProjectId)}`
-        : '';
+interface SettingsModelCatalog {
+  models: AvailableModelOption[];
+  /** null when no key in this scope can run the built-in start model */
+  fallbackModelId?: string | null;
+}
+
+function settingsModelsQuery(target?: AvailableModelsTarget) {
+  if (target?.scope) return `?scope=${target.scope}`;
+  if (target?.factoryProjectId) return `?factoryId=${encodeURIComponent(target.factoryProjectId)}`;
+  return '';
+}
+
+async function fetchSettingsModels(baseUrl: string, target?: AvailableModelsTarget): Promise<SettingsModelCatalog> {
+  const query = settingsModelsQuery(target);
   const res = await fetch(`${baseUrl}/web/config/models${query}`, {
     credentials: 'include',
     headers: { Accept: 'application/json' },
   });
   if (!res.ok) throw new Error(`Failed to load models (${res.status})`);
-  const data = (await res.json()) as { models: AvailableModelOption[] };
-  return data.models;
+  return (await res.json()) as SettingsModelCatalog;
 }
 
 /** Settings catalogs use the Factory's scope or the caller's own personal credentials. */
@@ -50,24 +48,33 @@ export function availableModelsQueryOptions(baseUrl: string, target?: AvailableM
 export function useAvailableModelsQuery(target?: AvailableModelsTarget) {
   const { baseUrl, client } = useApiConfig();
   const session: SessionModelCatalogTarget | undefined =
-    target?.resourceId && target.threadId
-      ? { ...target, resourceId: target.resourceId, threadId: target.threadId }
+    target?.sessionId && target.resourceId && target.threadId
+      ? { ...target, sessionId: target.sessionId, resourceId: target.resourceId, threadId: target.threadId }
       : undefined;
   const queryKey = session
     ? sessionModelCatalogQueryOptions(client, session).queryKey
     : availableModelsQueryOptions(baseUrl, target).queryKey;
-  return useQuery<AvailableModelOption[] | SessionModelCatalog, Error, AvailableModelOption[]>({
+  return useQuery<SettingsModelCatalog | SessionModelCatalog, Error, AvailableModelOption[]>({
     queryKey,
     queryFn: session ? () => fetchSessionModelCatalog(client, session) : () => fetchSettingsModels(baseUrl, target),
     enabled: target?.enabled !== false,
-    select: data => (Array.isArray(data) ? data : data.models),
+    select: catalog => catalog.models,
   });
 }
 
 /** Catalog reachable with the caller's own credentials, for personal defaults. */
 export function usePersonalAvailableModelsQuery() {
   const { baseUrl } = useApiConfig();
-  return useQuery(availableModelsQueryOptions(baseUrl, { scope: 'user' }));
+  return useQuery({ ...availableModelsQueryOptions(baseUrl, { scope: 'user' }), select: catalog => catalog.models });
+}
+
+export function useFallbackModelQuery(target: AvailableModelsTarget) {
+  const { baseUrl } = useApiConfig();
+  return useQuery({
+    ...availableModelsQueryOptions(baseUrl, target),
+    enabled: target.enabled !== false,
+    select: catalog => catalog.fallbackModelId ?? undefined,
+  });
 }
 
 export function useModelReasoningOptions(

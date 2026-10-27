@@ -54,6 +54,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
     effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
   ),
+  createPromptCacheKeyMiddleware: vi.fn((key?: string) =>
+    key === undefined ? undefined : { __middleware: 'prompt-cache-key', key },
+  ),
+  getRequestThreadId: vi.fn((headers?: Record<string, string>) => headers?.['x-thread-id']),
   getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
@@ -220,6 +224,7 @@ import {
 import { openaiCodexProvider, buildOpenAICodexOAuthFetch } from '../../providers/openai-codex.js';
 import { setCredentialStoreProvider } from '../credential-resolver.js';
 import {
+  canUseProvider,
   createMastraCodeGateway,
   resolveModel,
   getDynamicModel,
@@ -564,6 +569,24 @@ describe('resolveModel', () => {
       expect(result.__provider).toBe('model-router');
     });
 
+    it('reports only providers the signed-in Factory account can use, ignoring server keys', () => {
+      vi.stubEnv('GOOGLE_GENERATIVE_AI_API_KEY', 'server-google-key');
+      setCredentialStoreProvider(() => ({
+        allowEnvironmentFallback: false,
+        reload() {},
+        get: (providerId: string) =>
+          providerId === 'anthropic' ? { type: 'api_key' as const, key: 'sk-anthropic' } : undefined,
+        getStoredApiKey: (providerId: string) => (providerId === 'anthropic' ? 'sk-anthropic' : undefined),
+        getApiKey: async () => undefined,
+      }));
+      const requestContext = makeRequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+
+      expect(canUseProvider('anthropic', { requestContext })).toBe(true);
+      expect(canUseProvider('google', { requestContext })).toBe(false);
+      vi.unstubAllEnvs();
+    });
+
     it('reports a missing signed-in Factory credential instead of an environment variable', () => {
       setCredentialStoreProvider(() => ({
         allowEnvironmentFallback: false,
@@ -576,7 +599,7 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        "No usable openai credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
       );
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
       try {
@@ -615,7 +638,7 @@ describe('resolveModel', () => {
 
       await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
       await expect(resolution).rejects.toThrow(
-        "No usable openai credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
       );
     });
 
@@ -1385,6 +1408,18 @@ describe('resolveRequestThinkingLevel', () => {
     mockLoadSettings.mockImplementation(() => settingsWithThinking({ thinkingLevel: 'low' }));
 
     expect(resolveRequestThinkingLevel(undefined)).toBe('low');
+  });
+
+  it('uses the host default over settings defaults but under the session override', () => {
+    mockLoadSettings.mockImplementation(() =>
+      settingsWithThinking({ modeThinkingDefaults: { build: 'high' }, thinkingLevel: 'low' }),
+    );
+
+    expect(resolveRequestThinkingLevel({ state: {}, session: { modeId: 'build' } } as any, undefined, 'max')).toBe(
+      'max',
+    );
+    expect(mockLoadSettings).not.toHaveBeenCalled();
+    expect(resolveRequestThinkingLevel({ state: { thinkingLevel: 'medium' } } as any, undefined, 'max')).toBe('medium');
   });
 
   it('passes the settings path through to loadSettings', () => {

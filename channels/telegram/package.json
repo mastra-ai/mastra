@@ -1,6 +1,6 @@
 {
   "name": "@mastra/telegram",
-  "version": "0.2.2",
+  "version": "0.2.4-alpha.0",
   "description": "Telegram integration for Mastra agents — a ChannelProvider over @chat-adapter/telegram with webhooks, secret verification, commands, and streaming replies",
   "license": "Apache-2.0",
   "type": "module",
@@ -29,15 +29,15 @@
     "test:watch": "vitest"
   },
   "dependencies": {
-    "@chat-adapter/telegram": "^4.37.0"
+    "@chat-adapter/telegram": "^4.43.0"
   },
   "devDependencies": {
     "@mastra/core": "workspace:*",
-    "@types/node": "^22.20.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
-    "undici": "^8.11.2",
-    "vitest": "^4.1.11"
+    "undici": "^8.12.3",
+    "vitest": "^4.1.12"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.22.0 <2.0.0"

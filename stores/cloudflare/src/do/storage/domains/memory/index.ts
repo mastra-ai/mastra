@@ -18,6 +18,9 @@ import {
   normalizePerPage,
   calculatePagination,
   validateStorageMetadataFilter,
+  executeRetentionPrune,
+  resolveRetentionTargets,
+  retentionCutoffMs,
 } from '@mastra/core/storage';
 import type {
   RunFence,
@@ -29,6 +32,10 @@ import type {
   StorageListThreadsInput,
   StorageListThreadsOutput,
   TABLE_NAMES,
+  PruneOptions,
+  PruneResult,
+  RetentionTablesDescriptor,
+  TableRetentionPolicy,
 } from '@mastra/core/storage';
 
 import { DODB } from '../../db';
@@ -88,6 +95,15 @@ function addSqliteMetadataValuePredicate(
 }
 
 export class MemoryStorageDO extends MemoryStorage {
+  /**
+   * Tables `prune()` can clean up. Run fences anchor on `retiredAt` (epoch ms), which stays unset until the
+   * execution holding the fence settles, so a running execution's fence is
+   * never pruned.
+   */
+  static override readonly retentionTables: RetentionTablesDescriptor = {
+    runFences: { table: TABLE_MEMORY_RUN_FENCES, column: 'retiredAt', indexed: false, anchorType: 'epoch-ms' },
+  };
+
   override readonly supportsPartialThreadUpdate = true;
   #db: DODB;
 
@@ -109,6 +125,27 @@ export class MemoryStorageDO extends MemoryStorage {
     await this.#db.createTable({
       tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
       schema: RUN_FENCING_TABLE_SCHEMAS[TABLE_MEMORY_RUN_FENCES],
+    });
+  }
+
+  async prune(policies: Record<string, TableRetentionPolicy>, options?: PruneOptions): Promise<PruneResult[]> {
+    const targets = resolveRetentionTargets({
+      policies,
+      descriptor: MemoryStorageDO.retentionTables,
+      order: ['runFences'],
+    });
+    return executeRetentionPrune({
+      domain: 'memory',
+      targets,
+      options,
+      cutoffFor: (target, now) => retentionCutoffMs(target.policy, now),
+      deleteBatch: (_target, cutoff, limit) =>
+        this.#db.pruneRunRows({
+          tableName: TABLE_MEMORY_RUN_FENCES as TABLE_NAMES,
+          column: 'retiredAt',
+          cutoff: Number(cutoff),
+          limit,
+        }),
     });
   }
 

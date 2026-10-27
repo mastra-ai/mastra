@@ -39,7 +39,7 @@
     "o4-mini"
   ],
   "reasoning": {
-    "gpt-5.4": [
+    "gpt-5.5": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -51,16 +51,16 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "o4-mini": [
+    "auto": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "claude-opus-4.8": [
+    "glm-5.2": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "values": ["none", "high", "xhigh"]
       }
     ],
     "claude-haiku-4.5": [
@@ -75,13 +75,19 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
+    "o4-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
     "gpt-5.4-mini": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-5.5": [
+    "gpt-5.4": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
@@ -91,12 +97,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
       }
     ],
     "deepseek-v4-pro": [
@@ -114,10 +114,10 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "auto": [
+    "claude-opus-4.8": [
       {
         "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

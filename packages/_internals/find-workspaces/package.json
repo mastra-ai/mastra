@@ -1,0 +1,58 @@
+{
+  "name": "@internal/find-workspaces",
+  "version": "0.0.0",
+  "description": "Vendored fork of find-workspaces@0.3.1 that globs with tinyglobby instead of fast-glob",
+  "private": true,
+  "type": "module",
+  "files": [
+    "dist",
+    "LICENSE"
+  ],
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "exports": {
+    ".": {
+      "import": {
+        "types": "./dist/index.d.ts",
+        "default": "./dist/index.js"
+      },
+      "require": {
+        "types": "./dist/index.d.cts",
+        "default": "./dist/index.cjs"
+      }
+    },
+    "./package.json": "./package.json"
+  },
+  "sideEffects": false,
+  "scripts": {
+    "build": "tsdown --silent --config tsdown.config.ts",
+    "test": "vitest run",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
+    "typecheck": "tsc --noEmit -p tsconfig.build.json"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "tinyglobby": "^0.2.17",
+    "yaml": "^2.9.1"
+  },
+  "devDependencies": {
+    "@internal/lint": "workspace:*",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
+    "typescript": "catalog:",
+    "vitest": "catalog:"
+  },
+  "homepage": "https://mastra.ai",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/mastra-ai/mastra.git",
+    "directory": "packages/_internals/find-workspaces"
+  },
+  "bugs": {
+    "url": "https://github.com/mastra-ai/mastra/issues"
+  },
+  "engines": {
+    "node": ">=22.13.0"
+  }
+}

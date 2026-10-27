@@ -48,10 +48,19 @@ import { LocalFactorySandbox } from '@mastra/factory'
 new PlatformFactorySandbox() // reads MASTRA_PLATFORM_ACCESS_TOKEN and MASTRA_ENVIRONMENT_ID
 new E2BFactorySandbox() // reads E2B_API_KEY
 new DockerFactorySandbox({ defaults: { baseImage: 'node:22-slim' } })
-new LocalFactorySandbox({ root: '/var/sandboxes', env: { PATH: process.env.PATH! } })
+new LocalFactorySandbox() // reads MASTRACODE_LOCAL_SANDBOX_ROOT, defaults to ~/.mastracode/web/sandboxes
 ```
 
-`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`.
+`LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`. Without `env`, commands only see an allow-list of host variables that git and TLS need, such as `HOME`, `USER`, `SHELL` and `SSL_CERT_FILE`, plus `PATH`. App secrets stay out of commands that run in repository checkouts.
+
+## Default sandbox
+
+When you omit the `sandbox` option and Platform credentials (`MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`) are set, `MastraFactory` installs a sandbox itself:
+
+- Under `mastra dev` or with `NODE_ENV=development`, it installs `LocalFactorySandbox`, so development doesn't start remote machines.
+- In built deployments, it installs `PlatformFactorySandbox`. This needs `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. If either is missing, Factory logs a warning and turns off repository sandboxes.
+
+An explicit `sandbox` option always takes precedence. Without Platform credentials and without a `sandbox` option, repository sandboxes are off.
 
 For an unset setting, the provider applies its own default: 2 CPUs, 1024 MB and a 5 minute idle timeout on Platform and E2B, overridable through `defaults`. On Platform, a top-level `idleTimeoutMinutes` option also applies when `defaults` doesn't set one. The schema's `default` values show the effective defaults.
 
@@ -156,6 +165,8 @@ class MyFactorySandbox extends FactorySandbox<Settings> {
   }
 }
 ```
+
+When a user recreates a stuck session's sandbox, Factory may call `create` with only `sessionId` and the persisted `sandboxId` (no repository access, empty settings) and then call the returned sandbox's `destroy()` without starting it. This happens when the server restarted or the session was opened on another replica. For recreate to work, `destroy()` must find and remove the session's VM from `sandboxId` or the session id alone. Factory doesn't offer recreate for `LocalFactorySandbox`, because its `destroy()` keeps the session directory.
 
 ## FactorySandboxContext
 

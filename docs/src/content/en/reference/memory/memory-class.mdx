@@ -63,6 +63,13 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
     isOptional: true,
   },
   {
+    name: 'embeddingDimension',
+    type: 'number',
+    description:
+      'Output dimension of the embedder, as a positive integer. When set, Memory uses it to name the semantic recall index instead of embedding a probe string on first use. It must match the vectors the embedder returns: a mismatch throws a `MASTRA_MEMORY_EMBEDDING_DIMENSION_MISMATCH` error before any index is created. See [Setting the embedding dimension](/docs/memory/semantic-recall#setting-the-embedding-dimension).',
+    isOptional: true,
+  },
+  {
     name: 'options',
     type: 'MemoryConfig',
     description: 'Memory configuration options.',

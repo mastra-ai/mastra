@@ -12,9 +12,11 @@ import {
   checkRouteFGA,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
+  getHTTPErrorResponse,
   isSafeObjectKey,
   isZodError,
   normalizeQueryParams,
+  propagateRequestAbort,
   redactStreamChunk,
   serializeStreamChunk,
 } from '@mastra/server/server-adapter';
@@ -27,6 +29,7 @@ export { createAuthMiddleware } from './auth-middleware';
 export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
+export type { HonoBrowserStreamConfig } from './browser-stream';
 
 type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
@@ -433,6 +436,9 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         });
 
+      // Client disconnect before any response bytes: abort the in-flight MCP request.
+      propagateRequestAbort(response.req.raw.signal, res);
+
       return propagateClientDisconnect(await toFetchResponse(res), res);
     } else if (route.responseType === 'mcp-sse') {
       // MCP SSE transport
@@ -674,41 +680,8 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             return customResponse;
           }
 
-          // Check if it's an HTTPException or MastraError with a status code
-          if (error && typeof error === 'object') {
-            // Check for direct status property (HTTPException)
-            if ('status' in error) {
-              const status = (error as any).status;
-              let safeCause: { failingItems: unknown[] } | undefined;
-              try {
-                const raw = error instanceof Error ? error.cause : undefined;
-                if (
-                  raw &&
-                  typeof raw === 'object' &&
-                  !Array.isArray(raw) &&
-                  'failingItems' in raw &&
-                  Array.isArray((raw as any).failingItems)
-                ) {
-                  safeCause = { failingItems: (raw as any).failingItems };
-                }
-              } catch {
-                // serialization or access error — omit cause
-              }
-              return c.json(
-                {
-                  error: error instanceof Error ? error.message : 'Unknown error',
-                  ...(safeCause ? { cause: safeCause } : {}),
-                },
-                status,
-              );
-            }
-            // Check for MastraError with status in details
-            if ('details' in error && error.details && typeof error.details === 'object' && 'status' in error.details) {
-              const status = (error.details as any).status;
-              return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, status);
-            }
-          }
-          return c.json({ error: error instanceof Error ? error.message : 'Unknown error' }, 500);
+          const { status, body } = getHTTPErrorResponse(error);
+          return c.json(body, status as any);
         }
       },
     );
@@ -803,10 +776,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
             }
           }
         }
+        // Path params last: the custom handler reads them from the URL, so query/body
+        // values must not be able to change which resource FGA checks.
         const fgaError = await checkRouteFGA(this.mastra, serverRoute, c.get('requestContext'), {
-          ...c.req.param(),
           ...Object.fromEntries(new URL(c.req.url).searchParams.entries()),
           ...bodyParams,
+          ...c.req.param(),
         });
         if (fgaError) {
           return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);

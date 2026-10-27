@@ -5,11 +5,14 @@ import type {
   UpdateExperimentResultParams,
 } from '@mastra/client-js';
 import { useDatasetMutations } from '@mastra/react/hooks/datasets';
-import { fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse, delay } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { DatasetReview } from '../dataset-review';
+import { emptyScoresResponse } from '@/domains/experiments/__tests__/fixtures/experiment-item-route';
+import { noScorers } from '@/domains/experiments/components/__tests__/fixtures/target-registries';
+import { metricsUnavailableCapabilities } from '@/pages/traces/__tests__/fixtures/traces';
 import { server } from '@/test/msw-server';
 import { makeWrapper, renderWithProviders } from '@/test/render';
 
@@ -241,6 +244,57 @@ describe('DatasetReview without a scope', () => {
   });
 });
 
+describe('DatasetReview with an open agent result', () => {
+  describe('when the result was produced by an agent', () => {
+    const agentResult: DatasetExperimentResult = {
+      ...makeResult('r-1', 'exp-1', 'pancake input'),
+      targetType: 'agent',
+      output: { text: 'Whisk the egg whites separately.' },
+    };
+
+    const renderOpenResult = () => {
+      server.use(
+        http.get('*/api/datasets/:datasetId/experiments/:experimentId/results', () =>
+          HttpResponse.json({
+            results: [agentResult],
+            pagination: { total: 1, page: 0, perPage: 100, hasMore: false },
+          }),
+        ),
+        http.get('*/api/scores/run/:experimentId', () => HttpResponse.json(emptyScoresResponse)),
+        http.get('*/api/scores/scorers', () => HttpResponse.json(noScorers)),
+        http.get('*/api/observability/capabilities', () => HttpResponse.json(metricsUnavailableCapabilities)),
+      );
+      renderWithProviders(
+        <DatasetReview withQueryTrace withFeedback experiments={[makeExperiment('exp-1')]} featuredItemId="r-1" />,
+      );
+    };
+
+    it('shows the agent answer as text rather than raw JSON', async () => {
+      renderOpenResult();
+
+      const panel = await screen.findByRole('dialog', { name: 'Review item r-1' });
+      expect(await within(panel).findByText('Whisk the egg whites separately.')).toBeTruthy();
+      expect(within(panel).queryByText(/"text":/)).toBeNull();
+    });
+
+    it('shows how long the run took', async () => {
+      renderOpenResult();
+
+      const panel = await screen.findByRole('dialog', { name: 'Review item r-1' });
+      expect(await within(panel).findByText('Duration')).toBeTruthy();
+    });
+
+    it('does not offer to edit its tags, like on the experiment page', async () => {
+      renderOpenResult();
+
+      const panel = await screen.findByRole('dialog', { name: 'Review item r-1' });
+      await within(panel).findByText('Whisk the egg whites separately.');
+      expect(within(panel).queryByText('Tags')).toBeNull();
+      expect(within(panel).queryByRole('combobox')).toBeNull();
+    });
+  });
+});
+
 describe('DatasetReview scoped to an agent', () => {
   describe('when onCreateScorer is provided and review items are loaded', () => {
     it('calls onCreateScorer with the visible items input/output', async () => {
@@ -258,7 +312,7 @@ describe('DatasetReview scoped to an agent', () => {
 
       await screen.findByText(/exp one input/);
       await screen.findByText(/exp two input/);
-      fireEvent.click(screen.getByRole('button', { name: 'Create Scorer' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Create scorer' }));
 
       expect(onCreateScorer).toHaveBeenCalledTimes(1);
       expect(onCreateScorer.mock.calls[0]?.[0]).toEqual(
@@ -271,12 +325,12 @@ describe('DatasetReview scoped to an agent', () => {
   });
 
   describe('when onCreateScorer is not provided', () => {
-    it('does not render the Create Scorer action', async () => {
+    it('does not render the Create scorer action', async () => {
       setupHandlers();
       renderWithProviders(<DatasetReview withQueryTrace withFeedback targetType="agent" targetId="chef-agent" />);
 
       await screen.findByText(/exp one input/);
-      expect(screen.queryByRole('button', { name: 'Create Scorer' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Create scorer' })).toBeNull();
     });
   });
 });

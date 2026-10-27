@@ -1,4 +1,4 @@
-import { isValid, parse } from 'date-fns';
+import { format, isValid, parse, startOfDay } from 'date-fns';
 import { Check } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Button } from '@/ds/components/Button/Button';
@@ -26,6 +26,8 @@ export interface CustomRangeEditorProps {
   disabled?: boolean;
   /** Widest range that can be applied, in milliseconds. */
   maxRangeMs?: number;
+  /** Earliest day a range can start on. Days before it are disabled. */
+  minDate?: Date;
   onApply: (from: Date | undefined, to: Date | undefined) => void;
   onShowPresets: () => void;
 }
@@ -39,6 +41,7 @@ export function CustomRangeEditor({
   dateTo,
   disabled,
   maxRangeMs,
+  minDate,
   onApply,
   onShowPresets,
 }: CustomRangeEditorProps) {
@@ -54,11 +57,16 @@ export function CustomRangeEditor({
   const rangeReversed = fromDate !== undefined && toDate !== undefined && fromDate.getTime() > toDate.getTime();
   const rangeTooWide =
     fromDate !== undefined && toDate !== undefined && toDate.getTime() - fromDate.getTime() > (maxRangeMs ?? Infinity);
-  const rangeInvalid = rangeReversed || rangeTooWide;
+  const firstDay = minDate ? startOfDay(minDate) : undefined;
+  const endFirstDay = draftDateFrom && (!firstDay || draftDateFrom > firstDay) ? draftDateFrom : firstDay;
+  const rangeTooEarly = fromDate !== undefined && firstDay !== undefined && fromDate < firstDay;
+  const rangeInvalid = rangeReversed || rangeTooWide || rangeTooEarly;
   // Shown after a failed Apply, and gone as soon as the drafts form a valid range again.
   let error: string | undefined;
   if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
   else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
+  else if (applyAttempted && firstDay && rangeTooEarly)
+    error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
 
   const apply = () => {
     if (rangeInvalid) {
@@ -87,6 +95,7 @@ export function CustomRangeEditor({
             month={draftDateFrom}
             onSelect={setDraftDateFrom}
             disabled={disabled}
+            fromDate={firstDay}
             toDate={draftDateTo}
           />
           <TimePicker
@@ -108,7 +117,7 @@ export function CustomRangeEditor({
             month={draftDateTo}
             onSelect={setDraftDateTo}
             disabled={disabled}
-            fromDate={draftDateFrom}
+            fromDate={endFirstDay}
           />
           <TimePicker
             label="End time"

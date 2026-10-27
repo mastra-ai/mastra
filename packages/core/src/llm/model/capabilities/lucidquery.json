@@ -1,9 +1,4 @@
 {
-  "attachment": [
-    "lucidnova-rf1-100b",
-    "lucidquery-agi-01-frontier",
-    "lucidquery-agi-01-swift",
-    "lucidquery-nexus-coder"
-  ],
+  "attachment": ["lucidquery-agi-01-frontier", "lucidquery-agi-01-swift"],
   "temperature": ["lucidquery-agi-01-frontier", "lucidquery-agi-01-swift"]
 }

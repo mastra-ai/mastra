@@ -1,5 +1,41 @@
 # @mastra/schema-compat
 
+## 1.3.17-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`json-schema-to-zod@^2.8.1` ↗︎](https://www.npmjs.com/package/json-schema-to-zod/v/2.8.1) (from `^2.7.0`, in `dependencies`)
+  - Updated dependency [`zod-from-json-schema@0.5.2` ↗︎](https://www.npmjs.com/package/zod-from-json-schema/v/0.5.2) (from `^0.5.2`, in `dependencies`)
+  - Updated dependency [`@ai-sdk/anthropic@^3.0.135` ↗︎](https://www.npmjs.com/package/@ai-sdk/anthropic/v/3.0.135) (from `^3.0.133`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/google@^3.0.138` ↗︎](https://www.npmjs.com/package/@ai-sdk/google/v/3.0.138) (from `^3.0.135`, in `devDependencies`)
+  - Updated dependency [`@ai-sdk/openai@^3.0.131` ↗︎](https://www.npmjs.com/package/@ai-sdk/openai/v/3.0.131) (from `^3.0.130`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`arktype@^2.2.9` ↗︎](https://www.npmjs.com/package/arktype/v/2.2.9) (from `^2.2.0`, in `devDependencies`)
+
+## 1.3.16
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.16-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.15
+
+### Patch Changes
+
+- Fixed Azure OpenAI GPT models filling optional tool inputs with made-up values. They now leave optional inputs empty, as they already do through `@ai-sdk/openai`. This applies when the Azure deployment name contains an OpenAI model name, such as `gpt-4o`, `my-gpt5-deployment` or `o3-mini`. Deployments with other names, such as `production`, and non-OpenAI models served through Azure behave as before. ([#26680](https://github.com/mastra-ai/mastra/pull/26680))
+
+- Fixed two OpenAI errors with tool inputs and structured output: ([#26979](https://github.com/mastra-ai/mastra/pull/26979))
+
+  - Optional tool inputs that accept more than one type can now be left empty. Before, OpenAI models filled them with made-up values.
+  - Structured output with a field that has free-form keys, such as `z.record(z.string(), z.string())`, now works on OpenAI instead of failing with a 400 error. These schemas are sent without strict mode. To keep strict mode anyway, set `providerOptions.openai.strictJsonSchema: true`.
+
 ## 1.3.15-alpha.0
 
 ### Patch Changes

@@ -5,51 +5,57 @@ import {
   Composer as ComposerRoot,
   ComposerActions,
   ComposerBox,
+  ComposerHeader,
   ComposerInput,
-  type ComposerInputProps,
   ComposerRing,
   ComposerSuggestions,
   useComposerCommands,
 } from '@mastra/playground-ui/components/Composer';
+import type { ComposerInputProps } from '@mastra/playground-ui/components/Composer';
 import { useOptionalMessageScroller } from '@mastra/playground-ui/components/MessageScroller';
 import { useQueryClient } from '@tanstack/react-query';
-import { ArrowUp, ImagePlus, Square } from 'lucide-react';
+import { ImagePlus } from 'lucide-react';
 import type { KeyboardEvent } from 'react';
 import { useMatch, useNavigate, useParams } from 'react-router';
 
 import { INITIAL_THREAD_MESSAGE_LIMIT, queryKeys } from '../../../../api/keys';
-import { useChatCommands } from '../context/ChatCommandsProvider';
-import { useChatConnection } from '../context/useChatConnection';
-import { useChatModels } from '../context/useChatModels';
-import { useChatSessionContext } from '../context/useChatSessionContext';
-import { useChatTranscript } from '../context/useChatTranscript';
 import {
   useAbortAgentControllerMutation,
   useSendAgentControllerMessageMutation,
 } from '../../../../hooks/useAgentControllerRunMutations';
 import { useCreateAgentControllerThreadMutation } from '../../../../hooks/useAgentControllerThreadMutations';
-import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
+import { useChatCommands } from '../context/ChatCommandsProvider';
+import type { PendingImage } from '../context/ComposerImagesContext';
+import { useChatConnection } from '../context/useChatConnection';
+import { useChatModels } from '../context/useChatModels';
+import { useChatSessionContext } from '../context/useChatSessionContext';
+import { useChatTranscript } from '../context/useChatTranscript';
+import { useComposerConnectionNotice } from '../hooks/useComposerConnectionNotice';
 import { useCreateUserSessionFromDraft } from '../hooks/useCreateUserSessionFromDraft';
 import { clearPendingHandoff } from '../hooks/useHandoffPrompt';
 import { usePendingPlanFeedback } from '../hooks/usePendingPlanFeedback';
+import { usePreparingThreadId } from '../hooks/usePreparingThreadId';
 import { commandRequiresReadySession } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { StatusLine } from './StatusLine';
+import { ComposerConnectionNotice } from './ComposerConnectionNotice';
 import { ComposerImageAttachments } from './ComposerImageAttachments';
+import { ComposerPrimaryAction } from './ComposerPrimaryAction';
+import { StatusLine } from './StatusLine';
 import { useComposerImages } from './useComposerImages';
-import type { PendingImage } from './useComposerImages';
 import { useInitializingPlaceholder } from './useInitializingPlaceholder';
 
 type ComposerProps = Pick<ComposerInputProps, 'variant'>;
 
 export function Composer({ variant = 'inline' }: ComposerProps) {
-  const { resourceId, sessionEnabled, projectPath, baseUrl, factorySessionState } = useChatSessionContext();
+  const { sessionId, sessionEnabled, baseUrl, factorySessionState } = useChatSessionContext();
   const { factoryId } = useParams<{ factoryId: string }>();
   const onDraftComposer = useMatch('/factories/:factoryId/new') !== null;
   const onUserDraft = useMatch('/factories/:factoryId/user/new/:draftSessionId') !== null;
   const navigate = useNavigate();
   const queryClient = useQueryClient();
   const { status } = useChatConnection();
+  const connectionNotice = useComposerConnectionNotice(status);
+  const connectionLost = connectionNotice.open && connectionNotice.notice !== 'reconnected';
   const { busy, phase, localUser, failLocalUser, reset, clearPending, pushNotice } = useChatTranscript();
   const chatPreparing = phase === 'initializing';
   const scroller = useOptionalMessageScroller();
@@ -64,8 +70,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const hookArgs = {
     agentControllerId: AGENT_CONTROLLER_ID,
-    resourceId,
-    scope: projectPath,
+    sessionId,
     baseUrl,
     enabled: sessionEnabled,
   };
@@ -79,13 +84,14 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const createDraftSessionMutation = useCreateUserSessionFromDraft();
   const blocked = onUserDraft ? !factorySessionState : status !== 'ready' && !preparingThreadId;
   const draftConfigNotReady = onUserDraft && (modelLoading || modelError !== undefined);
-  const attachDisabled = onUserDraft || blocked || chatPreparing || planFeedback.pending;
+  const attachDisabled = blocked || chatPreparing || planFeedback.pending;
   const { images, setImages, fileInputRef, removeImage, onPaste, onDrop, onFileInputChange } = useComposerImages({
-    onUserDraft,
     disabled: chatPreparing || planFeedback.pending,
   });
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
+  const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
+  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -118,7 +124,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       },
     };
     queryClient.setQueryData(
-      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, resourceId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
+      queryKeys.agentControllerThreadMessages(AGENT_CONTROLLER_ID, sessionId, threadId, INITIAL_THREAD_MESSAGE_LIMIT),
       [message],
     );
   };
@@ -130,14 +136,26 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       const threadId = await createThread();
       localUser(text, false, outgoing);
       await sendMutation.mutateAsync({ text, files: outgoing });
-      clearPendingHandoff(resourceId);
+      clearPendingHandoff(sessionId);
       seedThreadMessageCache(threadId, text, files);
       void navigate(`/factories/${factoryId}/threads/${threadId}`, { replace: true });
       return;
     }
     localUser(text, false, outgoing);
     await sendMutation.mutateAsync({ text, files: outgoing });
-    clearPendingHandoff(resourceId);
+    clearPendingHandoff(sessionId);
+  };
+
+  // Images leave the composer while in flight and come back if the send fails.
+  const withPendingImages = async (run: (files: PendingImage[]) => Promise<unknown>) => {
+    const files = images;
+    setImages([]);
+    try {
+      await run(files);
+    } catch (error) {
+      setImages(current => [...files, ...current]);
+      throw error;
+    }
   };
 
   const steer = async (text: string) => {
@@ -146,7 +164,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     scroller?.scrollToEnd({ behavior: 'smooth' });
     try {
       await sendMutation.mutateAsync({ text });
-      clearPendingHandoff(resourceId);
+      clearPendingHandoff(sessionId);
     } catch (error) {
       failLocalUser(localId);
       throw error;
@@ -164,10 +182,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
 
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
-    if (sendDisabled) return;
-    const text = draft.trim();
-    if ((!text && images.length === 0) || (planFeedback.pending && !text)) return;
-    submitInput(text);
+    if (sendDisabled || !hasSubmittableDraft) return;
+    submitInput(draft.trim());
   };
 
   const commandMenu = useComposerCommands({
@@ -207,7 +223,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
     }
     if (onUserDraft) {
       try {
-        await createDraftSessionMutation.mutateAsync(text);
+        await withPendingImages(files => createDraftSessionMutation.mutateAsync({ prompt: text, files }));
       } catch (error) {
         updateDraft(text);
         throw error;
@@ -224,19 +240,15 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
       await steer(text);
       return;
     }
-    const files = images;
-    setImages([]);
-    try {
-      await send(text, files);
-    } catch (error) {
-      setImages(current => [...files, ...current]);
-      throw error;
-    }
+    await withPendingImages(files => send(text, files));
   }
 
   return (
     <ComposerRoot onSubmit={onSubmit} onDrop={onDrop} onDragOver={e => e.preventDefault()}>
-      <ComposerRing busy={busy || chatPreparing}>
+      <ComposerHeader open={connectionNotice.open}>
+        <ComposerConnectionNotice notice={connectionNotice.notice} />
+      </ComposerHeader>
+      <ComposerRing busy={(busy || chatPreparing) && !connectionLost}>
         <ComposerBox>
           <ComposerSuggestions {...commandMenu.suggestionsProps} />
           <ComposerImageAttachments images={images} onRemove={removeImage} />
@@ -272,27 +284,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               >
                 <ImagePlus size={14} />
               </Button>
-              {liveRun && (
-                <Button
-                  type="button"
-                  size="icon-sm"
-                  onClick={() => void abortMutation.mutateAsync()}
-                  aria-label="Abort"
-                >
-                  <Square size={14} />
-                </Button>
-              )}
-              <Button
-                type="submit"
-                size="icon-sm"
-                disabled={
-                  sendDisabled || (!draft.trim() && images.length === 0) || (planFeedback.pending && !draft.trim())
-                }
-                aria-label="Send message"
-                title={sendTitle}
-              >
-                <ArrowUp size={16} />
-              </Button>
+              <ComposerPrimaryAction
+                showAbort={liveRun && !hasSubmittableDraft}
+                sendDisabled={sendDisabled || !hasSubmittableDraft}
+                sendTitle={sendTitle}
+                onAbort={() => void abortMutation.mutateAsync()}
+              />
             </ButtonsGroup>
           </ComposerActions>
         </ComposerBox>

@@ -18,15 +18,25 @@
  * capabilities by implementing `FactoryIntegration` from outside the package.
  */
 
-import type { TypingStatusFn } from '@mastra/core/channels';
+import type { AgentChannels, TypingStatusFn } from '@mastra/core/channels';
+import type { InputProcessor, OutputProcessor } from '@mastra/core/processors';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import type { SlackAdapterChannelConfig } from '@mastra/slack';
 
 import type { WorkItemFeedPublisher } from '../../storage/domains/comments/feed-sync.js';
-import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext } from '../base.js';
 
+import type { FactoryChannelsConfig, FactoryIntegration, IntegrationContext, IntegrationTools } from '../base.js';
+import { announcePullRequest } from '../channel-thread-announcements.js';
+import { parseCreatedPullRequest } from '../github/session-subscriptions.js';
+import { FactoryChannelReplyProcessor } from './channel-reply-processor.js';
+import { FactoryChannelSessionLinkProcessor } from './channel-session-link-processor.js';
 import { createSlackConnectRoutes } from './connect-route.js';
 import { SlackFeedPublisher } from './feed-publisher.js';
+import { FactoryReplyReminderProcessor } from './reply-reminder-processor.js';
+import { createReplyTool, FactoryReplyStreamProcessor, REPLY_TOOL_NAME } from './reply-tool.js';
+import { createShareFileTool, isSlackThread } from './share-file-tool.js';
+import type { ShareFileToolDeps } from './share-file-tool.js';
 import { createSlackChannelsConfig } from './slack.js';
 
 /**
@@ -71,14 +81,49 @@ export interface SlackIntegrationConfig {
   adapterOptions?: SlackAdapterChannelConfig;
 }
 
-const factoryTypingStatus: TypingStatusFn = chunk => {
+/** Slack renders the status inline next to the app name; keep it to one short line. */
+const MAX_STATUS_LENGTH = 80;
+
+/**
+ * Turns a tool's `description` arg ("Listing the repo root") into a status
+ * line that reads after the app name ("<App> is listing the repo root…").
+ * Only the first line counts: issue/PR creators carry whole bodies there.
+ */
+function describeToolCall(args: unknown): string | undefined {
+  if (!args || typeof args !== 'object') return undefined;
+  const { description } = args as { description?: unknown };
+  if (typeof description !== 'string') return undefined;
+  const line = description
+    .split('\n')
+    .map(part => part.replace(/\s+/g, ' ').trim())
+    .find(Boolean);
+  if (!line) return undefined;
+  const text = line.length > MAX_STATUS_LENGTH ? `${line.slice(0, MAX_STATUS_LENGTH - 1)}…` : line;
+  // Drop the sentence-case capital ("Listing" → "listing") but leave acronyms
+  // and identifiers ("PR lookup", "CI status") alone.
+  return `is ${/^[A-Z][a-z]/.test(text) ? text.charAt(0).toLowerCase() + text.slice(1) : text}`;
+}
+
+/**
+ * With reply text hidden, streamed text never reaches the thread, so it gets
+ * no status: an "is typing..." set after the reply tool's post would sit on
+ * the thread with nothing coming, and race the clear at the end of the run.
+ */
+const factoryTypingStatus =
+  (textDisplay: SlackAdapterChannelConfig['textDisplay']): TypingStatusFn =>
+  chunk => {
   switch (chunk.type) {
     case 'reasoning-delta':
       return 'is thinking...';
     case 'text-delta':
-      return 'is typing...';
+      return textDisplay === 'hidden' ? undefined : 'is typing...';
+    // The reply tool's text streams into the thread as the model writes it.
+    case 'tool-call-input-streaming-start':
+      return chunk.payload.toolName === REPLY_TOOL_NAME ? 'is typing...' : undefined;
     case 'tool-call':
-      return 'is working...';
+      // Still finishing the streamed reply; don't flip to "is working...".
+      if (chunk.payload.toolName === REPLY_TOOL_NAME) return 'is typing...';
+      return describeToolCall(chunk.payload.args) ?? 'is working...';
     default:
       return undefined;
   }
@@ -94,6 +139,19 @@ function adapterOverrides(options: SlackAdapterChannelConfig | undefined): Slack
   ) as SlackAdapterChannelConfig;
 }
 
+/**
+ * Factory defaults under the caller's overrides. Tool calls stay out of the
+ * thread: a Factory session runs hundreds of them, and a row per call (or a
+ * card per call) buries the reply. Progress shows through the typing status
+ * instead, which names the tool's current step; the session link carries the
+ * full trace. `grouped` remains available via `adapterOptions` for callers
+ * who want Slack's "Thinking Steps" widget.
+ */
+function factoryAdapterOptions(overrides: SlackAdapterChannelConfig): SlackAdapterChannelConfig {
+  const textDisplay = overrides.textDisplay ?? 'hidden';
+  return { typingStatus: factoryTypingStatus(textDisplay), toolDisplay: 'hidden', textDisplay, ...overrides };
+}
+
 export class SlackIntegration implements FactoryIntegration {
   readonly id = 'slack';
   /**
@@ -104,6 +162,17 @@ export class SlackIntegration implements FactoryIntegration {
   readonly requiresStableStateSigner = true;
 
   readonly #config: SlackIntegrationConfig;
+  readonly #adapterOptions: SlackAdapterChannelConfig;
+  /** Bound in `initialize()`; the controller mounts after integrations are built. */
+  #channels: ShareFileToolDeps['channels'];
+  readonly #deps: ShareFileToolDeps = { channels: () => this.#channels?.() };
+  /**
+   * With reply text hidden (the Factory default) the agent speaks through
+   * `reply_in_thread`, so the prompt, reminder and live streaming for that
+   * tool come with it. The setting is fixed for the deployment, so it is
+   * decided once here rather than on every run.
+   */
+  readonly processors: { input: InputProcessor[]; output: OutputProcessor[] };
   /**
    * Whether `channels()` found a source-control owner on the context and wired
    * repo-backed sessions. Set at the channels() attach path, which runs once at
@@ -118,6 +187,56 @@ export class SlackIntegration implements FactoryIntegration {
       );
     }
     this.#config = config;
+    this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
+    const textHidden = this.#textHidden;
+    this.processors = {
+      input: [
+        new FactoryChannelReplyProcessor(),
+        ...(textHidden ? [new FactoryReplyReminderProcessor()] : []),
+      ],
+      output: [
+        new FactoryChannelSessionLinkProcessor(),
+        ...(textHidden ? [new FactoryReplyStreamProcessor(this.#deps)] : []),
+      ],
+    };
+  }
+
+  get #textHidden(): boolean {
+    return this.#adapterOptions.textDisplay === 'hidden';
+  }
+
+  initialize(args: { channels?: () => AgentChannels | null | undefined }): void {
+    this.#channels = args.channels;
+  }
+
+  /**
+   * `attach_file`, and `reply_in_thread` when reply text is hidden, on runs
+   * whose session is linked to a Slack thread. The tools find the thread to
+   * post into when they are called.
+   */
+  async agentTools({ requestContext }: { requestContext: RequestContext }): Promise<IntegrationTools> {
+    if (!(await isSlackThread(requestContext, this.#deps))) return {};
+    return {
+      ...createShareFileTool(requestContext, this.#deps),
+      ...(this.#textHidden ? createReplyTool(requestContext, this.#deps) : {}),
+    };
+  }
+
+  /**
+   * When a run opens a pull request, post its link into the session's Slack
+   * thread.
+   */
+  async postToolObserver({
+    toolContext,
+    requestContext,
+  }: Parameters<NonNullable<FactoryIntegration['postToolObserver']>>[0]): Promise<void> {
+    const url = parseCreatedPullRequest(toolContext);
+    const threadId = (requestContext?.get('controller') as { threadId?: string } | undefined)?.threadId;
+    if (!url || !requestContext || !threadId || !(await isSlackThread(requestContext, this.#deps))) return;
+    // Not awaited: the tool call must not wait on Slack.
+    void announcePullRequest(this.#channels?.(), threadId, 'opened', url).catch(error =>
+      console.warn('[slack] pull request opened announcement failed', error),
+    );
   }
 
   channels(ctx: IntegrationContext): FactoryChannelsConfig {
@@ -139,11 +258,7 @@ export class SlackIntegration implements FactoryIntegration {
       modelDefaults: ctx.storage.modelDefaults,
       workItems: ctx.runtime?.workItems,
       feed: ctx.feed,
-      adapterOptions: {
-        toolDisplay: 'hidden',
-        typingStatus: factoryTypingStatus,
-        ...adapterOverrides(this.#config.adapterOptions),
-      },
+      adapterOptions: this.#adapterOptions,
     });
   }
 

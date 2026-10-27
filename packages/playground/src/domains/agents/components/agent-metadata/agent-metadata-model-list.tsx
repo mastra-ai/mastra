@@ -3,9 +3,10 @@ import { DragDropContext, Draggable, Droppable } from '@hello-pangea/dnd';
 import type { GetAgentResponse, ReorderModelListParams, UpdateModelInModelListParams } from '@mastra/client-js';
 import { Switch } from '@mastra/playground-ui/components/Switch';
 import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
+import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { GripVertical } from 'lucide-react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { AgentMetadataModelSwitcher } from './agent-metadata-model-switcher';
 
 type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
@@ -13,19 +14,26 @@ type AgentMetadataModelListType = NonNullable<GetAgentResponse['modelList']>;
 export interface AgentMetadataModelListProps {
   modelList: AgentMetadataModelListType;
   updateModelInModelList: AgentMetadataModelListItemProps['updateModelInModelList'];
-  reorderModelList: (params: ReorderModelListParams) => void;
+  reorderModelList: (params: ReorderModelListParams) => Promise<{ message: string }>;
+  /** False when the list comes from a function in code; renders it without edit controls */
+  editable?: boolean;
 }
 
 export const AgentMetadataModelList = ({
   modelList,
   updateModelInModelList,
   reorderModelList,
+  editable = true,
 }: AgentMetadataModelListProps) => {
   const [modelConfigs, setModelConfigs] = useState(() => modelList);
   const hasMultipleModels = modelConfigs.length > 1;
   const enabledCount = modelConfigs.filter(m => m.enabled !== false).length;
 
-  const handleDragEnd = (result: DropResult) => {
+  useEffect(() => {
+    setModelConfigs(modelList);
+  }, [modelList]);
+
+  const handleDragEnd = async (result: DropResult) => {
     if (!result.destination) {
       return;
     }
@@ -35,10 +43,15 @@ export const AgentMetadataModelList = ({
     items.splice(result.destination.index, 0, reorderedItem);
 
     setModelConfigs(items);
-    reorderModelList({ reorderedModelIds: items.map(item => item.id) });
+    try {
+      await reorderModelList({ reorderedModelIds: items.map(item => item.id) });
+    } catch {
+      setModelConfigs(modelConfigs);
+    }
   };
 
-  const updateModel = (params: UpdateModelInModelListParams) => {
+  const updateModel = async (params: UpdateModelInModelListParams) => {
+    const previousModelConfigs = modelConfigs;
     setModelConfigs(prev =>
       prev.map(modelConfig =>
         modelConfig.id === params.modelConfigId
@@ -55,8 +68,17 @@ export const AgentMetadataModelList = ({
           : modelConfig,
       ),
     );
-    return updateModelInModelList(params);
+    try {
+      return await updateModelInModelList(params);
+    } catch (error) {
+      setModelConfigs(previousModelConfigs);
+      throw error;
+    }
   };
+
+  if (!editable) {
+    return <AgentMetadataReadOnlyModelList modelList={modelList} />;
+  }
 
   return (
     <DragDropContext onDragEnd={handleDragEnd}>
@@ -86,6 +108,24 @@ export const AgentMetadataModelList = ({
   );
 };
 
+const AgentMetadataReadOnlyModelList = ({ modelList }: { modelList: AgentMetadataModelListType }) => (
+  <div className="flex flex-col gap-2">
+    <Txt variant="caption" tone="muted">
+      This model list is dynamically set and cannot be edited in Studio.
+    </Txt>
+    {modelList.map(modelConfig => (
+      <div key={modelConfig.id} className="flex items-center gap-2 rounded-lg bg-sidebar p-2">
+        <Txt as="span" variant="caption" tone="ink" className="min-w-0 flex-1 truncate">
+          {modelConfig.model.provider}/{modelConfig.model.modelId}
+        </Txt>
+        <Txt as="span" variant="meta" tone="muted" className="shrink-0">
+          {modelConfig.enabled === false ? 'Disabled' : 'Enabled'}
+        </Txt>
+      </div>
+    ))}
+  </div>
+);
+
 interface AgentMetadataModelListItemProps {
   modelConfig: AgentMetadataModelListType[number];
   updateModelInModelList: (params: UpdateModelInModelListParams) => Promise<{ message: string }>;
@@ -101,8 +141,6 @@ const AgentMetadataModelListItem = ({
   dragHandleProps,
   isLastEnabled,
 }: AgentMetadataModelListItemProps) => {
-  const [enabled, setEnabled] = useState(() => modelConfig.enabled);
-
   return (
     <div className="state-layer rounded-lg bg-sidebar">
       <div className="flex items-center gap-2 p-2">
@@ -118,7 +156,7 @@ const AgentMetadataModelListItem = ({
             defaultProvider={modelConfig.model.provider}
             defaultModel={modelConfig.model.modelId}
             updateModel={params => updateModelInModelList({ modelConfigId: modelConfig.id, model: params })}
-            autoSave={true}
+            autoSave
           />
         </div>
         {isLastEnabled ? (
@@ -126,7 +164,7 @@ const AgentMetadataModelListItem = ({
             <Tooltip>
               <TooltipTrigger asChild>
                 <span className="shrink-0">
-                  <Switch checked={enabled} disabled className="pointer-events-none" />
+                  <Switch checked={modelConfig.enabled} disabled className="pointer-events-none" />
                 </span>
               </TooltipTrigger>
               <TooltipContent>
@@ -136,10 +174,9 @@ const AgentMetadataModelListItem = ({
           </TooltipProvider>
         ) : (
           <Switch
-            checked={enabled}
+            checked={modelConfig.enabled}
             onCheckedChange={checked => {
-              setEnabled(checked);
-              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked });
+              void updateModelInModelList({ modelConfigId: modelConfig.id, enabled: checked }).catch(() => undefined);
             }}
             className="shrink-0"
           />

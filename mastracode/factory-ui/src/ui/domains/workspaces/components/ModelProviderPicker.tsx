@@ -5,7 +5,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, KeyRound, LogIn } from 'lucide-react';
 import { useId, useState } from 'react';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { providerDisplayName } from '../../settings/components/provider-display-name';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
 import { ProviderBrandIcon } from './ProviderBrandIcon';

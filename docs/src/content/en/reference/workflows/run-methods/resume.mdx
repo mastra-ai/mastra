@@ -186,7 +186,7 @@ if (result.status === 'suspended') {
   content={[
   {
     name: 'result',
-    type: 'Promise<WorkflowResult<TState, TOutput, TSteps>>',
+    type: 'Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>',
     description: 'A promise that resolves to the workflow execution result containing step outputs and status',
   },
   {
@@ -264,7 +264,7 @@ try {
 
 Over HTTP, a losing resume returns `409 Conflict`.
 
-This claim only applies to `resume()`. [`timeTravel()`](./timeTravel#concurrent-time-travel-calls) doesn't claim the run, so concurrent time travel calls aren't rejected.
+[`timeTravel()`](./timeTravel#concurrent-time-travel-calls) claims the run the same way and throws `WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED` when it loses.
 
 :::note
 

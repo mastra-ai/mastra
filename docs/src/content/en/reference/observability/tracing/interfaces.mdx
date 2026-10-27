@@ -509,7 +509,7 @@ Structured event emitted when the exporter pipeline drops observability events.
 ```typescript
 type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
 
-type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted'
+type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable'
 
 interface ObservabilityDropEvent {
   type: 'drop'
@@ -689,6 +689,19 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -775,6 +788,16 @@ interface ModelStepAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number
 
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
   /** Token usage statistics */
   usage?: UsageStats
 
@@ -786,6 +809,9 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
 }
 ```
 
@@ -874,6 +900,8 @@ interface ToolCallAttributes {
   toolDescription?: string
   toolCallId?: string
   success?: boolean
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean
 }
 ```
 
@@ -952,8 +980,9 @@ interface ProcessorRunAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk. Only set on output stream processor spans. The span's own duration
-   * covers the whole stream, model latency included, so this is what
-   * separates a slow processor from a slow model.
+   * covers its step, from the first chunk to the step's end with model latency
+   * and tool calls included, so this is what separates a slow processor from
+   * the rest of the step.
    */
   hookDurationMs?: number
 

@@ -106,7 +106,10 @@
                 "entityType": "agent",
                 "entityId": "workflow-agent",
                 "attributes": {
-                  "instructions": "You are an agent in a workflow"
+                  "instructions": "You are an agent in a workflow",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -136,10 +139,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "1",
-                      "responseModel": "",
-                      "completionStartTime": "<date>",
+                      "responseModel": "mock-model-id",
                       "usage": {
                         "inputTokens": 10,
                         "outputTokens": 20,
@@ -195,7 +198,10 @@
                         "entityId": "workflow-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 10,
                             "outputTokens": 20,
@@ -357,12 +363,23 @@
                                 }
                               },
                               "finishReason": "stop",
-                              "completionStartTime": "<date>"
+                              "completionStartTime": "<date>",
+                              "responseModel": "mock-model-id"
                             },
                             "metadata": {
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You are an agent in a workflow"
+                              },
+                              {
+                                "role": "user",
+                                "content": "test query"
+                              }
+                            ],
                             "output": {
                               "text": "Test response from agent",
                               "toolCalls": []
