@@ -52,13 +52,48 @@ export function SpanPayloadCollapsible({
   );
 }
 
+export interface SpanPayloadListItem {
+  key: string;
+  /** The item name, a link when it has a page to open. */
+  name: ReactNode;
+  description?: string;
+}
+
+/** A scrollable list of named items with an optional description (tools, skills…). */
+export function SpanPayloadList({ items, slot }: { items: SpanPayloadListItem[]; slot: string }) {
+  return (
+    <ul data-slot={slot} className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+      {items.map(item => (
+        <li key={item.key} className="flex min-w-0 flex-col">
+          {item.name}
+          {item.description && (
+            // Payload content reads in ink like the messages around it; grey is kept for the labels.
+            <Txt as="span" variant="body-sm" className="line-clamp-2" title={item.description}>
+              {item.description}
+            </Txt>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A list item name rendered as plain text. */
+export function SpanPayloadListName({ children }: { children: string }) {
+  return (
+    <Txt as="span" variant="label" tone="ink" className="truncate">
+      {children}
+    </Txt>
+  );
+}
+
 /** Tool calls as core records them: `{ toolName, args | input }` when they have that shape, JSON otherwise. */
 export function SpanPayloadToolCalls({ toolCalls }: { toolCalls: unknown[] }) {
   return (
     <ul data-slot="span-payload-tool-calls" className="flex flex-col gap-2">
       {toolCalls.map((call, index) => (
         <li key={index}>
-          <SpanPayloadTool value={call} showLabel={false} />
+          <SpanPayloadTool value={call} />
         </li>
       ))}
     </ul>

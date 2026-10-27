@@ -1,5 +1,69 @@
 # @mastra/inngest
 
+## 1.10.8-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`inngest@^4.26.0` ↗︎](https://www.npmjs.com/package/inngest/v/4.26.0) (from `^4.5.0`, in `dependencies`)
+  - Updated dependency `@ai-sdk/openai-v5@npm:@ai-sdk/openai@^2.0.136` (from `npm:@ai-sdk/openai@^2.0.135`, in `devDependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@hono/node-server@^2.1.3` ↗︎](https://www.npmjs.com/package/@hono/node-server/v/2.1.3) (from `^2.0.0`, in `devDependencies`)
+  - Updated dependency [`@types/koa@^3.0.3` ↗︎](https://www.npmjs.com/package/@types/koa/v/3.0.3) (from `^3.0.1`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`express@^5.3.0` ↗︎](https://www.npmjs.com/package/express/v/5.3.0) (from `^5.2.1`, in `devDependencies`)
+  - Updated dependency [`fastify@^5.12.7` ↗︎](https://www.npmjs.com/package/fastify/v/5.12.7) (from `^5.12.5`, in `devDependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `devDependencies`)
+  - Updated dependency [`inngest-cli@^1.49.0` ↗︎](https://www.npmjs.com/package/inngest-cli/v/1.49.0) (from `^1.26.0`, in `devDependencies`)
+  - Updated dependency [`koa@^3.2.1` ↗︎](https://www.npmjs.com/package/koa/v/3.2.1) (from `^3.1.2`, in `devDependencies`)
+
+- Brought Inngest durable agents (`createInngestAgent`) in line with core's durable agent. These features already worked with `DurableAgent` but were missing or broken on Inngest: ([#28232](https://github.com/mastra-ai/mastra/pull/28232))
+
+  - `observe()` now returns `detach()`, accepts `idleTimeoutMs` and `isAlive`, closes at once when the run already finished, and stays open across suspends and through an abort until the run's abort finish. Fixes #28175.
+  - `modelSettings.timeout.totalMs` now stops the run at the deadline instead of waiting for a stuck tool.
+  - Output processors (`processOutputStream`, `processOutputResult`, output step processors) now run on Inngest agent streams, including a resumed stream in the process that started the run. A resume in a process that never ran the stream (cold resume) still runs without them. Processors that hold parts, such as `BatchPartsProcessor`, keep the step text intact.
+  - `isTaskComplete` scorers and agent goals are now checked on each iteration.
+  - Calling `abort()` on an `observe()` handle for a run parked on a tool approval or suspension now releases it, like the stream `abort()` does, so a later resume is rejected.
+  - Reserved request-context memory keys now take priority over the `memory` option, as on `DurableAgent`.
+  - `approveToolCall` and `resumeStream` now run the tool, and the resumed stream's output processors, with the request context you pass, not the one the run suspended with.
+  - `stopWhen` now gets the same step content as `stream.steps`.
+  - A resumed stream's `toolCalls` now includes the resumed call, `generateTitle.emitEvent` streams the title, step `response.messages` is populated, and a processor retry no longer drops the earlier tool call from the prompt.
+
+  ```ts
+  const observation = await agent.observe(runId, { idleTimeoutMs: 30_000 });
+
+  for await (const chunk of observation.fullStream) {
+    if (chunk.type === 'finish') break;
+  }
+
+  // Stop listening without aborting the run.
+  observation.detach();
+  ```
+
+- Fixed a second `InngestAgent.resume()` failing with "the nested iteration snapshot does not contain suspended tool calls" when a run suspended again on a new tool call. Resume now waits until the stored suspension matches the latest suspended tool call. ([#27459](https://github.com/mastra-ai/mastra/pull/27459))
+
+- Fixed `InngestAgent.resume()` ignoring `hooks` passed at resume time. A resumed tool call now runs the `beforeToolCall` and `afterToolCall` hooks you pass to `resume()`. Delegation callbacks, toolsets, and memory tools from the original call are kept on resume. `InngestAgent.stream()` now accepts `hooks` in its options type. ([#27459](https://github.com/mastra-ai/mastra/pull/27459))
+
+  Per-call hooks are functions and only live in the process that received the call. If a run resumes in a different process, only constructor hooks and `defaultOptions.hooks` run.
+
+- Fixed resumed Inngest agent streams staying open when the resumed run fails. The stream now ends with the run's error, for example when the final messages cannot be saved after a tool approval. Fixes [#27445](https://github.com/mastra-ai/mastra/issues/27445). ([#28157](https://github.com/mastra-ai/mastra/pull/28157))
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0-alpha.4
+
+## 1.10.8-alpha.2
+
+### Patch Changes
+
+- Restore text streamed before tool approval in Inngest agents' resumed output. ([#27582](https://github.com/mastra-ai/mastra/pull/27582))
+
+- Fixed resumed Inngest agent output so it includes tool calls made before suspension. Earlier stream events do not repeat, and completed tools do not run again. ([#28080](https://github.com/mastra-ai/mastra/pull/28080))
+
+  `resume()` now waits up to 10 seconds for the stored run state to include the suspended tool calls. If they are still missing, `resume()` rejects with `Cannot resume run <runId>: ...` without sending a resume event. The run stays suspended, so you can call `resume()` again.
+
+- Updated dependencies [[`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`5bd713b`](https://github.com/mastra-ai/mastra/commit/5bd713b4f2ca7769675d949f8052943807c11598), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f)]:
+  - @mastra/core@1.80.0-alpha.3
+
 ## 1.10.8-alpha.1
 
 ### Patch Changes

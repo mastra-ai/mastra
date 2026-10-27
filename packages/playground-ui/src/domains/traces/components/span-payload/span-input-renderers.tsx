@@ -2,12 +2,12 @@ import { describeSpanInput } from '@mastra/core/observability';
 import type { AgentRunResumeInput, SpanInputDescription } from '@mastra/core/observability';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadJson } from './span-payload-json';
-import { SpanPayloadMessages } from './span-payload-messages';
+import { SpanPayloadMessages, SpanSignal } from './span-payload-messages';
 import { SpanPayloadField, SpanPayloadMarkdown } from './span-payload-primitives';
-import { SpanPayloadProcessor } from './span-payload-processor';
+import { SpanPayloadProcessorInput } from './span-payload-processor';
 import { asCoreSpan, pickRenderer } from './span-payload-registry';
 import type { PayloadRegistry } from './span-payload-registry';
-import { SpanSignalInput } from './span-signal-input';
+import { SpanToolNameValue } from './span-payload-tool';
 import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
@@ -27,7 +27,7 @@ function SpanAgentRunResumeRenderer({ value }: { value: AgentRunResumeInput }) {
             {toolName !== undefined && (
               <>
                 <DataKeysAndValues.Key>Tool</DataKeysAndValues.Key>
-                <DataKeysAndValues.Value>{String(toolName)}</DataKeysAndValues.Value>
+                <SpanToolNameValue toolName={String(toolName)} />
               </>
             )}
             {toolCallId !== undefined && (
@@ -58,7 +58,7 @@ const SPAN_INPUT_RENDERERS = {
   text: SpanTextRenderer,
   messages: SpanPayloadMessages,
   'agent-run-resume': SpanAgentRunResumeRenderer,
-  processor: SpanPayloadProcessor,
+  processor: SpanPayloadProcessorInput,
   json: SpanPayloadJson,
 } satisfies PayloadRegistry<SpanInputDescription>;
 
@@ -72,7 +72,7 @@ export interface SpanInputRendererProps {
  */
 export function SpanInputRenderer({ span }: SpanInputRendererProps) {
   const signal = getSpanSignal(span);
-  if (signal) return <SpanSignalInput signal={signal} />;
+  if (signal) return <SpanSignal signal={signal} />;
   const description = describeSpanInput(asCoreSpan(span));
   if (!description) return null;
   if (description.type === 'json') return <SpanPayloadJson value={description.value} />;

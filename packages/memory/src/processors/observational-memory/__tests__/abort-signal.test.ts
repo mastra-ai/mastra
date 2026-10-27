@@ -6,11 +6,18 @@
  * 2. OM-level: withAbortCheck detects the abort and throws AbortError
  */
 
-import { Agent } from '@mastra/core/agent';
-import { InMemoryStore } from '@mastra/core/storage';
+import { APICallError } from '@internal/ai-sdk-v5';
+import type { LanguageModelV2StreamPart } from '@internal/ai-sdk-v5';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
+import type { MastraDBMessage } from '@mastra/core/agent';
+import { Agent, MessageList } from '@mastra/core/agent';
+import { InMemoryStore, InMemoryMemory, InMemoryDB } from '@mastra/core/storage';
 import { describe, it, expect } from 'vitest';
 
 import { Memory } from '../../../index';
+import { runOMCommit, waitingOMCommits } from '../commit-queue';
+import { Extractor } from '../extractor';
+import { ObservationalMemoryProcessor } from '../processor';
 
 // =============================================================================
 // Slow model that takes a long time to respond (simulates real LLM latency)
@@ -139,14 +146,15 @@ describe('AbortSignal basics', () => {
 
   it('persists an aborted turn through the Observational Memory output processor', async () => {
     const controller = new AbortController();
+    const idleObserver = createLatchedModel('<observations>\n- Idle work\n</observations>', false);
     const store = new InMemoryStore();
     const memory = new Memory({
       storage: store,
       options: {
         observationalMemory: {
           enabled: true,
-          model: createSlowModel(1) as any,
-          observation: { messageTokens: 100_000, bufferTokens: false },
+          model: idleObserver.model,
+          observation: { messageTokens: 100_000, bufferTokens: 1000, bufferOnIdle: true },
           reflection: { observationTokens: 100_000 },
         },
       },
@@ -175,6 +183,8 @@ describe('AbortSignal basics', () => {
       // The provider surfaces cancellation as an AbortError.
     }
 
+    await (await memory.omEngine)!.waitForBuffering(threadId, 'abort-test-resource');
+    expect(idleObserver.calls).toBe(0);
     const memoryStore = await store.getStore('memory');
     const { messages } = await memoryStore!.listMessages({
       threadId,
@@ -199,71 +209,1027 @@ describe('AbortSignal basics', () => {
   }, 10000);
 });
 
-describe('AbortSignal in OM withAbortCheck', () => {
-  it('withAbortCheck throws when signal fires during fn()', async () => {
-    // Simulates what withAbortCheck does: agent.generate() returns empty on abort,
-    // then the post-call abortSignal check catches it
-    const controller = new AbortController();
-
-    const fn = async () => {
-      // Simulate agent.generate() returning empty on abort
-      await new Promise(resolve => setTimeout(resolve, 200));
-      return { text: '' };
-    };
-
-    // Abort after 50ms
-    setTimeout(() => controller.abort(), 50);
-
-    const abortSignal = controller.signal;
-
-    let threw = false;
-    try {
-      if (abortSignal?.aborted) {
-        throw new Error('The operation was aborted.');
-      }
-      await fn();
-      // This is the key fix — check after fn() returns
-      if (abortSignal?.aborted) {
-        throw new Error('The operation was aborted.');
-      }
-    } catch {
-      threw = true;
-    }
-
-    expect(threw).toBe(true);
+// A provider stream that stays open until the test releases it or the caller cancels.
+// Only the paid model boundary is replaced; Agent, Memory and storage are real. (#27792)
+function createLatchedModel(text: string, held = true) {
+  const started = Promise.withResolvers<AbortSignal | undefined>();
+  let cancelled = false;
+  let calls = 0;
+  let finish = () => {};
+  const model = new MockLanguageModelV2({
+    doStream: async ({ abortSignal }) => {
+      calls++;
+      const stream = new ReadableStream<LanguageModelV2StreamPart>({
+        start(controller) {
+          let closed = false;
+          const abort = () => {
+            if (closed) return;
+            closed = true;
+            cancelled = true;
+            controller.error(new DOMException('The operation was aborted.', 'AbortError'));
+          };
+          finish = () => {
+            if (closed) return;
+            closed = true;
+            abortSignal?.removeEventListener('abort', abort);
+            controller.enqueue({ type: 'text-start', id: 'text' });
+            controller.enqueue({ type: 'text-delta', id: 'text', delta: text });
+            controller.enqueue({ type: 'text-end', id: 'text' });
+            controller.enqueue({ type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 10 } });
+            controller.close();
+          };
+          controller.enqueue({ type: 'stream-start', warnings: [] });
+          if (abortSignal?.aborted) abort();
+          else abortSignal?.addEventListener('abort', abort, { once: true });
+          started.resolve(abortSignal);
+          if (!held) finish();
+        },
+      });
+      return { stream };
+    },
   });
+  return {
+    model,
+    started: started.promise,
+    release: () => finish(),
+    get cancelled() {
+      return cancelled;
+    },
+    get calls() {
+      return calls;
+    },
+  };
+}
 
-  it('withAbortCheck does NOT throw when signal is not aborted', async () => {
-    const fn = async () => {
-      await new Promise(resolve => setTimeout(resolve, 50));
-      return { text: 'ok' };
-    };
-
-    let threw = false;
-    try {
-      await fn();
-    } catch {
-      threw = true;
-    }
-
-    expect(threw).toBe(false);
-  });
-
-  it('withAbortCheck throws immediately if signal already aborted', async () => {
+describe('Cancellation of in-flight Observational Memory (#27792)', () => {
+  it.each([
+    ['sync observation', 'thread', 'model'],
+    ['sync reflection', 'thread', 'model'],
+    ['sync observation', 'resource', 'model'],
+    ['sync reflection', 'resource', 'model'],
+    ['sync observation', 'thread', 'hook'],
+    ['sync reflection', 'thread', 'hook'],
+  ] as const)('cancels %s in %s scope during %s without late writes', async (mode, scope, phase) => {
     const controller = new AbortController();
-    controller.abort(); // Already aborted
-
-    const abortSignal = controller.signal;
-
-    let threw = false;
-    try {
-      if (abortSignal?.aborted) {
-        throw new Error('The operation was aborted.');
+    const observer = createLatchedModel(
+      '<observations>\n- Late observation\n</observations>\n<thread-title>Late title</thread-title>',
+      phase === 'model',
+    );
+    const reflector = createLatchedModel('<observations>\n- Late reflection\n</observations>', phase === 'model');
+    const hookStarted = Promise.withResolvers<void>();
+    const releaseHook = Promise.withResolvers<void>();
+    const afterModel = async () => {
+      if (phase === 'hook') {
+        hookStarted.resolve();
+        await releaseHook.promise;
       }
-    } catch {
-      threw = true;
+    };
+    const actor = createLatchedModel('Actor finished', phase === 'hook');
+    const store = new InMemoryStore();
+    const isReflection = mode.includes('reflection');
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          hooks: { afterObservation: afterModel, afterReflection: afterModel },
+          scope,
+          observation: {
+            model: observer.model,
+            messageTokens: isReflection ? 100_000 : 1,
+            bufferTokens: false,
+            bufferOnIdle: false,
+          },
+          reflection: { model: reflector.model, observationTokens: isReflection ? 100 : 100_000 },
+        },
+      },
+    });
+    const threadId = `cancel-${mode}-${scope}-${phase}`;
+    const resourceId = `resource-${mode}-${scope}-${phase}`;
+    const engine = await memory.omEngine;
+    const storage = (await store.getStore('memory'))!;
+    if (isReflection) {
+      const record = await engine!.getOrCreateRecord(threadId, resourceId);
+      await storage.updateActiveObservations({
+        id: record.id,
+        observations: 'Existing observations that must survive cancellation.\n'.repeat(30),
+        tokenCount: 1000,
+      });
     }
-
-    expect(threw).toBe(true);
+    const before = { ...(await engine!.getRecord(threadId, resourceId)) };
+    const agent = new Agent({
+      id: threadId,
+      name: threadId,
+      instructions: 'Help the user.',
+      model: actor.model,
+      memory,
+    });
+    const request = 'Remember the accepted user request. '.repeat(isReflection ? 1 : 20);
+    const run = agent
+      .stream(request, { abortSignal: controller.signal, memory: { thread: threadId, resource: resourceId } })
+      .then(result => result.consumeStream())
+      .catch(() => undefined);
+    const provider = isReflection ? reflector : observer;
+    try {
+      const providerSignal = await provider.started;
+      if (phase === 'hook') await hookStarted.promise;
+      controller.abort();
+      // Abort listeners run synchronously: cancellation must reach the provider without
+      // releasing its response latch, rather than waiting for a successful model reply.
+      if (phase === 'model') {
+        expect(providerSignal?.aborted).toBe(true);
+        expect(provider.cancelled).toBe(true);
+      }
+      releaseHook.resolve();
+      await run;
+      await engine!.waitForBuffering(threadId, resourceId);
+      const after = await engine!.getRecord(threadId, resourceId);
+      expect(after?.activeObservations ?? '').toBe(before?.activeObservations ?? '');
+      expect(after?.generationCount ?? 0).toBe(before?.generationCount ?? 0);
+      expect(after?.bufferedObservationChunks ?? []).toEqual([]);
+      expect(after?.bufferedReflection).toBeFalsy();
+      expect((await storage.getThreadById({ threadId }))?.title).not.toBe('Late title');
+      const { messages } = await storage.listMessages({ threadId, perPage: false });
+      expect(
+        messages.some(
+          message =>
+            message.role === 'user' &&
+            message.content.parts?.some(part => part.type === 'text' && part.text === request),
+        ),
+      ).toBe(true);
+      expect(provider.calls).toBe(1);
+    } finally {
+      controller.abort();
+      releaseHook.resolve();
+      observer.release();
+      reflector.release();
+      actor.release();
+      await run;
+      await engine!.waitForBuffering(threadId, resourceId);
+    }
   });
 });
+
+it("leaves a cancelled sync observation's messages for a later cycle (#27792)", async () => {
+  const observer = createLatchedModel('<observations>\n- Observed later\n</observations>');
+  const actor = createLatchedModel('Actor', false);
+  const memory = new Memory({
+    storage: new InMemoryStore(),
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: observer.model, messageTokens: 1, bufferTokens: false, bufferOnIdle: false },
+        reflection: { model: observer.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'cancelled-sync-observation';
+  const resourceId = 'cancelled-sync-resource';
+  const controller = new AbortController();
+  const agent = new Agent({ id: threadId, name: threadId, instructions: 'Help.', model: actor.model, memory });
+  const run = agent
+    .stream('Remember the cancelled request. '.repeat(20), {
+      abortSignal: controller.signal,
+      memory: { thread: threadId, resource: resourceId },
+    })
+    .then(result => result.consumeStream())
+    .catch(() => undefined);
+  let later: Promise<unknown> | undefined;
+  try {
+    await observer.started;
+    controller.abort();
+    await run;
+    const cancelled = await engine.getRecord(threadId, resourceId);
+    expect(cancelled?.activeObservations ?? '').toBe('');
+    expect(cancelled?.lastObservedAt).toBeFalsy();
+
+    // The next cycle reads the unobserved messages back from storage.
+    later = engine.observe({ threadId, resourceId });
+    for (let i = 0; i < 200 && observer.calls < 2; i++) await new Promise<void>(resolve => setTimeout(resolve, 5));
+    expect(observer.calls).toBe(2);
+    observer.release();
+    await later;
+    expect((await engine.getRecord(threadId, resourceId))?.activeObservations).toContain('Observed later');
+    expect(JSON.stringify(observer.model.doStreamCalls[1]?.prompt)).toContain('Remember the cancelled request.');
+  } finally {
+    controller.abort();
+    observer.release();
+    await run;
+    await later?.catch(() => undefined);
+    await engine.settled();
+  }
+});
+
+describe('Background work outlives its run (#27792)', () => {
+  it.each(['async buffer', 'background reflection'] as const)(
+    'keeps the %s running after the last run aborts and settles after it',
+    async mode => {
+      const isReflection = mode === 'background reflection';
+      const provider = createLatchedModel(
+        `<observations>\n- Kept ${isReflection ? 'reflection' : 'observation'}\n</observations>`,
+      );
+      const other = createLatchedModel('<observations>\n- Unused\n</observations>', false);
+      const actor = createLatchedModel('Cancelled actor');
+      const store = new InMemoryStore();
+      const memory = new Memory({
+        storage: store,
+        options: {
+          generateTitle: false,
+          observationalMemory: {
+            enabled: true,
+            scope: 'thread',
+            observation: {
+              model: isReflection ? other.model : provider.model,
+              messageTokens: isReflection ? 100_000 : 1000,
+              bufferTokens: isReflection ? 10_000 : 1,
+              bufferOnIdle: false,
+            },
+            reflection: {
+              model: isReflection ? provider.model : other.model,
+              observationTokens: isReflection ? 2000 : 100_000,
+              bufferActivation: isReflection ? 0.2 : undefined,
+            },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const threadId = `detached-${isReflection ? 'reflection' : 'buffer'}`;
+      const resourceId = 'detached-resource';
+      if (isReflection) {
+        const record = await engine.getOrCreateRecord(threadId, resourceId);
+        await (await store.getStore('memory'))!.updateActiveObservations({
+          id: record.id,
+          observations: '- Existing observation.\n'.repeat(30),
+          tokenCount: 1000,
+        });
+      }
+      const controller = new AbortController();
+      const agent = new Agent({ id: threadId, name: threadId, instructions: 'Help.', model: actor.model, memory });
+      const run = agent
+        .stream(`Remember this request. `.repeat(isReflection ? 1 : 20), {
+          abortSignal: controller.signal,
+          memory: { thread: threadId, resource: resourceId },
+        })
+        .then(result => result.consumeStream())
+        .catch(() => undefined);
+      let settled = false;
+      let settling: Promise<void> | undefined;
+      try {
+        await provider.started;
+        await actor.started;
+        controller.abort();
+        await run;
+        expect(actor.cancelled).toBe(true);
+        expect(provider.cancelled).toBe(false);
+
+        settling = engine.settled({ threadId, resourceId }).then(() => {
+          settled = true;
+        });
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).toBe(false);
+        provider.release();
+        await settling;
+
+        const record = await engine.getRecord(threadId, resourceId);
+        if (isReflection) expect(record?.bufferedReflection).toContain('Kept reflection');
+        else
+          expect(record?.bufferedObservationChunks?.map(chunk => chunk.observations).join('\n')).toContain(
+            'Kept observation',
+          );
+        expect(provider.calls).toBe(1);
+      } finally {
+        controller.abort();
+        provider.release();
+        actor.release();
+        await run;
+        await settling;
+        await engine.settled();
+      }
+    },
+  );
+});
+
+describe('Cancellation while waiting for other OM work (#27792)', () => {
+  it.each(['activation', 'observation lock'] as const)(
+    'settles a cancelled %s while its predecessor stays live',
+    async mode => {
+      const provider = createLatchedModel('<observations>\n- Accepted observation\n</observations>');
+      const memory = new Memory({
+        storage: new InMemoryStore(),
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: provider.model,
+              messageTokens: 1000,
+              bufferTokens: mode === 'observation lock' ? false : 10,
+            },
+            reflection: { model: provider.model, observationTokens: 100_000 },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const threadId = `waiting-${mode}`;
+      const resourceId = 'waiting-resource';
+      const message: MastraDBMessage = {
+        id: `message-${mode}`,
+        threadId,
+        resourceId,
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Remember this request. '.repeat(20) }] },
+      };
+      await engine.persistMessages([message], threadId, resourceId);
+      const record = { ...(await engine.getOrCreateRecord(threadId, resourceId)) };
+      if (mode === 'activation') {
+        const storage = (await memory.storage.getStore('memory'))!;
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: 'prior-buffer',
+            observations: '- Prior observation',
+            tokenCount: 3,
+            messageTokens: 10,
+            messageIds: ['prior-message'],
+            lastObservedAt: new Date(0),
+          },
+        });
+      }
+      const owner = new AbortController();
+      const cancelled = new AbortController();
+      const first =
+        mode === 'observation lock'
+          ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: owner.signal })
+          : engine.buffer({
+              threadId,
+              resourceId,
+              messages: [message],
+              record: { ...record },
+              skipMinimumTokenCheck: true,
+            });
+      let waiter: Promise<unknown> | undefined;
+      try {
+        await provider.started;
+        waiter =
+          mode === 'observation lock'
+            ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: cancelled.signal })
+            : engine.activate({ threadId, resourceId, pendingTokens: 2000, abortSignal: cancelled.signal });
+        let settled = false;
+        const settlement = waiter.then(
+          () => {
+            settled = true;
+          },
+          () => {
+            settled = true;
+          },
+        );
+        cancelled.abort();
+        // Advance one event-loop turn, without releasing the provider's event latch.
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).toBe(true);
+        expect(provider.cancelled).toBe(false);
+        expect(provider.calls).toBe(1);
+        await settlement;
+      } finally {
+        owner.abort();
+        provider.release();
+        await Promise.allSettled([first, ...(waiter ? [waiter] : [])]);
+        await engine.waitForBuffering(threadId, resourceId);
+      }
+    },
+  );
+});
+
+// Keep the real in-memory adapter, but return a held snapshot as a remote DB would.
+class PausedMarkerStorage extends InMemoryMemory {
+  pause = false;
+  readonly readStarted = Promise.withResolvers<void>();
+  readonly releaseRead = Promise.withResolvers<void>();
+
+  private async snapshot<T>(value: T): Promise<T> {
+    if (!this.pause) return value;
+    this.pause = false;
+    const snapshot = structuredClone(value);
+    this.readStarted.resolve();
+    await this.releaseRead.promise;
+    return snapshot;
+  }
+
+  override async listMessages(args: Parameters<InMemoryMemory['listMessages']>[0]) {
+    const result = await super.listMessages(args);
+    return args.perPage === 20 ? this.snapshot(result) : result;
+  }
+
+  override async listMessagesById(args: Parameters<InMemoryMemory['listMessagesById']>[0]) {
+    return this.snapshot(await super.listMessagesById(args));
+  }
+}
+
+describe('Cancellation during marker reads (#27792)', () => {
+  it('does not let sync reflection overwrite application abort metadata', async () => {
+    const storage = new PausedMarkerStorage({ db: new InMemoryDB() });
+    const store = new InMemoryStore();
+    store.stores.memory = storage;
+    const provider = createLatchedModel('<observations>\n- Too late\n</observations>');
+    const actor = createLatchedModel('Actor');
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          observation: { model: provider.model, messageTokens: 100_000, bufferTokens: false },
+          reflection: { model: provider.model, observationTokens: 100 },
+        },
+      },
+    });
+    const engine = (await memory.omEngine)!;
+    const threadId = 'marker-read-sync-reflection';
+    const resourceId = 'marker-resource';
+    const target: MastraDBMessage = {
+      id: 'prior-sync-reflection',
+      threadId,
+      resourceId,
+      role: 'user',
+      createdAt: new Date('2020-01-01'),
+      content: { format: 2, parts: [{ type: 'text', text: 'Previously accepted content.' }] },
+    };
+    await engine.persistMessages([target], threadId, resourceId);
+    const record = await engine.getOrCreateRecord(threadId, resourceId);
+    await storage.updateActiveObservations({
+      id: record.id,
+      observations: '- Existing observation.\n'.repeat(30),
+      tokenCount: 1000,
+    });
+    const controller = new AbortController();
+    const agent = new Agent({ id: threadId, name: threadId, model: actor.model, instructions: 'Help.', memory });
+    storage.pause = true;
+    const run = agent
+      .stream('Remember this request. '.repeat(20), {
+        abortSignal: controller.signal,
+        memory: { thread: threadId, resource: resourceId },
+      })
+      .then(result => result.consumeStream())
+      .catch(() => undefined);
+    try {
+      await storage.readStarted.promise;
+      controller.abort();
+      const {
+        messages: [saved],
+      } = await storage.listMessagesById({ messageIds: [target.id] });
+      if (!saved) throw new Error('Expected the accepted message in storage');
+      await storage.saveMessages({
+        messages: [{ ...saved, content: { ...saved.content, metadata: { abortedByApplication: true } } }],
+      });
+      storage.releaseRead.resolve();
+      await run;
+      await engine.waitForBuffering(threadId, resourceId);
+      const {
+        messages: [after],
+      } = await storage.listMessagesById({ messageIds: [target.id] });
+      expect(after?.content.metadata).toMatchObject({ abortedByApplication: true });
+      expect(provider.calls).toBe(0);
+    } finally {
+      controller.abort();
+      storage.releaseRead.resolve();
+      provider.release();
+      actor.release();
+      await run;
+      await engine.waitForBuffering(threadId, resourceId);
+    }
+  });
+});
+
+describe('Cancellation in the commit queue (#27792)', () => {
+  it.each(['activation', 'observation', 'reflection'] as const)(
+    'settles cancelled %s without overtaking a held commit',
+    async mode => {
+      const provider = createLatchedModel('<observations>\n- Accepted observation\n</observations>');
+      const store = new InMemoryStore();
+      const memory = new Memory({
+        storage: store,
+        options: {
+          observationalMemory: {
+            enabled: true,
+            observation: {
+              model: provider.model,
+              messageTokens: 1000,
+              bufferTokens: mode === 'activation' ? 10 : false,
+            },
+            reflection: { model: provider.model, observationTokens: mode === 'reflection' ? 100 : 100_000 },
+          },
+        },
+      });
+      const engine = (await memory.omEngine)!;
+      const storage = (await store.getStore('memory'))!;
+      const threadId = `commit-wait-${mode}`;
+      const resourceId = 'commit-resource';
+      const record = await engine.getOrCreateRecord(threadId, resourceId);
+      const message: MastraDBMessage = {
+        id: `request-${mode}`,
+        threadId,
+        resourceId,
+        role: 'user',
+        createdAt: new Date(),
+        content: { format: 2, parts: [{ type: 'text', text: 'Keep this request.' }] },
+      };
+      await engine.persistMessages([message], threadId, resourceId);
+      if (mode === 'activation')
+        await storage.updateBufferedObservations({
+          id: record.id,
+          chunk: {
+            cycleId: 'queued-activation',
+            observations: '- Existing buffer',
+            tokenCount: 3,
+            messageTokens: 10,
+            messageIds: ['prior-message'],
+            lastObservedAt: new Date(0),
+          },
+        });
+      if (mode === 'reflection')
+        await storage.updateActiveObservations({
+          id: record.id,
+          observations: '- Existing observation.\n'.repeat(30),
+          tokenCount: 1000,
+        });
+      const controller = new AbortController();
+      const turn = engine.beginTurn({
+        threadId,
+        resourceId,
+        messageList: new MessageList({ threadId, resourceId }),
+        abortSignal: controller.signal,
+      });
+      if (mode === 'reflection') await turn.start();
+      const entered = Promise.withResolvers<void>();
+      const release = Promise.withResolvers<void>();
+      const key = engine.buffering.getLockKey(threadId, resourceId);
+      const blocker = runOMCommit(key, async () => {
+        entered.resolve();
+        await release.promise;
+      });
+      await entered.promise;
+      const operation =
+        mode === 'activation'
+          ? engine.activate({ threadId, resourceId, abortSignal: controller.signal })
+          : mode === 'observation'
+            ? engine.observe({ threadId, resourceId, messages: [message], force: true, abortSignal: controller.signal })
+            : turn.step(0).prepare();
+      let settled = false;
+      const result = operation.then(
+        () => {
+          settled = true;
+        },
+        () => {
+          settled = true;
+        },
+      );
+      try {
+        if (mode !== 'activation') {
+          await provider.started;
+          provider.release();
+        }
+        await new Promise<void>(resolve => setImmediate(resolve));
+        const waiting = waitingOMCommits(key);
+        expect(waiting.normal + waiting.reflection).toBeGreaterThan(0);
+        controller.abort();
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(settled).toBe(true);
+        expect((await engine.getRecord(threadId, resourceId))?.activeObservations ?? '').toBe(
+          mode === 'reflection' ? '- Existing observation.\n'.repeat(30) : '',
+        );
+      } finally {
+        controller.abort();
+        release.resolve();
+        provider.release();
+        await Promise.all([blocker, result]);
+        if (mode === 'reflection' && !turn.ended) await turn.end();
+        await engine.settled();
+      }
+    },
+  );
+});
+
+class PausedThreadStorage extends InMemoryMemory {
+  pause = false;
+  readonly readStarted = Promise.withResolvers<void>();
+  readonly releaseRead = Promise.withResolvers<void>();
+  override async getThreadById(args: Parameters<InMemoryMemory['getThreadById']>[0]) {
+    const result = await super.getThreadById(args);
+    if (!this.pause) return result;
+    this.pause = false;
+    const snapshot = structuredClone(result);
+    this.readStarted.resolve();
+    await this.releaseRead.promise;
+    return snapshot;
+  }
+}
+
+it('does not apply activation hints after an aborted thread read (#27792)', async () => {
+  const storage = new PausedThreadStorage({ db: new InMemoryDB() });
+  const store = new InMemoryStore();
+  store.stores.memory = storage;
+  const model = createLatchedModel('Unused', false);
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        model: model.model,
+        observation: { messageTokens: 1000, bufferTokens: 10 },
+        reflection: { observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'activation-metadata';
+  const resourceId = 'activation-resource';
+  await storage.saveThread({
+    thread: {
+      id: threadId,
+      resourceId,
+      title: 'Original title',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    },
+  });
+  const record = await engine.getOrCreateRecord(threadId, resourceId);
+  await storage.updateBufferedObservations({
+    id: record.id,
+    chunk: {
+      cycleId: 'activation-metadata',
+      observations: '- Prior observation',
+      tokenCount: 5,
+      messageTokens: 100,
+      messageIds: ['prior'],
+      lastObservedAt: new Date(),
+      suggestedContinuation: 'Late continuation',
+      threadTitle: 'Late title',
+    },
+  });
+  const controller = new AbortController();
+  storage.pause = true;
+  const activation = engine.activate({ threadId, resourceId, abortSignal: controller.signal }).catch(() => undefined);
+  try {
+    await storage.readStarted.promise;
+    controller.abort();
+    await storage.patchThread({ id: threadId, metadata: { abortedByApplication: true } });
+    storage.releaseRead.resolve();
+    await activation;
+    const thread = await storage.getThreadById({ threadId });
+    expect(thread?.title).toBe('Original title');
+    expect(thread?.metadata).toEqual({ abortedByApplication: true });
+  } finally {
+    storage.releaseRead.resolve();
+    await activation;
+  }
+});
+
+it.each(['shared buffer', 'queued activation'] as const)('cancels context-overflow recovery during %s', async mode => {
+  const provider = createLatchedModel('<observations>\n- Prior observation\n</observations>');
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 1000, bufferTokens: 10 },
+        reflection: { model: provider.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const storage = (await store.getStore('memory'))!;
+  const threadId = `overflow-abort-${mode}`;
+  const resourceId = 'overflow-resource';
+  const message: MastraDBMessage = {
+    id: `request-${mode}`,
+    threadId,
+    resourceId,
+    role: 'user',
+    createdAt: new Date(),
+    content: { format: 2, parts: [{ type: 'text', text: 'Keep the accepted request.' }] },
+  };
+  await engine.persistMessages([message], threadId, resourceId);
+  const record = await engine.getOrCreateRecord(threadId, resourceId);
+  if (mode === 'queued activation')
+    await storage.updateBufferedObservations({
+      id: record.id,
+      chunk: {
+        cycleId: 'overflow-buffer',
+        observations: '- Prior observation',
+        tokenCount: 5,
+        messageTokens: 100,
+        messageIds: ['prior'],
+        lastObservedAt: new Date(0),
+        threadTitle: 'Late title',
+      },
+    });
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const background =
+    mode === 'shared buffer'
+      ? engine.buffer({ threadId, resourceId, messages: [message], skipMinimumTokenCheck: true })
+      : runOMCommit(engine.buffering.getLockKey(threadId, resourceId), async () => {
+          entered.resolve();
+          await release.promise;
+        });
+  if (mode === 'shared buffer') await provider.started;
+  else await entered.promise;
+  const controller = new AbortController();
+  const processor = new ObservationalMemoryProcessor(engine, memory);
+  const messageList = new MessageList({ threadId, resourceId });
+  messageList.add([message], 'input');
+  let settled = false;
+  const recovery = processor
+    .processAPIError({
+      error: new APICallError({
+        message: 'prompt is too long: 210345 tokens > 200000 maximum',
+        url: 'https://api.example.com/v1/messages',
+        requestBodyValues: {},
+        statusCode: 400,
+      }),
+      messageList,
+      messages: [message],
+      stepNumber: 0,
+      steps: [],
+      state: {},
+      retryCount: 0,
+      abortSignal: controller.signal,
+      abort: reason => {
+        throw new Error(reason);
+      },
+    })
+    .then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+  try {
+    await new Promise<void>(resolve => setImmediate(resolve));
+    controller.abort();
+    await new Promise<void>(resolve => setImmediate(resolve));
+    expect(settled).toBe(true);
+    expect(provider.cancelled).toBe(false);
+  } finally {
+    controller.abort();
+    release.resolve();
+    provider.release();
+    await Promise.allSettled([background, recovery]);
+    await engine.settled();
+  }
+  const after = await engine.getRecord(threadId, resourceId);
+  expect(after?.activeObservations ?? '').toBe('');
+  expect((await storage.listMessagesById({ messageIds: [message.id] })).messages).toHaveLength(1);
+});
+
+async function createReflectionFixture(mode: 'sync' | 'async', reflectorText: string, held = true) {
+  const storage = new PausedThreadStorage({ db: new InMemoryDB() });
+  const store = new InMemoryStore();
+  store.stores.memory = storage;
+  const provider = createLatchedModel(reflectorText, held);
+  const memory = new Memory({
+    storage: store,
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: provider.model, messageTokens: 100_000, bufferTokens: mode === 'async' ? 10_000 : false },
+        reflection: {
+          model: provider.model,
+          observationTokens: mode === 'async' ? 2000 : 100,
+          bufferActivation: mode === 'async' ? 0.2 : undefined,
+          extract: [new Extractor({ name: 'Priority', instructions: 'Extract the current priority.' })],
+        },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = `reflect-${mode}-${Math.random().toString(36).slice(2)}`;
+  const resourceId = 'reflect-resource';
+  await storage.saveThread({
+    thread: { id: threadId, resourceId, title: 'Original', metadata: {}, createdAt: new Date(), updatedAt: new Date() },
+  });
+  const created = await engine.getOrCreateRecord(threadId, resourceId);
+  await storage.updateActiveObservations({
+    id: created.id,
+    observations: '- Existing observation.\n'.repeat(30),
+    tokenCount: 1000,
+  });
+  const record = (await engine.getRecord(threadId, resourceId))!;
+  return { storage, provider, engine, threadId, resourceId, record };
+}
+
+it.each(['sync', 'async'] as const)(
+  'does not start %s reflection after an aborted thread-metadata read (#27792)',
+  async mode => {
+    const { storage, provider, engine, threadId, resourceId, record } = await createReflectionFixture(
+      mode,
+      '<observations>\n- Late reflection\n</observations>',
+      false,
+    );
+    const controller = new AbortController();
+    storage.pause = true;
+    const reflection = engine.reflector.maybeReflect({
+      record,
+      observationTokens: 1000,
+      threadId,
+      abortSignal: controller.signal,
+    });
+    try {
+      await storage.readStarted.promise;
+      controller.abort();
+      storage.releaseRead.resolve();
+      await expect(reflection).rejects.toThrow();
+      await engine.settled();
+      expect(provider.calls).toBe(0);
+      const after = await engine.getRecord(threadId, resourceId);
+      expect(after?.isReflecting).toBe(false);
+      expect(after?.isBufferingReflection).toBe(false);
+      expect(after?.generationCount).toBe(record.generationCount);
+    } finally {
+      storage.releaseRead.resolve();
+      await reflection.catch(() => undefined);
+    }
+  },
+);
+
+it('stores a background reflection and its extracted values after its run aborts mid-commit (#27792)', async () => {
+  const { storage, provider, engine, threadId, resourceId, record } = await createReflectionFixture(
+    'async',
+    '<observations>\n- Kept reflection\n</observations>\n<extracted-values>\n{"priority":"Kept priority"}\n</extracted-values>',
+  );
+  const controller = new AbortController();
+  const key = engine.buffering.getLockKey(threadId, resourceId);
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const blocker = runOMCommit(key, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  try {
+    await engine.reflector.maybeReflect({ record, observationTokens: 1000, threadId, abortSignal: controller.signal });
+    await provider.started;
+    provider.release();
+    // Abort while the buffered reflection is queued behind the held commit.
+    for (let i = 0; i < 100 && waitingOMCommits(key).normal + waitingOMCommits(key).reflection === 0; i++) {
+      await new Promise<void>(resolve => setImmediate(resolve));
+    }
+    expect(waitingOMCommits(key).normal + waitingOMCommits(key).reflection).toBeGreaterThan(0);
+    controller.abort();
+  } finally {
+    controller.abort();
+    release.resolve();
+    provider.release();
+    await blocker;
+    await engine.settled();
+  }
+  expect((await engine.getRecord(threadId, resourceId))?.bufferedReflection).toContain('Kept reflection');
+  const thread = await storage.getThreadById({ threadId });
+  expect(JSON.stringify(thread?.metadata ?? {})).toContain('Kept priority');
+});
+
+it('does not wait for or apply a queued pending-token write after the run aborts (#27792)', async () => {
+  const actor = createLatchedModel('Actor');
+  const observer = createLatchedModel('Unused', false);
+  const store = new InMemoryStore();
+  const memory = new Memory({
+    storage: store,
+    options: {
+      generateTitle: false,
+      observationalMemory: {
+        enabled: true,
+        observation: { model: observer.model, messageTokens: 100_000, bufferTokens: false },
+        reflection: { model: observer.model, observationTokens: 100_000 },
+      },
+    },
+  });
+  const engine = (await memory.omEngine)!;
+  const threadId = 'pending-token-abort';
+  const resourceId = 'pending-token-resource';
+  await engine.getOrCreateRecord(threadId, resourceId);
+  const key = engine.buffering.getLockKey(threadId, resourceId);
+  const release = Promise.withResolvers<void>();
+  const entered = Promise.withResolvers<void>();
+  const blocker = runOMCommit(key, async () => {
+    entered.resolve();
+    await release.promise;
+  });
+  await entered.promise;
+  const controller = new AbortController();
+  const agent = new Agent({ id: threadId, name: threadId, model: actor.model, instructions: 'Help.', memory });
+  let settled = false;
+  const run = agent
+    .stream('Remember this request. '.repeat(20), {
+      abortSignal: controller.signal,
+      memory: { thread: threadId, resource: resourceId },
+    })
+    .then(result => result.consumeStream())
+    .catch(() => undefined)
+    .finally(() => {
+      settled = true;
+    });
+  try {
+    for (let i = 0; i < 200 && waitingOMCommits(key).normal === 0; i++) {
+      await new Promise<void>(resolve => setTimeout(resolve, 5));
+    }
+    expect(waitingOMCommits(key).normal).toBeGreaterThan(0);
+    controller.abort();
+    for (let i = 0; i < 200 && !settled; i++) await new Promise<void>(resolve => setTimeout(resolve, 5));
+    expect(settled).toBe(true);
+    expect(actor.calls).toBe(0);
+  } finally {
+    controller.abort();
+    release.resolve();
+    actor.release();
+    await blocker;
+    await run;
+    await engine.settled();
+  }
+  expect((await engine.getRecord(threadId, resourceId))?.pendingMessageTokens ?? 0).toBe(0);
+});
+
+it.each(['stale boundary reset', 'post-commit buffering reset'] as const)(
+  'releases a cancelled caller from a queued %s (#27792)',
+  async mode => {
+    const provider = createLatchedModel('Unused', false);
+    const store = new InMemoryStore();
+    const memory = new Memory({
+      storage: store,
+      options: {
+        generateTitle: false,
+        observationalMemory: {
+          enabled: true,
+          observation: { model: provider.model, messageTokens: 100_000, bufferTokens: 1000 },
+          reflection: { model: provider.model, observationTokens: 200_000 },
+        },
+      },
+    });
+    const engine = (await memory.omEngine)!;
+    const storage = (await store.getStore('memory'))!;
+    const threadId = `queued-reset-${mode}`;
+    const resourceId = 'queued-reset-resource';
+    const record = await engine.getOrCreateRecord(threadId, resourceId);
+    await storage.setBufferingObservationFlag(record.id, true, 50_000);
+    const message: MastraDBMessage = {
+      id: `queued-reset-${mode}-message`,
+      threadId,
+      resourceId,
+      role: 'user',
+      createdAt: new Date(),
+      content: { format: 2, parts: [{ type: 'text', text: 'Short request.' }] },
+    };
+    const key = engine.buffering.getLockKey(threadId, resourceId);
+    const release = Promise.withResolvers<void>();
+    const entered = Promise.withResolvers<void>();
+    const blocker = runOMCommit(key, async () => {
+      entered.resolve();
+      await release.promise;
+    });
+    await entered.promise;
+    const controller = new AbortController();
+    let settled = false;
+    const operation = (
+      mode === 'stale boundary reset'
+        ? engine.activate({
+            threadId,
+            resourceId,
+            messages: [message],
+            record: (await engine.getRecord(threadId, resourceId))!,
+            abortSignal: controller.signal,
+          })
+        : engine.resetBufferingState({ threadId, resourceId, recordId: record.id, abortSignal: controller.signal })
+    ).then(
+      () => {
+        settled = true;
+      },
+      () => {
+        settled = true;
+      },
+    );
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(waitingOMCommits(key).normal).toBeGreaterThan(0);
+      controller.abort();
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(settled).toBe(true);
+    } finally {
+      controller.abort();
+      release.resolve();
+      await blocker;
+      await operation;
+      await engine.settled();
+    }
+    const after = await engine.getRecord(threadId, resourceId);
+    // Only the post-commit reset belongs to work that already committed, so only it still applies.
+    expect(after?.lastBufferedAtTokens).toBe(mode === 'stale boundary reset' ? 50_000 : 0);
+    expect(after?.isBufferingObservation).toBe(mode === 'stale boundary reset');
+  },
+);

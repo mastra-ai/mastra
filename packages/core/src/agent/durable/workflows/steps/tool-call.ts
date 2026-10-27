@@ -42,6 +42,7 @@ import { createStep } from '../../../../workflows/workflow';
 import { stopGoalActivity } from '../../../goal';
 import type { MessageList } from '../../../message-list';
 import type { MastraDBMessage } from '../../../message-list/state/types';
+import { startRunStep } from '../../../run-lease-fence';
 import type { SaveQueueManager } from '../../../save-queue';
 import { resolveDeclineReason } from '../../../tool-approval';
 import { TripWire } from '../../../trip-wire';
@@ -80,7 +81,7 @@ import { readMessageListState } from '../shared/message-list-state';
 const durableToolCallInputSchema = z.object({
   toolCallId: z.string(),
   toolName: z.string(),
-  args: z.record(z.string(), z.any()),
+  args: z.record(z.string(), z.any()).optional(),
   providerMetadata: z.record(z.string(), z.any()).optional(),
   providerExecuted: z.boolean().optional(),
   output: z.any().optional(),
@@ -259,6 +260,7 @@ async function processChunkThroughOutputProcessors(
           outputProcessors: registryEntry.outputProcessors,
           logger,
           agentName,
+          agent: registryEntry.agent,
           processorStates: registryEntry.processorStates,
         })
       : undefined;
@@ -648,6 +650,24 @@ export function createDurableToolCallStep() {
           ...typedInput,
           error,
         };
+      }
+
+      // Preserve parse failure as a tool error, before approval hooks or argument spreading.
+      if (args === null || args === undefined) {
+        const error = serializeError(
+          new Error(
+            `Tool "${toolName}" received invalid arguments — the provided JSON could not be parsed. Please provide valid JSON arguments.`,
+          ),
+        );
+        if (pubsub) {
+          await emitChunkEvent(pubsub, runId, {
+            type: 'tool-error',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: { toolCallId, toolName, args, error },
+          });
+        }
+        return { ...typedInput, error };
       }
 
       // Get memory-related state for message persistence. Fall back to the
@@ -1040,6 +1060,12 @@ export function createDurableToolCallStep() {
         // Persist active goal time before exposing the approval wait.
         await stopGoalActivity({ agentId: initData.agentId, runId });
 
+        // Add approval metadata to message before persisting
+        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
+
+        // Flush messages before suspension
+        await doFlush();
+
         // Emit approval chunk via PubSub (mirrors base agent's controller.enqueue).
         // Apply the tool payload transform first so display targets never see raw
         // args on the approval prompt (parity with the main loop's approval chunk).
@@ -1079,12 +1105,6 @@ export function createDurableToolCallStep() {
             }),
           );
         }
-
-        // Add approval metadata to message before persisting
-        addToolMetadata({ type: 'approval', resumeSchema: approvalResumeSchema });
-
-        // Flush messages before suspension
-        await doFlush();
 
         // End the trace's open spans as suspended before pausing.
         endSpansAsSuspended({ toolCallId, toolName, reason: 'approval' });
@@ -1391,6 +1411,16 @@ export function createDurableToolCallStep() {
             // Tool is requesting approval during execution
             await stopGoalActivity({ agentId: initData.agentId, runId });
 
+            // Add approval metadata to message before persisting
+            addToolMetadata({
+              type: 'approval',
+              resumeSchema: approvalResumeSchema,
+              delegatedRunId,
+              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
+            });
+
+            await doFlush();
+
             if (pubsub) {
               const approvalChunk = await applyToolPayloadTransformToChunk(
                 {
@@ -1427,16 +1457,6 @@ export function createDurableToolCallStep() {
               );
             }
 
-            // Add approval metadata to message before persisting
-            addToolMetadata({
-              type: 'approval',
-              resumeSchema: approvalResumeSchema,
-              delegatedRunId,
-              ...(innerApproval ? { approvalToolName, approvalArgs } : {}),
-            });
-
-            await doFlush();
-
             endSpansAsSuspended({ toolCallId, toolName: approvalToolName, reason: 'approval' });
 
             return suspend(
@@ -1460,6 +1480,16 @@ export function createDurableToolCallStep() {
               type: 'suspension',
               resumeSchema: suspendOptions?.resumeSchema,
             };
+
+            // Add suspension metadata to message before persisting
+            addToolMetadata({
+              type: 'suspension',
+              suspendPayload,
+              resumeSchema: suspendOptions?.resumeSchema,
+              delegatedRunId,
+            });
+
+            await doFlush();
 
             if (pubsub) {
               const suspensionChunk = await applyToolPayloadTransformToChunk(
@@ -1485,16 +1515,6 @@ export function createDurableToolCallStep() {
               await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
               await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
             }
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
 
             endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
 
@@ -1889,6 +1909,8 @@ export function createDurableToolCallStep() {
       };
       let mappingFailure: { error: unknown } | undefined;
 
+      // A run that loses its thread lease while this call runs lets it finish before it stops.
+      const settleRunTool = startRunStep(registryEntry);
       try {
         ownership?.throwIfLost();
         const outcome = await executeToolCall({
@@ -1902,7 +1924,7 @@ export function createDurableToolCallStep() {
           // Run-activity tracking brackets live execution (durable-only bookkeeping).
           acquireExecution: () => markRunActive(runId),
           logger: logger as any,
-        });
+        }).finally(settleRunTool);
 
         ownership?.throwIfLost();
         if (outcome.status === 'aborted') {
@@ -1979,6 +2001,7 @@ export function createDurableToolCallStep() {
             outputProcessors: registryEntry.outputProcessors,
             logger,
             agentName: initData.agentId,
+            agent: registryEntry.agent,
             processorStates: registryEntry.processorStates,
           });
           try {

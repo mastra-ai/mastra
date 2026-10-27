@@ -100,14 +100,7 @@ describe('AgentChat history pagination', () => {
 
     render(
       <Wrapper threadId="thread-1">
-        <AgentChat
-          agentId="agent-1"
-          agentName="Helper"
-          threadId="thread-1"
-          memory={true}
-          supportsMemory={true}
-          isNewThread={false}
-        />
+        <AgentChat agentId="agent-1" agentName="Helper" threadId="thread-1" memory supportsMemory isNewThread={false} />
       </Wrapper>,
     );
 

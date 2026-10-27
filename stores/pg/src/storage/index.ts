@@ -13,6 +13,7 @@ import {
 } from '../shared/config';
 import type { PostgresStoreConfig } from '../shared/config';
 import { buildConnectionStringPoolConfig } from '../shared/pool-config';
+import { guardCheckedOutClientErrors } from '../shared/pool-error-guard';
 import { parseSchemaName } from '../shared/schema-name';
 import { PinnedClientAdapter, PoolAdapter, RoutingDbClient } from './client';
 import type { DbClient, PoolClient } from './client';
@@ -303,6 +304,8 @@ export class PostgresStore extends MastraCompositeStore {
       );
     });
 
+    guardCheckedOutClientErrors(pool, message => this.logger?.warn?.(message));
+
     return pool;
   }
 
@@ -587,6 +590,7 @@ export class PostgresStoreVNext extends PostgresStore {
     // 'error' listener, an idle client dropped by the backend escalates to an
     // uncaughtException. Only for pools this store created.
     if (built.owned) {
+      guardCheckedOutClientErrors(built.pool, message => this.logger?.warn?.(message));
       built.pool.on('error', err => {
         this.logger?.warn?.(
           'PostgresStoreVNext: idle observability pool client error (pool discards the client and reconnects on next checkout)',

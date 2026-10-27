@@ -1,5 +1,6 @@
 import { TraceTimeRangeChip } from '../../traces/components/trace-time-range-chip';
 import { useMetrics } from '../hooks/use-metrics';
+import { useTraceRetentionMinDate } from '../hooks/use-trace-retention-min-date';
 import { fromPickerPreset, METRICS_PICKER_PRESETS, toPickerPreset } from '../metrics-date-presets';
 
 /**
@@ -8,6 +9,7 @@ import { fromPickerPreset, METRICS_PICKER_PRESETS, toPickerPreset } from '../met
  */
 export function MetricsTimeRangeChip() {
   const { datePreset, setDatePreset, customRange, setCustomRange } = useMetrics();
+  const minDate = useTraceRetentionMinDate();
 
   return (
     <TraceTimeRangeChip
@@ -19,6 +21,7 @@ export function MetricsTimeRangeChip() {
       // carries bounds, and both land in one update.
       onDateRangeChange={(from, to) => setCustomRange({ from, to })}
       presets={METRICS_PICKER_PRESETS}
+      minDate={minDate}
     />
   );
 }

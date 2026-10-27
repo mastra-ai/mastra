@@ -265,7 +265,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       for await (const textPart of response.textStream) {
         expect(textPart === previousText).toBe(false);
         previousText = textPart;
-        finalText = finalText + previousText;
+        finalText += previousText;
         expect(textPart).toBeDefined();
       }
 
@@ -2232,7 +2232,7 @@ describe('Agent Tests', () => {
                   type: 'tool-call' as const,
                   toolCallId: 'call-1',
                   toolName: 'analyzeSentiment',
-                  args: { text: 'Hello world' },
+                  input: JSON.stringify({ text: 'Hello world' }),
                 },
               ],
               warnings: [],

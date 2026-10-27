@@ -166,6 +166,14 @@ export interface AgentRunAttributes extends AIBaseAttributes {
   maxSteps?: number;
   /** The resolved agent version ID used for this execution */
   resolvedVersionId?: string;
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string;
+  /** Provider of `model`, taken from the same model object */
+  provider?: string;
   /** The agent signal that started this run, when the run input was a signal */
   signal?: {
     id: string;
@@ -357,6 +365,14 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
 export interface ModelStepAttributes extends AIBaseAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number;
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string;
+  /** Provider of `model`, taken from the same model object */
+  provider?: string;
   /** Token usage statistics */
   usage?: UsageStats;
   /** Reason this step finished (stop, tool-calls, length, etc.) */
@@ -1627,6 +1643,11 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
 export interface ExportedSpan<TType extends SpanType> extends SpanData<TType> {
   /** Set when the span is internal, so `rebuildSpan()` can restore its internal status */
   isInternal?: boolean;
+  /**
+   * Version of the span's own entity: declared for it, or inherited from a parent of the same entity.
+   * Omitted when it only inherited another entity's version through `metadata.entityVersionId`.
+   */
+  entityVersionId?: string;
   /**
    * Entity of the nearest ancestor span that is not internal or excluded. Omitted when there is none.
    * Independent of `includeInternalSpans`, so it can skip the span `parentSpanId` points to.

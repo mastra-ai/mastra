@@ -337,7 +337,7 @@ describe('__subscribeToRunStream() lifecycle', () => {
       expect(performance.now() - started).toBeLessThan(1000);
       expect(onComplete).toHaveBeenCalledTimes(1);
       expect(onEvent).not.toHaveBeenCalled();
-      expect(getRunRegistryEntry(runId)).toBeUndefined();
+      expect(getRunRegistryEntry(runId, undefined)).toBeUndefined();
       expect(clearTopic).not.toHaveBeenCalled();
     } finally {
       await unsubscribe();
@@ -698,6 +698,30 @@ describe('__subscribeToRunStream()', () => {
     await emitChunkEvent(pubsub, runId, textChunk('after unsubscribe'));
 
     expect(summarize(events)).toEqual([[AgentStreamEventTypes.CHUNK, 'delivered', undefined]]);
+    await transport.close();
+  });
+
+  it('forwards frames without the cache-assigned sequencing fields', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = 'subscribed-run';
+
+    // Published before the observer attaches, so this frame reaches it out of the
+    // topic history — the path that hands an event its `index`.
+    await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+
+    const events: any[] = [];
+    const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => events.push(event));
+    await emitChunkEvent(pubsub, runId, textChunk('live'));
+
+    expect(summarize(events)).toEqual([
+      [AgentStreamEventTypes.CHUNK, 'replayed', undefined],
+      [AgentStreamEventTypes.CHUNK, 'live', undefined],
+    ]);
+    // They exist for subscribers of the topic, not for the payload observe forwards.
+    for (const event of events) {
+      expect(event).not.toHaveProperty('index');
+    }
+    await unsubscribe();
     await transport.close();
   });
 });
