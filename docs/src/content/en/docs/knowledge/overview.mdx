@@ -31,6 +31,7 @@ import { LibSQLStore } from '@mastra/libsql'
 export const knowledge = new Knowledge({
   id: 'company',
   storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  tools: { read: true },
 })
 
 export const agent = new Agent({
@@ -42,7 +43,7 @@ export const agent = new Agent({
 })
 ```
 
-The agent can now search Knowledge and read nodes. It can't write until you turn writing on. See [agents and tools](/docs/knowledge/agents-and-tools).
+The agent can now search Knowledge and read nodes. It can't write until you set `tools: true`. See [agents and tools](/docs/knowledge/agents-and-tools).
 
 ## What's in the section
 

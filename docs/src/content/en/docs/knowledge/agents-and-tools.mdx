@@ -27,24 +27,24 @@ const agent = new Agent({
 
 ## Choose the tools
 
-Set `tools` and `pins` on `Knowledge` to control what an attached agent gets:
+Set `tools` and `pinnedContext` on `Knowledge` to control what an attached agent gets. Both are off by default. An attached agent gets no Knowledge tools until you turn them on:
 
 ```typescript
 const knowledge = new Knowledge({
   id: 'company',
   storage,
-  tools: { read: true, write: true },
-  pins: { maxPins: 20, maxTokens: 500 },
+  tools: true,
+  pinnedContext: { maxPins: 20, maxTokens: 500 },
 })
 ```
 
-| Option | Gives the agent | Default |
-| - | - | - |
-| `tools.read` | `knowledge_search`, and `knowledge_read`, which reads a node by ID or name or lists nodes | on |
-| `tools.write` | `knowledge_record` (`op`: `add`, `remove`, `rescope`) and `knowledge_node` (`op`: `update`, `write`, `merge`) | off |
-| `pins` | `knowledge_pin` (`op`: `pin`, `edit`, `unpin`), and the pin set in context every turn | off |
+| Option | Gives the agent |
+| - | - |
+| `tools: { read: true }` | `knowledge_search`, and `knowledge_read`, which reads a node by ID or name or lists nodes |
+| `tools: true` | The read tools, plus `knowledge_record` (`op`: `add`, `remove`, `rescope`) and `knowledge_node` (`op`: `update`, `write`, `merge`) |
+| `pinnedContext` | `knowledge_pin` (`op`: `pin`, `edit`, `unpin`), and the pinned entries in context every turn |
 
-Set `pins: true` for the default limit of pins, or pass `maxPins` and `maxTokens`.
+Set `pinnedContext: true` for the default limits (20 pins, 500 tokens), or pass `maxPins` and `maxTokens`.
 
 ## How scopes limit the tools
 
@@ -59,12 +59,12 @@ Tool errors come back to the model as tool-result text. Naming a tag the run doe
 To wire the tools yourself, for example into an agent's `tools`, call `createTools`. It defaults to the groups configured on the instance:
 
 ```typescript
-const tools = knowledge.createTools({ write: true })
+const tools = knowledge.createTools({ read: true, write: true })
 ```
 
 ## Memory and pins
 
-Pins work without Memory. With `pins` on, the agent gets the pin tools, the pins instructions, and the pinned Knowledge as a state signal on each step. Nothing is saved to a thread.
+Pins work without Memory. With `pinnedContext` on, the agent gets the pin tools, the pins instructions, and the pinned Knowledge as a state signal on each step. Nothing is saved to a thread.
 
 A run sees every pin whose tags it holds, so org pins and team pins form one set.
 
