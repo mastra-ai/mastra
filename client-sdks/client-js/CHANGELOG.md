@@ -1,5 +1,29 @@
 # @mastra/client-js
 
+## 1.57.0-alpha.6
+
+### Minor Changes
+
+- Added `withRunStatus: true` to thread subscriptions to receive retained and live `thread-run-status` outcomes. Callback types include run statuses only when requested. ([#28621](https://github.com/mastra-ai/mastra/pull/28621))
+
+  ```ts
+  const subscription = await agent.subscribeToThread({
+    resourceId: 'user-123',
+    threadId: 'thread-456',
+    withRunStatus: true,
+  });
+  await subscription.processDataStream({
+    onChunk: chunk => {
+      if (chunk.type === 'thread-run-status') console.log(chunk.runId, chunk.payload.status);
+    },
+  });
+  ```
+
+### Patch Changes
+
+- Updated dependencies [[`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c)]:
+  - @mastra/core@1.80.0-alpha.6
+
 ## 1.57.0-alpha.5
 
 ### Patch Changes
