@@ -186,6 +186,31 @@ export function wrapInObservationGroup(
   return `<observation-group id="${id}" range="${range}"${kindAttr}>\n${content}\n</observation-group>`;
 }
 
+/**
+ * Moves a line-count cut so it never splits an observation group. Prefers the
+ * nearest group end at or before the cut, then the first group end after it.
+ * Returns the cut unchanged when the lines contain no group tags.
+ */
+export function snapLineCountToObservationGroupBoundary(lines: string[], lineCount: number): number {
+  if (!lines.some(line => line.trimStart().startsWith(OBSERVATION_GROUP_OPEN))) {
+    return lineCount;
+  }
+
+  for (let i = Math.min(lineCount, lines.length); i >= 1; i--) {
+    if (lines[i - 1]!.trim() === OBSERVATION_GROUP_CLOSE) {
+      return i;
+    }
+  }
+
+  for (let i = lineCount + 1; i <= lines.length; i++) {
+    if (lines[i - 1]!.trim() === OBSERVATION_GROUP_CLOSE) {
+      return i;
+    }
+  }
+
+  return lineCount;
+}
+
 export function parseObservationGroups(observations: string): ObservationGroup[] {
   if (!observations) {
     return [];

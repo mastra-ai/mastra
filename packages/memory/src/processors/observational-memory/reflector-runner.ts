@@ -40,6 +40,7 @@ import {
 import { getObservableMessages } from './message-utils';
 import type { ModelByInputTokens } from './model-by-input-tokens';
 import { didProviderChange } from './model-context';
+import { snapLineCountToObservationGroupBoundary } from './observation-groups';
 import { describeDegenerateOutput } from './observer-agent';
 import { registerOp, unregisterOp, isOpActiveInProcess } from './operation-registry';
 import {
@@ -848,8 +849,11 @@ export class ReflectorRunner {
 
     const avgTokensPerLine = totalLines > 0 ? observationTokens / totalLines : 0;
     const activationPointTokens = reflectThreshold * bufferActivation;
-    const linesToReflect =
+    const estimatedLinesToReflect =
       avgTokensPerLine > 0 ? Math.min(Math.floor(activationPointTokens / avgTokensPerLine), totalLines) : totalLines;
+    // Activation keeps lines after this count verbatim, so a cut inside an
+    // <observation-group> would leave an orphaned closing tag behind.
+    const linesToReflect = snapLineCountToObservationGroupBoundary(allLines, estimatedLinesToReflect);
 
     const hookContext = {
       threadId: currentRecord.threadId ?? undefined,
@@ -869,7 +873,7 @@ export class ReflectorRunner {
     const compressionTarget = Math.round(sliceTokenEstimate * 0.75);
 
     omDebug(
-      `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines}, sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
+      `[OM:reflect] doAsyncBufferedReflection: slicing observations for reflection — totalLines=${totalLines}, avgTokPerLine=${avgTokensPerLine.toFixed(1)}, activationPointTokens=${activationPointTokens}, linesToReflect=${linesToReflect}/${totalLines} (estimated ${estimatedLinesToReflect}), sliceTokenEstimate=${sliceTokenEstimate}, compressionTarget=${compressionTarget}`,
     );
 
     omDebug(

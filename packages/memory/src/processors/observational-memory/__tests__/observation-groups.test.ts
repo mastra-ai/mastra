@@ -6,6 +6,7 @@ import {
   parseObservationGroups,
   reconcileObservationGroupsFromReflection,
   renderObservationGroupsForReflection,
+  snapLineCountToObservationGroupBoundary,
   stripObservationGroups,
 } from '../observation-groups';
 import type { ObservationGroup } from '../observation-groups';
@@ -322,5 +323,61 @@ describe('malformed observation group input', () => {
     expect(renderObservationGroupsForReflection(observations)).toBeNull();
 
     expect(performance.now() - start).toBeLessThan(200);
+  });
+});
+
+describe('snapLineCountToObservationGroupBoundary', () => {
+  // Lines 1-4: group a, line 5: blank, lines 6-9: group b, line 10: blank, lines 11-14: group c
+  const groupedLines = [
+    '<observation-group id="a" range="m1:m2">',
+    '* a1',
+    '* a2',
+    '</observation-group>',
+    '',
+    '<observation-group id="b" range="m3:m4">',
+    '* b1',
+    '* b2',
+    '</observation-group>',
+    '',
+    '<observation-group id="c" range="m5:m6">',
+    '* c1',
+    '* c2',
+    '</observation-group>',
+  ];
+
+  it('returns the cut unchanged when there are no group tags', () => {
+    const lines = ['* one', '* two', '* three', '* four'];
+    expect(snapLineCountToObservationGroupBoundary(lines, 0)).toBe(0);
+    expect(snapLineCountToObservationGroupBoundary(lines, 2)).toBe(2);
+    expect(snapLineCountToObservationGroupBoundary(lines, 4)).toBe(4);
+  });
+
+  it('snaps a cut inside a group back to the end of the previous group', () => {
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 7)).toBe(4);
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 12)).toBe(9);
+  });
+
+  it('keeps a cut that already ends on a group boundary', () => {
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 4)).toBe(4);
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 9)).toBe(9);
+  });
+
+  it('snaps a cut on a separator line back to the previous group end', () => {
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 5)).toBe(4);
+  });
+
+  it('snaps forward to the end of the first group when the cut is inside it', () => {
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 0)).toBe(4);
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, 2)).toBe(4);
+  });
+
+  it('keeps a cut covering every line', () => {
+    expect(snapLineCountToObservationGroupBoundary(groupedLines, groupedLines.length)).toBe(groupedLines.length);
+  });
+
+  it('snaps around groups that follow untagged lines', () => {
+    const lines = ['* legacy 1', '* legacy 2', ...groupedLines];
+    expect(snapLineCountToObservationGroupBoundary(lines, 1)).toBe(6);
+    expect(snapLineCountToObservationGroupBoundary(lines, 9)).toBe(6);
   });
 });
