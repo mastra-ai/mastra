@@ -137,6 +137,7 @@ describe('JiraIntegration capability surface', () => {
       cursor: 'page-1',
     });
 
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${BASE}/rest/api/3/search/jql`);
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { jql: string; nextPageToken?: string };
     expect(body.jql).toBe(
       'project IN (1, "ENG") AND statusCategory != Done AND labels IN ("bug", "urgent") ORDER BY updated DESC',
