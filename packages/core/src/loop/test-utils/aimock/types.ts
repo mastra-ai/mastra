@@ -387,7 +387,7 @@ export interface RunLoopScenarioOptions {
    * Controls recall behavior like `lastMessages` (number of messages to recall)
    * or `semanticRecall` (enable/disable semantic recall).
    */
-  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory'>;
+  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
   /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
   onTitleGenerated?: (title: string) => void | Promise<void>;
   /**

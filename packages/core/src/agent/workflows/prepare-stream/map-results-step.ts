@@ -4,6 +4,7 @@ import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
@@ -13,6 +14,7 @@ import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
@@ -89,6 +91,31 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
     let earlierTurnSnapshot: MastraDBMessage | undefined;
 
+    const ensureThreadExists = async () => {
+      if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
+        await memory.createThread({
+          threadId: memoryData.thread?.id,
+          title: memoryData.thread?.title,
+          metadata: memoryData.thread?.metadata,
+          resourceId: memoryData.thread?.resourceId,
+          memoryConfig,
+        });
+
+        threadCreatedByStep = true;
+      }
+    };
+
+    const saveInputAfterTotalTimeout = async () => {
+      // OM owns its own writes, matching the durable engine's final persistence.
+      if (!memory || !memoryData.thread?.id || memoryConfig?.readOnly || memoryConfig?.observationalMemory) return;
+      const input = filterMessagesForPersistence(messageList.get.input.db());
+      if (input.length === 0) return;
+
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+      await ensureThreadExists();
+      await memory.saveMessages({ messages: messageList.transformMessagesForTranscript(input), memoryConfig });
+    };
+
     const result = {
       ...options,
       agentId,
@@ -110,17 +137,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           if (memoryData.thread?.id) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
           }
-          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
-            await memory.createThread({
-              threadId: memoryData.thread?.id,
-              title: memoryData.thread?.title,
-              metadata: memoryData.thread?.metadata,
-              resourceId: memoryData.thread?.resourceId,
-              memoryConfig,
-            });
-
-            threadCreatedByStep = true;
-          }
+          await ensureThreadExists();
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
@@ -475,7 +492,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async ({ error }: { error: Error | string }) => {
+          // A run that hits `timeout.totalMs` ends without a `finish` chunk, so the output
+          // processors that normally persist the turn never run. Save the accepted user
+          // message; completed steps are only saved by `savePerStep`, and the unfinished
+          // step is never saved after the deadline.
+          if (isMastraTimeoutError(error) && error.timeoutType === 'total') {
+            try {
+              await saveInputAfterTotalTimeout();
+            } catch (e) {
+              capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
+            }
+          }
+          await options.onError?.({ error });
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
       },

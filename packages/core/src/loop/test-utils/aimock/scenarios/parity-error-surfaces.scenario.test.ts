@@ -190,11 +190,15 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    'only completed steps reach memory at the deadline (savePerStep: %s)',
-    async savePerStep => {
+  it.each([
+    { savePerStep: false, readOnly: false },
+    { savePerStep: true, readOnly: false },
+    { savePerStep: false, readOnly: true },
+  ])(
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly)',
+    async ({ savePerStep, readOnly }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}`;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -208,6 +212,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         prompt: 'Look up the order, then check the courier.',
         maxSteps: 3,
         savePerStep,
+        ...(readOnly && { memoryOptions: { readOnly } }),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
@@ -256,10 +261,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       const { messages } = await memory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
-      expect(saved.includes('Look up the order, then check the courier.')).toBe(
-        savePerStep || engine === 'durable' || engine === 'evented',
-      );
-      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(!readOnly);
+      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
     TEST_TIMEOUT_MS,
