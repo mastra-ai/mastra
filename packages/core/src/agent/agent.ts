@@ -8098,13 +8098,7 @@ export class Agent<
     requestContext: RequestContext,
   ): Promise<T | undefined> {
     if (value === undefined) return undefined;
-    if (typeof value === 'function') {
-      return await (value as (args: { requestContext: RequestContext; mastra?: Mastra }) => Promise<T> | T)({
-        requestContext,
-        mastra: this.#mastra,
-      });
-    }
-    return value;
+    return await resolveDynamicArgument(value, { requestContext, mastra: this.#mastra });
   }
 
   /**
