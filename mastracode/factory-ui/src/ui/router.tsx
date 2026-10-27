@@ -11,21 +11,15 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
+import { lazy, Suspense } from 'react';
+import type { ComponentType } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
 import { RootGuards } from './domains/auth/components/RootGuards';
-import { KnowledgePage } from './pages/KnowledgePage';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
-import { CreateFactoryPage } from './pages/CreateFactoryPage';
-import { NewPage } from './pages/NewPage';
-import { OnboardingPage } from './pages/OnboardingPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { SlackConnectionPage } from './pages/SlackConnectionPage';
-import { RulesPage } from './pages/RulesPage';
-import { SignInPage } from './pages/SignInPage';
-import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
@@ -34,6 +28,44 @@ import { AppLayout } from './layouts/AppLayout';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
+
+// Keep the boards eager. Secondary pages load after their route guards allow
+// them, with the loading boundary inside the app shell so the sidebar stays.
+const KnowledgePage = lazyPage(() =>
+  import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })),
+);
+const CreateFactoryPage = lazyPage(() =>
+  import('./pages/CreateFactoryPage').then(module => ({ default: module.CreateFactoryPage })),
+);
+const NewPage = lazyPage(() => import('./pages/NewPage').then(module => ({ default: module.NewPage })));
+const OnboardingPage = lazyPage(() =>
+  import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
+);
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const SlackConnectionPage = lazyPage(() =>
+  import('./pages/SlackConnectionPage').then(module => ({ default: module.SlackConnectionPage })),
+);
+const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
+const SignInPage = lazyPage(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => ({ default: module.ThreadPage })));
+
+function lazyPage(load: () => Promise<{ default: ComponentType }>) {
+  const Page = lazy(load);
+
+  return function LazyPage() {
+    return (
+      <Suspense
+        fallback={
+          <div className="flex flex-1 items-center justify-center p-6">
+            <Spinner aria-label="Loading page" />
+          </div>
+        }
+      >
+        <Page />
+      </Suspense>
+    );
+  };
+}
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
