@@ -12,6 +12,13 @@ import { DecisionReasonSchema, InvoiceDraftSchema, InvoiceResultSchema } from '.
 import { validateExtraction } from '../invoice/validation.ts';
 
 const toolResult = z.object({
+  ...ApprovalRequestSchema.pick({
+    invoiceNumber: true,
+    vendorName: true,
+    currency: true,
+    totalMinor: true,
+    invoiceDigest: true,
+  }).partial().shape,
   status: z.enum(['processed', 'needs_extraction_review', 'failed']),
   runId: z.string().nullable().default(null),
   executionStatus: z.string().nullable().default(null),

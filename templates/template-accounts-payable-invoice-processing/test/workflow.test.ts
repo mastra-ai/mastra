@@ -94,6 +94,12 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         status: string;
         result?: InvoiceResult;
         disposition?: string;
+        invoiceNumber?: string;
+        vendorName?: string;
+        currency?: string;
+        totalMinor?: number;
+        invoiceDigest?: string;
+        approvalPending?: boolean;
         reasons?: Array<{ code: string; message: string }>;
       };
     },
@@ -362,6 +368,23 @@ it('returns structured extraction review for incomplete or inconsistent invoice 
       assert.ok(result.reasons?.length);
     }
     assert.deepEqual((await test.state()).calls, []);
+  } finally {
+    await test.close();
+  }
+});
+
+// PR #28532, CodeRabbit 4383787281: approval must expose authoritative invoice identity and amount.
+it('preserves invoice identity, amount and digest in the real approval tool response', async () => {
+  const test = await scenario({ env: { AP_APPROVAL_THRESHOLD_MINOR: '9999' } });
+  try {
+    const result = await test.run({ tool: true });
+    assert.equal(result.approvalPending, true);
+    assert.equal(result.invoiceNumber, 'AP-TEST-1001');
+    assert.equal(result.vendorName, 'AP Sandbox Vendor');
+    assert.equal(result.currency, 'USD');
+    assert.equal(result.totalMinor, 10000);
+    assert.match(result.invoiceDigest ?? '', /^[a-f0-9]{64}$/);
+    assert.equal((await test.state()).bills.length, 0);
   } finally {
     await test.close();
   }
