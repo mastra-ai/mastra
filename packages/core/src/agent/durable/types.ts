@@ -307,6 +307,8 @@ export interface SerializableDurableOptions {
    * observability and cross-process engines.
    */
   isTaskComplete?: {
+    /** Whether this run inherited its completion policy from the registered agent. */
+    fromDefaults?: boolean;
     scorerNames?: string[];
     strategy?: 'all' | 'any';
     timeout?: number;

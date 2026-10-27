@@ -72,6 +72,8 @@ import {
 import { generateDurableThreadTitle } from './workflows/finalize-run';
 import { isJsonSafe } from './workflows/shared/schemas';
 
+export const COMPLETION_POLICY_FROM_DEFAULTS = Symbol('mastra.durable.completionPolicyFromDefaults');
+
 /**
  * JSON-safe snapshot of `requestContext.entries()` so durable steps (e.g.
  * is-task-complete scorers) can see the same `customContext` the non-durable
@@ -906,6 +908,11 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
       transform: toolPayloadTransform?.targets ? { targets: toolPayloadTransform.targets } : undefined,
       isTaskComplete: execOptions?.isTaskComplete
         ? {
+            fromDefaults: optionsAreResolved
+              ? (rawExecOptions as AgentExecutionOptions<OUTPUT> & { [COMPLETION_POLICY_FROM_DEFAULTS]?: boolean })?.[
+                  COMPLETION_POLICY_FROM_DEFAULTS
+                ] === true
+              : rawExecOptions?.isTaskComplete === undefined,
             scorerNames: execOptions.isTaskComplete.scorers?.map(s => s.name).filter((n): n is string => !!n),
             strategy: execOptions.isTaskComplete.strategy,
             timeout: execOptions.isTaskComplete.timeout,

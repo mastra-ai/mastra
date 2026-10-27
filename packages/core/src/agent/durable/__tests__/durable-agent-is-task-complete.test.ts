@@ -130,6 +130,7 @@ describe('DurableAgent isTaskComplete', () => {
     // The workflowInput carries only the JSON-safe sub-keys.
     const serialized = (workflowInput.options as any).isTaskComplete;
     expect(serialized).toEqual({
+      fromDefaults: false,
       scorerNames: ['Durable Task Scorer'],
       strategy: 'all',
       timeout: 2000,

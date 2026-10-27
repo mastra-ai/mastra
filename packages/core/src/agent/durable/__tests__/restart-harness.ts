@@ -213,6 +213,7 @@ export type ScenarioOptions<K extends RestartKind> = {
   build: K extends 'workflow' ? WorkflowBuild : AgentBuild;
   /** Park graph 1 inside the write that leaves the snapshot this picks out. */
   hold?: HoldWrite;
+  onRestartGraph?: (graph: Graph) => void;
   timeoutMs?: number;
 };
 
@@ -461,6 +462,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
         );
       }
       for (const row of checkpoint.rows) await graph.workflows.persistWorkflowSnapshot(structuredClone(row));
+      options.onRestartGraph?.(graph);
 
       if (options.kind === 'workflow') {
         const run = await graph.workflow.createRun({ runId: options.runId });

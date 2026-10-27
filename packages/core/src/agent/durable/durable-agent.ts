@@ -74,7 +74,7 @@ import {
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from './memory-fga';
-import { prepareForDurableExecution } from './preparation';
+import { COMPLETION_POLICY_FROM_DEFAULTS, prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
 import {
@@ -1507,13 +1507,20 @@ export class DurableAgent<
 
     const wrapped = this.#wrappedAgent as Agent<string, any, TOutput>;
     const persistedCompletion = workflowInput.options?.isTaskComplete;
-    const defaultCompletion = persistedCompletion
-      ? (await wrapped.getDefaultOptions({ requestContext }))?.isTaskComplete
-      : undefined;
-    // Only rebind the live default policy when its scorers match this run's
-    // serialized shadow; per-call scorers cannot be restored after a crash.
+    let defaultCompletion: Awaited<ReturnType<typeof wrapped.getDefaultOptions>>['isTaskComplete'];
+    if (persistedCompletion?.fromDefaults) {
+      try {
+        defaultCompletion = (await wrapped.getDefaultOptions({ requestContext }))?.isTaskComplete;
+      } catch (error) {
+        this.#mastra
+          ?.getLogger?.()
+          ?.warn?.(`[DurableAgent] recover(${runId}) failed to resolve default task completion: ${error}`);
+      }
+    }
+    // Scorer instances are not serialized. Never substitute defaults for a
+    // per-call policy, even if the two policies have identically named scorers.
     const isTaskComplete =
-      persistedCompletion &&
+      persistedCompletion?.fromDefaults &&
       defaultCompletion?.scorers?.length &&
       JSON.stringify(defaultCompletion.scorers.map(s => s.name).filter(Boolean)) ===
         JSON.stringify(persistedCompletion.scorerNames ?? [])
@@ -1525,6 +1532,13 @@ export class DurableAgent<
             suppressFeedback: persistedCompletion.suppressFeedback,
           }
         : undefined;
+    if (persistedCompletion && !isTaskComplete) {
+      this.#mastra
+        ?.getLogger?.()
+        ?.warn?.(
+          `[DurableAgent] recover(${runId}) cannot restore task-completion scorers from the run's ${persistedCompletion.fromDefaults ? 'default' : 'per-call'} policy; completion checks will be skipped.`,
+        );
+    }
     let model;
     try {
       model = await wrapped.getModel({ requestContext });
@@ -1989,8 +2003,12 @@ export class DurableAgent<
       defaultScopes: defaultOptions?.scopes,
       snapshot,
     });
-    // Preserve the marker when the until-idle wrapper spreads these options.
+    // Preserve both markers when the until-idle wrapper spreads these options.
     Object.defineProperty(scopedOptions, RESOLVED_EXECUTION_OPTIONS, { value: true, enumerable: true });
+    Object.defineProperty(scopedOptions, COMPLETION_POLICY_FROM_DEFAULTS, {
+      value: options?.isTaskComplete === undefined,
+      enumerable: true,
+    });
     return scopedOptions;
   }
 
