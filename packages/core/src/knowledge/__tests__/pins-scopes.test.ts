@@ -19,13 +19,13 @@ async function setup() {
   return { store, tools };
 }
 
-const director = ['org:self', 'team:self:director'];
+const lead = ['org:self', 'team:self:lead'];
 const member = ['agent:alex', 'org:self', 'team:self:x'];
 
 describe('pins across scopes', () => {
-  it("shows a member the director's org pins next to its own, without fragmenting either set", async () => {
+  it("shows a member the lead's org pins next to its own, without fragmenting either set", async () => {
     const { store, tools } = await setup();
-    await tools(director).knowledge_pin!.execute({
+    await tools(lead).knowledge_pin!.execute({
       op: 'pin',
       text: 'Org: ship on Fridays only.',
       scope: ['org:self'],
@@ -42,17 +42,17 @@ describe('pins across scopes', () => {
     // One node per pin scope: the org's and the member's.
     expect(memberSet.nodeIds).toHaveLength(2);
 
-    const directorSet = await listPinnedKnowledge({ store, scope: director });
-    expect(directorSet.pins.map(pin => pin.text)).toEqual(['Org: ship on Fridays only.']);
+    const leadSet = await listPinnedKnowledge({ store, scope: lead });
+    expect(leadSet.pins.map(pin => pin.text)).toEqual(['Org: ship on Fridays only.']);
 
     const other = await listPinnedKnowledge({ store, scope: ['org:self', 'team:self:y'] });
     expect(other.pins.map(pin => pin.text)).toEqual(['Org: ship on Fridays only.']);
   });
 
-  it("lets a member see but not unpin the director's org pin", async () => {
+  it("lets a member see but not unpin the lead's org pin", async () => {
     const { store, tools } = await setup();
-    const pin = await tools(director).knowledge_pin!.execute({ op: 'pin', text: 'Org rule.', scope: ['org:self'] });
-    const recordId = pin.id ?? pin.record?.id ?? (await listPinnedKnowledge({ store, scope: director })).pins[0]!.id;
+    const pin = await tools(lead).knowledge_pin!.execute({ op: 'pin', text: 'Org rule.', scope: ['org:self'] });
+    const recordId = pin.id ?? pin.record?.id ?? (await listPinnedKnowledge({ store, scope: lead })).pins[0]!.id;
     const refused = await tools(member, ['org:self'])
       .knowledge_pin!.execute({ op: 'unpin', recordId })
       .catch(error => error);

@@ -102,9 +102,9 @@ describe('read-only scope entries', () => {
   it("refuses another run's marked access map", () => {
     const member = new RequestContext();
     setRunAgentScopes(member, ['org:self'], ['org:self']);
-    const director = new RequestContext();
-    setRunAgentScopes(director, ['org:self']);
-    member.set(MASTRA_SCOPE_ACCESS_KEY, director.get(MASTRA_SCOPE_ACCESS_KEY));
+    const lead = new RequestContext();
+    setRunAgentScopes(lead, ['org:self']);
+    member.set(MASTRA_SCOPE_ACCESS_KEY, lead.get(MASTRA_SCOPE_ACCESS_KEY));
     expect(getRunAgentScopes(member)).toEqual([]);
   });
 
