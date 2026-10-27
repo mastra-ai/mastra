@@ -38,7 +38,7 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 
 ### `createIndex()`
 
-Note: This method is a no-op for Upstash as indexes are created automatically.
+Note: This method is a no-op for Upstash. Indexes (Upstash namespaces) are created automatically on first write, and the parameters below are ignored.
 
 <PropertiesTable
   content={[
@@ -56,8 +56,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
     name: 'metric',
     type: "'cosine' | 'euclidean' | 'dotproduct'",
     isOptional: true,
-    defaultValue: 'cosine',
-    description: 'Distance metric for similarity search',
+    description: 'Ignored. The metric is set on the Upstash index itself.',
   },
 ]}
 />
@@ -176,7 +175,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -204,7 +203,14 @@ interface IndexStats {
   {
     name: 'id',
     type: 'string',
-    description: 'ID of the item to update',
+    isOptional: true,
+    description: 'ID of the item to update. Mutually exclusive with `filter`.',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description: 'Metadata filter matching the items to update. Mutually exclusive with `id`. Must not be empty.',
   },
   {
     name: 'update',
@@ -213,6 +219,8 @@ interface IndexStats {
   },
 ]}
 />
+
+Provide exactly one of `id` or `filter`.
 
 The `update` object can have the following properties:
 
