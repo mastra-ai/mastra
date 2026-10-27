@@ -3,8 +3,10 @@ import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it } from 'vitest';
 import { server } from '../../../../../../../e2e/ui/msw-server';
+import type { IntakeConfig } from '../../../../factory/services/intake';
 import type { JiraStatus } from '../../../../factory/services/jira';
 import {
+  CONFIG_URL,
   JIRA_STATUS_URL,
   JIRA_PROJECTS_URL,
   FACTORY_A,
@@ -96,6 +98,40 @@ describe('IntakeSection jira', () => {
 
     await waitFor(() => expect(saved).toHaveLength(1));
     expect(saved[0].jira.sourceIds).toEqual(['10001']);
+  });
+
+  it('returns focus to Add after a selected project finishes being removed', async () => {
+    useJiraHandlers({
+      config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+    });
+    const saved: IntakeConfig[] = [];
+    let releaseSave!: () => void;
+    const pendingSave = new Promise<void>(resolve => {
+      releaseSave = resolve;
+    });
+    server.use(
+      http.put<Record<string, never>, IntakeConfig>(CONFIG_URL, async ({ request }) => {
+        const config = await request.json();
+        saved.push(config);
+        await pendingSave;
+        return HttpResponse.json({ config });
+      }),
+    );
+    renderIntakeSection();
+    const remove = await screen.findByRole('button', { name: 'Remove ENG · Engineering' });
+    const add = screen.getByRole('button', { name: 'Add project to Jira projects' });
+    await userEvent.click(remove);
+    try {
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(add).toBeDisabled();
+      expect(remove).toBeInTheDocument();
+      expect(saved[0].jira.sourceIds).toBeNull();
+      expect(saved[0].github).toEqual(baseConfig().github);
+    } finally {
+      releaseSave();
+    }
+    await waitFor(() => expect(add).toHaveFocus());
+    expect(screen.queryByRole('button', { name: 'Remove ENG · Engineering' })).not.toBeInTheDocument();
   });
 
   it('routes a selected Jira project to a Factory through the generic bindings', async () => {

@@ -37,7 +37,7 @@ function recordPatches(environment: FactoryEnvironmentPayload) {
 }
 
 function renderEnvironmentSettings() {
-  renderWithProviders(
+  return renderWithProviders(
     <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/factory`]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/factory" element={<FactoryManagementSection />} />
@@ -264,6 +264,38 @@ describe('Environment settings', () => {
     await userEvent.setup().click(privileged);
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({ settings: { privileged: true } });
+  });
+
+  it('suggests more memory only while Docker is on with less than 2 GB', async () => {
+    const withSettings = (settings: Record<string, unknown>) => {
+      const base = environmentPayload();
+      return environmentPayload({
+        sandbox: {
+          ...base.sandbox,
+          settingsSchema: {
+            type: 'object',
+            properties: {
+              memoryMb: { type: 'integer', title: 'Memory', default: 1024 },
+              docker: { type: 'boolean', title: 'Docker', default: false },
+            },
+          },
+        },
+        settings,
+      });
+    };
+    const tip = /E2B recommends at least 2 GB for Docker/;
+    useFactory();
+    useEnvironment(withSettings({ docker: true }));
+    const first = renderEnvironmentSettings();
+    expect(await screen.findByText(tip)).toHaveTextContent('1024 MB');
+    first.unmount();
+    for (const settings of [{ docker: true, memoryMb: 2048 }, {}]) {
+      useEnvironment(withSettings(settings));
+      const view = renderEnvironmentSettings();
+      expect(await screen.findByRole('switch', { name: 'Docker' })).toBeInTheDocument();
+      expect(screen.queryByText(tip)).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it('renders a oneOf of consts as a select labelled by title and saves the numeric value', async () => {

@@ -9,3 +9,4 @@ Improved Factory Settings with consistent headers, action icons, provider logos,
 - Configure **Work Intake** with integration-level sync controls, full-width source lists, and the same searchable drawer pattern. Connection management stays aligned across pages.
 - Manage personal accounts, organization connections, and GitHub CLI tokens together in **Connections**. The MCP URL copy control appears on hover or keyboard focus without reserving space or changing row height.
 - Deployments without GitLab no longer show a false connection error.
+- When a run's repository is excluded from pre-cloning, the recovery message now points to **Repositories → Pre-clone**.

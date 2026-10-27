@@ -89,13 +89,13 @@ export function SourcePicker(props: SourcePickerProps) {
               const item = group?.items.find(candidate => candidate.id === id);
               const context = [groups.length > 1 ? group?.label : undefined, item?.hint].filter(Boolean).join(' · ');
               return (
-                <li key={id} className={cn(settingsRowLayout, 'relative flex items-center')}>
+                <li key={id} className={cn(settingsRowLayout, 'flex items-center')}>
                   {itemIcon && (
                     <span className="shrink-0" aria-hidden>
                       {itemIcon}
                     </span>
                   )}
-                  <div className="flex min-w-0 flex-1 flex-col pr-28">
+                  <div className="flex min-w-0 flex-1 flex-col">
                     <Txt as="span" variant="caption" className="wrap-anywhere">
                       {item?.label ?? id}
                     </Txt>
@@ -105,21 +105,20 @@ export function SourcePicker(props: SourcePickerProps) {
                       </Txt>
                     )}
                   </div>
-                  <div className="absolute top-1/2 right-4 -translate-y-1/2">
-                    <Button
-                      size="sm"
-                      variant="ghost"
-                      icon={<Trash2 />}
-                      aria-label={`Remove ${item?.label ?? id}`}
-                      disabled={selectionDisabled || item?.disabled}
-                      onClick={async () => {
-                        await onToggleItem(id);
-                        requestAnimationFrame(() => trigger.current?.focus());
-                      }}
-                    >
-                      Remove
-                    </Button>
-                  </div>
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<Trash2 />}
+                    className="shrink-0"
+                    aria-label={`Remove ${item?.label ?? id}`}
+                    disabled={selectionDisabled || item?.disabled}
+                    onClick={async () => {
+                      await onToggleItem(id);
+                      requestAnimationFrame(() => trigger.current?.focus());
+                    }}
+                  >
+                    Remove
+                  </Button>
                 </li>
               );
             })}
