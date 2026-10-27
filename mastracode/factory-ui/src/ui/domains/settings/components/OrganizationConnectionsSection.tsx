@@ -136,7 +136,7 @@ function LinearConnectionRow({ showAvailable }: { showAvailable: boolean }) {
   const label = <IntegrationLabel provider="linear" name="Linear" />;
 
   if (query.isPending) return <SkeletonRows label="Loading Linear connection" rows={1} rowClassName="h-16 w-full" />;
-  if (query.isError) {
+  if (status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load Linear connections." onRetry={() => void query.refetch()} />;
   }
   const access = accessDescription(status?.reason, 'Linear');
@@ -177,7 +177,7 @@ function JiraConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const label = <PlatformLabel provider="jira" />;
 
   if (query.isPending) return <SkeletonRows label="Loading Jira connections" rows={1} rowClassName="h-16 w-full" />;
-  if (query.isError) {
+  if (status?.reason === 'unavailable') {
     return <RetryRow label={label} errorMsg="Couldn't load Jira connections." onRetry={() => void query.refetch()} />;
   }
   const access = accessDescription(status?.reason, 'Jira');

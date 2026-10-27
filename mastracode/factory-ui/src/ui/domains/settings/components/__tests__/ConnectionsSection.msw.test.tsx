@@ -276,6 +276,41 @@ describe('Connections settings', () => {
     expect(screen.queryByText('Managed by deployment environment variables.')).not.toBeInTheDocument();
   });
 
+  it.each([
+    {
+      provider: 'Linear',
+      path: 'linear/status',
+      ready: { enabled: true, connected: true, workspace: { name: 'Acme workspace', urlKey: 'acme' }, reason: 'ready' },
+      connected: 'Acme workspace',
+    },
+    {
+      provider: 'Jira',
+      path: 'jira/status',
+      ready: { enabled: true, configured: true, mode: 'direct', reason: 'ready' },
+      connected: 'Managed by deployment environment variables.',
+    },
+  ])(
+    'offers a retry instead of "not configured" when the $provider status fails',
+    async ({ provider, path, ready, connected }) => {
+      let statusRequests = 0;
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/${path}`, () => {
+          statusRequests += 1;
+          if (statusRequests === 1) return new HttpResponse(null, { status: 503 });
+          return HttpResponse.json(ready);
+        }),
+      );
+      renderConnections();
+
+      expect(await screen.findByText(`Couldn't load ${provider} connections.`)).toBeInTheDocument();
+      await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
+      expect(screen.getAllByText(provider)).toHaveLength(1);
+
+      await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+      expect(await screen.findByText(connected)).toBeInTheDocument();
+    },
+  );
+
   it('opens the add list when linked from Work Intake', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
