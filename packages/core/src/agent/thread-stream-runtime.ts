@@ -27,7 +27,7 @@ import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
 import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
-import { deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
+import { agentScopeEntryTag, agentScopeEntryWrites, deriveAgentRunRequestContext, resolveAgentScopes } from './scopes';
 import type { AgentScopeEntry } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
@@ -299,9 +299,11 @@ function releaseReplyTopic(pubsub: PubSub, replyTopic: string, cb: EventCallback
 function unionScopes(...lists: Array<readonly AgentScopeEntry[] | undefined>): AgentScopeEntry[] {
   const byTag = new Map<string, AgentScopeEntry>();
   for (const entry of lists.flatMap(list => list ?? [])) {
-    const tag = typeof entry === 'string' ? entry : entry.tag;
+    const tag = agentScopeEntryTag(entry);
     const existing = byTag.get(tag);
-    if (existing === undefined || typeof existing === 'string') byTag.set(tag, entry);
+    if (existing === undefined || (agentScopeEntryWrites(existing) && !agentScopeEntryWrites(entry))) {
+      byTag.set(tag, entry);
+    }
   }
   return [...byTag.values()];
 }
@@ -311,7 +313,7 @@ function sameScopeEntries(a: readonly AgentScopeEntry[], b: readonly AgentScopeE
   const keys = (list: readonly AgentScopeEntry[]) =>
     [
       ...new Set(
-        unionScopes(list).map(entry => (typeof entry === 'string' ? `${entry}\u0000rw` : `${entry.tag}\u0000r`)),
+        unionScopes(list).map(entry => `${agentScopeEntryTag(entry)}\u0000${agentScopeEntryWrites(entry) ? 'w' : 'r'}`),
       ),
     ].sort();
   const left = keys(a);

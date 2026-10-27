@@ -945,23 +945,26 @@ describe('createMastraCode', () => {
     const { createMastraCode } = await import('../index.js');
     const instance = new Knowledge({ id: 'mastra' });
     await createMastraCode({
-      knowledge: { key: 'scoped', instance, scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'] },
+      knowledge: { key: 'scoped', instance, scopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'] },
     });
     const context = new RequestContext([['controller', { state: {} }]]);
     expect(codeAgentConfig().knowledge).toBe(instance);
     expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual([
-      { tag: 'org:self', access: 'read' },
+      { scope: 'org:self', access: 'read' },
       'team:self:x',
     ]);
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(
-      expect.objectContaining({ hostScopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'] }),
+      expect.objectContaining({ hostScopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'] }),
     );
 
     await createMastraCode({ knowledge: { key: 'plain', instance: new Knowledge({ id: 'plain' }) } });
     const plainScopes = codeAgentConfig().scopes;
-    expect(await plainScopes({ requestContext: context })).toEqual(['org:local']);
+    expect(await plainScopes({ requestContext: context })).toEqual([{ scope: 'org:local', access: 'write' }]);
     const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
-    expect(await plainScopes({ requestContext: factory })).toEqual(['org:o', 'project:p']);
+    expect(await plainScopes({ requestContext: factory })).toEqual([
+      { scope: 'org:o', access: 'write' },
+      { scope: 'project:p', access: 'write' },
+    ]);
   });
 
   it('gives an unresolved Factory session only identity tags, never the host tags', async () => {

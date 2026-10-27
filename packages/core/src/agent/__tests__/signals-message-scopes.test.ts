@@ -53,7 +53,7 @@ describe('Agent signals: per-message scopes', () => {
       {
         runId: 'local-run',
         memory: { resource: ids.resourceId, thread: ids.threadId },
-        scopes: ['request:r1', { tag: 'org:self', access: 'read' }],
+        scopes: ['request:r1', { scope: 'org:self', access: 'read' }],
       } as any,
       pubsub,
     );
@@ -66,7 +66,7 @@ describe('Agent signals: per-message scopes', () => {
       ).accepted;
 
     // Same tags and access, in any order: joins.
-    await expect(send([{ tag: 'org:self', access: 'read' }, 'request:r1'])).resolves.toEqual({
+    await expect(send([{ scope: 'org:self', access: 'read' }, 'request:r1'])).resolves.toEqual({
       action: 'deliver',
       runId: 'local-run',
     });
@@ -74,9 +74,9 @@ describe('Agent signals: per-message scopes', () => {
     await expect(send()).resolves.toMatchObject({ action: 'deliver', runId: 'local-run' });
     // Another tag, a missing tag, or the same tag with other access: refused.
     for (const scopes of [
-      ['request:r2', { tag: 'org:self', access: 'read' }],
+      ['request:r2', { scope: 'org:self', access: 'read' }],
       ['request:r1'],
-      ['request:r1', 'org:self'],
+      ['request:r1', { scope: 'org:self', access: 'write' }],
     ]) {
       await expect(send(scopes)).resolves.toEqual({ action: 'blocked', reason: 'scope-mismatch', runId: 'local-run' });
     }

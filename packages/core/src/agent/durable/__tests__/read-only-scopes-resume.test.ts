@@ -113,7 +113,7 @@ describe.each([
 
     let suspended: unknown;
     const initial = await agent.stream('go', {
-      scopes: [{ tag: 'org:a', access: 'read' }, 'team:core', 'resource:u1', 'thread:t1'],
+      scopes: [{ scope: 'org:a', access: 'read' }, { scope: 'team:core', access: 'write' }, 'resource:u1', 'thread:t1'],
       onSuspended: (data: unknown) => (suspended = data),
     });
     if (!createAgent) for await (const _ of initial.fullStream);
@@ -129,8 +129,8 @@ describe.each([
     }
     await vi.waitFor(() => expect(finished).toBe(true), { timeout: 5000 });
 
-    expect(onResume).toContainEqual({ tag: 'org:a', access: 'read' });
-    expect(onResume).toContainEqual({ tag: 'team:core', access: 'readwrite' });
+    expect(onResume).toContainEqual({ scope: 'org:a', access: 'read' });
+    expect(onResume).toContainEqual({ scope: 'team:core', access: 'write' });
     await vi.waitFor(() => expect(created.mock.calls.map(([input]) => input.name)).toEqual(['Team note']), {
       timeout: 5000,
     });

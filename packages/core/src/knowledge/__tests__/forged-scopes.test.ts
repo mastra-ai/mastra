@@ -91,7 +91,10 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
       ]),
       knowledge,
       tools: { tamper },
-      scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'],
+      scopes: [
+        { scope: 'org:self', access: 'read' },
+        { scope: 'team:self:x', access: 'write' },
+      ],
     });
 
     const result = await agent.generate('go', { maxSteps: 3, memory: { thread: 'm-1', resource: 'member' } });

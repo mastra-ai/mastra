@@ -5865,7 +5865,7 @@ export class Agent<
                   inheritedScopes,
                   getRunAgentScopes(subAgentRequestContext)
                     .filter(scope => scope.access === 'read')
-                    .map(scope => scope.tag),
+                    .map(scope => scope.scope),
                 );
               } else subAgentRequestContext.delete(MASTRA_SCOPES_KEY);
             }

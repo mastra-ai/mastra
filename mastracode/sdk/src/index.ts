@@ -354,9 +354,10 @@ export interface MastraCodeConfig {
   /**
    * Knowledge for the code agent. `instance` is attached to the agent (read, write and pin tools
    * per its own options) and registered on the mounted Mastra runtime under `key` (default
-   * `'default'`). `scopes` are the tags every run acts with, e.g. `['team:acme:support']` or
-   * `[{ tag: 'org:acme', access: 'read' }]`; local sessions add `org:local` only when none are
-   * given, Factory sessions always add their `org:` and `project:` tags. `false` turns Knowledge
+   * `'default'`). `scopes` are the tags every run acts with: a plain tag such as `'org:acme'` is
+   * read-only, `{ scope: 'team:acme:support', access: 'write' }` is writable. Local sessions add a
+   * writable `org:local` only when none are given; Factory sessions always add writable `org:` and
+   * `project:` tags. `false` turns Knowledge
    * off even when `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1`.
    */
   knowledge?: false | { instance: Knowledge; key?: string; scopes?: AgentScopeEntry[] };
