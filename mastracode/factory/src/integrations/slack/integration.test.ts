@@ -27,8 +27,9 @@ describe('SlackIntegration transport configuration', () => {
     expect(() => new SlackIntegration({ mode: 'webhook' })).toThrow("'signingSecret' is required");
   });
 
-  it('requires an app token in socket mode', () => {
+  it('requires an app token and bot token in socket mode', () => {
     expect(() => new SlackIntegration({ mode: 'socket' })).toThrow("'appToken' is required");
+    expect(() => new SlackIntegration({ mode: 'socket', appToken: 'xapp-test' })).toThrow("'botToken' is required");
   });
 
   it('keeps account-link credentials out of the socket mode adapter configuration', () => {

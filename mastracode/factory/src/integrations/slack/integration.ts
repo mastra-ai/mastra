@@ -187,6 +187,9 @@ export class SlackIntegration implements FactoryIntegration {
     if (mode === 'socket' && !config.appToken) {
       throw new Error("SlackIntegration: 'appToken' is required in socket mode — Slack cannot open a Socket Mode connection without it.");
     }
+    if (mode === 'socket' && !config.botToken) {
+      throw new Error("SlackIntegration: 'botToken' is required in socket mode — Factory cannot reply without it.");
+    }
     this.#config = config;
     this.#adapterOptions = factoryAdapterOptions(adapterOverrides(config.adapterOptions));
     const textHidden = this.#textHidden;
