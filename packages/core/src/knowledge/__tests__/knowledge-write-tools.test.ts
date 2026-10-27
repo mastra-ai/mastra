@@ -59,7 +59,7 @@ async function structuralFixture() {
 }
 
 describe('Knowledge write tools', () => {
-  it('keeps snapshots of all ten public input schemas', async () => {
+  it('keeps snapshots of both public input schemas', async () => {
     const { tools } = await fixture();
     // Snapshot the resolved JSON Schema, not the wrapper: `tool.inputSchema` serializes to
     // an opaque `JsonSchemaWrapper` whose snapshot never changes when the schema does.
@@ -77,9 +77,10 @@ describe('Knowledge write tools', () => {
     const { store, tools } = await fixture();
     const before = Date.now();
 
-    const result = (await tools.knowledge_create!.execute?.(
+    const result = (await tools.knowledge_record!.execute?.(
       {
-        name: 'Atlas Launch',
+        op: 'add',
+        node: 'Atlas Launch',
         kind: 'project',
         text: 'Project Atlas launches on 2026-09-15.',
         scope: ['org:acme', 'resource:user-42'],
@@ -109,8 +110,8 @@ describe('Knowledge write tools', () => {
     vi.spyOn(store, 'appendKnowledge').mockRejectedValueOnce(new Error('record write failed'));
 
     await expect(
-      tools.knowledge_create!.execute?.(
-        { name: 'Partial Atlas', kind: 'project', text: 'This record fails.' },
+      tools.knowledge_record!.execute?.(
+        { op: 'add', node: 'Partial Atlas', kind: 'project', text: 'This record fails.' },
         {} as any,
       ),
     ).rejects.toThrow('record write failed');
@@ -121,9 +122,10 @@ describe('Knowledge write tools', () => {
   it('places created nodes into visible structural scopes by address', async () => {
     const { store, scopeIds, tools } = await structuralFixture();
 
-    const result = (await tools.knowledge_create!.execute?.(
+    const result = (await tools.knowledge_record!.execute?.(
       {
-        name: 'Memory Extraction',
+        op: 'add',
+        node: 'Memory Extraction',
         kind: 'subsystem',
         text: 'The memory subsystem extracts observations mid-conversation.',
         nodeScope: 'features:memory',
@@ -159,9 +161,10 @@ describe('Knowledge write tools', () => {
       { address: 'features:acme:memory', name: 'memory', description: 'Memory subsystem knowledge.' },
     ]);
 
-    const result = (await tools.knowledge_create!.execute?.(
+    const result = (await tools.knowledge_record!.execute?.(
       {
-        name: 'Memory Extraction',
+        op: 'add',
+        node: 'Memory Extraction',
         kind: 'subsystem',
         text: 'The memory subsystem extracts observations mid-conversation.',
         nodeScope: 'features:acme:memory',
@@ -177,8 +180,8 @@ describe('Knowledge write tools', () => {
       expect.objectContaining({ id: result.node.id }),
     ]);
     await expect(
-      tools.knowledge_create!.execute?.(
-        { name: 'Foreign', kind: 'x', text: 'x', nodeScope: 'features:other:memory' },
+      tools.knowledge_record!.execute?.(
+        { op: 'add', node: 'Foreign', kind: 'x', text: 'x', nodeScope: 'features:other:memory' },
         {} as any,
       ),
     ).rejects.toThrow("Structural scope is outside this run's visible scope: features:other:memory");
@@ -204,8 +207,8 @@ describe('Knowledge write tools', () => {
 
     expect((await knowledge.__getDescriptionContext(scope)).scopes).toEqual([]);
     await expect(
-      tools.knowledge_create!.execute?.(
-        { name: 'Memory Extraction', kind: 'x', text: 'x', nodeScope: 'features:acme:memory' },
+      tools.knowledge_record!.execute?.(
+        { op: 'add', node: 'Memory Extraction', kind: 'x', text: 'x', nodeScope: 'features:acme:memory' },
         {} as any,
       ),
     ).rejects.toThrow("Structural scope is outside this run's visible scope: features:acme:memory");
@@ -214,9 +217,10 @@ describe('Knowledge write tools', () => {
   it('keeps structurally placed org-level nodes readable from another resource in the org', async () => {
     const { store, tools } = await structuralFixture();
 
-    const { node } = (await tools.knowledge_create!.execute?.(
+    const { node } = (await tools.knowledge_record!.execute?.(
       {
-        name: 'Inventory',
+        op: 'add',
+        node: 'Inventory',
         kind: 'ref',
         text: 'Shared inventory service.',
         nodeScope: 'features:memory',
@@ -233,15 +237,15 @@ describe('Knowledge write tools', () => {
   it('creates a node at the first record level when no node placement is given', async () => {
     const { tools } = await fixture();
 
-    const { node, record } = (await tools.knowledge_create!.execute?.(
-      { name: 'Thread Note', kind: 'note', text: 'Only relevant here.', scope },
+    const { node, record } = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Thread Note', kind: 'note', text: 'Only relevant here.', scope },
       {} as any,
     )) as any;
     expect(node.scope).toEqual(scope);
     expect(record.scope).toEqual(scope);
 
-    const { node: orgNode } = (await tools.knowledge_create!.execute?.(
-      { name: 'Org Note', kind: 'note', text: 'Everyone should know.', scope: ['org:acme'] },
+    const { node: orgNode } = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Org Note', kind: 'note', text: 'Everyone should know.', scope: ['org:acme'] },
       {} as any,
     )) as any;
     expect(orgNode.scope).toEqual(['org:acme']);
@@ -253,18 +257,24 @@ describe('Knowledge write tools', () => {
     const store = await knowledge.getStorage();
     const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha' });
 
-    await tools.knowledge_create!.execute?.(
-      { name: 'Resource Note', kind: 'note', text: 'Project-wide.', scope: ['org:acme', 'resource:user-42'] },
+    await tools.knowledge_record!.execute?.(
+      {
+        op: 'add',
+        node: 'Resource Note',
+        kind: 'note',
+        text: 'Project-wide.',
+        scope: ['org:acme', 'resource:user-42'],
+      },
       {} as any,
     );
     expect((await store.listScopeNodes({ addresses: ['thread:alpha'] })).scopes).toEqual([]);
 
-    await tools.knowledge_create!.execute?.(
-      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope },
+    await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Session Note', kind: 'note', text: 'Only this session.', scope },
       {} as any,
     );
-    await tools.knowledge_append!.execute?.(
-      { node: (await store.resolveNode({ name: 'Session Note', scope }))!.id, text: 'More.', scope },
+    await tools.knowledge_record!.execute?.(
+      { op: 'add', node: (await store.resolveNode({ name: 'Session Note', scope }))!.id, text: 'More.', scope },
       {} as any,
     );
 
@@ -281,8 +291,8 @@ describe('Knowledge write tools', () => {
     vi.spyOn(knowledge, 'materializeScope').mockRejectedValue(new Error('vouch failed'));
     const tools = createKnowledgeWriteTools(memory, { scope, sourceThreadId: 'alpha' });
 
-    const result = (await tools.knowledge_create!.execute?.(
-      { name: 'Session Note', kind: 'note', text: 'Only this session.', scope },
+    const result = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Session Note', kind: 'note', text: 'Only this session.', scope },
       {} as any,
     )) as any;
     expect(result.record.scope).toEqual(scope);
@@ -295,7 +305,10 @@ describe('Knowledge write tools', () => {
     // are both refused before any storage write.
     for (const nodeScope of ['other:things', 'bogus']) {
       await expect(
-        tools.knowledge_create!.execute?.({ name: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope }, {} as any),
+        tools.knowledge_record!.execute?.(
+          { op: 'add', node: `Nope ${nodeScope}`, kind: 'x', text: 'x', nodeScope },
+          {} as any,
+        ),
       ).rejects.toThrow(`Structural scope is outside this run's visible scope: ${nodeScope}`);
     }
   });
@@ -304,8 +317,8 @@ describe('Knowledge write tools', () => {
     const { tools } = await fixture();
 
     await expect(
-      tools.knowledge_create!.execute?.(
-        { name: 'No instance', kind: 'x', text: 'x', nodeScope: 'features:memory' },
+      tools.knowledge_record!.execute?.(
+        { op: 'add', node: 'No instance', kind: 'x', text: 'x', nodeScope: 'features:memory' },
         {} as any,
       ),
     ).rejects.toThrow("Structural scope is outside this run's visible scope: features:memory");
@@ -318,24 +331,27 @@ describe('Knowledge write tools', () => {
 
     for (const name of ['payments-service (2026-10-08)', 'Payments', 'Payments Service API']) {
       await expect(
-        tools.knowledge_create!.execute?.({ name, kind: 'service', text: 'Deploys run nightly.' }, {} as any),
+        tools.knowledge_record!.execute?.(
+          { op: 'add', node: name, kind: 'service', text: 'Deploys run nightly.' },
+          {} as any,
+        ),
       ).rejects.toThrow(`Similar nodes already exist: ${existing.id} "Payments Service"`);
     }
     expect(createNode).not.toHaveBeenCalled();
 
     // The exact canonical name reuses the node; an unrelated name and a confirmed distinct node are created.
-    const reused = (await tools.knowledge_create!.execute?.(
-      { name: 'payments service', kind: 'service', text: 'Deploys run nightly.' },
+    const reused = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'payments service', kind: 'service', text: 'Deploys run nightly.' },
       {} as any,
     )) as any;
     expect(reused.node.id).toBe(existing.id);
-    const unrelated = (await tools.knowledge_create!.execute?.(
-      { name: 'Billing Ledger', kind: 'service', text: 'Ledger entries are immutable.' },
+    const unrelated = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Billing Ledger', kind: 'service', text: 'Ledger entries are immutable.' },
       {} as any,
     )) as any;
     expect(unrelated.node.id).not.toBe(existing.id);
-    const confirmed = (await tools.knowledge_create!.execute?.(
-      { name: 'Payments', kind: 'team', text: 'The payments team owns checkout.', confirmDistinct: true },
+    const confirmed = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Payments', kind: 'team', text: 'The payments team owns checkout.', confirmDistinct: true },
       {} as any,
     )) as any;
     expect(confirmed.node).toMatchObject({ name: 'Payments', kind: 'team' });
@@ -346,9 +362,10 @@ describe('Knowledge write tools', () => {
     const { store, tools } = await fixture();
     const resourceScope = scope.slice(0, 2);
 
-    const created = (await tools.knowledge_create!.execute?.(
+    const created = (await tools.knowledge_record!.execute?.(
       {
-        name: 'Deploy Pipeline',
+        op: 'add',
+        node: 'Deploy Pipeline',
         kind: 'system',
         text: 'Builds run on merge.',
         scope: ['org:acme', 'resource:user-42'],
@@ -358,8 +375,8 @@ describe('Knowledge write tools', () => {
     expect(created.node.scope).toEqual(resourceScope);
 
     const threadNode = await store.createNode({ name: 'Release Train', kind: 'process', scope });
-    await tools.knowledge_append!.execute?.(
-      { node: threadNode.id, text: 'Releases ship every Tuesday.', scope: ['org:acme'] },
+    await tools.knowledge_record!.execute?.(
+      { op: 'add', node: threadNode.id, text: 'Releases ship every Tuesday.', scope: ['org:acme'] },
       {} as any,
     );
     expect((await store.getNode(threadNode.id))?.scope).toEqual(['org:acme']);
@@ -373,8 +390,8 @@ describe('Knowledge write tools', () => {
       resolutionScope: scope,
       defaultScope: scope,
     });
-    await tools.knowledge_rescope!.execute?.(
-      { recordId: record.id, scope: ['org:acme', 'resource:user-42'] },
+    await tools.knowledge_record!.execute?.(
+      { op: 'rescope', recordId: record.id, scope: ['org:acme', 'resource:user-42'] },
       {} as any,
     );
     expect((await store.getNode(reused.id))?.scope).toEqual(resourceScope);
@@ -388,15 +405,18 @@ describe('Knowledge write tools', () => {
     // About one token per word; the schema can't count tokens, so the execute-time check refuses it.
     const pasted = 'word '.repeat(MAX_KNOWLEDGE_RECORD_TOKENS + 1);
     await expect(
-      tools.knowledge_create!.execute?.({ name: 'Pasted README', kind: 'doc', text: pasted }, {} as any),
+      tools.knowledge_record!.execute?.({ op: 'add', node: 'Pasted README', kind: 'doc', text: pasted }, {} as any),
     ).rejects.toThrow('Split this into separate records, one fact each, or summarize it');
-    await expect(tools.knowledge_append!.execute?.({ node: source.id, text: pasted }, {} as any)).rejects.toThrow(
-      'Split this into separate records',
-    );
+    await expect(
+      tools.knowledge_record!.execute?.({ op: 'add', node: source.id, text: pasted }, {} as any),
+    ).rejects.toThrow('Split this into separate records');
     // 400 characters is about 67 tokens: the old character bound would refuse it, the token bound doesn't.
     expect(
-      (await tools.knowledge_append!.execute?.({ node: source.id, text: 'x'.repeat(400) }, {} as any)) as any,
-    ).toMatchObject({ text: 'x'.repeat(400) });
+      (await tools.knowledge_record!.execute?.(
+        { op: 'add', node: source.id, text: 'x'.repeat(400) },
+        {} as any,
+      )) as any,
+    ).toMatchObject({ record: { text: 'x'.repeat(400) } });
     append.mockClear();
     expect(createNode).not.toHaveBeenCalled();
     expect(append).not.toHaveBeenCalled();
@@ -411,15 +431,15 @@ describe('Knowledge write tools', () => {
     // `format: 'date-time'` alone is a silent no-op under the tool validator's Ajv (no formats
     // plugin), so this proves the schema itself refuses before either tool body runs.
     for (const when of ['next tuesday', '2026-09-15', '2026-09-15 10:00', 'not-a-date']) {
-      const created = (await tools.knowledge_create!.execute?.(
-        { name: `Bad ${when}`, kind: 'project', text: 'x', when },
+      const created = (await tools.knowledge_record!.execute?.(
+        { op: 'add', node: `Bad ${when}`, kind: 'project', text: 'x', when },
         {} as any,
       )) as any;
       expect(created?.error).toBe(true);
       expect(created?.message).toContain('when');
 
-      const appended = (await tools.knowledge_append!.execute?.(
-        { node: source.id, text: 'x', when },
+      const appended = (await tools.knowledge_record!.execute?.(
+        { op: 'add', node: source.id, text: 'x', when },
         {} as any,
       )) as any;
       expect(appended?.error).toBe(true);
@@ -429,11 +449,11 @@ describe('Knowledge write tools', () => {
     expect(append).not.toHaveBeenCalled();
 
     // Valid RFC 3339 values still reach execute and are stamped as real dates.
-    const ok = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Landed.', when: '2026-09-15T10:00:00+02:00' },
+    const ok = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: source.id, text: 'Landed.', when: '2026-09-15T10:00:00+02:00' },
       {} as any,
     )) as any;
-    expect(ok.when).toEqual(new Date('2026-09-15T08:00:00.000Z'));
+    expect(ok.record.when).toEqual(new Date('2026-09-15T08:00:00.000Z'));
     expect(append).toHaveBeenCalledTimes(1);
   });
 
@@ -452,13 +472,13 @@ describe('Knowledge write tools', () => {
       deletedBy: 'admin',
     };
 
-    for (const [tool, base] of [
-      ['knowledge_create', { name: 'Forged', kind: 'project', text: 'x' }],
-      ['knowledge_append', { node: source.id, text: 'x' }],
-    ] as const) {
+    for (const base of [
+      { op: 'add', node: 'Forged', kind: 'project', text: 'x' },
+      { op: 'add', node: source.id, text: 'x' },
+    ]) {
       for (const [key, value] of Object.entries(forged)) {
-        const result = (await tools[tool]!.execute?.({ ...base, [key]: value }, {} as any)) as any;
-        expect({ tool, key, error: result?.error, message: result?.message }).toMatchObject({
+        const result = (await tools.knowledge_record!.execute?.({ ...base, [key]: value }, {} as any)) as any;
+        expect({ base, key, error: result?.error, message: result?.message }).toMatchObject({
           error: true,
           message: expect.stringContaining(key),
         });
@@ -467,19 +487,22 @@ describe('Knowledge write tools', () => {
     expect(createNode).not.toHaveBeenCalled();
 
     // Scope levels are the only scope input the model has; raw scope entries are rejected.
-    for (const tool of ['knowledge_create', 'knowledge_append'] as const) {
-      const base =
-        tool === 'knowledge_create' ? { name: 'Escalate', kind: 'project', text: 'x' } : { node: source.id, text: 'x' };
-      const bogus = (await tools[tool]!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
+    for (const base of [
+      { op: 'add', node: 'Escalate', kind: 'project', text: 'x' },
+      { op: 'add', node: source.id, text: 'x' },
+    ]) {
+      const bogus = (await tools.knowledge_record!.execute?.({ ...base, scope: 'org:evil' }, {} as any)) as any;
       expect(bogus?.error).toBe(true);
     }
 
     // What actually lands carries the curator's own provenance, never the observation's claims.
     const before = Date.now();
-    const appended = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Claims to come from victim-thread in 1999.', scope },
-      {} as any,
-    )) as any;
+    const appended = (await tools
+      .knowledge_record!.execute?.(
+        { op: 'add', node: source.id, text: 'Claims to come from victim-thread in 1999.', scope },
+        {} as any,
+      )
+      ?.then((result: any) => result.record)) as any;
     expect(appended).toMatchObject({
       sourceThreadId: 'alpha',
       scope: ['org:acme', 'resource:user-42', 'thread:alpha'],
@@ -491,25 +514,26 @@ describe('Knowledge write tools', () => {
   it('writes and rescopes at any subset of the tags the run holds', async () => {
     const { store, source, tools } = await fixture();
 
-    const created = (await tools.knowledge_create!.execute?.(
-      { name: 'Team ritual', kind: 'practice', text: 'Retro every Friday', scope: ['org:acme'] },
+    const created = (await tools.knowledge_record!.execute?.(
+      { op: 'add', node: 'Team ritual', kind: 'practice', text: 'Retro every Friday', scope: ['org:acme'] },
       {} as any,
     )) as any;
     expect(created.node.scope).toEqual(['org:acme']);
     expect(created.record.scope).toEqual(['org:acme']);
 
-    const appended = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Shared with the whole org', scope: ['org:acme'] },
-      {} as any,
-    )) as any;
+    const appended = (await tools
+      .knowledge_record!.execute?.(
+        { op: 'add', node: source.id, text: 'Shared with the whole org', scope: ['org:acme'] },
+        {} as any,
+      )
+      ?.then((result: any) => result.record)) as any;
     expect(appended.scope).toEqual(['org:acme']);
 
-    const narrow = (await tools.knowledge_append!.execute?.(
-      { node: source.id, text: 'Started in this thread', scope },
-      {} as any,
-    )) as any;
-    const widened = (await tools.knowledge_rescope!.execute?.(
-      { recordId: narrow.id, scope: ['org:acme'] },
+    const narrow = (await tools
+      .knowledge_record!.execute?.({ op: 'add', node: source.id, text: 'Started in this thread', scope }, {} as any)
+      ?.then((result: any) => result.record)) as any;
+    const widened = (await tools.knowledge_record!.execute?.(
+      { op: 'rescope', recordId: narrow.id, scope: ['org:acme'] },
       {} as any,
     )) as any;
     expect(widened.scope).toEqual(['org:acme']);
@@ -532,7 +556,7 @@ describe('Knowledge write tools', () => {
       source: 'agent:alex',
     });
 
-    await tools.knowledge_remove!.execute?.({ recordId: record.id }, {} as any);
+    await tools.knowledge_record!.execute?.({ op: 'remove', recordId: record.id }, {} as any);
 
     expect((await store.getKnowledge({ id: record.id, includeDeleted: true }))?.deletedBy).toBe('agent:alex');
   });
@@ -555,12 +579,12 @@ describe('Knowledge write tools', () => {
     const append = vi.spyOn(store, 'appendKnowledge');
     const remove = vi.spyOn(store, 'removeKnowledge');
 
-    await expect(tools.knowledge_append!.execute?.({ node: foreign.id, text: 'poisoned' }, {} as any)).rejects.toThrow(
-      "outside this run's visible scope",
-    );
-    await expect(tools.knowledge_remove!.execute?.({ recordId: foreignRecord.id }, {} as any)).rejects.toThrow(
-      "outside this run's visible scope",
-    );
+    await expect(
+      tools.knowledge_record!.execute?.({ op: 'add', node: foreign.id, text: 'poisoned' }, {} as any),
+    ).rejects.toThrow("outside this run's visible scope");
+    await expect(
+      tools.knowledge_record!.execute?.({ op: 'remove', recordId: foreignRecord.id }, {} as any),
+    ).rejects.toThrow("outside this run's visible scope");
     expect(append).not.toHaveBeenCalled();
     expect(remove).not.toHaveBeenCalled();
     expect(await store.getKnowledge({ id: foreignRecord.id })).toMatchObject({ text: 'private' });
@@ -587,12 +611,10 @@ describe('Knowledge write tools', () => {
     }
   });
 
-  it('reaches Google with the node-edit rule intact, one required field per tool', async () => {
-    // The rule used to be enforced in `execute`, so the model was never told it — it found
-    // out by being thrown at. It now lives in the schema, and this asserts the shape still
-    // says so after the Google compat layer has rewritten it: that layer drops every
-    // sibling key of an `anyOf`, so a union here (root-level or nested) would arrive with
-    // no properties at all and hide the fields from the model entirely.
+  it('reaches Google as flat op schemas with every field intact', async () => {
+    // The Google compat layer drops every sibling key of an `anyOf`, so a per-op union
+    // (root-level or nested) would arrive with no properties at all and hide the fields
+    // from the model. The tools stay flat objects with an `op` enum.
     const { tools } = await fixture();
     const compat = new GoogleSchemaCompatLayer({
       provider: 'google',
@@ -604,66 +626,59 @@ describe('Knowledge write tools', () => {
         io: 'input',
       }) as any;
 
-    const update = onTheWire('knowledge_update_node');
-    expect(update.anyOf ?? update.oneOf ?? update.allOf).toBeUndefined();
-    expect(update.required).toEqual(['node', 'expectedVersion', 'name', 'kind']);
-    expect(update.properties.name.type).toBe('string');
-    expect(update.properties.kind.type).toBe('string');
+    const record = onTheWire('knowledge_record');
+    expect(record.anyOf ?? record.oneOf ?? record.allOf).toBeUndefined();
+    expect(record.required).toEqual(['op']);
+    expect(record.properties.op.enum).toEqual(['add', 'remove', 'rescope']);
+    expect(Object.keys(record.properties)).toEqual(
+      expect.arrayContaining(['node', 'text', 'when', 'scope', 'kind', 'nodeScope', 'confirmDistinct', 'recordId']),
+    );
 
-    const rename = onTheWire('knowledge_rename_node');
-    expect(rename.anyOf ?? rename.oneOf ?? rename.allOf).toBeUndefined();
-    expect(rename.required).toEqual(['node', 'expectedVersion', 'name']);
-    expect(rename.properties.name.type).toBe('string');
-    expect(rename.properties.name.nullable).toBeUndefined();
-
-    const setKind = onTheWire('knowledge_set_node_kind');
-    expect(setKind.anyOf ?? setKind.oneOf ?? setKind.allOf).toBeUndefined();
-    expect(setKind.required).toEqual(['node', 'expectedVersion', 'kind']);
-    expect(setKind.properties.kind.type).toBe('string');
-    expect(setKind.properties.kind.nullable).toBeUndefined();
+    const node = onTheWire('knowledge_node');
+    expect(node.anyOf ?? node.oneOf ?? node.allOf).toBeUndefined();
+    expect(node.required).toEqual(['op']);
+    expect(node.properties.op.enum).toEqual(['update', 'write', 'merge']);
+    expect(node.properties.name.type).toBe('string');
+    expect(node.properties.kind.type).toBe('string');
 
     // The `when` date-time constraint is enforced locally by Ajv on the raw schema; on the wire the
     // compat layer folds `format`/`pattern` into description text, so Google never sees keywords it
     // might reject and the model still learns the expected shape.
-    for (const id of ['knowledge_create', 'knowledge_append']) {
-      const when = onTheWire(id).properties.when;
-      expect(when.type).toBe('string');
-      expect(when.pattern).toBeUndefined();
-      expect(when.format).toBeUndefined();
-      expect(when.description).toMatch(/date-time/);
-    }
+    const when = record.properties.when;
+    expect(when.type).toBe('string');
+    expect(when.pattern).toBeUndefined();
+    expect(when.format).toBeUndefined();
+    expect(when.description).toMatch(/date-time/);
   });
 
   it('rejects a node edit that changes nothing, before it can burn a version', async () => {
     // A change-nothing update is not harmless: `updateNode` still bumps the version, writes
-    // a node-updated activity, and fails a concurrent writer holding the old version. With
-    // one required field per tool the model cannot express it, and validation says so.
+    // a node-updated activity, and fails a concurrent writer holding the old version.
     const { store, target, tools } = await fixture();
-    for (const id of ['knowledge_rename_node', 'knowledge_set_node_kind']) {
-      const outcome = (await tools[id]!.execute?.(
-        { node: target.id, expectedVersion: target.version },
-        {} as any,
-      )) as any;
-      expect(outcome?.validationErrors, `${id} accepted an edit with no field to change`).toBeDefined();
-    }
+    await expect(
+      tools.knowledge_node!.execute?.({ op: 'update', node: target.id, expectedVersion: target.version }, {} as any),
+    ).rejects.toThrow('needs at least one of name, kind, description, content');
     expect(await store.getNode(target.id)).toMatchObject({ version: target.version, name: target.name });
   });
 
-  it('rejects a combined node edit unless both fields are present', async () => {
-    const { store, target, tools } = await fixture();
-    const partialCombined = (await tools.knowledge_update_node!.execute?.(
-      { node: target.id, expectedVersion: target.version, name: 'Incomplete edit' },
-      {} as any,
-    )) as any;
-
-    expect(partialCombined?.validationErrors).toBeDefined();
-    expect(await store.getNode(target.id)).toMatchObject({ version: target.version, name: target.name });
+  it('names the missing field when an op is called without it', async () => {
+    const { tools } = await fixture();
+    await expect(tools.knowledge_record!.execute?.({ op: 'rescope', recordId: 'r1' }, {} as any)).rejects.toThrow(
+      'knowledge_record op "rescope" needs scope.',
+    );
+    await expect(
+      tools.knowledge_record!.execute?.({ op: 'add', node: 'Brand new thing', text: 'x' }, {} as any),
+    ).rejects.toThrow('knowledge_record op "add" creates a new node "Brand new thing"; it needs kind.');
+    await expect(tools.knowledge_node!.execute?.({ op: 'merge', sourceId: 'a' }, {} as any)).rejects.toThrow(
+      'knowledge_node op "merge" needs sourceVersion.',
+    );
   });
 
   it('atomically renames and re-kinds a node under one CAS version', async () => {
     const { store, target, tools } = await fixture();
-    const updated = (await tools.knowledge_update_node!.execute?.(
+    const updated = (await tools.knowledge_node!.execute?.(
       {
+        op: 'update',
         node: target.id,
         expectedVersion: target.version,
         name: 'Project Atlas Prime',
@@ -680,13 +695,8 @@ describe('Knowledge write tools', () => {
     });
 
     await expect(
-      tools.knowledge_update_node!.execute?.(
-        {
-          node: target.id,
-          expectedVersion: target.version,
-          name: 'Stale name',
-          kind: 'stale-kind',
-        },
+      tools.knowledge_node!.execute?.(
+        { op: 'update', node: target.id, expectedVersion: target.version, name: 'Stale name', kind: 'stale-kind' },
         {} as any,
       ),
     ).rejects.toThrow(/version/i);
@@ -694,21 +704,21 @@ describe('Knowledge write tools', () => {
 
   it('renames and re-kinds a node under CAS', async () => {
     const { target, tools } = await fixture();
-    const renamed = (await tools.knowledge_rename_node!.execute?.(
-      { node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
+    const renamed = (await tools.knowledge_node!.execute?.(
+      { op: 'update', node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
     expect(renamed).toMatchObject({ name: 'Project Atlas Prime', kind: target.kind, version: 2 });
 
-    const rekinded = (await tools.knowledge_set_node_kind!.execute?.(
-      { node: target.id, expectedVersion: renamed.version, kind: 'initiative' },
+    const rekinded = (await tools.knowledge_node!.execute?.(
+      { op: 'update', node: target.id, expectedVersion: renamed.version, kind: 'initiative' },
       {} as any,
     )) as any;
     expect(rekinded).toMatchObject({ name: 'Project Atlas Prime', kind: 'initiative', version: 3 });
 
     await expect(
-      tools.knowledge_rename_node!.execute?.(
-        { node: target.id, expectedVersion: target.version, name: 'Stale write' },
+      tools.knowledge_node!.execute?.(
+        { op: 'update', node: target.id, expectedVersion: target.version, name: 'Stale write' },
         {} as any,
       ),
     ).rejects.toThrow(/version/i);
@@ -716,79 +726,55 @@ describe('Knowledge write tools', () => {
 
   it('supports CAS node/content writes and merge tombstones', async () => {
     const { store, source, target, tools } = await fixture();
-    const updated = (await tools.knowledge_rename_node!.execute?.(
-      { node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
+    const updated = (await tools.knowledge_node!.execute?.(
+      { op: 'update', node: target.id, expectedVersion: target.version, name: 'Project Atlas Prime' },
       {} as any,
     )) as any;
     expect(updated).toMatchObject({ name: 'Project Atlas Prime', version: 2 });
 
-    const merged = (await tools.knowledge_merge_nodes!.execute?.(
-      { sourceId: source.id, targetId: target.id, sourceVersion: source.version },
+    const merged = (await tools.knowledge_node!.execute?.(
+      { op: 'merge', sourceId: source.id, targetId: target.id, sourceVersion: source.version },
       {} as any,
     )) as any;
     expect(merged).toMatchObject({ id: target.id });
     expect(await store.getNode(source.id)).toMatchObject({ mergedInto: target.id });
     expect(await store.resolveNode({ name: source.name, scope })).toMatchObject({ id: target.id });
 
-    const page = (await tools.knowledge_write_node_content!.execute?.(
-      { name: 'Atlas brief', content: 'Owned by [[Project Atlas Prime]].', scope: ['org:acme', 'resource:user-42'] },
-      {} as any,
-    )) as any;
-    await expect(
-      tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'Missing CAS version.', scope: ['org:acme', 'resource:user-42'] },
-        {} as any,
-      ),
-    ).rejects.toThrow('expectedVersion');
-    await expect(
-      tools.knowledge_write_node_content!.execute?.(
-        {
-          name: 'New node',
-          content: 'Cannot create with a version.',
-          scope: ['org:acme', 'resource:user-42'],
-          expectedVersion: 1,
-        },
-        {} as any,
-      ),
-    ).rejects.toThrow('only valid');
-    const revised = (await tools.knowledge_write_node_content!.execute?.(
+    const page = (await tools.knowledge_node!.execute?.(
       {
-        name: page.name,
-        content: 'Launch brief for [[Project Atlas Prime]].',
+        op: 'write',
+        name: 'Atlas brief',
+        content: 'Owned by [[Project Atlas Prime]].',
         scope: ['org:acme', 'resource:user-42'],
-        expectedVersion: 1,
       },
       {} as any,
     )) as any;
-    expect(revised).toMatchObject({ type: 'node', version: 2 });
+    expect(page).toMatchObject({ type: 'node', kind: 'document', version: 1 });
     await expect(
-      tools.knowledge_write_node_content!.execute?.(
-        { name: page.name, content: 'stale', scope: ['org:acme', 'resource:user-42'], expectedVersion: 1 },
+      tools.knowledge_node!.execute?.(
+        { op: 'write', name: page.name, content: 'Again.', scope: ['org:acme', 'resource:user-42'] },
         {} as any,
       ),
+    ).rejects.toThrow('already exists');
+    const revised = (await tools.knowledge_node!.execute?.(
+      { op: 'update', node: page.id, expectedVersion: 1, content: 'Launch brief for [[Project Atlas Prime]].' },
+      {} as any,
+    )) as any;
+    expect(revised).toMatchObject({ type: 'node', version: 2, content: 'Launch brief for [[Project Atlas Prime]].' });
+    await expect(
+      tools.knowledge_node!.execute?.({ op: 'update', node: page.id, expectedVersion: 1, content: 'stale' }, {} as any),
     ).rejects.toThrow('version');
   });
 
   it('never exposes restoration', async () => {
     const { tools } = await fixture();
-    expect(Object.keys(tools)).toEqual([
-      'knowledge_create',
-      'knowledge_append',
-      'knowledge_remove',
-      'knowledge_update_node',
-      'knowledge_rename_node',
-      'knowledge_set_node_kind',
-      'knowledge_merge_nodes',
-      'knowledge_rescope',
-      'knowledge_write_node_description',
-      'knowledge_write_node_content',
-    ]);
+    expect(Object.keys(tools)).toEqual(['knowledge_record', 'knowledge_node']);
   });
 
   it('bounds node descriptions in estimated tokens with CAS and explicit clears', async () => {
     const { store, target, tools } = await fixture();
     const write = (description: string, expectedVersion: number) =>
-      tools.knowledge_write_node_description!.execute?.({ node: target.id, expectedVersion, description }, {} as any);
+      tools.knowledge_node!.execute?.({ op: 'update', node: target.id, expectedVersion, description }, {} as any);
 
     const limit = MAX_KNOWLEDGE_NODE_DESCRIPTION_TOKENS;
     // About one token per word: exactly at the limit is accepted.
@@ -800,14 +786,20 @@ describe('Knowledge write tools', () => {
     expect((await write('x'.repeat(401), 2)) as any).toMatchObject({ version: 3, description: 'x'.repeat(401) });
     // Stale CAS rejected.
     await expect(write('stale write', 1)).rejects.toThrow('version');
-    // Empty string is an explicit clear.
+    // Empty string or null is an explicit clear.
     const cleared = (await write('', 3)) as any;
     expect(cleared).toMatchObject({ version: 4, description: '' });
+    await write('again', 4);
+    const nulled = (await tools.knowledge_node!.execute?.(
+      { op: 'update', node: target.id, expectedVersion: 5, description: null },
+      {} as any,
+    )) as any;
+    expect(nulled).toMatchObject({ version: 6, description: '' });
     // Content untouched throughout; tool never creates nodes.
     expect((await store.getNode(target.id))?.content).toBe(target.content);
     await expect(
-      tools.knowledge_write_node_description!.execute?.(
-        { node: 'missing-node', expectedVersion: 1, description: 'nope' },
+      tools.knowledge_node!.execute?.(
+        { op: 'update', node: 'missing-node', expectedVersion: 1, description: 'nope' },
         {} as any,
       ),
     ).rejects.toThrow('not found');

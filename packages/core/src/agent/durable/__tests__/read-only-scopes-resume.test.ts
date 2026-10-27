@@ -33,9 +33,10 @@ function approvalModel() {
                 {
                   type: 'tool-call',
                   toolCallId: 'c2',
-                  toolName: 'knowledge_create',
+                  toolName: 'knowledge_record',
                   input: JSON.stringify({
-                    name: 'Team note',
+                    op: 'add',
+                    node: 'Team note',
                     kind: 'note',
                     text: 'Team ships Tuesdays.',
                     scope: ['team:core'],
@@ -44,9 +45,10 @@ function approvalModel() {
                 {
                   type: 'tool-call',
                   toolCallId: 'c3',
-                  toolName: 'knowledge_create',
+                  toolName: 'knowledge_record',
                   input: JSON.stringify({
-                    name: 'Org note',
+                    op: 'add',
+                    node: 'Org note',
                     kind: 'note',
                     text: 'Org ships Fridays.',
                     scope: ['org:a'],

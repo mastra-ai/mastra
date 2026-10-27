@@ -207,98 +207,98 @@ async function requirePin(
   return record;
 }
 
+function requirePinField<T>(value: T | undefined, op: string, field: string): T {
+  if (value === undefined) throw new Error(`knowledge_pin op "${op}" needs ${field}.`);
+  return value;
+}
+
 /**
- * Pin lifecycle tools. Pin appends a record on the reserved node; unpin soft-deletes it
- * (auditable, restorable); edit is remove plus append because knowledge records are immutable,
+ * The pin tool. op "pin" appends a record on the reserved node; "unpin" soft-deletes it
+ * (auditable, restorable); "edit" is remove plus append because knowledge records are immutable,
  * so an edited pin carries a new record id.
  */
 export function createPinnedTools(
   memory: PinnedMemory,
   options: PinnedToolsOptions,
 ): Record<string, ToolAction<any, any, any>> {
+  async function unpin(recordId: string) {
+    const store = await getStore(memory);
+    const record = await requirePin(store, recordId, options);
+    return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
+  }
+
+  async function editPin(recordId: string, text: string, reason?: string) {
+    const store = await getStore(memory);
+    const record = await requirePin(store, recordId, options);
+    const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
+    assertBudget(options, pins, text, record);
+    await store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
+    return store.appendKnowledge({
+      node: record.node,
+      text,
+      scope: record.scope,
+      sourceThreadId: options.sourceThreadId,
+      metadata: {
+        ...record.metadata,
+        ...(reason ? { reason } : {}),
+        ...(options.source ? { source: options.source } : {}),
+      },
+      resolutionScope: options.scope,
+      defaultScope: defaultPinScope(options.scope),
+    });
+  }
+
   return {
     knowledge_pin: createTool({
       id: 'knowledge_pin',
       description:
-        'Pin knowledge that must stay in context every turn without being asked for. Pins cost context permanently; pin only what is unconditionally relevant.',
+        'Maintain the pinned context, knowledge that stays in context every turn without being asked for. op "pin" adds a pin; "edit" replaces a pin\'s text (the replacement gets a new record id); "unpin" removes one. Pins cost context permanently; pin only what is unconditionally relevant.',
       inputSchema: {
         type: 'object',
         properties: {
-          text: { type: 'string', minLength: 1 },
+          op: { type: 'string', enum: ['pin', 'edit', 'unpin'] },
+          text: { type: 'string', minLength: 1, description: 'pin, edit: the pin text.' },
           scope: scopeTagsSchema,
           reason: {
             type: 'string',
             minLength: 1,
-            description: 'One short sentence: why this must stay in context permanently.',
+            description: 'pin, edit: one short sentence on why this must stay in context permanently.',
           },
+          recordId: { type: 'string', minLength: 1, description: 'edit, unpin: the pin to change.' },
         },
-        required: ['text'],
+        required: ['op'],
         additionalProperties: false,
       } satisfies JSONSchema7,
       execute: async input => {
-        const value = input as { text: string; scope?: string[]; reason?: string };
-        const store = await getStore(memory);
-        return writePinnedKnowledge(
-          store,
-          options,
-          value.text,
-          value.scope,
-          value.reason ? { reason: value.reason } : undefined,
-        );
-      },
-    }),
-    knowledge_unpin: createTool({
-      id: 'knowledge_unpin',
-      description: 'Remove a pin. The underlying knowledge record is soft-deleted and drops out of the pinned context.',
-      inputSchema: {
-        type: 'object',
-        properties: { recordId: { type: 'string', minLength: 1 } },
-        required: ['recordId'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const store = await getStore(memory);
-        const record = await requirePin(store, (input as { recordId: string }).recordId, options);
-        return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
-      },
-    }),
-    knowledge_edit_pin: createTool({
-      id: 'knowledge_edit_pin',
-      description: 'Replace the text of an existing pin. The replacement carries a new knowledge record id.',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          recordId: { type: 'string', minLength: 1 },
-          text: { type: 'string', minLength: 1 },
-          reason: {
-            type: 'string',
-            minLength: 1,
-            description: 'One short sentence: why this must stay in context permanently.',
-          },
-        },
-        required: ['recordId', 'text'],
-        additionalProperties: false,
-      } satisfies JSONSchema7,
-      execute: async input => {
-        const value = input as { recordId: string; text: string; reason?: string };
-        const store = await getStore(memory);
-        const record = await requirePin(store, value.recordId, options);
-        const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
-        assertBudget(options, pins, value.text, record);
-        await store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
-        return store.appendKnowledge({
-          node: record.node,
-          text: value.text,
-          scope: record.scope,
-          sourceThreadId: options.sourceThreadId,
-          metadata: {
-            ...record.metadata,
-            ...(value.reason ? { reason: value.reason } : {}),
-            ...(options.source ? { source: options.source } : {}),
-          },
-          resolutionScope: options.scope,
-          defaultScope: defaultPinScope(options.scope),
-        });
+        const value = input as {
+          op: 'pin' | 'edit' | 'unpin';
+          text?: string;
+          scope?: string[];
+          reason?: string;
+          recordId?: string;
+        };
+        switch (value.op) {
+          case 'pin': {
+            const store = await getStore(memory);
+            return writePinnedKnowledge(
+              store,
+              options,
+              requirePinField(value.text, 'pin', 'text'),
+              value.scope,
+              value.reason ? { reason: value.reason } : undefined,
+            );
+          }
+          case 'edit':
+            return editPin(
+              requirePinField(value.recordId, 'edit', 'recordId'),
+              requirePinField(value.text, 'edit', 'text'),
+              value.reason,
+            );
+          case 'unpin':
+            return unpin(requirePinField(value.recordId, 'unpin', 'recordId'));
+          default:
+            throw new Error(`knowledge_pin has no op "${String(value.op)}".`);
+        }
       },
     }),
   };

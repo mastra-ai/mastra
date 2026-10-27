@@ -73,8 +73,8 @@ describe('Knowledge attached to an Agent without Memory', () => {
       model: scriptedModel(
         [
           {
-            toolName: 'knowledge_create',
-            input: { name: 'Deploy policy', kind: 'policy', text: 'Deploys freeze on Fridays.' },
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'Deploy policy', kind: 'policy', text: 'Deploys freeze on Fridays.' },
           },
           { toolName: 'knowledge_search', input: { query: 'Fridays' } },
           { text: 'Noted.' },
@@ -109,7 +109,10 @@ describe('Knowledge attached to an Agent without Memory', () => {
       id: 'reader',
       name: 'reader',
       instructions: 'You answer questions.',
-      model: scriptedModel([{ toolName: 'knowledge_create', input: { name: 'x', kind: 'y', text: 'z' } }], prompts),
+      model: scriptedModel(
+        [{ toolName: 'knowledge_record', input: { op: 'add', node: 'x', kind: 'y', text: 'z' } }],
+        prompts,
+      ),
       knowledge: new Knowledge({ storage: new InMemoryStore({ id: 'reader' }), instructions: false }),
     });
 
@@ -143,8 +146,8 @@ describe('Knowledge attached to an Agent without Memory', () => {
       model: scriptedModel(
         [
           {
-            toolName: 'knowledge_create',
-            input: { name: 'Plan', kind: 'doc', text: 'Ship Friday.', scope: ['team:acme:support'] },
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'Plan', kind: 'doc', text: 'Ship Friday.', scope: ['team:acme:support'] },
           },
         ],
         [],
@@ -179,7 +182,12 @@ describe('Knowledge attached to an Agent without Memory', () => {
       name: 'writer',
       instructions: 'x',
       model: scriptedModel(
-        [{ toolName: 'knowledge_create', input: { name: 'X', kind: 'doc', text: 'y', scope: ['team:acme:sales'] } }],
+        [
+          {
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'X', kind: 'doc', text: 'y', scope: ['team:acme:sales'] },
+          },
+        ],
         [],
       ),
       knowledge,
@@ -221,7 +229,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     );
 
     const created = await member([
-      { toolName: 'knowledge_create', input: { name: 'Team note', kind: 'doc', text: 'x' } },
+      { toolName: 'knowledge_record', input: { op: 'add', node: 'Team note', kind: 'doc', text: 'x' } },
     ]);
     expect((toolResults(created)[0] as any).result.record.scope).toEqual([
       'resource:member',
@@ -230,11 +238,16 @@ describe('Knowledge attached to an Agent without Memory', () => {
     ]);
 
     const named = await member([
-      { toolName: 'knowledge_create', input: { name: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] } },
+      {
+        toolName: 'knowledge_record',
+        input: { op: 'add', node: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] },
+      },
     ]);
     expect(toolErrors(named)).toEqual(['"org:self" is read-only for this run.']);
 
-    const appended = await member([{ toolName: 'knowledge_append', input: { node: orgNode.id, text: 'z' } }]);
+    const appended = await member([
+      { toolName: 'knowledge_record', input: { op: 'add', node: orgNode.id, text: 'z' } },
+    ]);
     expect(toolErrors(appended)).toEqual(['"org:self" is read-only for this run.']);
   });
 
@@ -252,16 +265,15 @@ describe('Knowledge attached to an Agent without Memory', () => {
       });
     expect(agent([]).hasOwnMemory()).toBe(false);
 
-    const noThread = await agent([{ toolName: 'knowledge_pin', input: { text: 'x' } }]).generate('pin', {
+    const noThread = await agent([{ toolName: 'knowledge_pin', input: { op: 'pin', text: 'x' } }]).generate('pin', {
       maxSteps: 2,
     });
     expect(toolErrors(noThread)).toEqual(['Knowledge tools require an active threadId.']);
     prompts.length = 0;
 
-    const pinned = await agent([{ toolName: 'knowledge_pin', input: { text: 'Always answer in French.' } }]).generate(
-      'pin it',
-      { maxSteps: 2, memory: { thread: 'p-1', resource: 'u' } },
-    );
+    const pinned = await agent([
+      { toolName: 'knowledge_pin', input: { op: 'pin', text: 'Always answer in French.' } },
+    ]).generate('pin it', { maxSteps: 2, memory: { thread: 'p-1', resource: 'u' } });
     expect(toolErrors(pinned)).toEqual([]);
     const pin = (
       await knowledge

@@ -53,19 +53,22 @@ describe('Knowledge pinned facts against LibSQL', () => {
   it('pins, edits and unpins facts durably, keeping deleted facts out of the set', async () => {
     const { tools, store } = await createHarness();
 
-    const pinned = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
+    const pinned = await tools.knowledge_pin!.execute!(
+      { op: 'pin', text: 'Always answer in French.' } as any,
+      {} as any,
+    );
     let { pins } = await listPinnedKnowledge({ store, scope: threadScope });
     expect(pins.map(pin => pin.text)).toEqual(['Always answer in French.']);
 
-    const edited = await tools.knowledge_edit_pin!.execute!(
-      { recordId: pinned.id, text: 'Always answer in French. Politely.' } as any,
+    const edited = await tools.knowledge_pin!.execute!(
+      { op: 'edit', recordId: pinned.id, text: 'Always answer in French. Politely.' } as any,
       {} as any,
     );
     expect(edited.id).not.toBe(pinned.id);
     ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
     expect(pins.map(pin => pin.id)).toEqual([edited.id]);
 
-    await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
+    await tools.knowledge_pin!.execute!({ op: 'unpin', recordId: edited.id } as any, {} as any);
     ({ pins } = await listPinnedKnowledge({ store, scope: threadScope }));
     expect(pins).toHaveLength(0);
 
@@ -79,12 +82,12 @@ describe('Knowledge pinned facts against LibSQL', () => {
       getKnowledgeStore: () => (storage as any).getStore('knowledge'),
     });
 
-    const first = await tools.knowledge_pin!.execute!({ text: 'first pin' } as any, {} as any);
+    const first = await tools.knowledge_pin!.execute!({ op: 'pin', text: 'first pin' } as any, {} as any);
     const snapshot = await processor.computeStateSignal(makeArgs());
     expect(snapshot).toMatchObject({ mode: 'snapshot' });
     expect(snapshot!.contents).toContain('first pin');
 
-    const second = await tools.knowledge_pin!.execute!({ text: 'second pin' } as any, {} as any);
+    const second = await tools.knowledge_pin!.execute!({ op: 'pin', text: 'second pin' } as any, {} as any);
     const delta = await processor.computeStateSignal(
       makeArgs({
         contextWindow: { hasSnapshot: true },
@@ -96,8 +99,8 @@ describe('Knowledge pinned facts against LibSQL', () => {
     expect(delta).toMatchObject({ mode: 'delta' });
     expect((delta as any).delta.ops).toEqual([{ op: 'add', pin: { id: second.id, text: 'second pin' } }]);
 
-    await tools.knowledge_unpin!.execute!({ recordId: first.id } as any, {} as any);
-    await tools.knowledge_unpin!.execute!({ recordId: second.id } as any, {} as any);
+    await tools.knowledge_pin!.execute!({ op: 'unpin', recordId: first.id } as any, {} as any);
+    await tools.knowledge_pin!.execute!({ op: 'unpin', recordId: second.id } as any, {} as any);
     const clear = await processor.computeStateSignal(
       makeArgs({
         contextWindow: { hasSnapshot: true },

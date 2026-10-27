@@ -309,18 +309,28 @@ export function createKnowledgeTools(
 
   const knowledgeRead = createTool({
     id: 'knowledge_read',
-    description: 'Read a knowledge node, its content, and knowledge records about or linked to it by name or ID.',
+    description:
+      'Read one knowledge node by id or name: its content and the records about it, mentioning it, or related to it. Without node, list the visible nodes, filtered by name prefix, kind, or whether they have content.',
     inputSchema: {
       type: 'object',
       properties: {
-        id: { type: 'string', minLength: 1 },
-        name: { type: 'string', minLength: 1 },
+        node: {
+          type: 'string',
+          minLength: 1,
+          description: 'The id or name of the node to read. Omit it to list nodes.',
+        },
         relationship: {
           type: 'string',
           enum: ['about', 'mentioning', 'related'],
-          description: 'Knowledge relationship to query. Defaults to about.',
+          description: 'With node: which records to return. Defaults to about.',
         },
-        cursor: { type: 'string', minLength: 1, description: 'Return knowledge records after this record ULID.' },
+        namePrefix: { type: 'string', description: 'Without node: list nodes whose name starts with this.' },
+        kind: { type: 'string', description: 'Without node: list nodes of this kind.' },
+        hasContent: {
+          type: 'boolean',
+          description: 'Without node: list nodes with (true) or without (false) long-form content.',
+        },
+        cursor: { type: 'string', minLength: 1, description: 'The nextCursor of the previous page.' },
         limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
         scope: readScopeSchema,
       },
@@ -328,76 +338,20 @@ export function createKnowledgeTools(
     } satisfies JSONSchema7,
     execute: async (input, context) => {
       const {
-        id,
-        name,
+        node: nodeReference,
         relationship = 'about',
-        cursor,
-        limit: requestedLimit,
-        scope: requestedScope,
-      } = input as {
-        id?: string;
-        name?: string;
-        relationship?: 'about' | 'mentioning' | 'related';
-        cursor?: string;
-        limit?: number;
-        scope?: string[];
-      };
-      if (!id && !name) throw new Error('knowledge_read requires id or name.');
-      const scope = fixedScope ?? resolveReadScope(runAccess(context), requestedScope);
-      const store = await getKnowledgeStore(memory);
-      const node = id ? await store.getNode(id) : await store.resolveNode({ name: name!, scope });
-      if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-      const query =
-        relationship === 'related'
-          ? store.listKnowledgeRelatedTo
-          : relationship === 'mentioning'
-            ? store.listKnowledgeMentioning
-            : store.listKnowledgeAbout;
-      const result = await query.call(store, {
-        node,
-        scope,
-        after: cursor,
-        limit: normalizeLimit(requestedLimit),
-      });
-      return {
-        found: true,
-        node: serializeNode(node),
-        records: result.records.map(serializeRecord),
-        nextCursor: result.nextCursor,
-      };
-    },
-  });
-
-  const knowledgeBrowse = createTool({
-    id: 'knowledge_browse',
-    description: 'Browse visible knowledge nodes by scope and name prefix, or follow a node’s mentions and backlinks.',
-    inputSchema: {
-      type: 'object',
-      properties: {
-        namePrefix: { type: 'string' },
-        kind: { type: 'string', description: 'Optional node kind filter.' },
-        hasContent: { type: 'boolean', description: 'Filter nodes by whether they have long-form content.' },
-        node: { type: 'string', minLength: 1, description: 'When set, return knowledge related to this node.' },
-        cursor: { type: 'string', minLength: 1 },
-        limit: { type: 'integer', minimum: 1, maximum: MAX_LIMIT },
-        scope: readScopeSchema,
-      },
-      additionalProperties: false,
-    } satisfies JSONSchema7,
-    execute: async (input, context) => {
-      const {
         namePrefix,
         kind,
         hasContent,
-        node: nodeReference,
         cursor,
         limit: requestedLimit,
         scope: requestedScope,
       } = input as {
+        node?: string;
+        relationship?: 'about' | 'mentioning' | 'related';
         namePrefix?: string;
         kind?: string;
         hasContent?: boolean;
-        node?: string;
         cursor?: string;
         limit?: number;
         scope?: string[];
@@ -406,9 +360,15 @@ export function createKnowledgeTools(
       const limit = normalizeLimit(requestedLimit);
       const store = await getKnowledgeStore(memory);
       if (nodeReference) {
-        const node = await store.getNode(nodeReference);
+        const node = (await store.getNode(nodeReference)) ?? (await store.resolveNode({ name: nodeReference, scope }));
         if (!node || node.mergedInto || !isKnowledgeScopeVisible(node.scope, scope)) return { found: false };
-        const result = await store.listKnowledgeRelatedTo({ node, scope, after: cursor, limit });
+        const query =
+          relationship === 'related'
+            ? store.listKnowledgeRelatedTo
+            : relationship === 'mentioning'
+              ? store.listKnowledgeMentioning
+              : store.listKnowledgeAbout;
+        const result = await query.call(store, { node, scope, after: cursor, limit });
         return {
           found: true,
           node: serializeNode(node),
@@ -431,6 +391,5 @@ export function createKnowledgeTools(
   return {
     knowledge_search: knowledgeSearch,
     knowledge_read: knowledgeRead,
-    knowledge_browse: knowledgeBrowse,
   };
 }

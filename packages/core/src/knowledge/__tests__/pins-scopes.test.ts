@@ -25,9 +25,13 @@ const member = ['agent:alex', 'org:self', 'team:self:x'];
 describe('pins across scopes', () => {
   it("shows a member the director's org pins next to its own, without fragmenting either set", async () => {
     const { store, tools } = await setup();
-    await tools(director).knowledge_pin!.execute({ text: 'Org: ship on Fridays only.', scope: ['org:self'] });
-    await tools(member, ['org:self']).knowledge_pin!.execute({ text: 'Alex: prefers short answers.' });
-    await tools(member, ['org:self']).knowledge_pin!.execute({ text: 'Alex: uses metric units.' });
+    await tools(director).knowledge_pin!.execute({
+      op: 'pin',
+      text: 'Org: ship on Fridays only.',
+      scope: ['org:self'],
+    });
+    await tools(member, ['org:self']).knowledge_pin!.execute({ op: 'pin', text: 'Alex: prefers short answers.' });
+    await tools(member, ['org:self']).knowledge_pin!.execute({ op: 'pin', text: 'Alex: uses metric units.' });
 
     const memberSet = await listPinnedKnowledge({ store, scope: member });
     expect(memberSet.pins.map(pin => pin.text).sort()).toEqual([
@@ -47,10 +51,10 @@ describe('pins across scopes', () => {
 
   it("lets a member see but not unpin the director's org pin", async () => {
     const { store, tools } = await setup();
-    const pin = await tools(director).knowledge_pin!.execute({ text: 'Org rule.', scope: ['org:self'] });
+    const pin = await tools(director).knowledge_pin!.execute({ op: 'pin', text: 'Org rule.', scope: ['org:self'] });
     const recordId = pin.id ?? pin.record?.id ?? (await listPinnedKnowledge({ store, scope: director })).pins[0]!.id;
     const refused = await tools(member, ['org:self'])
-      .knowledge_unpin!.execute({ recordId })
+      .knowledge_pin!.execute({ op: 'unpin', recordId })
       .catch(error => error);
     expect(String(refused?.message ?? refused)).toContain('"org:self" is read-only for this run.');
     expect((await listPinnedKnowledge({ store, scope: member })).pins).toHaveLength(1);
@@ -59,12 +63,12 @@ describe('pins across scopes', () => {
   it('records the agent that unpinned or replaced a pin as deletedBy', async () => {
     const { store, tools } = await setup();
     const agentTools = tools(member, [], 'agent:alex');
-    await agentTools.knowledge_pin!.execute({ text: 'Alex: first.' });
-    await agentTools.knowledge_pin!.execute({ text: 'Alex: second.' });
+    await agentTools.knowledge_pin!.execute({ op: 'pin', text: 'Alex: first.' });
+    await agentTools.knowledge_pin!.execute({ op: 'pin', text: 'Alex: second.' });
     const [first, second] = (await listPinnedKnowledge({ store, scope: member })).pins;
 
-    await agentTools.knowledge_unpin!.execute({ recordId: first!.id });
-    await agentTools.knowledge_edit_pin!.execute({ recordId: second!.id, text: 'Alex: second, edited.' });
+    await agentTools.knowledge_pin!.execute({ op: 'unpin', recordId: first!.id });
+    await agentTools.knowledge_pin!.execute({ op: 'edit', recordId: second!.id, text: 'Alex: second, edited.' });
 
     for (const id of [first!.id, second!.id]) {
       const removed = await store.getKnowledge({ id, includeDeleted: true });

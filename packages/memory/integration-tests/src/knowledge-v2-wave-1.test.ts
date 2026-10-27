@@ -70,9 +70,10 @@ function deterministicObservationModel(curate = false) {
           controller.enqueue({
             type: 'tool-call',
             toolCallId: 'wave-1-create',
-            toolName: 'knowledge_create',
+            toolName: 'knowledge_record',
             input: JSON.stringify({
-              name: 'Atlas refund launch',
+              op: 'add',
+              node: 'Atlas refund launch',
               kind: 'feature',
               text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
               scope: ['org:acme', 'resource:shipyard'],
