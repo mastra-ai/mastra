@@ -63,11 +63,13 @@ When a schedule is created at runtime, Mastra publishes a wake event on the PubS
 
 To poll from startup regardless of whether schedules exist (for example, when your processes don't share a PubSub backend), set `scheduler: { enabled: true }` on the worker or run it with `MASTRA_WORKERS=scheduler`.
 
-Once running, the scheduler sleeps until the next schedule is due rather than polling on a fixed interval. It still checks storage at least once per `maxSleepMs` (default one hour), so a schedule created by a process without a shared PubSub backend can wait up to that long to be picked up. Lower it if you need faster pickup:
+With `enabled: true` or `MASTRA_WORKERS=scheduler`, the scheduler checks storage every `tickIntervalMs` (default 10 seconds) and ignores `maxSleepMs`.
+
+Otherwise, the scheduler starts once a schedule exists and then sleeps until the next schedule is due rather than polling on a fixed interval. Creating, updating, or resuming a schedule through Mastra wakes it early. It still checks storage at least once per `maxSleepMs` (default one hour), even after its schedules are removed, so a schedule written by a process without a shared PubSub backend can wait up to that long to be picked up. Lower it if you need faster pickup:
 
 ```typescript
 const mastra = new Mastra({
-  scheduler: { enabled: true, maxSleepMs: 60_000 },
+  scheduler: { maxSleepMs: 60_000 },
 })
 ```
 
