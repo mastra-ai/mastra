@@ -18,7 +18,7 @@ import type { Span, TracingContext } from '@mastra/core/observability';
 import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from '@mastra/core/request-context';
 import { isStandardSchemaWithJSON, standardSchemaToJSONSchema, toStandardSchema } from '@mastra/core/schema';
 import type { StandardSchemaWithJSON } from '@mastra/core/schema';
-import { createTool, isValidationError } from '@mastra/core/tools';
+import { createTool, isValidationError, validateToolInput } from '@mastra/core/tools';
 import type { InternalCoreTool, MCPToolExecutionContext, MCPToolType, ToolAction } from '@mastra/core/tools';
 import { makeCoreTool } from '@mastra/core/utils';
 import type { SuspendOptions, Workflow } from '@mastra/core/workflows';
@@ -103,11 +103,12 @@ import type {
 import {
   firstSuspendedStep,
   isFinalRunStatus,
+  isStillSuspended,
   isWorkflowTaskContext,
   runErrorMessage,
   runSummary,
 } from './tasks/workflow-runs';
-import type { WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
+import type { AnsweredSuspension, WorkflowRunView, WorkflowTaskContext } from './tasks/workflow-runs';
 import type {
   AppResources,
   MCPAuthInfoToUserMapper,
@@ -1257,6 +1258,12 @@ export class MCPServer extends MCPServerBase {
     const workflowKey = name.slice('run_'.length);
     const workflow = this.workflowFor(workflowKey);
     if (!workflow) throw new Error(`Workflow '${workflowKey}' is not served`);
+    // Rejected input answers as the plain tool does, before a run or task exists to be left behind.
+    const input = validateToolInput(workflow.inputSchema, args, name);
+    if (input.error) {
+      this.logger.warn(`Tool '${name}' rejected its input.`, { error: input.error.message });
+      return errorResult(input.error.message);
+    }
     // Never the task id: a task id is unguessable, a run id is visible to anyone who can list runs.
     const context: WorkflowTaskContext = {
       toolName: name,
@@ -1390,14 +1397,19 @@ export class MCPServer extends MCPServerBase {
       await this.cancelWorkflowRun(context);
       return completed(errorResult(`${label} was ${answer.action === 'decline' ? 'declined' : 'cancelled'}`));
     }
-    if (!(await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false }))) {
-      throw new Error(`${label} run '${context.runId}' was lost`);
+    const current = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+    if (!current) throw new Error(`${label} run '${context.runId}' was lost`);
+    const answered = suspendPayload as AnsweredSuspension;
+    // Resumed elsewhere since the task asked (Studio, the API): the answer is stale, so follow the
+    // run, which asks again if it waits for input once more.
+    if (!isStillSuspended({ status: current.status, steps: current.steps }, answered)) {
+      return this.watchWorkflowRun(workflow, context, attempt.signal);
     }
     const run = await workflow.createRun({ runId: context.runId });
     let view: WorkflowRunView;
     try {
       view = await run.resume({
-        step: (suspendPayload as { step: string[] }).step,
+        step: answered.step,
         resumeData: answer.content ?? {},
         requestContext,
       });
@@ -1470,20 +1482,28 @@ export class MCPServer extends MCPServerBase {
         const inputRequests = {
           [`${INPUT_KEY}-${randomUUID()}`]: this.inputRequestForm(context.toolName, suspended.payload, requestedSchema),
         } as MCPTaskInputRequests;
-        return { status: 'input_required', inputRequests, suspendPayload: { step: suspended.path } };
+        const answered: AnsweredSuspension = { step: suspended.path, suspendedAt: suspended.suspendedAt };
+        return { status: 'input_required', inputRequests, suspendPayload: answered };
       }
       default:
         return undefined;
     }
   }
 
-  /** Cancels the task's run, wherever it runs or waits. A run that already finished is left alone. */
-  private async cancelWorkflowRun(context: WorkflowTaskContext): Promise<void> {
+  /**
+   * Cancels the task's run. A run that already finished is left alone. With `executing: false` (the
+   * store's cancel hook, on whichever instance got `tasks/cancel`), a run that is executing is left
+   * to the attempt running it: writing `canceled` under a run another process executes doesn't stop
+   * it there, its next write overwrites the status, and that process's own cancel then finds the run
+   * already `canceled` and does nothing.
+   */
+  private async cancelWorkflowRun(context: WorkflowTaskContext, { executing = true } = {}): Promise<void> {
     const workflow = this.workflowFor(context.workflowKey);
     if (!workflow) return;
     try {
       const state = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
       if (!state || isFinalRunStatus(state.status)) return;
+      if (!executing && state.status === 'running') return;
       await (await workflow.createRun({ runId: context.runId })).cancel();
     } catch (error) {
       this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error });
@@ -1912,7 +1932,8 @@ export class MCPServer extends MCPServerBase {
         isWorkflowTaskContext(context)
           ? this.workflowTaskWork(context)
           : this.toolTaskWork(context as unknown as ToolTaskContext),
-      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
+      onCancel: context =>
+        isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context, { executing: false }) : undefined,
       recoverFor: name => this.tasks.modeFor(name, this.convertedTools[name]?.mcp?.toolType).recover,
       logger: () => this.logger,
     });
@@ -1954,7 +1975,8 @@ export class MCPServer extends MCPServerBase {
       this.backgroundTaskStore = undefined;
     }
     return new InMemoryMCPTaskStore({
-      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
+      onCancel: context =>
+        isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context, { executing: false }) : undefined,
     });
   }
 

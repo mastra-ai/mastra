@@ -30,7 +30,8 @@ export interface BackgroundTaskMCPTaskStoreOptions {
   /**
    * Called with a task's context when it is cancelled or expires before finishing, on whichever
    * instance does so, even while no attempt runs (e.g. while it waits for input). Stops whatever
-   * the task stands for outside the store, such as a suspended workflow run.
+   * the task stands for outside the store, such as a suspended workflow run. Not awaited: the
+   * cancel answers and the sweep goes on without waiting for it; errors are logged.
    */
   onCancel?: (context: BackgroundToolTaskContext) => void | Promise<void>;
   /** Read on every log, since Mastra sets the server's logger after registering it. */
@@ -410,18 +411,19 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         this.#getLogger?.().warn('Could not cancel MCP task', { error });
       }
       this.#abortFirstAttempt(found.row.id, new Error('Task cancelled'));
-      await this.#notifyCancel(found.row);
+      this.#notifyCancel(found.row);
     }
     return true;
   }
 
-  async #notifyCancel(row: BackgroundTask): Promise<void> {
-    if (!this.#onCancel) return;
-    try {
-      await this.#onCancel((row.args as unknown as RowArgs).context);
-    } catch (error) {
-      this.#getLogger?.().warn('Could not stop what a cancelled MCP task stands for', { error });
-    }
+  /** Fire and forget: a slow hook must hold up neither the `tasks/cancel` ack nor the sweep. */
+  #notifyCancel(row: BackgroundTask): void {
+    const onCancel = this.#onCancel;
+    if (!onCancel) return;
+    const context = (row.args as unknown as RowArgs).context;
+    void Promise.resolve()
+      .then(() => onCancel(context))
+      .catch(error => this.#getLogger?.().warn('Could not stop what a cancelled MCP task stands for', { error }));
   }
 
   #abortFirstAttempt(rowId: string, reason: Error): void {
@@ -505,7 +507,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   async #expire(storage: BackgroundTasksStorage, row: BackgroundTask): Promise<void> {
     await this.#manager.cancel(row.id);
     this.#abortFirstAttempt(row.id, new Error(TASK_EXPIRED_MESSAGE));
-    await this.#notifyCancel(row);
+    this.#notifyCancel(row);
     await storage.updateTask(
       row.id,
       {

@@ -173,14 +173,19 @@ export function resolveTasksConfig(
     surfaceRecover: (entry: MCPServerToolTaskConfig) => boolean,
   ) => {
     const known = new Set(keys);
+    const tools = new Set(surfaces.tools);
     const resolved = new Map<string, ResolvedToolTaskMode>();
     const entries = (config[option] ?? {}) as Record<string, MCPServerTaskMode | MCPServerToolTaskConfig>;
     const noun = option.slice(0, -1);
     for (const [key, entry] of Object.entries(entries)) {
       if (!known.has(key))
         throw invalid(`tasks.${option} names "${key}", which is not one of this server's ${option}.`);
-      const surface = typeof entry === 'string' ? { mode: entry } : entry;
       const owner = `tasks.${option}.${key}`;
+      // The server skips a workflow or agent whose run_/ask_ name a tool already has.
+      if (option !== 'tools' && tools.has(exposedAs(key))) {
+        throw invalid(`${owner} names a ${noun} hidden by the tool "${exposedAs(key)}", so it is never served.`);
+      }
+      const surface = typeof entry === 'string' ? { mode: entry } : entry;
       assertMode(owner, surface.mode);
       assertDuration(`${owner}.syncWindowMs`, surface.syncWindowMs);
       assertDuration(`${owner}.ttlMs`, surface.ttlMs);

@@ -47,7 +47,8 @@ export interface InMemoryMCPTaskStoreOptions {
   /**
    * Called with a task's context when it is cancelled or expires before finishing, even while no
    * attempt runs (e.g. while it waits for input). Stops whatever the task stands for outside the
-   * store, such as a suspended workflow run. Errors are ignored; report them from the hook.
+   * store, such as a suspended workflow run. Not awaited: the cancel answers and expiry goes on
+   * without waiting for it. Errors are ignored; report them from the hook.
    */
   onCancel?: (context: Record<string, unknown>) => void | Promise<void>;
 }
@@ -316,6 +317,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     record.purgeAt = this.#now() + this.#expiredRetentionMs;
   }
 
+  /** Fire and forget: a slow hook must hold up neither the `tasks/cancel` ack nor expiry. */
   #notifyCancel(record: TaskRecord): void {
     const onCancel = this.#onCancel;
     const context = record.context;

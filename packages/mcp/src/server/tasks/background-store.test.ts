@@ -7,6 +7,7 @@ import type { BackgroundTaskEnvelope } from './background-store';
 import type { MCPTaskWork } from './store';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+const elicitRequest = { method: 'elicitation/create', params: {} };
 
 const envelope: BackgroundTaskEnvelope = {
   v: 1,
@@ -114,6 +115,33 @@ describe('BackgroundTaskMCPTaskStore', () => {
       status: 'failed',
       error: { message: 'Input request key "same" was already used by this task' },
     });
+    store.close();
+  });
+
+  it('acknowledges a cancel without waiting for onCancel, and calls it with the task context', async () => {
+    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+    const contexts: unknown[] = [];
+    const store = new BackgroundTaskMCPTaskStore({
+      manager: mastra.backgroundTaskManager!,
+      serverId: 's',
+      workFor: () => async () => ({ status: 'input_required', inputRequests: { who: elicitRequest } }),
+      recoverFor: () => false,
+      // Never settles, like a hook stuck on a slow storage.
+      onCancel: context => (contexts.push(context), new Promise(() => {})),
+    });
+    store.registerTool('tool');
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool', id: 1 } });
+    store.run(task.taskId, async () => ({ status: 'input_required', inputRequests: { who: elicitRequest } }));
+    let current = await store.get(task.taskId, access);
+    for (let i = 0; i < 100 && current?.status !== 'input_required'; i++) {
+      await sleep(20);
+      current = await store.get(task.taskId, access);
+    }
+
+    expect(await store.cancel(task.taskId, access)).toBe(true);
+    expect(await store.get(task.taskId, access)).toMatchObject({ status: 'cancelled' });
+    await vi.waitFor(() => expect(contexts).toEqual([{ toolName: 'tool', id: 1 }]));
     store.close();
   });
 

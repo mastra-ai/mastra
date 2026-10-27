@@ -76,6 +76,32 @@ function makeApproval(probe: Probe) {
     .commit();
 }
 
+/** Runs one step for a while, unless aborted. */
+function makeSlow(probe: Probe) {
+  return createWorkflow({
+    id: 'slow',
+    description: 'Runs one long step',
+    inputSchema: z.object({}),
+    outputSchema: z.object({}),
+  })
+    .then(
+      createStep({
+        id: 'long',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ abortSignal }) => {
+          await new Promise<void>(resolve => {
+            const timer = setTimeout(resolve, LEASE_MS * 1.5);
+            abortSignal.addEventListener('abort', () => (clearTimeout(timer), resolve()), { once: true });
+          });
+          probe.runs.push({ tool: 'long', resumeData: abortSignal.aborted ? 'aborted' : 'done' });
+          return {};
+        },
+      }),
+    )
+    .commit();
+}
+
 function makeTools(probe: Probe, counterFile: string) {
   return {
     echo: createTool({
@@ -830,10 +856,16 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   });
 
   describe('workflow tasks', () => {
-    const tasks = { workflows: { approval: 'always' as const, nightly: 'always' as const } };
+    const tasks = { workflows: { approval: 'always' as const, nightly: 'always' as const, slow: 'always' as const } };
     const workflowInstance = () =>
       instance(tasks, {
-        extra: { workflows: { approval: makeApproval(probe), nightly: makeNightly(`${counterFile}.nightly`) } },
+        extra: {
+          workflows: {
+            approval: makeApproval(probe),
+            nightly: makeNightly(`${counterFile}.nightly`),
+            slow: makeSlow(probe),
+          },
+        },
       });
     const stepRuns = (step: string) => probe.runs.filter(run => run.tool === step);
 
@@ -843,6 +875,22 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect(total).toBe(1);
       return (await workflow.getWorkflowRunById(runs[0]!.runId))!;
     }
+
+    // Fails until core aborts a local run whose row another process cancelled (#28523), as for tools
+    // above. B leaves a running run to the attempt on A, since a `canceled` written from B would only
+    // be overwritten by A's run, and would turn A's own cancel into a no-op once core #28523 lands.
+    it.fails('stops a running run on one instance when another instance cancels its task', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_slow');
+      const onB = await requester(b.url);
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'slow')).status).toBe('running'));
+      await onB.cancel(taskId);
+      expect(await onB.get(taskId)).toMatchObject({ status: 'cancelled' });
+      await sleep(LEASE_MS * 2);
+      expect(stepRuns('long')).toEqual([{ tool: 'long', resumeData: 'aborted' }]);
+      expect((await onlyRun(a.mastra, 'slow')).status).toBe('canceled');
+    });
 
     it('asks on one instance for a run another started, and resumes that run once with the answer', async () => {
       const a = await workflowInstance();

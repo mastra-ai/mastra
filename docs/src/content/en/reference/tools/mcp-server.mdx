@@ -2001,7 +2001,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: "'off'",
     description:
-      'Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`, including tools added later with `toolActions.add()`.',
+      "Mode for every tool, workflow and agent not listed in `tools`, `workflows` or `agents`, including tools added later with `toolActions.add()`. It covers `run_*` and `ask_*` tools too, so `default: 'always'` serves every workflow and agent as a task; list one as `'off'` to keep it synchronous.",
   },
   {
     name: 'tools',
@@ -2107,12 +2107,14 @@ const server = new MCPServer({
 ```
 
 - A run that ends `success` or `bailed` completes the task with the same text a synchronous call answers: `status`, `input`, `steps` and `result`.
-- A run that ends `failed`, `tripwire` or `canceled` completes the task with `isError: true` and the error message. A synchronous call answers a failed run without `isError`.
+- A run that ends `failed`, `tripwire` or `canceled` completes the task with `isError: true` and the error message. In `'auto'` mode, a run that fails within `syncWindowMs` answers the same way, without a task. Only a client without the Tasks extension, or a workflow whose mode is `'off'`, gets the plain `run_` answer, where a failed run comes back without `isError`.
 - In `'auto'` mode, a run that suspends within `syncWindowMs` continues as a task, so it can ask for input.
+- Invalid arguments answer with `isError: true` before any run or task exists.
 - A step that suspends moves the task to `input_required`, with a form built from the step's `resumeSchema` and its suspend payload as the message. The server asks for one suspended step at a time. `tasks/update` resumes the run with the answer as `resumeData`. Resuming needs Mastra storage.
-- A run is resumed at most once per suspension. If it was already resumed, for example from Studio or by another instance, the task follows that run instead.
-- A step whose `resumeSchema` can't be shown as a form, such as one with nested objects, leaves the task `working`. Resume the run another way, for example from Studio, and the task follows it.
-- Declining the input request, `tasks/cancel`, and TTL expiry cancel the run, including a run waiting for input. With a `store` passed in `tasks`, a run waiting for input is only cancelled if that store calls `onCancel`.
+- A run is resumed at most once per suspension. If it was already resumed, for example from Studio or by another instance, the answer is dropped and the task follows the run: when the run suspends again, even on the same step in a loop, the task asks again with a new input request.
+- A step whose `resumeSchema` can't be shown as a form, such as one with nested objects, leaves the task `working`. Resume the run another way, for example from Studio, and the task follows it. Until then the task reads the run's state every second and, on Mastra background tasks, holds a background task slot, as it does while it follows a run another instance executes.
+- Declining the input request, `tasks/cancel`, and TTL expiry cancel the run, including a run waiting for input, from any instance. A run that is executing is stopped by the instance executing it, when that instance's attempt is aborted. Across instances that abort doesn't arrive yet, so a run executing on another instance goes on to finish while its task reads `cancelled`.
+- With a `store` passed in `tasks`, the server cancels the run only while an attempt runs. To also cancel a run waiting for input, have the store's cancel and expiry check the task's context with `isWorkflowTaskContext()` and call `mastra.getWorkflow(context.workflowKey).createRun({ runId: context.runId })`, then `run.cancel()` on it.
 
 When the server running a workflow task stops, Mastra's [workflow recovery](/reference/core/mastra-class) continues the run on the next instance that starts, and the task follows it there. This needs `recovery.workflows` left at `'auto'`. With `'off'`, the task stays `working` until its TTL expires. The step that was running when the server stopped runs again, so keep steps safe to repeat. A task whose run was never saved, or whose follower stops a second time, ends `failed`.
 

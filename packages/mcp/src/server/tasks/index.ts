@@ -14,4 +14,7 @@ export type {
   MCPServerTaskMode,
   MCPServerTasksOptions,
   MCPServerToolTaskConfig,
+  MCPServerWorkflowTaskConfig,
 } from './config';
+export { isWorkflowTaskContext } from './workflow-runs';
+export type { WorkflowTaskContext } from './workflow-runs';

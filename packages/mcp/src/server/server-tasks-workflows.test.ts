@@ -168,7 +168,40 @@ function makeWorkflows(probe: Probe) {
     )
     .commit();
 
-  return { doubler, report, approval, opaque, boom, hang };
+  // Two questions in a row, each its own step.
+  const question = (id: string) =>
+    createStep({
+      id,
+      inputSchema: z.object({ answers: z.array(z.string()) }),
+      outputSchema: z.object({ answers: z.array(z.string()) }),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ answer: z.string() }),
+      execute: async ({ inputData, resumeData, suspend }) => {
+        if (!resumeData) return suspend({ message: `Answer ${id}` });
+        return { answers: [...inputData.answers, `${id}=${resumeData.answer}`] };
+      },
+    });
+  const interview = createWorkflow({
+    id: 'interview',
+    description: 'Asks two questions',
+    inputSchema: z.object({ answers: z.array(z.string()) }),
+    outputSchema: z.object({ answers: z.array(z.string()) }),
+  })
+    .then(question('ask1'))
+    .then(question('ask2'))
+    .commit();
+
+  // The same step asks again on each pass of a loop.
+  const poll = createWorkflow({
+    id: 'poll',
+    description: 'Asks the same question twice',
+    inputSchema: z.object({ answers: z.array(z.string()) }),
+    outputSchema: z.object({ answers: z.array(z.string()) }),
+  })
+    .dountil(question('vote'), async ({ inputData }) => inputData.answers.length >= 2)
+    .commit();
+
+  return { doubler, report, approval, opaque, boom, hang, interview, poll };
 }
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
@@ -324,6 +357,30 @@ describe.each([
       expect(JSON.parse(result.content[0].text)).toMatchObject({ status: 'success', result: { doubled: 42 } });
     });
 
+    it("answers an 'auto' run that fails within the window with isError, as its task would, unlike a client without tasks", async () => {
+      await start({ workflows: { boom: 'auto' } });
+      const { result } = await call('run_boom');
+      expect(result.resultType).not.toBe('task');
+      expect(result.isError).toBe(true);
+      expect(result.content[0].text).toContain("Workflow 'boom' failed: kaboom");
+      // Without the extension the plain run_ tool answers as it always has: the failed run as data.
+      const { result: plain } = await call('run_boom', {}, { tasks: false });
+      expect(plain.isError).toBe(false);
+      expect(JSON.parse(plain.content[0].text)).toMatchObject({ status: 'failed' });
+    });
+
+    it.each(['auto', 'always'] as const)(
+      "rejects invalid input to an '%s' workflow like the plain tool, without starting a run or task",
+      async mode => {
+        const { workflows } = await start({ workflows: { approval: mode } });
+        const { result } = await call('run_approval', { release: 42 });
+        expect(result.resultType).not.toBe('task');
+        expect(result.isError).toBe(true);
+        expect(result.content[0].text).toMatch(/release/);
+        expect((await workflows.approval.listWorkflowRuns()).total).toBe(0);
+      },
+    );
+
     it("continues an 'auto' workflow past its window as a task that completes with the run's result", async () => {
       const { probe, workflows } = await start({ workflows: { report: { mode: 'auto', syncWindowMs: 50 } } });
       const { result } = await call('run_report', { topic: 'tides' });
@@ -361,6 +418,63 @@ describe.each([
       // The run id stays server-side: a task id is unguessable, a run id is listable.
       expect(run.runId).not.toBe(result.taskId);
       expect(JSON.stringify(done)).not.toContain(run.runId);
+    });
+
+    it('asks the next question when an answer arrives for a step already resumed elsewhere', async () => {
+      const { workflows } = await start({ workflows: { interview: 'always' } });
+      const { result } = await call('run_interview', { answers: [] });
+      const tasks = await requester();
+      const first = await waitFor(tasks, result.taskId, 'input_required');
+      const [staleKey] = Object.keys(first.inputRequests ?? {});
+      // Someone answers ask1 in Studio, so the run moves on and suspends on ask2.
+      const { runs } = await workflows.interview.listWorkflowRuns();
+      const run = await workflows.interview.createRun({ runId: runs[0]!.runId });
+      await run.resume({ step: 'ask1', resumeData: { answer: 'studio' } });
+      expect((await onlyRun(workflows.interview)).status).toBe('suspended');
+
+      // The client's answer to ask1 is stale: the task asks ask2 instead of failing.
+      await tasks.update(result.taskId, { [staleKey!]: { action: 'accept', content: { answer: 'client' } } });
+      const second = await waitFor(tasks, result.taskId, 'input_required');
+      const [[key, request]] = Object.entries(second.inputRequests ?? {}) as [string, any][];
+      expect(key).not.toBe(staleKey);
+      expect(request.params.message).toBe('Answer ask2');
+      const waiting = await onlyRun(workflows.interview);
+      expect(waiting.status).toBe('suspended');
+      expect(waiting.steps.ask2).toMatchObject({ status: 'suspended' });
+
+      await tasks.update(result.taskId, { [key]: { action: 'accept', content: { answer: 'client' } } });
+      const done = await waitFor(tasks, result.taskId, 'completed');
+      expect(JSON.parse(text(done))).toMatchObject({
+        status: 'success',
+        result: { answers: ['ask1=studio', 'ask2=client'] },
+      });
+    });
+
+    it('asks again, rather than answering it, when the same step suspends again after a resume elsewhere', async () => {
+      const { workflows } = await start({ workflows: { poll: 'always' } });
+      const { result } = await call('run_poll', { answers: [] });
+      const tasks = await requester();
+      const first = await waitFor(tasks, result.taskId, 'input_required');
+      const [staleKey] = Object.keys(first.inputRequests ?? {});
+      const { runs } = await workflows.poll.listWorkflowRuns();
+      await (
+        await workflows.poll.createRun({ runId: runs[0]!.runId })
+      ).resume({
+        step: 'vote',
+        resumeData: { answer: 'studio' },
+      });
+      expect((await onlyRun(workflows.poll)).status).toBe('suspended');
+
+      await tasks.update(result.taskId, { [staleKey!]: { action: 'accept', content: { answer: 'stale' } } });
+      const second = await waitFor(tasks, result.taskId, 'input_required');
+      const [key] = Object.keys(second.inputRequests ?? {});
+      expect(key).not.toBe(staleKey);
+      await tasks.update(result.taskId, { [key!]: { action: 'accept', content: { answer: 'client' } } });
+      const done = await waitFor(tasks, result.taskId, 'completed');
+      expect(JSON.parse(text(done))).toMatchObject({
+        status: 'success',
+        result: { answers: ['vote=studio', 'vote=client'] },
+      });
     });
 
     it('completes with isError and cancels the run when the client declines', async () => {
@@ -501,5 +615,23 @@ describe.each([
     );
     expect(make({ workflows: { doubler: 'off' }, required: ['run_doubler'] })).toThrow(/not served as a task/);
     expect(make({ required: ['doubler'] })).toThrow(/not one of this server's tools/);
+  });
+
+  it('rejects task configs for a workflow or agent that a same-named tool hides', () => {
+    const probe = { prepared: 0, slowRuns: 0, aborted: [], modelCalls: 0, modelAborted: 0 };
+    const tool = createTool({ id: 'taken', description: 'Takes the name', execute: async () => 'tool' });
+    const make = (tasks: MCPServerConfig['tasks']) => () =>
+      new MCPServer({
+        name: 'Hidden',
+        version: '1.0.0',
+        tools: { run_doubler: tool, ask_researcher: tool },
+        workflows: makeWorkflows(probe),
+        agents: makeAgents(probe),
+        tasks,
+      });
+    expect(make({ workflows: { doubler: 'always' } })).toThrow(/hidden by the tool "run_doubler"/);
+    expect(make({ agents: { researcher: 'always' } })).toThrow(/hidden by the tool "ask_researcher"/);
+    // The tool itself can be a task.
+    expect(make({ tools: { run_doubler: 'always' } })).not.toThrow();
   });
 });

@@ -1,8 +1,12 @@
 import type { StepWithComponent, Workflow, WorkflowRunStatus } from '@mastra/core/workflows';
 
 /**
- * What a workflow task records at creation. The task follows the run `runId`, which the server
- * started exactly once when it created the task; nothing here can start it again.
+ * What a workflow task records at creation, as `MCPTaskCreateParams.context`. The task follows the
+ * run `runId`, which the server started exactly once when it created the task; nothing here can
+ * start it again. A custom `tasks.store` that cancels or expires a task waiting for input cancels
+ * its run with `mastra.getWorkflow(workflowKey).createRun({ runId })` then `run.cancel()`.
+ *
+ * @experimental SEP-2663 extension; API may change.
  */
 export interface WorkflowTaskContext extends Record<string, unknown> {
   toolName: string;
@@ -13,6 +17,11 @@ export interface WorkflowTaskContext extends Record<string, unknown> {
   requestContext: Record<string, unknown>;
 }
 
+/**
+ * Whether a task's context is a workflow task's.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
 export function isWorkflowTaskContext(context: Record<string, unknown> | undefined): context is WorkflowTaskContext {
   return context?.kind === 'workflow' && typeof context.runId === 'string' && typeof context.workflowKey === 'string';
 }
@@ -54,6 +63,8 @@ export interface SuspendedStep {
   step?: StepWithComponent;
   /** The payload the step suspended with, without the engine's bookkeeping. */
   payload: unknown;
+  /** When the step suspended; tells this suspension from a later one of the same step. */
+  suspendedAt?: number;
 }
 
 /**
@@ -62,15 +73,33 @@ export interface SuspendedStep {
  */
 export function firstSuspendedStep(workflow: Workflow, view: WorkflowRunView): SuspendedStep | undefined {
   for (const [stepId, raw] of Object.entries(view.steps ?? {})) {
-    const result = raw as { status?: unknown; suspendPayload?: Record<string, unknown> } | undefined;
+    const result = raw as
+      | { status?: unknown; suspendPayload?: Record<string, unknown>; suspendedAt?: number }
+      | undefined;
     if (result?.status !== 'suspended') continue;
     const { __workflow_meta: meta, ...payload } = result.suspendPayload ?? {};
     const nested = (meta as { path?: unknown } | undefined)?.path;
     // A nested workflow's suspension is reported on its parent step, with the path inside it.
     const path = [stepId, ...(Array.isArray(nested) ? nested.filter(part => typeof part === 'string') : [])];
-    return { path, step: stepAt(workflow, path), payload };
+    return { path, step: stepAt(workflow, path), payload, suspendedAt: result.suspendedAt };
   }
   return undefined;
+}
+
+/**
+ * Whether `answered` (recorded when the task asked) is still the run's current suspension. Another
+ * resume, from Studio or the API, moves the run on; a step that suspends again gets a new `suspendedAt`.
+ */
+export function isStillSuspended(view: WorkflowRunView, answered: AnsweredSuspension): boolean {
+  const result = view.steps?.[answered.step[0]!] as { status?: unknown; suspendedAt?: number } | undefined;
+  if (view.status !== 'suspended' || result?.status !== 'suspended') return false;
+  return answered.suspendedAt === undefined || result.suspendedAt === answered.suspendedAt;
+}
+
+/** What a workflow task keeps of the suspension it asked about, to resume exactly that one. */
+export interface AnsweredSuspension {
+  step: string[];
+  suspendedAt?: number;
 }
 
 /** Walks the workflow's step definitions along `path`, descending into nested workflows. */
