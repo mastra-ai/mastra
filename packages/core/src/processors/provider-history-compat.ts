@@ -931,7 +931,7 @@ function hasReasoningPart(message: MastraDBMessage): boolean {
  * Deliberately not "has any reasoning part" — a previous row that already paired its own
  * reasoning with its own text says nothing about the row after it, and treating it as cover
  * would leave a genuine orphan unrepaired. The retry would then hit the same 400, and
- * `processAPIError` bails at `retryCount > 0`, turning a recoverable turn into a hard failure.
+ * `processAPIError` stops after its second pass, turning a recoverable turn into a hard failure.
  */
 function isUnpairedReasoningRow(message: MastraDBMessage): boolean {
   const parts = message.content?.parts ?? [];
@@ -1347,7 +1347,11 @@ export class ProviderHistoryCompat implements Processor<'provider-history-compat
     messageList,
     retryCount,
   }: ProcessAPIErrorArgs): Promise<ProcessAPIErrorResult | void> {
-    if (retryCount > 0) return;
+    // Two passes, not one: a legacy history can need two repairs that raise the same error (an
+    // orphaned thinking step and an empty signed block), and only the first rule that changes
+    // history runs per pass. A pass retries only when a rule actually changed something, so
+    // the second pass is a no-op once nothing is left to repair.
+    if (retryCount > 1) return;
 
     const messages = messageList.get.all.db();
 

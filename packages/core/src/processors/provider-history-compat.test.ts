@@ -186,9 +186,9 @@ describe('ProviderHistoryCompat', () => {
     expect(result).toBeUndefined();
   });
 
-  it('should return undefined when retryCount > 0', async () => {
+  it('should return undefined once two repair passes have been spent (retryCount >= 2)', async () => {
     const handler = new ProviderHistoryCompat();
-    const args = makeArgs({ retryCount: 1 });
+    const args = makeArgs({ retryCount: 2 });
 
     const result = await handler.processAPIError(args);
 
@@ -2683,6 +2683,38 @@ describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
 
     expect(result).toEqual({ retry: true });
     expect(signatures(args.messageList)).toEqual([['VALID_EMPTY'], ['NEXT']]);
+  });
+
+  it('recovers a history that needs both the orphaned-step repair and the empty-signed strip, within a bounded second pass', async () => {
+    // One legacy thread can hold an orphaned thinking step and a corrupted empty signed block. They
+    // raise the same 400, only the first repair that changes history runs per pass, so the retry
+    // fails again and needs a second pass. The pass count stays bounded.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('LEGACY_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+    const compat = new ProviderHistoryCompat();
+
+    expect(await compat.processAPIError({ ...args, retryCount: 0 })).toEqual({ retry: true });
+    expect(await compat.processAPIError({ ...args, retryCount: 1 })).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([[], ['NEXT']]);
+    expect(await compat.processAPIError({ ...args, retryCount: 2 })).toBeUndefined();
   });
 
   it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
