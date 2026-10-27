@@ -5451,6 +5451,8 @@ export class DurableAgent<
     const topic = AGENT_STREAM_TOPIC(runId);
     let subscribed = true;
     let activityVersion = 0;
+    let bufferingReplay = true;
+    const bufferedEvents: Array<() => Promise<void>> = [];
 
     const deliver = (event: AgentStreamEvent) => {
       if (
@@ -5468,12 +5470,7 @@ export class DurableAgent<
       }
       onEvent(event);
     };
-    // Acks every delivery, dropped ones included, so a durable backend doesn't
-    // keep them pending.
-    const callback = withAck(event => {
-      if (!subscribed) return;
-      activityVersion++;
-      const streamEvent = event as unknown as AgentStreamEvent;
+    const filterEvent = (streamEvent: AgentStreamEvent) => {
       const filterGeneration = () => {
         const keep = keepGeneration(streamEvent);
         if (typeof keep === 'boolean') {
@@ -5490,12 +5487,31 @@ export class DurableAgent<
       return keepReplay.then(keep => {
         if (keep) return filterGeneration();
       });
-    });
+    };
+    // Replayed frames are held until attachment finishes and the claim history
+    // is refreshed; a claim can arrive partway through replay. Acknowledge only
+    // after filtering and delivery, including frames that are dropped.
+    const acknowledge = withAck(event => filterEvent(event as AgentStreamEvent));
+    const callback: ReturnType<typeof withAck> = (event, ...args) => {
+      if (!subscribed) return args[0]?.() ?? Promise.resolve();
+      activityVersion++;
+      if (bufferingReplay && event.index !== undefined) {
+        bufferedEvents.push(async () => {
+          await acknowledge(event, ...args);
+        });
+        return Promise.resolve();
+      }
+      return acknowledge(event, ...args);
+    };
 
     await (options.offset !== undefined
       ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
       : this.pubsub.subscribeWithReplay(topic, callback));
     await replayFloor.refreshReplayFilter?.();
+    while (bufferedEvents.length) {
+      await bufferedEvents.shift()!();
+    }
+    bufferingReplay = false;
 
     const unsubscribe = async () => {
       if (!subscribed) return;
