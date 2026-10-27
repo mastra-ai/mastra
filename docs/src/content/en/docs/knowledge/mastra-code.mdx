@@ -13,27 +13,35 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-Mastra Code can attach Knowledge to its agent with read, write, and pin tools on. Set `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1` to use a default instance on the session's storage.
+Knowledge is off in Mastra Code until you turn it on.
 
-To supply your own, pass `knowledge` when creating the harness. `key` is the name it's registered under on the Mastra runtime and defaults to `'default'`. `scopes` are the tags every run acts with:
+## Turn it on in the TUI
+
+Open `/settings`, turn on **Experimental Knowledge**, and restart Mastra Code. The code agent then gets the Knowledge tools (search, read, write, and pin) and pinned context every turn. Knowledge is stored with Mastra Code's own storage under a shared `org:local` scope.
+
+## Attach your own Knowledge
+
+When you embed Mastra Code, attach Knowledge the way you would on an agent, with `knowledge` and `scopes`:
 
 ```typescript
 const code = await createMastraCode({
-  knowledge: {
-    instance: companyKnowledge,
-    key: 'company',
-    scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }],
-  },
+  knowledge: companyKnowledge,
+  scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }],
 })
 ```
 
-Here every run reads `org:acme` and `team:acme:support` and writes only to `team:acme:support`. As everywhere else, a plain tag is read-only. See [read and write access](/docs/knowledge/concepts#read-and-write-access).
+Here every run reads `org:acme` and `team:acme:support` and writes only to `team:acme:support`. As everywhere else, a plain tag is read-only. See [read and write access](/docs/knowledge/concepts#read-and-write-access). The instance's own `tools` and `pinnedContext` options decide which tools the agent gets.
 
-Pass `knowledge: false` to turn Knowledge off, even when the environment variable is set.
+The instance is registered on the mounted Mastra runtime under its `id`. To register it under another key, pass `knowledge: { key: 'company', instance: companyKnowledge }`.
+
+The `knowledge` option also accepts:
+
+- `true`: the built-in Knowledge, the same one the TUI setting turns on. With no `scopes`, it writes to `org:local`.
+- `false`: Knowledge stays off, even when the TUI setting is on.
 
 ## Session scopes
 
-Local sessions run as `org:local` only when you pass no scopes. Factory sessions always add `org:<org>` and `project:<project>` tags. The tags Mastra Code adds are writable. The tags you pass keep the access you gave them.
+Local sessions act with the `scopes` you pass. Factory sessions always add writable `org:<org>` and `project:<project>` tags. The tags you pass keep the access you gave them.
 
 If a Factory session has no organization, or a tag in `scopes` has the same type as one of those but a different value, the agent runs with only its `resource:` and `thread:` tags. Its writes are private to the run, and the `/knowledge` inspector reports Knowledge as unavailable.
 
@@ -68,6 +76,6 @@ Scopes are set in process only. Remote callers, through the agent controller HTT
 
 ## Upgrading
 
-`experimental_subconscious` is removed. Attach Knowledge to the agent instead.
+`experimental_subconscious` and the Memory `knowledge` option are removed, and setting either throws. Attach Knowledge to the agent instead. The `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` environment variables do nothing.
 
 Scope entries changed shape. A plain tag used to be writable and is now read-only. Mark tags the run should write to as `{ scope, access: 'write' }`. The old `{ tag, access: 'read' }` form is gone, because a plain tag already means read-only.
