@@ -5412,11 +5412,12 @@ export class DurableAgent<
   }
 
   /**
-   * Subscribe to the raw events of a run's stream, for servers that forward
-   * them as they are. Unlike a plain subscription to the run's topic, it drops
-   * what an execution that lost the run still publishes and the marker
-   * announcing the takeover, so a client never sees either. Resolves once
-   * subscribed, with a function that unsubscribes.
+   * Subscribe to a run's raw AgentStreamEvents, filtering out events from
+   * executions that lost ownership and takeover markers. Callers must map
+   * these events to the public frame contract produced by stream-adapter.ts's
+   * createDurableAgentStream before sending them to clients; raw event
+   * envelopes are not public stream frames. Resolves once subscribed, with
+   * a function that unsubscribes.
    *
    * @internal
    */
