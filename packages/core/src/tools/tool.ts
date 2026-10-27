@@ -1,5 +1,6 @@
 import type { ToolBackgroundConfig } from '../background-tasks';
 import type { Mastra } from '../mastra';
+import { resolveCurrentSpan } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import { getRequestContextInputSource, REQUEST_CONTEXT_INPUT_SOURCE } from '../request-context/input-source';
 import { toStandardSchema } from '../schema';
@@ -589,12 +590,15 @@ export class Tool<
         }
 
         // Agent tool calls inject `observe` in the tool builder. Direct `tool.execute()` calls and
-        // `createStep(tool)` workflow steps do not, so default it here from the caller's span.
+        // `createStep(tool)` workflow steps do not, so default it here from the caller's span,
+        // falling back to the ambient span (e.g. a direct call from inside a traced workflow step).
         if (!organizedContext.observe) {
           organizedContext = {
             ...organizedContext,
             observe: createToolObserve(
-              organizedContext.tracingContext?.currentSpan ?? organizedContext.tracing?.currentSpan,
+              organizedContext.tracingContext?.currentSpan ??
+                organizedContext.tracing?.currentSpan ??
+                resolveCurrentSpan(),
             ),
           };
         }

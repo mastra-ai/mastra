@@ -1,6 +1,8 @@
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import type { AnySpan } from '../observability';
+import { initContextStorage } from '../observability/context-storage';
+import { executeWithContext } from '../observability/utils';
 import { RequestContext } from '../request-context';
 import { createStep, createWorkflow } from '../workflows';
 import { createTool } from './tool';
@@ -45,6 +47,25 @@ describe('tool observe outside agent execution', () => {
     expect(result).toEqual({ emphasized: 'HI' });
     expect(span.createChildSpan).toHaveBeenCalledWith(expect.objectContaining({ name: 'emphasize' }));
     expect(childSpan.end).toHaveBeenCalledWith({ output: 'HI' });
+  });
+
+  it('creates child spans from the ambient span when a traced caller omits tracingContext', async () => {
+    initContextStorage();
+    const tool = createObservingTool();
+    const childSpan = { end: vi.fn(), error: vi.fn(), executeInContext: vi.fn(async (fn: () => unknown) => fn()) };
+    const span = {
+      isValid: true,
+      observabilityInstance: { getLoggerContext: vi.fn(() => undefined) },
+      createChildSpan: vi.fn(() => childSpan),
+    } as unknown as AnySpan;
+
+    const result = await executeWithContext({
+      span,
+      fn: () => tool.execute({ text: 'hi' }, { requestContext: new RequestContext() }),
+    });
+
+    expect(result).toEqual({ emphasized: 'HI' });
+    expect(span.createChildSpan).toHaveBeenCalledWith(expect.objectContaining({ name: 'emphasize' }));
   });
 
   it('provides observe when the tool runs as a createStep(tool) workflow step', async () => {
