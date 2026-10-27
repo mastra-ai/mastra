@@ -35,6 +35,9 @@ export type TracesListViewTrace = {
   threadId?: string | null;
   resourceId?: string | null;
   environment?: string | null;
+  /** Model and provider of a model span; only span rows carry them. */
+  model?: string | null;
+  provider?: string | null;
   status?: string | null;
   /** Server-rendered preview of `input`. Present on lightweight rows, which omit `input` itself. */
   inputPreview?: string | null;
@@ -196,6 +199,8 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'environment') && (
           <TracesDataList.TopCell>Environment</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'model') && <TracesDataList.TopCell>Model</TracesDataList.TopCell>}
+        {hasTraceColumn(columnPreferences, 'provider') && <TracesDataList.TopCell>Provider</TracesDataList.TopCell>}
         {hasTraceColumn(columnPreferences, 'inputTokens') && (
           <TracesDataList.TopCell className="justify-end text-right">Input tokens</TracesDataList.TopCell>
         )}
@@ -310,6 +315,12 @@ export function TracesListView({
                 )}
                 {hasTraceColumn(columnPreferences, 'environment') && (
                   <DataList.TextCell>{trace.environment || '—'}</DataList.TextCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'model') && (
+                  <DataList.TextCell>{trace.model || '—'}</DataList.TextCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'provider') && (
+                  <DataList.TextCell>{trace.provider || '—'}</DataList.TextCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'inputTokens') && (
                   <DataList.NumberCell>

@@ -125,8 +125,8 @@ export const useTracesListFetching = () => {
 };
 export const useTracesColumns = () => useRequired(TracesColumnsContext, 'useTracesColumns');
 
-const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
-const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
+export const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
+export const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
 
 export type TraceUsageColumns = {
   /** Column preferences with the usage columns removed when the store can't serve them. */
