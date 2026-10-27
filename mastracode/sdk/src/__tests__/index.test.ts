@@ -180,6 +180,7 @@ function createMockSettings() {
       experimentalGithubSignals: false,
       experimentalCrossAgentSignals: false,
       experimentalScheduleTools: false,
+      experimentalKnowledge: false,
       githubPollIntervalMs: 300_000,
     },
     mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -939,13 +940,14 @@ describe('createMastraCode', () => {
     expect(createKnowledgeInspectorMock).toHaveBeenCalledWith(expect.objectContaining({ knowledge: instance }));
   });
 
-  it("gives the code agent the host's knowledge scopes plus the local default only when none are shared", async () => {
+  it("gives the code agent the host's scopes, plus the Factory session's org and project", async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const { RequestContext } = await import('@mastra/core/request-context');
     const { createMastraCode } = await import('../index.js');
     const instance = new Knowledge({ id: 'mastra' });
     await createMastraCode({
-      knowledge: { key: 'scoped', instance, scopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'] },
+      knowledge: instance,
+      scopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'],
     });
     const context = new RequestContext([['controller', { state: {} }]]);
     expect(codeAgentConfig().knowledge).toBe(instance);
@@ -957,9 +959,11 @@ describe('createMastraCode', () => {
       expect.objectContaining({ hostScopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'] }),
     );
 
-    await createMastraCode({ knowledge: { key: 'plain', instance: new Knowledge({ id: 'plain' }) } });
+    expect(mastraStub.addKnowledge).toHaveBeenLastCalledWith(instance, 'mastra');
+
+    await createMastraCode({ knowledge: new Knowledge({ id: 'plain' }) });
     const plainScopes = codeAgentConfig().scopes;
-    expect(await plainScopes({ requestContext: context })).toEqual([{ scope: 'org:local', access: 'write' }]);
+    expect(await plainScopes({ requestContext: context })).toEqual([]);
     const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
     expect(await plainScopes({ requestContext: factory })).toEqual([
       { scope: 'org:o', access: 'write' },
@@ -980,7 +984,8 @@ describe('createMastraCode', () => {
     ];
     for (const [index, { host, state }] of cases.entries()) {
       await createMastraCode({
-        knowledge: { key: `unresolved-${index}`, instance: new Knowledge({ id: 'mastra' }), scopes: host },
+        knowledge: { key: `unresolved-${index}`, instance: new Knowledge({ id: 'mastra' }) },
+        scopes: host,
       });
       const context = new RequestContext([['controller', { state }]]);
       expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual(
@@ -992,21 +997,49 @@ describe('createMastraCode', () => {
     }
   });
 
-  it('attaches the flag-enabled default Knowledge with read, write and pin tools, and knowledge: false turns it off', async () => {
+  it('attaches the built-in Knowledge from the /settings toggle, writing to org:local, and knowledge: false overrides it', async () => {
+    const { RequestContext } = await import('@mastra/core/request-context');
+    loadSettingsMock.mockReturnValue({
+      ...createMockSettings(),
+      signals: { ...createMockSettings().signals, experimentalKnowledge: true },
+    });
+    const { createMastraCode } = await import('../index.js');
+    const on = await createMastraCode();
+    const tools = Object.keys(on.knowledge!.createTools());
+    expect(tools).toEqual(
+      expect.arrayContaining([
+        'knowledge_search',
+        'knowledge_read',
+        'knowledge_record',
+        'knowledge_node',
+        'knowledge_pin',
+      ]),
+    );
+    expect(on.knowledge!.pinnedContextEnabled).toBe(true);
+    expect(codeAgentConfig().knowledge).toBe(on.knowledge);
+    const context = new RequestContext([['controller', { state: {} }]]);
+    expect(await codeAgentConfig().scopes({ requestContext: context })).toEqual([
+      { scope: 'org:local', access: 'write' },
+    ]);
+
+    const off = await createMastraCode({ knowledge: false });
+    expect(off.knowledge).toBeUndefined();
+    expect(codeAgentConfig()).not.toHaveProperty('knowledge');
+  });
+
+  it('leaves Knowledge off by default and ignores the old environment flags', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '1');
+    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
     try {
       const { createMastraCode } = await import('../index.js');
-      const on = await createMastraCode();
-      const tools = Object.keys(on.knowledge!.createTools());
-      expect(tools).toEqual(expect.arrayContaining(['knowledge_search', 'knowledge_record', 'knowledge_pin']));
-      expect(on.knowledge!.pinnedContextEnabled).toBe(true);
-      expect(codeAgentConfig().knowledge).toBe(on.knowledge);
-
-      const off = await createMastraCode({ knowledge: false });
-      expect(off.knowledge).toBeUndefined();
+      const code = await createMastraCode();
+      expect(code.knowledge).toBeUndefined();
       expect(codeAgentConfig()).not.toHaveProperty('knowledge');
+      expect(warn.mock.calls.some(([message]) => String(message).includes('MASTRACODE_EXPERIMENTAL'))).toBe(false);
     } finally {
       vi.unstubAllEnvs();
+      warn.mockRestore();
     }
   });
 
@@ -1040,60 +1073,15 @@ describe('createMastraCode', () => {
     ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
-  it('warns once at startup that the removed Subconscious flag does nothing, naming the Knowledge flag', async () => {
-    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', '1');
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
-    try {
-      const { createMastraCode } = await import('../index.js');
-      const code = await createMastraCode();
-
-      const flagWarnings = warn.mock.calls.filter(([message]) =>
-        String(message).includes('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS'),
-      );
-      expect(flagWarnings).toEqual([
-        [
-          'MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS no longer does anything: Subconscious was removed. Set MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1 to turn on Knowledge.',
-        ],
-      ]);
-      // The old flag is no alias: Knowledge stays off.
-      expect(code.knowledge).toBeUndefined();
-    } finally {
-      vi.unstubAllEnvs();
-      warn.mockRestore();
-    }
-  });
-
-  it.each(['', '0'])(
-    'says nothing about the Subconscious flag when it is %j, which never turned it on',
-    async value => {
-      const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
-      vi.stubEnv('MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS', value);
-      try {
-        const { createMastraCode } = await import('../index.js');
-        await createMastraCode();
-        expect(warn.mock.calls.some(([message]) => String(message).includes('SUBCONSCIOUS'))).toBe(false);
-      } finally {
-        vi.unstubAllEnvs();
-        warn.mockRestore();
-      }
-    },
-  );
-
   it('does not touch Knowledge storage at startup when Knowledge is off', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
-    try {
-      const { createMastraCode } = await import('../index.js');
+    const { createMastraCode } = await import('../index.js');
 
-      const code = await createMastraCode();
+    const code = await createMastraCode();
 
-      expect(code.knowledge).toBeUndefined();
-      expect(createKnowledgeInspectorMock).not.toHaveBeenCalled();
-      expect(code.knowledgeInspector).toBeUndefined();
-      expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1');
-    } finally {
-      vi.unstubAllEnvs();
-    }
+    expect(code.knowledge).toBeUndefined();
+    expect(createKnowledgeInspectorMock).not.toHaveBeenCalled();
+    expect(code.knowledgeInspector).toBeUndefined();
+    expect(code.knowledgeInspectorUnavailableReason).toContain('/settings');
   });
 
   it('starts with an unavailable reason when Knowledge storage cannot be opened', async () => {

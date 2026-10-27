@@ -1,6 +1,8 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-const mocks = vi.hoisted(() => ({ showModalOverlay: vi.fn() }));
+const mocks = vi.hoisted(() => ({ showModalOverlay: vi.fn(), knowledgeOn: false }));
+
+vi.mock('../utils/experimental-features.js', () => ({ isKnowledgeEnabled: () => mocks.knowledgeOn }));
 
 vi.mock('../overlay.js', () => ({ showModalOverlay: mocks.showModalOverlay }));
 vi.mock('../components/knowledge-browser.js', () => ({
@@ -14,11 +16,11 @@ import { handleKnowledgeCommand } from './knowledge-command.js';
 
 describe('handleKnowledgeCommand', () => {
   beforeEach(() => {
-    delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
+    mocks.knowledgeOn = false;
   });
 
   afterEach(() => {
-    delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
+    mocks.knowledgeOn = false;
     mocks.showModalOverlay.mockClear();
   });
 
@@ -30,17 +32,17 @@ describe('handleKnowledgeCommand', () => {
   });
 
   it('shows one actionable error when the inspector is unavailable', async () => {
-    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
+    mocks.knowledgeOn = true;
     const showError = vi.fn();
     await handleKnowledgeCommand({ showError } as any);
     expect(showError).toHaveBeenCalledWith(
-      'Knowledge inspection is unavailable. Restart Mastra Code with MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1.',
+      'Knowledge inspection is unavailable. Turn on Experimental Knowledge in /settings and restart Mastra Code.',
     );
     expect(mocks.showModalOverlay).not.toHaveBeenCalled();
   });
 
   it('shows the reason startup reported when Knowledge could not be opened', async () => {
-    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
+    mocks.knowledgeOn = true;
     const showError = vi.fn();
     const reason = 'Knowledge is unavailable: Knowledge schema reset required: Missing Knowledge v2 tables.';
     await handleKnowledgeCommand({ showError, knowledgeInspectorUnavailableReason: reason } as any);
@@ -49,7 +51,7 @@ describe('handleKnowledgeCommand', () => {
   });
 
   it('passes the session-scoped inspector to the browser without resolving storage', () => {
-    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
+    mocks.knowledgeOn = true;
     const knowledgeInspector = {};
     const promise = handleKnowledgeCommand({
       knowledgeInspector,

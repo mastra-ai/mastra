@@ -2,7 +2,7 @@ import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { MastraCodeState } from './schema.js';
 
 /**
- * The org tag local (TUI/studio) Knowledge is written under when the caller gives no tags. A
+ * The org tag the built-in (`knowledge: true`) Knowledge writes under when the host gives no scopes. A
  * fixed literal on purpose: deriving it from a hostname, machine id or path would fragment local
  * Knowledge per machine or checkout, so several machines sharing one store could never share it.
  */
@@ -32,8 +32,7 @@ function isIdentityTag(tag: string): boolean {
  * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, so projects stay
  *   isolated. A host tag of the same type with another value is refused. A Factory session with
  *   no org resolves to nothing (fail closed): a session owner is a user id, never an org.
- * - Local sessions get `org:local` only when the host gives no tags besides `resource:`/`thread:`.
- *   Any host tag (`org:self`, `team:self:x`) turns the default off.
+ * - Local sessions act with the host's scopes as given.
  */
 export function resolveKnowledgeSessionScopes(
   state: MastraCodeState | undefined,
@@ -58,8 +57,7 @@ export function resolveKnowledgeSessionScopes(
     return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag)).map(writable)] };
   }
 
-  if (hostScopes.some(entry => !isIdentityTag(tagOf(entry)))) return { resolved: true, scopes: [...hostScopes] };
-  return { resolved: true, scopes: [...hostScopes, writable(`org:${LOCAL_KNOWLEDGE_ORG_ID}`)] };
+  return { resolved: true, scopes: [...hostScopes] };
 }
 
 /**
