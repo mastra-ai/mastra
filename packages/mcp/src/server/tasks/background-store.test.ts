@@ -155,6 +155,56 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.close();
   });
 
+  it('drops an answer whose suspension ended before it was written, instead of storing it on the next one', async () => {
+    const work: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { first: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, storage, manager } = await setup(work);
+    const access = { principal: 'alice' };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+    store.run(task.taskId, work);
+    await until(
+      () => store.get(task.taskId, access),
+      t => t?.status === 'input_required',
+    );
+
+    // Between this update's read and its write, the tool resumes and suspends again asking `second`.
+    const update = storage.updateTask.bind(storage);
+    const writes: boolean[] = [];
+    vi.spyOn(storage, 'updateTask').mockImplementation(async (id, change, options) => {
+      if ('metadata' in change && writes.length === 0) {
+        const row = (await storage.getTask(id))!;
+        await update(id, {
+          suspendedAt: new Date(row.suspendedAt!.getTime() + 1000),
+          metadata: {
+            ...row.metadata,
+            inputRequests: { second: { method: 'elicitation/create', params: {} } },
+            inputResponses: {},
+            usedInputKeys: ['first', 'second'],
+          },
+        });
+      }
+      const written = await update(id, change, options);
+      if ('metadata' in change) writes.push(written);
+      return written;
+    });
+
+    // `first` is no longer open once the write is refused, so the answer is ignored rather than retried.
+    expect(await store.update(task.taskId, { first: { action: 'accept', content: { stale: true } } }, access)).toBe(
+      true,
+    );
+    expect(writes).toEqual([false]);
+    const row = await rowOf(manager);
+    expect(row).toMatchObject({ status: 'suspended' });
+    expect(row.metadata).toMatchObject({ inputRequests: { second: {} }, inputResponses: {} });
+    expect(await store.get(task.taskId, access)).toMatchObject({
+      status: 'input_required',
+      inputRequests: { second: {} },
+    });
+    store.close();
+  });
+
   async function rowOf(manager: NonNullable<Mastra['backgroundTaskManager']>) {
     const { tasks } = await manager.listTasks({ agentId: 'mcp-server:s' });
     return tasks[0]!;

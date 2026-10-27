@@ -306,9 +306,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     ]);
   });
 
-  // Fails until core can fence a write on the suspension it read (daniel/mcp-tasks-3b3-suspended-at-fence):
-  // a write is fenced only on status 'suspended', which a later suspension of the same row also has.
-  it.fails('ignores an answer to a question the task already moved past', async () => {
+  it('ignores an answer to a question the task already moved past', async () => {
     const tools = { tools: { approveTwice: 'always' as const } };
     const a = await instance(tools);
     const b = await instance(tools);

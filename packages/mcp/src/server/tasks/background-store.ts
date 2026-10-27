@@ -357,7 +357,9 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       const written = await storage.updateTask(
         row.id,
         { metadata: next as unknown as Record<string, unknown> },
-        { expectedStatus: 'suspended' },
+        // Fenced on the suspension these answers are for: once the tool resumes and asks again,
+        // the row is suspended anew, and this write must not land on the new questions.
+        { expectedStatus: 'suspended', expectedSuspendedAt: row.suspendedAt ?? null },
       );
       const reread = await storage.getTask(row.id);
       const rereadEnvelope = reread && envelopeOf(reread);
