@@ -113,6 +113,7 @@ describe('the new session page', () => {
     await waitFor(() =>
       expect(route.createBodies).toEqual([{ sessionId: DRAFT_SESSION_ID, title: shown, visibility: 'private' }]),
     );
+    await waitFor(() => expect(route.posted).toEqual([shown]));
     route.finishWorkspace();
     await waitForMutationsIdle(client);
   });
