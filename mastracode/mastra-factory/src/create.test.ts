@@ -126,7 +126,7 @@ afterEach(() => {
 });
 
 describe('create --no-platform', () => {
-  it('scaffolds a project with a verbatim .env and shows the next steps', async () => {
+  it('scaffolds a project with a generated encryption key in .env and shows the next steps', async () => {
     await create({
       projectName: 'my-factory',
       template: TEMPLATE_REPO,
@@ -137,12 +137,16 @@ describe('create --no-platform', () => {
     const projectPath = path.join(workDir, 'my-factory');
     const env = fs.readFileSync(path.join(projectPath, '.env'), 'utf8');
 
-    // With --no-platform, .env stays a verbatim copy of .env.example — the
-    // CLI writes no values. Everything stays a commented placeholder (an
+    // With --no-platform the CLI writes only a generated credential
+    // encryption key; everything else stays a commented placeholder (an
     // active `KEY=` would load as the empty string and poison
     // `process.env.X ?? default` fallbacks).
-    expect(env).toBe(ENV_EXAMPLE);
-    expect(env).not.toMatch(/^[A-Z][A-Z0-9_]*=/m);
+    const key = /^FACTORY_CREDENTIAL_ENCRYPTION_KEY=(.+)$/m.exec(env)?.[1];
+    expect(Buffer.from(key!, 'base64')).toHaveLength(32);
+    expect(env).toBe(
+      ENV_EXAMPLE.replace('# FACTORY_CREDENTIAL_ENCRYPTION_KEY=', `FACTORY_CREDENTIAL_ENCRYPTION_KEY=${key}`),
+    );
+    expect(env.match(/^[A-Z][A-Z0-9_]*=/gm)).toEqual(['FACTORY_CREDENTIAL_ENCRYPTION_KEY=']);
 
     // Project renamed and installed.
     const pkg = JSON.parse(fs.readFileSync(path.join(projectPath, 'package.json'), 'utf8'));
@@ -232,6 +236,32 @@ describe('create template selection', () => {
 
     expect(degitRepo()).toBe('mastra-ai/template-factory-self-hosted');
     expect(cliAuth.getToken).not.toHaveBeenCalled();
+  });
+
+  it('generates a different encryption key for each project', async () => {
+    await create({ projectName: 'factory-a', noPlatform: true, analytics });
+    await create({ projectName: 'factory-b', noPlatform: true, analytics });
+
+    const keyOf = (name: string) =>
+      /^FACTORY_CREDENTIAL_ENCRYPTION_KEY=(.+)$/m.exec(fs.readFileSync(path.join(workDir, name, '.env'), 'utf8'))?.[1];
+    expect(keyOf('factory-a')).toBeTruthy();
+    expect(keyOf('factory-a')).not.toBe(keyOf('factory-b'));
+  });
+
+  it('keeps an encryption key the template already sets', async () => {
+    fs.writeFileSync(path.join(templateDir, '.env.example'), 'FACTORY_CREDENTIAL_ENCRYPTION_KEY=preset\n');
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8')).toBe(
+      'FACTORY_CREDENTIAL_ENCRYPTION_KEY=preset\n',
+    );
+  });
+
+  it('adds no encryption key when the template does not declare one', async () => {
+    fs.writeFileSync(path.join(templateDir, '.env.example'), '# OPENAI_API_KEY=\n');
+    await create({ projectName: 'my-factory', noPlatform: true, analytics });
+
+    expect(fs.readFileSync(path.join(workDir, 'my-factory', '.env'), 'utf8')).toBe('# OPENAI_API_KEY=\n');
   });
 
   it('uses an explicit --template over the --no-platform default', async () => {

@@ -1,3 +1,4 @@
+import { randomBytes } from 'node:crypto';
 import fs from 'node:fs';
 import path from 'node:path';
 import * as p from '@clack/prompts';
@@ -122,6 +123,7 @@ export async function create(args: CreateArgs): Promise<void> {
     } catch {
       // Best-effort on Unix; no-op or unsupported on Windows.
     }
+    seedCredentialEncryptionKey(envPath);
     spinner.stop('Template downloaded.');
   } catch (err) {
     spinner.stop('Template download failed.');
@@ -425,6 +427,18 @@ function sanitizeDatabaseName(projectName: string): string {
   const cleaned = projectName.replace(/[^a-zA-Z0-9_-]/g, '-').replace(/^-+|-+$/g, '');
   const truncated = (cleaned || 'factory').slice(0, 64);
   return truncated;
+}
+
+/**
+ * Fill the template's empty `FACTORY_CREDENTIAL_ENCRYPTION_KEY` placeholder
+ * with a fresh AES-256 key so stored credentials are encrypted from the first
+ * boot. Templates that don't declare the key, or that already set one, are
+ * left alone.
+ */
+function seedCredentialEncryptionKey(envPath: string): void {
+  const env = fs.readFileSync(envPath, 'utf8');
+  if (!/^\s*(#\s*)?FACTORY_CREDENTIAL_ENCRYPTION_KEY\s*=\s*$/m.test(env)) return;
+  upsertEnvFile(envPath, { FACTORY_CREDENTIAL_ENCRYPTION_KEY: randomBytes(32).toString('base64') });
 }
 
 /**
