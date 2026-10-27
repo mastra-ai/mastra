@@ -310,7 +310,7 @@ const sandbox = new LocalSandbox({
 When isolation is enabled:
 
 - File writes are restricted to the workspace directory, `readWritePaths`, and temporary locations. On macOS (seatbelt), writes are also allowed under `/private/tmp`, `/var/folders`, and `/private/var/folders`. On Linux (bubblewrap), `/tmp` is a private in-sandbox tmpfs that isn't written to the host.
-- File reads depend on the backend. On macOS (seatbelt), reads are allowed everywhere (needed for system binaries). On Linux (bubblewrap), the generated policy exposes only selected system paths (such as `/usr`, `/lib`, `/bin`, and essential `/etc` files), `readOnlyPaths`, `readWritePaths`, and the workspace. When `allowSystemBinaries` isn't `false`, the Node.js directory, `/opt`, and `/snap` are also visible. Other host paths aren't accessible. If you set `bwrapArgs`, it replaces the generated policy, so your arguments alone determine what is visible.
+- File reads depend on the backend. On macOS (seatbelt), reads are allowed everywhere (needed for system binaries). On Linux (bubblewrap), the generated policy exposes only selected system paths (such as `/usr`, `/lib`, `/bin`, and essential `/etc` files), `readOnlyPaths`, `readWritePaths`, and the workspace. When `allowSystemBinaries` isn't `false`, the Node.js directory, `/opt`, and `/snap` are also visible. Other host paths aren't accessible. If you set `bwrapArgs`, it replaces the generated policy, so your arguments alone determine what's visible.
 - Network access is blocked by default
 - Process isolation prevents affecting the host system
 
