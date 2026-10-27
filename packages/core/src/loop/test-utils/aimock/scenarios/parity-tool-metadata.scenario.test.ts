@@ -319,8 +319,7 @@ describeForAllEngines('tool-result provider metadata in public streams', engine 
 
     expect(await output.text).toBe('Done.');
     expect(requests).toHaveLength(2);
-    expect(mapperInputs.length).toBeGreaterThan(0);
-    for (const input of mapperInputs) expect(input).toEqual({ n: 1, secret: 'raw' });
+    expect(mapperInputs).toEqual([{ n: 1, secret: 'raw' }]);
     const toolMessage = requests[1]!.body?.messages.find(message => message.role === 'tool');
     expect(JSON.stringify(toolMessage)).toContain('mapped:1');
     expect(JSON.stringify(toolMessage)).not.toContain('"secret"');
