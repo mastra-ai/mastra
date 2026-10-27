@@ -563,6 +563,8 @@ With no constructor options, the integration reads `GITLAB_ACCESS_TOKEN`, `GITLA
 
 `GITLAB_BASE_URL` must use HTTPS. Plain HTTP is accepted only for loopback development instances (`localhost`, `127.0.0.0/8`, or `::1`), where the access token is sent without transport encryption.
 
+Linking a GitLab repository imports its open issues and merge requests (up to five pages each). Without a webhook, later items are discovered when their lists are requested, and changed merge-request heads are recorded when the merge-request list is requested. Existing cards can still be reconciled. For ongoing issue changes, comments, and merge-request lifecycle events, configure the direct project webhook with `GITLAB_WEBHOOK_SECRET`.
+
 For a Mastra Platform/Nango connection, use `PlatformGitLabIntegration`. `MastraFactory` installs it automatically whenever Platform credentials are configured and no integration with id `gitlab` was supplied. It discovers every active connection of the organization on the Platform's `gitlab` (OAuth) integration, proxies provider requests through `/v2/connections/{connectionId}/proxy`, and polls the Platform event log for GitLab events. `MASTRA_GITLAB_CONNECTION_ID` (or the `connectionId` constructor option) is optional and only narrows discovery to one connection. An explicit integration with id `gitlab` takes precedence.
 
 ```typescript

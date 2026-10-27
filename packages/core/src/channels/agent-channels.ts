@@ -484,7 +484,8 @@ export class AgentChannels {
       });
 
       // Register handlers with optional overrides
-      const { onDirectMessage, onMention, onSubscribedMessage, onSlashCommand, onAction } = this.handlerOverrides;
+      const { onDirectMessage, onMention, onMessage, onSubscribedMessage, onSlashCommand, onAction } =
+        this.handlerOverrides;
 
       // Per-message dispatch scope. The request context and the handler context
       // MUST be built per message, never once at initialize() time: a custom
@@ -494,11 +495,24 @@ export class AgentChannels {
       // when the Chat SDK batched the dispatch under a `burst`/`debounce`/`queue`
       // concurrency strategy; `batchIds` covers the whole batch so a first
       // mention never re-fetches batched messages as thread history.
-      const beginMessage = (skipped: readonly Message[] = [], batchIds?: ReadonlySet<string>) => {
+      const beginMessage = (
+        skipped: readonly Message[] = [],
+        batchIds?: ReadonlySet<string>,
+        eventType?: ChannelContext['eventType'],
+      ) => {
         const requestContext = new RequestContext();
         const signalMetadata: Record<string, unknown> = {};
         const defaultHandler = (chatThread: Thread, message: Message) =>
-          this.handleChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+          this.handleChatMessage(
+            chatThread,
+            message,
+            mastra,
+            requestContext,
+            signalMetadata,
+            skipped,
+            batchIds,
+            eventType,
+          );
         // Context handed to custom handlers so they can reach the resolved Mastra
         // instance without being injected with an external accessor, and
         // contribute to the request context the run will dispatch with.
@@ -516,6 +530,7 @@ export class AgentChannels {
         message: Message,
         skipped: readonly Message[] | undefined,
         handler: ChannelHandlerConfig,
+        route: 'direct' | 'mention' | 'subscribed' | 'message',
       ) => {
         const all = [...(skipped ?? []), message];
         const batchIds = new Set(all.map(m => m.id));
@@ -529,9 +544,27 @@ export class AgentChannels {
         let failure: { err: unknown } | undefined;
         for (const run of runs) {
           const runMessage = run[run.length - 1]!;
-          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds);
+          let runHandler = handler;
+          let runEventType: ChannelContext['eventType'] = thread.isDM || route === 'message' ? 'message' : 'mention';
+          // The SDK selects one handler for the whole batch if any message is
+          // a mention. Preserve DM/subscription precedence, but when onMessage
+          // is opted in, route each new sender run independently so unmentioned
+          // messages go through its filter. Without onMessage, unmentioned runs
+          // keep reaching the batch's handler as before.
+          if (!thread.isDM && (route === 'mention' || route === 'message')) {
+            if (run.some(m => m.isMention)) {
+              if (onMention === false) continue;
+              runHandler = onMention;
+              runEventType = 'mention';
+            } else if (typeof onMessage === 'function') {
+              runHandler = onMessage;
+              runEventType = 'message';
+            }
+          }
+          if (runHandler === false) continue;
+          const { defaultHandler, handlerContext } = beginMessage(run.slice(0, -1), batchIds, runEventType);
           try {
-            if (typeof handler === 'function') await handler(thread, runMessage, defaultHandler, handlerContext);
+            if (typeof runHandler === 'function') await runHandler(thread, runMessage, defaultHandler, handlerContext);
             else await defaultHandler(thread, runMessage);
           } catch (err) {
             // A host handler that throws for one sender must not silence later
@@ -560,17 +593,29 @@ export class AgentChannels {
 
       if (onDirectMessage !== false) {
         chat.onDirectMessage((thread, message, _channel, context) =>
-          dispatchBatch(thread, message, context?.skipped, onDirectMessage),
+          dispatchBatch(thread, message, context?.skipped, onDirectMessage, 'direct'),
         );
       }
 
-      if (onMention !== false) {
-        chat.onNewMention((thread, message, context) => dispatchBatch(thread, message, context?.skipped, onMention));
+      // With onMention disabled, still register the mention route when onMessage
+      // is opted in: the SDK sends a batch ending in a mention there and skips
+      // the catch-all, so its unmentioned sender runs would otherwise be lost.
+      // Per-run routing above drops the disabled runs.
+      if (onMention !== false || typeof onMessage === 'function') {
+        chat.onNewMention((thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMention, 'mention'),
+        );
       }
 
       if (onSubscribedMessage !== false) {
         chat.onSubscribedMessage((thread, message, context) =>
-          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage),
+          dispatchBatch(thread, message, context?.skipped, onSubscribedMessage, 'subscribed'),
+        );
+      }
+
+      if (typeof onMessage === 'function') {
+        chat.onNewMessage(/[\s\S]*/, (thread, message, context) =>
+          dispatchBatch(thread, message, context?.skipped, onMessage, 'message'),
         );
       }
 
@@ -729,7 +774,7 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (!requesterId && authors.size > 1) {
+                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
                           this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                           return;
                         }
@@ -750,7 +795,7 @@ export class AgentChannels {
               // Only the user whose message triggered the tool call may answer
               // its approval card. Skip the check when either identity is unknown.
               const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
+              if (adapterConfig?.toolApprovers !== 'anyone' && requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,
@@ -1316,9 +1361,19 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown>,
     skipped: readonly Message[] = [],
     batchIds?: ReadonlySet<string>,
+    eventType?: ChannelContext['eventType'],
   ): Promise<void> {
     try {
-      await this.processChatMessage(chatThread, message, mastra, requestContext, signalMetadata, skipped, batchIds);
+      await this.processChatMessage(
+        chatThread,
+        message,
+        mastra,
+        requestContext,
+        signalMetadata,
+        skipped,
+        batchIds,
+        eventType,
+      );
     } catch (err) {
       await this.handleRunError(chatThread, message, err);
     }
@@ -1385,6 +1440,7 @@ export class AgentChannels {
     signalMetadata: Record<string, unknown> = {},
     skipped: readonly Message[] = [],
     historyExcludeIds: ReadonlySet<string> = new Set([...skipped, message].map(m => m.id)),
+    eventType: ChannelContext['eventType'] = chatThread.isDM ? 'message' : 'mention',
   ): Promise<void> {
     const platform = chatThread.adapter.name;
     // Messages batched by a concurrency strategy, oldest first, then the current one.
@@ -1567,7 +1623,7 @@ export class AgentChannels {
     const { channelContext, attributes, providerOptions } = await this.buildEventContext({
       chatThread,
       platform,
-      eventType: chatThread.isDM ? 'message' : 'mention',
+      eventType,
       messageId: message.id,
       actor: message.author,
     });

@@ -9,15 +9,15 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "glm-4.6v": [
+      {
+        "type": "toggle"
+      }
+    ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "glm-4.6v": [
-      {
-        "type": "toggle"
       }
     ],
     "glm-5.3": [

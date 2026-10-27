@@ -106,6 +106,9 @@ export interface ChannelAdapterBaseConfig {
    */
   approvalButtons?: boolean;
 
+  /** Who may approve or deny a tool call in a shared channel. Defaults to the requester. */
+  toolApprovers?: 'requester' | 'anyone';
+
   /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).
@@ -549,6 +552,13 @@ export interface ChannelHandlers {
    * Default: Routes to agent.stream and posts the response.
    */
   onMention?: ChannelHandlerConfig;
+
+  /**
+   * Handler for messages that neither mention the bot nor belong to a subscribed thread.
+   * Opt-in: registered only when a function is supplied; omitted or false ignores these messages.
+   * Calling defaultHandler runs the agent, posts the response, and subscribes the thread.
+   */
+  onMessage?: ChannelHandlerConfig;
 
   /**
    * Handler for messages in subscribed threads.

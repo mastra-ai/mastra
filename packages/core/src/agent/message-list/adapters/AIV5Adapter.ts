@@ -920,35 +920,33 @@ export class AIV5Adapter {
 
     if (data instanceof URL) {
       return data.toString();
-    } else {
-      if (data instanceof Buffer) {
-        const base64 = data.toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (typeof data === 'string') {
-        // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
-        // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
-        // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
-        // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
-        // attachment that can't be downloaded.
-        if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
-          return data;
-        }
-        return `data:${mimeType};base64,${data}`;
-      } else if (data instanceof Uint8Array) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else if (data instanceof ArrayBuffer) {
-        const base64 = Buffer.from(data).toString('base64');
-        return `data:${mimeType};base64,${base64}`;
-      } else {
-        throw new MastraError({
-          id: 'MASTRA_AIV5_DATA_PART_INVALID',
-          domain: ErrorDomain.AGENT,
-          category: ErrorCategory.USER,
-          text: 'Unrecognized file data in message part',
-          details: { dataType: typeof data },
-        });
+    } else if (data instanceof Buffer) {
+      const base64 = data.toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (typeof data === 'string') {
+      // Absolute URLs of any scheme (https:, gs:, s3:, ...) pass through. So do OpenAI
+      // Files API file IDs (e.g. "file-abc123"), which @ai-sdk/openai forwards as
+      // { file_id: "file-..." }. Only base64 is wrapped as a data URL; anything else
+      // (e.g. a relative path) is kept as-is, and the prompt build treats it as an
+      // attachment that can't be downloaded.
+      if (data.startsWith('data:') || data.startsWith('file-') || isAbsoluteUrl(data) || !isBase64Like(data)) {
+        return data;
       }
+      return `data:${mimeType};base64,${data}`;
+    } else if (data instanceof Uint8Array) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else if (data instanceof ArrayBuffer) {
+      const base64 = Buffer.from(data).toString('base64');
+      return `data:${mimeType};base64,${base64}`;
+    } else {
+      throw new MastraError({
+        id: 'MASTRA_AIV5_DATA_PART_INVALID',
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text: 'Unrecognized file data in message part',
+        details: { dataType: typeof data },
+      });
     }
   }
 

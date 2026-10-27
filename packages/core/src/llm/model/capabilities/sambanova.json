@@ -10,7 +10,7 @@
   ],
   "structuredOutput": ["DeepSeek-V3.2", "gemma-4-31B-it", "gpt-oss-120b"],
   "reasoning": {
-    "gemma-4-31B-it": [
+    "MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -31,7 +31,7 @@
         "type": "toggle"
       }
     ],
-    "MiniMax-M3": [
+    "gemma-4-31B-it": [
       {
         "type": "toggle"
       }
