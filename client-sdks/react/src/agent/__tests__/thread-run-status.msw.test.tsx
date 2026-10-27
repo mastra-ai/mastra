@@ -8,7 +8,7 @@ import { useChat } from '../hooks';
 
 describe('useChat thread outcomes (COR-1500)', () => {
   it.each(
-    (['history', 'send-message', 'status-before-response'] as const).flatMap(identitySource =>
+    (['history', 'send-message', 'status-before-response', 'prior-run-finishes'] as const).flatMap(identitySource =>
       (['success', 'failed', 'aborted', 'suspended'] as const).map(status => ({ identitySource, status })),
     ),
   )('settles $status identified by $identitySource without a start frame', async ({ identitySource, status }) => {
@@ -53,6 +53,9 @@ describe('useChat thread outcomes (COR-1500)', () => {
     let sending: Promise<void> | undefined;
     try {
       await waitFor(() => expect(controller).toBeDefined());
+      if (identitySource === 'prior-run-finishes') {
+        await emit({ type: 'start', runId: 'old-run', from: 'AGENT', payload: {} });
+      }
       act(() => {
         sending = result.current.sendMessage({ message: 'Recover my reply', threadId: 'thread-1' });
       });
@@ -65,7 +68,11 @@ describe('useChat thread outcomes (COR-1500)', () => {
           from: 'AGENT',
           payload: { messages: [], hasMore: false, activeRunId: 'recovered-run' },
         });
-      } else if (identitySource === 'send-message') {
+      } else if (identitySource === 'send-message' || identitySource === 'prior-run-finishes') {
+        if (identitySource === 'prior-run-finishes') {
+          await emit({ type: 'thread-run-status', runId: 'old-run', from: 'AGENT', payload: { status: 'success' } });
+          await waitFor(() => expect(result.current.isRunning).toBe(false));
+        }
         response.resolve();
         await act(async () => {
           await sending;

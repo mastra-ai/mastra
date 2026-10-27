@@ -1068,6 +1068,7 @@ export const useChat = ({
         liveRunId.current = result.runId;
         liveRunFinished.current = false;
         _currentRunId.current = result.runId;
+        setIsRunning(true);
         const earlyStatus = earlyRunStatuses.get(result.runId);
         if (earlyStatus) {
           setIsRunning(false);
