@@ -20,7 +20,7 @@ import type { ActorSignal } from '../../auth/ee';
 import {
   backgroundOverrideJsonSchema,
   backgroundOverrideZodSchema,
-  isToolBackgroundEligible,
+  isToolBackgroundOverrideEnabled,
 } from '../../background-tasks';
 import { MastraBase } from '../../base';
 import { ErrorCategory, MastraError, ErrorDomain } from '../../error';
@@ -308,9 +308,9 @@ export class CoreToolBuilder extends MastraBase {
     // runtime would never honor it (issue #22724), and mutating every schema
     // with a v4 Zod field breaks v3-authored tools (keyValidator._parse
     // crashes in schema-compat validation).
-    const isBackgroundEligible =
+    const exposesBackgroundOverride =
       !!input.backgroundTaskEnabled &&
-      isToolBackgroundEligible({
+      isToolBackgroundOverrideEnabled({
         toolName: this.options.name,
         toolConfig: this.options.backgroundConfig,
         agentConfig: this.options.agentBackgroundConfig,
@@ -322,7 +322,7 @@ export class CoreToolBuilder extends MastraBase {
     );
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || this.isResumableTool) {
+      if (exposesBackgroundOverride || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
@@ -344,7 +344,7 @@ export class CoreToolBuilder extends MastraBase {
         //   `TypeError: keyValidator._parse is not a function`.
         if (isZodObject(schema) && isZodV4Schema(schema)) {
           let nextSchema: z.ZodObject<any> = schema as z.ZodObject<any>;
-          if (isBackgroundEligible) {
+          if (exposesBackgroundOverride) {
             nextSchema = safeExtendZodObject(nextSchema, {
               _background: backgroundOverrideZodSchema,
             });
@@ -362,7 +362,7 @@ export class CoreToolBuilder extends MastraBase {
             const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
             const injectedKeys: string[] = [];
 
-            if (isBackgroundEligible) {
+            if (exposesBackgroundOverride) {
               properties._background = backgroundOverrideJsonSchema;
               injectedKeys.push('_background');
             }

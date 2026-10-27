@@ -21,6 +21,54 @@ describeForAllEngines(
   engine => {
     const getMock = useLoopScenarioAimock();
 
+    it('keeps five fixed-background tools schema-free while still dispatching deferred', async () => {
+      const executed: string[] = [];
+      const tools = Object.fromEntries(
+        Array.from({ length: 5 }, (_, index) => {
+          const name = `background-work-${index}`;
+          return [
+            name,
+            createTool({
+              id: name,
+              description: 'Fixed-background work',
+              inputSchema: z.object({ duration: z.number() }),
+              outputSchema: z.object({ result: z.string() }),
+              background: { enabled: true, allowModelOverride: false },
+              execute: async () => {
+                executed.push(name);
+                return { result: 'done' };
+              },
+            }),
+          ];
+        }),
+      );
+
+      const { chunks, llm } = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        prompt: 'Run background-work-0',
+        tools,
+        backgroundTasks: { enabled: true },
+        stopWhen: stepCountIs(3),
+        collectChunks: true,
+        fixtures: mock => {
+          mock.on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            { toolCalls: [{ id: 'call_fixed', name: 'background-work-0', arguments: { duration: 100 } }] },
+          );
+          mock.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Dispatched.' });
+        },
+      });
+
+      const offered = llm.getRequests()[0]?.body?.tools ?? [];
+      expect(offered).toHaveLength(5);
+      for (const tool of offered) {
+        expect(tool.function?.parameters?.properties).not.toHaveProperty('_background');
+      }
+      expect(executed).toEqual(['background-work-0']);
+      expect(chunks?.some(chunk => chunk.type === 'background-task-started')).toBe(true);
+    });
+
     it('emits background-task-started/completed when tool opts in at tool level', async () => {
       // Track whether the tool executed
       let toolExecuted = false;
