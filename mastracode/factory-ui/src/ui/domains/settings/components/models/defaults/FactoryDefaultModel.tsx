@@ -17,8 +17,8 @@ import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
-  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
-  const fallbackModelQuery = useFallbackModelQuery({ factoryProjectId: factoryId });
+  const modelsQuery = useAvailableModelsQuery({ scope: 'org' });
+  const fallbackModelQuery = useFallbackModelQuery({ scope: 'org' });
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
   const [confirmModelId, setConfirmModelId] = useState<string>();

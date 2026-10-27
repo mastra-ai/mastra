@@ -918,10 +918,7 @@ describe('GET /web/config/models', () => {
               { id: modeDefault, modelName: 'claude-fable-5', provider: 'anthropic', hasApiKey: false },
               { id: openaiDefault, modelName: 'gpt-5.6-sol', provider: 'openai', hasApiKey: false },
             ],
-            listModes: () => [
-              { id: 'plan', defaultModelId: openaiDefault },
-              { id: 'build', default: true, defaultModelId: modeDefault },
-            ],
+            getDefaultMode: () => ({ defaultModelId: modeDefault }),
           },
           modelCredentials: seed.credentials,
           factoryProjects: seed.projects,

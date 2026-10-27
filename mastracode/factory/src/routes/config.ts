@@ -130,7 +130,8 @@ export interface ModelCatalog {
       releaseDate?: string;
     }>
   >;
-  listModes?: () => Array<{ id: string; default?: boolean; defaultModelId?: string }>;
+  listModes?: () => Array<{ id: string; defaultModelId?: string }>;
+  getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
@@ -1154,8 +1155,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               listCustomProviders,
             });
             if (!credentialTenant) return c.json({ ...sessionPolicy, models });
-            const modes = controller.listModes?.() ?? [];
-            const modeModelId = (modes.find(mode => mode.default) ?? modes[0])?.defaultModelId;
+            const modeModelId = controller.getDefaultMode?.().defaultModelId;
             const candidate =
               (await resolveTenantProviderDefaultModel(credentialTenant, modeModelId).catch(error => {
                 console.warn('[Factory Config] Failed to resolve a provider default model', {
