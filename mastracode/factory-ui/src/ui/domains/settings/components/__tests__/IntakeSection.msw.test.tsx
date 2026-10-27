@@ -541,6 +541,20 @@ describe('IntakeSection', () => {
       expect(saved[0].linear.enabled).toBe(true);
       expect(await screen.findByText('Intake sources updated')).toBeInTheDocument();
     });
+
+    it('sends back a custom integration selection it does not render', async () => {
+      seedGithubProject();
+      const custom = { enabled: false, sourceIds: ['src-1'] };
+      const saved = useIntakeHandlers({ config: { ...baseConfig(), 'custom-tracker': custom } });
+
+      renderIntakeSection();
+
+      await userEvent.click(await screen.findByRole('switch', { name: 'Sync GitHub issues' }));
+
+      await waitFor(() => expect(saved).toHaveLength(1));
+      expect(saved[0].github.enabled).toBe(false);
+      expect(saved[0]['custom-tracker']).toEqual(custom);
+    });
   });
 
   describe('given GitHub is not configured on the server', () => {
