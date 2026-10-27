@@ -17,9 +17,27 @@
  * the server.
  */
 
+import { homedir } from 'node:os';
+import { join } from 'node:path';
+
 import { Mastra } from '@mastra/core/mastra';
-import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@mastra/factory';
 import { PgFactoryStorage, PgVector } from '@mastra/pg';
+import { PlatformFactorySandbox } from '@mastra/platform-workspace';
+
+// TODO: drop the explicit sandbox once the `@mastra/factory` release that
+// defaults it is `latest`. Until then an omitted sandbox means none, and
+// `LocalFactorySandbox` needs its root and env spelled out. Only an allow-list
+// of host variables reaches sandbox commands, so server secrets such as
+// DATABASE_URL stay out of them.
+const SANDBOX_ENV_KEYS = ['HOME', 'USER', 'LOGNAME', 'SHELL', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'TZ'];
+
+function localSandbox(): LocalFactorySandbox {
+  return new LocalFactorySandbox({
+    root: join(homedir(), '.mastracode', 'web', 'sandboxes'),
+    env: Object.fromEntries(SANDBOX_ENV_KEYS.flatMap(key => (process.env[key] ? [[key, process.env[key]]] : []))),
+  });
+}
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth; the paired PgVector rides
@@ -52,8 +70,12 @@ export const factory = new MastraFactory({
   }),
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
-  // No `sandbox`: with Platform credentials the factory uses a local sandbox
-  // under `mastra dev` and a Platform sandbox in deployments.
+  // Local sandboxes under `mastra dev`, Platform sandboxes (MASTRA_PROJECT_ID +
+  // MASTRA_ENVIRONMENT_ID) in deployments.
+  sandbox:
+    process.env.MASTRA_DEV === 'true' || process.env.NODE_ENV === 'development'
+      ? localSandbox()
+      : new PlatformFactorySandbox(),
 });
 
 const preparedArgs = await factory.prepare();
