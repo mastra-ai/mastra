@@ -14,6 +14,7 @@ import {
   discoveryUnsupportedError,
   nestedMetadataFields,
   noSpanQueryCapabilities,
+  noTimeToFirstChunkCapabilities,
   noTraceQueryCapabilities,
 } from './fixtures/columns-menu';
 import { server } from '@/test/msw-server';
@@ -246,6 +247,51 @@ describe('ColumnsMenu', () => {
 
       expect(columnsButton().disabled).toBe(true);
       await waitFor(() => expect(columnsButton().disabled).toBe(false));
+    });
+  });
+
+  describe('time to first chunk column', () => {
+    it('offers it when the store records it, and hands the host the selection with it', async () => {
+      setHandlers();
+      renderMenu();
+
+      await openMenuWhenReady();
+      fireEvent.click(await screen.findByRole('menuitemcheckbox', { name: 'Time to first chunk' }));
+
+      expect(onChange).toHaveBeenCalledWith({
+        ...DEFAULT_TRACE_COLUMN_PREFERENCES,
+        visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'timeToFirstChunk'],
+      });
+    });
+
+    it('does not offer it when the store does not record it', async () => {
+      setHandlers({ capabilities: noTimeToFirstChunkCapabilities });
+      renderMenu();
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
+    });
+
+    it('does not offer it without the trace query API, whose rows are the only ones that carry it', async () => {
+      setHandlers();
+      renderMenu({ queryEnabled: false });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
+    });
+
+    it('is not a span column', async () => {
+      setHandlers();
+      renderMenu({ scope: 'spans', value: TRACE_COLUMN_CATALOGS.spans.defaults });
+
+      await openMenuWhenReady();
+
+      expect(await screen.findByRole('menuitemcheckbox', { name: 'Duration' })).toBeTruthy();
+      expect(screen.queryByRole('menuitemcheckbox', { name: 'Time to first chunk' })).toBeNull();
     });
   });
 

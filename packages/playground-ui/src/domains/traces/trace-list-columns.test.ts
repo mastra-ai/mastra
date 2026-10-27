@@ -104,6 +104,23 @@ describe('trace list columns', () => {
         'provider',
       ]);
     });
+
+    it('places time to first chunk right after duration, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['endTime', 'timeToFirstChunk', 'duration'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 7rem 11rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'duration',
+        'timeToFirstChunk',
+        'endTime',
+      ]);
+    });
   });
 
   describe('when saved preferences are missing for a list with its own defaults', () => {
@@ -138,6 +155,7 @@ describe('trace list columns', () => {
         'input',
         'output',
         'duration',
+        'timeToFirstChunk',
         'endTime',
         'environment',
         'model',
@@ -151,7 +169,7 @@ describe('trace list columns', () => {
 
     it('offers traces their standard columns with usage and metadata', () => {
       expect(TRACE_COLUMN_CATALOGS.traces).toEqual({
-        standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment'],
+        standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
         usage: true,
         metadata: true,
         defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,

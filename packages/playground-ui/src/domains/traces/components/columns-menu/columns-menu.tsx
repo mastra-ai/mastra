@@ -14,7 +14,12 @@ import { resolveTraceQueryTimeRange } from '../../trace-query-filters';
 import { TraceColumnsMenu } from '../trace-columns-menu';
 import { CHECKING_USAGE_REASON, UNSUPPORTED_USAGE_REASON } from '../traces-explorer/traces-explorer-context';
 import type { TracesMetricsSupport } from '../traces-explorer/traces-explorer-context';
-import { useSpanQueryAvailable, useTraceQueryAvailable, useTraceQueryDiscoveryAvailable } from '@/domains/capabilities';
+import {
+  useObservabilityCapabilities,
+  useSpanQueryAvailable,
+  useTraceQueryAvailable,
+  useTraceQueryDiscoveryAvailable,
+} from '@/domains/capabilities';
 
 export type ColumnsMenuScope = TraceColumnScope | 'threads';
 
@@ -54,9 +59,18 @@ const ScopedColumnsMenu = memo(function ScopedColumnsMenu({
   const catalog = TRACE_COLUMN_CATALOGS[scope];
   const queryAvailable = useQueryAvailable(scope);
   const discoveryAvailable = useTraceQueryDiscoveryAvailable();
+  const { data: capabilities } = useObservabilityCapabilities();
   const [defaultTimeRange] = useState(() => resolveTraceQueryTimeRange(undefined, undefined, new Date()));
 
   const withQuery = queryAvailable.enabled && queryEnabled;
+  const withTimeToFirstChunk = withQuery && (capabilities?.capabilities.traceQueryTimeToFirstChunk ?? false);
+  const offeredCatalog = useMemo(
+    () =>
+      withTimeToFirstChunk
+        ? catalog
+        : { ...catalog, standardColumns: catalog.standardColumns.filter(column => column !== 'timeToFirstChunk') },
+    [catalog, withTimeToFirstChunk],
+  );
   const { fields } = useTraceMetadataFilterFields({
     timeRange: discoveryTimeRange ?? defaultTimeRange,
     queryOptions: { enabled: catalog.metadata && withQuery && discoveryAvailable.enabled },
@@ -81,7 +95,7 @@ const ScopedColumnsMenu = memo(function ScopedColumnsMenu({
   return (
     <TraceColumnsMenu
       preferences={value}
-      catalog={catalog}
+      catalog={offeredCatalog}
       availableMetadataKeys={availableMetadataKeys}
       usageDisabledReason={usageDisabledReason}
       withQueryTrace={withQuery}

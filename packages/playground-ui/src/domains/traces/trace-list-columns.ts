@@ -3,6 +3,7 @@ export const TRACE_OPTIONAL_COLUMNS = [
   'input',
   'output',
   'duration',
+  'timeToFirstChunk',
   'endTime',
   'environment',
   'model',
@@ -62,17 +63,15 @@ export type TraceColumnCatalog = {
   readonly defaults: TraceColumnPreferences;
 };
 
-const TRACE_STANDARD_COLUMNS = ['type', 'input', 'output', 'duration', 'endTime', 'environment'] as const;
-
 export const TRACE_COLUMN_CATALOGS: Record<TraceColumnScope, TraceColumnCatalog> = {
   traces: {
-    standardColumns: TRACE_STANDARD_COLUMNS,
+    standardColumns: ['type', 'input', 'output', 'duration', 'timeToFirstChunk', 'endTime', 'environment'],
     usage: true,
     metadata: true,
     defaults: DEFAULT_TRACE_COLUMN_PREFERENCES,
   },
   spans: {
-    standardColumns: [...TRACE_STANDARD_COLUMNS, 'model', 'provider'],
+    standardColumns: ['type', 'input', 'output', 'duration', 'endTime', 'environment', 'model', 'provider'],
     usage: false,
     metadata: false,
     defaults: { visibleColumns: ['type', 'input', 'output', 'duration'], customColumns: [], metadataKeys: [] },
@@ -162,7 +161,15 @@ export function buildTraceListColumnKeys(preferences: TraceColumnPreferences): s
   if (visible.has('input')) keys.push('input');
   if (visible.has('output')) keys.push('output');
   keys.push('status');
-  for (const column of ['duration', 'endTime', 'environment', 'model', 'provider', ...TRACE_USAGE_COLUMNS] as const) {
+  for (const column of [
+    'duration',
+    'timeToFirstChunk',
+    'endTime',
+    'environment',
+    'model',
+    'provider',
+    ...TRACE_USAGE_COLUMNS,
+  ] as const) {
     if (visible.has(column)) keys.push(column);
   }
   keys.push(...preferences.customColumns.map(field => `custom:${field}`));
@@ -185,6 +192,7 @@ export function buildTraceListColumns(preferences: TraceColumnPreferences): stri
   columns.push('6rem');
 
   if (visible.has('duration')) columns.push('7rem');
+  if (visible.has('timeToFirstChunk')) columns.push('7rem');
   if (visible.has('endTime')) columns.push('11rem');
   if (visible.has('environment')) columns.push('8rem');
   if (visible.has('model')) columns.push('10rem');
