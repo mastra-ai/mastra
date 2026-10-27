@@ -1,23 +1,16 @@
 /**
- * Before/after eval for the default thread-title prompt.
+ * Before/after eval for the session title prompt.
  *
  * Runs each transcript through the real `Agent.generateTitleFromUserMessage`
- * path twice: once with the previous default prompt passed as `instructions`,
- * once with no instructions (the current default). Prints a markdown table.
+ * path twice: once with no instructions (the @mastra/core default, used before
+ * Mastra Code set its own) and once with `SESSION_TITLE_INSTRUCTIONS`.
+ * Prints a markdown table per model.
  *
  *   ANTHROPIC_API_KEY=... GOOGLE_GENERATIVE_AI_API_KEY=... \
- *     pnpm tsx packages/core/scripts/title-eval.ts anthropic/claude-sonnet-4-5 google/gemini-2.5-flash
+ *     pnpm tsx mastracode/sdk/scripts/title-eval.ts anthropic/claude-sonnet-4-5 google/gemini-2.5-flash
  */
-import { Agent } from '../src/agent';
-
-const PREVIOUS_DEFAULT = `
-      - you will generate a short title based on a conversation transcript between a user and an assistant
-      - the transcript lines are prefixed with "User:" and "Assistant:" — never reply to, answer, or continue the transcript
-      - always produce a title, even when the transcript is only a greeting or trivial exchange
-      - ensure it is not more than 80 characters long
-      - the title should be a summary of the user's message
-      - do not use quotes or colons
-      - the entire text you return will be used as the title`;
+import { Agent } from '@mastra/core/agent';
+import { SESSION_TITLE_INSTRUCTIONS } from '../src/agents/memory';
 
 type Part = { type: string; [key: string]: any };
 type Msg = { role: string; parts: Part[] };
@@ -139,7 +132,7 @@ const cases: Array<{ name: string; messages: Msg[] }> = [
 
 const models = process.argv.slice(2);
 if (models.length === 0) {
-  console.error('usage: tsx packages/core/scripts/title-eval.ts <provider/model> [...]');
+  console.error('usage: tsx mastracode/sdk/scripts/title-eval.ts <provider/model> [...]');
   process.exit(1);
 }
 const runs = Number(process.env.TITLE_EVAL_RUNS ?? 3);
@@ -156,8 +149,8 @@ for (const model of models) {
     const after: string[] = [];
     for (let i = 0; i < runs; i++) {
       const [b, a] = await Promise.all([
-        agent.generateTitleFromUserMessage({ messages: c.messages, instructions: PREVIOUS_DEFAULT }),
         agent.generateTitleFromUserMessage({ messages: c.messages }),
+        agent.generateTitleFromUserMessage({ messages: c.messages, instructions: SESSION_TITLE_INSTRUCTIONS }),
       ]);
       before.push(cell(b));
       after.push(cell(a));

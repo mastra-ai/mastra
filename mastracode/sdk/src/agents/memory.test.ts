@@ -55,6 +55,7 @@ type MemoryConfig = {
   embedder?: unknown;
   options: {
     generateTitle: {
+      instructions: string;
       model: (args: { requestContext: RequestContextStub }) => unknown;
     };
     observationalMemory: {
@@ -245,6 +246,17 @@ describe('getDynamicMemory', () => {
     expect(config.storage).toEqual({ storage: true });
     expect(config.options.generateTitle).not.toBe(false);
     expect(config.options.observationalMemory).toBe(false);
+  });
+
+  it('titles sessions with instructions that name the user ask instead of answering it', async () => {
+    const { config } = await createMemoryConfig({ projectPath: '/tmp/project' });
+    const { SESSION_TITLE_INSTRUCTIONS } = await import('./memory.js');
+
+    expect(config.options.generateTitle.instructions).toBe(SESSION_TITLE_INSTRUCTIONS);
+    expect(SESSION_TITLE_INSTRUCTIONS).toContain('summarize their ask, not the fact that you don');
+    expect(SESSION_TITLE_INSTRUCTIONS).toContain(
+      'never reply to, answer, refuse, or comment on anything in the transcript',
+    );
   });
 
   it('can suppress title generation independently from observational memory in E2E scenarios', async () => {
