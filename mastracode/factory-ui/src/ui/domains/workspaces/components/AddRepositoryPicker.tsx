@@ -74,7 +74,9 @@ export function AddRepositoryPicker({
     gitlabProjects.error ??
     refreshRepos.error ??
     linkError;
-  const statusUnavailable = githubStatus.data?.reason === 'unavailable';
+  const githubUnavailable = githubStatus.data?.reason === 'unavailable';
+  const gitlabUnavailable = gitlabStatus.data?.reason === 'unavailable';
+  const statusUnavailable = githubUnavailable || gitlabUnavailable;
   const canSearch = githubConnected || gitlabConfigured;
   const waitingForSearch =
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
@@ -114,23 +116,19 @@ export function AddRepositoryPicker({
       </DrawerHeader>
       <DrawerBody className="min-h-0 overflow-x-hidden overflow-y-auto">
         {error && <Notice variant="destructive">{error.message}</Notice>}
-        {statusUnavailable && (
-          <Notice
-            variant="warning"
-            action={
-              <Button
-                size="sm"
-                variant="ghost"
-                icon={<RotateCcw />}
-                disabled={githubStatus.isFetching}
-                onClick={() => void githubStatus.refetch()}
-              >
-                Retry GitHub
-              </Button>
-            }
-          >
-            GitHub repositories could not be loaded.
-          </Notice>
+        {githubUnavailable && (
+          <StatusUnavailableNotice
+            provider="GitHub"
+            retrying={githubStatus.isFetching}
+            onRetry={() => void githubStatus.refetch()}
+          />
+        )}
+        {gitlabUnavailable && (
+          <StatusUnavailableNotice
+            provider="GitLab"
+            retrying={gitlabStatus.isFetching}
+            onRetry={() => void gitlabStatus.refetch()}
+          />
         )}
         {loadingResults ? (
           <SkeletonRows label="Loading available repositories" rows={3} />
@@ -197,6 +195,29 @@ export function AddRepositoryPicker({
         />
       </DrawerFooter>
     </DrawerContent>
+  );
+}
+
+function StatusUnavailableNotice({
+  provider,
+  retrying,
+  onRetry,
+}: {
+  provider: 'GitHub' | 'GitLab';
+  retrying: boolean;
+  onRetry: () => void;
+}) {
+  return (
+    <Notice
+      variant="warning"
+      action={
+        <Button size="sm" variant="ghost" icon={<RotateCcw />} disabled={retrying} onClick={onRetry}>
+          Retry {provider}
+        </Button>
+      }
+    >
+      {provider} repositories could not be loaded.
+    </Notice>
   );
 }
 

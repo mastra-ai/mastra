@@ -271,6 +271,35 @@ describe('Repositories settings', () => {
     expect(screen.queryByRole('status', { name: 'Loading available repositories' })).not.toBeInTheDocument();
   });
 
+  it('offers a GitLab retry instead of claiming no provider is configured when GitLab status fails', async () => {
+    const user = userEvent.setup();
+    let gitlabDown = true;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        gitlabDown
+          ? HttpResponse.json({ error: 'GitLab status unavailable' }, { status: 503 })
+          : HttpResponse.json({
+              enabled: true,
+              configured: true,
+              mode: 'platform',
+              accounts: ['gitlab.com'],
+              reauthRequired: false,
+              reason: 'ready',
+            }),
+      ),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: 'Add repository' }));
+    expect(await screen.findByText('GitLab repositories could not be loaded.')).toBeInTheDocument();
+    expect(screen.queryByText(/GitHub is disabled on the server/)).not.toBeInTheDocument();
+
+    gitlabDown = false;
+    await user.click(screen.getByRole('button', { name: 'Retry GitLab' }));
+    expect(await screen.findByRole('button', { name: /Add .*factory-gitlab-control/ })).toBeInTheDocument();
+    expect(screen.queryByText('GitLab repositories could not be loaded.')).not.toBeInTheDocument();
+  });
+
   it('excludes a checkout without unlinking it, then removes only the requested repository with safe retry', async () => {
     const user = userEvent.setup();
     let linked = true;
