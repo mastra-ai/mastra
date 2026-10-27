@@ -1,0 +1,37 @@
+{
+  "url": "https://api.openai.com/v1/responses",
+  "body": {
+    "model": "gpt-5-mini",
+    "input": [
+      {
+        "role": "user",
+        "content": "Date: Oct 25, 2026\nOct 25 2026:"
+      },
+      {
+        "role": "user",
+        "content": [
+          {
+            "type": "input_text",
+            "text": "## Previous Observations\n\nDate: Oct 25, 2026\n* User asked about Lisbon weather.\n\n---\n\nDo not repeat these existing observations.\nDate: Oct 25, 2026"
+          },
+          {
+            "type": "input_text",
+            "text": "## New Message History to Observe\n\n"
+          },
+          {
+            "type": "input_text",
+            "text": "Oct 25 2026:\nUser (7:54 PM): Date: Oct 25, 2026\nDate: Oct 25, 2026\nOct 25 2026:"
+          },
+          {
+            "type": "input_text",
+            "text": "User (7:54 PM): Date: Oct 25, 2026\nDate: Oct 25, 2026\nOct 25 2026:"
+          },
+          {
+            "type": "input_text",
+            "text": "\n\n---\n\n## Your Task\n\nDate: Oct 25, 2026\nOct 25 2026:"
+          }
+        ]
+      }
+    ]
+  }
+}
