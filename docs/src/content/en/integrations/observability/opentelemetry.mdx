@@ -19,19 +19,19 @@ The OpenTelemetry exporter sends your traces and logs using standardized [OpenTe
 
 Each provider requires specific protocol packages. Install the base exporter plus the protocol package for your provider:
 
-#### For HTTP/Protobuf Providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
+#### For HTTP/Protobuf providers (SigNoz, New Relic, Sentry, Laminar, MLflow, Latitude, telemetry.dev)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-proto
 ```
 
-#### For `gRPC` Providers (Dash0, Datadog)
+#### For `gRPC` providers (Dash0, Datadog)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
-#### For HTTP/JSON Providers (Traceloop, Sazabi)
+#### For HTTP/JSON providers (Traceloop, Sazabi)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
