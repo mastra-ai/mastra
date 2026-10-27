@@ -60,12 +60,13 @@ export function useTraceAggregateGate({ requiresRootSpanFields = false } = {}): 
  */
 export function useMetricsTraceAggregate(
   request: AggregateTracesArgs,
-  { priority }: { priority?: AggregatePriority } = {},
+  { priority, enabled }: { priority?: AggregatePriority; enabled?: boolean } = {},
 ): UseQueryResult<AggregateTracesResponse> {
   const client = useMastraClient();
   const queryFn = useLimitedQueryFn(() => client.aggregateTraces(request), priority);
   return useTraceAggregate({
     request,
+    enabled,
     queryOptions: { queryFn, placeholderData: keepPreviousData, staleTime: Infinity },
   });
 }

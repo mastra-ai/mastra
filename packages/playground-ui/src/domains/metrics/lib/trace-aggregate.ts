@@ -81,6 +81,13 @@ export const toTraceAggregateTimeRange = ({ start, end }: Window): AggregateTrac
  */
 export const traceAggregateInterval = ({ start, end }: Window) => bucketPlan(start, end).interval;
 
+/**
+ * `limit` for a grouped time series. The server caps `limit × buckets` at 10 000 and the default
+ * limit is 100, which a two-week hourly series (337 buckets) would break. Ten groups fit the widest
+ * window the server allows (366 daily buckets) and every chart here shows fewer series than that.
+ */
+export const TRACE_AGGREGATE_SERIES_LIMIT = 10;
+
 export type TraceAggregateBucket = BucketLabels & { rows: TraceAggregateRow[] };
 
 /**

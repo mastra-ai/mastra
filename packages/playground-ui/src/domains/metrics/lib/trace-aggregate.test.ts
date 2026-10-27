@@ -1,8 +1,9 @@
-import { traceAggregateRequestSchema } from '@mastra/core/storage';
+import { planTraceAggregate, traceAggregateRequestSchema } from '@mastra/core/storage';
 import { describe, expect, it } from 'vitest';
 import {
   bucketTraceAggregateRows,
   buildTraceAggregateWhere,
+  TRACE_AGGREGATE_SERIES_LIMIT,
   toTraceAggregateTimeRange,
   traceAggregateInterval,
 } from './trace-aggregate';
@@ -95,5 +96,29 @@ describe('bucketTraceAggregateRows', () => {
       const filled = buckets.filter(bucket => bucket.rows.length > 0);
       expect(filled.map(bucket => bucket.ts)).toEqual([busyHour.getTime()]);
     });
+  });
+});
+
+describe('grouped time series limits', () => {
+  const plan = (days: number, limit?: number) => {
+    const window = { start: new Date(Date.UTC(2026, 0, 1)), end: new Date(Date.UTC(2026, 0, 1) + days * 86_400_000) };
+    return () =>
+      planTraceAggregate(
+        traceAggregateRequestSchema.parse({
+          timeRange: toTraceAggregateTimeRange(window),
+          interval: traceAggregateInterval(window),
+          groupBy: ['spanType'],
+          measures: ['duration.p50'],
+          limit,
+        }),
+      );
+  };
+
+  it("breaks the server's row cap at the default limit over two weeks", () => {
+    expect(plan(14)).toThrow();
+  });
+
+  it.each([1, 14, 30, 365])('fits a %i-day window at the series limit', days => {
+    expect(plan(days, TRACE_AGGREGATE_SERIES_LIMIT)).not.toThrow();
   });
 });
