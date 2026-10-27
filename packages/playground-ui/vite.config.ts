@@ -1,5 +1,5 @@
 import { spawn } from 'node:child_process';
-import { existsSync, readdirSync, readFileSync } from 'node:fs';
+import { existsSync, readdirSync, readFileSync, rmSync } from 'node:fs';
 import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
 import { dirname, relative, resolve } from 'node:path';
 import tailwindcss from '@tailwindcss/vite';
@@ -179,6 +179,52 @@ const skipUnchangedWrites = (): Plugin => ({
   },
 });
 
+// The watch layers over the last full build without emptying `dist`, so a turbo cache restore leaves orphaned hashed
+// chunks and deleted components behind. Prune them only once the first watch build is written: emptying `dist` up front
+// races consuming dev servers, which cache the failed resolutions.
+const pruneStaleOutput = (): Plugin => {
+  const emitted = new Set<string>();
+  const writtenFormats = new Set<string>();
+  let formatCount = 0;
+  let pruned = false;
+
+  const prune = (directory: string) => {
+    readdirSync(directory, { withFileTypes: true }).forEach(dirent => {
+      const path = resolve(directory, dirent.name);
+      if (dirent.isDirectory()) {
+        prune(path);
+        if (readdirSync(path).length === 0) rmSync(path, { recursive: true });
+      } else if (!dirent.name.endsWith('.d.ts') && !emitted.has(path)) {
+        rmSync(path);
+      }
+    });
+  };
+
+  return {
+    name: 'prune-stale-output',
+    configResolved(config) {
+      formatCount = config.build.lib ? (config.build.lib.formats?.length ?? 1) : 1;
+    },
+    // Runs before skipUnchangedWrites drops unchanged files from the bundle.
+    generateBundle: {
+      order: 'pre',
+      handler({ dir }, bundle) {
+        if (pruned || !dir) return;
+        for (const fileName of Object.keys(bundle)) emitted.add(resolve(dir, fileName));
+      },
+    },
+    writeBundle({ dir, format }) {
+      if (pruned || !dir) return;
+      writtenFormats.add(format);
+      if (writtenFormats.size < formatCount) return;
+
+      prune(dir);
+      pruned = true;
+      emitted.clear();
+    },
+  };
+};
+
 const appPlugins = [react(), tailwindcss()];
 
 const baseConfig: UserConfig = {
@@ -199,6 +245,7 @@ const createLibConfig = (isProduction: boolean): UserConfig => ({
     libInjectCss(),
     nodeExternals(),
     !isProduction && skipUnchangedWrites(),
+    !isProduction && pruneStaleOutput(),
   ],
   build: {
     emptyOutDir: isProduction,
