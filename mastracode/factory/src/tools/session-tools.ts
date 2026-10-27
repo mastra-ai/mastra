@@ -478,7 +478,11 @@ export function createFactorySessionTools(
     );
 
     const session = await messaging.controller.getSession(prepared.sessionId);
-    if (!session) throw new Error(`The ${role} session was bound but is not running; try again shortly.`);
+    if (!session) {
+      throw new Error(
+        `The ${role} session ${prepared.sessionId} was bound but is not running; message it with factory_signal_session to wake it.`,
+      );
+    }
     const kickoffId = globalThis.crypto.randomUUID();
     // Heartbeat from before the kickoff so a fast run's end is seen; the open-run
     // entry and audit follow the accepted kickoff, as the dispatcher records them.
