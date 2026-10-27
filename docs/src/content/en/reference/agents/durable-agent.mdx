@@ -576,7 +576,7 @@ cleanup()
 
 Recovery restarts from the persisted `durable-agentic-loop` checkpoint. The nested execution row alone isn't sufficient. Before starting a run, enable `recovery: { durableAgents: 'auto' }` on `Mastra`, or provide a `shouldPersistSnapshot` policy that includes `'running'`. Recovery is unavailable until the first running checkpoint is saved, even with persistence enabled. Enabling persistence after a crash can't reconstruct a missing checkpoint.
 
-Model and tool calls after the checkpoint may run again. Make tool side effects idempotent; recovery doesn't guarantee exactly-once execution.
+Model and tool calls after the checkpoint may run again. Make tool side effects idempotent. Recovery doesn't guarantee exactly-once execution.
 
 `recover()` throws for unavailable checkpoints and runs that aren't orphaned:
 
@@ -589,7 +589,7 @@ Model and tool calls after the checkpoint may run again. Make tool side effects 
 | `DURABLE_AGENT_RECOVER_RUN_SUSPENDED` | The run is suspended. Continue it with `resume()`. |
 | `DURABLE_AGENT_EXECUTION_CONFLICT` | With `force`, another execution claimed the run during the takeover. |
 
-The server's `POST /agents/:agentId/recover` route returns ownership and suspended-run conflicts as `409 Conflict`.
+The server's `POST /agents/:agentId/recover` route returns ownership and suspended-run conflicts as `409 Conflict`. An unavailable checkpoint returns `500 Internal Server Error`.
 
 <PropertiesTable
   content={[

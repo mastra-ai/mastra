@@ -1098,7 +1098,7 @@ export class DurableAgent<
           `Enable recovery: { durableAgents: 'auto' } or a shouldPersistSnapshot policy that includes ` +
           `"running" before starting the run. Even with persistence enabled, recovery is unavailable ` +
           `until the first running checkpoint is saved.`,
-        details: { agentName: this.name, runId, status: snapshot.status },
+        details: { agentName: this.name, runId, snapshotStatus: snapshot.status },
       });
     }
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
@@ -1150,7 +1150,7 @@ export class DurableAgent<
           `DurableAgent "${this.name}" recover(${runId}): run status is "${snapshot.status}", ` +
           `so the run cannot be recovered. Runs suspended on a tool call or an approval are ` +
           `continued with resume(${runId}, ...), not recover().`,
-        details: { agentName: this.name, runId, status: snapshot.status },
+        details: { agentName: this.name, runId, snapshotStatus: snapshot.status },
       });
     }
 

@@ -124,7 +124,12 @@ describe('recovery checkpoint availability (COR-1493)', () => {
         for (const force of [false, true]) {
           await expect(h.replacement.recover(stream.runId, { force })).rejects.toMatchObject({
             id: policy === 'off' ? CHECKPOINT_ERROR : 'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
-            ...(policy === 'off' ? { message: expect.stringContaining('before starting') } : {}),
+            ...(policy === 'off'
+              ? {
+                  message: expect.stringContaining('before starting'),
+                  details: { snapshotStatus: 'pending' },
+                }
+              : {}),
           });
         }
         expect(await workflows.getRunOwnership({ runId: stream.runId })).toEqual(ownership);
