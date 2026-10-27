@@ -89,6 +89,7 @@ export class DuckDBConnection extends MastraBase {
   private instance: DuckDBInstance | null = null;
   private initialized = false;
   private initPromise: Promise<void> | null = null;
+  private closed = false;
   private path: string;
   private instanceOptions: Record<string, string>;
 
@@ -102,6 +103,7 @@ export class DuckDBConnection extends MastraBase {
   }
 
   private async initialize(): Promise<void> {
+    if (this.closed) throw new Error('DuckDB connection is closed');
     if (this.initialized && this.instance) return;
 
     if (this.initPromise) {
@@ -129,6 +131,7 @@ export class DuckDBConnection extends MastraBase {
   /** Create a new connection to the DuckDB instance, initializing if needed. */
   async getConnection() {
     await this.initialize();
+    if (this.closed) throw new Error('DuckDB connection is closed');
     if (!this.instance) {
       throw new Error('DuckDB instance not initialized');
     }
@@ -341,6 +344,8 @@ export class DuckDBConnection extends MastraBase {
 
   /** Release the DuckDB instance, allowing garbage collection. */
   async close(): Promise<void> {
+    this.closed = true;
+    await this.initPromise?.catch(() => undefined);
     if (this.instance) {
       try {
         const instance = this.instance as unknown as { closeSync?: () => void; close?: () => void };

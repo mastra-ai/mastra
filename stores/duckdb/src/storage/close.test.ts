@@ -91,6 +91,25 @@ describe('DuckDBStore.close()', () => {
     reopenInAnotherProcess();
   });
 
+  it('does not reopen the file when an observability read follows shutdown', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    await duck.observability.init();
+    await duck.close();
+
+    await expect(duck.observability.getSpan({ spanId: 'missing' })).rejects.toThrow('closed');
+    reopenInAnotherProcess();
+  });
+
+  it('does not reopen the file when an observability read races with shutdown', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    await duck.observability.init();
+    const read = duck.observability.getSpan({ spanId: 'missing' });
+    await duck.close();
+    await Promise.allSettled([read]);
+
+    reopenInAnotherProcess();
+  });
+
   it('releases the file lock when Mastra shuts down', async () => {
     duck = new DuckDBStore({ path: dbPath });
     const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
