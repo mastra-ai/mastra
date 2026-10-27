@@ -1246,7 +1246,13 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
             let usage: any = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-            let responseMetadata: any = {};
+            // Seeded like the regular loop's AgenticRunState so a provider that sends no
+            // response-metadata (e.g. Gemini) still reports an id and timestamp; provider
+            // values override these in the 'response-metadata' case below.
+            let responseMetadata: any = {
+              id: mastra?.generateId?.() || globalThis.crypto.randomUUID(),
+              timestamp: new Date(),
+            };
             // Tracks whether this attempt produced any actual model output.
             // Used to detect a zero-output stream that finishes with reason
             // 'other' (#21897, ported from the regular loop's #22273 fix).
