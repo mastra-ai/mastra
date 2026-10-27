@@ -17,11 +17,11 @@ Under the composer, in the same tray, illustrated cards show what waits on your 
 - **Agents backlog**, _Group by root cause_: the area label with the most cards nobody has started, grouped by root cause with duplicates flagged and a plan for the biggest group. It reads the whole area, since five cards show no pattern, and changes nothing until you say so. Labels such as `p: high` and GitHub's default labels such as `enhancement` are not areas.
 - **Stale pull requests**, _Flag what to close_: pull requests waiting over a month, each with a close-or-keep suggestion, and nothing closed without your go.
 
-Pointing at or focusing a card shows its prompt in the composer at the composer's current size, so nothing moves under the pointer, and moving away brings your own draft back. Clicking starts the session with that prompt. The Factory name and branch line under the composer is gone.
+Pointing at or focusing a card shows its prompt in the composer at the composer's current size, so nothing moves under the pointer, and moving away brings your own draft back. Clicking starts the session with that prompt, and so does pressing Enter while the prompt shows. The Factory name and branch line under the composer is gone.
 
 **Activity band**
 
-Below the cards, one line reads "382 came in, 282 agent runs, 292 shipped" for **This week** (the last seven days, the default), **Today** or **This month** (the last 30 days). Clicking it expands a chart of the period with one bar per hour, four hours or day; pointing at a bar opens a card with its counts. While the chart is open, the period picker sits under the band on the right. A period where nothing happened says so instead of drawing an empty chart. The band also says how many sessions are working or waiting on you, and offers **Recap the week** (or today, or the month) when something shipped.
+Below the cards, one line reads "382 came in, 282 agent runs, 292 shipped" for **This week** (the last seven days, the default), **Today** or **This month** (the last 30 days). Clicking it expands a chart of the period with one bar per hour, four hours or day; pointing at a bar opens a card with its counts. While the chart is open, the period picker sits under the band on the right. A period where nothing happened says so instead of drawing an empty chart. The band also says how many sessions are working or waiting on you, and offers **Recap the week** (or today, or the month) when something shipped. Agent runs are read up to 4,000 per period: past that, the count reads as a lower bound such as "4,000+", and a bar older than the oldest run read shows "–".
 
 **Audit route**
 
