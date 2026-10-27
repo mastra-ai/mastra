@@ -1,9 +1,14 @@
 import type { Mastra } from '@mastra/core';
-import type { MastraFGAPermissionInput } from '@mastra/core/auth/ee';
+import type { IFGAProvider, MastraFGAPermissionInput } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { MastraMemory } from '@mastra/core/memory';
 import type { Workflow } from '@mastra/core/workflows';
-import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, isReservedRequestContextKey } from '../constants';
+import {
+  MASTRA_AUTH_MODE_KEY,
+  MASTRA_RESOURCE_ID_KEY,
+  MASTRA_THREAD_ID_KEY,
+  isReservedRequestContextKey,
+} from '../constants';
 import { MastraFGAPermissions } from '../fga-permissions';
 import { HTTPException } from '../http-exception';
 
@@ -19,6 +24,29 @@ export function getPublicWorkflowById(mastra: Mastra, workflowId: string): Workf
     Object.values(workflows).find(workflow => workflow.id === workflowId) ??
     (Object.hasOwn(workflows, workflowId) ? workflows[workflowId] : undefined)
   );
+}
+
+/**
+ * Resolves the FGA provider a handler should use for this request, following
+ * the same auth-mode-aware selection as the route-level checks: Studio auth
+ * requests use `studio.fga` when it is configured, and everything else uses
+ * `server.fga`.
+ *
+ * Returns `undefined` when FGA is not configured at all. When FGA is
+ * configured but no provider applies to this request (for example `studio.fga`
+ * is set and the request used server auth), the request is denied rather than
+ * treated as unrestricted.
+ */
+export function getHandlerFGAProvider(mastra: any, requestContext?: RequestContext): IFGAProvider | undefined {
+  const studioFga = mastra?.getStudio?.()?.fga as IFGAProvider | undefined;
+  const serverFga = mastra?.getServer?.()?.fga as IFGAProvider | undefined;
+
+  if (requestContext?.get(MASTRA_AUTH_MODE_KEY) === 'studio' && studioFga) return studioFga;
+  if (serverFga) return serverFga;
+  if (studioFga) {
+    throw new HTTPException(403, { message: 'Access denied: no FGA provider is configured for this request' });
+  }
+  return undefined;
 }
 
 // Validation helper
@@ -231,7 +259,7 @@ export async function enforceThreadAccess({
 }): Promise<void> {
   await validateThreadOwnership(thread, effectiveResourceId);
 
-  const fgaProvider = mastra?.getServer?.()?.fga;
+  const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
   if (!fgaProvider) {
     return;
   }
@@ -248,6 +276,7 @@ export async function enforceThreadAccess({
     resourceId: thread?.resourceId ?? effectiveResourceId,
     requestContext,
     permission,
+    fgaProvider,
   });
 }
 
@@ -264,7 +293,11 @@ export async function enforceThreadAccess({
 export async function validateRunOwnership(
   run: { resourceId?: string | null } | null | undefined,
   effectiveResourceId: string | undefined,
-  mastra?: { getServer?: () => { auth?: unknown; fga?: unknown } | undefined },
+  mastra?: {
+    getServer?: () => { auth?: unknown; fga?: unknown } | undefined;
+    getStudio?: () => { fga?: unknown } | undefined;
+  },
+  requestContext?: RequestContext,
 ): Promise<void> {
   if (!run) return;
   const server = mastra?.getServer?.();
@@ -282,7 +315,7 @@ export async function validateRunOwnership(
     }
     return;
   }
-  if (!server?.fga) {
+  if (!getHandlerFGAProvider(mastra, requestContext)) {
     throw new HTTPException(403, {
       message:
         'Access denied: unscoped workflow run access requires explicit authorization. Configure an FGA provider to authorize privileged run access.',

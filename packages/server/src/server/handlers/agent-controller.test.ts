@@ -1140,6 +1140,67 @@ describe('agent-controller routes', () => {
   });
 
   describe('STREAM_AGENT_CONTROLLER_SESSION_ROUTE', () => {
+    it('parses displayState=false as false rather than a truthy string', () => {
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'false' }).displayState).toBe(
+        false,
+      );
+      expect(STREAM_AGENT_CONTROLLER_SESSION_ROUTE.queryParamSchema.parse({ displayState: 'true' }).displayState).toBe(
+        true,
+      );
+    });
+
+    it('omits display state snapshots when displayState=false but preserves other events', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-no-snapshots',
+        id: 'user-no-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-no-snapshots',
+        displayState: false,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+
+      session.emit({ type: 'agent_start' } as any);
+      session.emit({ type: 'agent_end' } as any);
+      const first = await reader.read();
+      const second = await reader.read();
+      await reader.cancel();
+
+      expect([first.value, second.value]).toEqual([{ type: 'agent_start' }, { type: 'agent_end' }]);
+    });
+
+    it('still sends live display state changes by default', async () => {
+      const controller = mastra.getAgentController('code')!;
+      await controller.init();
+      const session = await controller.createSession({
+        resourceId: 'user-snapshots',
+        id: 'user-snapshots',
+        ownerId: 'code',
+      });
+      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
+        mastra,
+        controllerId: 'code',
+        sessionId: 'user-snapshots',
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<unknown>;
+      const reader = stream.getReader();
+      const initial = await reader.read();
+      session.emit({ type: 'agent_start' } as any);
+      const event = await reader.read();
+      const snapshot = await reader.read();
+      await reader.cancel();
+
+      expect((initial.value as any).type).toBe('display_state_changed');
+      expect(event.value).toEqual({ type: 'agent_start' });
+      expect((snapshot.value as any).type).toBe('display_state_changed');
+    });
+
     it('delivers session events to the SSE stream', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

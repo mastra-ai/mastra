@@ -1,13 +1,13 @@
 {
   "temperature": ["hy3", "hy3-preview", "hy4-preview"],
   "reasoning": {
-    "hy3-preview": [
+    "hy3": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
     "hy4-preview": [
@@ -19,13 +19,13 @@
         "values": ["none", "high"]
       }
     ],
-    "hy3": [
+    "hy3-preview": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["low", "medium", "high"]
       }
     ]
   }
