@@ -121,6 +121,7 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
+const RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID = 'DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
@@ -196,6 +197,7 @@ function shouldReportRecoveryFailure(error: unknown): boolean {
   const errorId = (error as { id?: unknown })?.id;
   return (
     errorId !== RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID &&
+    errorId !== RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID &&
     errorId !== RECOVER_RUN_SUSPENDED_ERROR_ID &&
     errorId !== RECOVER_RUN_NOT_ACTIVE_ERROR_ID &&
     errorId !== RECOVER_SHUTDOWN_ERROR_ID
@@ -1080,6 +1082,25 @@ export class DurableAgent<
       typeof persisted.snapshot === 'string'
         ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
         : persisted.snapshot;
+    if (
+      snapshot?.status === 'pending' &&
+      snapshot.context != null &&
+      typeof snapshot.context === 'object' &&
+      !Array.isArray(snapshot.context) &&
+      !Object.prototype.hasOwnProperty.call(snapshot.context, 'input')
+    ) {
+      throw new MastraError({
+        id: RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" recover(${runId}): no restartable checkpoint has been persisted yet. ` +
+          `Enable recovery: { durableAgents: 'auto' } or a shouldPersistSnapshot policy that includes ` +
+          `"running" before starting the run. Even with persistence enabled, recovery is unavailable ` +
+          `until the first running checkpoint is saved.`,
+        details: { agentName: this.name, runId, status: snapshot.status },
+      });
+    }
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
     if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
       throw new MastraError({
@@ -5172,8 +5193,13 @@ export class DurableAgent<
               return { runId: targetRunId, status: 'skipped' };
             }
             if (!started) {
-              // The run finished or suspended between discovery and its recovery.
-              if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
+              // The checkpoint disappeared or the run suspended between discovery and recovery.
+              if (
+                errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
+                errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
+                errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
+              )
+                return;
               const skipped = recoverySkip(error);
               if (skipped) {
                 if (skipped.reason === 'transient-error') {

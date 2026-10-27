@@ -10,6 +10,10 @@ Recovery only takes runs that are orphaned. Whether a run is orphaned is decided
 - The run has a persisted `running` snapshot. `listActiveRuns()` and `recover()` read nothing else. A plain `DurableAgent` writes `running` snapshots only when `recovery.durableAgents` is `'auto'`, or when a user `shouldPersistSnapshot` includes `running`. `EventedAgent` always writes them.
 - The workflows store supports run fencing. Without it recovery still works, but liveness comes from the pubsub lease and a superseded execution's writes are not rejected. `recoverActiveRuns()` and `recover()` warn once per store when that applies.
 
+The outer `durable-agentic-loop` snapshot is the restart source of truth. A nested `durable-agentic-execution` input cannot reconstruct the outer workflow's progress. An initial `pending` loop row without its own `context.input` is not corrupt, but is not restartable: `recover()` throws `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` without starting a recovered execution. If the checkpoint disappears during claim acquisition, revalidation throws the same error and releases the acquired claim. A malformed input, wrong workflow kind, or foreign agent still fails its existing validation.
+
+Enable running-checkpoint persistence before starting the run. Even with persistence enabled, recovery is unavailable before the first running checkpoint is saved. Changing the configuration after a crash cannot reconstruct that checkpoint.
+
 ## Entry points
 
 | Entry point                                           | What it does                                                                                                                                                                                                              |
@@ -49,7 +53,7 @@ If setup fails after ownership is acquired but before the workflow restarts, the
 
 ## What the redo does
 
-The workflow restarts from the last persisted snapshot. Every step after it runs again, including model calls and tool calls.
+The workflow restarts from the last persisted snapshot. Every step after it runs again, including model calls and tool calls. Tool side effects must be idempotent; recovery does not guarantee exactly-once execution.
 
 Writes from the redo land on the same rows the crashed execution wrote. Message and part ids come from the snapshot's state, not freshly generated, so a redo upserts rather than appends. This holds for crashes anywhere in the run, including with `savePerStep: true`, where memory can be one step ahead of the snapshot. No reconciliation pass runs. A real model can produce different content on the redo; the redo overwrites what the crashed execution flushed.
 
