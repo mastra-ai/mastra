@@ -190,20 +190,25 @@ const makePostingStep = (runtime: InvoiceRuntime) =>
         });
         const receipt = await posting(request);
 
-        await runtime.history.save({
-          id: receipt.externalBillId,
-          vendorId: inputData.vendor.id,
-          invoiceNumber: inputData.invoice.invoiceNumber,
-          invoiceDate: inputData.invoice.invoiceDate,
-          currency: inputData.invoice.currency,
-          totalMinor: inputData.invoice.totalMinor,
-        });
+        let historyWarning: string | null = null;
+        try {
+          await runtime.history.save({
+            id: receipt.externalBillId,
+            vendorId: inputData.vendor.id,
+            invoiceNumber: inputData.invoice.invoiceNumber,
+            invoiceDate: inputData.invoice.invoiceDate,
+            currency: inputData.invoice.currency,
+            totalMinor: inputData.invoice.totalMinor,
+          });
+        } catch (error) {
+          historyWarning = `Bill posted; local history update failed: ${error instanceof Error ? error.message : String(error)}`;
+        }
 
         return {
           ...inputData,
           executionStatus: 'posted' as const,
           posting: receipt,
-          postingError: null,
+          postingError: historyWarning,
         };
       } catch (error) {
         return postingFailure(

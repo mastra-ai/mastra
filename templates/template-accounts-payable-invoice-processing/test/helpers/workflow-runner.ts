@@ -1,4 +1,5 @@
 import { Mastra } from '@mastra/core';
+import { writeFile } from 'node:fs/promises';
 import { LibSQLStore } from '@mastra/libsql';
 import { activeInvoiceRuntime } from '../../src/mastra/accounting/providers.ts';
 import { createInvoiceWorkflow, invoiceWorkflow, signInvoiceSubmission } from '../../src/mastra/workflows/invoice.ts';
@@ -10,7 +11,22 @@ import { noopObserve } from '@mastra/core/tools';
 
 try {
   const operation = JSON.parse(process.argv[2]!);
-  const workflow = operation.tool ? invoiceWorkflow : createInvoiceWorkflow(activeInvoiceRuntime);
+  const runtime = operation.historyFailure
+    ? {
+        ...activeInvoiceRuntime,
+        history: {
+          findPotentialDuplicates: activeInvoiceRuntime.history.findPotentialDuplicates.bind(
+            activeInvoiceRuntime.history,
+          ),
+          seed: activeInvoiceRuntime.history.seed.bind(activeInvoiceRuntime.history),
+          // Exercise a real filesystem persistence failure after the MCP returns a created Bill.
+          // The token store is a file, so writing a child of it fails with ENOTDIR.
+          save: async (invoice: unknown) =>
+            writeFile(`${process.env.QBO_MCP_TOKEN_STORE_PATH}/history.json`, JSON.stringify(invoice)),
+        },
+      }
+    : activeInvoiceRuntime;
+  const workflow = operation.tool ? invoiceWorkflow : createInvoiceWorkflow(runtime);
   const storage = new LibSQLStore({ id: 'ap-workflow-test', url: process.env.MASTRA_DB_URL! });
   new Mastra({ workflows: { workflow }, agents: { accountsPayableAgent }, storage });
   const run = await workflow.createRun(operation.runId ? { runId: operation.runId } : {});

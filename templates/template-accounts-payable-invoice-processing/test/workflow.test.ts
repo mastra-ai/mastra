@@ -438,3 +438,20 @@ it('matches identical descriptions by SKU and refuses a conflicting SKU before l
     }
   }
 });
+
+// PR #28532, CodeRabbit 4383787373: a local history write must not erase an external success.
+it('retains the posted Bill receipt when local history persistence fails', async () => {
+  const test = await scenario();
+  try {
+    const result = await test.run({ historyFailure: true });
+    assert.equal(result.result?.executionStatus, 'posted');
+    assert.equal(result.result?.posting?.externalBillId, 'bill-1');
+    assert.match(result.result?.postingError ?? '', /history.*failed/i);
+    assert.match(result.result?.postingError ?? '', /ENOTDIR/);
+    assert.equal((await test.state()).bills.length, 1);
+    await test.run();
+    assert.equal((await test.state()).bills.length, 1);
+  } finally {
+    await test.close();
+  }
+});
