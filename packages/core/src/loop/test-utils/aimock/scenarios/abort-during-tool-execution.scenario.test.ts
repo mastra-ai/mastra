@@ -170,6 +170,73 @@ describeForAllEngines(
       },
     );
 
+    (engine === 'normal' || engine === 'fs' ? it : it.skip)(
+      'saves completed eager work queued behind a tool that ignores cancellation',
+      async () => {
+        const controller = new AbortController();
+        const memory = new MockMemory();
+        const paymentFinished = Promise.withResolvers<void>();
+        const threadId = `queued-payment-${engine}`;
+        const resourceId = 'payment-customer';
+        let payments = 0;
+        const { output, chunks, requests } = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId,
+          resourceId,
+          prompt: 'Check the account and complete the payment',
+          defaultOptions: { eagerToolExecution: true, toolCallConcurrency: 1 },
+          abortSignal: controller.signal,
+          collectChunks: true,
+          tools: {
+            check: createTool({
+              id: 'check',
+              description: 'Check the account before continuing',
+              inputSchema: z.object({}),
+              // A suspend-capable tool runs in the foreach, not eagerly.
+              suspendSchema: z.object({ question: z.string() }),
+              execute: async () => {
+                await paymentFinished.promise;
+                controller.abort();
+                return new Promise<never>(() => {});
+              },
+            }),
+            payment: createTool({
+              id: 'payment',
+              description: 'Complete the payment',
+              inputSchema: z.object({}),
+              execute: async () => {
+                payments++;
+                return { receipt: 'QUEUED_PAID_1488' };
+              },
+              onOutput: () => paymentFinished.resolve(),
+            }),
+          },
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', hasToolResult: false },
+              {
+                toolCalls: [
+                  { id: 'call_check', name: 'check', arguments: {} },
+                  { id: 'call_payment', name: 'payment', arguments: {} },
+                ],
+              },
+            );
+            llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Should not reach here' });
+          },
+        });
+        expect(payments).toBe(1);
+        expect(await output.finishReason).toBe('aborted');
+        expect(requests).toHaveLength(1);
+        expect(chunks?.filter(chunk => chunk.type === 'abort')).toHaveLength(1);
+        expect(JSON.stringify((await memory.recall({ threadId, resourceId })).messages)).toContain('QUEUED_PAID_1488');
+        expect(
+          chunks?.filter(chunk => chunk.type === 'tool-result' && chunk.payload.toolCallId === 'call_payment'),
+        ).toHaveLength(1);
+      },
+    );
+
     it('propagates abort signal to tool execution context', async () => {
       const abortController = new AbortController();
       let toolReceivedSignal = false;
