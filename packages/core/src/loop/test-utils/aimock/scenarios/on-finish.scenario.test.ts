@@ -1,6 +1,7 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { EventEmitterPubSub } from '../../../../events/event-emitter';
 import type { Processor } from '../../../../processors';
 import { REPROCESS_PART_KEY } from '../../../../processors/stream-reprocess';
 import type { LLMStepResult, MastraOnFinishCallbackArgs, ToolResultChunk } from '../../../../stream/types';
@@ -542,88 +543,110 @@ describeForAllEngines(
     // Results the stream never emitted must stay out of the callback. The plain
     // Agent still restores a processor-hidden result on resume, so the hidden
     // case covers the durable engines only. A result a processor stashes and
-    // emits right after (the reprocess path) was emitted, so it stays.
-    it.each(isDurableEngineVariant(engine) ? (['hidden', 'client', 'reprocessed'] as const) : (['client'] as const))(
-      'restores only emitted results after approval (%s lookup)',
-      async kind => {
-        const shared = await createSharedAgent(getMock(), {
+    // emits right after (the reprocess path) was emitted, so it stays. A
+    // result whose publish failed never reached the stream, so it is left out
+    // (Inngest publishes through its own pubsub, so that case can't run there).
+    it.each(
+      isDurableEngineVariant(engine)
+        ? engine === 'inngest'
+          ? (['hidden', 'client', 'reprocessed'] as const)
+          : (['hidden', 'client', 'reprocessed', 'unpublished'] as const)
+        : (['client'] as const),
+    )('restores only emitted results after approval (%s lookup)', async kind => {
+      // Publishing the lookup result fails once; the rest goes through.
+      let failedPublish = false;
+      const pubsub =
+        kind === 'unpublished'
+          ? new (class extends EventEmitterPubSub {
+              override async publish(topic: string, event: any) {
+                const data = event?.data;
+                if (!failedPublish && data?.type === 'tool-result' && data.payload?.toolName === 'lookup') {
+                  failedPublish = true;
+                  throw new Error('publish failed');
+                }
+                return super.publish(topic, event);
+              }
+            })()
+          : undefined;
+      const shared = await createSharedAgent(getMock(), {
+        engine,
+        ...(pubsub ? { pubsub } : {}),
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Find an item.',
+            inputSchema: z.object({}),
+            ...(kind !== 'client' ? { execute: async () => ({ secret: 'private' }) } : {}),
+          }),
+          purchase: createTool({
+            id: 'purchase',
+            description: 'Purchase the item.',
+            inputSchema: z.object({}),
+            requireApproval: true,
+            execute: async () => ({ purchased: 'A' }),
+          }),
+        },
+      });
+      const hideLookup: Processor = {
+        id: 'hide-lookup',
+        processOutputStream: async ({ part }) =>
+          part.type === 'tool-result' && part.payload.toolName === 'lookup' ? null : part,
+      };
+      const deferLookup: Processor = {
+        id: 'defer-lookup',
+        processOutputStream: async ({ part, state }) => {
+          if (part.type !== 'tool-result' || part.payload.toolName !== 'lookup' || state.deferred) return part;
+          state.deferred = true;
+          state[REPROCESS_PART_KEY] = part;
+          return null;
+        },
+      };
+      const outputProcessors = { hidden: [hideLookup], reprocessed: [deferLookup], client: undefined }[kind];
+      const expected = kind === 'reprocessed' ? ['lookup-1', 'purchase-1'] : ['purchase-1'];
+      let finish: MastraOnFinishCallbackArgs | undefined;
+      let resumed: any;
+      try {
+        const { output } = await runLoopScenario({
           engine,
-          tools: {
-            lookup: createTool({
-              id: 'lookup',
-              description: 'Find an item.',
-              inputSchema: z.object({}),
-              ...(kind !== 'client' ? { execute: async () => ({ secret: 'private' }) } : {}),
-            }),
-            purchase: createTool({
-              id: 'purchase',
-              description: 'Purchase the item.',
-              inputSchema: z.object({}),
-              requireApproval: true,
-              execute: async () => ({ purchased: 'A' }),
-            }),
+          llm: getMock(),
+          sharedAgent: shared,
+          prompt: 'Find and buy an item.',
+          maxSteps: 4,
+          ...(outputProcessors ? { outputProcessors } : {}),
+          fixtures: llm => {
+            llm.on(
+              { endpoint: 'chat', sequenceIndex: 0 },
+              {
+                toolCalls: [
+                  { id: 'lookup-1', name: 'lookup', arguments: {} },
+                  { id: 'purchase-1', name: 'purchase', arguments: {} },
+                ],
+              },
+            );
+            llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Purchased.' });
           },
         });
-        const hideLookup: Processor = {
-          id: 'hide-lookup',
-          processOutputStream: async ({ part }) =>
-            part.type === 'tool-result' && part.payload.toolName === 'lookup' ? null : part,
-        };
-        const deferLookup: Processor = {
-          id: 'defer-lookup',
-          processOutputStream: async ({ part, state }) => {
-            if (part.type !== 'tool-result' || part.payload.toolName !== 'lookup' || state.deferred) return part;
-            state.deferred = true;
-            state[REPROCESS_PART_KEY] = part;
-            return null;
+        resumed = await shared.agent.approveToolCall({
+          runId: output.runId,
+          toolCallId: 'purchase-1',
+          onFinish: (result: MastraOnFinishCallbackArgs) => {
+            finish = result;
           },
-        };
-        const outputProcessors = { hidden: [hideLookup], reprocessed: [deferLookup], client: undefined }[kind];
-        const expected = kind === 'reprocessed' ? ['lookup-1', 'purchase-1'] : ['purchase-1'];
-        let finish: MastraOnFinishCallbackArgs | undefined;
-        let resumed: any;
-        try {
-          const { output } = await runLoopScenario({
-            engine,
-            llm: getMock(),
-            sharedAgent: shared,
-            prompt: 'Find and buy an item.',
-            maxSteps: 4,
-            ...(outputProcessors ? { outputProcessors } : {}),
-            fixtures: llm => {
-              llm.on(
-                { endpoint: 'chat', sequenceIndex: 0 },
-                {
-                  toolCalls: [
-                    { id: 'lookup-1', name: 'lookup', arguments: {} },
-                    { id: 'purchase-1', name: 'purchase', arguments: {} },
-                  ],
-                },
-              );
-              llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Purchased.' });
-            },
-          });
-          resumed = await shared.agent.approveToolCall({
-            runId: output.runId,
-            toolCallId: 'purchase-1',
-            onFinish: (result: MastraOnFinishCallbackArgs) => {
-              finish = result;
-            },
-          });
-          for await (const _chunk of resumed.fullStream) {
-            /* drain the resumed segment */
-          }
-          await expect.poll(() => finish).toBeDefined();
-          expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(expected);
-          expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual(
-            expected,
-          );
-        } finally {
-          resumed?.cleanup?.();
-          if (engine !== 'inngest') await shared.mastra.shutdown({ drainTimeout: 1000 });
+        });
+        for await (const _chunk of resumed.fullStream) {
+          /* drain the resumed segment */
         }
-      },
-    );
+        await expect.poll(() => finish).toBeDefined();
+        if (kind === 'unpublished') expect(failedPublish).toBe(true);
+        expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(expected);
+        expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual(
+          expected,
+        );
+      } finally {
+        resumed?.cleanup?.();
+        if (engine !== 'inngest') await shared.mastra.shutdown({ drainTimeout: 1000 });
+      }
+    });
   },
   { skip: ['fs'] },
 );

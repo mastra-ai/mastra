@@ -296,7 +296,6 @@ async function processChunkThroughOutputProcessors(
         }
       : undefined,
     emitChunk: async c => {
-      onEmit?.(c);
       if (pubsub) {
         // Mark chunks the processors ran on so the stream consumer doesn't run
         // them again. Without a runner (no processors, or none in this process)
@@ -307,6 +306,7 @@ async function processChunkThroughOutputProcessors(
           throw new DurableChunkPublishError(error);
         }
       }
+      onEmit?.(c);
     },
     onProcessorError: error => {
       // Publication failures keep the callers' non-fatal emission path.
@@ -2139,8 +2139,6 @@ export function createDurableToolCallStep() {
                 if (chunk.type === 'tool-result' && chunk.payload.toolCallId === toolCallId) resultEmitted = true;
               },
             );
-            // A processor can drop the result, or stash it and emit it right after.
-            resultHidden = !resultEmitted;
           } catch (emitError) {
             ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
@@ -2148,6 +2146,9 @@ export function createDurableToolCallStep() {
             }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
+          // A processor can drop the result or stash it and emit it right
+          // after, and publishing can fail; only a published result counts.
+          resultHidden = !resultEmitted;
         }
 
         return {
