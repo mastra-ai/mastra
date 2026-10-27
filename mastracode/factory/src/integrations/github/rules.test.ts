@@ -3356,7 +3356,7 @@ describe('GithubRules label routes', () => {
       // Planning's runner proposed the planning run.
       expect((await workItems.listDeferredDecisions('org-1', project.id)).map(record => record.decision)).toEqual(
         expect.arrayContaining([
-          expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-plan', role: 'plan' }),
+          expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-plan', role: 'build' }),
         ]),
       );
     });
@@ -3527,8 +3527,8 @@ describe('GithubRules label routes', () => {
       id: item.id,
       userId: 'user-1',
       patch: {
-        // Sessions are keyed by the phase's role (`plan`), not the phase id (`planning`).
-        sessions: { plan: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
+        // Sessions are keyed by the phase's configured context, not its phase id.
+        sessions: { build: { sessionId: 'session-1', branch: 'b', threadId: 'thread-1', startedBy: 'user-1' } },
       },
     });
     await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });

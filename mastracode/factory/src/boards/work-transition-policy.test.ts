@@ -14,8 +14,6 @@ function context(
     fromStage,
     toStage,
     isHumanTransition: options.human ?? false,
-    plansAutoApproved: true,
-    planApproved: false,
     fromPhaseTools: [],
     item: { triageType: 'bug', metadata: options.metadata ?? {} },
   } as unknown as BoardTransitionPolicyContext;

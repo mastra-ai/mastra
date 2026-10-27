@@ -546,8 +546,8 @@ export interface WorkItemRow {
   plansPreapprovedAt: Date | null;
   /**
    * When a person first moved this item out of Intake/Triage into working
-   * stages. Non-bug items wait for that gesture; once it is recorded the
-   * agents may advance the item through Planning and Execute on their own.
+   * stages. Retained for historical acceptance and source-label cleanup;
+   * classification does not gate transitions.
    */
   acceptedAt: Date | null;
   /** Denormalized feed counters, maintained by the comments domain via recount. */

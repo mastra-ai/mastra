@@ -120,7 +120,7 @@ describe('rulePhaseContext', () => {
       role: 'release',
       outcomes: [],
     });
-    expect(rulePhaseContext(boards, item(['execute'], null))).toMatchObject({ kind: 'working', role: 'work' });
+    expect(rulePhaseContext(boards, item(['execute'], null))).toMatchObject({ kind: 'working', role: 'build' });
   });
 
   it('fails closed for multi-stage rows, undeclared phases, and uninstalled boards', () => {

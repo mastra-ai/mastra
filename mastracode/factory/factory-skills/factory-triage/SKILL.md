@@ -100,15 +100,15 @@ Write one concise **handoff** for whoever plans the fix. It must begin with the 
 ```markdown
 <!-- mastra-factory-triage -->
 
-|                |                                                                                                                                                                 |
-| -------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification>            |
-| **Route**      | <Plan fix\|Await approval\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other> |
-| **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                                      |
-| **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                            |
-| **Effort**     | <low\|medium\|high> — <short implementation-scope reason>                                                                                                       |
-| **Impact**     | <low\|medium\|high> — <short user/business-consequence reason>                                                                                                  |
-| **Next step**  | <concise maintainer-facing next action>                                                                                                                         |
+|                |                                                                                                                                                      |
+| -------------- | ---------------------------------------------------------------------------------------------------------------------------------------------------- |
+| **Type**       | <bug\|feature request\|docs\|question/support\|maintenance\|duplicate\|resolved\|invalid\|spam\|out-of-scope\|other> — <one-sentence classification> |
+| **Route**      | <Plan fix\|Ask author for info\|Close as duplicate/resolved/invalid/spam/out-of-scope\|Answer provided / close\|No transition / refresh\|Other>      |
+| **Severity**   | <🔴 critical\|🟠 high\|🟡 medium\|🟢 low> — <short reason>                                                                                           |
+| **Confidence** | <high\|medium\|low> — <short reason>                                                                                                                 |
+| **Effort**     | <low\|medium\|high> — <short implementation-scope reason>                                                                                            |
+| **Impact**     | <low\|medium\|high> — <short user/business-consequence reason>                                                                                       |
+| **Next step**  | <concise maintainer-facing next action>                                                                                                              |
 
 ### Understanding
 
@@ -146,7 +146,7 @@ Impact guide:
 - medium — a normal workflow is degraded or a meaningful user group is affected.
 - high — a core workflow is blocked, a widespread regression exists, or there is data, security, or correctness risk without a practical workaround.
 
-Recompute the complete header and handoff, including independent effort and impact estimates, on every refresh. `Route` describes the outcome of this completed investigation: use `Plan fix` for actionable issues advancing to Planning, `Await approval` for a feature or other maintainer decision, and `No transition / refresh` when Planning-or-later work is refreshed.
+Recompute the complete header and handoff, including independent effort and impact estimates, on every refresh. `Route` describes the outcome of this completed investigation: use `Plan fix` for actionable work advancing to Planning, regardless of its classification, and `No transition / refresh` when Planning-or-later work is refreshed. Classification is descriptive; the board's phase configuration decides which moves and automatic starts are allowed.
 
 ## Phase 5: GitHub Handoff & Transition
 
@@ -162,7 +162,6 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
 
 - Add `status: auto-triaged` for every GitHub issue: `gh issue edit "$ISSUE" --add-label "status: auto-triaged"`.
 - Remove `status: needs triage` whenever it is present, including when Phase 1 added it: `gh issue edit "$ISSUE" --remove-label "status: needs triage"`.
-- Add `status: needs approval` when `Route: Await approval`, or when the recommended next action needs maintainer approval or prep before someone should investigate, implement, close, or reject: `gh issue edit "$ISSUE" --add-label "status: needs approval"`.
 - Add the selected `effort:<level>` and `impact:<level>` labels from the handoff.
 - Remove only conflicting alternatives from these explicit labels: `effort:low`, `effort:medium`, `effort:high`, `impact:low`, `impact:medium`, and `impact:high`. On every initial run and refresh, keep exactly the selected effort label and exactly the selected impact label.
 - Add the domain labels selected in Phase 4 in `mastra-ai/mastra`; never remove one. Create any that does not exist yet, leaving existing labels untouched. Skip when none was selected:
@@ -175,13 +174,12 @@ After a GitHub comment is posted or updated, reconcile the labels before the ter
   gh issue edit "$ISSUE" --repo mastra-ai/mastra --add-label '<comma-separated labels selected in Phase 4>'
   ```
 
-Apply only these label mutations. Do not remove `status: needs approval` merely because a later refresh has a different route. Do not add, remove, or derive any `trio-*` labels; leave all type, area, ownership, and unrelated labels untouched. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
+Apply only these label mutations. Do not add, remove, or derive any `trio-*` labels; leave all type, area, ownership, and unrelated labels untouched. For Linear issues, use the same structured handoff without attempting GitHub publication or label mutations.
 
 Post the same handoff as your final conversation message. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
 - When the current stage is **Intake** or **Triage**, make the terminal `factory_transition_work_item` call with `triageType` set to the exact `Type` from the handoff.
-- Confirmed bugs with `Route: Plan fix` request `stage: "planning"`. Issues that should be closed request `stage: "done"` with the close rationale.
-- Features and every other non-bug classification use `Route: Await approval` and request their current Intake/Triage stage. This records the classification without advancing; stop until a maintainer moves the card or starts the next run from the Factory UI.
+- Actionable work with `Route: Plan fix` requests `stage: "planning"`, whether it is a bug, feature, documentation, or maintenance work. Issues that should be closed request `stage: "done"` with the close rationale. Follow the board's allowed next phases; do not introduce a separate acceptance step based on classification or labels.
 - When the item is already in **Planning** or a later stage, this is a webhook-driven refresh: use `Route: No transition / refresh`, update the source-specific handoff, but do **not** request a stage transition. Report the updated verdict and stop.
 
 `rationale` (max 1000 chars) — the triage verdict and headline understanding in a few sentences (e.g. "Genuine regression from <commit>; root cause understood; ready to plan a fix").

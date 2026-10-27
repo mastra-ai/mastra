@@ -1,4 +1,4 @@
-import { FACTORY_ROLE_STAGES, isFactoryRole, needsApproval } from '@mastra/factory/rules/types';
+import { FACTORY_ROLE_STAGES, isFactoryRole } from '@mastra/factory/rules/types';
 import type { FactoryRole, FactoryRuleStage } from '@mastra/factory/rules/types';
 import type { BoardCardState, BoardCardStatus } from './boardCardState';
 import { itemSessionSpec, pullRequestStatusForItem } from './boardItems';
@@ -15,12 +15,10 @@ export interface CardPrimaryAction {
 
 /** A lane the card can be moved into, named by what the lane's rule then runs. */
 export interface CardMove {
-  label: 'Investigate' | 'Build' | 'Prepare approval' | 'Review' | 'Re-review';
+  label: 'Investigate' | 'Build' | 'Review' | 'Re-review';
   /** Session slot the lane's run fills on the card, e.g. `plan` or `work`. */
   role: FactoryRole;
   stage: FactoryRuleStage;
-  /** The run's outcome is a maintainer decision, so hands-off has nothing to remove. */
-  awaitsHumanDecision?: true;
 }
 
 /** A persisted card or a candidate feed entry: both are moved by the same lane rules. */
@@ -29,12 +27,6 @@ export type MovableCard = Pick<WorkItem, 'source' | 'metadata'> &
 
 const INVESTIGATE: CardMove = { label: 'Investigate', role: 'triage', stage: 'triage' };
 const BUILD: CardMove = { label: 'Build', role: 'work', stage: 'execute' };
-const PREPARE_APPROVAL: CardMove = {
-  label: 'Prepare approval',
-  role: 'triage',
-  stage: 'triage',
-  awaitsHumanDecision: true,
-};
 const REVIEW: CardMove = { label: 'Review', role: 'review', stage: 'review' };
 const RE_REVIEW: CardMove = { label: 'Re-review', role: 'review', stage: 'review' };
 
@@ -43,7 +35,7 @@ export function cardMoves(item: MovableCard, columnStage: BoardStageId): CardMov
   if (item.board != null && item.board !== 'work' && item.board !== 'review') return [];
   if (isTerminalStage(columnStage)) return openPullRequestInDone(item, columnStage) ? [RE_REVIEW] : [];
   if (columnStage === 'review' && item.source !== 'github-pr' && item.source !== 'gitlab-pr') return [];
-  if (item.source === 'github-issue') return needsApproval(item) ? [PREPARE_APPROVAL] : [INVESTIGATE, BUILD];
+  if (item.source === 'github-issue') return [INVESTIGATE, BUILD];
   if (
     item.source === 'gitlab-issue' ||
     item.source === 'linear-issue' ||
@@ -67,12 +59,18 @@ function seatDepth(role: string): number {
   return Object.keys(FACTORY_ROLE_STAGES).indexOf(role);
 }
 
-/** Resume re-enters the lane of the deepest seat the card has used, and lets that lane's rule dispatch. */
+/** Resume re-enters the last used working phase; legacy cards without a catalog fall back to their roles. */
 export function resumeStage(
   columnStage: BoardStageId,
   sessions: Record<string, WorkItemSessionRef>,
-): FactoryRuleStage | undefined {
+  phases?: readonly { id: string; kind: string; role?: string }[],
+  history: readonly { stage: string }[] = [],
+): string | undefined {
   if (columnStage !== 'intake') return undefined;
+  if (phases !== undefined) {
+    const used = phases.filter(phase => phase.kind === 'working' && phase.role && sessions[phase.role]);
+    return [...history].reverse().find(entry => used.some(phase => phase.id === entry.stage))?.stage ?? used.at(-1)?.id;
+  }
   const deepest = Object.keys(sessions)
     .filter(isFactoryRole)
     .sort((left, right) => seatDepth(left) - seatDepth(right))
@@ -80,46 +78,9 @@ export function resumeStage(
   return deepest === undefined ? undefined : FACTORY_ROLE_STAGES[deepest];
 }
 
-/**
- * Triage classified the card as something other than a bug, so the rules hold
- * it until a person moves it forward. The card then asks for that decision
- * instead of offering a run that would only advance it as a side effect.
- */
-export function awaitsTriageDecision(
-  item: Pick<WorkItem, 'triageType' | 'acceptedAt'> & Partial<Pick<WorkItem, 'board'>>,
-  columnStage: BoardStageId,
-) {
-  return (
-    (item.board == null || item.board === 'work') &&
-    (columnStage === 'intake' || columnStage === 'triage') &&
-    item.triageType !== null &&
-    item.triageType !== 'bug' &&
-    item.acceptedAt === null
-  );
-}
-
-export interface TriageDecision {
-  label: string;
-  stage: 'planning' | 'execute' | 'canceled';
-}
-
-/** The maintainer's choices for a held card, the likeliest first. */
-export const TRIAGE_DECISIONS: readonly TriageDecision[] = [
-  { label: 'Accept and plan', stage: 'planning' },
-  { label: 'Accept and build', stage: 'execute' },
-  { label: 'Close', stage: 'canceled' },
-];
-
-/**
- * A held card's primary action is the maintainer's decision, ahead of
- * everything else: a suggested or parked run would advance the card without
- * that decision being made. Otherwise a proposed run wins the slot, since
- * releasing it beats starting a rival run beside it, and resuming parked work
- * comes next for the same reason.
- */
+/** A suggested run wins over starting a rival run; resuming parked work comes next. */
 export function cardPrimaryAction({
   item,
-  columnStage,
   move,
   resumeStage,
   nextPhase,
@@ -134,7 +95,7 @@ export function cardPrimaryAction({
   /** The lane the button sends the card to; undefined when the card has none to offer. */
   move?: CardMove;
   /** Lane a parked card goes back to, ahead of any move it also offers. */
-  resumeStage?: FactoryRuleStage;
+  resumeStage?: string;
   /** On a custom board, the first phase this one declares a transition to. */
   nextPhase?: { id: string; label: string };
   /** The card's own parked run, read from its status so the button says what the badge says. */
@@ -144,11 +105,6 @@ export function cardPrimaryAction({
   onCreateSession: (spec: { branch: string; threadTitle: string }) => void;
   onMove: (toStage: string) => void;
 }): CardPrimaryAction | undefined {
-  if (columnStage !== undefined && awaitsTriageDecision(item, columnStage)) {
-    // One word on the pill so it sits beside "Open session"; the menu spells out the alternatives.
-    const [accept] = TRIAGE_DECISIONS;
-    return { label: 'Accept', ariaLabel: accept.label, start: () => onMove(accept.stage) };
-  }
   if (waiting !== undefined) {
     return { label: waiting.label, start: () => onApproveProposal(waiting.decisionId) };
   }
@@ -171,8 +127,7 @@ export function cardPrimaryAction({
 }
 
 export type CardAction = { label: string; ariaLabel?: string; disabled?: boolean; urgent?: boolean } & (
-  | { href: string }
-  | { start: () => void }
+  { href: string } | { start: () => void }
 );
 
 export function sessionLink(href: string | undefined): CardAction | undefined {
@@ -219,7 +174,7 @@ function freeCardActions(
       : run;
   const main = retry ?? namedRun ?? session;
   if (main === undefined) return [];
-  const awaitsPerson = status.kind === 'waiting' || status.kind === 'held';
+  const awaitsPerson = status.kind === 'waiting';
   const isUrgent = (action: CardAction) => action === retry || (awaitsPerson && action === namedRun);
   const rest = [session, namedRun].filter(action => action !== undefined).filter(action => action !== main);
   return [main, ...rest].map(action => ({ ...action, urgent: isUrgent(action) }));

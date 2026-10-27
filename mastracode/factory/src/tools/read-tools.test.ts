@@ -351,7 +351,7 @@ describe('factory_inspect_work_item', () => {
 });
 
 describe('factory_list_attention', () => {
-  it('groups failed decisions by failure, lists proposals and held items', async () => {
+  it('groups failures and proposals without inventing a classification hold', async () => {
     const items = [
       item({ id: 'x', metadata: { number: 1 } }),
       item({ id: 'y' }),
@@ -372,7 +372,6 @@ describe('factory_list_attention', () => {
     const result = await run<{
       incidents: Array<{ failureCode: string; count: number; decisions: Array<{ id: string; canRetry: boolean }> }>;
       proposals: Array<{ id: string; number: number | null }>;
-      held: Array<{ workItemId: string }>;
       truncated: boolean;
     }>('factory_list_attention', {});
     expect(result.incidents.map(group => [group.failureCode, group.count])).toEqual([
@@ -382,7 +381,7 @@ describe('factory_list_attention', () => {
     expect(result.incidents[0]!.decisions.map(row => row.canRetry)).toEqual([true, true]);
     expect(result.incidents[1]!.decisions[0]!.canRetry).toBe(false);
     expect(result.proposals).toMatchObject([{ id: 'p1', number: 1 }]);
-    expect(result.held.map(row => row.workItemId)).toEqual(['held']);
+    expect(result).not.toHaveProperty('held');
     expect(result.truncated).toBe(false);
   });
 

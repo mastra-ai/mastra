@@ -210,8 +210,7 @@ const MAX_BOARDS = 50;
 /**
  * Integrations, the Work transition policy and source-closed handling move Work cards between these
  * phases by key, so the Work board keeps each with its kind. Names, descriptions and runners stay
- * editable; next phases may narrow moves but must keep the ones Factory makes itself (pull request
- * opened, reviewed, merged or closed; the issue pipeline; reopening).
+ * editable; next phases belong entirely to the stored definition.
  */
 const WORK_BOARD_REQUIRED_KINDS: Readonly<Record<string, 'resting' | 'working' | 'terminal'>> = {
   intake: 'resting',
@@ -221,18 +220,6 @@ const WORK_BOARD_REQUIRED_KINDS: Readonly<Record<string, 'resting' | 'working' |
   review: 'working',
   done: 'terminal',
   canceled: 'terminal',
-};
-const WORK_BOARD_REQUIRED_MOVES: Readonly<Record<string, readonly string[]>> = {
-  // Cards filed past Intake (a review request, a route to Review) are created in Intake, then moved.
-  intake: ['triage', 'review', 'done', 'canceled'],
-  triage: ['intake', 'planning', 'review', 'done', 'canceled'],
-  // A pull request that fixes the card's issue can arrive before Factory builds it.
-  planning: ['execute', 'review', 'done', 'canceled'],
-  execute: ['review', 'done', 'canceled'],
-  // Self-review parks a card in Intake once it hits the round limit.
-  review: ['intake', 'execute', 'done', 'canceled'],
-  done: ['review'],
-  canceled: ['review'],
 };
 export const WORK_BOARD_REQUIRED_PHASES = Object.keys(WORK_BOARD_REQUIRED_KINDS);
 /** The retired Review board's id: cards and routes naming it are read as Work. */
@@ -277,16 +264,6 @@ export const projectBoardConfigInputSchema = z
               code: 'custom',
               path: [...path, 'kind'],
               message: `Work's ${phase.key} phase must stay ${kind}.`,
-            });
-          }
-          const dropped = phase.nextPhases
-            ? (WORK_BOARD_REQUIRED_MOVES[phase.key] ?? []).filter(next => !phase.nextPhases!.includes(next))
-            : [];
-          if (dropped.length > 0) {
-            ctx.addIssue({
-              code: 'custom',
-              path: [...path, 'nextPhases'],
-              message: `Work's ${phase.key} phase must allow moving to ${dropped.join(', ')}; Factory moves cards there itself.`,
             });
           }
         });

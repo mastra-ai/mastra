@@ -848,7 +848,7 @@ describe('factory_transition_work_item', () => {
 
     it('follows the card’s phase, not the session: a builder in Review never gets the verdict', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      const prepared = await prepareBoundItem(storage, 'github-issue', 'work');
+      const prepared = await prepareBoundItem(storage, 'github-issue', 'build');
       const options = {
         requestContext: requestContext(),
         storage,

@@ -909,7 +909,7 @@ describe('FactoryPhaseStateProcessor', () => {
 
   it('tells a parked card`s agent to transition back before resuming, and only then', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    const prepared = await prepare(storage, 'work', 'issue', { id: 'work', stage: 'review' });
+    const prepared = await prepare(storage, 'triage', 'issue', { id: 'work', stage: 'triage' });
     const boards = createBoardRegistry();
     const service = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
     const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage });

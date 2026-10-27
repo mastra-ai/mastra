@@ -578,7 +578,7 @@ describe('built-in board and integration handlers', () => {
     });
   });
 
-  it('prepares the approval instead of investigating when a needs-approval issue enters Triage', async () => {
+  it('investigates Triage issues regardless of the legacy needs-approval label', async () => {
     const rule = workBoard.rules.triage?.issue?.onEnter;
     const context = {
       ...stageContext({ type: 'human', id: 'user-1' }, 'work'),
@@ -592,11 +592,9 @@ describe('built-in board and integration handlers', () => {
     expect(decision).toMatchObject({
       type: 'invokeSkill',
       role: 'triage',
-      prompt: expect.stringContaining(
-        'Prepare approval for GitHub issue #42 (https://github.test/acme/repo/issues/42).',
-      ),
+      skillName: 'factory-triage',
+      arguments: 'GitHub issue #42 (https://github.test/acme/repo/issues/42)',
     });
-    expect(decision).not.toHaveProperty('skillName');
   });
 
   it('investigates an accepted issue whose needs-approval label has not caught up yet', async () => {
@@ -731,7 +729,7 @@ describe('built-in board and integration handlers', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       idempotencyKey: 'delivery-1:factory-plan',
-      role: 'plan',
+      role: 'build',
       skillName: 'factory-plan',
       arguments: 'Work item (https://github.test/acme/repo/issues/42)',
     });
@@ -759,7 +757,7 @@ describe('built-in board and integration handlers', () => {
     expect(decision).toMatchObject({
       type: 'invokeSkill',
       idempotencyKey: 'delivery-1:build',
-      role: 'work',
+      role: 'build',
       goal: expect.stringContaining('Implement the approved plan for the work item'),
     });
     expect(decision).not.toHaveProperty('skillName');

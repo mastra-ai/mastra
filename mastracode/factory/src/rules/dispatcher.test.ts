@@ -5,6 +5,8 @@ import { LibSQLStore } from '@mastra/libsql';
 import { describe, expect, it, vi } from 'vitest';
 
 import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { BoardResolver } from '../boards/resolver.js';
+import { defaultProjectBoardConfig } from '../boards/templates/work.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
 import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
@@ -19,6 +21,34 @@ import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+
+async function planApprovingResolver(seed: Awaited<ReturnType<typeof createFactoryStorageForTests>>) {
+  await seed.boardDefinitions.saveConfig({
+    orgId: 'org-1',
+    factoryProjectId: PROJECT_ID,
+    userId: 'user-1',
+    expectedRevision: 0,
+    config: {
+      ...defaultProjectBoardConfig,
+      boards: defaultProjectBoardConfig.boards.map(board => ({
+        ...board,
+        phases: board.phases.map(phase =>
+          phase.key === 'execute'
+            ? {
+                ...phase,
+                exitTool: 'submit_plan',
+                autoApproveWhen: {
+                  operator: 'AND',
+                  conditions: [{ field: 'item.title', operator: 'contains', value: 'Fix' }],
+                },
+              }
+            : { ...phase, exitTool: null },
+        ),
+      })),
+    },
+  });
+  return new BoardResolver({ codeBoards: createBoardRegistry(), storage: seed.boardDefinitions });
+}
 
 async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1') {
   return (
@@ -313,7 +343,11 @@ async function preapprovePlans(storage: WorkItemsStorage, workItemId: string) {
   await storage.update({ orgId: 'org-1', id: workItemId, userId: 'user-1', patch: { plansPreapproved: true } });
 }
 
-async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, options?: { preapprovePlans?: boolean }) {
+async function bindWorkRun(
+  storage: WorkItemsStorage,
+  workItemId: string,
+  options?: { preapprovePlans?: boolean; role?: string },
+) {
   if (options?.preapprovePlans) await preapprovePlans(storage, workItemId);
   const prepared = await storage.prepareRunStart({
     orgId: 'org-1',
@@ -329,7 +363,7 @@ async function bindWorkRun(storage: WorkItemsStorage, workItemId: string, option
         metadata: {},
       },
     },
-    role: 'work',
+    role: options?.role ?? 'work',
     session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
     resourceId: PROJECT_ID,
     kickoffKey: `kickoff-${workItemId}`,
@@ -941,7 +975,7 @@ describe('FactoryDecisionDispatcher', () => {
     // agent actually holds, and the reminder it receives, are asserted.
     const storage = (await createFactoryStorageForTests()).workItems;
     const item = await createItem(storage);
-    await bindWorkRun(storage, item.id);
+    await bindWorkRun(storage, item.id, { role: 'build' });
     const bound = await storage.get({ orgId: 'org-1', id: item.id });
     const transitionService = new FactoryTransitionService({ storage, configVersion: 'factory-config-v1' });
     const transitioned = await transitionService.transition({
@@ -3031,13 +3065,17 @@ describe('FactoryDecisionDispatcher', () => {
     // Decided while the card sat outside the plan seat's stages, like a held
     // triage run in Intake that Investigate approves and moves into Triage.
     const storage = (await createFactoryStorageForTests()).workItems;
-    const { item, transitionService } = await queueDecision(storage, {
-      type: 'invokeSkill',
-      role: 'plan',
-      skillName: 'understand-issue',
-      arguments: 'Issue 42',
-      idempotencyKey: 'skill-held-then-moved-in',
-    });
+    const { item, transitionService } = await queueDecision(
+      storage,
+      {
+        type: 'invokeSkill',
+        role: 'build',
+        skillName: 'understand-issue',
+        arguments: 'Issue 42',
+        idempotencyKey: 'skill-held-then-moved-in',
+      },
+      { stage: 'triage' },
+    );
     await new Promise(resolve => setTimeout(resolve, 5));
     await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['planning'] } });
     await storage.prepareRunStart({
@@ -3054,7 +3092,7 @@ describe('FactoryDecisionDispatcher', () => {
           metadata: {},
         },
       },
-      role: 'plan',
+      role: 'build',
       session: { sessionId: 'session-1', branch: 'factory/issue-1', threadId: 'thread-1' },
       resourceId: PROJECT_ID,
       kickoffKey: 'kickoff-null',
@@ -3067,10 +3105,13 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
+      boards: createLifecycleTestRegistry({}),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
+    const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(decision).toMatchObject({ status: 'succeeded', lastError: null });
     expect(session.sendSignal).toHaveBeenCalledTimes(1);
   });
 
@@ -3767,7 +3808,7 @@ describe('FactoryDecisionDispatcher', () => {
       configVersion: 'rules-v1',
       storage,
     });
-    // The PR closes after its review card already settled: the mirrored move has nowhere to go.
+    // A stale automation names a phase that no longer exists on a settled card.
     await storage.commitRuleEvaluation({
       orgId: 'org-1',
       factoryProjectId: PROJECT_ID,
@@ -3777,7 +3818,7 @@ describe('FactoryDecisionDispatcher', () => {
       expectedRevision: item.revision,
       actor: { type: 'github', login: 'author', trusted: true, factoryAuthored: false },
       outcome: { status: 'accepted' },
-      decisions: [{ type: 'transition', board: 'review', stage: 'canceled', idempotencyKey: 'closed-after-done' }],
+      decisions: [{ type: 'transition', board: 'review', stage: 'missing', idempotencyKey: 'closed-after-done' }],
       causalChain: [],
       now: new Date('2030-01-01T00:00:00Z'),
     });
@@ -3787,7 +3828,7 @@ describe('FactoryDecisionDispatcher', () => {
       transitionService,
       storage,
       ownerId: 'worker-1',
-      isAutoRunEnabled: async () => false,
+      isAutoRunEnabled: async () => true,
     });
     const start = new Date('2030-01-01T00:01:00Z');
 
@@ -3798,7 +3839,7 @@ describe('FactoryDecisionDispatcher', () => {
     const [decision] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
     expect(decision).toMatchObject({
       status: 'superseded',
-      lastError: expect.stringContaining('invalid_transition'),
+      lastError: 'Factory decision target phase is not defined on its board.',
     });
     expect((await storage.get({ orgId: 'org-1', id: item.id }))?.stages).toEqual(['done']);
     const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
@@ -4131,8 +4172,9 @@ describe('FactoryDecisionDispatcher', () => {
     expect(session.sendSignal).not.toHaveBeenCalled();
   });
 
-  it("approves a plan on the project's behalf when plan review is off", async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+  it("approves a plan only when the current phase's exit-tool rule matches", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'work',
@@ -4147,7 +4189,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      resolver: await planApprovingResolver(seed),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4175,7 +4217,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4203,7 +4244,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4214,7 +4254,8 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   it('auto-approve answers plans, never questions', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'work',
@@ -4229,7 +4270,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      resolver: await planApprovingResolver(seed),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4242,7 +4283,8 @@ describe('FactoryDecisionDispatcher', () => {
 
     // And never into failing a person's pause: a person-started run parked on
     // ask_user is that person's question to answer, not a stall.
-    const personStorage = (await createFactoryStorageForTests()).workItems;
+    const personSeed = await createFactoryStorageForTests();
+    const personStorage = personSeed.workItems;
     const person = await queueRunKickoff(personStorage);
     const personSession = createSession(undefined, { suspendsOnTool: 'ask_user' });
     await new FactoryDecisionDispatcher({
@@ -4251,7 +4293,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage: personStorage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      resolver: await planApprovingResolver(personSeed),
     }).runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect(personSession.session.respondToToolSuspension).not.toHaveBeenCalled();
@@ -4268,7 +4310,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4277,9 +4318,11 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({ status: 'sent' });
   });
 
-  it("approves a person-started run's plan too when plan review is off", async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueRunKickoff(storage);
+  it("approves a person-started run's plan when its phase's exit-tool rule matches", async () => {
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
+    const { item, transitionService } = await queueRunKickoff(storage);
+    await storage.update({ orgId: 'org-1', id: item.id, userId: 'user-1', patch: { stages: ['execute'] } });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
     const dispatcher = new FactoryDecisionDispatcher({
       controller: controller as never,
@@ -4287,7 +4330,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => true,
+      resolver: await planApprovingResolver(seed),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4299,7 +4342,7 @@ describe('FactoryDecisionDispatcher', () => {
     expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]?.status).toBe('sent');
   });
 
-  it("leaves a legacy hands-off item's plan parked while the project switch stays off", async () => {
+  it("leaves a legacy hands-off item's plan parked without a matching phase exit-tool rule", async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueRunKickoff(storage, { preapprovePlans: true });
     const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
@@ -4309,7 +4352,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => false,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4335,7 +4377,6 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -4345,7 +4386,8 @@ describe('FactoryDecisionDispatcher', () => {
   });
 
   it('caps the plans it approves, so a run that keeps re-planning reaches a person', async () => {
-    const storage = (await createFactoryStorageForTests()).workItems;
+    const seed = await createFactoryStorageForTests();
+    const storage = seed.workItems;
     const { item, transitionService } = await queueDecision(storage, {
       type: 'invokeSkill',
       role: 'work',
@@ -4360,7 +4402,7 @@ describe('FactoryDecisionDispatcher', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => true,
+      resolver: await planApprovingResolver(seed),
     });
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -6239,7 +6281,7 @@ describe('custom-board deferred targets', () => {
         board: 'work',
         title: 'Running card',
         stages: ['execute'],
-        sessions: { work: { threadId: 'thread-1', sessionId: 'session-1', branch: 'main', startedBy: 'user-1' } },
+        sessions: { build: { threadId: 'thread-1', sessionId: 'session-1', branch: 'main', startedBy: 'user-1' } },
         metadata: {},
         externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:running-target' },
       },
@@ -6587,7 +6629,6 @@ describe('run-end backstop report', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
       ...(reportRunEnd ? { reportRunEnd } : {}),
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
@@ -6655,7 +6696,6 @@ describe('run-end backstop report', () => {
       storage,
       ownerId: 'worker-1',
       isAutoRunEnabled: async () => true,
-      autoApprovePlans: async () => false,
       reportRunEnd,
     });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));

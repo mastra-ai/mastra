@@ -1,5 +1,4 @@
 import type { FactoryRuleItemContext, FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
-import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import type { BoardToolRule, FactoryPhaseTool, ReadonlyBoardPhaseHandlers } from './define-board.js';
 import { reviewPullRequest } from './review.js';
@@ -53,21 +52,6 @@ function invokeIssueInvestigation(context: FactoryStageRuleContext) {
     skillName: 'factory-triage',
     arguments: sourceRef(context.item),
   } as const;
-}
-
-function prepareApproval(context: FactoryStageRuleContext) {
-  return {
-    type: 'invokeSkill',
-    idempotencyKey: `${context.ingress.id}:prepare-approval`,
-    role: 'triage',
-    prompt:
-      `Prepare approval for ${sourceRef(context.item)}. Review the existing triage comment and summarize ` +
-      'the decision needed before implementation or closure.',
-  } as const;
-}
-
-function triageIssueEntry(context: FactoryStageRuleContext) {
-  return needsApproval(context.item) ? prepareApproval(context) : invokeIssueInvestigation(context);
 }
 
 const GITLAB_FETCH_HINT =
@@ -305,7 +289,7 @@ const triageRunner: BoardRunner = {
   onEnter: {
     pullRequest: triagePullRequest,
     gitlabPullRequest: triagePullRequest,
-    issue: triageIssueEntry,
+    issue: invokeIssueInvestigation,
     gitlabIssue: investigateTriagedGitLabIssue,
     linearIssue: investigateTriagedLinearIssue,
     jiraIssue: investigateTriagedJiraIssue,

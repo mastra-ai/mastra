@@ -63,8 +63,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
       skill: 'factory-triage',
       context: 'triage',
     });
-    // Null is kept: the phase runs in the card's main context.
-    expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: null });
+    expect(work!.phases.find(phase => phase.key === 'review')!.runner).toMatchObject({ context: 'review' });
     expect(work!.phases.map(phase => [phase.key, phase.nextPhases])).toEqual(
       workBoardTemplate.phases.map(phase => [phase.key, 'nextPhases' in phase ? phase.nextPhases : null]),
     );

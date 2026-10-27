@@ -357,30 +357,19 @@ describe('Board card with a proposed run', () => {
     expect(transitions).toEqual([]);
   });
 
-  it('asks for the maintainer decision on a held card, not the run parked on it', async () => {
+  it('lets a feature request start its suggested run without an extra classification approval', async () => {
     const { settled, transitions } = stubBoardEndpoints({ held: true });
     const user = userEvent.setup();
     renderWorkBoard();
 
-    // The parked plan cannot move a feature request on its own, so the card
-    // leads with the decision and keeps the run out of reach until it is made.
     const card = await screen.findByRole('article', { name: 'Fix login bug' });
-    expect(await within(card).findByText('Feature request · needs your approval')).toBeVisible();
-    expect(within(card).queryByText('Suggested: Investigate')).not.toBeInTheDocument();
-    const accept = within(card).getByRole('button', { name: 'Accept and plan' });
-    expect(accept).toHaveAttribute('data-variant', 'primary');
-
+    expect(within(card).queryByText('Feature request · needs your approval')).not.toBeInTheDocument();
+    expect(within(card).queryByRole('button', { name: 'Accept and plan' })).not.toBeInTheDocument();
     await user.click(within(card).getByRole('button', { name: 'Actions for Fix login bug' }));
-    await screen.findByRole('menuitem', { name: 'Accept and build' });
-    expect(screen.queryByRole('menuitem', { name: 'Start suggested run' })).not.toBeInTheDocument();
-    expect(screen.queryByRole('menuitem', { name: 'Build' })).not.toBeInTheDocument();
-    expect(screen.getByRole('menuitem', { name: 'Dismiss suggested run' })).toBeVisible();
-    await user.keyboard('{Escape}');
-
-    await user.click(accept);
-
-    await waitFor(() => expect(transitions).toEqual([expect.objectContaining({ stage: 'planning' })]));
-    expect(settled).toEqual([]);
+    expect(screen.queryByRole('menuitem', { name: 'Accept and build' })).not.toBeInTheDocument();
+    await user.click(await screen.findByRole('menuitem', { name: 'Start suggested run' }));
+    await waitFor(() => expect(settled).toEqual(['approve']));
+    expect(transitions).toEqual([]);
   });
 
   it('stops asking about a run parked on a pull request that already closed', async () => {

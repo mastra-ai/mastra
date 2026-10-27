@@ -45,11 +45,12 @@ describe('cardMoves', () => {
     },
   );
 
-  it('offers an issue its two lanes, and a needs-approval issue only the decision', () => {
+  it('offers the same lanes regardless of the legacy needs-approval label', () => {
     const issue = { source: 'github-issue' as const, metadata: {} };
     expect(cardMoves(issue, 'intake')).toEqual([investigate, build]);
     expect(cardMoves({ ...issue, metadata: { labels: ['Status: Needs Approval'] } }, 'intake')).toEqual([
-      { label: 'Prepare approval', role: 'triage', stage: 'triage', awaitsHumanDecision: true },
+      investigate,
+      build,
     ]);
     // Accepted, so the label is stale until the source catches up.
     expect(
@@ -98,6 +99,20 @@ describe('resumeStage', () => {
     expect(resumeStage('intake', { plan: sessionRef('plan'), work: sessionRef('work') })).toBe('execute');
   });
 
+  it('resumes named contexts using the catalog and history, including a shared build context', () => {
+    const phases = [
+      { id: 'triage', kind: 'working', role: 'triage' },
+      { id: 'planning', kind: 'working', role: 'build' },
+      { id: 'execute', kind: 'working', role: 'build' },
+      { id: 'review', kind: 'working', role: 'qa' },
+    ];
+    const sessions = { triage: sessionRef('triage'), build: sessionRef('build') };
+    expect(resumeStage('intake', sessions, phases, [{ stage: 'planning' }, { stage: 'intake' }])).toBe('planning');
+    expect(resumeStage('intake', sessions, phases, [{ stage: 'execute' }, { stage: 'intake' }])).toBe('execute');
+    expect(resumeStage('intake', { build: sessionRef('build') }, phases)).toBe('execute');
+    expect(resumeStage('intake', { qa: sessionRef('qa') }, phases)).toBe('review');
+  });
+
   it('offers nothing for a fresh arrival or outside Intake', () => {
     expect(resumeStage('intake', {})).toBeUndefined();
     expect(resumeStage('done', { review: sessionRef('review') })).toBeUndefined();
@@ -142,7 +157,7 @@ describe('cardPrimaryAction', () => {
     expect(onMove).toHaveBeenCalledWith('preparing');
   });
 
-  it('asks for the maintainer decision on a held non-bug card instead of offering its lane', () => {
+  it('offers a feature request its lane without a classification gate', () => {
     const onMove = vi.fn();
     const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
     const action = cardPrimaryAction({
@@ -154,13 +169,12 @@ describe('cardPrimaryAction', () => {
       onMove,
     });
 
-    expect(action?.label).toBe('Accept');
-    expect(action?.ariaLabel).toBe('Accept and plan');
+    expect(action?.label).toBe('Build');
     action?.start();
-    expect(onMove).toHaveBeenCalledWith('planning');
+    expect(onMove).toHaveBeenCalledWith('execute');
   });
 
-  it('keeps the maintainer decision ahead of a suggested run on a held card', () => {
+  it('offers a feature request its suggested run without a classification gate', () => {
     const onMove = vi.fn();
     const onApproveProposal = vi.fn();
     const held = { ...item({ triage: sessionRef('triage') }), triageType: 'feature request' as const };
@@ -175,10 +189,10 @@ describe('cardPrimaryAction', () => {
       onMove,
     });
 
-    expect(action?.label).toBe('Accept');
+    expect(action?.label).toBe('Review');
     action?.start();
-    expect(onMove).toHaveBeenCalledWith('planning');
-    expect(onApproveProposal).not.toHaveBeenCalled();
+    expect(onMove).not.toHaveBeenCalled();
+    expect(onApproveProposal).toHaveBeenCalledWith('decision-1');
   });
 
   it('offers the lane again once the card is accepted, and never holds bugs', () => {
@@ -255,9 +269,6 @@ describe('cardActions', () => {
     expect(lit(cardActions({ ...idle, session, retry, run }))).toEqual(['Retry']);
     expect(lit(cardActions({ ...running, session, run }))).toEqual([]);
     expect(lit(cardActions({ ...running, session, retry, run }))).toEqual([]);
-    expect(lit(cardActions({ state: boardCardState({ heldAs: 'feature request' }), session, run }))).toEqual([
-      'Investigate',
-    ]);
   });
 
   it('replaces the run with a disabled progress action until there is a session to open', () => {

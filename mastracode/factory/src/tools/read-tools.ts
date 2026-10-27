@@ -129,11 +129,6 @@ function summarizeDecision(decision: FactoryDeferredDecisionRecord, overtaken = 
   };
 }
 
-/** Held: a non-bug item triage parked until a person accepts it. */
-function isHeld(item: WorkItemRow): boolean {
-  return item.stages.includes('triage') && !!item.triageType && item.triageType !== 'bug' && !item.acceptedAt;
-}
-
 const listInputSchema = z
   .object({
     query: z
@@ -339,7 +334,6 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           incidents.flatMap(group => group.shown),
         );
         const proposals = decisions.filter(decision => decision.status === 'proposed');
-        const held = items.filter(isHeld);
         return {
           incidents: incidents.map(group => ({
             failureCode: group.failureCode,
@@ -356,16 +350,10 @@ export function createFactoryReadTools(scope: FactoryToolScope, deps: FactoryRea
           proposals: proposals
             .slice(0, limit)
             .map(decision => ({ ...summarizeDecision(decision), ...ref(decision.workItemId) })),
-          held: held.slice(0, limit).map(item => ({
-            ...ref(item.id),
-            triageType: item.triageType,
-            stage: workItemStage(item),
-          })),
           truncated:
             allIncidents.length > limit ||
             incidents.some(group => group.shown.length < group.decisions.length) ||
-            proposals.length > limit ||
-            held.length > limit,
+            proposals.length > limit,
         };
       },
     }),

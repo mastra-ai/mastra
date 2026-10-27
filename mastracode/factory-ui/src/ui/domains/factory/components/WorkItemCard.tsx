@@ -15,15 +15,7 @@ import type { DragPayload } from '../boardDrag';
 import { itemThreadSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
-import {
-  awaitsTriageDecision,
-  cardActions,
-  cardMoves,
-  cardPrimaryAction,
-  resumeStage,
-  retryButton,
-  sessionLink,
-} from '../cardPrimaryAction';
+import { cardActions, cardMoves, cardPrimaryAction, resumeStage, retryButton, sessionLink } from '../cardPrimaryAction';
 import { useCardMorph } from '../hooks/useCardMorph';
 import type { AuditEventPage } from '../services/audit';
 import type { FactoryDecisionSummary } from '../services/decisions';
@@ -124,7 +116,6 @@ export function WorkItemCard({
     decision,
     transitionReason,
     sessionStatus,
-    heldAs: awaitsTriageDecision(item, columnStage) ? (item.triageType ?? undefined) : undefined,
   });
   const { status, owner, wick } = state;
   const lockedByYou = owner.kind === 'you';
@@ -137,7 +128,7 @@ export function WorkItemCard({
     item,
     columnStage,
     move: primaryMove,
-    resumeStage: custom ? undefined : resumeStage(columnStage, sessions),
+    resumeStage: custom ? undefined : resumeStage(columnStage, sessions, definition?.phases, item.stageHistory),
     nextPhase: custom ? nextPhase : undefined,
     waiting: status.kind === 'waiting' ? status : undefined,
     hasSession: threadSession !== undefined,
@@ -202,8 +193,6 @@ export function WorkItemCard({
   };
   const relatedLinks = relatedItems.map(relatedLink);
 
-  // A held card's decision, like a parked suggestion, is the person's to
-  // release, so it stays on the card beside a finished triage session.
   const actions = cardActions({
     state,
     session: sessionLink(sessionHref),

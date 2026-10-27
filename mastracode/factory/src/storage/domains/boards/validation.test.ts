@@ -36,7 +36,7 @@ describe('stored board validation', () => {
     );
   });
 
-  it("keeps the kinds of Work's phases and leaves their moves to Factory", () => {
+  it("keeps the kinds of Work's phases but lets the template own their moves", () => {
     const [work] = defaultProjectBoardConfig.boards;
     const edited = {
       ...defaultProjectBoardConfig,
@@ -57,12 +57,22 @@ describe('stored board validation', () => {
     };
     const result = projectBoardConfigInputSchema.safeParse(edited);
     expect(result.error?.issues.map(issue => issue.message)).toEqual(
-      expect.arrayContaining([
-        "Work's review phase must stay working.",
-        "Work's triage phase must allow moving to planning, review, done, canceled; Factory moves cards there itself.",
-        "Work's intake phase must allow moving to review; Factory moves cards there itself.",
-      ]),
+      expect.arrayContaining(["Work's review phase must stay working."]),
     );
+  });
+
+  it('accepts a Work graph without the old mandatory integration moves', () => {
+    const work = defaultProjectBoardConfig.boards[0];
+    const edited = {
+      ...defaultProjectBoardConfig,
+      boards: [
+        {
+          ...work,
+          phases: work.phases.map(phase => (phase.key === 'triage' ? { ...phase, nextPhases: ['planning'] } : phase)),
+        },
+      ],
+    };
+    expect(projectBoardConfigInputSchema.safeParse(edited).success).toBe(true);
   });
 
   it("rejects the retired Review board's key", () => {

@@ -499,11 +499,9 @@ describe('bundled Factory skill assets', () => {
     );
     expect(triage).toContain('including independent effort and impact estimates, on every refresh');
     expect(triage).toContain('Plan fix');
-    expect(triage).toContain('Await approval');
+    expect(triage).not.toContain('Route: Await approval');
     expect(triage).toContain('No transition / refresh');
-    expect(triage).toContain(
-      'This records the classification without advancing; stop until a maintainer moves the card',
-    );
+    expect(triage).toContain('do not introduce a separate acceptance step based on classification or labels');
     expect(triage).toContain('triageType');
     expect(triage).toContain('approval_required');
     const labelReconciliationIndex = handoff.indexOf(
@@ -512,7 +510,7 @@ describe('bundled Factory skill assets', () => {
     expect(labelReconciliationIndex).toBeGreaterThan(questionsIndex);
     expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: auto-triaged"');
     expect(triage).toContain('gh issue edit "$ISSUE" --remove-label "status: needs triage"');
-    expect(triage).toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
+    expect(triage).not.toContain('gh issue edit "$ISSUE" --add-label "status: needs approval"');
     for (const label of ['effort:low', 'effort:medium', 'effort:high', 'impact:low', 'impact:medium', 'impact:high']) {
       expect(triage).toContain(label);
     }

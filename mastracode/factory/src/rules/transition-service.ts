@@ -1,4 +1,4 @@
-import { cardRuleFacts, phaseAutoApproves } from '../boards/auto-approve.js';
+import { cardRuleFacts } from '../boards/auto-approve.js';
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry, FactoryPhaseTool } from '../boards/index.js';
 import type { BoardResolver } from '../boards/resolver.js';
@@ -62,8 +62,6 @@ export interface FactoryTransitionRequest {
   reenter?: boolean;
   /** Structured verdict required from a bound triage-agent terminal request. */
   triageType?: FactoryTriageType;
-  /** Internal proof that this move consumes an approved `submit_plan` result. */
-  planApproved?: true;
 }
 
 export interface FactoryTransitionServiceOptions {
@@ -110,7 +108,7 @@ export interface FactoryTransitionServiceOptions {
   terminalCleanupTimeoutMs?: number;
   /**
    * Called after a transition first records a person's acceptance of a
-   * non-bug item (see `WorkItemRow.acceptedAt`). Fire-and-forget: failures
+   * item (see `WorkItemRow.acceptedAt`). This is history, not a workflow gate. Failures
    * are swallowed, the committed transition never depends on it.
    */
   onAccepted?: (args: {
@@ -119,11 +117,6 @@ export interface FactoryTransitionServiceOptions {
     workItemId: string;
     item: WorkItemRow;
   }) => Promise<void> | void;
-  /**
-   * Resolves whether a project auto-approves produced plans. Unset means off:
-   * a plan without explicit approval is a plan a person must review.
-   */
-  autoApprovePlans?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
   /** Resolves whether a project self-reviews Work items before the change request opens. Unset means off. */
   selfReviewEnabled?: (tenant: { orgId: string; factoryProjectId: string }) => Promise<boolean>;
 }
@@ -255,7 +248,6 @@ export class FactoryTransitionService {
   readonly #terminalCleanupTimeoutMs: number;
   readonly #onAccepted: FactoryTransitionServiceOptions['onAccepted'];
   readonly #onTransitionCommitted: FactoryTransitionServiceOptions['onTransitionCommitted'];
-  readonly #autoApprovePlans: FactoryTransitionServiceOptions['autoApprovePlans'];
   readonly #selfReviewEnabled: FactoryTransitionServiceOptions['selfReviewEnabled'];
   readonly #audit: AuditRecorder | undefined;
 
@@ -269,7 +261,6 @@ export class FactoryTransitionService {
     this.#onTerminalStage = options.onTerminalStage;
     this.#onAccepted = options.onAccepted;
     this.#onTransitionCommitted = options.onTransitionCommitted;
-    this.#autoApprovePlans = options.autoApprovePlans;
     this.#selfReviewEnabled = options.selfReviewEnabled;
     this.#terminalCleanupTimeoutMs = options.terminalCleanupTimeoutMs ?? TERMINAL_CLEANUP_TIMEOUT_MS;
   }
@@ -481,12 +472,6 @@ export class FactoryTransitionService {
     try {
       evaluation = await withRuleTimeout(
         (async () => {
-          // Resolve the project switch inside the timed block so a resolver rejection
-          // surfaces as a committed rule_error and a slow lookup is bounded.
-          const plansAutoApproved =
-            (this.#autoApprovePlans
-              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-              : false) || (this.#resolver ? await phaseAutoApproves(this.#resolver, item) : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
@@ -495,8 +480,6 @@ export class FactoryTransitionService {
                 initialEntry: request.initialEntry ?? false,
                 reenter: request.reenter ?? false,
                 isHumanTransition: isHumanTransition(request),
-                plansAutoApproved,
-                planApproved: request.planApproved === true,
                 requestedTriageType: request.triageType,
                 fromPhaseTools: board.toolsForPhase(fromStage),
               }),

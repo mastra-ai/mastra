@@ -42,7 +42,7 @@ describe('resolvePhaseSemantics', () => {
     expect(resolvePhaseSemantics(boards, 'release', 'queued')).toEqual({ kind: 'resting' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipping')).toEqual({ kind: 'working', role: 'release' });
     expect(resolvePhaseSemantics(boards, 'release', 'shipped')).toEqual({ kind: 'terminal' });
-    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'plan' });
+    expect(resolvePhaseSemantics(boards, 'work', 'planning')).toEqual({ kind: 'working', role: 'build' });
     expect(resolvePhaseSemantics(boards, 'work', 'done')).toEqual({ kind: 'terminal' });
   });
 
@@ -83,7 +83,7 @@ describe('workItemPhaseSemantics', () => {
         externalSource: { integrationId: 'github', type: 'pull-request', externalId: '1' },
         stages: ['review'],
       }),
-    ).toEqual({ kind: 'working', role: 'work' });
+    ).toEqual({ kind: 'working', role: 'review' });
   });
 
   it('is undefined for multi-stage rows', () => {

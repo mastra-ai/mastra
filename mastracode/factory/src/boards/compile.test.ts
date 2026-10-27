@@ -81,15 +81,17 @@ function shape(board: InstalledBoard) {
 }
 
 describe('compileStoredBoard', () => {
-  it('keeps the original Work behaviour apart from its explicitly narrowed transitions', () => {
+  it('keeps stored and code Work in agreement with the template, including its contexts', () => {
     const compiled = compileStoredBoard(workBoardTemplate, builtInRunners);
-    const { transitions: _transitions, ...original } = shape(preRefactorWorkBoard);
-    const { transitions: _compiledTransitions, ...stored } = shape(compiled);
-    const { transitions: _codeTransitions, ...code } = shape(workBoard);
-    expect(stored).toEqual(original);
-    expect(code).toEqual(original);
+    const { rules: compiledRules, ...compiledShape } = shape(compiled);
+    const { rules: codeRules, ...codeShape } = shape(workBoard);
+    expect(compiledShape).toEqual(codeShape);
+    expect(Object.keys(compiledRules)).toEqual(Object.keys(codeRules));
+    expect(compiled.sourceClosed).toEqual(preRefactorWorkBoard.sourceClosed);
+    expect(compiled.roleForPhase('planning')).toBe('build');
+    expect(compiled.roleForPhase('execute')).toBe('build');
+    expect(compiled.roleForPhase('review')).toBe('review');
     expect(compiled.rules.triage?.issue?.onEnter).toBe(preRefactorWorkBoard.rules.triage?.issue?.onEnter);
-    expect(compiled.rules.review?.manual?.onEnter).toBe(preRefactorWorkBoard.rules.review?.manual?.onEnter);
     expect(compiled.transitionPolicy).toBe(workTransitionPolicy);
   });
 
@@ -115,9 +117,9 @@ describe('compileStoredBoard', () => {
     const expected: Record<Phase, readonly Phase[]> = {
       intake: Object.keys(all) as Phase[],
       triage: ['intake', 'planning', 'review', 'done', 'canceled'],
-      planning: ['execute', 'review', 'done', 'canceled'],
+      planning: ['execute', 'canceled'],
       execute: ['review', 'done', 'canceled'],
-      review: ['intake', 'execute', 'done', 'canceled'],
+      review: ['execute', 'done', 'canceled'],
       done: Object.keys(all) as Phase[],
       canceled: Object.keys(all) as Phase[],
     };
@@ -313,7 +315,7 @@ describe('compileStoredBoard', () => {
     const build = await board.rules.execute?.manual?.onEnter?.(card as never);
     expect(build).toMatchObject({
       type: 'invokeSkill',
-      role: 'work',
+      role: 'build',
       goal: expect.stringContaining('approved plan'),
     });
     expect(build).not.toHaveProperty('skillName');
@@ -330,7 +332,9 @@ describe('compileStoredBoard', () => {
     const edited = {
       ...workBoardTemplate,
       phases: workBoardTemplate.phases.map(phase =>
-        phase.key === 'planning' ? { ...phase, runner: { ...phase.runner!, context: null } } : phase,
+        phase.key === 'planning' || phase.key === 'review'
+          ? { ...phase, runner: { ...phase.runner!, context: null } }
+          : phase,
       ),
     };
     const board = compileStoredBoard(edited, builtInRunners);

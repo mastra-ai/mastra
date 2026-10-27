@@ -2265,12 +2265,12 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(metrics.agentCoverage).toEqual([]);
   });
 
-  it('serves per-stage coverage: agent-finished triage vs human-approved planning', async () => {
+  it('serves per-stage coverage: agent-finished triage vs human-finished planning', async () => {
     // The rules engine queues triage (intake → triage), the bound agent run
-    // finishes it (triage → planning), then a human approves planning into done.
+    // finishes it (triage → planning), then a human cancels planning.
     const created = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items`, createBody({ sessions: run }));
     const { workItem } = await created.json();
-    // Work's Planning is people-only; this fixture lets the triage agent hand the card on itself.
+    // Use a lifecycle fixture to isolate coverage attribution from runner effects.
     const service = new FactoryTransitionService({
       configVersion: 'factory-config-v1',
       storage: seed.workItems,
@@ -2302,7 +2302,7 @@ describe('GET /web/factory/projects/:id/metrics', () => {
     expect(planned.status).toBe('accepted');
     const approved = await json('POST', `/web/factory/projects/${PROJECT_ID}/work-items/${workItem.id}/transition`, {
       board: 'work',
-      stage: 'done',
+      stage: 'canceled',
       expectedRevision: (planned as { revision: number }).revision,
       requestId: 'aaaaaaaa-aaaa-4aaa-8aaa-aaaaaaaaaaa7',
       cause: 'board_drag',
@@ -2315,8 +2315,8 @@ describe('GET /web/factory/projects/:id/metrics', () => {
 
     expect(metrics.agentCoverage).toEqual([
       // Intake is the inbox — filing a card is not a pass through the pipeline.
-      // Exited by the agent run, first visit → the agent's pass, item is done.
-      { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 1, canceled: 0, reworked: 0, inFlight: 0 } },
+      // Exited by the agent run, first visit → the agent's pass, item is canceled.
+      { stage: 'triage', passes: 1, byAgent: 1, outcomes: { done: 0, canceled: 1, reworked: 0, inFlight: 0 } },
       // Agent-entered, human-exited → the human finished this one.
       { stage: 'planning', passes: 1, byAgent: 0, outcomes: { done: 0, canceled: 0, reworked: 0, inFlight: 0 } },
     ]);

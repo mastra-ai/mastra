@@ -144,7 +144,7 @@ describe('moveCardToBoard', () => {
     const row = item({
       board: 'work',
       stages: ['execute'],
-      sessions: { work: { threadId: 't', sessionId: 's', branch: 'b', startedBy: 'user-1' } },
+      sessions: { build: { threadId: 't', sessionId: 's', branch: 'b', startedBy: 'user-1' } },
     });
     const { boards, update } = harness(row);
 

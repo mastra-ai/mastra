@@ -1,6 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
 import { createBoardRegistry, defineBoard, workBoard } from '../boards/index.js';
-import { reviewPullRequest } from '../boards/review.js';
 import { resolveFactoryStageRules } from './resolve.js';
 
 describe('Factory rule resolution', () => {
@@ -44,7 +43,7 @@ describe('Factory rule resolution', () => {
         fromStage: 'triage',
         toStage: 'review',
       }),
-    ).toEqual([{ phase: 'enter', handler: reviewPullRequest }]);
+    ).toEqual([{ phase: 'enter', handler: workBoard.rules.review?.pullRequest?.onEnter }]);
   });
 
   it.each(['issue', 'pullRequest', 'linearIssue', 'manual'] as const)('matches the %s source exactly', source => {

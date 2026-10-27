@@ -28,10 +28,6 @@ export type BoardTransitionPolicyContext = Immutable<
     reenter: boolean;
     itemRevision: number;
     isHumanTransition: boolean;
-    /** Whether the project allows produced plans to advance without human review. */
-    plansAutoApproved: boolean;
-    /** Whether this transition consumes a successfully approved `submit_plan` result. */
-    planApproved: boolean;
     requestedTriageType?: FactoryTriageType;
     /** Factory tools the phase the card leaves grants; an agent leaving a `triage` phase classifies. */
     fromPhaseTools: readonly FactoryPhaseTool[];

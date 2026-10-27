@@ -1,26 +1,8 @@
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
-// The lifecycle the Review board gave a pull request card, with Triage as its new first working lane.
-const PULL_REQUEST_MOVES: Readonly<Record<string, readonly string[]>> = {
-  intake: ['triage', 'review', 'done', 'canceled'],
-  triage: ['intake', 'review', 'done', 'canceled'],
-  review: ['intake', 'done', 'canceled'],
-  done: ['review'],
-  canceled: ['review'],
-};
-
 export const workTransitionPolicy: BoardTransitionPolicy = context => {
-  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition, plansAutoApproved, planApproved } =
-    context;
+  const { item, requestedTriageType, actor, fromStage, toStage, isHumanTransition } = context;
   const pullRequestCard = context.source === 'pullRequest' || context.source === 'gitlabPullRequest';
-  // A pull request card keeps the lifecycle the Review board gave it: it is reviewed, never planned or built.
-  if (pullRequestCard && fromStage !== toStage && !PULL_REQUEST_MOVES[fromStage]?.includes(toStage)) {
-    return {
-      type: 'reject',
-      code: 'invalid_transition',
-      reason: `A pull request card cannot move from ${fromStage} to ${toStage}. It moves between Intake, Triage, Review, Done and Canceled.`,
-    };
-  }
   const triageAgent = actor.type === 'agent' && context.fromPhaseTools.includes('triage');
   if (triageAgent && !pullRequestCard && requestedTriageType === undefined) {
     return {
@@ -34,25 +16,6 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
       type: 'reject',
       code: 'forbidden',
       reason: 'The persisted triage classification cannot be changed by a later transition.',
-    };
-  }
-  // Planning is the approval boundary. When project auto-approval is off, only a
-  // person or a successfully approved `submit_plan` result may move the card into Building.
-  // An agent cannot skip Planning from Intake or Triage either; maintainer-configured
-  // system rules may still route cards there.
-  const skipsPlanning = (fromStage === 'intake' || fromStage === 'triage') && actor.type === 'agent';
-  if (
-    (fromStage === 'planning' || skipsPlanning) &&
-    toStage === 'execute' &&
-    actor.type !== 'human' &&
-    !plansAutoApproved &&
-    !planApproved
-  ) {
-    return {
-      type: 'reject',
-      code: 'approval_required',
-      reason:
-        'Auto-approve plans is off: a maintainer must approve the plan or move this work item into Building from the Factory UI.',
     };
   }
   // A pull request's own card is done when the pull request merges. A review agent records its
@@ -84,7 +47,11 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
     };
   }
   // Self-review hit its round limit and parked the card for a person.
-  if (fromStage === 'intake' && actor.type === 'agent' && item.metadata?.selfReviewNeedsHuman === true) {
+  if (
+    (fromStage === 'intake' || (fromStage === 'review' && toStage !== 'intake')) &&
+    actor.type === 'agent' &&
+    item.metadata?.selfReviewNeedsHuman === true
+  ) {
     return {
       type: 'reject',
       code: 'approval_required',
@@ -108,16 +75,7 @@ export const workTransitionPolicy: BoardTransitionPolicy = context => {
         'This work item is in self-review and has no open change request yet. Record a self-review verdict instead; a maintainer can still close the work.',
     };
   }
-  const triageType = item.triageType ?? requestedTriageType;
   const entersWork = toStage === 'planning' || toStage === 'execute';
-  // An intermediate phase is not evidence of human approval.
-  if (triageType != null && triageType !== 'bug' && entersWork && !isHumanTransition && !item.acceptedAt) {
-    return {
-      type: 'reject',
-      code: 'approval_required',
-      reason: 'A maintainer must move this non-bug work item into Planning or Execute from the Factory UI.',
-    };
-  }
   return {
     type: 'allow',
     ...(triageAgent && requestedTriageType ? { triageType: requestedTriageType } : {}),

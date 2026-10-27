@@ -157,7 +157,7 @@ describe('factory_review_source', () => {
 
   it('is not offered on non-review sessions', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
-    await prepareReviewItem(storage, { role: 'work', externalId: 'github-issue:99' });
+    await prepareReviewItem(storage, { role: 'build', externalId: 'github-issue:99' });
     const context = requestContext();
     const tools = await createReviewSourceTool({
       requestContext: context,

@@ -252,10 +252,10 @@ describe('defineBoard', () => {
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.phaseKind('intake')).toBe('resting');
     expect(workBoard.roleForPhase('triage')).toBe('triage');
-    expect(workBoard.roleForPhase('planning')).toBe('plan');
-    expect(workBoard.roleForPhase('execute')).toBe('work');
-    expect(workBoard.roleForPhase('review')).toBe('work');
-    expect(workBoard.phaseForRole('work')).toBe('execute');
+    expect(workBoard.roleForPhase('planning')).toBe('build');
+    expect(workBoard.roleForPhase('execute')).toBe('build');
+    expect(workBoard.roleForPhase('review')).toBe('review');
+    expect(workBoard.phaseForRole('build')).toBe('planning');
     expect(workBoard.isTerminal('done')).toBe(true);
     expect(workBoard.isTerminal('canceled')).toBe(true);
   });
@@ -267,9 +267,11 @@ describe('defineBoard', () => {
       expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
     }
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
-      // Work seats Review as `work` (the builder answers feedback there); the review seat still works it.
+      // Legacy tool roles still map to their phases, even when phases share a named context.
       expect(phaseForSeat(workBoard, role), `lane for ${role}`).toBe(stage);
-      if (role !== 'review') expect(workBoard.roleForPhase(stage), `role for ${stage}`).toBe(role);
+      expect(workBoard.roleForPhase(stage), `context for ${stage}`).toBe(
+        role === 'plan' || role === 'work' ? 'build' : role,
+      );
     }
   });
 

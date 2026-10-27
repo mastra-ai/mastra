@@ -7,7 +7,6 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { itemBoard, itemStageOptions } from '../boardStages';
 import { canMoveTo, canStartRun } from '../boardCardState';
 import type { BoardCardOwner } from '../boardCardState';
-import { TRIAGE_DECISIONS, awaitsTriageDecision } from '../cardPrimaryAction';
 import type { CardMove } from '../cardPrimaryAction';
 import type { FactoryDecisionSummary } from '../services/decisions';
 import type { WorkItem } from '../services/workItems';
@@ -62,26 +61,13 @@ export function WorkItemMenuItems({
         .map(phase => ({ id: phase.id, label: phase.title, kind: phase.kind })) ?? [])
     : itemStageOptions(item).map(stage => ({ ...stage, kind: undefined }));
   const suggestionForThisBoard = custom && proposedRunLabel === undefined ? undefined : proposal;
-  // Every run-starting action would accept a held card as a side effect, so triage choices replace them.
-  const awaitsTriage = !custom && awaitsTriageDecision(item, columnStage);
   const runsBlocked = !canStartRun(owner.kind);
   const yourRequestInFlight = owner.kind === 'you';
   const phaseKind = (stage: string) => board?.phases.find(phase => phase.id === stage)?.kind;
   return (
     <>
-      {awaitsTriage &&
-        TRIAGE_DECISIONS.map(choice => (
-          <DropdownMenu.Item
-            key={choice.stage}
-            disabled={!canMoveTo(owner.kind, phaseKind(choice.stage))}
-            onClick={() => onMove(choice.stage)}
-          >
-            <BoardStageIcon stage={choice.stage} />
-            <span>{choice.label}</span>
-          </DropdownMenu.Item>
-        ))}
-      {!awaitsTriage && moves.map(move => moveItem(move, onMove, runsBlocked))}
-      {suggestionForThisBoard !== undefined && !awaitsTriage && (
+      {moves.map(move => moveItem(move, onMove, runsBlocked))}
+      {suggestionForThisBoard !== undefined && (
         <DropdownMenu.Item disabled={runsBlocked} onClick={() => onApproveProposal(suggestionForThisBoard.id)}>
           {actionIcon(proposedRunLabel ?? 'Start run')}
           <span>{approvingDecisionId === suggestionForThisBoard.id ? 'Starting…' : 'Start suggested run'}</span>
@@ -101,7 +87,6 @@ export function WorkItemMenuItems({
       )}
       {stages
         .filter(stage => stage.id !== columnStage)
-        .filter(stage => !awaitsTriage || !TRIAGE_DECISIONS.some(choice => choice.stage === stage.id))
         .map(stage => (
           <DropdownMenu.Item
             key={stage.id}

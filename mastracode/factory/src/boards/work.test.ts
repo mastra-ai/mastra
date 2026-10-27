@@ -37,7 +37,7 @@ describe('work board build prompt', () => {
   // Building starts as a goal: the objective carries the hand-off the judge holds the run to.
   it('hands a GitLab build to self-review without opening a merge request', async () => {
     const decision = await workBoard.rules.execute?.gitlabIssue?.onEnter?.(executeContext('gitlab-issue'));
-    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
+    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'build' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
     expect(decision.goal).toContain('Do not open a pull or merge request.');
     expect(decision.goal).toContain('stage `review`');
@@ -63,7 +63,7 @@ describe('work board build prompt', () => {
 
   it('hands a GitHub build to self-review without opening a pull request', async () => {
     const decision = await workBoard.rules.execute?.issue?.onEnter?.(executeContext('github-issue'));
-    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'work' });
+    expect(decision).toMatchObject({ type: 'invokeSkill', role: 'build' });
     if (!decision || decision.type !== 'invokeSkill') throw new Error('Expected build invocation.');
     expect(decision.goal).toContain('Do not open a pull or merge request.');
   });
@@ -176,8 +176,6 @@ describe('work board done policy', () => {
       fromStage: 'review',
       toStage: 'done',
       isHumanTransition: actor.type === 'human',
-      plansAutoApproved: false,
-      planApproved: false,
       fromPhaseTools: workBoard.toolsForPhase('review'),
       item: {
         ...executeContext('issue').item,

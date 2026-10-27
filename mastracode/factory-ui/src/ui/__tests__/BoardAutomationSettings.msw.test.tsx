@@ -85,7 +85,7 @@ function renderBoard(board: 'work' | 'review') {
 }
 
 describe('Board automation settings', () => {
-  it('edits plan auto-approval in a dismissible settings popover', async () => {
+  it('edits auto-start in a dismissible popover without a project plan-approval override', async () => {
     stubBoard({ items: [], factory: project() });
     const user = userEvent.setup();
     const { client } = renderBoard('review');
@@ -93,18 +93,19 @@ describe('Board automation settings', () => {
     const settings = await screen.findByRole('button', { name: 'Automation settings' });
     expect(screen.queryByRole('switch')).not.toBeInTheDocument();
     await user.click(settings);
-    const autoApprove = await screen.findByRole('switch', { name: 'Auto-approve plans' });
+    expect(screen.queryByRole('switch', { name: 'Auto-approve plans' })).not.toBeInTheDocument();
+    const autoApprove = await screen.findByRole('switch', { name: 'Auto-start runs' });
     expect(autoApprove).not.toBeChecked();
     await user.click(autoApprove);
 
     await waitForMutationsIdle(client);
-    expect(patchBodies).toEqual([{ autoApprovePlans: true }]);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
     await user.keyboard('{Escape}');
     await waitFor(() => expect(screen.queryByRole('dialog', { name: 'Automation settings' })).not.toBeInTheDocument());
     expect(settings).toHaveFocus();
     await user.click(settings);
-    expect(await screen.findByRole('switch', { name: 'Auto-approve plans' })).toBeChecked();
+    expect(await screen.findByRole('switch', { name: 'Auto-start runs' })).toBeChecked();
   });
 
   it('turns review test checks on, defaulting to off for older projects', async () => {
@@ -147,6 +148,6 @@ describe('Board automation settings', () => {
 
     await waitForMutationsIdle(client);
     expect(patchBodies).toEqual([{ autoRunEnabled: true }]);
-    expect(screen.getByRole('switch', { name: 'Auto-approve plans' })).not.toBeChecked();
+    expect(screen.getByRole('switch', { name: 'Self-review before pull requests' })).not.toBeChecked();
   });
 });

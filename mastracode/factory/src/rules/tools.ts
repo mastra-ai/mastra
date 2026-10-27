@@ -117,7 +117,7 @@ export async function createFactoryTransitionTools(options: {
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage
-        ? 'Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Only bugs may request Planning autonomously; closure outcomes may request a terminal stage. Feature requests and other non-bug classifications that remain open must stay in their current Intake or Triage stage for maintainer approval.'
+        ? "Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Classification is descriptive: follow the board's allowed next phases and automatic-start rules, without a separate acceptance step for features or other non-bug work."
         : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
       inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
       requireApproval: true,

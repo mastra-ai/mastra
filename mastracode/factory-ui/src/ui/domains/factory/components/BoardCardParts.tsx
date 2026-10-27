@@ -6,7 +6,7 @@ import { Tooltip, TooltipContent, TooltipProvider, TooltipTrigger } from '@mastr
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Hand, Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
+import { Maximize2, MessageSquare, TriangleAlert } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link } from 'react-router';
 
@@ -86,14 +86,6 @@ export function CommentCount({ count }: { count: number }) {
 export function CardStatus({ status, compact = false }: { status: BoardCardStatus; compact?: boolean }) {
   // A parked run is surfaced by the highlighted "Start suggested run" action, not a status badge.
   if (status.kind === 'idle' || status.kind === 'waiting') return null;
-
-  if (status.kind === 'held') {
-    return (
-      <Badge size="xs" variant="orange" icon={<Hand aria-hidden />} role="status">
-        {status.label}
-      </Badge>
-    );
-  }
 
   if (status.kind === 'busy') {
     return (
