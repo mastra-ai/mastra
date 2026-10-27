@@ -1470,70 +1470,69 @@ export function createDurableToolCallStep() {
               },
               { resumeLabel: toolCallId },
             );
-          } else {
-            // General tool suspension (e.g., tool calls context.agent.suspend())
-            const suspendedEventData: AgentSuspendedEventData = {
+          }
+          // General tool suspension (e.g., tool calls context.agent.suspend())
+          const suspendedEventData: AgentSuspendedEventData = {
+            toolCallId,
+            toolName,
+            args,
+            suspendPayload,
+            type: 'suspension',
+            resumeSchema: suspendOptions?.resumeSchema,
+          };
+
+          // Add suspension metadata to message before persisting
+          addToolMetadata({
+            type: 'suspension',
+            suspendPayload,
+            resumeSchema: suspendOptions?.resumeSchema,
+            delegatedRunId,
+          });
+
+          await doFlush();
+
+          if (pubsub) {
+            const suspensionChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-call-suspended' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId,
+                  toolName,
+                  suspendPayload,
+                  args,
+                  resumeSchema: suspendOptions?.resumeSchema,
+                  usage: typedInput.stepUsage,
+                },
+              },
+              {
+                policy: toolPayloadTransform,
+                tools: toolsForTransform,
+                logger: logger as any,
+              },
+            );
+            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+            await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
+          }
+
+          endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+
+          return suspend(
+            {
+              type: 'suspension',
+              toolCallSuspended: suspendPayload,
               toolCallId,
               toolName,
-              args,
-              suspendPayload,
-              type: 'suspension',
-              resumeSchema: suspendOptions?.resumeSchema,
-            };
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
-
-            if (pubsub) {
-              const suspensionChunk = await applyToolPayloadTransformToChunk(
-                {
-                  type: 'tool-call-suspended' as const,
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId,
-                    toolName,
-                    suspendPayload,
-                    args,
-                    resumeSchema: suspendOptions?.resumeSchema,
-                    usage: typedInput.stepUsage,
-                  },
-                },
-                {
-                  policy: toolPayloadTransform,
-                  tools: toolsForTransform,
-                  logger: logger as any,
-                },
-              );
-              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
-              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
-            }
-
-            endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
-
-            return suspend(
-              {
-                type: 'suspension',
-                toolCallSuspended: suspendPayload,
-                toolCallId,
-                toolName,
-                resumeLabel: suspendOptions?.resumeLabel,
-                // Persist the inner suspended run id in the workflow snapshot,
-                // partitioned per tool call (resumeLabel = toolCallId), so the
-                // resume leg continues the delegate's suspended run instead of
-                // restarting it (#20496; mirrors the approval branch above).
-                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
-              },
-              { resumeLabel: toolCallId },
-            );
-          }
+              resumeLabel: suspendOptions?.resumeLabel,
+              // Persist the inner suspended run id in the workflow snapshot,
+              // partitioned per tool call (resumeLabel = toolCallId), so the
+              // resume leg continues the delegate's suspended run instead of
+              // restarting it (#20496; mirrors the approval branch above).
+              ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+            },
+            { resumeLabel: toolCallId },
+          );
         },
       };
       // Raw `Tool` instances resolved from the Mastra registry (the cross-process

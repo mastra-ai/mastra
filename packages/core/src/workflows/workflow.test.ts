@@ -190,22 +190,21 @@ createWorkflowTestSuite({
 
       const result = await getWorkflowState();
       return { events, result: result as WorkflowResult };
-    } else {
-      const streamResult = run.stream({
-        inputData,
-        initialState: options.initialState,
-        perStep: options.perStep,
-        requestContext: options.requestContext as any,
-        closeOnSuspend: options.closeOnSuspend,
-      });
-
-      for await (const event of streamResult.fullStream) {
-        events.push(JSON.parse(JSON.stringify(event)));
-      }
-
-      const result = await streamResult.result;
-      return { events, result: result as WorkflowResult };
     }
+    const streamResult = run.stream({
+      inputData,
+      initialState: options.initialState,
+      perStep: options.perStep,
+      requestContext: options.requestContext as any,
+      closeOnSuspend: options.closeOnSuspend,
+    });
+
+    for await (const event of streamResult.fullStream) {
+      events.push(JSON.parse(JSON.stringify(event)));
+    }
+
+    const result = await streamResult.result;
+    return { events, result: result as WorkflowResult };
   },
 
   streamResumeWorkflow: async (workflow, options: ResumeWorkflowOptions): Promise<StreamWorkflowResult> => {

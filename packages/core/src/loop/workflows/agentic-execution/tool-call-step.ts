@@ -636,58 +636,57 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeLabel: inputData.toolCallId,
               },
             );
-          } else {
-            const suspendedStepUsage = takeSuspendedStepUsage();
-            const suspensionChunk = await transformChunk({
-              type: 'tool-call-suspended',
-              runId,
-              from: ChunkFrom.AGENT,
-              payload: {
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                suspendPayload,
-                args: inputData.args,
-                resumeSchema: options?.resumeSchema,
-                usage: suspendedStepUsage,
-              },
-            });
-            safeEnqueue(controller, suspensionChunk);
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
+          }
+          const suspendedStepUsage = takeSuspendedStepUsage();
+          const suspensionChunk = await transformChunk({
+            type: 'tool-call-suspended',
+            runId,
+            from: ChunkFrom.AGENT,
+            payload: {
               toolCallId: inputData.toolCallId,
               toolName: inputData.toolName,
-              args,
               suspendPayload,
-              suspendedToolRunId: options?.runId,
-              type: 'suspension',
+              args: inputData.args,
               resumeSchema: options?.resumeSchema,
-              metadata: suspensionChunk.metadata,
-            });
+              usage: suspendedStepUsage,
+            },
+          });
+          safeEnqueue(controller, suspensionChunk);
 
-            // Flush messages before suspension to ensure they are persisted
-            await flushMessagesBeforeSuspension();
+          // Add suspension metadata to message before persisting
+          addToolMetadata({
+            toolCallId: inputData.toolCallId,
+            toolName: inputData.toolName,
+            args,
+            suspendPayload,
+            suspendedToolRunId: options?.runId,
+            type: 'suspension',
+            resumeSchema: options?.resumeSchema,
+            metadata: suspensionChunk.metadata,
+          });
 
-            return await suspend(
-              {
-                toolCallSuspended: suspendPayload,
-                __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
-                __agentId: agentId,
-                ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
-                // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
-                // whose resume adopts the supplied scopes instead of rejecting them.
-                __resolvedScopes: resolvedScopes ?? [],
-                ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
-                toolCallId: inputData.toolCallId,
-                toolName: inputData.toolName,
-                resumeLabel: options?.resumeLabel,
-                suspendedToolRunId: options?.runId,
-              },
-              {
-                resumeLabel: inputData.toolCallId,
-              },
-            );
-          }
+          // Flush messages before suspension to ensure they are persisted
+          await flushMessagesBeforeSuspension();
+
+          return await suspend(
+            {
+              toolCallSuspended: suspendPayload,
+              __streamState: await serializeStreamStateForSuspend({ usage: suspendedStepUsage }),
+              __agentId: agentId,
+              ...(agentVersionId ? { __agentVersionId: agentVersionId } : {}),
+              // Persisted unconditionally — [] included — so absence marks a pre-upgrade snapshot,
+              // whose resume adopts the supplied scopes instead of rejecting them.
+              __resolvedScopes: resolvedScopes ?? [],
+              ...(returnScorerData !== undefined ? { __returnScorerData: returnScorerData } : {}),
+              toolCallId: inputData.toolCallId,
+              toolName: inputData.toolName,
+              resumeLabel: options?.resumeLabel,
+              suspendedToolRunId: options?.runId,
+            },
+            {
+              resumeLabel: inputData.toolCallId,
+            },
+          );
         };
 
         // An eager attempt that suspended at runtime hands its intent back here. The body
@@ -778,28 +777,27 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
                 resumeLabel: inputData.toolCallId,
               },
             );
-          } else {
-            // Remove approval metadata since we're resuming (either approved or declined)
-            const clearedApproval = await removeToolMetadata(
-              { toolCallId: inputData.toolCallId, toolName: inputData.toolName },
-              'approval',
-            );
-            if (clearedApproval) await emitToolCallResumed(clearedApproval, 'approval');
+          }
+          // Remove approval metadata since we're resuming (either approved or declined)
+          const clearedApproval = await removeToolMetadata(
+            { toolCallId: inputData.toolCallId, toolName: inputData.toolName },
+            'approval',
+          );
+          if (clearedApproval) await emitToolCallResumed(clearedApproval, 'approval');
 
-            if (!approvalDecision.approved) {
-              // Return the approval decision (not a `result` string) so it persists as
-              // `state: 'output-denied'` with `approval`. The denial reason carries the
-              // caller-supplied reason when one was provided, otherwise the default string
-              // so downstream consumers/UI keep the same message.
-              return {
-                approval: {
-                  id: inputData.toolCallId,
-                  approved: false,
-                  reason: resolveDeclineReason(approvalDecision),
-                },
-                ...inputData,
-              };
-            }
+          if (!approvalDecision.approved) {
+            // Return the approval decision (not a `result` string) so it persists as
+            // `state: 'output-denied'` with `approval`. The denial reason carries the
+            // caller-supplied reason when one was provided, otherwise the default string
+            // so downstream consumers/UI keep the same message.
+            return {
+              approval: {
+                id: inputData.toolCallId,
+                approved: false,
+                reason: resolveDeclineReason(approvalDecision),
+              },
+              ...inputData,
+            };
           }
         }
 

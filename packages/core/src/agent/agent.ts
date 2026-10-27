@@ -7048,13 +7048,12 @@ export class Agent<
                     : undefined,
                   runId: runIdToUse,
                 });
-              } else {
-                // This is to satisfy the execute fn's return value for typescript
-                return {
-                  error: `Workflow should never reach this path, workflow returned no status`,
-                  runId: run.runId,
-                };
               }
+              // This is to satisfy the execute fn's return value for typescript
+              return {
+                error: `Workflow should never reach this path, workflow returned no status`,
+                runId: run.runId,
+              };
             } catch (err) {
               if (savedMastraMemory !== undefined) {
                 requestContext.set('MastraMemory', savedMastraMemory);
@@ -11793,12 +11792,11 @@ export class Agent<
 
     if (typeof instructions === 'string') {
       return instructions;
-    } else {
-      const result = instructions({ requestContext, mastra: this.#mastra });
-      return resolveMaybePromise(result, resolvedInstructions => {
-        return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
-      });
     }
+    const result = instructions({ requestContext, mastra: this.#mastra });
+    return resolveMaybePromise(result, resolvedInstructions => {
+      return resolvedInstructions || DEFAULT_TITLE_INSTRUCTIONS;
+    });
   }
 
   // ---------------------------------------------------------------------------
