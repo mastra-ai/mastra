@@ -84,6 +84,7 @@ import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
 
 import { toSlug } from '../utils';
+import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
@@ -2750,6 +2751,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
       };
 
       let closed = false;
+      let pendingRejection: Error | undefined;
       let unsubscribe: (() => Promise<void>) | undefined;
       let idleTimer: ReturnType<typeof setTimeout> | null = null;
       let onAbort: (() => void) | undefined;
@@ -2814,7 +2816,17 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                 event => {
                   if (closed) return;
                   const type = event.type === 'chunk' ? event.data?.type : event.type;
-                  controller.enqueue(event);
+                  if (event.type === 'error' && event.data?.delivery === 'reject') {
+                    const error = Object.assign(new Error(event.data.error.message), event.data.error);
+                    stop();
+                    // Erroring immediately discards queued replay chunks. Drain them first.
+                    if ((controller.desiredSize ?? 0) > 0) controller.error(error);
+                    else pendingRejection = error;
+                    return;
+                  }
+                  for (const chunk of toAgentStreamChunks(event)) {
+                    controller.enqueue(chunk);
+                  }
                   if (type === 'finish' || type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
@@ -2839,7 +2851,14 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
               },
             );
         },
+        pull(controller) {
+          if (pendingRejection) {
+            controller.error(pendingRejection);
+            pendingRejection = undefined;
+          }
+        },
         cancel() {
+          pendingRejection = undefined;
           stop();
         },
       });

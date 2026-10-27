@@ -1,9 +1,16 @@
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
+import {
+  AGENT_STREAM_TOPIC,
+  createDurableAgent,
+  createDurableAgentStream,
+  createEventedAgent,
+} from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import { InMemoryStore } from '@mastra/core/storage';
+import type { ChunkType } from '@mastra/core/stream';
 import { createTool } from '@mastra/core/tools';
+import { serializeStreamChunk } from '@mastra/server/server-adapter';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 
@@ -20,6 +27,7 @@ export interface DurableDisconnectTestConfig {
     getRequestCount: () => number;
     close: () => Promise<void>;
   }>;
+  observeWithClient?: (baseUrl: string, runId: string, offset?: number) => Promise<ChunkType<unknown>[]>;
   startServer: (
     mastra: Mastra,
     onDisconnect: (path: string) => void,
@@ -37,6 +45,33 @@ function deferred() {
   return { promise, resolve };
 }
 
+async function collectPublicFrames(response: Response, onFrame?: (frame: ChunkType<unknown>) => void) {
+  const frames: ChunkType<unknown>[] = [];
+  const reader = response.body!.pipeThrough(new TextDecoderStream()).getReader();
+  let buffer = '';
+  try {
+    while (true) {
+      const { done, value } = await reader.read();
+      if (done) return frames;
+      buffer += value;
+      const events = buffer.split(/\r?\n\r?\n/);
+      buffer = events.pop()!;
+      for (const event of events) {
+        for (const line of event.split(/\r?\n/)) {
+          if (!line.startsWith('data: ')) continue;
+          const data = line.slice(6);
+          if (data === '[DONE]') continue;
+          const frame: ChunkType<unknown> = JSON.parse(data);
+          frames.push(frame);
+          onFrame?.(frame);
+        }
+      }
+    }
+  } finally {
+    reader.releaseLock();
+  }
+}
+
 // Real TCP disconnects exercise both request-signal propagation and reader cancellation.
 export function createDurableDisconnectTestSuite(config: DurableDisconnectTestConfig) {
   describe.each(['plain', 'durable', 'evented'] as const)('HTTP observer disconnect: %s (COR-1489)', kind => {
@@ -51,6 +86,283 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       mastra = undefined;
       fixture = undefined;
     });
+
+    if (kind !== 'plain') {
+      it.each(['error', 'abort', 'abort-without-text', 'aborted-finish'] as const)(
+        'replays %s as public terminal frames (COR-1498)',
+        async terminal => {
+          fixture = await config.setupModel();
+          const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+            agent: new Agent({
+              id: 'terminal-agent',
+              name: 'Terminal agent',
+              instructions: 'Unused',
+              model: fixture.model,
+            }),
+            cleanupTimeoutMs: 60_000,
+          });
+          mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+          server = await config.startServer(mastra, () => {});
+          const runId = `observe-terminal-${kind}-${terminal}`;
+          const topic = AGENT_STREAM_TOPIC(runId);
+          // Exercise the real replay log and core adapter as the reference, including
+          // lifecycle records that consume offsets but must not leak onto the wire.
+          await agent.pubsub.publish(topic, { runId, type: 'iteration-complete', data: {} });
+          await agent.pubsub.publish(topic, { runId, type: 'suspended', data: { type: 'suspension' } });
+          await agent.pubsub.publish(topic, {
+            runId,
+            type: terminal === 'aborted-finish' ? 'finish' : terminal === 'abort-without-text' ? 'abort' : terminal,
+            data:
+              terminal === 'error'
+                ? {
+                    error: {
+                      id: 'TEST_ERROR',
+                      name: 'ProviderError',
+                      message: 'Provider unavailable',
+                      stack: 'producer-stack',
+                    },
+                  }
+                : terminal === 'abort' || terminal === 'abort-without-text'
+                  ? { ...(terminal === 'abort' ? { text: 'partial answer' } : {}), steps: [] }
+                  : {
+                      output: {
+                        text: 'partial answer',
+                        steps: [],
+                        usage: { inputTokens: 1, outputTokens: 2, totalTokens: 3 },
+                      },
+                      stepResult: { reason: 'abort' },
+                    },
+          });
+          const reference = createDurableAgentStream({
+            pubsub: agent.pubsub,
+            runId,
+            messageId: 'reference',
+            model: { version: 'v3', modelId: undefined, provider: undefined },
+          });
+          const expected: unknown[] = [];
+          try {
+            for await (const chunk of reference.output.fullStream) {
+              const serialized = serializeStreamChunk(chunk);
+              if (!serialized.ok) throw serialized.error;
+              expected.push(JSON.parse(serialized.json));
+            }
+          } finally {
+            await reference.cleanup();
+          }
+          for (const offset of [0, 1, 2]) {
+            const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+              method: 'POST',
+              headers: { 'content-type': 'application/json' },
+              body: JSON.stringify({ runId, offset }),
+            });
+            expect(response.status).toBe(200);
+            expect(await collectPublicFrames(response)).toEqual(expected);
+          }
+          expect(expected).toHaveLength(terminal === 'error' ? 1 : 2);
+          if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
+        },
+      );
+
+      it.each([false, true])(
+        'matches public finish usage when terminal raw is present: %s (COR-1498)',
+        async explicit => {
+          fixture = await config.setupModel();
+          const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+            agent: new Agent({ id: 'usage-agent', name: 'Usage agent', instructions: 'Unused', model: fixture.model }),
+          });
+          mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+          server = await config.startServer(mastra, () => {});
+          const runId = `observe-usage-${kind}-${explicit}`;
+          const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
+          const raw = { source: 'first step' };
+          const steps = [{ usage: { ...usage, raw } }, { usage }];
+          for (const step of steps) {
+            await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+              runId,
+              type: 'chunk',
+              data: {
+                type: 'step-finish',
+                runId,
+                from: 'AGENT',
+                payload: {
+                  output: step,
+                  stepResult: { reason: 'stop', warnings: [], isContinued: false },
+                  metadata: {},
+                },
+              },
+            });
+          }
+          await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+            runId,
+            type: 'finish',
+            data: {
+              output: { text: '', steps, usage: { ...usage, ...(explicit ? { raw: { source: 'finish' } } : {}) } },
+              stepResult: { reason: 'stop' },
+            },
+          });
+          const reference = createDurableAgentStream({
+            pubsub: agent.pubsub,
+            runId,
+            messageId: 'reference',
+            model: { version: 'v3', modelId: undefined, provider: undefined },
+          });
+          let expected: unknown;
+          try {
+            for await (const chunk of reference.output.fullStream) {
+              if (chunk.type === 'finish') {
+                const serialized = serializeStreamChunk(chunk);
+                if (!serialized.ok) throw serialized.error;
+                expected = JSON.parse(serialized.json).payload.output.usage;
+              }
+            }
+          } finally {
+            await reference.cleanup();
+          }
+          expect(expected).toEqual({ ...usage, raw });
+          const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ runId }),
+          });
+          const frames = await collectPublicFrames(response);
+          const finish = frames.find(frame => frame.type === 'finish');
+          expect(finish?.payload.output.usage).toEqual(expected);
+        },
+      );
+
+      it('drains replay before a rejecting error without emitting DONE (COR-1498)', async () => {
+        fixture = await config.setupModel();
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: new Agent({ id: 'reject-agent', name: 'Reject agent', instructions: 'Unused', model: fixture.model }),
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        const runId = `observe-reject-${kind}`;
+        const prefix = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: prefix });
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'error',
+          data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
+        });
+        const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ runId }),
+        });
+        expect(response.status).toBe(200);
+        const wire = await response.text();
+        expect(wire).toContain(JSON.stringify(prefix));
+        expect(wire).not.toContain('[DONE]');
+        expect(wire).not.toContain('"type":"error"');
+      });
+
+      it('reattaches with the same public frames as stream, including tools and finish metadata (COR-1498)', async () => {
+        fixture = await config.setupModel();
+        const entered = deferred();
+        const gate = deferred();
+        const liveFrames: ChunkType<unknown>[] = [];
+        const tool = createTool({
+          id: 'lookup',
+          description: 'Look up an answer',
+          inputSchema: z.object({}),
+          execute: async () => {
+            entered.resolve();
+            await gate.promise;
+            return { answer: 42 };
+          },
+        });
+        let processedChunks = 0;
+        const inner = new Agent({
+          id: 'observe-agent',
+          name: 'Observe agent',
+          instructions: 'Look up the answer.',
+          model: fixture.model,
+          tools: { lookup: tool },
+          outputProcessors: [
+            {
+              id: 'count-output-chunks',
+              async processOutputStream({ part }) {
+                processedChunks++;
+                return part;
+              },
+            },
+          ],
+        });
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: inner,
+          cleanupTimeoutMs: 60_000,
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        fixture.addResponse(0, {
+          content: 'Looking up',
+          toolCalls: [{ id: 'lookup-1', name: 'lookup', arguments: {} }],
+        });
+        fixture.addResponse(1, { content: 'The answer is 42.' });
+        const runId = `observe-parity-${kind}`;
+        const base = `${server.baseUrl}/api/agents/agent`;
+        const post = async (route: string, body: object) => {
+          const response = await fetch(`${base}/${route}`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify(body),
+          });
+          expect(response.status).toBe(200);
+          return response;
+        };
+        const original = collectPublicFrames(await post('stream', { messages: 'Find the answer', runId, maxSteps: 3 }));
+        try {
+          await entered.promise;
+          const live = collectPublicFrames(await post('observe', { runId, offset: 0 }), frame => {
+            liveFrames.push(frame);
+          });
+          await expect.poll(() => liveFrames.some(frame => frame.type === 'tool-call'), { timeout: 2000 }).toBe(true);
+          // Detaching another observer must not cancel the gated tool or erase replay history.
+          const detached = await post('observe', { runId });
+          await detached.body!.cancel();
+          gate.resolve();
+          const frames = await original;
+          expect(await live).toEqual(frames);
+          expect(
+            frames
+              .filter(frame => frame.type === 'text-delta')
+              .map(frame => frame.payload.text)
+              .join(''),
+          ).toBe('Looking upThe answer is 42.');
+          expect(frames.some(frame => frame.type === 'tool-result')).toBe(true);
+          expect(frames.filter(frame => frame.type === 'step-start')).toHaveLength(2);
+          expect(frames.at(-1)).toMatchObject({ type: 'finish', runId, payload: { stepResult: { reason: 'stop' } } });
+          const processedAtFinish = processedChunks;
+          expect(processedAtFinish).toBeGreaterThan(0);
+          for (const offset of [undefined, 0]) {
+            expect(await collectPublicFrames(await post('observe', { runId, offset }))).toEqual(frames);
+            if (config.observeWithClient) {
+              expect(await config.observeWithClient(server.baseUrl, runId, offset)).toEqual(frames);
+            }
+          }
+          const history = await agent.pubsub.getHistory(AGENT_STREAM_TOPIC(runId));
+          const delta = history.find(event => event.type === 'chunk' && event.data?.type === 'text-delta');
+          expect(delta).toBeDefined();
+          const firstDelta = frames.findIndex(frame => frame.type === 'text-delta');
+          expect(await collectPublicFrames(await post('observe', { runId, offset: delta!.index }))).toEqual(
+            frames.slice(firstDelta),
+          );
+          expect(await collectPublicFrames(await post('observe', { runId, offset: delta!.index! + 1 }))).toEqual(
+            frames.slice(firstDelta + 1),
+          );
+          if (config.observeWithClient) {
+            expect(await config.observeWithClient(server.baseUrl, runId, delta!.index)).toEqual(
+              frames.slice(firstDelta),
+            );
+          }
+          expect(processedChunks).toBe(processedAtFinish);
+        } finally {
+          gate.resolve();
+          await original;
+        }
+      });
+    }
 
     for (const route of [
       'stream',
