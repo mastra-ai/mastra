@@ -184,7 +184,13 @@ export class Scheduler extends MastraBase {
     let delay: number | undefined;
     do {
       this.#wakeRequested = false;
-      await this.#runTick();
+      try {
+        await this.#runTick();
+      } catch (err) {
+        // A crashed tick must not stop the scheduler: retry at the tick interval.
+        this.logger.error('Scheduler tick crashed', { error: err });
+        this.#lastTickBusy = true;
+      }
       if (this.#stopping || !this.#started) return;
       delay = await this.#nextDelay();
     } while (this.#wakeRequested && !this.#stopping && this.#started);

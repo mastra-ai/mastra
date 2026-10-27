@@ -1235,6 +1235,33 @@ describe('Scheduler', () => {
       await scheduler.stop();
     });
 
+    it('retries at the tick interval after a tick throws instead of going quiet', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      let calls = 0;
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: {
+          tickIntervalMs: 20,
+          isTargetReady: () => {
+            if (++calls === 1) throw new Error('readiness probe crashed');
+            return true;
+          },
+        },
+      });
+      await store.createSchedule(row('sched-crash', Date.now() - 1));
+
+      await scheduler.start();
+      await wait(250);
+
+      expect(calls).toBeGreaterThan(1);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
     it('fires a schedule created while sleeping as soon as it is woken', async () => {
       const { store } = makeStore();
       const pubsub = new EventEmitterPubSub();
