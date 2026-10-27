@@ -11,8 +11,8 @@ import { z } from 'zod';
 import { useMcpServerTasks } from '../hooks/use-mcp-server-tasks';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 
-const COLUMNS = 'auto 1fr auto';
-const COLUMNS_WITH_TASKS = 'auto 1fr auto auto';
+const COLUMNS = 'auto minmax(0, 1fr) auto';
+const COLUMNS_WITH_TASKS = 'auto minmax(0, 1fr) auto auto';
 
 const TOOL_TYPE_LABELS = { tool: 'Tool', agent: 'Agent', workflow: 'Workflow' } as const;
 
@@ -108,7 +108,7 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
       {isLoading ? (
         <DataListSkeleton columns={columns} />
       ) : (
-        <DataList columns={columns} scrollRef={containerRef}>
+        <DataList columns={columns} fit="container" scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Name</DataList.TopCell>
             <DataList.TopCell>Description</DataList.TopCell>

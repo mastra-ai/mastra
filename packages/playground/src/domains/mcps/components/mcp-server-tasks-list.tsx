@@ -43,7 +43,7 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
       {isError && <Notice variant="destructive">Could not load this server's tasks.</Notice>}
       {data?.unavailable && <Notice variant="info">{UNAVAILABLE[data.unavailable]}</Notice>}
       {data && !data.unavailable && (
-        <DataList columns={COLUMNS} scrollRef={containerRef}>
+        <DataList columns={COLUMNS} fit="container" scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Surface</DataList.TopCell>
             <DataList.TopCell>Status</DataList.TopCell>
