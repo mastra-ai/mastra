@@ -3,6 +3,7 @@ import type { AgentSignalIfIdleOptions } from '../agent/types';
 import type { Mastra } from '../mastra';
 import type { SendNotificationSignalInput } from '../notifications/types';
 import type { InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
+import type { ApiRoute } from '../server/types';
 
 /**
  * Identifies a specific agent thread that a signal provider targets.
@@ -415,6 +416,30 @@ export abstract class SignalProvider<TId extends string = string> {
    * performing provider-specific webhook verification.
    */
   handleWebhook?(request: SignalProviderWebhookRequest): Promise<{ status?: number; body?: unknown }>;
+
+  /**
+   * Return API routes this provider needs on the Mastra server, such as
+   * webhook receivers or OAuth callbacks. Mastra merges them into
+   * `server.apiRoutes` when the provider's agent is registered, so users
+   * don't have to add them by hand.
+   *
+   * @example
+   * ```ts
+   * getRoutes() {
+   *   return [
+   *     registerApiRoute('/acme/webhook', {
+   *       method: 'POST',
+   *       requiresAuth: false,
+   *       handler: async c => {
+   *         const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() });
+   *         return c.json(result.body ?? {}, result.status ?? 200);
+   *       },
+   *     }),
+   *   ];
+   * }
+   * ```
+   */
+  getRoutes?(): ApiRoute[];
 
   // ── Lifecycle ──────────────────────────────────────────────────────
 

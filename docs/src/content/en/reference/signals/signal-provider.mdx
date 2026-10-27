@@ -333,7 +333,7 @@ provider.stopPolling()
 
 Handle an incoming webhook request. Override to parse the payload and match it to subscriptions. Then emit notification signals. See [`WebhookSignalProvider`](/reference/signals/webhook-signal-provider) for a ready-to-use implementation.
 
-Call this method from an application-defined HTTP endpoint after verifying the webhook request.
+Call this method from a route returned by [`getRoutes()`](#getroutes) or from your own HTTP endpoint, after verifying the webhook request.
 
 ```typescript oxfmt:false
 async handleWebhook(request) {
@@ -352,6 +352,27 @@ async handleWebhook(request) {
 ```
 
 Returns: `Promise<{ status?: number; body?: unknown }>`
+
+#### `getRoutes()`
+
+Return API routes this provider needs on the Mastra server, such as webhook receivers or OAuth callbacks. Optional. When the provider's agent is registered, Mastra adds these routes to `server.apiRoutes`, so you don't add them by hand. Routes with a method and path that are already registered are skipped, so a provider shared by several agents mounts its routes once.
+
+```typescript oxfmt:false
+getRoutes() {
+  return [
+    registerApiRoute('/acme/webhook', {
+      method: 'POST',
+      requiresAuth: false,
+      handler: async c => {
+        const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() })
+        return c.json(result.body ?? {}, result.status ?? 200)
+      },
+    }),
+  ]
+}
+```
+
+Returns: `ApiRoute[]`
 
 ### Lifecycle
 

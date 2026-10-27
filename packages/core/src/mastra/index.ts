@@ -2990,6 +2990,7 @@ export class Mastra<
         });
       }
 
+      this.#registerSignalProviderRoutes(underlyingAgent);
       this.#syncLateRegisteredAgentSchedules(underlyingAgent);
 
       return;
@@ -3110,7 +3111,31 @@ export class Mastra<
       });
     }
 
+    this.#registerSignalProviderRoutes(mastraAgent);
     this.#syncLateRegisteredAgentSchedules(mastraAgent);
+  }
+
+  /**
+   * Merge routes from the agent's signal providers into `server.apiRoutes`.
+   * Skips routes whose method and path are already registered, so a provider
+   * shared by several agents only mounts its routes once.
+   */
+  #registerSignalProviderRoutes(agent: Agent<any, any, any>): void {
+    const existingRoutes = this.#server?.apiRoutes ?? [];
+    const newRoutes: ApiRoute[] = [];
+
+    for (const provider of agent.listSignalProviders?.() ?? []) {
+      for (const route of provider.getRoutes?.() ?? []) {
+        const isRegistered = [...existingRoutes, ...newRoutes].some(
+          existing => existing.path === route.path && existing.method === route.method,
+        );
+        if (!isRegistered) newRoutes.push(route);
+      }
+    }
+
+    if (newRoutes.length > 0) {
+      this.#server = { ...this.#server, apiRoutes: [...existingRoutes, ...newRoutes] };
+    }
   }
 
   /**
