@@ -79,7 +79,10 @@ export async function createFactoryTransitionTools(options: {
   }
 
   return {
-    ...(availableBinding.role === 'review' ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
+    // Built for every role because tools resolve once per run and a session's
+    // role can rotate to review partway through one. The rules processor hides
+    // it on steps whose binding is not review, and execute re-checks the role.
+    ...createReviewVerdictTool(options, availableBinding.workItemId),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
       description: isTriage

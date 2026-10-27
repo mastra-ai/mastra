@@ -796,16 +796,58 @@ describe('factory_transition_work_item', () => {
       ).rejects.toThrow('Only a card in Reviewing records a verdict');
     });
 
-    it('is offered only to review bindings and bounds its input', async () => {
+    it('is built for a work run and records once the same run rotates to review', async () => {
       const storage = (await createFactoryStorageForTests()).workItems;
-      await prepareBoundItem(storage, 'github-issue');
-      const workTools = await createFactoryTransitionTools({
-        requestContext: requestContext(),
+      const prepared = await prepareBoundItem(storage, 'github-issue', 'work');
+      const context = requestContext();
+      const tools = await createFactoryTransitionTools({
+        requestContext: context,
         storage,
-        transitionService: { transition: vi.fn() } as never,
+        transitionService: { transition: vi.fn().mockResolvedValue({ status: 'accepted' }) } as never,
       });
-      expect(workTools).not.toHaveProperty('factory_record_review_verdict');
+      const verdict = {
+        verdict: 'approve',
+        reviewedHeadSha: 'abc1234def000000000000000000000000000000',
+        findings: 'Result: approved',
+      };
+      await expect(execute(tools.factory_record_review_verdict as ExecutableTool, context, verdict)).rejects.toThrow(
+        'review binding is unavailable',
+      );
 
+      // The builder hands the live session to self-review partway through the run.
+      await storage.prepareRunStart({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: PROJECT_ID,
+        workItem: {
+          id: prepared.item.id,
+          input: {
+            externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+            title: 'Factory item',
+            stages: ['review'],
+            sessions: {},
+            metadata: {},
+          },
+        },
+        role: 'review',
+        session: { sessionId: 'resource-1', branch: 'factory/item', threadId: 'thread-1' },
+        resourceId: 'resource-1',
+        kickoffKey: 'kickoff-review',
+        kickoffMessage: null,
+      });
+      await storage.update({
+        orgId: 'org-1',
+        id: prepared.item.id,
+        userId: 'user-1',
+        patch: { stages: ['review'], metadata: { authorTrusted: true } },
+      });
+
+      await expect(
+        execute(tools.factory_record_review_verdict as ExecutableTool, context, verdict),
+      ).resolves.toMatchObject({ status: 'recorded', verdict: 'approve' });
+    });
+
+    it('bounds its input', async () => {
       const reviewStorage = (await createFactoryStorageForTests()).workItems;
       await reviewingItem(reviewStorage);
       const tools = await createFactoryTransitionTools({

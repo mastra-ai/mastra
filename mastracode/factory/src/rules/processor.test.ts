@@ -131,6 +131,47 @@ function stateArgs(context: RequestContext, overrides: Record<string, unknown> =
 }
 
 describe('FactoryPhaseStateProcessor', () => {
+  it('offers the review verdict tool only on steps where the session reviews', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'work');
+    const processor = new FactoryPhaseStateProcessor({
+      configVersion: 'rules-v1',
+      boards: createBoardRegistry(),
+      storage,
+    });
+    const context = requestContext();
+    const tools = { factory_record_review_verdict: {}, factory_transition_work_item: {} };
+    const stepArgs = () => ({ ...(inputArgs(context, []) as object), tools }) as never;
+
+    await expect(processor.processInputStep(stepArgs())).resolves.toEqual({
+      tools: { factory_transition_work_item: {} },
+    });
+
+    // The same session rotates to review partway through the run.
+    await storage.prepareRunStart({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: PROJECT_ID,
+      workItem: {
+        id: prepared.item.id,
+        input: {
+          externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:1' },
+          title: 'Improve the settings UI',
+          stages: ['review'],
+          sessions: {},
+          metadata: {},
+        },
+      },
+      role: 'review',
+      session: { sessionId: 'resource-1', branch: 'factory/issue-1', threadId: 'thread-1' },
+      resourceId: 'resource-1',
+      kickoffKey: 'kickoff-review',
+      kickoffMessage: null,
+    });
+
+    await expect(processor.processInputStep(stepArgs())).resolves.toBeUndefined();
+  });
+
   it('reconciles caller memory settings once per request, before the step hooks', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     await prepare(storage);

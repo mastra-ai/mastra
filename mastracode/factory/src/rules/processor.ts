@@ -8,6 +8,7 @@ import type {
   ComputeStateSignalResult,
   ProcessInputArgs,
   ProcessInputStepArgs,
+  ProcessInputStepResult,
   Processor,
 } from '@mastra/core/processors';
 
@@ -34,6 +35,8 @@ const STATE_ID = 'factory-phase';
 const RULE_TIMEOUT_MS = 5_000;
 const TRANSCRIPT_PAGE_SIZE = 50;
 const MAX_LINKED_ITEMS = 5;
+/** Mirrors the verdict tool id in `tools.ts`. */
+const REVIEW_VERDICT_TOOL = 'factory_record_review_verdict';
 function ruleStage(boards: BoardRegistry, item: WorkItemRow | null | undefined): string | undefined {
   return item && workItemPhaseSemantics(boards, item) ? item.stages[0] : undefined;
 }
@@ -309,7 +312,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     return args.messageList;
   }
 
-  async processInputStep(args: ProcessInputStepArgs): Promise<MessageList | undefined> {
+  async processInputStep(args: ProcessInputStepArgs): Promise<ProcessInputStepResult | undefined> {
     const address = getFactorySessionCoordinates(args.requestContext);
     let binding: FactoryRunBindingRecord | null | undefined;
     try {
@@ -323,12 +326,20 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
     // `undefined` (not `null`) keeps the recovery lookup inside the loader, so a
     // recovered session reaches its project row from this hook too.
     await this.loadCallerMemorySettings(args.requestContext, binding);
-    if (!binding || binding.status !== 'active') return;
-    const completedToolCallIds = completedStepToolCallIds(args.steps);
-    const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
-    if (completedMessage) {
-      await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+    // Run tools carry the verdict tool for every role, since the role can
+    // rotate mid-run; offer it only on steps where this session reviews.
+    const tools =
+      args.tools && REVIEW_VERDICT_TOOL in args.tools && !(binding?.status === 'active' && binding.role === 'review')
+        ? Object.fromEntries(Object.entries(args.tools).filter(([name]) => name !== REVIEW_VERDICT_TOOL))
+        : undefined;
+    if (binding && binding.status === 'active') {
+      const completedToolCallIds = completedStepToolCallIds(args.steps);
+      const completedMessage = currentCompletedToolMessage(args.messages, completedToolCallIds);
+      if (completedMessage) {
+        await this.ingestMessages(binding, [completedMessage], completedToolCallIds);
+      }
     }
+    return tools ? { tools } : undefined;
   }
 
   /**
