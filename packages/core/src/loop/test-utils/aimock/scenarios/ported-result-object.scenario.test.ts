@@ -103,6 +103,20 @@ describeForAllEngines('AIMock loop scenario: ported result object (v6 providers)
     expect(await output.warnings).toEqual([{ type: 'unsupported', feature: 'seed' }]);
   });
 
+  it('reports provider warnings on the step result, and leaves them undefined when there are none', async () => {
+    const stepWarnings = (chunks: any[]) =>
+      chunks.filter(c => c.type === 'step-finish').map(c => c.payload.stepResult.warnings);
+
+    p.openai.responses.push(openaiHello);
+    const withWarnings = await run(p.openaiModel, { modelSettings: { seed: 1 }, collectChunks: true });
+    expect(stepWarnings(withWarnings.chunks!)).toEqual([[{ type: 'unsupported', feature: 'seed' }]]);
+
+    p.openai.responses.push(openaiHello);
+    const withoutWarnings = await run(p.openaiModel, { collectChunks: true });
+    expect(stepWarnings(withoutWarnings.chunks!)).toEqual([undefined]);
+    expect(await withoutWarnings.output.warnings).toEqual([]);
+  });
+
   it('resolves signed and redacted reasoning blocks in reasoning, response messages and step content', async () => {
     p.anthropic.responses.push(
       anthropicEvents([

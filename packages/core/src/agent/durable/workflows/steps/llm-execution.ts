@@ -1,5 +1,5 @@
 import type { ReadableStream as NodeReadableStream } from 'node:stream/web';
-import type { LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
+import type { LanguageModelV2CallWarning, LanguageModelV2Prompt } from '@ai-sdk/provider-v5';
 import type { ToolChoice, ToolSet } from '@internal/ai-sdk-v5';
 import { expandDurableSteps } from '@internal/core/durable';
 import { z } from 'zod';
@@ -58,6 +58,7 @@ import {
 } from '../../../../processors/trailing-assistant-guard';
 import { getToolDefinitionsForTracing } from '../../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../../stream/aisdk/v5/execute';
+import { reportedWarnings } from '../../../../stream/base/input';
 import { MastraModelOutput, persistProcessorDataChunk } from '../../../../stream/base/output';
 import type { ChunkType, TextDeltaPayload, ToolCallPayload } from '../../../../stream/types';
 import { ChunkFrom } from '../../../../stream/types';
@@ -374,6 +375,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       });
       // The last model a call was attempted with, reported on a failed step like the regular agent does.
       let attemptedModelMetadata: ReturnType<typeof modelMetadataOf> | undefined;
+      // Warnings of the last attempt whose stream opened; a call that failed before that reports none.
+      let attemptedWarnings: LanguageModelV2CallWarning[] | undefined;
 
       // Emit error + step-finish chunks and return a bail response. This
       // mirrors the regular agent which sets stepResult.reason = 'error' and
@@ -414,7 +417,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               runId,
               from: ChunkFrom.AGENT,
               payload: {
-                stepResult: { reason: 'error', warnings: [], isContinued: false },
+                stepResult: {
+                  reason: 'error',
+                  warnings: attemptedWarnings ? reportedWarnings(attemptedWarnings) : [],
+                  isContinued: false,
+                },
                 output: { usage },
                 metadata: attemptedModelMetadata ? { modelMetadata: attemptedModelMetadata } : {},
               },
@@ -1081,6 +1088,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // so durable also relies on the MessageList defaults here. If those
             // ever become user-facing they should be plumbed in identically.
             attemptedModelMetadata = modelMetadataOf(currentModel);
+            attemptedWarnings = undefined;
             const messageListPromptArgs = await buildLlmPromptArgs({
               model: currentModel,
               skipUnavailableAttachments,
@@ -1622,6 +1630,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       structuredOutput: structuredOutput as any,
                       onResult: ({ warnings: w, request: r, rawResponse: rr }) => {
                         warnings = w || [];
+                        attemptedWarnings = warnings;
                         request = r || {};
                         rawResponse = rr || {};
                         modelSpanTracker?.updateStep?.({
@@ -2061,7 +2070,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       ...clientChunk,
                       payload: {
                         ...clientChunk.payload,
-                        stepResult: { ...clientChunk.payload?.stepResult, warnings },
+                        stepResult: { ...clientChunk.payload?.stepResult, warnings: reportedWarnings(warnings) },
                         metadata: {
                           ...(id !== undefined ? { id } : {}),
                           ...(timestamp !== undefined ? { timestamp } : {}),

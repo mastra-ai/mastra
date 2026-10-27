@@ -3,6 +3,20 @@ import { MastraBase } from '../../base';
 import { attachModelStreamTransport, readModelStreamTransport } from '../types';
 import type { ChunkType, CreateStream, OnResult } from '../types';
 
+// Arrays handed to onResult when the provider's doStream result carried no warnings.
+// They fill in later from the stream-start part; while empty they stand for "none reported".
+const streamStartWarnings = new WeakSet<object>();
+
+/**
+ * The warnings to report on a step result: the collected stream-start warnings when the
+ * provider sent any, otherwise `undefined` if the provider reported none, as before
+ * stream-start warnings were read.
+ */
+export function reportedWarnings<W>(warnings: W): W | undefined {
+  if (Array.isArray(warnings) && warnings.length === 0 && streamStartWarnings.has(warnings)) return undefined;
+  return warnings;
+}
+
 /**
  * Safely enqueue a chunk into a ReadableStreamDefaultController.
  * Returns true if the enqueue succeeded, false if the controller was already closed/errored.
@@ -71,6 +85,7 @@ export abstract class MastraModelInput extends MastraBase {
           // doStream result. Collect them into the same array handed to onResult so the
           // step result (built after the stream drains) carries them.
           const warnings = stream.warnings ?? [];
+          if (!stream.warnings) streamStartWarnings.add(warnings);
           const modelStream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>> = stream.warnings
             ? stream.stream
             : stream.stream.pipeThrough(
