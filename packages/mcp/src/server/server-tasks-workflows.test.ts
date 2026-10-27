@@ -450,6 +450,36 @@ describe.each([
       });
     });
 
+    it('asks the next question when the run is resumed elsewhere between the check and the resume', async () => {
+      const { workflows } = await start({ workflows: { interview: 'always' } });
+      const { result } = await call('run_interview', { answers: [] });
+      const tasks = await requester();
+      const first = await waitFor(tasks, result.taskId, 'input_required');
+      const [staleKey] = Object.keys(first.inputRequests ?? {});
+      const { runs } = await workflows.interview.listWorkflowRuns();
+      const before = await workflows.interview.getWorkflowRunById(runs[0]!.runId, { withNestedWorkflows: false });
+      await (
+        await workflows.interview.createRun({ runId: runs[0]!.runId })
+      ).resume({
+        step: 'ask1',
+        resumeData: { answer: 'studio' },
+      });
+      // The task's check still sees ask1 waiting, as if the outside resume landed just after it.
+      const read = vi.spyOn(workflows.interview, 'getWorkflowRunById').mockResolvedValueOnce(before);
+
+      await tasks.update(result.taskId, { [staleKey!]: { action: 'accept', content: { answer: 'client' } } });
+      const second = await waitFor(tasks, result.taskId, 'input_required');
+      expect(read).toHaveBeenCalled();
+      const [[key, request]] = Object.entries(second.inputRequests ?? {}) as [string, any][];
+      expect(key).not.toBe(staleKey);
+      expect(request.params.message).toBe('Answer ask2');
+      read.mockRestore();
+
+      await tasks.update(result.taskId, { [key]: { action: 'accept', content: { answer: 'client' } } });
+      const done = await waitFor(tasks, result.taskId, 'completed');
+      expect(JSON.parse(text(done))).toMatchObject({ result: { answers: ['ask1=studio', 'ask2=client'] } });
+    });
+
     it('asks again, rather than answering it, when the same step suspends again after a resume elsewhere', async () => {
       const { workflows } = await start({ workflows: { poll: 'always' } });
       const { result } = await call('run_poll', { answers: [] });

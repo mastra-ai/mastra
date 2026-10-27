@@ -3,8 +3,8 @@ import type { StepWithComponent, Workflow, WorkflowRunStatus } from '@mastra/cor
 /**
  * What a workflow task records at creation, as `MCPTaskCreateParams.context`. The task follows the
  * run `runId`, which the server started exactly once when it created the task; nothing here can
- * start it again. A custom `tasks.store` that cancels or expires a task waiting for input cancels
- * its run with `mastra.getWorkflow(workflowKey).createRun({ runId })` then `run.cancel()`.
+ * start it again. A custom `tasks.store` that cancels or expires a task cancels its run with
+ * `mastra.getWorkflow(workflowKey).createRun({ runId })` then `run.cancel()`.
  *
  * @experimental SEP-2663 extension; API may change.
  */

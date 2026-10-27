@@ -279,6 +279,8 @@ export class MCPServer extends MCPServerBase {
   private readonly tasks: ResolvedTasksConfig;
   /** Where tasks are kept: `tasks.store`, or the store picked on first use. */
   private readonly taskStore: MCPTaskStore;
+  /** Cancels for the workflow runs executing in this process, by run id, while they execute. */
+  private readonly executingRuns = new Map<string, () => void>();
   /** Prepared on Mastra registration so its executors exist before the manager recovers rows. */
   private backgroundTaskStore?: BackgroundTaskMCPTaskStore;
 
@@ -1282,6 +1284,9 @@ export class MCPServer extends MCPServerBase {
         void run
           .then(started => started.cancel())
           .catch(error => this.logger.warn('Could not cancel workflow run', { tool: name, error }));
+      this.executingRuns.set(context.runId, cancel);
+      const done = () => this.executingRuns.delete(context.runId);
+      result.then(done, done);
       return { result, cancel };
     };
 
@@ -1290,7 +1295,7 @@ export class MCPServer extends MCPServerBase {
       const { store, task } = await this.createTask(params, true);
       const live = start();
       store.run(task.taskId, this.workflowTaskWork(context), {
-        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result, live.cancel),
+        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
       });
       this.logger.debug(`Workflow tool '${name}' runs as task.`);
       return taskHandleResult(task);
@@ -1321,7 +1326,7 @@ export class MCPServer extends MCPServerBase {
     try {
       const { store, task } = await this.createTask(params, true);
       store.run(task.taskId, this.workflowTaskWork(context), {
-        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result, live.cancel),
+        initialAttempt: this.liveWorkflowAttempt(workflow, context, live.result),
       });
       this.logger.debug(`Workflow tool '${name}' continues as task.`);
       return taskHandleResult(task);
@@ -1337,7 +1342,6 @@ export class MCPServer extends MCPServerBase {
     workflow: Workflow,
     context: WorkflowTaskContext,
     result: Promise<WorkflowRunView>,
-    cancel: () => void,
   ): NonNullable<MCPTaskRunOptions['initialAttempt']> {
     const controller = new AbortController();
     return {
@@ -1347,10 +1351,10 @@ export class MCPServer extends MCPServerBase {
           this.watchWorkflowRun(workflow, context, controller.signal),
         (error: unknown) => this.toolErrorOutcome(context.toolName, error),
       ),
-      abort: reason => {
-        controller.abort(reason);
-        cancel();
-      },
+      // Stops following the run, and only that: an attempt is also aborted when this server shuts
+      // down or loses the task to another worker, and the run must go on then. Cancelling the task
+      // cancels the run through the store's onCancel (see cancelWorkflowRun).
+      abort: reason => controller.abort(reason),
     };
   }
 
@@ -1369,15 +1373,9 @@ export class MCPServer extends MCPServerBase {
       } catch (error) {
         return this.toolErrorOutcome(name, error);
       }
-      const cancelRun = () => void this.cancelWorkflowRun(context);
-      if (attempt.signal.aborted) cancelRun();
-      else attempt.signal.addEventListener('abort', cancelRun, { once: true });
-      try {
-        if (!attempt.resume) return await this.watchWorkflowRun(workflow, context, attempt.signal);
-        return await this.resumeWorkflowRun(workflow, context, attempt, requestContext);
-      } finally {
-        attempt.signal.removeEventListener('abort', cancelRun);
-      }
+      // An aborted attempt only stops following the run (see liveWorkflowAttempt).
+      if (!attempt.resume) return this.watchWorkflowRun(workflow, context, attempt.signal);
+      return this.resumeWorkflowRun(workflow, context, attempt, requestContext);
     };
   }
 
@@ -1407,6 +1405,7 @@ export class MCPServer extends MCPServerBase {
     }
     const run = await workflow.createRun({ runId: context.runId });
     let view: WorkflowRunView;
+    this.executingRuns.set(context.runId, () => void run.cancel());
     try {
       view = await run.resume({
         step: answered.step,
@@ -1416,7 +1415,14 @@ export class MCPServer extends MCPServerBase {
     } catch (error) {
       // Resumed already, by another instance or an earlier try of this attempt: follow that.
       if (isResumeClaimLost(error)) return this.watchWorkflowRun(workflow, context, attempt.signal);
+      // Or resumed elsewhere between the check above and this resume, so core refused the step.
+      const now = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
+      if (now && !isStillSuspended({ status: now.status, steps: now.steps }, answered)) {
+        return this.watchWorkflowRun(workflow, context, attempt.signal);
+      }
       return this.toolErrorOutcome(context.toolName, error);
+    } finally {
+      this.executingRuns.delete(context.runId);
     }
     return this.workflowRunOutcome(workflow, context, view) ?? this.watchWorkflowRun(workflow, context, attempt.signal);
   }
@@ -1491,19 +1497,20 @@ export class MCPServer extends MCPServerBase {
   }
 
   /**
-   * Cancels the task's run. A run that already finished is left alone. With `executing: false` (the
-   * store's cancel hook, on whichever instance got `tasks/cancel`), a run that is executing is left
-   * to the attempt running it: writing `canceled` under a run another process executes doesn't stop
-   * it there, its next write overwrites the status, and that process's own cancel then finds the run
-   * already `canceled` and does nothing.
+   * Cancels the task's run, for a declined input or the store's onCancel (`tasks/cancel`, TTL
+   * expiry), on whichever instance that happens. A run executing in this process is cancelled here.
+   * A run executing in another process is left alone: writing `canceled` under it doesn't stop it,
+   * its next write overwrites the status, and its own cancel would then find it `canceled` and do
+   * nothing. A run that waits (suspended, pending) is cancelled in storage. A finished run is left alone.
    */
-  private async cancelWorkflowRun(context: WorkflowTaskContext, { executing = true } = {}): Promise<void> {
+  private async cancelWorkflowRun(context: WorkflowTaskContext): Promise<void> {
+    const local = this.executingRuns.get(context.runId);
+    if (local) return local();
     const workflow = this.workflowFor(context.workflowKey);
     if (!workflow) return;
     try {
       const state = await workflow.getWorkflowRunById(context.runId, { withNestedWorkflows: false });
-      if (!state || isFinalRunStatus(state.status)) return;
-      if (!executing && state.status === 'running') return;
+      if (!state || isFinalRunStatus(state.status) || state.status === 'running') return;
       await (await workflow.createRun({ runId: context.runId })).cancel();
     } catch (error) {
       this.logger.warn('Could not cancel workflow run', { tool: context.toolName, error });
@@ -1932,8 +1939,7 @@ export class MCPServer extends MCPServerBase {
         isWorkflowTaskContext(context)
           ? this.workflowTaskWork(context)
           : this.toolTaskWork(context as unknown as ToolTaskContext),
-      onCancel: context =>
-        isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context, { executing: false }) : undefined,
+      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
       recoverFor: name => this.tasks.modeFor(name, this.convertedTools[name]?.mcp?.toolType).recover,
       logger: () => this.logger,
     });
@@ -1975,8 +1981,7 @@ export class MCPServer extends MCPServerBase {
       this.backgroundTaskStore = undefined;
     }
     return new InMemoryMCPTaskStore({
-      onCancel: context =>
-        isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context, { executing: false }) : undefined,
+      onCancel: context => (isWorkflowTaskContext(context) ? this.cancelWorkflowRun(context) : undefined),
     });
   }
 

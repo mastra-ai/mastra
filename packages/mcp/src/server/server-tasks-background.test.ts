@@ -892,6 +892,37 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       expect((await onlyRun(a.mastra, 'slow')).status).toBe('canceled');
     });
 
+    it('leaves a run alone when its server shuts down mid-step, so the task completes with it on a peer', async () => {
+      const a = await workflowInstance();
+      const b = await workflowInstance();
+      const taskId = await call(a.url, 'run_slow');
+      await vi.waitFor(async () => expect((await onlyRun(b.mastra, 'slow')).status).toBe('running'));
+      // A shuts down its background tasks (as `mastra.shutdown()` does first): that aborts A's
+      // attempt and releases its lease, which is not a cancel, so the run must go on.
+      await a.mastra.backgroundTaskManager!.shutdown();
+      // As the deployer does on boot: continues the run once A's run lease lapses.
+      await b.mastra.restartAllActiveWorkflowRuns();
+      const done = await waitFor(await requester(b.url), taskId, 'completed', 60_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect((await onlyRun(b.mastra, 'slow')).status).toBe('success');
+    }, 90_000);
+
+    it('leaves a run alone when its server loses the task to another worker, so the task still completes', async () => {
+      const a = await workflowInstance();
+      const taskId = await call(a.url, 'run_slow');
+      await vi.waitFor(async () => expect((await onlyRun(a.mastra, 'slow')).status).toBe('running'));
+      // Another worker takes the row over: A's heartbeat aborts A's attempt as superseded.
+      const [row] = (await rows(a.mastra)).filter(r => r.toolName === 'mcp-server:tasks:run_slow');
+      const storage = await a.mastra.backgroundTaskManager!.getStorage();
+      await storage.updateTask(row!.id, { ownerId: 'someone-else', leaseExpiresAt: new Date(Date.now() + LEASE_MS) });
+
+      // That worker never renews, so the row is reclaimed and the task follows the run again.
+      const done = await waitFor(await requester(a.url), taskId, 'completed', 30_000);
+      expect(done.result).toMatchObject({ isError: false });
+      expect((await onlyRun(a.mastra, 'slow')).status).toBe('success');
+      expect(stepRuns('long')).toEqual([{ tool: 'long', resumeData: 'done' }]);
+    });
+
     it('asks on one instance for a run another started, and resumes that run once with the answer', async () => {
       const a = await workflowInstance();
       const b = await workflowInstance();

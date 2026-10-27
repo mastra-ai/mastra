@@ -489,7 +489,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       try {
         if (isExpired(row, now)) await this.#expire(storage, row);
         else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
-        else if (isOwned(row) && row.leaseExpiresAt && row.leaseExpiresAt.getTime() <= now) {
+        // No lease at all: a worker that shut down gracefully released it, leaving the row running.
+        else if (isOwned(row) && (!row.leaseExpiresAt || row.leaseExpiresAt.getTime() <= now)) {
           await this.#reclaim(storage, row, envelope);
         } else if (row.status === 'pending' && !row.ownerId && now - row.createdAt.getTime() >= lease) {
           // Never started, or reclaimed for another attempt, and still waiting a lease on: it may
