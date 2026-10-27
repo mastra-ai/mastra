@@ -114,21 +114,55 @@ describe('executeToolCall', () => {
     expect(onOutput).not.toHaveBeenCalled();
   });
 
-  it('does not execute a tool whose signal is already aborted', async () => {
-    const controller = new AbortController();
-    controller.abort(Object.assign(new Error('not an authorization denial'), { name: 'FGADeniedError' }));
-    const execute = vi.fn();
-    const outcome = await executeToolCall({
-      tool: { execute },
-      args: {},
-      toolOptions: {},
-      toolCallId: 'call-1',
-      toolName: 'notify',
-      abortSignal: controller.signal,
-    });
-    expect(outcome).toEqual({ status: 'aborted' });
-    expect(execute).not.toHaveBeenCalled();
-  });
+  it.each(['inside', 'outside', 'never'] as const)(
+    'starts an already-aborted call with a bounded execution window (result: %s)',
+    async timing => {
+      vi.useFakeTimers();
+      const controller = new AbortController();
+      controller.abort();
+      const execution = Promise.withResolvers<string>();
+      const execute = vi.fn(() => execution.promise);
+      const onOutput = vi.fn();
+      const release = vi.fn();
+      const pending = executeToolCall({
+        tool: { execute, onOutput },
+        args: {},
+        toolOptions: {},
+        toolCallId: 'call-1',
+        toolName: 'notify',
+        abortSignal: controller.signal,
+        acquireExecution: () => release,
+      });
+      let settled = false;
+      void pending.then(() => {
+        settled = true;
+      });
+      try {
+        expect(execute).toHaveBeenCalledTimes(1);
+        await vi.advanceTimersByTimeAsync(TOOL_ABORT_GRACE_MS - 1);
+        expect(settled).toBe(false);
+        if (timing === 'inside') {
+          execution.resolve('sent');
+          await expect(pending).resolves.toEqual({ status: 'success', result: 'sent', rawResult: 'sent' });
+          expect(onOutput).toHaveBeenCalledWith(expect.objectContaining({ output: 'sent' }));
+        } else {
+          await vi.advanceTimersByTimeAsync(1);
+          await expect(pending).resolves.toEqual({ status: 'aborted' });
+          if (timing === 'outside') {
+            execution.resolve('too late');
+            await vi.advanceTimersByTimeAsync(0);
+          }
+          expect(onOutput).not.toHaveBeenCalled();
+        }
+        expect(release).toHaveBeenCalledTimes(1);
+        expect(vi.getTimerCount()).toBe(0);
+      } finally {
+        execution.resolve('cleanup');
+        vi.useRealTimers();
+        await pending;
+      }
+    },
+  );
 
   it('keeps a successful result returned during self-abort', async () => {
     const controller = new AbortController();

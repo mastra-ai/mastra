@@ -76,7 +76,6 @@ export async function executeToolCall(deps: {
   let executionError: unknown;
 
   try {
-    if (abortSignal?.aborted) throw aborted;
     const release = deps.acquireExecution?.();
     const settleSignal = deps.settleSignal ?? abortSignal;
     let onAbort: (() => void) | undefined;
@@ -92,7 +91,6 @@ export async function executeToolCall(deps: {
             settleSignal.addEventListener('abort', onAbort, { once: true });
             if (settleSignal.aborted) {
               onAbort();
-              return;
             }
             // Consume abandoned rejections even after the grace window expires.
             Promise.resolve(tool.execute(deps.args, deps.toolOptions)).then(resolve, error => {
