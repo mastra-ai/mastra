@@ -121,15 +121,17 @@ function callbackToolResults(records: unknown[], runId: string): ToolResultChunk
   return records.flatMap<ToolResultChunk>(record => {
     if ((record as ToolResultChunk).type === 'tool-result') return [record as ToolResultChunk];
     const result = record as DurableToolCallOutput;
-    // These records never emitted a successful tool-result chunk. An absent
-    // result is a pending client call or a suspended call, not a void result.
+    // These records never emitted a successful tool-result chunk. An undefined
+    // result is a pending client call or a suspended call: a tool that ran and
+    // returned nothing is recorded as null.
     if (
       result.error ||
       result.mappingError ||
       result.aborted ||
       result.resultBlocked ||
+      result.resultHidden ||
       result.approval?.approved === false ||
-      !Object.hasOwn(result, 'result')
+      result.result === undefined
     )
       return [];
     return [

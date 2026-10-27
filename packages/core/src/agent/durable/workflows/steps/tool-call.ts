@@ -127,6 +127,9 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
+  // Set when an output processor dropped the tool-result chunk. The model still
+  // gets the result; callbacks must not report a result the stream never emitted.
+  resultHidden: z.boolean().optional(),
   error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
@@ -2094,6 +2097,7 @@ export function createDurableToolCallStep() {
         // tool-result with undefined would produce a spurious entry that
         // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
         let transformMetadata: DurableToolCallOutput['transformMetadata'];
+        let resultHidden = false;
         if (pubsub && !wasSuspended) {
           try {
             const resultChunk = await applyToolPayloadTransformToChunk(
@@ -2117,7 +2121,7 @@ export function createDurableToolCallStep() {
             transformMetadata = (resultChunk as { metadata?: Record<string, any> })
               .metadata as DurableToolCallOutput['transformMetadata'];
             // Runs through output processors (tripwire/blocking/redaction) and emits
-            await processChunkThroughOutputProcessors(
+            const emitted = await processChunkThroughOutputProcessors(
               resultChunk,
               registryEntry,
               pubsub,
@@ -2128,6 +2132,7 @@ export function createDurableToolCallStep() {
               processorObservabilityContext,
               collectProcessorDataPart,
             );
+            resultHidden = emitted === null;
           } catch (emitError) {
             ownership?.throwIfLost();
             if (emitError instanceof DurableOutputProcessorError) {
@@ -2142,6 +2147,7 @@ export function createDurableToolCallStep() {
           providerMetadata,
           result,
           modelOutputComputed,
+          ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),

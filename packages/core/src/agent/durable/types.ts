@@ -486,6 +486,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    */
   resultBlocked?: boolean;
   /**
+   * Set when an output processor dropped the tool-result chunk without a
+   * tripwire. The model still gets the result, but callbacks leave it out of
+   * `toolResults`, as the stream never emitted it.
+   */
+  resultHidden?: boolean;
+  /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
    * is a local copy whose mutations don't cross the step boundary, so parts

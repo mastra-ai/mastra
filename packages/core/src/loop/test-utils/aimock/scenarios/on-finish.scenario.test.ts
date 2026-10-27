@@ -536,6 +536,81 @@ describeForAllEngines(
         }
       },
     );
+
+    // A resumed stream restores the run's earlier tool results from storage.
+    // Results the stream never emitted must stay out of the callback. The plain
+    // Agent still restores a processor-hidden result on resume, so the hidden
+    // case covers the durable engines only.
+    it.each(isDurableEngineVariant(engine) ? (['hidden', 'client'] as const) : (['client'] as const))(
+      'does not restore a %s result after approval',
+      async kind => {
+        const shared = await createSharedAgent(getMock(), {
+          engine,
+          tools: {
+            lookup: createTool({
+              id: 'lookup',
+              description: 'Find an item.',
+              inputSchema: z.object({}),
+              ...(kind === 'hidden' ? { execute: async () => ({ secret: 'private' }) } : {}),
+            }),
+            purchase: createTool({
+              id: 'purchase',
+              description: 'Purchase the item.',
+              inputSchema: z.object({}),
+              requireApproval: true,
+              execute: async () => ({ purchased: 'A' }),
+            }),
+          },
+        });
+        const hideLookup: Processor = {
+          id: 'hide-lookup',
+          processOutputStream: async ({ part }) =>
+            part.type === 'tool-result' && part.payload.toolName === 'lookup' ? null : part,
+        };
+        let finish: MastraOnFinishCallbackArgs | undefined;
+        let resumed: any;
+        try {
+          const { output } = await runLoopScenario({
+            engine,
+            llm: getMock(),
+            sharedAgent: shared,
+            prompt: 'Find and buy an item.',
+            maxSteps: 4,
+            ...(kind === 'hidden' ? { outputProcessors: [hideLookup] } : {}),
+            fixtures: llm => {
+              llm.on(
+                { endpoint: 'chat', sequenceIndex: 0 },
+                {
+                  toolCalls: [
+                    { id: 'lookup-1', name: 'lookup', arguments: {} },
+                    { id: 'purchase-1', name: 'purchase', arguments: {} },
+                  ],
+                },
+              );
+              llm.on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Purchased.' });
+            },
+          });
+          resumed = await shared.agent.approveToolCall({
+            runId: output.runId,
+            toolCallId: 'purchase-1',
+            onFinish: (result: MastraOnFinishCallbackArgs) => {
+              finish = result;
+            },
+          });
+          for await (const _chunk of resumed.fullStream) {
+            /* drain the resumed segment */
+          }
+          await expect.poll(() => finish).toBeDefined();
+          expect(finish!.toolResults.map(chunk => chunk.payload.toolCallId)).toEqual(['purchase-1']);
+          expect(finish!.steps.flatMap(step => step.toolResults.map(chunk => chunk.payload.toolCallId))).toEqual([
+            'purchase-1',
+          ]);
+        } finally {
+          resumed?.cleanup?.();
+          if (engine !== 'inngest') await shared.mastra.shutdown({ drainTimeout: 1000 });
+        }
+      },
+    );
   },
   { skip: ['fs'] },
 );
