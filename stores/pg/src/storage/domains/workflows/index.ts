@@ -1,5 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import {
+  inheritsState,
+  materializeState,
   materializeWorkflowRun,
   mergeWorkflowStepResult,
   normalizePerPage,
@@ -25,6 +27,7 @@ import type {
   RunFence,
   RunOwnershipRecord,
   UpdateWorkflowStateOptions,
+  StatePatchOp,
   StorageListWorkflowRunsInput,
   StoredWorkflowRun,
   StoredWorkflowRunHeader,
@@ -163,7 +166,7 @@ function workflowSnapshotThreadIdIndexSQL(indexName: string, schemaName?: string
 
 /** A storage v2 entry as written: one element of the jsonb array the write statements unpack. */
 interface EntryInput {
-  kind: 'step' | 'state';
+  kind: WorkflowRunEntry['kind'];
   step_id: string | null;
   payload: unknown;
 }
@@ -171,7 +174,7 @@ interface EntryInput {
 /** A storage v2 entry as read back by `#entriesSql`. */
 interface EntryRow {
   seq: number;
-  kind: 'step' | 'state';
+  kind: WorkflowRunEntry['kind'];
   step_id: string | null;
   payload: unknown;
   /** The payload was undefined when written (SQL NULL), as opposed to JSON null. */
@@ -189,14 +192,19 @@ interface RunWrite {
   header: WorkflowRunHeader;
 }
 
-/** The entries a storage v2 write adds: one per step, in order, then the state when given. */
-function journalEntries(steps: Record<string, StepResult<any, any, any, any>>, state?: Record<string, any>) {
+/** The entries a storage v2 write adds: one per step, in order, then the state or state patch when given. */
+function journalEntries(
+  steps: Record<string, StepResult<any, any, any, any>>,
+  state?: Record<string, any>,
+  statePatch?: StatePatchOp[],
+) {
   const entries: EntryInput[] = Object.entries(steps).map(([stepId, result]) => ({
     kind: 'step',
     step_id: stepId,
     payload: result,
   }));
   if (state !== undefined) entries.push({ kind: 'state', step_id: null, payload: state });
+  else if (statePatch !== undefined) entries.push({ kind: 'state-patch', step_id: null, payload: statePatch });
   return entries;
 }
 
@@ -208,15 +216,19 @@ function journalEntries(steps: Record<string, StepResult<any, any, any, any>>, s
 const entryRows = (param: string) => `jsonb_array_elements(${param}::jsonb) WITH ORDINALITY AS e(elem, ord)`;
 const ENTRY_VALUES = `e.elem ->> 'kind', e.elem ->> 'step_id', e.elem -> 'payload'`;
 
-/** Rebuilds a storage v2 run's state; an undefined payload reads back as undefined, as in v1. */
-function materializeRun(header: WorkflowRunHeader, rows: EntryRow[]): WorkflowRunState {
-  const entries = rows.map((row): WorkflowRunEntry => {
+/** The entries of `#entriesSql` rows; an undefined payload reads back as undefined, as in v1. */
+function toEntries(rows: EntryRow[]): WorkflowRunEntry[] {
+  return rows.map((row): WorkflowRunEntry => {
     const payload = row.absent ? undefined : row.payload;
-    return row.kind === 'step'
-      ? { seq: row.seq, kind: 'step', stepId: row.step_id!, result: payload }
-      : { seq: row.seq, kind: 'state', state: payload as Record<string, any> };
+    switch (row.kind) {
+      case 'step':
+        return { seq: row.seq, kind: 'step', stepId: row.step_id!, result: payload };
+      case 'state':
+        return { seq: row.seq, kind: 'state', state: payload as Record<string, any> };
+      case 'state-patch':
+        return { seq: row.seq, kind: 'state-patch', ops: payload as StatePatchOp[] };
+    }
   });
-  return materializeWorkflowRun(header, entries);
 }
 
 export class WorkflowsPG extends WorkflowsStorage {
@@ -548,14 +560,18 @@ export class WorkflowsPG extends WorkflowsStorage {
 
   /**
    * A jsonb array of {@link EntryRow} for the storage v2 run `alias` refers to: each step's
-   * latest entry and the latest state entry, ordered by when each was first written so
-   * `context` keys keep their write order.
+   * latest entry, ordered by when each step was first written so `context` keys keep their write
+   * order, and the entries `materializeState` uses: the latest full state and every state patch
+   * after it, in `seq` order. `stateOnly` leaves out the steps.
    *
    * With `summaryFieldsParam` (the parameter holding `STEP_RESULT_SUMMARY_FIELDS`), successful
    * steps other than `input` come back as their summary, built here so their data is never sent.
    * Like `summarizeStepResult`, it keeps a field that is JSON null and leaves out one that is absent.
    */
-  #entriesSql(alias: string, summaryFieldsParam?: string): string {
+  #entriesSql(
+    alias: string,
+    { summaryFieldsParam, stateOnly }: { summaryFieldsParam?: string; stateOnly?: boolean } = {},
+  ): string {
     let payload = 'x.payload';
     if (summaryFieldsParam) {
       const summarized = `(x.kind = 'step' AND x.step_id <> 'input' AND x.payload ->> 'status' = 'success')`;
@@ -566,15 +582,16 @@ export class WorkflowsPG extends WorkflowsStorage {
     }
     return `(SELECT COALESCE(jsonb_agg(jsonb_build_object(
           'seq', x.seq, 'kind', x.kind, 'step_id', x.step_id, 'absent', x.payload IS NULL, 'payload', ${payload}
-        ) ORDER BY x.first_seq), '[]'::jsonb)
+        ) ORDER BY CASE WHEN x.kind = 'step' THEN x.first_seq ELSE x.seq END), '[]'::jsonb)
       FROM (
         SELECT e.seq, e.kind, e.step_id, e.payload,
           ROW_NUMBER() OVER (PARTITION BY e.kind, e.step_id ORDER BY e.seq DESC) AS rn,
-          MIN(e.seq) OVER (PARTITION BY e.kind, e.step_id) AS first_seq
+          MIN(e.seq) OVER (PARTITION BY e.kind, e.step_id) AS first_seq,
+          MAX(CASE WHEN e.kind = 'state' THEN e.seq END) OVER () AS state_seq
         FROM ${this.#entriesTable()} e
-        WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id
+        WHERE e.workflow_name = ${alias}.workflow_name AND e.run_id = ${alias}.run_id${stateOnly ? ` AND e.kind <> 'step'` : ''}
       ) x
-      WHERE x.rn = 1)`;
+      WHERE CASE WHEN x.kind = 'state-patch' THEN x.state_seq IS NULL OR x.seq > x.state_seq ELSE x.rn = 1 END)`;
   }
 
   /**
@@ -627,10 +644,38 @@ export class WorkflowsPG extends WorkflowsStorage {
       ORDER BY p."createdAt" DESC`;
   }
 
+  /**
+   * The parent state a storage v2 run's state starts from (see `materializeState`): the state of
+   * the run in `header.parentWorkflow` when the run inherits it, else undefined. `{}` when the
+   * parent isn't stored. One query per inheriting ancestor.
+   */
+  async #parentState(
+    client: Queryable,
+    header: WorkflowRunHeader,
+    entries: readonly WorkflowRunEntry[],
+  ): Promise<Record<string, any> | undefined> {
+    const parent = header.parentWorkflow;
+    if (!parent || !inheritsState(entries)) return undefined;
+    const row = await client.oneOrNone<{ header: WorkflowRunHeader; entries: EntryRow[] }>(
+      `SELECT r.header, ${this.#entriesSql('r', { stateOnly: true })} AS entries
+       FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
+      [parent.workflowId, parent.runId],
+    );
+    if (!row) return {};
+    const parentEntries = toEntries(row.entries);
+    return materializeState(parentEntries, await this.#parentState(client, row.header, parentEntries)).state;
+  }
+
+  /** Rebuilds a storage v2 run's `WorkflowRunState` from its header and `#entriesSql` rows. */
+  async #materializeRun(client: Queryable, header: WorkflowRunHeader, rows: EntryRow[]): Promise<WorkflowRunState> {
+    const entries = toEntries(rows);
+    return materializeWorkflowRun(header, entries, await this.#parentState(client, header, entries));
+  }
+
   /** Parses a row of `#runsQuery`. */
-  #parseRun(row: Record<string, any>): WorkflowRun {
+  async #parseRun(client: Queryable, row: Record<string, any>): Promise<WorkflowRun> {
     if (row.version !== 2) return this.parseWorkflowRun(row);
-    const snapshot = row.entries ? materializeRun(row.header, row.entries) : row.snapshot;
+    const snapshot = row.entries ? await this.#materializeRun(client, row.header, row.entries) : row.snapshot;
     return { ...this.parseWorkflowRun({ ...row, snapshot }), storageVersion: 2 };
   }
 
@@ -675,25 +720,23 @@ export class WorkflowsPG extends WorkflowsStorage {
     try {
       const summary = successfulSteps === 'summary';
       const run = await this.#db.client.oneOrNone<StoredWorkflowRunHeader & { entries: EntryRow[] }>(
-        `SELECT r.header, r."lastSeq", ${this.#entriesSql('r', summary ? '$3' : undefined)} AS entries
+        `SELECT r.header, r."lastSeq", ${this.#entriesSql('r', { summaryFieldsParam: summary ? '$3' : undefined })} AS entries
          FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
         summary ? [workflowName, runId, STEP_RESULT_SUMMARY_FIELDS] : [workflowName, runId],
       );
       if (!run) return null;
 
-      let state: Record<string, any> = {};
+      const entries = toEntries(run.entries);
       const steps: StoredWorkflowRun['steps'] = {};
       const summarizedStepIds: string[] = [];
-      for (const row of run.entries) {
-        const payload = row.absent ? undefined : (row.payload as any);
-        if (row.kind === 'state') {
-          state = payload;
-          continue;
-        }
-        steps[row.step_id!] = payload;
-        if (row.summarized) summarizedStepIds.push(row.step_id!);
-      }
-      return { header: run.header, lastSeq: run.lastSeq, state, steps, summarizedStepIds };
+      entries.forEach((entry, i) => {
+        if (entry.kind !== 'step') return;
+        steps[entry.stepId] = entry.result as StoredWorkflowRun['steps'][string];
+        if (run.entries[i]!.summarized) summarizedStepIds.push(entry.stepId);
+      });
+      const parentState = await this.#parentState(this.#db.client, run.header, entries);
+      const { state, statePatchBytes } = materializeState(entries, parentState);
+      return { header: run.header, lastSeq: run.lastSeq, state, statePatchBytes, steps, summarizedStepIds };
     } catch (error) {
       throw this.#runError('LOAD_WORKFLOW_RUN', workflowName, runId, error);
     }
@@ -798,13 +841,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     fence: explicitFence,
     steps,
     state,
+    statePatch,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
-    state: Record<string, any>;
+    state?: Record<string, any>;
+    statePatch?: StatePatchOp[];
     fence?: RunFence;
   }): Promise<void> {
-    const entries = journalEntries(steps, state);
+    const entries = journalEntries(steps, state, statePatch);
     const fence = resolveRunFence(this, explicitFence, run.runId);
     try {
       await this.#db.client.tx(async t => {
@@ -837,13 +882,15 @@ export class WorkflowsPG extends WorkflowsStorage {
     fence,
     steps,
     state,
+    statePatch,
     ...run
   }: RunWrite & {
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
+    statePatch?: StatePatchOp[];
     fence?: RunFence;
   }): Promise<void> {
-    const entries = journalEntries(steps, state);
+    const entries = journalEntries(steps, state, statePatch);
     try {
       await withRunFence(
         this.#db.client,
@@ -1100,7 +1147,7 @@ export class WorkflowsPG extends WorkflowsStorage {
                RETURNING ${this.#entriesSql('r')} AS entries`,
               [workflowName, runId, toPgJson(header), header.status, now, now],
             );
-            return materializeRun(header, entries);
+            return this.#materializeRun(t, header, entries);
           }
           if (storageVersion === 2) return undefined;
         }
@@ -1241,7 +1288,7 @@ export class WorkflowsPG extends WorkflowsStorage {
            FROM ${this.#runsTable()} r WHERE r.workflow_name = $1 AND r.run_id = $2`,
           [workflowName, runId],
         );
-        if (run) return materializeRun(run.header, run.entries);
+        if (run) return await this.#materializeRun(this.#db.client, run.header, run.entries);
         if (storageVersion === 2) return null;
       }
       const result = await this.#db.load<{ snapshot: WorkflowRunState }>({
@@ -1302,7 +1349,7 @@ export class WorkflowsPG extends WorkflowsStorage {
         return null;
       }
 
-      return this.#parseRun(result);
+      return await this.#parseRun(this.#db.readClient, result);
     } catch (error) {
       throw new MastraError(
         {
@@ -1487,7 +1534,7 @@ export class WorkflowsPG extends WorkflowsStorage {
 
       const result = await this.#db.client.manyOrNone(query, queryValues);
 
-      const runs = (result || []).map(row => this.#parseRun(row));
+      const runs = await Promise.all((result || []).map(row => this.#parseRun(this.#db.client, row)));
 
       return { runs, total: total || runs.length };
     } catch (error) {

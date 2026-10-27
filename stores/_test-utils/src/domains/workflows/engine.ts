@@ -191,7 +191,12 @@ export function createWorkflowEngineTests({
       const writes: { checkpoint: boolean; status: string; stepIds: string[]; state: boolean }[] = [];
       const { writeWorkflowRunCheckpoint, appendWorkflowRunEntries, persistWorkflowSnapshot } = store;
       store.writeWorkflowRunCheckpoint = function (args) {
-        writes.push({ checkpoint: true, status: args.header.status, stepIds: Object.keys(args.steps), state: true });
+        writes.push({
+          checkpoint: true,
+          status: args.header.status,
+          stepIds: Object.keys(args.steps),
+          state: args.state !== undefined || args.statePatch !== undefined,
+        });
         return writeWorkflowRunCheckpoint.call(this, args);
       };
       store.appendWorkflowRunEntries = function (args) {
@@ -199,7 +204,7 @@ export function createWorkflowEngineTests({
           checkpoint: false,
           status: args.header.status,
           stepIds: Object.keys(args.steps),
-          state: args.state !== undefined,
+          state: args.state !== undefined || args.statePatch !== undefined,
         });
         return appendWorkflowRunEntries.call(this, args);
       };
@@ -232,9 +237,9 @@ export function createWorkflowEngineTests({
           expect(checkpoint).toBe(false);
           expect(stepIds).toHaveLength(status === 'running' ? 1 : 0);
         }
+        // Only the write after s5 changes the state, so only it carries any.
         expect(appends.filter(w => w.state)).toEqual([
           { checkpoint: false, status: 'running', stepIds: ['s5'], state: true },
-          { checkpoint: false, status: 'success', stepIds: [], state: true },
         ]);
 
         const stored = await store.loadWorkflowSnapshot({ workflowName: id('sequential'), runId, storageVersion: 2 });
