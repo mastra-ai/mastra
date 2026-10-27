@@ -18,7 +18,9 @@ describe('transformRequest', () => {
       const original = JSON.stringify(request);
       const normalized = transformRequest(request);
       expect(JSON.stringify(request)).toBe(original);
-      return createHash('md5').update(`${normalized.url}:${JSON.stringify(normalized.body)}`).digest('hex');
+      return createHash('md5')
+        .update(`${normalized.url}:${JSON.stringify(normalized.body)}`)
+        .digest('hex');
     };
     expect(hash(first)).toBe(hash(later));
   });

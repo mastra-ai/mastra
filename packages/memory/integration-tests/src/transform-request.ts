@@ -213,6 +213,14 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
   }
   // Normalize dates/timestamps in remembered messages (timezone/date differences cause hash mismatches)
   stringifiedBody = stringifiedBody.replaceAll(/\d{4},\s*\w{3},\s*\d{1,2}/g, 'REDACTED_DATE');
+  stringifiedBody = stringifiedBody.replaceAll(
+    /((?:\\n|"))Date: (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}(?=\\n|")/g,
+    '$1Date: REDACTED_DATE',
+  );
+  stringifiedBody = stringifiedBody.replaceAll(
+    /((?:\\n|"))(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2} \d{4}:(?=\\n|")/g,
+    '$1REDACTED_DATE:',
+  );
   stringifiedBody = stringifiedBody.replaceAll(/\d{1,2}:\d{2}\s*(AM|PM)/gi, 'REDACTED_TIME');
   // Remove "caller" objects that may be present in some SDK versions
   // Handle both cases: with trailing comma and as last property
