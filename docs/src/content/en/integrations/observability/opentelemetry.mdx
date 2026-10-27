@@ -13,7 +13,7 @@ Mastra supports OpenTelemetry (OTEL) through an exporter for sending traces and 
 
 ## Exporter
 
-The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, and more.
+The OpenTelemetry exporter sends your traces and logs using standardized [OpenTelemetry Semantic Conventions for GenAI](https://opentelemetry.io/docs/specs/semconv/gen-ai/). This ensures broad compatibility with platforms like Datadog, New Relic, Sentry, SigNoz, MLflow, Latitude, Dash0, Traceloop, Laminar, telemetry.dev, Sazabi, and more.
 
 ### Installation
 
@@ -31,7 +31,7 @@ npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-prot
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-grpc @grpc/grpc-js
 ```
 
-#### For HTTP/JSON Providers (Traceloop)
+#### For HTTP/JSON Providers (Traceloop, Sazabi)
 
 ```bash npm2yarn
 npm install @mastra/otel-exporter@latest @opentelemetry/exporter-trace-otlp-http
@@ -143,6 +143,29 @@ new OtelExporter({
   },
 })
 ```
+
+#### Sazabi
+
+[Sazabi](https://sazabi.com) is an AI-native observability platform that ingests OTLP traces. In Sazabi, add a Mastra log source and copy its intake URL. The URL carries your project key, so no auth header is needed:
+
+```bash title=".env"
+SAZABI_INTAKE_URL=https://...
+```
+
+Use the `custom` provider with HTTP/JSON:
+
+```typescript title="src/mastra/index.ts"
+new OtelExporter({
+  provider: {
+    custom: {
+      endpoint: process.env.SAZABI_INTAKE_URL!,
+      protocol: 'http/json',
+    },
+  },
+})
+```
+
+See [Sazabi's Mastra guide](https://docs.sazabi.com/catalogs/log-sources/send-to-an-endpoint/mastra) for the full setup.
 
 #### Dash0
 
