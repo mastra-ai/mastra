@@ -38,13 +38,16 @@ export async function createToken(
   const data = (await resp.json()) as { token: TokenInfo; secret: string };
   const granted = data.token.permissions ?? [];
   // A Platform that predates token permissions ignores the field and mints a
-  // plain key; fail rather than hand back a key that will 403 later.
+  // plain key; revoke it and fail rather than hand back a key that will 403 later.
   const missing = permissions.filter(p => !granted.includes(p));
   if (missing.length > 0) {
-    throw new Error(
-      `Token ${data.token.id} was created without ${missing.join(', ')}; this Platform may not support token ` +
-        `permissions yet. Revoke it with: mastra auth tokens revoke ${data.token.id}`,
-    );
+    const problem = `Token ${data.token.id} was created without ${missing.join(', ')}; this Platform may not support token permissions yet.`;
+    try {
+      await revokeToken(token, orgId, data.token.id);
+    } catch {
+      throw new Error(`${problem} Revoking it also failed. Revoke it with: mastra auth tokens revoke ${data.token.id}`);
+    }
+    throw new Error(`${problem} It has been revoked.`);
   }
   return { id: data.token.id, secret: data.secret, permissions: granted };
 }
@@ -102,11 +105,7 @@ export async function listTokensAction() {
   console.info('');
 }
 
-export async function revokeTokenAction(tokenId: string) {
-  const token = await getToken();
-  const orgId = await resolveOrgId();
-  if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
-
+export async function revokeToken(token: string, orgId: string, tokenId: string): Promise<void> {
   const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens/${encodeURIComponent(tokenId)}`, {
     method: 'DELETE',
     headers: authHeaders(token, orgId),
@@ -116,6 +115,14 @@ export async function revokeTokenAction(tokenId: string) {
     const text = await resp.text();
     throwApiError('Failed to revoke token', resp.status, text);
   }
+}
+
+export async function revokeTokenAction(tokenId: string) {
+  const token = await getToken();
+  const orgId = await resolveOrgId();
+  if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
+
+  await revokeToken(token, orgId, tokenId);
 
   console.info(`\nToken ${tokenId} revoked.\n`);
 }

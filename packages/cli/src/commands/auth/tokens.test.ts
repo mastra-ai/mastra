@@ -8,12 +8,19 @@ import { afterAll, beforeAll, beforeEach, describe, expect, it } from 'vitest';
 let server: Server;
 let lastBody: Record<string, unknown> | undefined;
 let respond: (body: Record<string, unknown>) => Record<string, unknown>;
+let revoked: string[];
+let revokeStatus: number;
 
 beforeAll(async () => {
   server = createServer((req: IncomingMessage, res: ServerResponse) => {
     let raw = '';
     req.on('data', chunk => (raw += chunk));
     req.on('end', () => {
+      if (req.method === 'DELETE') {
+        revoked.push(decodeURIComponent(req.url!.split('/').pop()!));
+        res.writeHead(revokeStatus).end();
+        return;
+      }
       lastBody = raw ? JSON.parse(raw) : undefined;
       res.writeHead(201, { 'Content-Type': 'application/json' });
       res.end(JSON.stringify(respond(lastBody ?? {})));
@@ -30,6 +37,8 @@ afterAll(async () => {
 
 beforeEach(() => {
   lastBody = undefined;
+  revoked = [];
+  revokeStatus = 204;
   // Current Platform: echoes the permissions it minted the key with.
   respond = body => ({
     token: { id: 'api_key_1', name: body.name, permissions: body.permissions ?? [] },
@@ -57,12 +66,23 @@ describe('createToken', () => {
 
   // An older Platform drops unknown fields, so it would mint a plain key and
   // report success; the CI job would then fail later with a 403.
-  it('fails loudly, with the revoke command, when Platform drops the permission', async () => {
+  it('revokes the plain key and fails when Platform drops the permission', async () => {
     respond = body => ({ token: { id: 'api_key_1', name: body.name }, secret: 'sk_test_secret' });
     const { createToken } = await import('./tokens.js');
 
     await expect(createToken('tok', 'org_1', 'ci', ['databases:write'])).rejects.toThrow(
-      /without databases:write.*mastra auth tokens revoke api_key_1/s,
+      /without databases:write.*revoked/s,
+    );
+    expect(revoked).toEqual(['api_key_1']);
+  });
+
+  it('prints the revoke command when revoking the plain key also fails', async () => {
+    respond = body => ({ token: { id: 'api_key_1', name: body.name }, secret: 'sk_test_secret' });
+    revokeStatus = 503;
+    const { createToken } = await import('./tokens.js');
+
+    await expect(createToken('tok', 'org_1', 'ci', ['databases:write'])).rejects.toThrow(
+      /mastra auth tokens revoke api_key_1/,
     );
   });
 });
