@@ -1,5 +1,19 @@
 # @mastra/core
 
+## 1.80.0-alpha.7
+
+### Patch Changes
+
+- Fixed Claude 5.x thinking blocks being stripped from earlier assistant messages on every request, which changed the prompt prefix each step and broke Anthropic prompt caching. The `anthropic-strip-empty-signed-reasoning-content` rule in `ProviderHistoryCompat` now runs only after Anthropic rejects the history with the "thinking blocks cannot be modified" error, so valid empty-text signed blocks are replayed unchanged. ([#28552](https://github.com/mastra-ai/mastra/pull/28552))
+
+- **Fixed canceled runs that hang on tools that ignore cancellation.** ([#28472](https://github.com/mastra-ai/mastra/pull/28472))
+
+  - Cancellation gives running tool executions a 250 ms grace period to settle and keeps successful results completed within that window across eager, deferred, and durable execution.
+  - Canceled tool calls emit a `tool-result` chunk carrying a cancellation notice and record it in conversation history so the next turn knows the tool started and may still be running. Check the tool's status before retrying. Execution activity is released, and later results and failures are ignored without changing timeout errors.
+  - Unless the caller cancels the run, retry and fallback still wait for running eager work, record its result or error, and reuse it before the replacement attempt begins.
+
+  Already-started tool code and external side effects may continue after cancellation.
+
 ## 1.80.0-alpha.6
 
 ### Minor Changes
