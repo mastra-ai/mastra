@@ -69,6 +69,28 @@ describe('DuckDBStore.close()', () => {
     await expect(duck.close()).resolves.toBeUndefined();
   });
 
+  it('waits for pending observability init before releasing the file lock', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
+    const init = storage.init();
+    await Promise.resolve(); // Allow composite init to start the observability domain.
+    await storage.close();
+    await init;
+
+    reopenInAnotherProcess();
+    await expect(duck.observability.init()).rejects.toThrow('closed');
+    reopenInAnotherProcess();
+  });
+
+  it('waits for pending observability init when closing DuckDBStore directly', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const init = duck.observability.init();
+    await duck.close();
+    await init;
+
+    reopenInAnotherProcess();
+  });
+
   it('releases the file lock when Mastra shuts down', async () => {
     duck = new DuckDBStore({ path: dbPath });
     const storage = new MastraCompositeStore({ id: 'app', domains: { observability: duck.observability } });
