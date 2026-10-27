@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useGitLabProjectsQuery } from '../../../../hooks/useGitLabData';
 import { isGitLabAuthError, isGitLabReauthRequired } from '../../factory/services/gitlab';
 import type { GitLabStatus } from '../../factory/services/gitlab';
-import type { FactoryProject } from '../../workspaces/services/github';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -17,12 +17,10 @@ export function GitLabIntakeSection({
   config,
   busy,
   update,
-  factories,
+  listed,
   statusQuery,
-}: IntakeSectionProps & {
-  factories: FactoryProject[];
-  statusQuery: UseQueryResult<GitLabStatus>;
-}) {
+}: IntakeSectionProps & { statusQuery: UseQueryResult<GitLabStatus> }) {
+  const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const statusUnavailable = statusQuery.isError || status?.reason === 'unavailable';
   const configured = Boolean(status?.enabled && status.configured);
@@ -33,7 +31,6 @@ export function GitLabIntakeSection({
   const projects = projectsQuery.data ?? [];
   const description = connectionDescription();
   function connectionDescription() {
-    if (statusQuery.isPending) return 'Checking the GitLab connection…';
     if (statusUnavailable) return "Couldn't load GitLab status.";
     if (reauthRequired) return 'A GitLab account needs to be reconnected in Mastra Platform.';
     if (authError)
@@ -51,7 +48,7 @@ export function GitLabIntakeSection({
       name="GitLab"
       icon={<SettingsIntegrationIcon provider="gitlab" />}
       account={status?.accounts?.join(', ')}
-      connected={configured || Boolean(status?.connections?.length) || statusQuery.isPending || statusUnavailable}
+      listed={listed}
       connectable={platformManaged}
       description={description}
       syncControl={
@@ -78,8 +75,7 @@ export function GitLabIntakeSection({
             addLabel="Add project"
             itemIcon={<SettingsIntegrationIcon provider="gitlab" />}
             groups={groupGitLabProjectsByAccount(projects)}
-            selectedIds={config.gitlab.sourceIds}
-            disabled={busy}
+            selectedIds={projectsQuery.isPending ? [] : config.gitlab.sourceIds}
             pending={busy}
             loading={projectsQuery.isPending}
             error={projectsQuery.isError ? "Couldn't load GitLab projects." : undefined}

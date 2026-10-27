@@ -9,8 +9,8 @@ import { useRef, useState } from 'react';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { useFactoryEnvironmentQuery } from '../../../../hooks/useFactoryEnvironment';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { RepositoriesBlock } from '../../settings/components/repositories/RepositoriesBlock';
-import type { RepositoryProviders } from '../../settings/components/repositories/RepositoriesBlock';
+import { RepositoriesBlock } from '../../settings/components/environment/RepositoriesBlock';
+import type { RepositoryProviders } from '../../settings/components/environment/RepositoriesBlock';
 import { useEnvironmentSave } from '../../settings/components/environment/useEnvironmentSave';
 import { SettingsAddRow } from '../../settings/components/common/SettingsAddRow';
 import type { FactoryProject } from '../services/github';
@@ -26,7 +26,7 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const { save, disabled: saving } = useEnvironmentSave(factory.id);
   const mutationPending = saving || linkRepository.isPending || unlinkRepository.isPending;
   const providers: RepositoryProviders = Object.fromEntries(
-    factory.repositories.map(repository => [repository.projectRepositoryId, repository.provider]),
+    factory.repositories.map(repository => [repository.projectRepositoryId, repository.provider ?? 'github']),
   );
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables.projectRepositoryId : undefined;
 
@@ -66,15 +66,14 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           <RepositoriesBlock
             repositories={environmentQuery.data.repositories}
             providers={providers}
-            disabled={mutationPending || environmentQuery.isFetching || environmentQuery.isError || adding}
+            disabled={mutationPending || environmentQuery.isError || adding}
             onSave={save}
-            onRemove={projectRepositoryId => {
-              if (mutationPending || environmentQuery.isFetching || environmentQuery.isError) return;
+            onRemove={projectRepositoryId =>
               unlinkRepository.mutate(
                 { factoryProjectId: factory.id, projectRepositoryId },
                 { onSuccess: () => requestAnimationFrame(() => addButton.current?.focus()) },
-              );
-            }}
+              )
+            }
             removingId={unlinkingId}
             removeError={
               unlinkRepository.isError
@@ -99,10 +98,9 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           factory={factory}
           addingRepository={linkRepository.isPending ? linkRepository.variables.repo : undefined}
           linkError={linkRepository.error ?? undefined}
-          onAddRepository={repo => {
-            if (mutationPending) return;
-            linkRepository.mutate({ factoryProjectId: factory.id, repo }, { onSuccess: () => setAdding(false) });
-          }}
+          onAddRepository={repo =>
+            linkRepository.mutate({ factoryProjectId: factory.id, repo }, { onSuccess: () => setAdding(false) })
+          }
         />
       )}
     </Drawer>

@@ -8,7 +8,7 @@ import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 
 import { SettingsSubsection } from './SettingsSubsection';
 
-// MCP clients need an absolute URL; the web API base URL is empty.
+// Same-origin API: baseUrl is ''.
 export function factoryMcpUrl(baseUrl: string, factoryId: string): string {
   return `${baseUrl || window.location.origin}/web/factory/projects/${encodeURIComponent(factoryId)}/mcp`;
 }

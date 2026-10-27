@@ -14,11 +14,13 @@ import type {
   FactoryEnvironmentRepository,
   FactoryEnvironmentRepositoryPatch,
 } from '../../../workspaces/services/environment';
-import { CommittedInput } from '../environment/CommittedInput';
-import type { SaveEnvironment } from '../environment/CommittedInput';
-import { SettingsActionRow } from '../common/SettingsActionRow';
 import { SettingsIntegrationIcon } from '../brand-icons/SettingsIntegrationIcon';
+import { SettingsActionRow } from '../common/SettingsActionRow';
+import { settingsRowLayout } from '../common/settings-row-layout';
+import { CommittedInput } from './CommittedInput';
+import type { SaveEnvironment } from './CommittedInput';
 
+// Number every link 1..n (dead links last) and send only ids + positions so concurrent edits survive.
 export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEnvironmentRepositoryPatch[] {
   return ordered.map((repository, index) => ({
     projectRepositoryId: repository.projectRepositoryId,
@@ -26,14 +28,12 @@ export function reorderPatch(ordered: FactoryEnvironmentRepository[]): FactoryEn
   }));
 }
 
-export type RepositoryProviders = Partial<Record<string, 'github' | 'gitlab'>>;
-
-type LiveRepository = FactoryEnvironmentRepository & { slug: string };
+export type RepositoryProviders = Record<string, 'github' | 'gitlab'>;
 
 function splitRows(repositories: FactoryEnvironmentRepository[]) {
   const ordered = [...repositories].sort((a, b) => a.position - b.position);
   return {
-    live: ordered.filter((repository): repository is LiveRepository => repository.slug !== null),
+    live: ordered.filter(repository => repository.slug !== null),
     dead: ordered.filter(repository => repository.slug === null),
   };
 }
@@ -56,44 +56,97 @@ export function RepositoriesBlock({
   removeError?: { projectRepositoryId: string; message: string };
 }) {
   const { live, dead } = splitRows(repositories);
-  const change = (patch: FactoryEnvironmentRepositoryPatch) =>
-    disabled ? Promise.resolve(false) : onSave({ repositories: [patch] });
+  const change = (patch: FactoryEnvironmentRepositoryPatch) => onSave({ repositories: [patch] });
 
   return (
-    <ContentBlocks
-      items={live}
-      onChange={next => {
-        const orderUnchanged = next.every(
-          (repository, index) => repository.projectRepositoryId === live[index]?.projectRepositoryId,
-        );
-        if (disabled || orderUnchanged) return;
-        void onSave({ repositories: reorderPatch([...next, ...dead]) });
-      }}
-      className="flex min-w-0 flex-col"
-    >
-      {live.map((repository, index) => (
-        <ContentBlock key={repository.projectRepositoryId} draggableId={repository.projectRepositoryId} index={index}>
-          {dragHandleProps => (
-            <RepositoryRow
-              repository={repository}
-              position={index + 1}
-              provider={providers[repository.projectRepositoryId]}
-              disabled={disabled}
-              dragHandleProps={dragHandleProps}
-              onToggle={inEnvironment =>
-                void change({ projectRepositoryId: repository.projectRepositoryId, inEnvironment })
-              }
-              onCommands={commands => change({ projectRepositoryId: repository.projectRepositoryId, ...commands })}
-              onRemove={() => onRemove(repository.projectRepositoryId)}
-              removing={removingId === repository.projectRepositoryId}
-              removeError={
-                removeError?.projectRepositoryId === repository.projectRepositoryId ? removeError.message : undefined
-              }
-            />
-          )}
-        </ContentBlock>
+    <>
+      {live.length > 0 && (
+        <ContentBlocks
+          items={live}
+          onChange={next => {
+            const order = (list: FactoryEnvironmentRepository[]) => list.map(r => r.projectRepositoryId).join('\n');
+            if (disabled || order(next) === order(live)) return;
+            void onSave({ repositories: reorderPatch([...next, ...dead]) });
+          }}
+          className="flex min-w-0 flex-col"
+        >
+          {live.map((repository, index) => (
+            <ContentBlock
+              key={repository.projectRepositoryId}
+              draggableId={repository.projectRepositoryId}
+              index={index}
+            >
+              {dragHandleProps => (
+                <RepositoryRow
+                  repository={repository}
+                  position={index + 1}
+                  provider={providers[repository.projectRepositoryId] ?? 'github'}
+                  disabled={disabled}
+                  dragHandleProps={dragHandleProps}
+                  onToggle={inEnvironment =>
+                    void change({ projectRepositoryId: repository.projectRepositoryId, inEnvironment })
+                  }
+                  onCommands={commands => change({ projectRepositoryId: repository.projectRepositoryId, ...commands })}
+                  onRemove={() => onRemove(repository.projectRepositoryId)}
+                  removing={removingId === repository.projectRepositoryId}
+                  removeError={
+                    removeError?.projectRepositoryId === repository.projectRepositoryId
+                      ? removeError.message
+                      : undefined
+                  }
+                />
+              )}
+            </ContentBlock>
+          ))}
+        </ContentBlocks>
+      )}
+      {dead.map(repository => (
+        <DeadRepositoryRow
+          key={repository.projectRepositoryId}
+          disabled={disabled}
+          onRemove={() => onRemove(repository.projectRepositoryId)}
+          removing={removingId === repository.projectRepositoryId}
+          removeError={
+            removeError?.projectRepositoryId === repository.projectRepositoryId ? removeError.message : undefined
+          }
+        />
       ))}
-    </ContentBlocks>
+    </>
+  );
+}
+
+const UNAVAILABLE_LABEL = 'Unavailable repository';
+
+function DeadRepositoryRow({
+  disabled,
+  onRemove,
+  removing,
+  removeError,
+}: {
+  disabled: boolean;
+  onRemove: () => void;
+  removing: boolean;
+  removeError?: string;
+}) {
+  return (
+    <div role="group" aria-label={UNAVAILABLE_LABEL}>
+      <div className={cn(settingsRowLayout, 'flex items-center')}>
+        <Txt as="span" variant="caption" tone="muted" className="min-w-0 flex-1 truncate pl-8">
+          {UNAVAILABLE_LABEL}
+        </Txt>
+        <Button
+          variant="ghost"
+          size="sm"
+          icon={<Trash2 />}
+          aria-label={`Remove ${UNAVAILABLE_LABEL}`}
+          disabled={disabled}
+          onClick={onRemove}
+        >
+          {removing ? 'Removing…' : 'Remove'}
+        </Button>
+      </div>
+      {removeError && <Notice variant="destructive">{removeError}</Notice>}
+    </div>
   );
 }
 
@@ -109,9 +162,9 @@ function RepositoryRow({
   removing,
   removeError,
 }: {
-  repository: LiveRepository;
+  repository: FactoryEnvironmentRepository;
   position: number;
-  provider: 'github' | 'gitlab' | undefined;
+  provider: 'github' | 'gitlab';
   disabled: boolean;
   dragHandleProps: React.HTMLAttributes<HTMLElement> | null;
   onToggle: (inEnvironment: boolean) => void;
@@ -120,7 +173,7 @@ function RepositoryRow({
   removing: boolean;
   removeError?: string;
 }) {
-  const label = repository.slug;
+  const label = repository.slug ?? '';
   const [expanded, setExpanded] = useState(false);
   const detailsId = useId();
 
@@ -135,12 +188,23 @@ function RepositoryRow({
         >
           <span className="flex min-w-0 flex-1 flex-col gap-1 pr-28 pl-8 sm:flex-row sm:items-center sm:gap-2">
             <span className="flex min-w-0 items-center gap-2 sm:flex-1">
-              {provider && <SettingsIntegrationIcon provider={provider} />}
-              <Txt as="span" variant="caption" className="min-w-0 flex-1 truncate" title={label}>
+              <SettingsIntegrationIcon provider={provider} />
+              <Txt
+                as="span"
+                variant="caption"
+                tone={repository.inEnvironment ? undefined : 'muted'}
+                className="min-w-0 flex-1 truncate"
+                title={label}
+              >
                 {label}
               </Txt>
               <ChevronDown aria-hidden className={cn('size-4 shrink-0', expanded && 'rotate-180')} />
             </span>
+            {!repository.inEnvironment && (
+              <Txt as="span" variant="caption" tone="muted">
+                Skipped
+              </Txt>
+            )}
             {repository.lastBuildStatus === 'failed' && (
               <Badge size="sm" variant="destructive">
                 Last build failed

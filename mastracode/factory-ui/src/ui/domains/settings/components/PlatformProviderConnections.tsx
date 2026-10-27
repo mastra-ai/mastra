@@ -12,8 +12,6 @@ import {
 } from '@mastra/playground-ui/components/Dialog';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Link2 } from 'lucide-react';
 import { useState } from 'react';
 import type { ReactNode } from 'react';
 
@@ -24,7 +22,7 @@ import {
 import { PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 
-function connectionName(connection: PlatformProviderConnection): string {
+export function connectionName(connection: PlatformProviderConnection): string {
   return connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account';
 }
 
@@ -141,40 +139,5 @@ export function ProviderConnectControl({
         />
       )}
     </>
-  );
-}
-
-export interface ProviderConnectionsListProps {
-  provider: PlatformConnectProviderId;
-  connections: PlatformProviderConnection[];
-}
-
-export function ProviderConnectionsList({ provider, connections }: ProviderConnectionsListProps) {
-  if (connections.length === 0) return null;
-  return (
-    <ul className="flex flex-col">
-      {connections.map(connection => (
-        <li key={connection.id} className="flex items-center justify-between gap-2 px-4 py-2">
-          <span className="flex min-w-0 items-center gap-2">
-            <Txt as="span" variant="caption" className="truncate">
-              {connectionName(connection)}
-            </Txt>
-            {connection.status === 'needs_reauth' && (
-              <Txt as="span" variant="meta" className="text-destructive-foreground">
-                Needs reauthorization
-              </Txt>
-            )}
-          </span>
-          <ProviderConnectControl
-            provider={provider}
-            reconnectConnectionId={connection.id}
-            label="Reconnect"
-            icon={<Link2 />}
-            size="sm"
-            variant={connection.status === 'needs_reauth' ? 'default' : 'ghost'}
-          />
-        </li>
-      ))}
-    </ul>
   );
 }

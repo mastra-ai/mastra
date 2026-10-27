@@ -1,11 +1,12 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
+import { queryKeys } from '../../../../../api/keys';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
 import { FactoryManagementSection } from '../FactoryManagementSection';
@@ -48,6 +49,21 @@ function renderEnvironmentSettings() {
 }
 
 describe('Environment settings', () => {
+  it('renders Environment with the working directory, the setup command and the provider settings, then Builds', async () => {
+    useFactory();
+    useEnvironment(environmentPayload());
+
+    renderEnvironmentSettings();
+
+    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
+    const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
+    expect(headings).toEqual(['Environment', 'Builds', 'Danger zone']);
+    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
+    const command = screen.getByRole('textbox', { name: 'Setup command' });
+    expect(workdir.closest('section')).toBe(command.closest('section'));
+    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Environment' }).closest('section'));
+  });
+
   it('saves global settings before any repository is linked', async () => {
     useFactory();
     const environment = environmentPayload({ repositories: [], workspaceSetupCommand: 'pnpm install' });
@@ -77,7 +93,29 @@ describe('Environment settings', () => {
     expect(await screen.findByText('Failed to load environment (500)')).toBeInTheDocument();
   });
 
-  it('surfaces a failed global save and restores the stored value', async () => {
+  it('keeps the settings on screen when refreshing the Factory list fails in the background', async () => {
+    let factoryRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        factoryRequests++;
+        return factoryRequests === 1
+          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] })
+          : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
+      }),
+    );
+    useEnvironment(environmentPayload());
+
+    const { client } = renderEnvironmentSettings();
+
+    expect(await screen.findByRole('heading', { name: 'Danger zone' })).toBeInTheDocument();
+    fireEvent(window, new Event('visibilitychange'));
+    await waitFor(() => expect(client.getQueryState(queryKeys.factories())?.status).toBe('error'));
+    expect(factoryRequests).toBe(2);
+    expect(screen.queryByText(/Failed to list Factories/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Acme' })).toBeInTheDocument();
+  });
+
+  it('surfaces a failed save as a toast and shows the stored value again', async () => {
     useFactory();
     const environment = environmentPayload();
     useEnvironment(environment);

@@ -1,5 +1,4 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { Link2, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
@@ -7,15 +6,11 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
-import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
+import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
+import { IntegrationLabel } from './IntegrationLabel';
 
-const slackLabel = (
-  <span className="flex items-center gap-2">
-    <SettingsIntegrationIcon provider="slack" />
-    Slack
-  </span>
-);
+const slackLabel = <IntegrationLabel provider="slack" name="Slack" />;
 
 // Env vars alone do not prove the deployment registers SlackIntegration.
 export function SlackNotConfigured() {
@@ -36,6 +31,10 @@ export function ConnectedAccountsSection() {
   const accountsQuery = useChannelAccountsQuery();
   const slackAccounts = accountsQuery.data?.accounts.filter(account => account.platform === 'slack') ?? [];
   const canConnect = accountsQuery.data?.canConnect ?? false;
+
+  const connectSlack = () => {
+    window.location.assign(connectSlackUrl(baseUrl, factoryId));
+  };
 
   if (accountsQuery.isPending) {
     return <SkeletonRows label="Loading connected accounts" rows={1} rowClassName="h-16 w-full" />;
@@ -60,37 +59,30 @@ export function ConnectedAccountsSection() {
     return <SlackUnavailableRow />;
   }
 
-  return (
-    <>
-      {slackAccounts.length > 0 ? (
-        slackAccounts.map((account, index) => (
-          <SettingsRow
-            key={`${account.externalTeamId}:${account.externalUserId}`}
-            label={slackLabel}
-            description={`${account.externalUserName || account.externalUserId} · ${account.externalTeamName || account.externalTeamId}`}
-          >
-            {index === 0 && factoryId && (
-              <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>
-                Configure Slack
-              </ConnectionManagementButton>
-            )}
-          </SettingsRow>
-        ))
-      ) : (
-        <SettingsRow
-          label={slackLabel}
-          description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
-        >
-          <Button
-            size="sm"
-            icon={<Link2 />}
-            disabled={!canConnect}
-            onClick={() => window.location.assign(connectSlackUrl(baseUrl, factoryId))}
-          >
-            Connect Slack
-          </Button>
-        </SettingsRow>
+  if (slackAccounts.length === 0) {
+    return (
+      <SettingsRow
+        label={slackLabel}
+        description={canConnect ? undefined : 'Slack sign-in is not configured on this server.'}
+      >
+        <Button size="sm" icon={<Link2 />} disabled={!canConnect} onClick={connectSlack}>
+          Connect Slack
+        </Button>
+      </SettingsRow>
+    );
+  }
+
+  return slackAccounts.map((account, index) => (
+    <SettingsRow
+      key={`${account.externalTeamId}:${account.externalUserId}`}
+      label={slackLabel}
+      description={`${account.externalUserName || account.externalUserId} · ${account.externalTeamName || account.externalTeamId}`}
+    >
+      {index === 0 && factoryId && (
+        <ConnectionManagementButton render={<Link to={`/factories/${factoryId}/settings/connections/slack`} />}>
+          Configure Slack
+        </ConnectionManagementButton>
       )}
-    </>
-  );
+    </SettingsRow>
+  ));
 }

@@ -361,6 +361,42 @@ describe('Repositories settings', () => {
     await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
   });
 
+  it('keeps the repositories on screen when refreshing the Factory list fails after a removal', async () => {
+    const user = userEvent.setup();
+    let environment = repositoryEnvironment();
+    environment.repositories.push(
+      environmentRepository({ projectRepositoryId: 'repo-2', slug: 'acme/other', position: 2 }),
+    );
+    let factoryRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        factoryRequests++;
+        return factoryRequests === 1
+          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'factory-gitlab-primary' }] })
+          : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`, () =>
+        HttpResponse.json({ environment }),
+      ),
+      http.delete(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/repositories/repo-1`, () => {
+        environment = {
+          ...environment,
+          repositories: environment.repositories.filter(repo => repo.projectRepositoryId !== 'repo-1'),
+        };
+        return new HttpResponse(null, { status: 204 });
+      }),
+    );
+
+    renderRepositoriesSettings();
+    await user.click(await screen.findByRole('button', { name: `Remove ${PRIMARY_PROJECT}` }));
+
+    await waitFor(() => expect(factoryRequests).toBe(2));
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Add repository' })).toHaveFocus());
+    expect(screen.queryByText(/Failed to list Factories/)).not.toBeInTheDocument();
+    expect(screen.queryByText(PRIMARY_PROJECT)).not.toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'acme/other' })).toBeInTheDocument();
+  });
+
   it('allows adding the first repository while configuration loads, and retries configuration failures without inventing rows', async () => {
     const user = userEvent.setup();
     let releaseEnvironment!: () => void;
@@ -482,5 +518,25 @@ describe('Repositories settings', () => {
     expect(await drawer.findByText('octo/hello')).toBeInTheDocument();
     expect(drawer.queryByRole('status', { name: 'Loading available repositories' })).not.toBeInTheDocument();
     expect(linkedRepository).toBeInTheDocument();
+  });
+
+  it('names the missing GitHub App env vars when no provider can list repositories', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/gitlab/status`, () =>
+        HttpResponse.json({ enabled: false, configured: false, accounts: [], reason: 'disabled' }),
+      ),
+    );
+    const user = userEvent.setup();
+
+    renderRepositoriesSettings();
+
+    expect(await screen.findByRole('link', { name: 'Manage Factory' })).toHaveAttribute(
+      'href',
+      `/factories/${FACTORY_ID}/settings/factory`,
+    );
+    await user.click(screen.getByRole('button', { name: 'Add repository' }));
+    expect(
+      await screen.findByText('GitHub is disabled on the server. Missing env vars: GITHUB_APP_ID.'),
+    ).toBeInTheDocument();
   });
 });

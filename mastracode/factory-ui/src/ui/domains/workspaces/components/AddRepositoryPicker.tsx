@@ -145,6 +145,11 @@ export function AddRepositoryPicker({
                     <span className="wrap-anywhere">{repo.fullName}</span>
                   </span>
                 }
+                description={
+                  isGitLabRepository(repo)
+                    ? `Default branch: ${repo.defaultBranch}`
+                    : `${repo.private ? 'Private' : 'Public'} · Default branch: ${repo.defaultBranch}`
+                }
               >
                 <Button
                   size="sm"
@@ -199,7 +204,11 @@ function githubUnavailableMessage(status: GithubStatus | undefined): string {
   if (status?.authRequired || status?.reason === 'auth_required') return 'Sign in again to manage repository access.';
   if (status?.organizationRequired || status?.reason === 'organization_required')
     return 'Select an organization to connect repositories.';
-  if (status?.reason === 'missing_config')
-    return 'No source-control provider is configured. Manage connections to see available providers.';
+  if (status?.reason === 'missing_config') {
+    const missing = status.diagnostics?.missingGithubAppEnvVars ?? [];
+    return missing.length > 0
+      ? `GitHub is disabled on the server. Missing env vars: ${missing.join(', ')}.`
+      : 'No source-control provider is configured. Manage connections to see available providers.';
+  }
   return 'Connect GitHub or GitLab to add repositories.';
 }

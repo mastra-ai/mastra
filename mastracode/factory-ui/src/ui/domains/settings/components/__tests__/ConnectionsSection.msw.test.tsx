@@ -10,7 +10,6 @@ import type { PlatformConnectProviderId, PlatformProviderConnection } from '../.
 import type { GithubStatus } from '../../../workspaces/services/github';
 import { ConnectionsSection } from '../ConnectionsSection';
 
-// Nango opens a provider consent popup; only that browser boundary is stubbed.
 const authCalls: Array<{ integrationId: string; options: Record<string, unknown> }> = [];
 vi.mock('@nangohq/frontend', () => {
   class Nango {
@@ -40,9 +39,9 @@ beforeEach(() => {
   );
 });
 
-function renderConnections() {
+function renderConnections(path = '/factories/fp-1/settings/connections') {
   return renderWithProviders(
-    <MemoryRouter initialEntries={['/factories/fp-1/settings/connections']}>
+    <MemoryRouter initialEntries={[path]}>
       <Routes>
         <Route path="/factories/:factoryId/settings/connections" element={<ConnectionsSection />} />
       </Routes>
@@ -226,6 +225,69 @@ describe('Connections settings', () => {
     expect(screen.queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
   });
 
+  it('offers a retry instead of a connect action when the incident.io status fails', async () => {
+    platformAccounts('incident-io', []);
+    let statusRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => {
+        statusRequests += 1;
+        if (statusRequests === 1) return new HttpResponse(null, { status: 500 });
+        return HttpResponse.json({ enabled: true, configured: true, mode: 'api-key', reason: 'ready' });
+      }),
+    );
+    renderConnections();
+
+    expect(await screen.findByText("Couldn't load incident.io status.")).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
+    expect(screen.queryByRole('button', { name: 'Connect incident.io' })).not.toBeInTheDocument();
+
+    await userEvent.click(screen.getByRole('button', { name: 'Retry' }));
+    expect(await screen.findByText('API key configured on this server.')).toBeInTheDocument();
+  });
+
+  it('treats a missing incident.io status route as not configured instead of an error', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/incidentio/status`, () => new HttpResponse(null, { status: 404 })),
+      http.get(
+        `${TEST_BASE_URL}/web/integrations/platform/incident-io/connections`,
+        () => new HttpResponse(null, { status: 404 }),
+      ),
+    );
+    renderConnections();
+
+    await waitFor(() => expect(screen.queryByLabelText('Loading incident.io connections')).not.toBeInTheDocument());
+    expect(screen.queryByText("Couldn't load incident.io status.")).not.toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Retry' })).not.toBeInTheDocument();
+    expect(screen.queryByText('incident.io')).not.toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Add connection' }));
+    expect(await screen.findByText('incident.io')).toBeInTheDocument();
+  });
+
+  it('does not present a disabled direct Jira credential as deployment-managed', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/jira/status`, () =>
+        HttpResponse.json({ enabled: false, configured: true, mode: 'direct', reason: 'missing_config' }),
+      ),
+    );
+    renderConnections();
+
+    expect(await screen.findByRole('button', { name: 'Add connection' })).toBeInTheDocument();
+    await waitFor(() => expect(screen.queryByLabelText('Loading Jira connections')).not.toBeInTheDocument());
+    expect(screen.queryByText('Managed by deployment environment variables.')).not.toBeInTheDocument();
+  });
+
+  it('opens the add list when linked from Work Intake', async () => {
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
+        HttpResponse.json({ enabled: true, connected: false, workspace: null }),
+      ),
+    );
+    renderConnections('/factories/fp-1/settings/connections?add=1');
+
+    expect(await screen.findByRole('button', { name: 'Connect Linear' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Done' })).toBeInTheDocument();
+  });
+
   it('shows the Linear workspace with its existing reconnect flow', async () => {
     server.use(
       http.get(`${TEST_BASE_URL}/web/linear/status`, () =>
@@ -267,6 +329,7 @@ describe('Connections settings', () => {
       '[data-slot="settings-row"]',
     );
     if (!workerRow) throw new Error('Worker token row is missing');
+    expect(within(workerRow).getByText('Not set')).toBeInTheDocument();
     await userEvent.click(within(workerRow).getByRole('button', { name: 'Add token' }));
     const input = screen.getByLabelText('Worker token GitHub Personal Access Token');
     await userEvent.type(input, 'worker-secret');
@@ -275,7 +338,9 @@ describe('Connections settings', () => {
     expect(input).toHaveValue('worker-secret');
     rejectSave = false;
     await userEvent.click(screen.getByRole('button', { name: 'Save' }));
-    expect(await screen.findByRole('button', { name: 'Update token' })).toBeInTheDocument();
+    const updateToken = await screen.findByRole('button', { name: 'Update token' });
+    expect(within(tokens).getByText('Configured')).toBeInTheDocument();
+    await waitFor(() => expect(updateToken).toHaveFocus());
     expect(screen.queryByLabelText('Worker token GitHub Personal Access Token')).not.toBeInTheDocument();
     expect(saved).toEqual([
       { token: 'worker-secret', kind: 'default' },

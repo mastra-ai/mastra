@@ -87,7 +87,7 @@ describe('Environment builds', () => {
 
     renderEnvironmentSettings();
 
-    await screen.findByRole('textbox', { name: 'Working directory' });
+    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     expect(screen.queryByRole('button', { name: /build now/i })).toBeNull();
     expect(screen.queryByRole('heading', { name: 'Builds' })).toBeNull();
     expect(screen.queryByRole('switch', { name: 'Rebuild on push' })).toBeNull();

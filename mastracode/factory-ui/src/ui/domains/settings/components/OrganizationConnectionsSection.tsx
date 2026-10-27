@@ -4,6 +4,7 @@ import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settin
 import { Check, Link2, Plus, RotateCcw } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
+import { useSearchParams } from 'react-router';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
@@ -18,22 +19,27 @@ import { connectLinear } from '../../factory/services/linear';
 import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '../../factory/services/platformConnect';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { connectGithub, manageGithubConnection } from '../../workspaces/services/github';
-import { ProviderConnectControl } from './PlatformProviderConnections';
+import { isIncidentioDirectConfigured } from './IncidentioIntakeSection';
+import { IntegrationLabel } from './IntegrationLabel';
+import { connectionName, ProviderConnectControl } from './PlatformProviderConnections';
 import { SettingsSubsection } from './SettingsSubsection';
-import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { ConnectionManagementButton } from './common/ConnectionManagementButton';
 
-function ConnectionLabel({ icon, name }: { icon: ReactNode; name: string }) {
-  return (
-    <span className="flex items-center gap-2">
-      {icon}
-      {name}
-    </span>
-  );
+const platformIcons = {
+  gitlab: 'gitlab',
+  jira: 'jira',
+  'incident-io': 'incidentio',
+} as const satisfies Record<PlatformConnectProviderId, string>;
+
+function accessDescription(reason: string | undefined, name: string): string | undefined {
+  if (reason === 'auth_required') return 'Sign in to manage organization connections.';
+  if (reason === 'organization_required') return `Select an organization to connect ${name}.`;
+  return undefined;
 }
 
 export function OrganizationConnectionsSection() {
-  const [adding, setAdding] = useState(false);
+  const [searchParams] = useSearchParams();
+  const [adding, setAdding] = useState(() => searchParams.has('add'));
   const connectionsId = useId();
   return (
     <SettingsSubsection
@@ -67,32 +73,38 @@ export function OrganizationConnectionsSection() {
   );
 }
 
+function RetryRow({ label, errorMsg, onRetry }: { label: ReactNode; errorMsg: string; onRetry: () => void }) {
+  return (
+    <SettingsRow label={label} errorMsg={errorMsg}>
+      <Button size="sm" icon={<RotateCcw />} onClick={onRetry}>
+        Retry
+      </Button>
+    </SettingsRow>
+  );
+}
+
+function NotConfiguredRow({ label, showAvailable }: { label: ReactNode; showAvailable: boolean }) {
+  if (!showAvailable) return null;
+  return <SettingsRow label={label} description="Not configured on this server." />;
+}
+
 function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
   const { baseUrl } = useApiConfig();
   const query = useGithubStatusQuery();
   const status = query.data;
-  const label = <ConnectionLabel icon={<SettingsIntegrationIcon provider="github" />} name="GitHub" />;
+  const label = <IntegrationLabel provider="github" name="GitHub" />;
 
   if (query.isPending) return <SkeletonRows label="Loading GitHub connection" rows={1} rowClassName="h-16 w-full" />;
   if (query.isError || status?.reason === 'unavailable') {
-    return (
-      <SettingsRow label={label} errorMsg="Couldn't load GitHub connections.">
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void query.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
-    );
+    return <RetryRow label={label} errorMsg="Couldn't load GitHub connections." onRetry={() => void query.refetch()} />;
   }
   if (!status) return null;
-  if (status.authRequired || status.reason === 'auth_required') {
-    return <SettingsRow label={label} description="Sign in to manage organization connections." />;
-  }
-  if (status.organizationRequired || status.reason === 'organization_required') {
-    return <SettingsRow label={label} description="Select an organization to connect GitHub." />;
-  }
-  if (!status.enabled && !status.connected) {
-    return showAvailable ? <SettingsRow label={label} description="Not configured on this server." /> : null;
-  }
+  const access = accessDescription(
+    status.authRequired ? 'auth_required' : status.organizationRequired ? 'organization_required' : status.reason,
+    'GitHub',
+  );
+  if (access) return <SettingsRow label={label} description={access} />;
+  if (!status.enabled && !status.connected) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   if (!status.connected && !showAvailable) return null;
 
   return (
@@ -121,25 +133,15 @@ function LinearConnectionRow({ showAvailable }: { showAvailable: boolean }) {
   const { baseUrl } = useApiConfig();
   const query = useLinearStatusQuery();
   const status = query.data;
-  const label = <ConnectionLabel icon={<SettingsIntegrationIcon provider="linear" />} name="Linear" />;
+  const label = <IntegrationLabel provider="linear" name="Linear" />;
 
   if (query.isPending) return <SkeletonRows label="Loading Linear connection" rows={1} rowClassName="h-16 w-full" />;
   if (query.isError) {
-    return (
-      <SettingsRow label={label} errorMsg="Couldn't load Linear connections.">
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void query.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
-    );
+    return <RetryRow label={label} errorMsg="Couldn't load Linear connections." onRetry={() => void query.refetch()} />;
   }
-  if (status?.reason === 'auth_required')
-    return <SettingsRow label={label} description="Sign in to manage organization connections." />;
-  if (status?.reason === 'organization_required')
-    return <SettingsRow label={label} description="Select an organization to connect Linear." />;
-  if (!status?.enabled) {
-    return showAvailable ? <SettingsRow label={label} description="Not configured on this server." /> : null;
-  }
+  const access = accessDescription(status?.reason, 'Linear');
+  if (access) return <SettingsRow label={label} description={access} />;
+  if (!status?.enabled) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   if (!status.connected && !showAvailable) return null;
 
   return (
@@ -154,86 +156,37 @@ function LinearConnectionRow({ showAvailable }: { showAvailable: boolean }) {
 function GitLabConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const query = useGitLabStatusQuery();
   const status = query.data;
+  const label = <PlatformLabel provider="gitlab" />;
+
   if (query.isPending) return <SkeletonRows label="Loading GitLab connections" rows={1} rowClassName="h-16 w-full" />;
   if (query.isError || status?.reason === 'unavailable') {
-    return (
-      <SettingsRow label={<PlatformLabel provider="gitlab" />} errorMsg="Couldn't load GitLab connections.">
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void query.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
-    );
+    return <RetryRow label={label} errorMsg="Couldn't load GitLab connections." onRetry={() => void query.refetch()} />;
   }
-  if (status?.reason === 'auth_required') {
-    return (
-      <SettingsRow
-        label={<PlatformLabel provider="gitlab" />}
-        description="Sign in to manage organization connections."
-      />
-    );
+  const access = accessDescription(status?.reason, 'GitLab');
+  if (access) return <SettingsRow label={label} description={access} />;
+  if (status?.mode === 'direct' && status.enabled && status.configured) {
+    return <SettingsRow label={label} description="Managed by deployment environment variables." />;
   }
-  if (status?.reason === 'organization_required') {
-    return (
-      <SettingsRow
-        label={<PlatformLabel provider="gitlab" />}
-        description="Select an organization to connect GitLab."
-      />
-    );
-  }
-  if (status?.mode === 'direct' && status.configured) {
-    return (
-      <SettingsRow
-        label={<PlatformLabel provider="gitlab" />}
-        description="Managed by deployment environment variables."
-      />
-    );
-  }
-  if (status?.mode !== 'platform') {
-    return showAvailable ? (
-      <SettingsRow label={<PlatformLabel provider="gitlab" />} description="Not configured on this server." />
-    ) : null;
-  }
+  if (status?.mode !== 'platform') return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   return <PlatformAccountRows provider="gitlab" connections={status.connections ?? []} showAvailable={showAvailable} />;
 }
 
 function JiraConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const query = useJiraStatusQuery();
   const status = query.data;
+  const label = <PlatformLabel provider="jira" />;
+
   if (query.isPending) return <SkeletonRows label="Loading Jira connections" rows={1} rowClassName="h-16 w-full" />;
   if (query.isError) {
-    return (
-      <SettingsRow label={<PlatformLabel provider="jira" />} errorMsg="Couldn't load Jira connections.">
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void query.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
-    );
+    return <RetryRow label={label} errorMsg="Couldn't load Jira connections." onRetry={() => void query.refetch()} />;
   }
-  if (status?.reason === 'auth_required') {
-    return (
-      <SettingsRow
-        label={<PlatformLabel provider="jira" />}
-        description="Sign in to manage organization connections."
-      />
-    );
-  }
-  if (status?.reason === 'organization_required') {
-    return (
-      <SettingsRow label={<PlatformLabel provider="jira" />} description="Select an organization to connect Jira." />
-    );
-  }
-  if (status?.mode === 'direct' && status.configured) {
-    return (
-      <SettingsRow
-        label={<PlatformLabel provider="jira" />}
-        description="Managed by deployment environment variables."
-      />
-    );
+  const access = accessDescription(status?.reason, 'Jira');
+  if (access) return <SettingsRow label={label} description={access} />;
+  if (status?.mode === 'direct' && status.enabled && status.configured) {
+    return <SettingsRow label={label} description="Managed by deployment environment variables." />;
   }
   if (status?.mode !== 'platform' && status?.connections === undefined) {
-    return showAvailable ? (
-      <SettingsRow label={<PlatformLabel provider="jira" />} description="Not configured on this server." />
-    ) : null;
+    return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   }
   return <PlatformAccountRows provider="jira" connections={status.connections ?? []} showAvailable={showAvailable} />;
 }
@@ -241,23 +194,29 @@ function JiraConnectionRows({ showAvailable }: { showAvailable: boolean }) {
 function IncidentioConnectionRows({ showAvailable }: { showAvailable: boolean }) {
   const statusQuery = useIncidentioStatusQuery();
   const connectionsQuery = usePlatformConnectionsQuery('incident-io');
-  const directConfigured = statusQuery.data?.mode === 'api-key' && statusQuery.data.configured;
   const label = <PlatformLabel provider="incident-io" />;
 
   if (statusQuery.isPending || connectionsQuery.isPending) {
     return <SkeletonRows label="Loading incident.io connections" rows={1} rowClassName="h-16 w-full" />;
   }
-  if (directConfigured) return <SettingsRow label={label} description="API key configured on this server." />;
+  if (statusQuery.isError) {
+    return (
+      <RetryRow label={label} errorMsg="Couldn't load incident.io status." onRetry={() => void statusQuery.refetch()} />
+    );
+  }
+  if (isIncidentioDirectConfigured(statusQuery.data)) {
+    return <SettingsRow label={label} description="API key configured on this server." />;
+  }
   if (connectionsQuery.isError) {
     if (isPlatformConnectUnavailableError(connectionsQuery.error)) {
-      return showAvailable ? <SettingsRow label={label} description="Not configured on this server." /> : null;
+      return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
     }
     return (
-      <SettingsRow label={label} errorMsg={connectionsQuery.error.message}>
-        <Button size="sm" icon={<RotateCcw />} onClick={() => void connectionsQuery.refetch()}>
-          Retry
-        </Button>
-      </SettingsRow>
+      <RetryRow
+        label={label}
+        errorMsg={connectionsQuery.error.message}
+        onRetry={() => void connectionsQuery.refetch()}
+      />
     );
   }
   return (
@@ -266,10 +225,9 @@ function IncidentioConnectionRows({ showAvailable }: { showAvailable: boolean })
 }
 
 function PlatformLabel({ provider }: { provider: PlatformConnectProviderId }) {
-  if (provider === 'gitlab')
-    return <ConnectionLabel icon={<SettingsIntegrationIcon provider="gitlab" />} name="GitLab" />;
-  if (provider === 'jira') return <ConnectionLabel icon={<SettingsIntegrationIcon provider="jira" />} name="Jira" />;
-  return <ConnectionLabel icon={<SettingsIntegrationIcon provider="incidentio" />} name="incident.io" />;
+  return (
+    <IntegrationLabel provider={platformIcons[provider]} name={PLATFORM_CONNECT_PROVIDERS[provider].displayName} />
+  );
 }
 
 function PlatformAccountRows({
@@ -295,7 +253,7 @@ function PlatformAccountRows({
     <SettingsRow
       key={connection.id}
       label={<PlatformLabel provider={provider} />}
-      description={connection.displayName?.trim() || connection.accountLabel?.trim() || 'Connected account'}
+      description={connectionName(connection)}
       errorMsg={connection.status === 'needs_reauth' ? 'Needs reauthorization' : undefined}
     >
       <div className="flex flex-wrap items-center gap-2">

@@ -2,7 +2,8 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
-import type { FactoryProject, GithubStatus } from '../../workspaces/services/github';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
+import type { GithubStatus } from '../../workspaces/services/github';
 import { GithubLabelRouting } from './GithubLabelRouting';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
@@ -14,21 +15,13 @@ export function GithubIntakeSection({
   config,
   busy,
   update,
-  factories,
+  listed,
   statusQuery,
-  loading,
-  error,
-  onRetry,
-}: IntakeSectionProps & {
-  factories: FactoryProject[];
-  statusQuery: UseQueryResult<GithubStatus>;
-  loading: boolean;
-  error: boolean;
-  onRetry: () => void;
-}) {
+}: IntakeSectionProps & { statusQuery: UseQueryResult<GithubStatus> }) {
+  const factoriesQuery = useFactoriesQuery();
   const status = statusQuery.data;
   const connected = status?.connected === true;
-  const githubFactories = factories.filter(factory =>
+  const githubFactories = (factoriesQuery.data ?? []).filter(factory =>
     factory.repositories.some(repository => repository.provider !== 'gitlab'),
   );
   const slugs = [
@@ -38,18 +31,16 @@ export function GithubIntakeSection({
       ),
     ),
   ];
+  // 'unavailable' means the browser's status request failed, not "not configured".
   const unavailable = statusQuery.isError || status?.reason === 'unavailable';
-  const description = unavailable
-    ? 'GitHub status could not be loaded.'
-    : githubDescription(status?.reason, statusQuery.isPending, status?.enabled === true, connected);
   return (
     <IntakeProviderCard
       name="GitHub"
       icon={<SettingsIntegrationIcon provider="github" />}
       account={status?.installations.map(installation => installation.accountLogin).join(', ')}
-      connected={connected || Boolean(status?.installations.length) || unavailable || statusQuery.isPending}
+      listed={listed}
       connectable={status?.enabled === true}
-      description={description}
+      description={githubDescription(status, unavailable)}
       syncControl={
         <IntakeSyncControl
           accessibleLabel="Sync GitHub issues"
@@ -81,11 +72,10 @@ export function GithubIntakeSection({
             itemIcon={<SettingsIntegrationIcon provider="github" />}
             groups={[{ id: 'repositories', items: slugs.map(slug => ({ id: slug, label: slug })) }]}
             selectedIds={config.github.sourceIds}
-            disabled={busy}
             pending={busy}
-            loading={loading}
-            error={error ? "Couldn't load linked repositories." : undefined}
-            onRetry={onRetry}
+            loading={factoriesQuery.isPending}
+            error={factoriesQuery.isError ? "Couldn't load linked repositories." : undefined}
+            onRetry={() => void factoriesQuery.refetch()}
             onToggleItem={slug =>
               update({
                 ...config,
@@ -93,7 +83,7 @@ export function GithubIntakeSection({
               })
             }
           />
-          {!loading && !error && slugs.length === 0 && (
+          {factoriesQuery.isSuccess && slugs.length === 0 && (
             <SettingsRow label="No linked repositories yet" description="Link a repository to a Factory to add one." />
           )}
           {slugs.length > 0 &&
@@ -114,11 +104,11 @@ export function GithubIntakeSection({
   );
 }
 
-function githubDescription(reason: string | undefined, pending: boolean, enabled: boolean, connected: boolean) {
-  if (pending) return 'Checking the GitHub connection…';
-  if (reason === 'auth_required') return 'Sign in again to manage GitHub issue syncing.';
-  if (reason === 'organization_required') return 'Select an organization to manage GitHub issue syncing.';
-  if (!enabled) return 'GitHub is not configured on this server.';
-  if (!connected) return 'Connect GitHub to sync issues from this organization.';
+function githubDescription(status: GithubStatus | undefined, unavailable: boolean) {
+  if (unavailable) return 'GitHub status could not be loaded.';
+  if (status?.reason === 'auth_required') return 'Sign in again to manage GitHub issue syncing.';
+  if (status?.reason === 'organization_required') return 'Select an organization to manage GitHub issue syncing.';
+  if (status?.enabled !== true) return 'GitHub is not configured on this server.';
+  if (!status.connected) return 'Connect GitHub to sync issues from this organization.';
   return undefined;
 }

@@ -2,11 +2,14 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { RotateCcw } from 'lucide-react';
-import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useGitLabStatusQuery } from '../../../../hooks/useGitLabData';
 import { useIncidentioStatusQuery } from '../../../../hooks/useIncidentioData';
-import { useIntakeConfigQuery, useSaveIntakeConfigMutation } from '../../../../hooks/useIntakeConfig';
+import {
+  useIntakeBindingsQuery,
+  useIntakeConfigQuery,
+  useSaveIntakeConfigMutation,
+} from '../../../../hooks/useIntakeConfig';
 import { useJiraStatusQuery } from '../../../../hooks/useJiraData';
 import { useLinearStatusQuery } from '../../../../hooks/useLinearData';
 import { usePlatformConnectionsQuery } from '../../../../hooks/usePlatformConnections';
@@ -20,10 +23,18 @@ import { JiraIntakeSection } from './JiraIntakeSection';
 import { LinearIntakeSection } from './LinearIntakeSection';
 import { SettingsSubsection } from './SettingsSubsection';
 
+type SourceListing = 'connected' | 'unavailable' | 'available';
+
+function sourceListing(connected: boolean, unavailable: boolean): SourceListing {
+  if (connected) return 'connected';
+  if (unavailable) return 'unavailable';
+  return 'available';
+}
+
 export function IntakeSection() {
   const configQuery = useIntakeConfigQuery();
   const saveMutation = useSaveIntakeConfigMutation();
-  const factoriesQuery = useFactoriesQuery();
+  useIntakeBindingsQuery();
   const github = useGithubStatusQuery();
   const gitlab = useGitLabStatusQuery();
   const linear = useLinearStatusQuery();
@@ -61,93 +72,97 @@ export function IntakeSection() {
       toast.error(error instanceof Error ? error.message : 'Failed to save intake sources');
     }
   };
-  const props = {
-    config: configQuery.data,
-    busy: saveMutation.isPending,
-    update,
-    factories: factoriesQuery.data ?? [],
-  };
-  const platformUnavailable =
-    incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);
+  const props = { config: configQuery.data, busy: saveMutation.isPending, update };
   const incidentioDirect = isIncidentioDirectConfigured(incidentio.data);
-  const showIncidentio = !platformUnavailable || incidentioDirect;
-  const providers = [
+  const incidentioPlatformUnavailable =
+    incidentioConnections.isError && isPlatformConnectUnavailableError(incidentioConnections.error);
+  const githubListing = sourceListing(
+    Boolean(github.data?.connected || github.data?.installations.length),
+    github.isError || github.data?.reason === 'unavailable',
+  );
+  const gitlabListing = sourceListing(
+    Boolean(gitlab.data?.configured || gitlab.data?.connections?.length),
+    gitlab.isError || gitlab.data?.reason === 'unavailable',
+  );
+  const linearListing = sourceListing(Boolean(linear.data?.connected), linear.isError);
+  const jiraListing = sourceListing(Boolean(jira.data?.configured || jira.data?.connections?.length), jira.isError);
+  // 403/404: Platform connections aren't offered here.
+  const incidentioListing =
+    incidentioPlatformUnavailable && !incidentioDirect
+      ? undefined
+      : sourceListing(
+          incidentioDirect || Boolean(incidentioConnections.data?.length),
+          incidentio.isError || incidentioConnections.isError,
+        );
+  // Pass gated queries down: a new observer on an errored query refetches on mount and loops the gate.
+  const sources = [
     {
       id: 'github',
-      connected: Boolean(github.data?.connected || github.data?.installations.length),
-      unavailable: github.isError || github.data?.reason === 'unavailable',
-      content: (
-        <GithubIntakeSection
-          {...props}
-          statusQuery={github}
-          loading={factoriesQuery.isPending}
-          error={factoriesQuery.isError}
-          onRetry={() => void factoriesQuery.refetch()}
-        />
-      ),
+      listing: githubListing,
+      content: <GithubIntakeSection {...props} listed={githubListing !== 'available'} statusQuery={github} />,
     },
     {
       id: 'gitlab',
-      connected: Boolean(gitlab.data?.configured || gitlab.data?.connections?.length),
-      unavailable: gitlab.isError || gitlab.data?.reason === 'unavailable',
-      content: <GitLabIntakeSection {...props} statusQuery={gitlab} />,
+      listing: gitlabListing,
+      content: <GitLabIntakeSection {...props} listed={gitlabListing !== 'available'} statusQuery={gitlab} />,
     },
     {
       id: 'linear',
-      connected: Boolean(linear.data?.connected),
-      unavailable: linear.isError,
-      content: <LinearIntakeSection {...props} statusQuery={linear} />,
+      listing: linearListing,
+      content: <LinearIntakeSection {...props} listed={linearListing !== 'available'} statusQuery={linear} />,
     },
     {
       id: 'jira',
-      connected: Boolean(jira.data?.configured || jira.data?.connections?.length),
-      unavailable: jira.isError,
-      content: <JiraIntakeSection {...props} statusQuery={jira} />,
+      listing: jiraListing,
+      content: <JiraIntakeSection {...props} listed={jiraListing !== 'available'} statusQuery={jira} />,
     },
     {
       id: 'incidentio',
-      connected: incidentioDirect || Boolean(incidentioConnections.data?.length),
-      unavailable: incidentio.isError || (!platformUnavailable && incidentioConnections.isError),
-      content: showIncidentio ? (
-        <IncidentioIntakeSection {...props} statusQuery={incidentio} connectionsQuery={incidentioConnections} />
-      ) : undefined,
+      listing: incidentioListing,
+      content: (
+        <IncidentioIntakeSection
+          {...props}
+          listed={incidentioListing !== 'available'}
+          statusQuery={incidentio}
+          connectionsQuery={incidentioConnections}
+        />
+      ),
     },
   ];
-  const connectedProviders = providers.filter(provider => provider.connected && provider.content);
-  const unavailableProviders = providers.filter(
-    provider => !provider.connected && provider.unavailable && provider.content,
-  );
-  const availableProviders = providers.filter(
-    provider => !provider.connected && !provider.unavailable && provider.content,
-  );
+  const sourcesListed = (listing: SourceListing) => sources.filter(source => source.listing === listing);
+  const connectedSources = sourcesListed('connected');
+  const unavailableSources = sourcesListed('unavailable');
+  const availableSources = sourcesListed('available');
 
   return (
     <div className="flex flex-col gap-8">
-      <SettingsSubsection
-        scope="org"
-        title="Connected sources"
-        description="Choose which services bring work into your organization's boards."
-      >
-        <div className="flex flex-col gap-6">
-          {connectedProviders.map(provider => (
-            <div key={provider.id}>{provider.content}</div>
-          ))}
-        </div>
-      </SettingsSubsection>
-      {unavailableProviders.length > 0 && (
-        <SettingsSubsection title="Unavailable sources">
+      {connectedSources.length > 0 && (
+        <SettingsSubsection
+          scope="org"
+          title="Connected sources"
+          description="Choose which services bring work into your organization's boards."
+        >
           <div className="flex flex-col gap-6">
-            {unavailableProviders.map(provider => (
-              <div key={provider.id}>{provider.content}</div>
+            {connectedSources.map(source => (
+              <div key={source.id}>{source.content}</div>
             ))}
           </div>
         </SettingsSubsection>
       )}
-      {availableProviders.length > 0 && (
+      {unavailableSources.length > 0 && (
+        <SettingsSubsection title="Unavailable sources">
+          <div className="flex flex-col gap-6">
+            {unavailableSources.map(source => (
+              <div key={source.id}>{source.content}</div>
+            ))}
+          </div>
+        </SettingsSubsection>
+      )}
+      {availableSources.length > 0 && (
         <SettingsSubsection title="Add a source">
           <SettingsContainer>
-            {availableProviders.map(provider => (
-              <div key={provider.id}>{provider.content}</div>
+            {availableSources.map(source => (
+              <div key={source.id}>{source.content}</div>
             ))}
           </SettingsContainer>
         </SettingsSubsection>

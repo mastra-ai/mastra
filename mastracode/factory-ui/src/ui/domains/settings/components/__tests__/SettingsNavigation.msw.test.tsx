@@ -1,5 +1,5 @@
 import { SidebarProvider } from '@mastra/playground-ui/components/Sidebar';
-import { screen } from '@testing-library/react';
+import { screen, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { afterEach, describe, expect, it } from 'vitest';
 import { MemoryRouter, Route, Routes } from 'react-router';
@@ -24,6 +24,29 @@ function renderNavigation() {
 afterEach(() => window.localStorage.removeItem(STORAGE_KEY));
 
 describe('SettingsNavigation', () => {
+  it('links to My account settings', () => {
+    renderNavigation();
+
+    expect(screen.getByRole('link', { name: 'My account' })).toHaveAttribute(
+      'href',
+      '/factories/fp-1/settings/account',
+    );
+  });
+
+  it('groups destinations by topic: account, agent, Factory', () => {
+    renderNavigation();
+
+    const linksIn = (group: string) =>
+      within(screen.getByRole('region', { name: group }))
+        .getAllByRole('link')
+        .map(link => link.textContent);
+    expect(linksIn('Account')).toEqual(['My account', 'Preferences', 'Connections']);
+    expect(linksIn('Agent')).toEqual(['Models', 'Memory', 'Skills', 'Behavior']);
+    expect(linksIn('Factory')).toEqual(['Repositories', 'Work Intake', 'Manage Factory']);
+    expect(screen.getByRole('link', { name: 'Models' })).toHaveAttribute('href', '/factories/fp-1/settings/models');
+    expect(screen.getByRole('link', { name: 'Memory' })).toHaveAttribute('href', '/factories/fp-1/settings/memory');
+  });
+
   it('keeps legacy terms searchable while showing the clearer destination label', async () => {
     const user = userEvent.setup();
     renderNavigation();

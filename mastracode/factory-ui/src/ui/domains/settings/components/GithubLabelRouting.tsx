@@ -77,7 +77,7 @@ export function GithubLabelRouting({
     );
   }
 
-  if (boards.length === 0 && catalog.isSuccess && routesQuery.isSuccess && routes.length === 0) {
+  if (boards.length === 0 && catalog.isSuccess && routes.length === 0) {
     return (
       <SettingsFieldsetRow label={label} description={scope} className="sm:items-start">
         <div className="flex w-full flex-col gap-1 sm:w-3/4">

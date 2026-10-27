@@ -38,11 +38,10 @@ export interface SourcePickerGroup {
 
 interface SourcePickerProps {
   label: string;
-  addLabel?: string;
+  addLabel: string;
   itemIcon?: ReactNode;
   groups: SourcePickerGroup[];
   selectedIds: string[] | null;
-  disabled: boolean;
   pending: boolean;
   loading?: boolean;
   error?: string;
@@ -51,24 +50,11 @@ interface SourcePickerProps {
 }
 
 export function SourcePicker(props: SourcePickerProps) {
-  const {
-    label,
-    addLabel = 'Add project',
-    itemIcon,
-    groups,
-    selectedIds,
-    disabled,
-    pending,
-    loading,
-    error,
-    onRetry,
-    onToggleItem,
-  } = props;
+  const { label, addLabel, itemIcon, groups, selectedIds, pending, loading, error, onRetry, onToggleItem } = props;
   const isMobile = useIsMobile();
   const [open, setOpen] = useState(false);
   const trigger = useRef<HTMLButtonElement>(null);
   const selected = selectedIds ?? [];
-  const selectionDisabled = disabled || pending;
   const savingIndicator = pending && <Spinner size="sm" aria-label={`Saving ${label} selection`} />;
 
   return (
@@ -111,7 +97,7 @@ export function SourcePicker(props: SourcePickerProps) {
                     icon={<Trash2 />}
                     className="shrink-0"
                     aria-label={`Remove ${item?.label ?? id}`}
-                    disabled={selectionDisabled || item?.disabled}
+                    disabled={pending || item?.disabled}
                     onClick={async () => {
                       await onToggleItem(id);
                       requestAnimationFrame(() => trigger.current?.focus());
@@ -126,7 +112,7 @@ export function SourcePicker(props: SourcePickerProps) {
         )}
         <DrawerTrigger
           render={
-            <SettingsAddRow ref={trigger} aria-label={`${addLabel} to ${label}`} disabled={selectionDisabled}>
+            <SettingsAddRow ref={trigger} aria-label={`${addLabel} to ${label}`} disabled={pending}>
               {addLabel}
             </SettingsAddRow>
           }
@@ -152,15 +138,7 @@ export function SourcePicker(props: SourcePickerProps) {
           </div>
         )}
       </div>
-      {open && (
-        <SourcePickerDrawer
-          {...props}
-          disabled={selectionDisabled}
-          addLabel={addLabel}
-          trigger={trigger}
-          savingIndicator={savingIndicator}
-        />
-      )}
+      {open && <SourcePickerDrawer {...props} trigger={trigger} savingIndicator={savingIndicator} />}
     </Drawer>
   );
 }
@@ -170,7 +148,6 @@ function SourcePickerDrawer({
   addLabel,
   groups,
   selectedIds,
-  disabled,
   pending,
   loading,
   error,
@@ -179,7 +156,6 @@ function SourcePickerDrawer({
   trigger,
   savingIndicator,
 }: SourcePickerProps & {
-  addLabel: string;
   trigger: RefObject<HTMLButtonElement | null>;
   savingIndicator: ReactNode;
 }) {
@@ -249,7 +225,7 @@ function SourcePickerDrawer({
                       <Checkbox
                         checked={false}
                         aria-label={item.label}
-                        disabled={disabled || item.disabled}
+                        disabled={pending || item.disabled}
                         onCheckedChange={() => {
                           onToggleItem(item.id);
                           searchInput.current?.focus();

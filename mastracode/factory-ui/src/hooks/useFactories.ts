@@ -21,18 +21,18 @@ import { registerGitLabRepository } from '../ui/domains/factory/services/gitlab'
 import { fetchIntakeConfig, selectIntakeSource } from '../ui/domains/factory/services/intake';
 import { useSaveIntakeConfigMutation } from './useIntakeConfig';
 
-function invalidateFactories(queryClient: QueryClient) {
-  return queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
+function invalidateFactories(queryClient: ReturnType<typeof useQueryClient>) {
+  void queryClient.invalidateQueries({ queryKey: queryKeys.factories() });
 }
 
 function invalidateFactoryRepositories(queryClient: QueryClient, factoryProjectId: string) {
   return Promise.all([
-    invalidateFactories(queryClient),
+    queryClient.invalidateQueries({ queryKey: queryKeys.factories() }),
     queryClient.invalidateQueries({ queryKey: queryKeys.factoryEnvironment(factoryProjectId) }),
   ]);
 }
 
-function refetchFactories(queryClient: QueryClient) {
+function refetchFactories(queryClient: ReturnType<typeof useQueryClient>) {
   return queryClient.refetchQueries({ queryKey: queryKeys.factories() });
 }
 
@@ -73,6 +73,7 @@ export function useCreateFactoryMutation() {
 /** @deprecated Use useCreateFactoryMutation. */
 export const useAddFactoryMutation = useCreateFactoryMutation;
 
+// Link lands first so the list refreshes even if the intake write fails; the link is idempotent, so retry is safe.
 export function useLinkRepositoryMutation() {
   const { baseUrl } = useApiConfig();
   const queryClient = useQueryClient();

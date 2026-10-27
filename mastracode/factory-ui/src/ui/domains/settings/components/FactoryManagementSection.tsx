@@ -20,7 +20,7 @@ export function FactoryManagementSection() {
   if (!factoryId || (factoryQuery.isSuccess && !factory)) {
     return <Notice variant="info">Select a factory to manage its settings.</Notice>;
   }
-  if (factoryQuery.isError) {
+  if (factoryQuery.isError && !factory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
   if (!factory) return <SkeletonRows label="Loading Factory settings" rows={2} />;

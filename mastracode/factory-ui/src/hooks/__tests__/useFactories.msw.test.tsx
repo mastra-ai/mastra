@@ -222,7 +222,7 @@ describe('useLinkRepositoryMutation', () => {
     expect(saved).toEqual([]);
   });
 
-  it('keeps a successfully linked repository visible when enabling issue intake fails', async () => {
+  it('given the intake write fails, when a repository is linked, then the error surfaces and the Factory repositories still refresh', async () => {
     let linked = false;
     const projectRepository = {
       id: 'ghp_1',

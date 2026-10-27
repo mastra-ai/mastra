@@ -13,6 +13,7 @@ export interface IntakeSectionProps {
   config: IntakeConfig;
   busy: boolean;
   update: (next: IntakeConfig) => Promise<void>;
+  listed: boolean;
 }
 
 export function toggleSourceId(ids: string[] | null, id: string): string[] | null {
@@ -25,7 +26,7 @@ export function IntakeProviderCard({
   name,
   icon,
   account,
-  connected,
+  listed,
   connectable = true,
   description,
   action,
@@ -35,7 +36,7 @@ export function IntakeProviderCard({
   name: string;
   icon: ReactNode;
   account?: string;
-  connected: boolean;
+  listed: boolean;
   connectable?: boolean;
   description?: string;
   action?: ReactNode;
@@ -44,25 +45,25 @@ export function IntakeProviderCard({
 }) {
   const { factoryId } = useParams<{ factoryId: string }>();
   const connectionsPath = factoryId ? settingsSectionPath(factoryId, 'connections') : undefined;
-  const showConnectionAction = connected || connectable;
+  const showConnectionAction = listed || connectable;
   const connectionAction = (
     <div className="flex w-full min-w-0 flex-wrap items-center justify-end gap-3 sm:w-auto">
-      {connected && syncControl}
+      {listed && syncControl}
       {action}
       {connectionsPath &&
         showConnectionAction &&
-        (connected ? (
+        (listed ? (
           <ConnectionManagementButton render={<Link to={connectionsPath} />}>
             Manage connection
           </ConnectionManagementButton>
         ) : (
-          <Button size="sm" icon={<Link2 />} render={<Link to={connectionsPath} />}>
+          <Button size="sm" icon={<Link2 />} render={<Link to={`${connectionsPath}?add=1`} />}>
             Connect {name}
           </Button>
         ))}
     </div>
   );
-  if (!connected) {
+  if (!listed) {
     return (
       <SettingsRow
         label={

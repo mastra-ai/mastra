@@ -4,18 +4,22 @@ import { useSaveFactoryEnvironmentMutation } from '../../../../../hooks/useFacto
 import type { SaveEnvironment } from './CommittedInput';
 
 export function useEnvironmentSave(factoryId: string) {
-  const mutation = useSaveFactoryEnvironmentMutation();
-  const save: SaveEnvironment = input =>
-    mutation.mutateAsync({ factoryId, input }).then(
-      () => {
-        toast.success('Environment saved');
-        return true;
-      },
-      error => {
-        toast.error(error instanceof Error ? error.message : 'Failed to save environment');
-        return false;
-      },
-    );
+  const saveMutation = useSaveFactoryEnvironmentMutation();
 
-  return { save, disabled: mutation.isPending };
+  // Resolves either way: callers fire and forget, the toast carries the failure.
+  const save: SaveEnvironment = input =>
+    saveMutation
+      .mutateAsync(
+        { factoryId, input },
+        {
+          onSuccess: () => toast.success('Environment saved'),
+          onError: err => toast.error(err instanceof Error ? err.message : 'Failed to save environment'),
+        },
+      )
+      .then(
+        () => true,
+        () => false,
+      );
+
+  return { save, disabled: saveMutation.isPending };
 }

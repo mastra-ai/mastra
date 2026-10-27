@@ -4,11 +4,11 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useIntakeBindingsQuery } from '../../../../hooks/useIntakeConfig';
 import { useLinearProjectsQuery, useLinearTeamsQuery } from '../../../../hooks/useLinearData';
 import { isLinearReauthError, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearStatus } from '../../factory/services/linear';
-import type { FactoryProject } from '../../workspaces/services/github';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -23,12 +23,10 @@ export function LinearIntakeSection({
   config,
   busy,
   update,
-  factories,
+  listed,
   statusQuery,
-}: IntakeSectionProps & {
-  factories: FactoryProject[];
-  statusQuery: UseQueryResult<LinearStatus>;
-}) {
+}: IntakeSectionProps & { statusQuery: UseQueryResult<LinearStatus> }) {
+  const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const connected = Boolean(status?.enabled && status.connected);
   const projectsQuery = useLinearProjectsQuery(connected);
@@ -41,7 +39,6 @@ export function LinearIntakeSection({
   const sourceError = projectsQuery.isError || teamsQuery.isError;
   const description = connectionDescription();
   function connectionDescription() {
-    if (statusQuery.isPending) return 'Checking the Linear connection…';
     if (statusQuery.isError) return "Couldn't load Linear status.";
     if (status?.enabled === false) return 'Linear is not configured on this server.';
     if (reauthRequired) return 'Linear authorization expired. Reconnect to keep syncing issues.';
@@ -77,7 +74,7 @@ export function LinearIntakeSection({
       name="Linear"
       icon={<SettingsIntegrationIcon provider="linear" />}
       account={status?.workspace?.name ?? undefined}
-      connected={connected || statusQuery.isPending || statusQuery.isError}
+      listed={listed}
       connectable={status?.enabled !== false}
       description={description}
       syncControl={
@@ -104,8 +101,7 @@ export function LinearIntakeSection({
             addLabel="Add project or team"
             itemIcon={<SettingsIntegrationIcon provider="linear" />}
             groups={groupLinearSourcesByTeam(projects, teams, config.linear.sourceIds)}
-            selectedIds={config.linear.sourceIds}
-            disabled={busy}
+            selectedIds={projectsQuery.isPending ? [] : config.linear.sourceIds}
             pending={busy}
             loading={projectsQuery.isPending}
             error={sourceError ? "Couldn't load Linear projects and teams." : undefined}
@@ -128,45 +124,45 @@ export function LinearIntakeSection({
               factories={factories}
             />
           )}
-          {routedProjects.length > 0 && (
-            <div className="flex flex-col">
-              <Txt tone="muted" as="p" variant="caption">
-                Map Linear projects to repositories so their issues start in the intended repository.
-              </Txt>
-              {routedProjects.map(({ project, repositorySlugs }) => {
-                const mappedRepository = config.linear.repositoryByLinearProject?.[project.id];
-                return (
-                  <SettingsRow key={project.id} label={project.name}>
-                    <Select
-                      value={mappedRepository ?? NO_REPOSITORY_MAPPING}
-                      disabled={busy}
-                      onValueChange={value => {
-                        const repositoryByLinearProject = { ...config.linear.repositoryByLinearProject };
-                        if (value === NO_REPOSITORY_MAPPING) delete repositoryByLinearProject[project.id];
-                        else repositoryByLinearProject[project.id] = value;
-                        update({ ...config, linear: { ...config.linear, repositoryByLinearProject } });
-                      }}
-                    >
-                      <SelectTrigger size="sm" aria-label={`Repository for ${project.name}`} className="w-auto">
-                        <Txt as="span" variant="caption">
-                          {mappedRepository ?? 'No repository mapping'}
-                        </Txt>
-                      </SelectTrigger>
-                      <SelectContent>
-                        <SelectItem value={NO_REPOSITORY_MAPPING}>No repository mapping</SelectItem>
-                        {repositorySlugs.map(slug => (
-                          <SelectItem key={slug} value={slug}>
-                            {slug}
-                          </SelectItem>
-                        ))}
-                      </SelectContent>
-                    </Select>
-                  </SettingsRow>
-                );
-              })}
-            </div>
-          )}
         </>
+      )}
+      {routedProjects.length > 0 && (
+        <div className="flex flex-col">
+          <Txt tone="muted" as="p" variant="caption">
+            Map Linear projects to repositories so their issues start in the intended repository.
+          </Txt>
+          {routedProjects.map(({ project, repositorySlugs }) => {
+            const mappedRepository = config.linear.repositoryByLinearProject?.[project.id];
+            return (
+              <SettingsRow key={project.id} label={project.name}>
+                <Select
+                  value={mappedRepository ?? NO_REPOSITORY_MAPPING}
+                  disabled={busy}
+                  onValueChange={value => {
+                    const repositoryByLinearProject = { ...config.linear.repositoryByLinearProject };
+                    if (value === NO_REPOSITORY_MAPPING) delete repositoryByLinearProject[project.id];
+                    else repositoryByLinearProject[project.id] = value;
+                    update({ ...config, linear: { ...config.linear, repositoryByLinearProject } });
+                  }}
+                >
+                  <SelectTrigger size="sm" aria-label={`Repository for ${project.name}`} className="w-auto">
+                    <Txt as="span" variant="caption">
+                      {mappedRepository ?? 'No repository mapping'}
+                    </Txt>
+                  </SelectTrigger>
+                  <SelectContent>
+                    <SelectItem value={NO_REPOSITORY_MAPPING}>No repository mapping</SelectItem>
+                    {repositorySlugs.map(slug => (
+                      <SelectItem key={slug} value={slug}>
+                        {slug}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+              </SettingsRow>
+            );
+          })}
+        </div>
       )}
     </IntakeProviderCard>
   );

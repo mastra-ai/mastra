@@ -88,7 +88,6 @@ export interface GitLabProject {
   sandboxWorkdir?: string;
 }
 
-/** Provider-neutral repository pick used by Factory onboarding and linking. */
 export interface GitLabRepository {
   provider: 'gitlab';
   /** Opaque Intake source id. */

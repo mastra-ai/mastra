@@ -6,7 +6,7 @@ import { useApiConfig } from '../../../../api/config';
 import { useFactoryQuery } from '../../../../hooks/useFactories';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { SkeletonRows } from '../../../ui/SkeletonRows';
-import { ConnectRepositoriesPanel } from '../../workspaces/components/ConnectRepositoriesPanel';
+import { ConnectRepositoriesPanel } from '../../workspaces';
 import { manageGithubConnection } from '../../workspaces/services/github';
 import { settingsSectionPath } from '../settingsSections';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -16,13 +16,13 @@ export function RepositoriesSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
   const factoryQuery = useFactoryQuery(factoryId);
+  const githubConnected = useGithubStatusQuery().data?.connected === true;
   const activeFactory = factoryQuery.data;
-  const githubStatus = useGithubStatusQuery().data;
 
-  if (factoryQuery.isPending) {
+  if (factoryQuery.isLoading) {
     return <SkeletonRows label="Loading repositories" rows={2} />;
   }
-  if (factoryQuery.isError) {
+  if (factoryQuery.isError && !activeFactory) {
     return <Notice variant="destructive">{factoryQuery.error.message}</Notice>;
   }
   if (!activeFactory) {
@@ -36,7 +36,7 @@ export function RepositoriesSection() {
         title="Added to this Factory"
         description={`Repositories agents in ${activeFactory.name} can edit. Pre-cloned repositories are set up in this order.`}
         action={
-          githubStatus?.connected && (
+          githubConnected && (
             <ConnectionManagementButton onClick={() => manageGithubConnection(baseUrl)}>
               Manage GitHub connection
             </ConnectionManagementButton>

@@ -1,7 +1,6 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Hammer } from 'lucide-react';
 
 import type {
   FactoryEnvironmentBuild,
@@ -25,6 +24,10 @@ export function formatBuildTime(iso: string): string {
   return Number.isNaN(date.getTime()) ? iso : date.toLocaleString();
 }
 
+/**
+ * Build now beside the last build's live status; sits in the Template
+ * subsection header. The error, when there is one, shows under the badge.
+ */
 export function BuildStatusBlock({
   lastBuild,
   build,
@@ -59,7 +62,7 @@ export function BuildStatusBlock({
             )}
           </span>
         ) : null}
-        <Button size="sm" variant="primary" icon={<Hammer />} disabled={requesting || active} onClick={onBuildNow}>
+        <Button size="sm" variant="primary" disabled={requesting || active} onClick={onBuildNow}>
           {active ? 'Building...' : 'Build now'}
         </Button>
       </div>

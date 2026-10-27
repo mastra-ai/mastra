@@ -12,6 +12,7 @@ import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useIntakeBindingsQuery, useSaveIntakeBindingMutation } from '../../../../hooks/useIntakeConfig';
 import { isLinearTeamSourceId, linearTeamSourceId } from '../../factory/services/linear';
 import type { LinearProject, LinearTeam } from '../../factory/services/linear';
+import { SkeletonRows } from '../../../ui/SkeletonRows';
 
 const UNROUTED = '__unrouted__';
 const NO_BOARD = '__no_board__';
@@ -51,7 +52,8 @@ export function IntakeSourceRouting({
   };
 
   if (sourceIds.length === 0) return null;
-  if (bindingsQuery.isPending) return <SettingsRow label="Loading routing…" />;
+  if (bindingsQuery.isPending)
+    return <SkeletonRows label={`Loading ${label} routing`} rows={Math.min(sourceIds.length, 3)} />;
   if (bindingsQuery.isError) {
     return (
       <SettingsRow label="Routing is unavailable" description="Your source routes could not be loaded.">

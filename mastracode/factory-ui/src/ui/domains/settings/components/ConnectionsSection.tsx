@@ -15,8 +15,7 @@ export function ConnectionsSection() {
   const factoryQuery = useFactoryQuery(factoryId);
   const githubStatus = useGithubStatusQuery().data;
   const githubRelevant =
-    githubStatus?.connected ||
-    githubStatus?.userConnected ||
+    githubStatus?.connected === true ||
     factoryQuery.data?.repositories.some(repository => repository.provider !== 'gitlab');
 
   return (

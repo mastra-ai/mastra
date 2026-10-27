@@ -1,10 +1,10 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { UseQueryResult } from '@tanstack/react-query';
 import { RotateCcw } from 'lucide-react';
+import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { useJiraProjectsQuery } from '../../../../hooks/useJiraData';
 import { isJiraAuthError } from '../../factory/services/jira';
 import type { JiraStatus } from '../../factory/services/jira';
-import type { FactoryProject } from '../../workspaces/services/github';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
 import { SourcePicker } from './IntakeSourcePicker';
@@ -17,12 +17,10 @@ export function JiraIntakeSection({
   config,
   busy,
   update,
-  factories,
+  listed,
   statusQuery,
-}: IntakeSectionProps & {
-  factories: FactoryProject[];
-  statusQuery: UseQueryResult<JiraStatus>;
-}) {
+}: IntakeSectionProps & { statusQuery: UseQueryResult<JiraStatus> }) {
+  const factories = useFactoriesQuery().data ?? [];
   const status = statusQuery.data;
   const configured = Boolean(status?.enabled && status.configured);
   const projectsQuery = useJiraProjectsQuery(configured);
@@ -34,7 +32,6 @@ export function JiraIntakeSection({
   const account = sites.join(', ') || (configured && platformManaged ? 'Connected through Mastra Platform' : undefined);
   const description = connectionDescription();
   function connectionDescription() {
-    if (statusQuery.isPending) return 'Checking the Jira connection…';
     if (statusQuery.isError) return "Couldn't load Jira status.";
     if (reauthRequired) return 'A connected Jira account needs to be reconnected.';
     if (authError)
@@ -52,7 +49,7 @@ export function JiraIntakeSection({
       name="Jira"
       icon={<SettingsIntegrationIcon provider="jira" />}
       account={account}
-      connected={configured || Boolean(status?.connections?.length) || statusQuery.isPending || statusQuery.isError}
+      listed={listed}
       connectable={platformManaged}
       description={description}
       syncControl={
@@ -80,7 +77,6 @@ export function JiraIntakeSection({
             itemIcon={<SettingsIntegrationIcon provider="jira" />}
             groups={groupJiraProjectsBySite(projects)}
             selectedIds={config.jira.sourceIds}
-            disabled={busy}
             pending={busy}
             loading={projectsQuery.isPending}
             error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
