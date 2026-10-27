@@ -304,7 +304,7 @@ export interface MastraCodeConfig {
    */
   modes?: AgentControllerMode[] | false;
   /**
-   * Subagent definitions. Default: none. Pass `builtinSubagents` to enable the
+   * Subagent definitions. Default: none. Pass `[...builtinSubagents]` to enable the
    * explore/plan/execute subagents, or your own definitions.
    */
   subagents?: AgentControllerSubagent[];

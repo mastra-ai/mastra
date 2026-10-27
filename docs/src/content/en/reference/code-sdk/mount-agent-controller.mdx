@@ -97,7 +97,7 @@ const { controller } = await mountAgentControllerOnMastra({ mastra })
     name: 'subagents',
     type: 'AgentControllerSubagent[]',
     description:
-      'Subagent definitions to register. None are registered by default. Pass `builtinSubagents` (exported from `@mastra/code-sdk`) to enable the explore, plan, and execute subagents.',
+      'Subagent definitions to register. None are registered by default. Pass `[...builtinSubagents]` (exported from `@mastra/code-sdk`) to enable the explore, plan, and execute subagents.',
     isOptional: true,
     defaultValue: '[]',
   },

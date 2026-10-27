@@ -62,7 +62,7 @@ const {
 | `cwd` | `string` | `process.cwd()` | Working directory for project detection |
 | `homeDir` | `string` | `os.homedir()` | Home directory for global config discovery |
 | `modes` | `AgentControllerMode[] \| false` | Build, Plan, Explore | Override modes (model IDs, colors, which modes exist). `false` runs every session as a single Build agent |
-| `subagents` | `AgentControllerSubagent[]` | `[]` | Subagent definitions to register. None are registered by default. Pass `builtinSubagents` to enable Explore, Plan and Execute |
+| `subagents` | `AgentControllerSubagent[]` | `[]` | Subagent definitions to register. None are registered by default. Pass `[...builtinSubagents]` to enable Explore, Plan and Execute |
 | `extraTools` | `Record<string, Tool> \| ((ctx) => Record<string, Tool> \| Promise<Record<string, Tool>>)` | — | Extra tools merged into the dynamic tool set |
 | `postToolObserver` | `(context: ToolAfterHookContext) => void \| Promise<void>` | — | Observes completed tool calls without replacing tools. Errors are logged without failing successful tool calls |
 | `inputProcessors` | `InputProcessor[] \| ((ctx) => InputProcessor[] \| Promise<InputProcessor[]>)` | — | Processors prepended before Mastra Code's built-in input processors |
