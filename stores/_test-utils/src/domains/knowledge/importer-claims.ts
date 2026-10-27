@@ -235,25 +235,107 @@ export function createKnowledgeImporterMultiBindingTests(
       }
     });
 
-    it('releases a binding without deleting its nodes or touching the other binding', async () => {
-      const { knowledge, storage, importer } = await setup(createStore);
+    it('retires a binding without changing retained knowledge, placement, references or indexing', async () => {
+      const { knowledge, storage, importer, alpha, beta } = await setup(createStore);
       await importer.run(bindingA, { items: [person] });
       await importer.run(bindingB, { items: [person] });
       const a = await nodeIn(storage, bindingA, person.address);
-
-      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
-      expect(await storage.getNode(a)).toMatchObject({ id: a });
-      // Releasing the last claim on a record removes it (pending a retention decision); the other copy stays.
-      expect(await storage.getRecord({ id: recordIn(bindingA, 'rec-shane-1'), includeDeleted: true })).toBeNull();
-      expect(await storage.getRecord({ id: recordIn(bindingB, 'rec-shane-1') })).not.toBeNull();
-      const left = await storage.listImportClaims({ targetType: 'node', targetId: a });
-      expect(left.flatMap(claim => claim.scopeIds)).toEqual([]);
-      expect((await importer.run(bindingB, { items: [person] })).error).toBeUndefined();
-
-      // Re-adding the released binding adopts its node again instead of failing.
+      const b = await nodeIn(storage, bindingB, person.address);
+      const recordId = recordIn(bindingA, 'rec-shane-1');
+      const notes = await storage.createNode({ name: 'Notes', scopeIds: [alpha] });
+      const firstReference = await storage.createRecord({
+        node: notes.id,
+        text: 'Remember [[Shane]].',
+        scopeIds: [alpha],
+      });
+      const snapshot = async () => ({
+        node: await storage.getNode(a),
+        record: await storage.getRecord({ id: recordId, includeDeleted: true }),
+        nodeScopes: await storage.getNodeScopeIds(a),
+        recordScopes: await storage.getRecordScopeIds(recordId),
+        addresses: await storage.listNodeAddresses({ source }),
+        mentions: await storage.listMentioningRecords({ node: a, scopeIds: [alpha] }),
+        outbox: await storage.listSemanticOutbox(),
+        activity: await storage.listActivity({ scopeIds: [alpha, beta] }),
+        otherNode: await storage.getNode(b),
+        otherRecord: await storage.getRecord({ id: recordIn(bindingB, 'rec-shane-1') }),
+      });
+      const before = await snapshot();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await knowledge.releaseImportBinding({
+          importerId: 'fireflies',
+          binding: knowledgeImporterBindingKey(bindingA),
+        });
+        expect(await snapshot()).toEqual(before);
+      }
+      expect((await storage.listRecords({ node: a, scopeIds: [alpha] })).records.map(record => record.id)).toEqual([
+        recordId,
+      ]);
+      expect((await storage.listRecords({ node: a, scopeIds: [beta] })).records).toEqual([]);
+      expect(
+        (await storage.listMentioningRecords({ node: a, scopeIds: [alpha] })).records.map(record => record.id),
+      ).toEqual([firstReference.id]);
+      const later = await storage.createRecord({
+        node: notes.id,
+        text: 'Later reference to [[Shane]].',
+        scopeIds: [alpha],
+      });
+      expect(
+        (await storage.listMentioningRecords({ node: a, scopeIds: [alpha] })).records.map(record => record.id).sort(),
+      ).toEqual([firstReference.id, later.id].sort());
+      expect((await storage.listMentioningRecords({ node: b, scopeIds: [beta] })).records).toEqual([]);
+      for (const targetType of ['node', 'record'] as const) {
+        const left = await storage.listImportClaims({ targetType, targetId: targetType === 'node' ? a : recordId });
+        expect(left.flatMap(claim => claim.scopeIds)).toEqual(targetType === 'node' ? [] : [alpha]);
+      }
       expect((await importer.run(bindingA, { items: [person] })).error).toBeUndefined();
       expect(await nodeIn(storage, bindingA, person.address)).toBe(a);
+      expect((await importer.run(bindingA, { items: [], removed: [person.address] })).error).toBeUndefined();
+      expect(await storage.getRecord({ id: recordId, includeDeleted: true })).toBeNull();
+      expect(await storage.getNode(a)).toEqual(before.node);
+      expect(await storage.getRecord({ id: recordIn(bindingB, 'rec-shane-1') })).toEqual(before.otherRecord);
     });
+
+    it('allows a later reference to an empty retained node without creating a replacement', async () => {
+      const { knowledge, storage, importer, alpha } = await setup(createStore);
+      await importer.run(bindingA, { items: [person] });
+      await importer.run(bindingA, { items: [], removed: [person.address] });
+      const nodeId = await nodeIn(storage, bindingA, person.address);
+      await knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
+      expect((await storage.listRecords({ node: nodeId, scopeIds: [alpha] })).records).toEqual([]);
+      const note = await storage.createNode({ name: 'Later note', scopeIds: [alpha] });
+      const record = await storage.createRecord({
+        node: note.id,
+        text: 'Follow up with [[Shane]].',
+        scopeIds: [alpha],
+      });
+      expect(
+        (await storage.listMentioningRecords({ node: nodeId, scopeIds: [alpha] })).records.map(item => item.id),
+      ).toEqual([record.id]);
+      expect(
+        (await storage.listNodes({ scopeIds: [alpha] })).filter(node => node.name === 'Shane').map(node => node.id),
+      ).toEqual([nodeId]);
+    });
+
+    it.each(['before', 'after'] as const)(
+      'preserves a record edited %s retirement rather than refreshing its ownership',
+      async when => {
+        const { knowledge, storage, importer, alpha, org } = await setup(createStore);
+        await importer.run(bindingA, { items: [person] });
+        const id = recordIn(bindingA, 'rec-shane-1');
+        const initial = (await storage.getRecord({ id }))!;
+        const retire = () =>
+          knowledge.releaseImportBinding({ importerId: 'fireflies', binding: knowledgeImporterBindingKey(bindingA) });
+        if (when === 'after') await retire();
+        const edited = await storage.setRecordScopes({ id, version: initial.version, scopeIds: [alpha, org] });
+        if (when === 'before') await retire();
+        expect((await importer.run(bindingA, { items: [person] })).status).toBe('failed');
+        await importer.run(bindingA, { items: [], removed: [person.address] });
+        expect(await storage.getRecord({ id })).toEqual(edited);
+        const claims = await storage.listImportClaims({ targetType: 'record', targetId: id });
+        expect(claims).toEqual([expect.objectContaining({ version: initial.version, scopeIds: [alpha] })]);
+      },
+    );
 
     it('does not let a release turn an earlier outside edit into importer-owned data', async () => {
       const { knowledge, storage, importer } = await setup(createStore);
@@ -457,6 +539,40 @@ export function createKnowledgeImportClaimStorageTests(
       expect(await storage.listImportClaims({ targetType: 'record', targetId: record.id })).toEqual([]);
     });
 
+    it.each([
+      { name: 'disjoint', scopes: [BETA] },
+      { name: 'identical', scopes: [ALPHA] },
+      { name: 'partially overlapping', scopes: [ALPHA, BETA] },
+    ])('keeps retired placement when another importer removes $name scopes', async ({ scopes }) => {
+      const { storage, node } = await seeded();
+      const record = await storage.createRecord({
+        node: node.id,
+        text: 'Retained fact',
+        source: 'src',
+        scopeIds: [ALPHA],
+        claimant: claimantA,
+      });
+      const other = { ...claimantB, importerId: 'different-importer' };
+      const shared = await storage.claimRecord({
+        id: record.id,
+        version: record.version,
+        claimant: other,
+        scopeIds: scopes,
+      });
+      await storage.releaseImportClaims({ importerId: claimantA.importerId, binding: claimantA.binding });
+      const removed = await storage.releaseRecordClaim({ id: record.id, version: shared.version, claimant: other });
+      expect(removed.deleted).toBe(false);
+      expect(await storage.getRecord({ id: record.id })).toMatchObject({ text: record.text });
+      expect(await storage.getRecordScopeIds(record.id)).toEqual([ALPHA]);
+      expect((await storage.listRecords({ node: node.id, scopeIds: [ALPHA] })).records.map(item => item.id)).toEqual([
+        record.id,
+      ]);
+      expect((await storage.listRecords({ node: node.id, scopeIds: [BETA] })).records).toEqual([]);
+      expect(await storage.listImportClaims({ targetType: 'record', targetId: record.id })).toEqual([
+        expect.objectContaining({ importerId: claimantA.importerId, scopeIds: [ALPHA] }),
+      ]);
+    });
+
     it('releases every claim one binding holds and nothing else', async () => {
       const { storage, node } = await seeded();
       const joined = await storage.setNodeScopes({
@@ -476,19 +592,31 @@ export function createKnowledgeImportClaimStorageTests(
       const shared = await storage.createRecord({
         id: 'rs',
         node: node.id,
-        text: 's',
+        text: 's [[Shared]]',
         source: 'src',
         scopeIds: [ALPHA],
         claimant: claimantA,
       });
       await storage.claimRecord({ id: shared.id, version: shared.version, claimant: claimantB, scopeIds: [BETA] });
-
-      await storage.releaseImportClaims({ importerId: claimantA.importerId, binding: claimantA.binding });
-      expect(await storage.getRecord({ id: onlyA.id })).toBeNull();
-      expect(await storage.getRecordScopeIds(shared.id)).toEqual([BETA]);
-      expect(await storage.getNodeScopeIds(node.id)).toEqual([BETA]);
+      const snapshot = async () => ({
+        node: await storage.getNode(node.id),
+        onlyA: await storage.getRecord({ id: onlyA.id }),
+        shared: await storage.getRecord({ id: shared.id }),
+        nodeScopes: await storage.getNodeScopeIds(node.id),
+        recordScopes: await storage.getRecordScopeIds(shared.id),
+        mentions: await storage.listMentioningRecords({ node: node.id, scopeIds: [ALPHA, BETA] }),
+        outbox: await storage.listSemanticOutbox(),
+      });
+      const before = await snapshot();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        await storage.releaseImportClaims({ importerId: claimantA.importerId, binding: claimantA.binding });
+        expect(await snapshot()).toEqual(before);
+      }
+      expect(await storage.getRecord({ id: onlyA.id })).toEqual(onlyA);
+      expect(sorted(await storage.getRecordScopeIds(shared.id))).toEqual(sorted([ALPHA, BETA]));
+      expect(sorted(await storage.getNodeScopeIds(node.id))).toEqual(sorted([ALPHA, BETA]));
       expect(await storage.listImportClaims({ targetType: 'node', targetId: node.id })).toEqual([
-        expect.objectContaining({ binding: claimantB.binding, version: joined.version + 1 }),
+        expect.objectContaining({ binding: claimantB.binding, version: joined.version }),
       ]);
     });
   });

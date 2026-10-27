@@ -593,38 +593,15 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         claim => claim.importerId === input.importerId && claim.binding === binding,
       );
       for (const claim of owned) {
-        if (claim.targetType === 'record') {
-          const record = this.#db.knowledgeRecords.get(claim.targetId);
-          if (record) this.#releaseRecordClaim(record, claim, input.importRunId);
-          else this.#deleteClaim(claim, 'record', claim.targetId);
-          continue;
-        }
-        const node = this.#db.knowledgeNodes.get(claim.targetId);
-        this.#deleteClaim(claim, 'node', claim.targetId);
-        if (!node || node.deletedAt) continue;
-        const current = this.#nodeScopeIds(node.id);
-        const remaining = this.#claims('node', node.id);
-        const others = remaining.flatMap(other => other.scopeIds);
-        const scopeIds = reconcileKnowledgeClaimScopes({ current, previous: claim.scopeIds, next: [], others });
-        // With no claim from this importer and source left, a scope-less marker keeps its version on record.
-        const marker = (after: number) => knowledgeReleaseMarkerVersion(claim, remaining, node.version, after);
-        // A node keeps at least one membership; one only this binding held stays rather than orphaning it.
-        if (scopeIds.length === 0 || knowledgeScopeIdsKey(scopeIds) === knowledgeScopeIdsKey(current)) {
-          const version = marker(node.version);
-          if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
-          continue;
-        }
-        const updated: KnowledgeNode = { ...node, version: node.version + 1, updatedAt: new Date() };
-        this.#db.knowledgeNodeKeys.delete(recordKey(node.name, current));
-        this.#db.knowledgeNodeKeys.set(recordKey(node.name, scopeIds), node.id);
-        this.#db.knowledgeNodes.set(node.id, updated);
-        this.#db.knowledgeNodeScopes.set(node.id, new Set(scopeIds));
-        this.#recordActivity('move', 'node', node.id, scopeIds[0], input.importRunId);
-        this.#enqueue('node', node.id, 'delete', updated.version, current);
-        this.#enqueue('node', node.id, 'upsert', updated.version, scopeIds);
-        this.#advanceClaims('node', node.id, node.version, updated.version);
-        const version = marker(updated.version);
-        if (version !== null) this.#writeClaim(claim, 'node', node.id, [], version);
+        // Retained record claims preserve placement even when another claimant removes overlapping scopes.
+        if (claim.targetType === 'record') continue;
+        const target = this.#db.knowledgeNodes.get(claim.targetId);
+        this.#deleteClaim(claim, claim.targetType, claim.targetId);
+        if (!target) continue;
+        // Retirement releases active claims, not knowledge or its readable placement.
+        const remaining = this.#claims(claim.targetType, claim.targetId);
+        const version = knowledgeReleaseMarkerVersion(claim, remaining, target.version, target.version);
+        if (version !== null) this.#writeClaim(claim, claim.targetType, claim.targetId, [], version);
       }
     });
   }
