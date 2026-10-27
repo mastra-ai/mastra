@@ -82,6 +82,32 @@ describe.each(transports)('requestAcknowledgedAbort over $name', ({ setup }) => 
 
     await expect(requestAcknowledgedAbort(requester, 'any-run', 300)).rejects.toThrow('pubsub down');
   });
+
+  it.each(['subscribe', 'publish'] as const)(
+    'resolves false within the deadline when %s stalls, and unsubscribes once it settles',
+    async method => {
+      const { requester } = await setup();
+      const original = requester[method].bind(requester) as (...args: unknown[]) => Promise<void>;
+      let release!: () => void;
+      const stalled = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      vi.spyOn(requester, method).mockImplementation(async (...args: unknown[]) => {
+        await stalled;
+        return original(...args);
+      });
+      const unsubscribe = vi.spyOn(requester, 'unsubscribe');
+
+      const result = await Promise.race([
+        requestAcknowledgedAbort(requester, `stalled-run-${globalThis.crypto.randomUUID()}`, 200),
+        new Promise<'hung'>(resolve => setTimeout(() => resolve('hung'), 1_000)),
+      ]);
+      expect(result).toBe(false);
+
+      release();
+      await vi.waitFor(() => expect(unsubscribe).toHaveBeenCalledTimes(1));
+    },
+  );
 });
 
 /**

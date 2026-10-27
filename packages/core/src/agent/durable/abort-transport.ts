@@ -74,24 +74,38 @@ export async function requestAcknowledgedAbort(
     await ack?.();
   };
 
-  // Subscribe before publishing so an acknowledgement cannot race past us.
-  await pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
+  // The deadline bounds the whole exchange: a broker that stalls on subscribe or
+  // publish must not hold the caller open past `timeoutMs`.
   let timer: ReturnType<typeof setTimeout> | undefined;
-  try {
+  let timedOut = false;
+  const deadline = new Promise<boolean>(resolve => {
+    timer = setTimeout(() => {
+      timedOut = true;
+      resolve(false);
+    }, timeoutMs);
+  });
+  // Subscribe before publishing so an acknowledgement cannot race past us.
+  const subscribed = pubsub.subscribe(topic, handler as Parameters<PubSub['subscribe']>[1], { startFrom: 'latest' });
+  const exchange = (async () => {
+    await subscribed;
     await pubsub.publish(AGENT_CONTROL_TOPIC(runId), {
       type: AgentControlEventTypes.ABORT_REQUEST,
       runId,
       data: { requestId },
     });
-    return await Promise.race([
-      acknowledged,
-      new Promise<boolean>(resolve => {
-        timer = setTimeout(() => resolve(false), timeoutMs);
-      }),
-    ]);
+    return acknowledged;
+  })();
+  // A setup failure after the deadline has nobody left to report to.
+  exchange.catch(() => {});
+  try {
+    return await Promise.race([exchange, deadline]);
   } finally {
     clearTimeout(timer);
-    await pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]).catch(() => {});
+    // Unsubscribe once the subscription settles, even when it lands after the deadline.
+    const cleanup = subscribed
+      .then(() => pubsub.unsubscribe(topic, handler as Parameters<PubSub['subscribe']>[1]))
+      .catch(() => {});
+    if (!timedOut) await cleanup;
   }
 }
 
