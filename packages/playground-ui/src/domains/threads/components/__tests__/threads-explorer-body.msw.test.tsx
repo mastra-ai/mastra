@@ -68,15 +68,15 @@ describe('ThreadsExplorerBody', () => {
 
       const weatherRow = await screen.findByRole('button', { name: /Weather Agent/ });
       const supportRow = screen.getByRole('button', { name: /Support Agent/ });
-      expect(screen.getByText('Messages')).toBeTruthy();
-      expect(
-        screen.getByRole('button', {
-          name: 'About Messages',
-          description: 'Messages sent in this thread, counting the whole thread, not just the selected time range',
-        }),
-      ).toBeTruthy();
       expect(within(weatherRow).getByText('2')).toBeTruthy();
       expect(within(supportRow).getByText('7')).toBeTruthy();
+
+      fireEvent.focus(screen.getByRole('button', { name: 'Messages' }));
+      expect(
+        await screen.findByText(
+          'Messages sent in this thread, counting the whole thread, not just the selected time range',
+        ),
+      ).toBeTruthy();
     });
   });
 

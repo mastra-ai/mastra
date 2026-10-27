@@ -16,7 +16,7 @@ import { DataList, DataListSkeletonRows, TracesDataList, useDataListKeyboard } f
 import type { DataListSort } from '@/ds/components/DataList';
 import { splitColumns } from '@/ds/components/DataList/shared';
 import { DropdownMenu } from '@/ds/components/DropdownMenu';
-import { InfoTooltip } from '@/ds/components/Tooltip';
+import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
 import { Txt } from '@/ds/components/Txt/Txt';
 import { focusRing } from '@/ds/primitives/transitions';
 import { formatCompactNumber, formatCost } from '@/lib/cost';
@@ -88,13 +88,13 @@ function isFailedTrace(trace: TracesListViewTrace): trace is FailedTrace {
   return trace.status === 'error' && !!trace.errorPreview && !!trace.spanId;
 }
 
-/** The TTFC abbreviation, spelled out by an info icon; the sort button already names the column for screen readers. */
+/** The TTFC abbreviation, spelled out on hover; the sort button already names the column for screen readers. */
 function TimeToFirstChunkLabel() {
   return (
-    <span className="flex items-center gap-1">
-      TTFC
-      <InfoTooltip aria-label="About TTFC">Time to first chunk</InfoTooltip>
-    </span>
+    <Tooltip>
+      <TooltipTrigger render={<span />}>TTFC</TooltipTrigger>
+      <TooltipContent>Time to first chunk</TooltipContent>
+    </Tooltip>
   );
 }
 
@@ -292,9 +292,9 @@ export function TracesListView({
           );
         })}
         {columnPreferences.metadataKeys.map(key => (
-          <TracesDataList.TopCell key={key} title={key}>
+          <TracesDataList.TopCellWithTooltip key={key} tooltip={key}>
             {key}
-          </TracesDataList.TopCell>
+          </TracesDataList.TopCellWithTooltip>
         ))}
       </TracesDataList.Top>
 
