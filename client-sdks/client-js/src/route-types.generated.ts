@@ -23660,15 +23660,6 @@ export type PostAgentControllerControllerIdSessionsSessionIdMessages_Body = {
         filename?: string | undefined;
       }[]
     | undefined;
-  scopes?:
-    | (
-        | string
-        | {
-            tag: string;
-            access: 'read';
-          }
-      )[]
-    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsSessionIdMessages_Response =
@@ -23708,21 +23699,8 @@ export type PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams =
   PostAgentControllerControllerIdSessions_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsSessionIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  files?:
-    | {
-        data: string;
-        mediaType: string;
-        filename?: string | undefined;
-      }[]
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsSessionIdSteer_Body =
+  PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
@@ -23762,7 +23740,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams
   PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsSessionIdSteer_Body;
+  PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
