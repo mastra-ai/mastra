@@ -472,11 +472,10 @@ export class TestExporter extends BaseExporter {
         if (state.hasUpdate) {
           this.logger.warn(`Event span ${spanId} (${span.type} "${span.name}") incorrectly received SPAN_UPDATED`);
         }
-      } else {
+      } else if (!state.hasStart) {
         // Normal spans should have started before ending
-        if (!state.hasStart) {
-          this.logger.warn(`Normal span ${spanId} (${span.type} "${span.name}") ended without starting`);
-        }
+
+        this.logger.warn(`Normal span ${spanId} (${span.type} "${span.name}") ended without starting`);
       }
     }
   }

@@ -90,18 +90,19 @@ export function BoardListRow({
           </span>
         </span>
         <span aria-hidden className="flex-1 max-sm:hidden" />
-        {/* Metadata sits flush right and gives way first, so the title keeps every pixel it can use. */}
-        <span className="flex min-w-0 shrink-[100] items-center justify-end gap-3 empty:hidden max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 max-sm:justify-start">
+        {/* Metadata sits flush right. Its group dissolves on wider screens so each part sets its own priority:
+            labels give way first, then the title, and the status last, so a review verdict stays readable. */}
+        <span className="flex min-w-0 items-center gap-3 empty:hidden max-sm:col-span-2 max-sm:col-start-2 max-sm:row-start-3 sm:contents">
           <span
             className={cn(
-              'max-w-72 min-w-0 empty:hidden max-sm:hidden @max-[32rem]:hidden [&>*]:max-w-full',
+              'max-w-72 min-w-0 shrink-[100] overflow-hidden empty:hidden max-sm:hidden @max-[32rem]:hidden [&>*]:max-w-full',
               SWAP_FOR_ACTION_ON_HOVER,
             )}
           >
             {cells.labels}
           </span>
-          {/* Shrinks (an error truncates) so a long status never spills over the title. */}
-          <span className="flex max-w-80 min-w-0 items-center empty:hidden">{cells.status}</span>
+          {/* Only shrinks once the title has nothing left to give, then truncates instead of spilling over the next column. */}
+          <span className="flex max-w-80 min-w-0 shrink-[0.01] items-center empty:hidden">{cells.status}</span>
         </span>
         <span
           onClick={stopRowClick}

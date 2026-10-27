@@ -487,6 +487,10 @@ export class ModelsDevGateway extends MastraModelGateway {
           baseURL,
           headers: mastraHeaders,
           supportsStructuredOutputs: true,
+          // Kimi's coding endpoint only reports usage at the standard top level of a stream chunk when
+          // asked; without stream_options.include_usage it nests usage inside choices[0], which the AI
+          // SDK never reads, so every Kimi step's token counts came back undefined (r325).
+          ...(providerId.startsWith('kimi-code-plan') ? { includeUsage: true } : {}),
         }).chatModel(modelId);
       }
     }

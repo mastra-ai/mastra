@@ -141,8 +141,13 @@ export function columnReviewVerdict(item: WorkItem, columnStage: BoardStageId) {
 
 export function ReviewVerdictBadge({ verdict }: { verdict: ReviewVerdict }) {
   return (
-    <Badge size="xs" variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}>
-      {verdict.label}
+    <Badge
+      size="xs"
+      variant={verdict.outdated ? 'neutral' : verdict.approved ? 'green' : 'orange'}
+      className="min-w-0"
+      title={verdict.label}
+    >
+      <span className="truncate">{verdict.label}</span>
     </Badge>
   );
 }

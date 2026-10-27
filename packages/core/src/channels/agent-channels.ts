@@ -774,7 +774,7 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (!requesterId && authors.size > 1) {
+                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
                           this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                           return;
                         }
@@ -795,7 +795,7 @@ export class AgentChannels {
               // Only the user whose message triggered the tool call may answer
               // its approval card. Skip the check when either identity is unknown.
               const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
+              if (adapterConfig?.toolApprovers !== 'anyone' && requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,

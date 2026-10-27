@@ -1,7 +1,7 @@
 {
   "temperature": ["hy3", "hy3-preview", "hy4-preview"],
   "reasoning": {
-    "hy4-preview": [
+    "hy3": [
       {
         "type": "toggle"
       },
@@ -10,7 +10,7 @@
         "values": ["none", "high"]
       }
     ],
-    "hy3": [
+    "hy4-preview": [
       {
         "type": "toggle"
       },

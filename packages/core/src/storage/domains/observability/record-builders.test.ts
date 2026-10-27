@@ -47,6 +47,12 @@ describe('record-builders', () => {
       expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
     });
 
+    it('stores the version of the span own entity, not an inherited metadata version', () => {
+      const inherited: AnyExportedSpan = { ...span(), metadata: { entityVersionId: 'agent-v1' } };
+      expect(buildCreateSpanRecord(inherited).entityVersionId).toBeNull();
+      expect(buildCreateSpanRecord({ ...inherited, entityVersionId: 'tool-v2' }).entityVersionId).toBe('tool-v2');
+    });
+
     it('stores the parent and root entity carried on the exported span, null when absent', () => {
       const nested: AnyExportedSpan = {
         ...span(),

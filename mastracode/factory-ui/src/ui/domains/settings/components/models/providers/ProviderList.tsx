@@ -10,7 +10,13 @@ import { useFactoryAuth } from '../../../../../../hooks/useFactoryAuth';
 import { SkeletonRows } from '../../../../../ui/SkeletonRows';
 import { AddApiKeyDialog } from '../../AddApiKeyDialog';
 import { ProviderOAuthDialog } from '../../ProviderOAuthDialog';
-import { CREDENTIAL_LABEL, SHARED_SOURCE, credentialAt } from '../../provider-credential';
+import {
+  CREDENTIAL_LABEL,
+  SHARED_SOURCE,
+  SIGN_IN_EXPIRED_LABEL,
+  credentialAt,
+  signInExpiredAt,
+} from '../../provider-credential';
 import type { CredentialScope, ProviderCredential } from '../../provider-credential';
 import { AddProviderDrawer } from './AddProviderDrawer';
 import { ConnectedProviderRow } from './ConnectedProviderRow';
@@ -22,6 +28,12 @@ const ORG_SCOPE_AUDIENCE = 'Shared with every Factory in your organization.';
 const CREDENTIAL_STATUS: Record<ProviderCredential, StatusPresentation> = {
   oauth: { label: CREDENTIAL_LABEL.oauth, tone: 'success', description: 'Signed in with a provider account' },
   api_key: { label: CREDENTIAL_LABEL.api_key, tone: 'success', description: 'An API key is saved' },
+};
+
+const SIGN_IN_EXPIRED_STATUS: StatusPresentation = {
+  label: SIGN_IN_EXPIRED_LABEL,
+  tone: 'error',
+  description: 'Could not renew this sign-in. Sign in again to keep using it.',
 };
 
 interface ActiveOAuthSession {
@@ -41,9 +53,13 @@ function sharedSourceStatus(source: ProviderInfo['source']): StatusPresentation 
 
 function providerConnection(provider: ProviderInfo, scope: CredentialScope): ProviderConnection | undefined {
   const credential = credentialAt(provider, scope);
-  if (credential) return { provider, status: CREDENTIAL_STATUS[credential], credential };
+  if (credential) {
+    const signInExpired = signInExpiredAt(provider, scope);
+    const status = signInExpired ? SIGN_IN_EXPIRED_STATUS : CREDENTIAL_STATUS[credential];
+    return { provider, status, credential, signInExpired };
+  }
   const sharedStatus = sharedSourceStatus(provider.source);
-  return sharedStatus && { provider, status: sharedStatus, credential: undefined };
+  return sharedStatus && { provider, status: sharedStatus, credential: undefined, signInExpired: false };
 }
 
 function connectedProviders(providers: ProviderInfo[], scope: CredentialScope): ProviderConnection[] {
@@ -99,6 +115,7 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
             requestScope={requestScope}
             disabled={actionsDisabled}
             onUpdateKey={() => setKeyDialogProvider(connection.provider)}
+            onOAuthStarted={openOAuth}
           />
         ))}
         <li>
