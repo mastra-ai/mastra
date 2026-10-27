@@ -12,6 +12,7 @@ import { TraceThreadPanel } from '@/domains/traces/components/trace-thread-panel
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { THREAD_LIST_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-columns';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type ThreadsExplorerBodyProps = {
@@ -98,6 +99,7 @@ export function ThreadsExplorerBody({
       >
         <TracesListView
           listId="all-threads"
+          columnPreferences={THREAD_LIST_COLUMN_PREFERENCES}
           traces={rows}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
