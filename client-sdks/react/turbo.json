@@ -2,6 +2,9 @@
   "$schema": "https://v2-9-16.turborepo.dev/schema.json",
   "extends": ["//"],
   "tasks": {
+    "lint": {
+      "dependsOn": ["@mastra/client-js#build"]
+    },
     "build:js": {
       "dependsOn": ["^build"],
       "outputs": ["dist/**", "!dist/react.css"],
