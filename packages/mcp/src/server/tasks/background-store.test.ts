@@ -2,7 +2,13 @@ import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { BackgroundTaskMCPTaskStore, projectTask, TASK_EXPIRED_MESSAGE, TASK_LOST_MESSAGE } from './background-store';
+import {
+  BackgroundTaskMCPTaskStore,
+  projectTask,
+  taskKeyOf,
+  TASK_EXPIRED_MESSAGE,
+  TASK_LOST_MESSAGE,
+} from './background-store';
 import type { BackgroundTaskEnvelope } from './background-store';
 import type { MCPTaskWork } from './store';
 
@@ -129,6 +135,31 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.registerTool('tool');
     return { manager, store, storage: await manager.getStorage() };
   }
+
+  it('lists a full page of tasks when newer rows are not readable as tasks', async () => {
+    const work: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { who: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, storage, manager } = await setup(work);
+    const keys: string[] = [];
+    for (let i = 0; i < 4; i++) {
+      const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' } });
+      keys.push(taskKeyOf(task.taskId));
+      await new Promise(resolve => setTimeout(resolve, 5));
+    }
+    // The two newest rows lose their envelope, like rows written before the principal was hashed.
+    const { tasks: rows } = await manager.listTasks({ agentId: 'mcp-server:s' });
+    for (const row of rows.filter(row => row.toolCallId === keys[2] || row.toolCallId === keys[3])) {
+      const { principalKey: _dropped, ...metadata } = row.metadata as Record<string, unknown>;
+      await storage.updateTask(row.id, { metadata });
+    }
+
+    const listed = await store.list({ limit: 2 });
+
+    expect(listed.map(listing => listing.taskKey)).toEqual([keys[1], keys[0]]);
+    store.close();
+  });
 
   it('does not acknowledge an answer that storage would not store', async () => {
     const work: MCPTaskWork = async () => ({

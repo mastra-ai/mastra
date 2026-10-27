@@ -355,19 +355,26 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
   /** Lists this server's tasks across principals, most recently created first. */
   async list({ limit = 50 }: { limit?: number } = {}): Promise<MCPTaskListing[]> {
     this.#startSweeping();
-    const { tasks } = await this.#manager.listTasks({
-      agentId: this.#owner,
-      orderBy: 'createdAt',
-      orderDirection: 'desc',
-      perPage: limit,
-    });
     const now = Date.now();
     const listings: MCPTaskListing[] = [];
-    for (const row of tasks) {
-      const envelope = envelopeOf(row);
-      if (!envelope || isForgotten(row, now)) continue;
-      const { context } = row.args as unknown as RowArgs;
-      listings.push(toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now)));
+    // Rows that aren't tasks any more (forgotten, or unreadable) are skipped, so a page can come
+    // back short; keep reading until `limit` tasks are found or the rows run out.
+    for (let page = 0; listings.length < limit; page++) {
+      const { tasks } = await this.#manager.listTasks({
+        agentId: this.#owner,
+        orderBy: 'createdAt',
+        orderDirection: 'desc',
+        page,
+        perPage: limit,
+      });
+      for (const row of tasks) {
+        const envelope = envelopeOf(row);
+        if (!envelope || isForgotten(row, now)) continue;
+        const { context } = row.args as unknown as RowArgs;
+        listings.push(toListing(row.toolCallId, envelope.principalKey, context, projectTask(row, envelope, '', now)));
+        if (listings.length === limit) break;
+      }
+      if (tasks.length < limit) break;
     }
     return listings;
   }
