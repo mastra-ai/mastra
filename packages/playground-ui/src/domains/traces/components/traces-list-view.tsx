@@ -52,6 +52,8 @@ export type TracesListViewTrace = {
   endedAt?: Date | string | null;
   /** The root span's time to first chunk; `null` when it never streamed one. */
   timeToFirstChunkMs?: number | null;
+  /** Thread rows only: every trace in the thread, regardless of the listed time range. */
+  traceCount?: number;
   createdAt: Date | string;
 };
 
@@ -213,6 +215,14 @@ export function TracesListView({
         {hasTraceColumn(columnPreferences, 'duration') && (
           <TracesDataList.TopCell className="justify-end text-right">Duration</TracesDataList.TopCell>
         )}
+        {hasTraceColumn(columnPreferences, 'traceCount') && (
+          <TracesDataList.TopCellWithTooltip
+            tooltip="All traces in this thread, not just those in the selected time range"
+            className="justify-end text-right"
+          >
+            Traces
+          </TracesDataList.TopCellWithTooltip>
+        )}
         {hasTraceColumn(columnPreferences, 'timeToFirstChunk') &&
           (onTimeToFirstChunkSortChange ? (
             <TracesDataList.SortableTopCell
@@ -342,6 +352,11 @@ export function TracesListView({
                 {hasTraceColumn(columnPreferences, 'duration') && (
                   <DataList.NumberCell font="mono">
                     {formatDuration(getSpanDurationMs(trace.startedAt, trace.endedAt))}
+                  </DataList.NumberCell>
+                )}
+                {hasTraceColumn(columnPreferences, 'traceCount') && (
+                  <DataList.NumberCell>
+                    {trace.traceCount === undefined ? undefined : formatCompactNumber(trace.traceCount)}
                   </DataList.NumberCell>
                 )}
                 {hasTraceColumn(columnPreferences, 'timeToFirstChunk') && (

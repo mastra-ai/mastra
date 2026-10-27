@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import type { QueryTraceThreadsResult } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 import {
@@ -59,6 +59,18 @@ describe('ThreadsExplorerBody', () => {
 
       expect(await screen.findByText('Weather Agent')).toBeTruthy();
       expect(screen.getByText('Support Agent')).toBeTruthy();
+    });
+
+    it("shows each thread's trace count", async () => {
+      setHandlers(threadRowsPage);
+
+      renderBody();
+
+      const weatherRow = await screen.findByRole('button', { name: /Weather Agent/ });
+      const supportRow = screen.getByRole('button', { name: /Support Agent/ });
+      expect(screen.getByText('Traces')).toBeTruthy();
+      expect(within(weatherRow).getByText('2')).toBeTruthy();
+      expect(within(supportRow).getByText('7')).toBeTruthy();
     });
   });
 
