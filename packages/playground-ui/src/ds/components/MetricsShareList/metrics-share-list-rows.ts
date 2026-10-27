@@ -56,9 +56,12 @@ type Colors = { color: string; palette: Palette };
 /** The top rows, then one "Other" row folding the tail, unless that would hide a single row. */
 export function foldRows(
   ranked: MetricsShareListRow[],
-  { limit, other, color, palette }: Colors & Pick<MetricsShareListProps, 'other'> & { limit: number },
+  { limit, other, color, palette, sort }: Colors & Pick<MetricsShareListProps, 'other' | 'sort'> & { limit: number },
 ) {
-  if (ranked.length <= limit + 1) return { shown: paintRows(ranked, color, palette), rest: [] };
+  if (ranked.length <= limit + 1) {
+    const strip = paintRows(ranked, color, palette);
+    return { shown: sortRows(strip, sort), strip, rest: [] };
+  }
   const rest = ranked.slice(limit);
   const folded = other?.(rest);
   const otherRow: ShownRow = {
@@ -70,42 +73,78 @@ export function foldRows(
     paint: REST,
     segment: REST_KEY,
   };
-  return { shown: [...paintRows(ranked.slice(0, limit), color, palette), otherRow], rest };
+  const strip = paintRows(ranked.slice(0, limit), color, palette);
+  return { shown: [...sortRows(strip, sort), otherRow], strip, rest };
 }
 
 function paintRows(rows: MetricsShareListRow[], color: string, palette: Palette): ShownRow[] {
   const colors = rowColors(color, rows.length, palette);
-  return rows.map((r, i) => ({ ...r, paint: colors[i] ?? REST, segment: r.key }));
+  return rows.map((r, i) => ({ ...r, paint: ownPaint(r) ?? colors[i] ?? REST, segment: r.key }));
+}
+
+const ownPaint = (row: MetricsShareListRow): Paint | undefined =>
+  row.color ? { color: row.color, alpha: 1 } : undefined;
+
+/**
+ * Rows in the order of `sort`; rows without a value for it go last either way, and ties keep
+ * their share order. No sort keeps the share order.
+ */
+export function sortRows<T extends MetricsShareListRow>(rows: T[], sort?: MetricsShareListProps['sort']): T[] {
+  if (!sort) return rows;
+  const sign = sort.direction === 'ascending' ? 1 : -1;
+  const valueOf = (row: T) => {
+    const v = row.sortValues?.[sort.key];
+    return typeof v === 'number' && Number.isFinite(v) ? v : undefined;
+  };
+  return rows.toSorted((a, b) => {
+    const x = valueOf(a);
+    const y = valueOf(b);
+    if (x === undefined || y === undefined) return x === y ? 0 : x === undefined ? 1 : -1;
+    return (x - y) * sign;
+  });
 }
 
 /**
- * The first `count` rows, plus the active row when it ranks past them. Rows past the strip's
- * own segments are gray and share its "everything else" segment.
+ * The first `count` rows in `sort` order, plus the active row when it falls past them. Colours
+ * and the strip follow share: the top rows by share have their own segments, and rows past the
+ * strip's own segments are gray and share its "everything else" segment.
  */
 export function pageRows(
   ranked: MetricsShareListRow[],
-  { count, activeKey, color, palette }: Colors & { count: number; activeKey?: string },
+  {
+    count,
+    activeKey,
+    color,
+    palette,
+    sort,
+  }: Colors & Pick<MetricsShareListProps, 'sort'> & { count: number; activeKey?: string },
 ) {
   const own = Math.min(count, ranked.length, SEGMENTS);
   const colors = rowColors(color, own, palette);
   const rank = new Map(ranked.map((r, i) => [r.key, i]));
-  const shown = listedRows(ranked, count, activeKey).map(r => {
+  const paint = (r: MetricsShareListRow): ShownRow => {
     const i = rank.get(r.key) ?? ranked.length;
-    return { ...r, paint: colors[i] ?? REST, segment: i < own ? r.key : REST_KEY };
-  });
-  return { shown, rest: ranked.slice(own) };
+    return i < own
+      ? { ...r, paint: ownPaint(r) ?? colors[i] ?? REST, segment: r.key }
+      : { ...r, paint: REST, segment: REST_KEY };
+  };
+  return {
+    shown: listedRows(sortRows(ranked, sort), count, activeKey).map(paint),
+    strip: ranked.slice(0, own).map(paint),
+    rest: ranked.slice(own),
+  };
 }
 
-function listedRows(ranked: MetricsShareListRow[], count: number, activeKey?: string) {
-  const listed = ranked.slice(0, count);
-  const active = activeKey ? ranked.findIndex(r => r.key === activeKey) : -1;
-  const pinned = active >= count ? ranked[active] : undefined;
+function listedRows(ordered: MetricsShareListRow[], count: number, activeKey?: string) {
+  const listed = ordered.slice(0, count);
+  const active = activeKey ? ordered.findIndex(r => r.key === activeKey) : -1;
+  const pinned = active >= count ? ordered[active] : undefined;
   return pinned ? [...listed, pinned] : listed;
 }
 
 /** One segment per row with its own color, then everything else in one gray segment. */
-export function stripSegments(shown: ShownRow[], rest: MetricsShareListRow[]): StripSegment[] {
-  const own = shown.filter(r => r.segment !== REST_KEY).map(r => ({ key: r.key, share: r.share, paint: r.paint }));
+export function stripSegments(strip: ShownRow[], rest: MetricsShareListRow[]): StripSegment[] {
+  const own = strip.filter(r => r.segment !== REST_KEY).map(r => ({ key: r.key, share: r.share, paint: r.paint }));
   const gray = rest.length ? [{ key: REST_KEY, share: sumShares(rest), paint: REST }] : [];
   const segments = [...own, ...gray].filter(s => s.share > 0);
   // Grow factors in percent: flex-grow values that sum below 1 (shares like $0.09 of cost)

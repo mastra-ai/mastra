@@ -47,7 +47,22 @@
     "Qwen3.5-397B-A17B"
   ],
   "reasoning": {
+    "DeepSeek-V4-Flash": [
+      {
+        "type": "toggle"
+      }
+    ],
     "GLM-5.1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen3.5-35B-A3B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Hy3": [
       {
         "type": "toggle"
       }
@@ -67,7 +82,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen3.5-35B-A3B": [
+    "GLM-5.2": [
       {
         "type": "toggle"
       }
@@ -77,17 +92,7 @@
         "type": "toggle"
       }
     ],
-    "Hy3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen3.5-27B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "DeepSeek-V4-Flash": [
+    "Qwen3.5-397B-A17B": [
       {
         "type": "toggle"
       }
@@ -97,12 +102,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "GLM-5.2": [
+    "Qwen3.5-27B": [
       {
         "type": "toggle"
       }

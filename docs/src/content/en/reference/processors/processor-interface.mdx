@@ -1902,7 +1902,7 @@ await agent.stream('Summarize this', {
 })
 ```
 
-`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, processor-requested retries are treated as aborts.
+`maxProcessorRetries` passed on the call overrides the agent default. If neither is set, retries requested by input and output processors are treated as aborts, while error processors (such as [`StreamErrorRetryProcessor`](/reference/processors/stream-error-retry-processor)) are capped at 3 retries.
 
 ## Related
 

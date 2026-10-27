@@ -17,6 +17,7 @@ import type {
   Session,
 } from '@mastra/core/agent-controller';
 import { createCodingAgent } from '@mastra/core/coding-agent';
+import { classifyProviderError } from '@mastra/core/error';
 import type { PubSub } from '@mastra/core/events';
 import { Knowledge } from '@mastra/core/knowledge';
 import { PROVIDER_REGISTRY, findGatewayForModel, getGatewayId } from '@mastra/core/llm';
@@ -183,7 +184,6 @@ const TRANSIENT_CONNECTION_MESSAGE_PATTERN = /econnreset|socket hang up|write ep
 // budget before the account-rotation processor classifies them as a persistent
 // outage (hop). Must stay aligned with `classifyRotationError`'s 5xx check.
 const isTransientServerStatus = (status: number) => status >= 500 && status < 600;
-const TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN = /internal server|server error|api may be experiencing issues/i;
 
 /**
  * Matcher for transient connection failures. Cause-chain traversal is handled
@@ -222,6 +222,8 @@ function isTransientConnectionError(error: unknown): boolean {
 
 function isTransientServerError(error: unknown): boolean {
   if (!error) return false;
+  const kind = classifyProviderError(error);
+  if (kind === 'context_overflow') return false;
 
   const errorObj = typeof error === 'object' ? (error as { status?: unknown; statusCode?: unknown }) : undefined;
   if (
@@ -231,8 +233,7 @@ function isTransientServerError(error: unknown): boolean {
     return true;
   }
 
-  const message = error instanceof Error ? error.message : undefined;
-  return typeof message === 'string' && TRANSIENT_SERVER_ERROR_MESSAGE_PATTERN.test(message);
+  return kind === 'unavailable';
 }
 
 function getTransientRetryDelay(retryCount: number): number {

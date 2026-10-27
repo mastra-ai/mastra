@@ -39,6 +39,7 @@ import type { AgentExecutionOptions, DelegationConfig } from '../agent.types';
 import { assertThreadOwnedByResource } from '../memory-thread-ownership';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopeEntry } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes } from '../scopes';
@@ -595,6 +596,7 @@ export async function prepareForDurableExecution<OUTPUT = undefined>(
     attributes: {
       conversationId: threadId,
       instructions: convertInstructionsToString(instructions),
+      ...modelSpanAttributes(model),
       ...(startingSignal ? { signal: startingSignal } : {}),
       // @deprecated — use entityVersionId (top-level span context field) instead.
       // Kept for backward compatibility during migration.

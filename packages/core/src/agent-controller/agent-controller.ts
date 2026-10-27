@@ -1638,6 +1638,10 @@ export class AgentController<TState = {}> {
     return this.config.modes;
   }
 
+  getDefaultMode(): AgentControllerMode {
+    return this.#defaultMode;
+  }
+
   private propagateRuntimeServicesToAgent(agent: Agent, _session?: Session<TState>): Agent {
     if (this.config.memory && !agent.hasOwnMemory()) {
       agent.__setMemory(this.config.memory);

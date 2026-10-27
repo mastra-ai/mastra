@@ -11,6 +11,8 @@ const DEFAULT_TICK_INTERVAL_MS = 10_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
 const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
+/** Longest delay `setTimeout` accepts; larger values fire immediately. */
+const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 
 /**
  * Drives cron-based workflow triggers.
@@ -31,8 +33,12 @@ export class Scheduler extends MastraBase {
   #pubsub: PubSub;
   #config: Required<Pick<SchedulerConfig, 'tickIntervalMs' | 'batchSize'>> & SchedulerConfig;
 
-  #intervalHandle?: ReturnType<typeof setInterval>;
+  #timerHandle?: ReturnType<typeof setTimeout>;
   #inflightTick?: Promise<void>;
+  #loop?: Promise<void>;
+  #wakeRequested = false;
+  /** Whether the last tick saw due schedules, or failed to list them. */
+  #lastTickBusy = false;
   #started = false;
   #stopping = false;
 
@@ -77,7 +83,7 @@ export class Scheduler extends MastraBase {
     };
   }
 
-  /** Start the periodic tick loop. Runs an immediate tick first. */
+  /** Start the tick loop. Runs an immediate tick first. */
   async start(): Promise<void> {
     if (this.#started) return;
     this.#started = true;
@@ -89,30 +95,13 @@ export class Scheduler extends MastraBase {
     this.#staleDefinitionCounts.clear();
 
     try {
-      // Run one tick immediately so newly-due schedules don't wait the full interval.
-      await this.#runTick();
-
-      // If stop() ran concurrently with the warm-up tick, don't arm a new
-      // interval afterwards — the caller has already asked us to shut down.
-      if (this.#stopping || !this.#started) return;
-
-      this.#intervalHandle = setInterval(() => {
-        // Swallow rejections here so a tick failure can't surface as an
-        // unhandled promise rejection and crash the host process. #processTick
-        // already logs its own errors and notifies onError, so we only need a
-        // belt-and-braces logger.error for anything that escapes.
-        void this.#runTick().catch(err => {
-          this.logger.error('Scheduler tick crashed', { error: err });
-        });
-      }, this.#config.tickIntervalMs);
-
-      // Don't keep the process alive solely because it has active schedules.
-      // Optional call: on runtimes where setInterval returns a number
-      // (e.g. Cloudflare Workers) there is no unref and nothing to release.
-      this.#intervalHandle.unref?.();
+      // Run one tick immediately so newly-due schedules don't wait, then arm
+      // the timer for the next one.
+      this.#wakeRequested = true;
+      await this.#runLoop();
     } catch (err) {
       // Reset state so a future start() can retry. Without this, a failed
-      // warm-up tick would leave #started=true with no interval armed and
+      // warm-up tick would leave #started=true with no timer armed and
       // every subsequent start() call would silently no-op.
       this.#started = false;
       this.#stopping = false;
@@ -125,11 +114,15 @@ export class Scheduler extends MastraBase {
     if (!this.#started) return;
     this.#stopping = true;
 
-    if (this.#intervalHandle) {
-      clearInterval(this.#intervalHandle);
-      this.#intervalHandle = undefined;
-    }
+    this.#clearTimer();
 
+    if (this.#loop) {
+      try {
+        await this.#loop;
+      } catch {
+        // tick errors are already logged; swallow during shutdown
+      }
+    }
     if (this.#inflightTick) {
       try {
         await this.#inflightTick;
@@ -149,13 +142,104 @@ export class Scheduler extends MastraBase {
 
   /**
    * Run a single tick. Public for tests; production callers should rely
-   * on the interval started by `start()`.
+   * on the timer started by `start()`.
    */
   async tick(): Promise<void> {
     await this.#runTick();
   }
 
+  /**
+   * Tick now and re-arm the timer. Call when a schedule was created, resumed
+   * or moved earlier, since the scheduler may be sleeping until a later fire.
+   */
+  wake(): void {
+    if (!this.#started || this.#stopping) return;
+    this.#wakeRequested = true;
+    if (this.#loop) return;
+    this.#clearTimer();
+    // Swallow rejections so a tick failure can't surface as an unhandled
+    // rejection and crash the host process. #processTick already logs its
+    // own errors; this is a belt-and-braces log for anything that escapes.
+    void this.#runLoop().catch(err => {
+      this.logger.error('Scheduler tick crashed', { error: err });
+    });
+  }
+
   // -------- Internals --------
+
+  /**
+   * Tick, then sleep until the earliest active schedule is due instead of
+   * polling storage on a fixed interval. A wake that lands mid-loop ticks
+   * again before the timer is armed.
+   */
+  #runLoop(): Promise<void> {
+    const loop = this.#loopOnce().finally(() => {
+      if (this.#loop === loop) this.#loop = undefined;
+    });
+    this.#loop = loop;
+    return loop;
+  }
+
+  async #loopOnce(): Promise<void> {
+    let delay: number | undefined;
+    do {
+      this.#wakeRequested = false;
+      try {
+        await this.#runTick();
+      } catch (err) {
+        // A crashed tick must not stop the scheduler: retry at the tick interval.
+        this.logger.error('Scheduler tick crashed', { error: err });
+        this.#lastTickBusy = true;
+      }
+      if (this.#stopping || !this.#started) return;
+      delay = await this.#nextDelay();
+    } while (this.#wakeRequested && !this.#stopping && this.#started);
+    if (this.#stopping || !this.#started) return;
+
+    this.#clearTimer();
+    // No active schedules: stay idle until `wake()`.
+    if (delay === undefined) return;
+    this.#timerHandle = setTimeout(() => {
+      this.#timerHandle = undefined;
+      this.wake();
+    }, delay);
+    // Don't keep the process alive solely because it has active schedules.
+    // Optional call: on runtimes where setTimeout returns a number
+    // (e.g. Cloudflare Workers) there is no unref and nothing to release.
+    this.#timerHandle.unref?.();
+  }
+
+  /**
+   * How long to sleep before the next tick. Keeps the fixed interval while
+   * schedules are due (fires, retries, skipped targets), on storage errors,
+   * and for a scheduler explicitly enabled with `enabled: true` (a dedicated
+   * scheduler that must find rows written by processes it shares no pubsub
+   * with). Otherwise waits for the earliest active `nextFireAt` and relies on
+   * `wake()` for new schedules; with no active schedules it returns undefined
+   * and no timer is armed, so an idle app never touches storage.
+   */
+  async #nextDelay(): Promise<number | undefined> {
+    const interval = this.#config.tickIntervalMs;
+    if (this.#config.enabled === true || this.#lastTickBusy) return interval;
+    let next: Schedule[];
+    try {
+      // Every adapter returns due rows ordered by nextFireAt, so asking for one
+      // row with an unbounded `now` is a bounded earliest-fire lookup.
+      next = await this.#schedulesStore.listDueSchedules(Number.MAX_SAFE_INTEGER, 1);
+    } catch (err) {
+      this.logger.error('Failed to look up the next scheduled fire', { error: err });
+      return interval;
+    }
+    if (next.length === 0) return undefined;
+    return Math.max(interval, Math.min(next[0]!.nextFireAt - Date.now(), MAX_TIMER_DELAY_MS));
+  }
+
+  #clearTimer(): void {
+    if (this.#timerHandle) {
+      clearTimeout(this.#timerHandle);
+      this.#timerHandle = undefined;
+    }
+  }
 
   async #runTick(): Promise<void> {
     if (this.#stopping || this.#inflightTick) return;
@@ -168,12 +252,14 @@ export class Scheduler extends MastraBase {
 
   async #processTick(): Promise<void> {
     let due: Schedule[];
+    this.#lastTickBusy = true;
     try {
       due = await this.#schedulesStore.listDueSchedules(Date.now(), this.#config.batchSize);
     } catch (err) {
       this.logger.error('Failed to list due schedules', { error: err });
       return;
     }
+    this.#lastTickBusy = due.length > 0;
 
     for (const schedule of due) {
       if (this.#stopping) break;
@@ -389,7 +475,15 @@ export class Scheduler extends MastraBase {
     let triggerError: string | undefined;
 
     try {
-      await this.#publishTargetStart(schedule, runId);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await this.#publishTargetStart(schedule, runId);
+          break;
+        } catch (err) {
+          if (attempt === 2) throw err;
+          await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
+        }
+      }
     } catch (err) {
       triggerStatus = 'failed';
       triggerError = err instanceof Error ? err.message : String(err);

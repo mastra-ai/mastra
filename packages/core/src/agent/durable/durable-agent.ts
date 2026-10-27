@@ -38,6 +38,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import { beginGoalActivity, stopGoalActivity } from '../goal';
 import { MessageList } from '../message-list';
 import type { MessageListInput } from '../message-list';
+import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopeEntry, AgentScopesSnapshot } from '../scopes';
 import {
@@ -1358,6 +1359,7 @@ export class DurableAgent<
           },
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
         },
       );
       this.#assertRecoveryActive();
@@ -1618,6 +1620,7 @@ export class DurableAgent<
         }
       }
       try {
+        const persistedHead = persistedModelList?.find(entry => entry.enabled);
         const rawConfig =
           typeof (wrapped as any).toRawConfig === 'function' ? (wrapped as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
@@ -1629,6 +1632,12 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: wrapped.id,
           entityName: wrapped.name,
+          // The persisted list is the run's shape: the recovered step tries its
+          // first enabled entry first, as the live model rebound to that id, or
+          // rebuilt from the serialized config when the resolver no longer returns it.
+          attributes: modelSpanAttributes(
+            modelList?.find(entry => entry.id === persistedHead?.id)?.model ?? persistedHead?.config ?? model,
+          ),
           metadata: {
             runId,
             recovered: true,
@@ -3294,6 +3303,7 @@ export class DurableAgent<
         continuation: closeOnSuspend ? undefined : 'across-suspension',
         generation: executionFence.generation,
         ownershipLost: () => executionFence.isLost(),
+        stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
       },
     );
 
@@ -3915,6 +3925,7 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: ag.id,
           entityName: ag.name,
+          attributes: modelSpanAttributes(resumeModel),
           metadata: {
             runId,
             resumed: true,
@@ -4132,6 +4143,7 @@ export class DurableAgent<
           continuation: closeOnSuspend ? undefined : 'across-suspension',
           generation: executionFence.generation,
           ownershipLost: () => executionFence.isLost(),
+          stepOwner: () => getRunRegistryEntry(runId, this.#mastra),
         },
       );
     }

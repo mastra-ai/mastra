@@ -1,33 +1,17 @@
-import { MastraClientError } from '@mastra/client-js';
 import { useTraceQuery, useTraceQueryLatest } from '@mastra/react/hooks/traces';
 import type { TraceQueryArgs, UseTraceQueryArgs } from '@mastra/react/hooks/traces';
 import { useEffect, useMemo, useState } from 'react';
 import { toTracesListViewTraces } from '../components/traces-list-view-adapter';
+import {
+  OBSERVABILITY_LIST_HORIZON_MS,
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+  OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+  fixedWindowRefetchInterval,
+  recoveryRefetchInterval,
+} from '@/domains/observability/list-polling';
 
-export const TRACES_LIST_REFETCH_INTERVAL_MS = 10_000;
-/** Delta polls only ask for what changed since the cursor, so they can run less often. */
-export const TRACES_LIST_DELTA_POLL_INTERVAL_MS = 30_000;
-/** How far past the anchor a delta-polled rolling window reaches, so traces started after mount still match. */
-export const TRACES_LIST_DELTA_HORIZON_MS = 24 * 60 * 60 * 1000;
 /** Fixed clock for comparing selections: filter and date changes move the query, time passing does not. */
 const SELECTION_CLOCK = new Date(0);
-
-/** The server refused the request (e.g. a time range over its cap); retrying cannot change that. */
-export function isRejectedTraceListRequest(error: unknown): boolean {
-  return error instanceof MastraClientError && error.status >= 400 && error.status < 500;
-}
-
-export function fixedWindowRefetchInterval(error: unknown): number | false {
-  return isRejectedTraceListRequest(error) ? false : TRACES_LIST_REFETCH_INTERVAL_MS;
-}
-
-/**
- * For an infinite list that must not reload its pages on a timer: it only reloads to recover from a
- * transient failure. With delta polling, delta polls bring the new traces instead.
- */
-export function recoveryRefetchInterval(error: unknown): number | false {
-  return error && !isRejectedTraceListRequest(error) ? TRACES_LIST_REFETCH_INTERVAL_MS : false;
-}
 
 export interface UseTracesListSourceArgs {
   query: (now: Date) => TraceQueryArgs;
@@ -85,7 +69,7 @@ export function useTracesListSource({
     delta && rolling && built.timeRange
       ? {
           ...built,
-          timeRange: { ...built.timeRange, to: new Date(now.getTime() + TRACES_LIST_DELTA_HORIZON_MS).toISOString() },
+          timeRange: { ...built.timeRange, to: new Date(now.getTime() + OBSERVABILITY_LIST_HORIZON_MS).toISOString() },
         }
       : built;
   const query = orderBy ? { ...anchored, orderBy } : anchored;
@@ -106,14 +90,14 @@ export function useTracesListSource({
     query,
     limit,
     enabled: enabled && delta && autoRefetch,
-    refetchInterval: TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+    refetchInterval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
     queryOptions: { refetchOnWindowFocus: autoRefetch },
   });
 
   // Moving the query key refreshes the cursor chain once, without a second polling request.
   useEffect(() => {
     if (delta || !autoRefetch || !rolling || result.error) return;
-    const timer = setInterval(() => setTickNow(new Date()), TRACES_LIST_REFETCH_INTERVAL_MS);
+    const timer = setInterval(() => setTickNow(new Date()), OBSERVABILITY_LIST_REFETCH_INTERVAL_MS);
     return () => clearInterval(timer);
   }, [delta, autoRefetch, rolling, result.error]);
 

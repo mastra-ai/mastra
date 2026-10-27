@@ -277,6 +277,8 @@ export interface AgentControllerRequestOptions {
 
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
+  /** Set to false to omit full display_state_changed snapshots, including the initial snapshot. Defaults to true. */
+  displayState?: boolean;
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
   /**
@@ -437,10 +439,13 @@ export class AgentControllerSession extends BaseResource {
       const abort = new AbortController();
       currentAbort = abort;
       let openTimer: ReturnType<typeof setTimeout> | undefined;
-      const request = this.request(`${this.base()}/stream`, {
-        stream: true,
-        signal: abort.signal,
-      }) as Promise<Response>;
+      const request = this.request(
+        `${this.base()}/stream${options.displayState === false ? '?displayState=false' : ''}`,
+        {
+          stream: true,
+          signal: abort.signal,
+        },
+      ) as Promise<Response>;
       // If the timeout wins the race, a late response must be cancelled and a late
       // rejection must not surface as unhandled.
       request

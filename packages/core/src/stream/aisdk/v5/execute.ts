@@ -262,6 +262,16 @@ type ExecutionProps<OUTPUT = undefined> = {
   shouldThrowError?: boolean;
   methodType: ModelMethodType;
   generateId?: IdGenerator;
+  /**
+   * Called when a provider request fails, before it is retried. A run that lost its thread lease while the
+   * request was out stops here, so the failed request is its last.
+   */
+  onRequestFailed?: () => void;
+  /**
+   * Called when a failed request is about to be sent again, after the retry delay. A run that lost its thread
+   * lease during that delay has already stopped, so this is only reached by a run that still holds it.
+   */
+  onRequestRetry?: () => void;
 };
 
 export function execute<OUTPUT = undefined>({
@@ -281,6 +291,8 @@ export function execute<OUTPUT = undefined>({
   shouldThrowError,
   methodType,
   generateId,
+  onRequestFailed,
+  onRequestRetry,
 }: ExecutionProps<OUTPUT>) {
   const v5 = new AISDKV5InputStream({
     component: 'LLM',
@@ -436,7 +448,11 @@ export function execute<OUTPUT = undefined>({
         const pRetry = await import('p-retry');
         const retryResult = await pRetry
           .default(
-            async () => {
+            async attemptNumber => {
+              if (attemptNumber > 1) {
+                onRequestRetry?.();
+                abortSignal?.throwIfAborted();
+              }
               const firstChunkTimeout = createTimeoutAbortSignal({
                 parentSignal: abortSignal,
                 timeoutMs: methodType === 'stream' ? timeout?.firstChunkMs : undefined,
@@ -470,6 +486,8 @@ export function execute<OUTPUT = undefined>({
                 return streamResult as unknown as LanguageModelV2StreamResult;
               } catch (error) {
                 cleanupFirstChunkTimeout();
+                onRequestFailed?.();
+                abortSignal?.throwIfAborted();
                 throw error;
               }
             },

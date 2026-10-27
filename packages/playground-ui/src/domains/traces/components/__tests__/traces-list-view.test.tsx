@@ -165,6 +165,39 @@ describe('TracesListView — status column', () => {
   });
 });
 
+describe('TracesListView — time to first chunk column', () => {
+  const ttfcOnly = { visibleColumns: ['timeToFirstChunk'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFC right after Status', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFC']);
+  });
+
+  it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttfcOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstChunkMs: 412 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstChunkMs: 1830 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstChunkMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttfc = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttfc).toEqual(['412ms', '1.83s', '', '']);
+  });
+});
+
 describe('TracesListView — name column', () => {
   it('shows the primitive name, falling back to the span name', () => {
     render(

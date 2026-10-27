@@ -1850,12 +1850,23 @@ describe('createMastraCode', () => {
     // Third matcher: provider server failures use the same retry budget and visible status.
     const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
-    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
+    expect(
+      serverErrorPolicy.match!({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }),
+    ).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
     // Gateway timeouts (504) exhaust the transient budget before the
     // account-rotation processor may classify them as a persistent outage.
     expect(serverErrorPolicy.match!(Object.assign(new Error('Gateway timeout'), { statusCode: 504 }))).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Server error'), { statusCode: 500 }))).toBe(true);
+    expect(
+      serverErrorPolicy.match!(
+        Object.assign(new Error('Service Unavailable'), {
+          statusCode: 503,
+          responseBody: '{"error":{"message":"prompt is too long: 210345 tokens > 200000 maximum"}}',
+        }),
+      ),
+    ).toBe(false);
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');

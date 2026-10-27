@@ -26,6 +26,13 @@ export type TracesFilters = {
 
 export type TracesSortDirection = 'asc' | 'desc';
 
+/** Fields the traces list can be sorted by, named like the trace query's `orderBy` fields. */
+export type TracesSortField = 'startedAt' | 'timeToFirstChunkMs';
+
+export type TracesSort = { field: TracesSortField; direction: TracesSortDirection };
+
+export const DEFAULT_TRACES_SORT: TracesSort = { field: 'startedAt', direction: 'desc' };
+
 /** What the explorer emits on every change: filters and selection move together (a filter edit clears the selection). */
 export type TracesExplorerState = { selection: TracesSelection; filters: TracesFilters };
 

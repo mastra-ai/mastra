@@ -265,7 +265,7 @@ function agentTests({ version }: { version: 'v1' | 'v2' }) {
       for await (const textPart of response.textStream) {
         expect(textPart === previousText).toBe(false);
         previousText = textPart;
-        finalText = finalText + previousText;
+        finalText += previousText;
         expect(textPart).toBeDefined();
       }
 

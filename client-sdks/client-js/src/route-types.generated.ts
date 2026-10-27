@@ -23611,8 +23611,10 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
 export type GetAgentControllerControllerIdSessionsSessionIdStream_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
-export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams =
-  PostAgentControllerControllerIdSessions_QueryParams;
+export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams = {
+  sessionScope?: never | undefined;
+  displayState?: boolean | undefined;
+};
 
 export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsSessionIdStream_PathParams extends never

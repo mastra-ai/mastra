@@ -430,6 +430,21 @@ describe('AgentController Resource', () => {
     });
   });
 
+  it('passes displayState=false to the session stream', async () => {
+    mockSse([]);
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        displayState: false,
+        onEvent: () => {},
+      });
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?displayState=false',
+    );
+    sub.unsubscribe();
+  });
+
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {
     const createdAt = '2026-01-01T00:00:00.000Z';
     const message = {
