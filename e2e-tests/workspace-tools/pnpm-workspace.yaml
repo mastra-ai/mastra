@@ -3,12 +3,14 @@ packages:
 
 # Security floors (Vanta/Dependabot 2026-09-21): scrub nested lock residuals.
 overrides:
+  # Vanta 2026-10-26: CVE-2026-111181 (body-parser <1.20.9), via verdaccio -> express 4
+  body-parser@<1.20.9: 1.20.9
   # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
   'vite@>=8.0.0 <8.3.3': 8.3.4
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
   qs@>=6.7.0 <6.16.0: 6.16.0
-  fast-uri@<3.1.8: 3.1.8
+  fast-uri@<3.1.9: 3.1.9
   fast-uri@>=4.0.0 <4.1.5: 4.2.1
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
@@ -51,4 +53,4 @@ overrides:
 allowBuilds:
   esbuild: true
 patchedDependencies:
-  'body-parser@1.20.6': patches/body-parser@1.20.6.patch
+  'body-parser@1.20.9': patches/body-parser@1.20.9.patch

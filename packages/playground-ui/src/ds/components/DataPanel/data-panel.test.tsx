@@ -312,6 +312,30 @@ describe('DataPanel', () => {
       expect(separator.compareDocumentPosition(list) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it('puts a divider between every block that follows the heading', () => {
+      render(
+        <TooltipProvider>
+          <DataPanel open title="Span">
+            <DataPanel.Header>
+              <DataPanel.HeaderContent>
+                <DataPanel.Heading>Span</DataPanel.Heading>
+                <span>Run id</span>
+                <DataPanel.Metadata>
+                  <DataPanel.Meta>12:28 PM</DataPanel.Meta>
+                </DataPanel.Metadata>
+              </DataPanel.HeaderContent>
+            </DataPanel.Header>
+          </DataPanel>
+        </TooltipProvider>,
+      );
+      const content = screen.getByRole('heading', { name: 'Span' }).parentElement;
+      if (!content) throw new Error('header content not rendered');
+      const order = Array.from(content.children).map(el =>
+        el.getAttribute('aria-hidden') === 'true' ? '|' : el.textContent,
+      );
+      expect(order).toEqual(['Span', '|', 'Run id', '|', '12:28 PM']);
+    });
+
     it('does not render a separator when there is no metadata', () => {
       render(
         <TooltipProvider>

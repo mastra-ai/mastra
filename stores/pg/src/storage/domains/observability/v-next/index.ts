@@ -134,6 +134,7 @@ import {
   columnExistsSQL,
   qualifiedTable,
   schemaDDL,
+  schemaExistsSQL,
   TABLE_DISCOVERY,
   TABLE_FEEDBACK_EVENTS,
   TABLE_LOG_EVENTS,
@@ -262,14 +263,21 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
       const ddlMode = mode === 'timescale' ? 'timescale' : 'partitioned';
 
-      try {
-        await this.#client.none(schemaDDL(this.#schema));
-      } catch (error) {
-        // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
-        // init() calls against a fresh schema can both pass the
-        // existence probe and one will surface 42P06 or a 23505 on
-        // pg_namespace_nspname_index. Treat it as success.
-        if (!isDuplicateSchemaError(error)) throw error;
+      // Only issue CREATE SCHEMA when the schema is missing. Postgres checks
+      // the database-level CREATE privilege before the IF NOT EXISTS clause,
+      // so running it unconditionally fails with 42501 for roles that can
+      // create tables in an existing schema but cannot create schemas.
+      const schemaExists = await this.#client.oneOrNone(schemaExistsSQL, [this.#schema]);
+      if (!schemaExists) {
+        try {
+          await this.#client.none(schemaDDL(this.#schema));
+        } catch (error) {
+          // `CREATE SCHEMA IF NOT EXISTS` is not atomic; two concurrent
+          // init() calls against a fresh schema can both pass the
+          // existence probe and one will surface 42P06 or a 23505 on
+          // pg_namespace_nspname_index. Treat it as success.
+          if (!isDuplicateSchemaError(error)) throw error;
+        }
       }
 
       for (const ddl of allTableDDL(this.#schema, ddlMode)) {

@@ -117,9 +117,11 @@ describe('LogsPage log drawer', () => {
   beforeEach(() => {
     if (!Element.prototype.scrollIntoView) Element.prototype.scrollIntoView = () => {};
     useDrawerHandlers();
-    // jsdom has no layout; give the list viewport a size so the virtualizer renders rows.
+    // jsdom has no layout; give the list viewport a size (the virtualizer reads clientWidth/clientHeight) so the virtualizer renders rows.
     vi.spyOn(HTMLElement.prototype, 'offsetHeight', 'get').mockReturnValue(800);
     vi.spyOn(HTMLElement.prototype, 'offsetWidth', 'get').mockReturnValue(1200);
+    vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(800);
+    vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(1200);
   });
 
   afterEach(() => {

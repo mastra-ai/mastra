@@ -2423,6 +2423,11 @@ type Shared_Type_7 = {
   connected: boolean;
   docUrl?: string | undefined;
   models: string[];
+  modelReleaseDates?:
+    | {
+        [key: string]: string;
+      }
+    | undefined;
 };
 
 type Shared_Type_8 =
@@ -23113,6 +23118,7 @@ export type GetAgentControllerControllerIdModels_Response = {
     id: string;
     provider: string;
     modelName: string;
+    releaseDate?: string | undefined;
     hasApiKey: boolean;
     useCount: number;
   }[];
@@ -23605,8 +23611,10 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
 export type GetAgentControllerControllerIdSessionsSessionIdStream_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
-export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams =
-  PostAgentControllerControllerIdSessions_QueryParams;
+export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams = {
+  sessionScope?: never | undefined;
+  displayState?: boolean | undefined;
+};
 
 export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsSessionIdStream_PathParams extends never

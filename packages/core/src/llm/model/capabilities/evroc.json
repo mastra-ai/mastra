@@ -40,18 +40,10 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "toggle"
-      },
+    "mistralai/Mistral-Medium-3.5-128B": [
       {
         "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "moonshotai/Kimi-K2.6": [
-      {
-        "type": "budget_tokens"
+        "values": ["none", "high"]
       }
     ],
     "evroc/roc": [
@@ -62,6 +54,20 @@
     "google/gemma-4-26B-A4B-it": [
       {
         "type": "toggle"
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "Qwen/Qwen3.6-35B-A3B": [
@@ -76,12 +82,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
-      }
-    ],
-    "mistralai/Mistral-Medium-3.5-128B": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
       }
     ]
   }

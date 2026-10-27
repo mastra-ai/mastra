@@ -643,7 +643,7 @@ export class LibSQLDB extends MastraBase {
   }): Promise<number> {
     const parsedTableName = parseSqlIdentifier(tableName, 'table name');
 
-    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? `${whereClause.sql}` : ''}`;
+    const statement = `SELECT COUNT(*) as count FROM ${parsedTableName} ${whereClause ? whereClause.sql : ''}`;
 
     const result = await this.client.execute({
       sql: statement,

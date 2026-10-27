@@ -16,8 +16,8 @@ export async function selectScorer(): Promise<ScorerTemplate[] | null> {
     if (!obj) return acc;
     obj.push({
       value: curr.id,
-      label: `${curr.name}`,
-      hint: `${curr.description}`,
+      label: curr.name,
+      hint: curr.description,
     });
     return acc;
   }, {});
@@ -151,5 +151,4 @@ async function showInteractivePrompt(providedCustomDir?: string) {
   if (containsSuccessfulWrites) {
     showSuccessNote();
   }
-  return;
 }

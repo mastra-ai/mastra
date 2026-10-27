@@ -1,5 +1,10 @@
 import { SpanType } from '@mastra/core/observability';
-import { planThreadRowsQuery, threadQueryResponseSchema } from '@mastra/core/storage';
+import {
+  parseTraceAggregateRequest,
+  planThreadRowsQuery,
+  planTraceAggregate,
+  threadQueryResponseSchema,
+} from '@mastra/core/storage';
 import type { CreateSpanRecord, ObservabilityStorage, ThreadQueryRequest, ThreadQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
@@ -73,6 +78,42 @@ export function createThreadQueryTests(
       expect(
         (await query({ where: { op: 'gte', left: { path: 'traceCount' }, right: { literal: 3 } } })).threads,
       ).toHaveLength(1);
+    });
+
+    it('counts each thread the way aggregateTraces counts it over the full retained history', async () => {
+      const done = (traceId: string, seconds: number, endSeconds: number, extra: Partial<CreateSpanRecord> = {}) =>
+        root(traceId, seconds, { endedAt: at(endSeconds), ...extra });
+      // Stored versions of one root with different end times (and so different dedupe keys)
+      // must count once, in both APIs.
+      await getStorage().batchCreateSpans({ records: [done('copied', 15, 16)] });
+      await getStorage().batchCreateSpans({ records: [done('copied', 15, 400)] });
+      await getStorage().batchCreateSpans({
+        records: [
+          done('before-window', -300, -299),
+          done('after-window', 300, 301),
+          done('copied', 15, 16, { spanId: 'child', parentSpanId: 'root-copied' }),
+          done('other-thread', 12, 13, { threadId: 'thread-b' }),
+          done('other-thread-history', -120, -119, { threadId: 'thread-b' }),
+          done('outside-scope', 14, 15, { resourceId: 'resource-b' }),
+        ],
+      });
+      const rows = (await query({}, scope)).threads;
+      expect(Object.fromEntries(rows.map(row => [row.threadId, row.traceCount]))).toEqual({
+        'thread-a': 3,
+        'thread-b': 2,
+      });
+      const aggregate = await getStorage().aggregateTraces(
+        planTraceAggregate(
+          parseTraceAggregateRequest({
+            timeRange: { from: at(-3600).toISOString(), to: at(3600).toISOString() },
+            groupBy: ['threadId'],
+            measures: ['count'],
+          }),
+          { scope },
+        ),
+      );
+      const counts = new Map(aggregate.rows.map(row => [row.dimensions?.threadId, row.measures.count]));
+      for (const row of rows) expect(row.traceCount, row.threadId).toBe(counts.get(row.threadId));
     });
 
     it('distinguishes trace starts, thread starts and maximum thread end time', async () => {

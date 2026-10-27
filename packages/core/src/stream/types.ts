@@ -14,6 +14,7 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
@@ -1284,6 +1285,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
   loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
+  /** The agent producing this output, passed to output processors as `agent`. */
+  agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;

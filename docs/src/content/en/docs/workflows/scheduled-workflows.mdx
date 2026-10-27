@@ -62,6 +62,8 @@ Only the environment variable triggers the switch, because `createWorkflow` runs
 Pass an object to `schedule` for a workflow that fires on one cadence:
 
 ```typescript title="src/mastra/workflows/daily-report.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
 const dailyReport = createWorkflow({
   id: 'daily-report',
   schedule: {
@@ -87,6 +89,8 @@ Fields:
 Pass an array to fire the same workflow on multiple cadences. Each entry needs a unique stable `id`:
 
 ```typescript title="src/mastra/workflows/status-check.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
 const statusCheck = createWorkflow({
   id: 'status-check',
   schedule: [

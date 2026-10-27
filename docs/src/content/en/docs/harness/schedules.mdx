@@ -172,6 +172,9 @@ The same operations are available from `@mastra/client-js` over the `/api/schedu
 Hooks let you run code at key points in an agent schedule's lifecycle, for example to compute fire-time parameters or react to the outcome. Configure them on the `Mastra` constructor under `schedules`. The hooks are a single flat bundle that runs for every agent's schedules; each hook context carries the firing `agentId`, so branch on it when you need per-agent behavior. Hooks live at the `Mastra` level so they apply to both code-defined and stored agents.
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { LibSQLStore } from '@mastra/libsql'
+
 const mastra = new Mastra({
   agents: { pinger },
   storage: new LibSQLStore({ id: 'mastra-storage', url: 'file:./mastra.db' }),

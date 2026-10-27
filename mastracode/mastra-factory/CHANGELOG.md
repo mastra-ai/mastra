@@ -1,5 +1,23 @@
 # create-factory
 
+## 0.3.1-alpha.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@clack/prompts@^1.8.1` ↗︎](https://www.npmjs.com/package/@clack/prompts/v/1.8.1) (from `^1.7.0`, in `dependencies`)
+  - Updated dependency [`tinyexec@^1.3.1` ↗︎](https://www.npmjs.com/package/tinyexec/v/1.3.1) (from `^1.2.4`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+- Updated dependencies [[`34983c9`](https://github.com/mastra-ai/mastra/commit/34983c9bbb6d22538b86371463af3797259aaf55), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - mastra@1.36.0-alpha.4
+
+## 0.3.1-alpha.3
+
+### Patch Changes
+
+- Updated dependencies [[`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb)]:
+  - mastra@1.36.0-alpha.3
+
 ## 0.3.1-alpha.2
 
 ### Patch Changes

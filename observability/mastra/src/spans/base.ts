@@ -58,11 +58,11 @@ const LINEAGE_KEYS = [
   'rootEntityVersionId',
 ] as const satisfies readonly (keyof SpanEntityLineage)[];
 
-/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function ownEntityVersionId(span: AnySpan): string | undefined {
   return span instanceof BaseSpan ? span.ownEntityVersionId : undefined;
 }
 
+/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   const lineage: SpanEntityLineage = {};
   for (const key of LINEAGE_KEYS) {
@@ -167,6 +167,20 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
     return parent.getParentSpanId(false);
   }
   return parent.id;
+}
+
+/**
+ * Vercel AI Gateway reports which provider served a step, and any provider
+ * attempts that failed first, only in `providerMetadata.gateway.routing`.
+ * Read it defensively so a throwing getter never skips the strip below.
+ */
+function readGatewayRouting(providerMetadata: unknown): unknown {
+  try {
+    const gateway = isPlainRecord(providerMetadata) ? providerMetadata.gateway : undefined;
+    return isPlainRecord(gateway) ? gateway.routing : undefined;
+  } catch {
+    return undefined;
+  }
 }
 
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
@@ -368,9 +382,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     try {
-      const prepared = { ...value };
+      const prepared: Record<string, unknown> = { ...value };
+      const gatewayRouting = readGatewayRouting(prepared.providerMetadata);
       delete prepared.providerMetadata;
       delete prepared.experimental_providerMetadata;
+      if (gatewayRouting !== undefined) {
+        prepared.providerMetadata = { gateway: { routing: gatewayRouting } };
+      }
       return prepared as T;
     } catch {
       return value;
@@ -632,7 +650,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
-      entityVersionId: getMetadataString('entityVersionId'),
+      entityVersionId: this.ownEntityVersionId,
       ...parentLineage,
       ...rootLineage,
       userId: getMetadataString('userId'),
@@ -680,6 +698,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),

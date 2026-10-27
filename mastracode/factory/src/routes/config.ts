@@ -1,3 +1,4 @@
+import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
@@ -45,6 +46,7 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -99,8 +101,12 @@ export interface ProviderInfo {
    * when one shadows the other.
    */
   userCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the caller's personal sign-in could not be renewed and must be redone. */
+  userCredentialExpired?: true;
   /** Tenant mode: the shared org credential for this provider, if any. */
   orgCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the shared org sign-in could not be renewed and must be redone. */
+  orgCredentialExpired?: true;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
 }
@@ -115,9 +121,17 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{
+      id?: string;
+      modelName: string;
+      provider: string;
+      hasApiKey: boolean;
+      apiKeyEnvVar?: string;
+      releaseDate?: string;
+    }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
+  getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
@@ -161,14 +175,18 @@ export async function listProviders({
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
     let userCredential: ProviderInfo['userCredential'];
+    let userCredentialExpired = false;
     let orgCredential: ProviderInfo['orgCredential'];
+    let orgCredentialExpired = false;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       // Any shared org credential (API key or org-wide OAuth) counts.
       orgKey = orgRec !== undefined;
       userCredential = userRec?.credential.type;
+      userCredentialExpired = userRec?.refreshFailedAt !== undefined;
       orgCredential = orgRec?.credential.type;
+      orgCredentialExpired = orgRec?.refreshFailedAt !== undefined;
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -195,7 +213,9 @@ export async function listProviders({
       source,
       ...(orgKey !== undefined ? { orgKey } : {}),
       ...(userCredential ? { userCredential } : {}),
+      ...(userCredentialExpired ? { userCredentialExpired: true as const } : {}),
       ...(orgCredential ? { orgCredential } : {}),
+      ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
   }
@@ -412,6 +432,7 @@ export interface ModelCatalogEntry {
   id: string;
   provider: string;
   modelName: string;
+  releaseDate?: string;
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
@@ -446,13 +467,14 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
+  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
             id,
             provider,
             modelName,
+            releaseDate,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
             ...tenantModelCredential(tenantCredentials, provider),
@@ -1036,6 +1058,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   personalThinkingLevel: ThinkingLevelSetting | null;
                 }
               | undefined;
+            let credentialTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1097,6 +1120,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const scope = z.enum(['org', 'user']).safeParse(c.req.query('scope'));
               if (!scope.success) return c.json({ error: 'invalid_model_scope' }, 400);
               tenantCredentials = allTenantCredentials?.filter(record => record.scope === scope.data);
+              if (tenant) {
+                credentialTenant = {
+                  orgId: tenantOrgId(tenant),
+                  userId: tenant.userId,
+                  credentialScope: scope.data === 'user' ? 'user' : 'factory',
+                };
+              }
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();
@@ -1104,6 +1134,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
               const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
               tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+              credentialTenant = {
+                orgId: tenantOrgId(tenant),
+                userId: tenant.userId,
+                credentialScope: credentialScope === 'user' ? 'user' : 'factory',
+              };
             }
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
@@ -1119,7 +1154,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               deploymentProviders,
               listCustomProviders,
             });
-            return c.json({ ...sessionPolicy, models });
+            if (!credentialTenant) return c.json({ ...sessionPolicy, models });
+            const modeModelId = controller.getDefaultMode?.().defaultModelId;
+            const candidate =
+              (await resolveTenantProviderDefaultModel(credentialTenant, modeModelId).catch(error => {
+                console.warn('[Factory Config] Failed to resolve a provider default model', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                return undefined;
+              })) ?? modeModelId;
+            const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
+            return c.json({ fallbackModelId, models });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
