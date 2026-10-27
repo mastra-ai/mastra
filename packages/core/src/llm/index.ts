@@ -160,7 +160,6 @@ type MastraCustomLLMOptionsKeys =
   | 'model'
   | 'onStepFinish'
   | 'experimental_output'
-  | 'messages'
   | 'onFinish'
   | 'output';
 

@@ -193,7 +193,7 @@ export abstract class SchemaCompatLayer {
 
   public defaultUnsupportedZodTypeHandler(
     value: zV3.ZodType | zV4.ZodType,
-    throwOnTypes?: readonly (v3.UnsupportedZodType | v4.UnsupportedZodType)[],
+    throwOnTypes?: readonly v3.UnsupportedZodType[],
   ): zV3.ZodType | zV4.ZodType {
     if ('_zod' in value) {
       return this.v4Layer.defaultUnsupportedZodTypeHandler(

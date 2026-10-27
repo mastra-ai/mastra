@@ -171,6 +171,7 @@ export default defineConfig({
     {
       files: ['**/*.{ts,tsx}'],
       rules: {
+        'typescript/no-duplicate-type-constituents': 'error',
         'typescript/no-meaningless-void-operator': 'error',
         'typescript/no-unnecessary-template-expression': 'error',
         'typescript/prefer-reduce-type-parameter': 'error',

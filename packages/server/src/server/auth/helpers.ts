@@ -197,11 +197,7 @@ export const canAccessPublicly = (path: string, method: string, authConfig: Mast
   return isAnyMatch(path, method, publicAccess);
 };
 
-const isAnyMatch = (
-  path: string,
-  method: string,
-  patterns: MastraAuthConfig['protected'] | MastraAuthConfig['public'],
-): boolean => {
+const isAnyMatch = (path: string, method: string, patterns: MastraAuthConfig['protected']): boolean => {
   if (!patterns) {
     return false;
   }

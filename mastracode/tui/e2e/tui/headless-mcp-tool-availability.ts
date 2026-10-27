@@ -73,7 +73,7 @@ async function runHeadlessInProcess(terminal: { write: (text: string) => void })
     else callback?.();
     return true;
   }) as typeof process.stderr.write;
-  process.exit = ((code?: string | number | null | undefined) => {
+  process.exit = ((code?: string | number | null) => {
     throw new Error(`MC_E2E_HEADLESS_EXIT:${code ?? 0}`);
   }) as typeof process.exit;
 

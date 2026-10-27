@@ -343,7 +343,7 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
    * marked loaded so the next step can retry.
    */
   private async loadCallerMemorySettings(
-    requestContext: ProcessInputStepArgs['requestContext'] | ProcessInputArgs['requestContext'],
+    requestContext: ProcessInputArgs['requestContext'],
     binding?: FactoryRunBindingRecord | null,
     force = false,
   ): Promise<void> {

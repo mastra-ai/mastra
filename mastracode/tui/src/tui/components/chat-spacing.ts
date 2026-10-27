@@ -35,8 +35,8 @@ export function getChatSpacingKind(component: Component | undefined): ChatSpacin
 export function getSpacingBetweenComponents(
   prev: Component | undefined,
   next: Component | undefined,
-  _prevPrev?: Component | undefined,
-  _nextNext?: Component | undefined,
+  _prevPrev?: Component,
+  _nextNext?: Component,
 ): number {
   const prevKind = getChatSpacingKind(prev);
   const nextKind = getChatSpacingKind(next);

@@ -288,7 +288,7 @@ async function withTerminalProcessOutput<T>(terminal: Terminal, run: () => Promi
   const previousExit = process.exit;
   runtimeConsole.info = (...values: unknown[]) => writeConsoleLineToTerminal(terminal, values);
   runtimeConsole.log = (...values: unknown[]) => writeConsoleLineToTerminal(terminal, values);
-  process.exit = ((code?: string | number | null | undefined) => {
+  process.exit = ((code?: string | number | null) => {
     if (code !== undefined && code !== null && code !== 0 && code !== '0') {
       throw new Error(`process.exit(${String(code)}) called during terminal backend run`);
     }

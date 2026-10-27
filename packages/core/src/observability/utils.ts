@@ -41,8 +41,8 @@ export function generateSignalId(): string {
  * also apply `toolChoice` and drop names that are not registered tools.
  */
 export function getStepAvailableToolNames(
-  tools?: Record<string, unknown> | undefined,
-  activeTools?: readonly string[] | undefined,
+  tools?: Record<string, unknown>,
+  activeTools?: readonly string[],
 ): string[] | undefined {
   if (activeTools !== undefined) {
     return [...activeTools];

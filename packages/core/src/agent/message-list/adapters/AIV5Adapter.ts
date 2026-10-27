@@ -867,7 +867,7 @@ export class AIV5Adapter {
    */
   private static getDataStringFromAIV5DataPart(part: AIV5Type.ImagePart | AIV5Type.FilePart): string {
     let mimeType: string;
-    let data: AIV5.FilePart['data'] | AIV5.ImagePart['image'];
+    let data: AIV5.FilePart['data'];
     if ('data' in part) {
       mimeType = part.mediaType || 'application/octet-stream';
       data = part.data;

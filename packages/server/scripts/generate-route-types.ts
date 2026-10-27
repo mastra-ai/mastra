@@ -4,7 +4,7 @@ import { fileURLToPath } from 'node:url';
 
 import { format } from 'oxfmt';
 import type { FormatConfig } from 'oxfmt';
-import type ts from 'typescript-classic';
+import ts from 'typescript-classic';
 import type * as z4 from 'zod/v4/core';
 import { printNode, zodToTs } from 'zod-to-ts';
 
@@ -39,6 +39,47 @@ type PathRouteMethod = {
   routeKey: string;
   contractName: string;
 };
+
+/** Flatten nested unions/intersections from Zod wrappers before comparing their constituents. */
+function printNormalizedNode(node: ts.Node): string {
+  const result = ts.transform(node, [
+    context => {
+      const visit: ts.Visitor = node => {
+        const visited = ts.visitEachChild(node, visit, context);
+        if (!ts.isUnionTypeNode(visited) && !ts.isIntersectionTypeNode(visited)) {
+          return visited;
+        }
+
+        const constituents = new Map<string, ts.TypeNode>();
+        const collect = (type: ts.TypeNode): void => {
+          while (ts.isParenthesizedTypeNode(type)) {
+            type = type.type;
+          }
+          if (type.kind === visited.kind && (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type))) {
+            type.types.forEach(collect);
+          } else {
+            constituents.set(printNode(type), type);
+          }
+        };
+        visited.types.forEach(collect);
+        const types = [...constituents.values()];
+        if (types.length === 1) {
+          return types[0]!;
+        }
+        return ts.isUnionTypeNode(visited)
+          ? ts.factory.createUnionTypeNode(types)
+          : ts.factory.createIntersectionTypeNode(types);
+      };
+      return node => ts.visitNode(node, visit) as ts.Node;
+    },
+  ]);
+
+  try {
+    return printNode(result.transformed[0]!);
+  } finally {
+    result.dispose();
+  }
+}
 
 function toPascalCase(value: string): string {
   return value
@@ -191,7 +232,7 @@ function createSchemaOverrideFunction(io: ZodIo) {
       });
       state.promotionInProgress.delete(schema);
 
-      const printed = printNode(node);
+      const printed = printNormalizedNode(node);
       if (printed.length < MIN_SHARED_TYPE_LENGTH) {
         sharedName = null;
       } else {
@@ -239,7 +280,7 @@ function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: bo
     overrideFunction: createSchemaOverrideFunction(io),
   });
 
-  const printed = printNode(node);
+  const printed = printNormalizedNode(node);
   const existingTextAlias = state.renderedTextAliases.get(printed);
   if (existingTextAlias) {
     state.renderedSchemaAliases.set(schema, existingTextAlias);
@@ -283,19 +324,21 @@ function renderRequestType(
   body: GeneratedRoutePart | null,
   deprecated: boolean,
 ): string {
-  const pathParamsType = getRouteMapTypeName(pathParams);
-  const queryParamsType = getRouteMapTypeName(queryParams);
-  const bodyType = getRouteMapTypeName(body);
+  const parts: string[] = [];
+  if (pathParams) {
+    const type = pathParams.aliasName;
+    parts.push(`(${type} extends never ? {} : { params: ${type} })`);
+  }
+  if (queryParams) {
+    const type = queryParams.aliasName;
+    parts.push(`(${type} extends never ? {} : {} extends ${type} ? { query?: ${type} } : { query: ${type} })`);
+  }
+  if (body) {
+    const type = body.aliasName;
+    parts.push(`(${type} extends never ? {} : {} extends ${type} ? { body?: ${type} } : { body: ${type} })`);
+  }
 
-  return `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = Simplify<
-  (${pathParamsType} extends never ? {} : { params: ${pathParamsType} }) &
-    (${queryParamsType} extends never
-      ? {}
-      : {} extends ${queryParamsType}
-        ? { query?: ${queryParamsType} }
-        : { query: ${queryParamsType} }) &
-    (${bodyType} extends never ? {} : {} extends ${bodyType} ? { body?: ${bodyType} } : { body: ${bodyType} })
->;`;
+  return `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = Simplify<${parts.join(' &\n') || '{}'}>;`;
 }
 
 export type RouteDefinition = (typeof SERVER_ROUTES)[number];
@@ -383,7 +426,7 @@ function generateRouteTypesFileContent(routes: readonly RouteDefinition[]): stri
 
   const auxiliaryDeclarations = (['input', 'output'] as const)
     .flatMap(io => [...renderStates[io].auxiliaryTypeStore.definitions.values()])
-    .map(definition => printNode(definition.node))
+    .map(definition => printNormalizedNode(definition.node))
     .join('\n\n');
 
   const sharedDeclarations = (['input', 'output'] as const)

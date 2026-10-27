@@ -329,7 +329,7 @@ export class LangSmithExporter extends TrackingExporter<
   protected override async _buildRoot(_args: {
     span: AnyExportedSpan;
     traceData: LangSmithTraceData;
-  }): Promise<LangSmithRoot | undefined> {
+  }): Promise<LangSmithRoot> {
     throw new Error('Method not implemented.');
   }
 

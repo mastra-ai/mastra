@@ -4,12 +4,9 @@ import { MASTRA_THREAD_ID_KEY } from '@mastra/core/request-context';
 import type { RequestContext } from '@mastra/core/request-context';
 
 import type { ModelByInputTokens } from './model-by-input-tokens';
-import type { ResolvedObservationConfig, ResolvedReflectionConfig } from './types';
+import type { ObservationalMemoryModel } from './types';
 
-type OmTracingModel = Exclude<
-  ResolvedObservationConfig['model'] | ResolvedReflectionConfig['model'],
-  ModelByInputTokens
->;
+type OmTracingModel = Exclude<ObservationalMemoryModel, ModelByInputTokens>;
 
 type OmTracingPhase = 'observer' | 'observer-multi-thread' | 'reflector';
 
