@@ -7,7 +7,7 @@ import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '.
 import { geminiChunk, geminiFinal, useScriptedProviders } from '../scripted-sse';
 
 /**
- * Ported from the AI SDK `result.fullStream` suite (test-utils/fullStream.ts),
+ * Ported from the AI SDK `result.fullStream` suite (formerly test-utils/fullStream.ts),
  * which drove loop() with hand-built V2/V3 stream parts and snapshotted the
  * output. Here real v6 providers parse scripted wire responses (Gemini for
  * reasoning/sources/files, OpenAI Responses for `rs_*` reasoning items), so the

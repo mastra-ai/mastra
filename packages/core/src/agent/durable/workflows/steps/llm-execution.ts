@@ -15,6 +15,7 @@ import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
+import { fallbackResponseMetadata } from '../../../../loop/shared/fallback-response-metadata';
 import { injectBackgroundTaskPrompt } from '../../../../loop/shared/inject-background-task-prompt';
 import { trackOpenReasoning, watchInterruptibleStream } from '../../../../loop/shared/interruptible-stream';
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../../../loop/shared/merge-llm-call-headers';
@@ -1246,13 +1247,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';
             let usage: any = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
-            // Seeded like the regular loop's AgenticRunState so a provider that sends no
-            // response-metadata (e.g. Gemini) still reports an id and timestamp; provider
-            // values override these in the 'response-metadata' case below.
-            let responseMetadata: any = {
-              id: mastra?.generateId?.() || globalThis.crypto.randomUUID(),
-              timestamp: new Date(),
-            };
+            // Provider values override these in the 'response-metadata' case below.
+            let responseMetadata: any = fallbackResponseMetadata({
+              generateId: mastra ? () => mastra.generateId() : undefined,
+            });
             // Tracks whether this attempt produced any actual model output.
             // Used to detect a zero-output stream that finishes with reason
             // 'other' (#21897, ported from the regular loop's #22273 fix).
