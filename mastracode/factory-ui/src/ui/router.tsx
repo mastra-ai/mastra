@@ -25,7 +25,7 @@ import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
-import { RouteErrorPage } from './layouts/RouteErrorPage';
+import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
@@ -183,7 +183,7 @@ export function createAppRoutes(): RouteObject[] {
               children: [
                 {
                   // Errors replace only the page, preserving the shell and its providers.
-                  errorElement: <RouteErrorPage />,
+                  errorElement: <AppRouteErrorPage />,
                   children: [
                     { index: true, element: <FactoryHomeRedirect /> },
                     { path: 'workspaces/:sessionId', lazy: loadNewPage },

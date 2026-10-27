@@ -1,11 +1,23 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import { useRouteError } from 'react-router';
+
+import { useSidebarHeaderSlots } from '../domains/chat/components/useSidebarHeaderSlots';
 
 // Browsers report failed module fetches differently; Vite also rejects the
 // import when a page's extracted stylesheet cannot be preloaded.
 const pageLoadError =
   /Failed to fetch dynamically imported module|error loading dynamically imported module|Importing a module script failed|Unable to preload CSS/i;
+
+export function AppRouteErrorPage() {
+  const slots = useSidebarHeaderSlots();
+  return (
+    <PageLayout {...slots}>
+      <RouteErrorPage />
+    </PageLayout>
+  );
+}
 
 export function RouteErrorPage() {
   const error = useRouteError();

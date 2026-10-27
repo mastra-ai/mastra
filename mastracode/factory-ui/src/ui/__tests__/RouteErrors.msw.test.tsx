@@ -1,4 +1,5 @@
 import { act, screen } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
@@ -119,5 +120,19 @@ describe('unavailable page chunks', () => {
     expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
     expect(screen.queryByRole('heading', { name: 'Could not load this page' })).not.toBeInTheDocument();
     expect(screen.queryByText('Unexpected Application Error!')).not.toBeInTheDocument();
+  });
+
+  it('lets users reopen a persisted collapsed sidebar and return to Work after a page fails', async () => {
+    localStorage.setItem('mastracode-web:sidebar:state', 'collapsed');
+    renderAt('/factories/fp-1/rules');
+
+    await screen.findByRole('heading', { name: 'Something went wrong' });
+    const toggle = screen.getByRole('button', { name: 'Toggle sidebar' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole('link', { name: 'Work' }));
+
+    expect(await screen.findByRole('heading', { name: 'Connect a repository to start intake' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload page' })).not.toBeInTheDocument();
   });
 });
