@@ -1,7 +1,7 @@
 import { useTools } from '@mastra/react/hooks/tools';
 import type { SpanRecord } from '../../types';
 import { SpanPayloadList, SpanPayloadListName } from './span-payload-primitives';
-import { getSpanTools, getWorkflowToolId } from './span-payload-registry';
+import { getDelegatedToolHref, getSpanTools } from './span-payload-registry';
 import type { SpanTool } from './span-payload-registry';
 import { SpanPayloadSection } from './span-payload-section';
 import type { SpanPayloadSectionProps } from './span-payload-section';
@@ -31,10 +31,9 @@ function SpanToolList({ tools }: { tools: SpanTool[] }) {
     <SpanPayloadList
       slot="span-tools"
       items={tools.map(tool => {
-        const workflowId = getWorkflowToolId(tool.id);
         const registeredId = registered.get(tool.id);
         // Workspace, skill and agent-only tools are not in the registry, so they have no page to open.
-        const href = workflowId ? paths.workflowLink(workflowId) : registeredId ? paths.toolLink(registeredId) : '';
+        const href = getDelegatedToolHref(paths, tool.id) || (registeredId ? paths.toolLink(registeredId) : '');
         return {
           key: tool.id,
           description: tool.description,

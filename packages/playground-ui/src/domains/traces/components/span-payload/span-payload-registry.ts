@@ -3,6 +3,7 @@ import type { ProcessorRunInputByPhase, ProcessorSpanPayload } from '@mastra/cor
 import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
 import { getSpanSignal } from '@/domains/traces/utils/span-signal';
+import type { LinkComponentPaths } from '@/lib/framework';
 
 type CoreSpanRecord = Parameters<typeof describeSpanInput>[0];
 
@@ -91,15 +92,30 @@ export function getProcessorRunContext(input: ProcessorSpanPayload<ProcessorRunI
 }
 
 /** A tool offered to the model, with the id the tool registry knows it by. */
-const WORKFLOW_TOOL_PREFIX = 'workflow-';
+/** Who a tool hands the work to when an agent exposes a workflow or sub-agent as a tool. */
+export interface DelegatedTool {
+  kind: 'workflow' | 'agent';
+  /** The key the agent registered it under, which the workflow and agent pages resolve. */
+  key: string;
+}
+
+const DELEGATED_TOOL = /^(workflow|agent)-(.+)$/;
 
 /**
- * The workflow behind a tool name, if it is one. Agents expose each workflow they
- * own as a tool named `workflow-<key>`, and the workflow page resolves that key.
+ * The workflow or sub-agent behind a tool name, if it is one. Agents expose each
+ * workflow they own as `workflow-<key>` and each sub-agent as `agent-<key>`.
  */
-export function getWorkflowToolId(toolName: string): string | undefined {
-  if (!toolName.startsWith(WORKFLOW_TOOL_PREFIX)) return undefined;
-  return toolName.slice(WORKFLOW_TOOL_PREFIX.length) || undefined;
+export function getDelegatedTool(toolName: string): DelegatedTool | undefined {
+  const match = DELEGATED_TOOL.exec(toolName);
+  if (!match?.[2]) return undefined;
+  return { kind: match[1] === 'workflow' ? 'workflow' : 'agent', key: match[2] };
+}
+
+/** The page of the workflow or sub-agent behind a tool name, or `''` when it is neither. */
+export function getDelegatedToolHref(paths: LinkComponentPaths, toolName: string): string {
+  const delegated = getDelegatedTool(toolName);
+  if (!delegated) return '';
+  return delegated.kind === 'workflow' ? paths.workflowLink(delegated.key) : paths.agentLink(delegated.key);
 }
 
 export interface SpanTool {
