@@ -1168,7 +1168,7 @@ describe('Scheduler', () => {
       updatedAt: Date.now(),
     });
 
-    it('does not poll storage on every tick when nothing is scheduled', async () => {
+    it('only checks storage again at the max sleep cap when nothing is scheduled', async () => {
       const { store } = makeStore();
       const scheduler = new Scheduler({
         schedulesStore: store,
@@ -1183,11 +1183,49 @@ describe('Scheduler', () => {
       await wait(250);
       // Warm-up tick plus one bounded earliest-fire lookup, then nothing.
       expect(listDue).toHaveBeenCalledTimes(2);
-      // No timer is armed at all: an idle scheduler waits for a wake.
-      expect(stSpy.mock.calls.some(call => (call[1] ?? 0) >= 60_000)).toBe(false);
+      // The only timer is the one-hour safety check.
+      expect(stSpy.mock.calls.some(call => call[1] === 3_600_000)).toBe(true);
 
       await scheduler.stop();
       stSpy.mockRestore();
+    });
+
+    it('finds a row written straight to storage while idle once the max sleep elapses', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 20, maxSleepMs: 100 },
+      });
+
+      await scheduler.start();
+      // No wake: models a row written by a process that shares no pubsub.
+      await store.createSchedule(row('sched-direct', Date.now() - 1));
+      await wait(300);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('caps the sleep before a far-off fire at the max sleep', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      await store.createSchedule(row('sched-far', Date.now() + 365 * 24 * 3_600_000));
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { tickIntervalMs: 20, maxSleepMs: 100 },
+      });
+
+      await scheduler.start();
+      await store.createSchedule(row('sched-direct', Date.now() - 1));
+      await wait(300);
+      expect(events.map(e => e.runId)).toEqual([expect.stringMatching(/^sched_sched-direct_/)]);
+
+      await scheduler.stop();
     });
 
     it('sleeps until the earliest schedule is due, then fires it', async () => {

@@ -166,7 +166,7 @@ Removing a schedule entry from a workflow's `schedule` array deletes its row on 
 
 ## Deployment topology
 
-The built-in scheduler uses a `setInterval` tick loop to poll the schedules table and claim due rows. It dispatches workflow runs through the in-process pubsub. It assumes a long-lived host process.
+The built-in scheduler claims due rows from the schedules table and dispatches workflow runs through the in-process pubsub. Between checks it sleeps until the next schedule is due, and creating, updating, or resuming a schedule through Mastra wakes it early. It still checks storage at least once per `scheduler.maxSleepMs` (default one hour), so schedules written by a process that doesn't share its pubsub are picked up within that window. It assumes a long-lived host process.
 
 ### Long-lived host (recommended)
 

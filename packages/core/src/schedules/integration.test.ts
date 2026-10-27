@@ -450,6 +450,41 @@ describe('Agent schedules — scheduler integration', () => {
       await expect(schedulesStore.getSchedule(created.id)).resolves.not.toBeNull();
     });
 
+    it('wakes the local sleeping scheduler directly when the wake publish fails', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const storage = new MockStore();
+      const agent = makeAgent('beat-fallback');
+      const mastra = track(
+        new Mastra({
+          logger: false,
+          storage,
+          pubsub,
+          agents: { 'beat-fallback': agent },
+          notifications: { dispatch: { enabled: false } },
+          scheduler: { tickIntervalMs: 50 },
+        }),
+      );
+      await mastra.startWorkers();
+      // A yearly schedule leaves the scheduler sleeping until the one-hour cap.
+      await mastra.schedules.create({ cron: '0 0 1 1 *', prompt: 'yearly', agentId: agent.id });
+      await waitForScheduler(mastra);
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      const publish = pubsub.publish.bind(pubsub);
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event) => {
+        if (topic === SCHEDULER_WAKE_TOPIC) throw new Error('pubsub down');
+        return publish(topic, event);
+      });
+
+      const hb = await mastra.schedules.create({ cron: '* * * * * *', prompt: 'ping', agentId: agent.id });
+      const schedulesStore = (await storage.getStore('schedules'))!;
+      const initial = (await schedulesStore.getSchedule(hb.id))!;
+      await waitUntil(async () => {
+        const current = await schedulesStore.getSchedule(hb.id);
+        return !!current && current.nextFireAt !== initial.nextFireAt;
+      });
+    }, 10_000);
+
     it('does not start polling when persisting a schedule fails', async () => {
       const storage = new MockStore();
       const schedulesStore = (await storage.getStore('schedules'))!;

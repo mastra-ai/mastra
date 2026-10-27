@@ -8,6 +8,7 @@ import type { ScheduledWorkflowTrigger, SchedulerConfig } from './types';
 const TOPIC_WORKFLOWS = 'workflows';
 export const TOPIC_AGENT_SCHEDULES = 'agent-schedules';
 const DEFAULT_TICK_INTERVAL_MS = 10_000;
+const DEFAULT_MAX_SLEEP_MS = 60 * 60_000;
 const DEFAULT_BATCH_SIZE = 100;
 const DEFAULT_MISSES_BEFORE_DELETE = 3;
 const DEFAULT_STALE_SKIPS_BEFORE_ESCALATION = 5;
@@ -31,7 +32,7 @@ const MAX_TIMER_DELAY_MS = 2 ** 31 - 1;
 export class Scheduler extends MastraBase {
   #schedulesStore: SchedulesStorage;
   #pubsub: PubSub;
-  #config: Required<Pick<SchedulerConfig, 'tickIntervalMs' | 'batchSize'>> & SchedulerConfig;
+  #config: Required<Pick<SchedulerConfig, 'tickIntervalMs' | 'maxSleepMs' | 'batchSize'>> & SchedulerConfig;
 
   #timerHandle?: ReturnType<typeof setTimeout>;
   #inflightTick?: Promise<void>;
@@ -79,6 +80,7 @@ export class Scheduler extends MastraBase {
     this.#config = {
       ...config,
       tickIntervalMs: config?.tickIntervalMs ?? DEFAULT_TICK_INTERVAL_MS,
+      maxSleepMs: config?.maxSleepMs ?? DEFAULT_MAX_SLEEP_MS,
       batchSize: config?.batchSize ?? DEFAULT_BATCH_SIZE,
     };
   }
@@ -181,7 +183,7 @@ export class Scheduler extends MastraBase {
   }
 
   async #loopOnce(): Promise<void> {
-    let delay: number | undefined;
+    let delay: number;
     do {
       this.#wakeRequested = false;
       try {
@@ -197,8 +199,6 @@ export class Scheduler extends MastraBase {
     if (this.#stopping || !this.#started) return;
 
     this.#clearTimer();
-    // No active schedules: stay idle until `wake()`.
-    if (delay === undefined) return;
     this.#timerHandle = setTimeout(() => {
       this.#timerHandle = undefined;
       this.wake();
@@ -215,10 +215,11 @@ export class Scheduler extends MastraBase {
    * and for a scheduler explicitly enabled with `enabled: true` (a dedicated
    * scheduler that must find rows written by processes it shares no pubsub
    * with). Otherwise waits for the earliest active `nextFireAt` and relies on
-   * `wake()` for new schedules; with no active schedules it returns undefined
-   * and no timer is armed, so an idle app never touches storage.
+   * `wake()` for new schedules, but never longer than `maxSleepMs`. The cap
+   * also applies with no active schedules, so rows written by a process this
+   * one shares no pubsub with are still found within `maxSleepMs`.
    */
-  async #nextDelay(): Promise<number | undefined> {
+  async #nextDelay(): Promise<number> {
     const interval = this.#config.tickIntervalMs;
     if (this.#config.enabled === true || this.#lastTickBusy) return interval;
     let next: Schedule[];
@@ -230,8 +231,9 @@ export class Scheduler extends MastraBase {
       this.logger.error('Failed to look up the next scheduled fire', { error: err });
       return interval;
     }
-    if (next.length === 0) return undefined;
-    return Math.max(interval, Math.min(next[0]!.nextFireAt - Date.now(), MAX_TIMER_DELAY_MS));
+    const maxSleep = Math.max(interval, Math.min(this.#config.maxSleepMs, MAX_TIMER_DELAY_MS));
+    if (next.length === 0) return maxSleep;
+    return Math.max(interval, Math.min(next[0]!.nextFireAt - Date.now(), maxSleep));
   }
 
   #clearTimer(): void {

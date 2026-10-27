@@ -6062,6 +6062,9 @@ export class Mastra<
       await this.#pubsub.publish(SCHEDULER_WAKE_TOPIC, { type: SCHEDULER_WAKE_EVENT, runId: scheduleId, data: {} });
     } catch (err) {
       this.#logger?.warn?.('Failed to publish scheduler wake event', err as any);
+      // The wake never reached the pubsub, so the subscriber in this process
+      // won't re-arm a sleeping scheduler either. Wake it directly.
+      this.#findSchedulerWorker()?.scheduler?.wake();
     }
   }
 

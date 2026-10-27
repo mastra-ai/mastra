@@ -75,6 +75,15 @@ export type SchedulerConfig = {
    */
   tickIntervalMs?: number;
   /**
+   * Longest the scheduler sleeps between storage checks when nothing is due,
+   * including when there are no active schedules. Schedules created through
+   * Mastra wake the scheduler immediately; this bounds how long a row written
+   * by a process without shared pubsub (or directly to storage) waits to be
+   * noticed. Defaults to 3_600_000 (1 hour). Values below `tickIntervalMs`
+   * are raised to it.
+   */
+  maxSleepMs?: number;
+  /**
    * Maximum number of due schedules processed per tick. Defaults to 100.
    */
   batchSize?: number;
