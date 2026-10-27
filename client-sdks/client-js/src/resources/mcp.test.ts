@@ -255,6 +255,39 @@ describe('MCP Server Registry Client Methods', () => {
     });
   });
 
+  describe('MCP server tasks', () => {
+    const lastCall = () => (global.fetch as any).mock.calls.at(-1) as [string, RequestInit];
+
+    it('lists tasks with getMcpServerTasks(), passing limit only when given', async () => {
+      const listed = { required: false, surfaces: [], tasks: [] };
+      mockFetchResponse(listed);
+      expect(await client.getMcpServerTasks('my server')).toEqual(listed);
+      expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/my%20server/tasks`);
+
+      mockFetchResponse(listed);
+      await client.getMcpServerTasks('tasks', { limit: 20 });
+      expect(lastCall()[0]).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks?limit=20`);
+    });
+
+    it('cancels by key with cancelMcpServerTask(), encoding the key', async () => {
+      mockFetchResponse({ success: true });
+      expect(await client.cancelMcpServerTask('tasks', 'a/b+c')).toEqual({ success: true });
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/a%2Fb%2Bc/cancel`);
+      expect(init.method).toBe('POST');
+    });
+
+    it('answers input with answerMcpServerTaskInput()', async () => {
+      mockFetchResponse({ success: true });
+      const inputResponses = { approve: { action: 'accept', content: { ok: true } } };
+      await client.answerMcpServerTaskInput('tasks', 'key-1', inputResponses);
+      const [url, init] = lastCall();
+      expect(url).toBe(`${clientOptions.baseUrl}/api/mcp/tasks/tasks/key-1/input`);
+      expect(init.method).toBe('POST');
+      expect(JSON.parse(init.body as string)).toEqual({ inputResponses });
+    });
+  });
+
   describe('MCP server events', () => {
     const occurrence = {
       eventId: 'evt-1',

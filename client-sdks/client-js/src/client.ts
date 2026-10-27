@@ -980,6 +980,54 @@ export class MastraClient extends BaseResource {
   }
 
   /**
+   * Lists which tools an MCP server runs as tasks, and its recent tasks across principals
+   * (experimental). `unavailable` says why `tasks` is empty for a store that can't be listed
+   * or a resource-scoped caller.
+   * @param serverId - The ID of the MCP server.
+   * @param params - Optional `limit` on the number of tasks.
+   */
+  public getMcpServerTasks(
+    serverId: PathParams<'GET /mcp/:serverId/tasks'>['serverId'],
+    params: QueryParams<'GET /mcp/:serverId/tasks'> = {},
+  ): Promise<RouteResponse<'GET /mcp/:serverId/tasks'>> {
+    const query = params.limit === undefined ? '' : `?limit=${params.limit}`;
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks${query}`);
+  }
+
+  /**
+   * Cancels an MCP server task by key, like the `tasks/cancel` MCP request (experimental).
+   * Rejects with 404 once the task is no longer running.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   */
+  public cancelMcpServerTask(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/cancel'>['taskKey'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/cancel'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/cancel`, {
+      method: 'POST',
+    });
+  }
+
+  /**
+   * Answers an MCP server task's open input requests, like the `tasks/update` MCP request
+   * (experimental). Rejects with 404 unless the task is waiting for one of them.
+   * @param serverId - The ID of the MCP server.
+   * @param taskKey - The task's `taskKey`, as listed.
+   * @param inputResponses - Answers keyed by input request, e.g. `{ approve: { action: 'accept', content: {...} } }`.
+   */
+  public answerMcpServerTaskInput(
+    serverId: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['serverId'],
+    taskKey: PathParams<'POST /mcp/:serverId/tasks/:taskKey/input'>['taskKey'],
+    inputResponses: Body<'POST /mcp/:serverId/tasks/:taskKey/input'>['inputResponses'],
+  ): Promise<RouteResponse<'POST /mcp/:serverId/tasks/:taskKey/input'>> {
+    return this.request(`/mcp/${encodeURIComponent(serverId)}/tasks/${encodeURIComponent(taskKey)}/input`, {
+      method: 'POST',
+      body: { inputResponses },
+    });
+  }
+
+  /**
    * Gets an A2A client for interacting with an agent via the A2A protocol
    * @param agentId - ID of the agent to interact with
    * @returns A2A client instance
