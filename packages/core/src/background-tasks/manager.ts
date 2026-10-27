@@ -214,7 +214,11 @@ export class BackgroundTaskManager {
         if (event.type === 'task.dispatch' || event.type === 'task.restart') {
           handled = await this.handleDispatch(event);
         } else if (event.type === 'task.resume') {
-          handled = await this.handleResume(event);
+          // Tracked so shutdown waits for a resume caught mid-preparation to
+          // decline before storage closes.
+          const resuming = this.handleResume(event);
+          this.#trackSettlingRun(resuming);
+          handled = await resuming;
         } else if (event.type === 'task.cancel') {
           this.handleCancel(event);
         }
@@ -284,7 +288,9 @@ export class BackgroundTaskManager {
     if (cleanupConfig && !this.shuttingDown) {
       const intervalMs = cleanupConfig.cleanupIntervalMs ?? 60_000;
       this.cleanupInterval = setInterval(() => {
-        void this.cleanup();
+        void this.cleanup().catch(error => {
+          this.#mastra?.getLogger?.()?.warn('Background task cleanup failed:', error);
+        });
       }, intervalMs);
     }
 
@@ -1433,6 +1439,32 @@ export class BackgroundTaskManager {
     // `createRun({ runId })` reattaches to the existing snapshot when given a
     // stable runId — we don't want a fresh run.
     const run = await workflow.createRun({ runId: taskId });
+    if (this.shuttingDown) {
+      // Starting the run now would outlive shutdown and leave the task
+      // `running`, where recovery restarts it from scratch. Put it back to
+      // `suspended` and leave the event unacked so the resume can be retried.
+      this.ownedLeases.delete(taskId);
+      this.releaseLocalSlot(taskId);
+      await storage
+        .updateTask(
+          taskId,
+          {
+            status: 'suspended',
+            startedAt: task.startedAt,
+            suspendPayload: task.suspendPayload,
+            suspendedAt: task.suspendedAt,
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          { expectedStatus: 'running' },
+        )
+        .catch(error => {
+          this.#mastra
+            ?.getLogger?.()
+            ?.warn(`Failed to restore suspended background task ${taskId} during shutdown:`, error);
+        });
+      return false;
+    }
     this.#trackSettlingRun(
       run
         .resume({ resumeData })

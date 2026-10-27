@@ -71,26 +71,38 @@ class SilentPublishPubSub extends EventEmitterPubSub {
 }
 
 /**
- * In-memory store whose workflows domain rejects every call once `close()` has
- * run, like LibSQL's client does with CLIENT_CLOSED. `failDeletes` makes run
- * deletes reject regardless.
+ * In-memory store whose workflows and background-task domains reject every
+ * call once `close()` has run, like LibSQL's client does with CLIENT_CLOSED.
+ * `failDeletes` makes run deletes reject regardless; `holdTaskDeletesUntilClose`
+ * parks `deleteTasks` calls until the store closes, so they land on it closed.
  */
-class ClosableWorkflowsStore extends InMemoryStore {
+class ClosableStore extends InMemoryStore {
   closed = false;
   failDeletes = false;
+  holdTaskDeletesUntilClose = false;
+  readonly taskDeleteStarted = deferred();
+  readonly #closedSignal = deferred();
 
   constructor() {
     super();
-    const workflows = this.stores.workflows!;
-    this.stores.workflows = new Proxy(workflows, {
+    this.stores.workflows = this.#rejectWhenClosed(this.stores.workflows!);
+    this.stores.backgroundTasks = this.#rejectWhenClosed(this.stores.backgroundTasks!);
+  }
+
+  #rejectWhenClosed<T extends object>(domain: T): T {
+    return new Proxy(domain, {
       get: (target, prop, receiver) => {
         const value = Reflect.get(target, prop, receiver);
         if (typeof value !== 'function') return value;
         return (...args: unknown[]) => {
-          if (this.closed) return Promise.reject(new Error('CLIENT_CLOSED: The client is closed'));
-          if (this.failDeletes && prop === 'deleteWorkflowRunById') {
-            return Promise.reject(new Error('delete failed'));
+          if (this.holdTaskDeletesUntilClose && prop === 'deleteTasks') {
+            this.taskDeleteStarted.resolve();
+            return this.#closedSignal.promise.then(() =>
+              Promise.reject(new Error('CLIENT_CLOSED: The client is closed')),
+            );
           }
+          if (this.closed) return Promise.reject(new Error('CLIENT_CLOSED: The client is closed'));
+          if (this.failDeletes && prop === 'deleteWorkflowRunById') return Promise.reject(new Error('delete failed'));
           return value.apply(target, args);
         };
       },
@@ -99,6 +111,7 @@ class ClosableWorkflowsStore extends InMemoryStore {
 
   override async close(): Promise<void> {
     this.closed = true;
+    this.#closedSignal.resolve();
   }
 }
 
@@ -299,7 +312,7 @@ describe('BackgroundTaskManager lifecycle', () => {
     // A task aborted by shutdown settles after manager.shutdown() used to return,
     // so its fire-and-forget run delete hit the already-closed store and became
     // an unhandled rejection, which crashes Node mid-shutdown.
-    const store = new ClosableWorkflowsStore();
+    const store = new ClosableStore();
     const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
     const manager = mastra.backgroundTaskManager!;
     manager.registerStaticExecutor('wait', { execute: waitUntilAborted });
@@ -331,7 +344,7 @@ describe('BackgroundTaskManager lifecycle', () => {
   });
 
   it('logs a failed workflow run delete instead of rejecting unhandled', async () => {
-    const store = new ClosableWorkflowsStore();
+    const store = new ClosableStore();
     store.failDeletes = true;
     const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
     const warn = vi.spyOn(mastra.getLogger(), 'warn');
@@ -359,6 +372,93 @@ describe('BackgroundTaskManager lifecycle', () => {
     } finally {
       unhandled.stop();
       await mastra.shutdown();
+    }
+  });
+
+  it('logs a cleanup tick that lands on storage closed by shutdown instead of rejecting unhandled', async () => {
+    // Shutdown clears the cleanup interval, but a tick already deleting task
+    // records keeps going and finishes after Mastra has closed storage.
+    const store = new ClosableStore();
+    store.holdTaskDeletesUntilClose = true;
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: { enabled: true, cleanup: { cleanupIntervalMs: 20 } },
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      await store.taskDeleteStarted.promise;
+      await mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(unhandled.rejections).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        'Background task cleanup failed:',
+        expect.objectContaining({ message: 'CLIENT_CLOSED: The client is closed' }),
+      );
+    } finally {
+      unhandled.stop();
+    }
+  });
+
+  it('declines a resume caught mid-preparation by shutdown and keeps the task suspended', async () => {
+    // The resume event flips the task to `running` and then awaits the run.
+    // If shutdown starts in that gap, it must not start the run against a
+    // store that is about to close, and the task must stay resumable.
+    const store = new ClosableStore();
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const execute = vi.fn(async (_args: unknown, opts: any) => {
+      if (!opts.resumeData) return opts.suspend({ waiting: true });
+      return opts.resumeData;
+    });
+    manager.registerStaticExecutor('approval', { execute });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'approval',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+
+      const workflow = mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const createRun = workflow.createRun.bind(workflow);
+      const createRunStarted = deferred();
+      const createRunGate = deferred();
+      vi.spyOn(workflow, 'createRun').mockImplementation(async (...args) => {
+        createRunStarted.resolve();
+        await createRunGate.promise;
+        return createRun(...args);
+      });
+
+      await manager.resume(task.id, { ok: true });
+      await createRunStarted.promise;
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+
+      const shutdown = mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      createRunGate.resolve();
+      await shutdown;
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(unhandled.rejections).toEqual([]);
+      expect(execute).toHaveBeenCalledTimes(1);
+      store.closed = false;
+      const backgroundTasks = await store.getStore('backgroundTasks');
+      expect(await backgroundTasks!.getTask(task.id)).toMatchObject({
+        status: 'suspended',
+        suspendPayload: { waiting: true },
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      });
+    } finally {
+      unhandled.stop();
     }
   });
 
