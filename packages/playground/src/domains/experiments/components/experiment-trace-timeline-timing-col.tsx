@@ -54,7 +54,7 @@ export function ExperimentTraceTimelineTimingCol({
                 left: `${percentageSpanStartTime || 0}%`,
                 backgroundColor: color,
               }}
-            ></div>
+            />
           </div>
         </div>
 
