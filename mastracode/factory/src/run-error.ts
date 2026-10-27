@@ -79,7 +79,7 @@ export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
         title: 'Model provider temporarily unavailable',
         message: 'The provider could not complete the request. Send a message to continue the run.',
       };
-    default:
+    case 'unknown':
       return describeUnclassifiedError(error);
   }
 }

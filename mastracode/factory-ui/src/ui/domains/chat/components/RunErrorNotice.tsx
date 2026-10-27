@@ -5,16 +5,23 @@ import { Notice } from '@mastra/playground-ui/components/Notice';
 import { describeRunError } from '@mastra/factory/run-error';
 import type { RunErrorRecovery } from '@mastra/factory/run-error';
 import { useContext } from 'react';
+import type { ComponentType } from 'react';
 
 import { ChatSessionContext } from '../context/ChatSessionContext';
 import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext';
 import { ProviderReconnectAction } from './ProviderReconnectAction';
-import { ModelPicker } from './StatusLine/ModelPicker';
+import { ChangeModelAction } from './StatusLine/ModelPicker';
+
+const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType> = {
+  credentials: ProviderReconnectAction,
+  model: ChangeModelAction,
+};
 
 export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['error']; entryId: string }) {
   const session = useContext(ChatSessionContext);
   const displayedThread = useContext(ChatThreadMessagesContext);
   const { title, message, recovery } = describeRunError(error);
+  const RecoveryAction = recovery && RECOVERY_ACTIONS[recovery];
   const diagnostics = JSON.stringify(
     {
       ...error,
@@ -27,7 +34,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
     2,
   );
   return (
-    <Notice variant="destructive" title={title} action={recovery && <RecoveryAction recovery={recovery} />}>
+    <Notice variant="destructive" title={title} action={RecoveryAction && <RecoveryAction />}>
       <Notice.Message>{message}</Notice.Message>
       <Collapsible>
         <CollapsibleTrigger render={<Notice.Button>Error details</Notice.Button>} />
@@ -37,8 +44,4 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
       </Collapsible>
     </Notice>
   );
-}
-
-function RecoveryAction({ recovery }: { recovery: RunErrorRecovery }) {
-  return recovery === 'credentials' ? <ProviderReconnectAction /> : <ModelPicker triggerLabel="Change model" />;
 }

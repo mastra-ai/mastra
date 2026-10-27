@@ -16,6 +16,7 @@ import { cn } from '@mastra/playground-ui/utils/cn';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
+import type { ReactNode } from 'react';
 import { Link, useParams } from 'react-router';
 
 import type { AvailableModelOption } from '../../../../../hooks/useAvailableModels';
@@ -56,23 +57,139 @@ function canSwitchModel({
   return sessionEnabled;
 }
 
-export function ModelPicker({ triggerLabel }: { triggerLabel?: string } = {}) {
+function useModelSwitch() {
   const chatSession = useChatSessionContext();
-  const { kind, modelLockedReason } = chatSession;
-  const { status } = useChatConnection();
-  const { activeModelId, defaultModelId, setModel, isLoading, error } = useChatModels();
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { activeModelId, defaultModelId, setModel } = useChatModels();
   const { catalogTarget, modelScope, scopeLoading } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const organizationScoped = useOrganizationScopedFactory();
-  const [open, setOpen] = useState(false);
   const [pendingModelId, setPendingModelId] = useState<string>();
 
   const selectedModelId = pendingModelId ?? activeModelId;
   const busy = Boolean(pendingModelId);
-  const providerGroups = groupByProvider(modelsQuery.data ?? []);
 
-  if (triggerLabel && !(canSwitchModel(chatSession) && modelsQuery.data?.length)) return null;
+  const pickModel = (modelId: string) => {
+    if (busy || modelId === activeModelId) return;
+    setPendingModelId(modelId);
+    void setModel(modelId).then(
+      () => setPendingModelId(undefined),
+      (cause: unknown) => {
+        setPendingModelId(undefined);
+        toast.error(cause instanceof Error ? cause.message : 'Failed to switch model');
+      },
+    );
+  };
+
+  return {
+    modelsQuery,
+    activeModelId,
+    selectedModelId,
+    defaultModelId,
+    scopeLoading,
+    busy,
+    switchable: canSwitchModel(chatSession),
+    locked: busy || modelsQuery.isPending || scopeLoading,
+    canReset:
+      chatSession.kind === 'user' &&
+      modelScope !== 'factory' &&
+      Boolean(defaultModelId) &&
+      selectedModelId !== defaultModelId &&
+      Boolean(modelsQuery.data?.some(model => model.id === defaultModelId)),
+    pickModel,
+  };
+}
+
+type ModelSwitch = ReturnType<typeof useModelSwitch>;
+
+interface ModelMenuProps {
+  modelSwitch: ModelSwitch;
+  triggerClassName: string;
+  triggerAriaLabel?: string;
+  children: ReactNode;
+}
+
+function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }: ModelMenuProps) {
+  const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const organizationScoped = useOrganizationScopedFactory();
+  const [open, setOpen] = useState(false);
+
+  const choose = (modelId: string) => {
+    setOpen(false);
+    pickModel(modelId);
+  };
+
+  return (
+    <Popover open={open} onOpenChange={setOpen}>
+      <PopoverTrigger
+        type="button"
+        disabled={locked}
+        aria-label={triggerAriaLabel}
+        aria-busy={locked}
+        className={triggerClassName}
+        title={selectedModelId}
+      >
+        {children}
+        <ChevronDown aria-hidden size={12} />
+      </PopoverTrigger>
+      <PopoverContent align="start" className="w-80 p-0">
+        <Command loop>
+          <CommandInput placeholder="Search models…" />
+          <CommandList className="max-h-80">
+            <CommandEmpty>No matching model.</CommandEmpty>
+            {groupByProvider(modelsQuery.data ?? []).map(([provider, models]) => (
+              <CommandGroup
+                key={provider}
+                heading={provider}
+                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
+              >
+                {models.map(model => (
+                  <CommandItem
+                    key={model.id}
+                    value={model.id}
+                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
+                    title={model.id}
+                    onSelect={() => choose(model.id)}
+                  >
+                    <span className="truncate">{model.modelName}</span>
+                    {model.id === defaultModelId ? (
+                      <Badge variant="blue" size="xs">
+                        Default
+                      </Badge>
+                    ) : null}
+                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
+                  </CommandItem>
+                ))}
+              </CommandGroup>
+            ))}
+            {canReset ? <CommandSeparator /> : null}
+            {canReset && defaultModelId ? (
+              <CommandGroup>
+                <CommandItem
+                  value="action:reset"
+                  keywords={['reset', 'default', 'model']}
+                  onSelect={() => choose(defaultModelId)}
+                >
+                  <RotateCcw aria-hidden />
+                  <span>Reset to your default</span>
+                </CommandItem>
+              </CommandGroup>
+            ) : null}
+          </CommandList>
+          {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
+        </Command>
+      </PopoverContent>
+    </Popover>
+  );
+}
+
+export function ModelPicker() {
+  const modelSwitch = useModelSwitch();
+  const { modelsQuery, activeModelId, selectedModelId, scopeLoading, switchable, busy } = modelSwitch;
+  const { modelLockedReason } = useChatSessionContext();
+  const { status } = useChatConnection();
+  const { isLoading, error } = useChatModels();
+  const { factoryId } = useParams<{ factoryId: string }>();
+  const organizationScoped = useOrganizationScopedFactory();
 
   if (!selectedModelId && (isLoading || status === 'connecting')) {
     return <Skeleton aria-label="Loading model" className="h-3.5 w-24" />;
@@ -99,13 +216,6 @@ export function ModelPicker({ triggerLabel }: { triggerLabel?: string } = {}) {
     Boolean(selectedModelId) &&
     modelsQuery.isSuccess &&
     !modelsQuery.data.some(model => model.id === selectedModelId);
-  const switchable = canSwitchModel(chatSession);
-  const canReset =
-    kind === 'user' &&
-    modelScope !== 'factory' &&
-    Boolean(defaultModelId) &&
-    selectedModelId !== defaultModelId &&
-    modelsQuery.data?.some(model => model.id === defaultModelId);
 
   const noModelsToOffer = !modelsQuery.isPending && !modelsQuery.data?.length;
   if (modelsQuery.isError && noModelsToOffer) {
@@ -139,101 +249,31 @@ export function ModelPicker({ triggerLabel }: { triggerLabel?: string } = {}) {
     );
   }
 
-  const runAction = (action: Promise<void>, failure: string) => {
-    void action.then(
-      () => setPendingModelId(undefined),
-      (cause: unknown) => {
-        setPendingModelId(undefined);
-        toast.error(cause instanceof Error ? cause.message : failure);
-      },
-    );
-  };
-
-  const pickModel = (modelId: string) => {
-    if (busy) return;
-    setOpen(false);
-    if (modelId === activeModelId) return;
-    setPendingModelId(modelId);
-    runAction(setModel(modelId), 'Failed to switch model');
-  };
-  const modelMenuLocked = busy || modelsQuery.isPending || scopeLoading;
-
-  const picker = (
-    <Popover open={open} onOpenChange={setOpen}>
-      <PopoverTrigger
-        type="button"
-        disabled={modelMenuLocked}
-        aria-label={triggerLabel ?? (notConfigured ? `Session model, ${label} is not configured` : 'Session model')}
-        aria-busy={modelMenuLocked}
-        className={
-          triggerLabel
-            ? cn(buttonVariants({ variant: 'link' }), 'text-foreground')
-            : cn(
-                buttonVariants({ variant: 'ghost', size: 'sm' }),
-                notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-              )
-        }
-        title={selectedModelId}
-      >
-        <span className="max-w-48 truncate">
-          {triggerLabel ?? label}
-          {!triggerLabel && notConfigured ? ' · not configured' : null}
-        </span>
-        <ChevronDown aria-hidden size={12} />
-      </PopoverTrigger>
-      <PopoverContent align="start" className="w-80 p-0">
-        <Command loop>
-          <CommandInput placeholder="Search models…" />
-          <CommandList className="max-h-80">
-            <CommandEmpty>No matching model.</CommandEmpty>
-            {providerGroups.map(([provider, models]) => (
-              <CommandGroup
-                key={provider}
-                heading={provider}
-                className="[&_[cmdk-group-heading]]:text-placeholder [&_[cmdk-group-heading]]:font-normal [&_[cmdk-group-heading]]:tracking-normal [&_[cmdk-group-heading]]:normal-case"
-              >
-                {models.map(model => (
-                  <CommandItem
-                    key={model.id}
-                    value={model.id}
-                    keywords={[model.provider, model.modelName, formatModelName(model.id)]}
-                    title={model.id}
-                    onSelect={() => pickModel(model.id)}
-                  >
-                    <span className="truncate">{model.modelName}</span>
-                    {model.id === defaultModelId ? (
-                      <Badge variant="blue" size="xs">
-                        Default
-                      </Badge>
-                    ) : null}
-                    {model.id === selectedModelId ? <Check aria-hidden className="ml-auto shrink-0" /> : null}
-                  </CommandItem>
-                ))}
-              </CommandGroup>
-            ))}
-            {canReset ? <CommandSeparator /> : null}
-            {canReset && defaultModelId ? (
-              <CommandGroup>
-                <CommandItem
-                  value="action:reset"
-                  keywords={['reset', 'default', 'model']}
-                  onSelect={() => pickModel(defaultModelId)}
-                >
-                  <RotateCcw aria-hidden />
-                  <span>Reset to your default</span>
-                </CommandItem>
-              </CommandGroup>
-            ) : null}
-          </CommandList>
-          {organizationScoped && factoryId ? <ModelScopeFooter factoryId={factoryId} /> : null}
-        </Command>
-      </PopoverContent>
-    </Popover>
-  );
-  if (triggerLabel) return picker;
   return (
     <ModelThinkingGroup modelId={activeModelId} switchingModel={busy}>
-      {picker}
+      <ModelMenu
+        modelSwitch={modelSwitch}
+        triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
+        triggerClassName={cn(
+          buttonVariants({ variant: 'ghost', size: 'sm' }),
+          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
+        )}
+      >
+        <span className="max-w-48 truncate">
+          {label}
+          {notConfigured ? ' · not configured' : null}
+        </span>
+      </ModelMenu>
     </ModelThinkingGroup>
+  );
+}
+
+export function ChangeModelAction() {
+  const modelSwitch = useModelSwitch();
+  if (!modelSwitch.switchable || !modelSwitch.modelsQuery.data?.length) return null;
+  return (
+    <ModelMenu modelSwitch={modelSwitch} triggerClassName={cn(buttonVariants({ variant: 'link' }), 'text-foreground')}>
+      Change model
+    </ModelMenu>
   );
 }
