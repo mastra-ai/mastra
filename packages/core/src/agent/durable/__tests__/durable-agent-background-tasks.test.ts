@@ -1379,6 +1379,9 @@ describe('DurableAgent.stream({ untilIdle })', () => {
     expect(result.output).not.toBe(result);
     expect(await result.output.text).toBe('hello');
     expect(result.output.fullStream).toBe(result.fullStream);
+    for (const key of ['output', 'threadId', 'resourceId', 'cleanup', 'abort', 'fullStream']) {
+      expect(key in result).toBe(true);
+    }
     result.cleanup();
   });
 

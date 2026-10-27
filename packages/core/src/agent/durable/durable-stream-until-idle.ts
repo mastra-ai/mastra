@@ -78,6 +78,16 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
       });
 
       return new Proxy(first.output, {
+        has(target, prop) {
+          return (
+            prop === 'output' ||
+            prop === 'threadId' ||
+            prop === 'resourceId' ||
+            prop === 'cleanup' ||
+            prop === 'abort' ||
+            Reflect.has(target, prop)
+          );
+        },
         get(target, prop) {
           if (prop === 'output') return output;
           if (prop === 'fullStream') return ctx.combinedStream;

@@ -3357,6 +3357,16 @@ export class DurableAgent<
     };
 
     return new Proxy(output, {
+      has(target, prop) {
+        return (
+          prop === 'output' ||
+          prop === 'threadId' ||
+          prop === 'resourceId' ||
+          prop === 'cleanup' ||
+          prop === 'abort' ||
+          Reflect.has(target, prop)
+        );
+      },
       get(target, prop) {
         if (prop === 'output') return target;
         if (prop === 'threadId') return threadId;

@@ -85,6 +85,9 @@ describe('AgentConfig.durable', () => {
       expect((result as unknown as DurableAgentStreamResult).output).not.toBe(result);
       expect(await (result as unknown as DurableAgentStreamResult).output.text).toBe('hi');
       expect(Object.keys(result)).not.toContain('output');
+      for (const key of ['output', 'threadId', 'resourceId', 'cleanup', 'abort', 'fullStream']) {
+        expect(key in result).toBe(true);
+      }
       expect(result.fullStream).toBeInstanceOf(ReadableStream);
     } finally {
       (result as unknown as DurableAgentStreamResult).cleanup();
