@@ -2064,7 +2064,15 @@ The server creates the task before it answers, so a `tasks/get` sent right after
 
 ### Access to tasks
 
-A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Tasks can't be listed.
+A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Clients can't list tasks over MCP.
+
+### Tasks in Studio
+
+The Studio page of a server with `tasks` shows which tools run as tasks (`always` or `auto`, and `recover`), and lists the server's recent tasks across all callers: their status, open input requests, and when they expire. Opening a task shows its result or error. From there you can cancel it, or answer an elicitation it's waiting on. Cancelling and answering run the same code as `tasks/cancel` and `tasks/update`, but skip `authorize`.
+
+- Studio identifies a task by a hash of its id, and the caller by a hash of its identity. Neither can be used over MCP, and the raw values are never sent to Studio.
+- Only Studio sessions without a resource scope get the list. MCP callers and Mastra resources are separate identities, so a session scoped to a resource gets no tasks and can't cancel or answer one.
+- The built-in task stores support the list. A custom `store` must also implement `MCPTaskStoreAdmin` (`list`, `updateByKey`, `cancelByKey`); otherwise Studio says the store can't be listed.
 
 ### Asking for input inside a task
 

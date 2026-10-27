@@ -718,6 +718,9 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 | `POST` | `/api/mcp/:serverId/tools/:toolId/execute` | Execute a tool |
 | `GET` | `/api/mcp/:serverId/resources` | List server resources |
 | `POST` | `/api/mcp/:serverId/resources/read` | Read a resource |
+| `GET` | `/api/mcp/:serverId/tasks` | List a server's recent MCP tasks (experimental) |
+| `POST` | `/api/mcp/:serverId/tasks/:taskKey/cancel` | Cancel an MCP task (experimental) |
+| `POST` | `/api/mcp/:serverId/tasks/:taskKey/input` | Answer an MCP task's input requests (experimental) |
 | `ALL` | `/api/mcp/:serverId/mcp` | MCP HTTP transport |
 | `ALL` | `/api/mcp/:serverId/sse` | Legacy MCP SSE transport |
 | `POST` | `/api/mcp/:serverId/messages` | Legacy MCP SSE messages |
