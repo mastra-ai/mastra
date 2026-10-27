@@ -18,7 +18,7 @@
  */
 
 import { Mastra } from '@mastra/core/mastra';
-import { MastraFactory } from '@mastra/factory';
+import { createFactorySecretEncryption, MastraFactory } from '@mastra/factory';
 import { PgFactoryStorage, PgVector } from '@mastra/pg';
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
@@ -35,11 +35,19 @@ if (!databaseUrl) {
 // configured globally. `configVersion` is the deployment label stamped onto
 // audit rows and deferred decisions so they can be traced back to the
 // deployment that produced them — bump it when handler behavior changes.
+// Encrypts stored model-provider keys and integration secrets at rest.
+// `npm create factory` generates this key; without it the factory stores them
+// in plaintext and logs a warning.
+const encryptionKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() || undefined;
+
 const factoryConfigVersion = 'mastracode-web-v1';
 
 export const factory = new MastraFactory({
   configVersion: factoryConfigVersion,
   sandboxStart: 'eager',
+  secretEncryption: encryptionKey
+    ? createFactorySecretEncryption({ primary: { id: 'v1', key: Buffer.from(encryptionKey, 'base64') } })
+    : undefined,
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
   // No `sandbox`: with Platform credentials the factory uses a local sandbox
