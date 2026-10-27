@@ -16,12 +16,17 @@ const RUN_ID = `sched_${SCHEDULE_ID}_${FIRE_AT}`;
 
 type StepExecute = (args: { inputData: any; state: any; requestContext: any }) => Promise<unknown>;
 
-function buildDefaultWorkflow(execute: StepExecute, inputSchema: z.ZodType = z.object({ n: z.number() })) {
+function buildDefaultWorkflow(
+  execute: StepExecute,
+  inputSchema: z.ZodType = z.object({ n: z.number() }),
+  storageVersion?: 1 | 2,
+) {
   const wf = createWorkflow({
     id: 'nightly',
     inputSchema,
     outputSchema: z.any(),
     stateSchema: z.object({ seen: z.string().optional() }),
+    options: { storageVersion },
   });
   wf.then(
     createStep({
@@ -148,6 +153,24 @@ describe('WorkflowEventProcessor — scheduled default-engine fires (#18807)', (
 
     expect(result).toEqual({ ok: true });
     expect(execute).toHaveBeenCalledTimes(1);
+
+    await mastra.shutdown();
+  });
+
+  it('skips a redelivered fire for a storage v2 run that already exists', async () => {
+    const execute = vi.fn<StepExecute>(async ({ inputData }) => inputData);
+    const wf = buildDefaultWorkflow(execute, undefined, 2);
+    const { mastra } = await setup(wf);
+
+    await mastra.handleWorkflowEvent(makeStartEvent({ scheduleTrigger: trigger() }));
+    const result = await mastra.handleWorkflowEvent(makeStartEvent({ scheduleTrigger: trigger() }));
+
+    expect(result).toEqual({ ok: true });
+    expect(execute).toHaveBeenCalledTimes(1);
+    const run = await wf.getWorkflowRunById(RUN_ID);
+    expect(run?.status).toBe('success');
+    const store = (await mastra.getStorage()!.getStore('workflows'))!;
+    expect((await store.getWorkflowRunById({ runId: RUN_ID, workflowName: 'nightly' }))?.storageVersion).toBe(2);
 
     await mastra.shutdown();
   });

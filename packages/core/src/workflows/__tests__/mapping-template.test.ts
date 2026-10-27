@@ -1,6 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { resolveTemplate, traverseMappingPath, validateTemplate } from '../mapping-template';
 
+const noSteps = new Map<string, unknown>();
+
 /** Minimal fake of the slice of the execute context resolveTemplate reads. */
 function makeCtx(overrides: Record<string, any> = {}) {
   return {
@@ -8,7 +10,6 @@ function makeCtx(overrides: Record<string, any> = {}) {
     getInitData: () => ({ city: 'Berlin' }),
     state: { phase: 'draft' },
     requestContext: { get: (key: string) => ({ userId: 'u-1' })[key as 'userId'] },
-    getStepResult: (_stepId: string) => null,
     ...overrides,
   } as any;
 }
@@ -54,46 +55,50 @@ describe('resolveTemplate', () => {
       resolveTemplate(
         'City=${initData.city} name=${inputData.name} phase=${state.phase} user=${requestContext.userId}',
         makeCtx(),
+        noSteps,
       ),
     ).toBe('City=Berlin name=Berlin phase=draft user=u-1');
   });
 
   it('resolves dotted sub-paths', () => {
-    expect(resolveTemplate('${inputData.nested.deep}', makeCtx())).toBe('value');
+    expect(resolveTemplate('${inputData.nested.deep}', makeCtx(), noSteps)).toBe('value');
   });
 
   it('resolves stepResults with and without a sub-path', () => {
-    const ctx = makeCtx({ getStepResult: () => ({ text: 'hello', meta: { n: 2 } }) });
-    expect(resolveTemplate('${stepResults.stepA.text}', ctx)).toBe('hello');
-    expect(resolveTemplate('${stepResults.stepA.meta.n}', ctx)).toBe('2');
-    expect(resolveTemplate('${stepResults.stepA}', ctx)).toBe('{"text":"hello","meta":{"n":2}}');
+    const outputs = new Map([['stepA', { text: 'hello', meta: { n: 2 } }]]);
+    expect(resolveTemplate('${stepResults.stepA.text}', makeCtx(), outputs)).toBe('hello');
+    expect(resolveTemplate('${stepResults.stepA.meta.n}', makeCtx(), outputs)).toBe('2');
+    expect(resolveTemplate('${stepResults.stepA}', makeCtx(), outputs)).toBe('{"text":"hello","meta":{"n":2}}');
   });
 
   it('throws when the referenced step has no successful output', () => {
-    expect(() => resolveTemplate('${stepResults.missing}', makeCtx())).toThrow(/has no successful output/);
+    expect(() => resolveTemplate('${stepResults.missing}', makeCtx(), noSteps)).toThrow(/has no successful output/);
+    expect(() => resolveTemplate('${stepResults.failed}', makeCtx(), new Map([['failed', null]]))).toThrow(
+      /has no successful output/,
+    );
   });
 
   it('treats an undefined step result the same as a missing one', () => {
-    const ctx = makeCtx({ getStepResult: () => undefined });
-    expect(() => resolveTemplate('${stepResults.ghost}', ctx)).toThrow(/has no successful output/);
+    const outputs = new Map([['ghost', undefined]]);
+    expect(() => resolveTemplate('${stepResults.ghost}', makeCtx(), outputs)).toThrow(/has no successful output/);
   });
 
   it('throws when a path traverses into a non-object', () => {
-    expect(() => resolveTemplate('${inputData.name.oops}', makeCtx())).toThrow(/Invalid path/);
+    expect(() => resolveTemplate('${inputData.name.oops}', makeCtx(), noSteps)).toThrow(/Invalid path/);
   });
 
   it('JSON-encodes object values and renders null/undefined as empty', () => {
     const ctx = makeCtx({ inputData: { obj: { a: 1 }, nil: null } });
-    expect(resolveTemplate('${inputData.obj}', ctx)).toBe('{"a":1}');
-    expect(resolveTemplate('[${inputData.nil}]', ctx)).toBe('[]');
-    expect(resolveTemplate('[${inputData.missing}]', ctx)).toBe('[]');
+    expect(resolveTemplate('${inputData.obj}', ctx, noSteps)).toBe('{"a":1}');
+    expect(resolveTemplate('[${inputData.nil}]', ctx, noSteps)).toBe('[]');
+    expect(resolveTemplate('[${inputData.missing}]', ctx, noSteps)).toBe('[]');
   });
 
   it('throws with a placeholder hint when a value cannot be JSON-stringified', () => {
     const circular: any = {};
     circular.self = circular;
     const ctx = makeCtx({ inputData: { circular } });
-    expect(() => resolveTemplate('${inputData.circular}', ctx)).toThrow(/could not be JSON-stringified/);
+    expect(() => resolveTemplate('${inputData.circular}', ctx, noSteps)).toThrow(/could not be JSON-stringified/);
   });
 });
 
