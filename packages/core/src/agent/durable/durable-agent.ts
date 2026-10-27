@@ -484,7 +484,7 @@ type DurableAgentResumeOptions<OUTPUT = undefined> = DurableAgentStreamOptions<O
  * Result from DurableAgent.stream()
  */
 export interface DurableAgentStreamResult<OUTPUT = undefined> {
-  /** The streaming output (also available directly on stream() results) */
+  /** The streaming output */
   output: MastraModelOutput<OUTPUT>;
   /** The full stream - delegates to output.fullStream for server compatibility */
   readonly fullStream: ReadableStream<any>;
@@ -514,6 +514,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    */
   abort: (reason?: unknown) => Promise<void>;
 }
+
+/** The model output returned by stream(), with durable execution controls. */
+export type DurableAgentStreamOutput<OUTPUT = undefined> = MastraModelOutput<OUTPUT> &
+  Omit<DurableAgentStreamResult<OUTPUT>, 'fullStream'>;
 
 /**
  * Configuration for DurableAgent - wraps an existing Agent with durable execution
@@ -3045,7 +3049,7 @@ export class DurableAgent<
   async stream(
     messages: MessageListInput,
     options?: DurableAgentStreamOptions<TOutput>,
-  ): Promise<DurableAgentStreamResult<TOutput>> {
+  ): Promise<DurableAgentStreamOutput<TOutput>> {
     options = await this.#resolveExecutionOptions(applyReservedMemoryContextKeys(options));
 
     // Delegate to the idle-loop wrapper when `untilIdle` is set.
@@ -3352,13 +3356,17 @@ export class DurableAgent<
       if (agentThreadStreamRuntime.isRunParked(runId, this.getPubSub())) super.abortRunStream(runId);
     };
 
-    return Object.assign(output, {
-      output,
-      threadId,
-      resourceId,
-      cleanup,
-      abort,
-    }) as unknown as DurableAgentStreamResult<TOutput>;
+    return new Proxy(output, {
+      get(target, prop) {
+        if (prop === 'output') return target;
+        if (prop === 'threadId') return threadId;
+        if (prop === 'resourceId') return resourceId;
+        if (prop === 'cleanup') return cleanup;
+        if (prop === 'abort') return abort;
+        const value = Reflect.get(target, prop, target);
+        return typeof value === 'function' ? value.bind(target) : value;
+      },
+    }) as DurableAgentStreamOutput<TOutput>;
   }
 
   /**

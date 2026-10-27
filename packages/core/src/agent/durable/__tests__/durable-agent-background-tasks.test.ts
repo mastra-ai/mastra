@@ -14,6 +14,7 @@ import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { Mastra } from '../../../mastra';
 import { MockMemory } from '../../../memory/mock';
 import { MockStore } from '../../../storage/mock';
+import type { MastraModelOutput } from '../../../stream/base/output';
 import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import { createDurableAgent } from '../create-durable-agent';
@@ -1374,6 +1375,10 @@ describe('DurableAgent.stream({ untilIdle })', () => {
     expect(textChunks).toBeGreaterThan(0);
 
     expect(getCallCount()).toBe(1);
+    expect(await (result as unknown as MastraModelOutput).text).toBe('hello');
+    expect(result.output).not.toBe(result);
+    expect(await result.output.text).toBe('hello');
+    expect(result.output.fullStream).toBe(result.fullStream);
     result.cleanup();
   });
 

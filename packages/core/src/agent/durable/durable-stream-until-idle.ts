@@ -2,7 +2,7 @@
  * Implementation of `DurableAgent.streamUntilIdle` and
  * `DurableAgent.resume(..., { untilIdle })`. Mirrors the regular agent's
  * `stream-until-idle.ts` but adapted for durable execution:
- * - `DurableAgent.stream()` returns `DurableAgentStreamResult` (not `MastraModelOutput`)
+ * - `DurableAgent.stream()` exposes the model output alongside durable controls
  * - The initial segment preserves a caller-supplied runId; each autonomous continuation starts a new durable workflow
  * - Cleanup functions from each inner stream are tracked and called on close
  * - Inner `abort()` handles are fanned out so the outer `result.abort()`
@@ -15,7 +15,12 @@ import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import { runIdleLoop } from '../../loop/shared/stream-until-idle-helpers';
 import type { MessageListInput } from '../message-list';
 
-import type { DurableAgent, DurableAgentStreamOptions, DurableAgentStreamResult } from './durable-agent';
+import type {
+  DurableAgent,
+  DurableAgentStreamOptions,
+  DurableAgentStreamOutput,
+  DurableAgentStreamResult,
+} from './durable-agent';
 
 export interface DurableStreamUntilIdleDeps {
   activeStreams: Map<string, () => void>;
@@ -33,52 +38,57 @@ export async function runDurableStreamUntilIdle<OUTPUT = undefined>(
   messages: MessageListInput,
   streamOptions: (DurableAgentStreamOptions<OUTPUT> & { maxIdleMs?: number }) | undefined,
   deps: DurableStreamUntilIdleDeps,
-): Promise<DurableAgentStreamResult<OUTPUT>> {
+): Promise<DurableAgentStreamOutput<OUTPUT>> {
   // Durable-specific: track cleanup/abort handles from each inner stream
   const innerCleanups: Array<() => void> = [];
   const innerAborts: Array<(reason?: unknown) => void> = [];
 
-  return runIdleLoop<typeof agent, DurableAgentStreamResult<OUTPUT>, DurableAgentStreamResult<OUTPUT>>(
+  return runIdleLoop<typeof agent, DurableAgentStreamOutput<OUTPUT>, DurableAgentStreamOutput<OUTPUT>>(
     agent,
     streamOptions,
     deps,
-    opts => (agent as any).stream(messages, opts) as Promise<DurableAgentStreamResult<OUTPUT>>,
+    opts => (agent as any).stream(messages, opts) as Promise<DurableAgentStreamOutput<OUTPUT>>,
     opts => (agent as any).stream([], opts) as Promise<{ fullStream: ReadableStream<any> }>,
     (first, ctx) => {
       // No ctx means no bgManager / no memory — fall through without wrapping.
       if (!ctx) return first;
 
-      return {
-        output: new Proxy(first.output, {
-          get(target, prop) {
-            if (prop === 'fullStream') return ctx.combinedStream;
-            const value = Reflect.get(target, prop, target);
-            return typeof value === 'function' ? value.bind(target) : value;
-          },
-        }) as any,
-        get fullStream() {
-          return ctx.combinedStream;
-        },
-        runId: first.runId,
-        threadId: ctx.threadId,
-        resourceId: ctx.resourceId,
-        cleanup: ctx.forceClose,
-        abort: async (reason?: unknown) => {
-          // Fan the abort out to every inner DurableAgent.stream() that has been
-          // spawned by the idle loop so far. `forceClose` then unwinds the outer
-          // stream + idle timer.
-          await Promise.all(
-            innerAborts.map(async innerAbort => {
-              try {
-                await innerAbort(reason);
-              } catch {
-                // ignore — best-effort abort across siblings
-              }
-            }),
-          );
-          ctx.abort();
-        },
+      const abort = async (reason?: unknown) => {
+        // Fan the abort out to every inner DurableAgent.stream() that has been
+        // spawned by the idle loop so far. `forceClose` then unwinds the outer
+        // stream + idle timer.
+        await Promise.all(
+          innerAborts.map(async innerAbort => {
+            try {
+              await innerAbort(reason);
+            } catch {
+              // ignore — best-effort abort across siblings
+            }
+          }),
+        );
+        ctx.abort();
       };
+
+      const output = new Proxy(first.output, {
+        get(target, prop) {
+          if (prop === 'fullStream') return ctx.combinedStream;
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      });
+
+      return new Proxy(first.output, {
+        get(target, prop) {
+          if (prop === 'output') return output;
+          if (prop === 'fullStream') return ctx.combinedStream;
+          if (prop === 'threadId') return ctx.threadId;
+          if (prop === 'resourceId') return ctx.resourceId;
+          if (prop === 'cleanup') return ctx.forceClose;
+          if (prop === 'abort') return abort;
+          const value = Reflect.get(target, prop, target);
+          return typeof value === 'function' ? value.bind(target) : value;
+        },
+      }) as DurableAgentStreamOutput<OUTPUT>;
     },
     {
       detachOnCancel: streamOptions?._detachObserverOnCancel === true,
