@@ -1287,7 +1287,7 @@ describe('agent-controller routes', () => {
       expect(received.errorType).toBe('provider');
     });
 
-    it('carries the provider status, body and request id a saved error keeps', async () => {
+    it('carries the provider status, body, request id and requested model a saved error keeps', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();
       const session = await controller.createSession({
@@ -1309,7 +1309,7 @@ describe('agent-controller routes', () => {
         statusCode: 403,
         responseBody,
         responseHeaders: { 'x-request-id': 'req_123' },
-        requestBodyValues: { messages: [{ role: 'user', content: 'secret prompt' }] },
+        requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'secret prompt' }] },
       });
       session.emit({ type: 'error', error: providerError, errorType: 'provider' } as any);
 
@@ -1326,6 +1326,7 @@ describe('agent-controller routes', () => {
         statusCode: 403,
         responseBody,
         requestId: 'req_123',
+        modelId: 'claude-opus-4-5',
       });
     });
 

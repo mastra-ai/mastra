@@ -50,7 +50,7 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(SLACK_SESSION_URL);
   });
 
-  it('links a missing credential to the Factory model settings', () => {
+  it('offers the Factory model settings and another model for a missing credential', () => {
     const error = new ProviderAuthRequiredError(
       "No usable openai credential is available for openai/gpt-5.5. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
     );
@@ -60,6 +60,22 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain('Add an organization credential');
     expect(card).toContain('Review credentials');
     expect(card).toContain(`${PUBLIC_URL}/factories/factory-1/settings/models`);
+    expect(card).toContain('Change model');
+    expect(card).toContain(SLACK_SESSION_URL);
+  });
+
+  it('names the model the provider refused the key for, without the rest of the request', () => {
+    const invalidKey = Object.assign(new Error('invalid x-api-key'), {
+      name: 'AI_APICallError',
+      statusCode: 401,
+      responseBody: JSON.stringify({ type: 'error', error: { type: 'authentication_error', message: 'invalid x-api-key' } }),
+      requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'secret prompt' }] },
+    });
+    const card = rendered(slackRunErrorCard(invalidKey, slackRun()));
+
+    expect(card).toContain('Provider access failed');
+    expect(card).toContain('Model: claude-opus-4-5');
+    expect(card).not.toContain('secret prompt');
   });
 
   it('keeps the provider’s sentence and request id on a quota failure, where Slack has no error details', () => {

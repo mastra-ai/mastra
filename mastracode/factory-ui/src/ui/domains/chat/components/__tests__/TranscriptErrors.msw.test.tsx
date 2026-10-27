@@ -21,7 +21,7 @@ const SIGN_IN_REJECTED = 'Anthropic rejected the stored sign-in.';
 function failedReply(
   message = 'Bad Request',
   name = 'AI_APICallError',
-  facts: { statusCode?: number; responseBody?: string } = {},
+  facts: { statusCode?: number; responseBody?: string; modelId?: string } = {},
 ): MastraDBMessage {
   return {
     id: 'failed-reply',
@@ -172,6 +172,44 @@ describe('chat run errors', () => {
     await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
 
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
+  });
+
+  it('names the model a rejected key was tried with and offers another model next to the credentials', async () => {
+    const modelSwitches: unknown[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            { id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true },
+            { id: 'anthropic/claude-opus-4-5', provider: 'anthropic', modelName: 'claude-opus-4-5', hasApiKey: true },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ErrorSession
+        messages={[
+          failedReply('Incorrect API key provided.', 'AI_APICallError', { statusCode: 401, modelId: 'gpt-5.5' }),
+        ]}
+      />,
+    );
+
+    expect(screen.getByText('Provider access failed')).toBeVisible();
+    expect(screen.getByText('Model: GPT-5.5')).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+
+    await user.click(await screen.findByRole('button', { name: 'Change model' }));
+    await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
   });
 
   it('classifies a live error by the status the server kept, not by its message alone', () => {

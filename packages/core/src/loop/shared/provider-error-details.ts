@@ -16,6 +16,7 @@ export type ProviderErrorDetails = {
   statusCode?: number;
   responseBody?: string;
   requestId?: string;
+  modelId?: string;
 };
 
 function readField(error: object, field: string): unknown {
@@ -53,6 +54,10 @@ export function readProviderErrorDetails(error: unknown): ProviderErrorDetails {
 
   const requestId = readRequestId(readField(error, 'responseHeaders'));
   if (requestId) details.requestId = requestId;
+
+  const requestBody = readField(error, 'requestBodyValues');
+  const modelId = requestBody && typeof requestBody === 'object' ? readField(requestBody, 'model') : undefined;
+  if (typeof modelId === 'string' && modelId.trim()) details.modelId = modelId.trim();
 
   return details;
 }

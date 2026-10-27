@@ -645,12 +645,20 @@ type ProviderCallError = Error & {
   statusCode?: unknown;
   responseBody?: unknown;
   responseHeaders?: Record<string, unknown>;
+  requestBodyValues?: { model?: unknown };
 };
 
 const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
 
 /** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError({ name, message, statusCode, responseBody, responseHeaders }: ProviderCallError): WireError {
+function toWireError({
+  name,
+  message,
+  statusCode,
+  responseBody,
+  responseHeaders,
+  requestBodyValues,
+}: ProviderCallError): WireError {
   const wire: WireError = { name, message };
   if (typeof statusCode === 'number') wire.statusCode = statusCode;
   if (typeof responseBody === 'string' && responseBody.trim()) {
@@ -661,6 +669,8 @@ function toWireError({ name, message, statusCode, responseBody, responseHeaders 
   }
   const requestId = responseHeaders?.['request-id'] ?? responseHeaders?.['x-request-id'];
   if (typeof requestId === 'string' && requestId) wire.requestId = requestId;
+  const modelId = requestBodyValues?.model;
+  if (typeof modelId === 'string' && modelId) wire.modelId = modelId;
   return wire;
 }
 

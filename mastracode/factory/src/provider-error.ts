@@ -187,21 +187,45 @@ export function providerErrorReason(error: unknown): string | undefined {
 }
 
 export function providerRequestId(error: unknown): string | undefined {
-  return requestIdWithin(error, 0);
+  return firstAlongCauses(error, requestIdOf, 0);
 }
 
-function requestIdWithin(error: unknown, depth: number): string | undefined {
+export function providerModelId(error: unknown): string | undefined {
+  return firstAlongCauses(error, modelIdOf, 0);
+}
+
+function firstAlongCauses(
+  error: unknown,
+  read: (error: object) => string | undefined,
+  depth: number,
+): string | undefined {
   if (depth > MAX_OBJECT_DEPTH || typeof error !== 'object' || error === null) return undefined;
-  const kept = readField(error, 'requestId');
-  if (typeof kept === 'string' && kept.trim()) return kept.trim();
+  return read(error) ?? firstAlongCauses(readField(error, 'cause'), read, depth + 1);
+}
+
+function requestIdOf(error: object): string | undefined {
+  const kept = nonBlank(readField(error, 'requestId'));
+  if (kept) return kept;
   const headers = readField(error, 'responseHeaders');
-  if (typeof headers === 'object' && headers !== null) {
-    for (const header of REQUEST_ID_HEADERS) {
-      const value = readField(headers, header);
-      if (typeof value === 'string' && value.trim()) return value.trim();
-    }
+  if (typeof headers !== 'object' || headers === null) return undefined;
+  for (const header of REQUEST_ID_HEADERS) {
+    const value = nonBlank(readField(headers, header));
+    if (value) return value;
   }
-  return requestIdWithin(readField(error, 'cause'), depth + 1);
+  return undefined;
+}
+
+function modelIdOf(error: object): string | undefined {
+  const kept = nonBlank(readField(error, 'modelId'));
+  if (kept) return kept;
+  const requestBody = readField(error, 'requestBodyValues');
+  return typeof requestBody === 'object' && requestBody !== null
+    ? nonBlank(readField(requestBody, 'model'))
+    : undefined;
+}
+
+function nonBlank(value: unknown): string | undefined {
+  return typeof value === 'string' && value.trim() ? value.trim() : undefined;
 }
 
 function innermostReason(error: unknown, depth: number): string | undefined {
