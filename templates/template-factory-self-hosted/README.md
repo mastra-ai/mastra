@@ -20,9 +20,13 @@ Read the [documentation](https://factory.mastra.ai/) or [watch the Mastra Factor
 
 To change a service, replace its instance in `src/mastra/index.ts`. See [Configure your Factory](#configure-your-factory).
 
+> [!WARNING]
+> Local sandboxes run agent commands as the server's user, with access to its files and network. Use them only on a machine dedicated to this Factory. For shared or multi-tenant hosts, replace `LocalFactorySandbox` with an isolated provider such as `E2BFactorySandbox`.
+
 ## Start the Factory Server
 
-1. Copy `.env.example` to `.env`.
+1. Install dependencies with `npm install` (`npm create factory` already did this).
+1. Copy `.env.example` to `.env` (`npm create factory` already did this).
 1. Generate a credential encryption key and save it as `FACTORY_CREDENTIAL_ENCRYPTION_KEY`. Preserve it across restarts and deployments, and keep a protected backup.
 
    ```bash
