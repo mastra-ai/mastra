@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-Fixed the Observational Memory option types and their JSDoc. `observation.observeAttachments` now accepts a MIME type allowlist (`string[]`), matching the runtime and its default of `['image/*', 'application/pdf']`. The `model` option JSDoc now documents the real default, `'auto'`, instead of `'google/gemini-2.5-flash'`.
+You can now choose which attachment types the Observational Memory Observer receives: `observation.observeAttachments` accepts a MIME type allowlist (`string[]`) in the public types, matching the runtime (images and PDFs by default). Also corrected the `model` option docs: the default is `'auto'`, falling back from the top-level `model` to the other sub-config's `model`, not `'google/gemini-2.5-flash'`.

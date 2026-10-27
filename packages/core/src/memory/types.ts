@@ -479,8 +479,9 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'auto' — Google's low-cost Gemini model when a Google key is available, otherwise a
-   * low-cost model from the main model's provider, otherwise the main model itself.
+   * @default the top-level `model`, else `reflection.model`, else `'auto'` — Google's low-cost Gemini
+   * model when a Google key is available, otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -709,8 +710,9 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'auto' — Google's low-cost Gemini model when a Google key is available, otherwise a
-   * low-cost model from the main model's provider, otherwise the main model itself.
+   * @default the top-level `model`, else `observation.model`, else `'auto'` — Google's low-cost Gemini
+   * model when a Google key is available, otherwise a low-cost model from the main model's provider,
+   * otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
