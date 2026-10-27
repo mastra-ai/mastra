@@ -32,9 +32,9 @@ type MenuScrollAreaProps = {
  */
 export function MenuScrollArea({ menu, size = 'default', viewportRender, children }: MenuScrollAreaProps) {
   return (
-    <ScrollArea className="flex h-full min-h-0 max-h-[inherit] flex-col">
+    <ScrollArea className="flex h-full max-h-[inherit] min-h-0 flex-col">
       {/* Keeps a row scrolled into view by the keyboard clear of the 2rem edge fade. */}
-      <ScrollAreaViewport className="min-h-0 max-h-[inherit] scroll-py-8" render={viewportRender}>
+      <ScrollAreaViewport className="max-h-[inherit] min-h-0 scroll-py-8" render={viewportRender}>
         {/* A one-column grid stacks rows like a block, and lets a row share a cell with another
             (Tabs' overflow menu lays each tab's close button over its row). `minmax(0,1fr)` keeps
             long rows truncating instead of widening the popup. */}

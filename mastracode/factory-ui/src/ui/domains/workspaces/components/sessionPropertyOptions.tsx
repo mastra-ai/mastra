@@ -67,10 +67,14 @@ export const SESSION_GROUP_MENU_OPTIONS = withIcons(SESSION_GROUP_BY_OPTIONS, {
   none: List,
 });
 
+const OWNER_ICONS: Partial<Record<string, LucideIcon>> = {
+  [ALL_SESSION_OWNERS]: UsersRound,
+  [MY_SESSIONS]: UserRoundCheck,
+};
+
 export function sessionOwnerMenuOptions(rows: readonly SessionListRow[], viewerUserId: string | undefined) {
-  const icons: Record<string, LucideIcon> = { [ALL_SESSION_OWNERS]: UsersRound, [MY_SESSIONS]: UserRoundCheck };
   return sessionOwnerOptions(rows, viewerUserId).map(option => {
-    const Icon = icons[option.value] ?? UserRound;
+    const Icon = OWNER_ICONS[option.value] ?? UserRound;
     return { ...option, icon: <Icon aria-hidden /> };
   });
 }
