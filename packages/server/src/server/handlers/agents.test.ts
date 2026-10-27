@@ -4667,6 +4667,54 @@ describe('plain Agent resumable streams', () => {
     expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.FINISH]);
   });
 
+  it('ends the observation when a plain Agent run suspends for approval', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'plain-agent',
+      name: 'plain-agent',
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      streams: { pubsub },
+    });
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    const runId = 'plain-suspended';
+    const bus = agent.__getStreamBus()!.pubsub;
+    // What a plain run publishes when a tool needs approval (pinned in core parity.test.ts).
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.CHUNK,
+      data: { type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'lookup', args: {} } },
+    });
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { type: 'approval', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+    });
+
+    const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      runId,
+    } as any)) as ReadableStream<any>;
+    const reader = stream.getReader();
+    const events: any[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      (async () => {
+        while (true) {
+          const result = await reader.read();
+          if (result.done) return;
+          events.push(result.value);
+        }
+      })(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Observation did not close after the run suspended')), 1_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+
+    expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, AgentStreamEventTypes.SUSPENDED]);
+  });
+
   describe('run-scoped abort', () => {
     function setup() {
       const agent = plainAgent('plain-agent');

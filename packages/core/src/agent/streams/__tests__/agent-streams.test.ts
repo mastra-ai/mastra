@@ -4,11 +4,14 @@
  */
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../../events/event-emitter';
 import type { Event } from '../../../events/types';
 import { useLoopScenarioAimock } from '../../../loop/test-utils/aimock/aimock-scenario';
 import { SCENARIO_MODEL_ID } from '../../../loop/test-utils/aimock/types';
 import { Mastra } from '../../../mastra';
+import { InMemoryStore } from '../../../storage';
+import { createTool } from '../../../tools';
 import { Agent } from '../../agent';
 import type { AgentConfig } from '../../types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes } from '../constants';
@@ -163,6 +166,40 @@ describe('Agent streams option', () => {
       const tail = await collect((await agent.observe(runId, { offset: 3 })).fullStream);
       expect(tail.types.length).toBeLessThan(all.types.length);
       expect(tail.types.at(-1)).toBe('finish');
+    });
+
+    it('ends when the observed run suspends for tool approval', async () => {
+      const pubsub = new RecordingPubSub();
+      getMock().on(
+        { endpoint: 'chat' },
+        { toolCalls: [{ id: 'call-1', name: 'lookup', arguments: JSON.stringify({ q: 'x' }) }] },
+      );
+      const lookup = createTool({
+        id: 'lookup',
+        description: 'Look something up.',
+        inputSchema: z.object({ q: z.string() }),
+        requireApproval: true,
+        execute: async () => ({ ok: true }),
+      });
+      const agent = makeAgent({ tools: { lookup } });
+      new Mastra({ agents: { agent }, pubsub, storage: new InMemoryStore(), logger: false });
+
+      const output = await agent.stream('Look up x.');
+      await output.consumeStream();
+      await vi.waitFor(() => expect(pubsub.types(output.runId)).toContain(AgentStreamEventTypes.SUSPENDED));
+
+      const onSuspended = vi.fn();
+      const observed = await agent.observe(output.runId, { onSuspended });
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      const { types } = await Promise.race([
+        collect(observed.fullStream),
+        new Promise<never>((_, reject) => {
+          timer = setTimeout(() => reject(new Error('observe() did not end after the run suspended')), 2_000);
+        }),
+      ]).finally(() => clearTimeout(timer));
+      expect(types).toContain('tool-call-approval');
+      expect(types).not.toContain('finish');
+      expect(onSuspended).toHaveBeenCalledWith(expect.objectContaining({ type: 'approval', toolName: 'lookup' }));
     });
 
     it('keeps throwing for a standalone agent without streams', async () => {

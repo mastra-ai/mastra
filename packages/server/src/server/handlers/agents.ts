@@ -2863,7 +2863,11 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                   if (closed) return;
                   const type = event.type === 'chunk' ? event.data?.type : event.type;
                   controller.enqueue(event);
-                  if (type === 'finish' || type === 'error' || type === 'abort') {
+                  // A plain agent publisher ends its stream at suspension; the resume is
+                  // a new stream that clients observe again. Durable observers stay
+                  // attached across suspension and end via onComplete.
+                  const suspendedPlainRun = type === 'suspended' && !durableAgent;
+                  if (type === 'finish' || type === 'error' || type === 'abort' || suspendedPlainRun) {
                     cleanup(controller);
                   } else {
                     resetIdleTimer(controller);

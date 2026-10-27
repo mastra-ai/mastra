@@ -12057,6 +12057,8 @@ export class Agent<
       onFinish: options?.onFinish,
       onError: options?.onError ? ({ error }) => options.onError!({ error }) : undefined,
       onSuspended: options?.onSuspended,
+      // A plain agent publisher ends its stream at suspension, so the observation ends here too.
+      closeOnSuspend: true,
       logger: this.logger,
     });
     const { output, detach } = stream;
