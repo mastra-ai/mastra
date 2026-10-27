@@ -479,7 +479,8 @@ export interface ObservationalMemoryObservationConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto' — Google's low-cost Gemini model when a Google key is available, otherwise a
+   * low-cost model from the main model's provider, otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -685,13 +686,15 @@ export interface ObservationalMemoryObservationConfig {
 
   /**
    * Whether image/file attachment parts are forwarded to the Observer LLM.
-   * - `true` forwards attachments
+   * - `true` forwards every attachment
    * - `false` drops attachments and leaves placeholder text
    * - `'auto'` checks model capabilities to decide
+   * - a `string[]` forwards only attachments whose MIME type matches an entry; entries may be
+   *   exact (`'application/pdf'`) or a wildcard (`'image/*'`)
    *
-   * @default true
+   * @default ['image/*', 'application/pdf']
    */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 }
 
 /**
@@ -706,7 +709,8 @@ export interface ObservationalMemoryReflectionConfig {
    *
    * Cannot be set if a top-level `model` is also provided.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto' — Google's low-cost Gemini model when a Google key is available, otherwise a
+   * low-cost model from the main model's provider, otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -858,7 +862,8 @@ export interface ObservationalMemoryOptions {
    * Sets the model for both agents at once. Cannot be used together with
    * `observation.model` or `reflection.model` — an error will be thrown.
    *
-   * @default 'google/gemini-2.5-flash'
+   * @default 'auto' — Google's low-cost Gemini model when a Google key is available, otherwise a
+   * low-cost model from the main model's provider, otherwise the main model itself.
    */
   model?: AgentConfig['model'];
 
@@ -1528,7 +1533,7 @@ export type SerializedObservationalMemoryObservationConfig = {
   /** Whether the Observer should suggest thread titles */
   threadTitle?: boolean;
   /** Whether image/file attachment parts are forwarded to the Observer LLM */
-  observeAttachments?: 'auto' | boolean;
+  observeAttachments?: 'auto' | boolean | string[];
 };
 
 /** Serializable subset of ObservationalMemoryReflectionConfig */
