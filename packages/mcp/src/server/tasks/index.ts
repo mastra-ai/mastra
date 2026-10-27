@@ -1,6 +1,8 @@
 export type {
   MCPTaskAccess,
   MCPTaskAttempt,
+  MCPTaskAttemptTrace,
+  MCPTaskTrace,
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
   MCPTaskRunOptions,

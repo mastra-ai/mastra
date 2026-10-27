@@ -9,13 +9,15 @@ import { Agent } from '@mastra/core/agent';
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
+import type { SpanRecord } from '@mastra/core/storage';
 import { createTool } from '@mastra/core/tools';
 import { LibSQLStore } from '@mastra/libsql';
+import { DefaultExporter, Observability } from '@mastra/observability';
 import type { Client } from '@modelcontextprotocol/client';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { TaskRequester } from '../client/tasks/requester';
-import { tasksCapabilityEntry } from '../shared/tasks';
+import { taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
 import type { MCPDetailedTask } from '../shared/tasks';
 import { authFor, makeCrashy, runsIn } from './__tests__/background-tasks.mock';
 import { connectClient, rawRequest, serveHTTP } from './__tests__/harness.mock';
@@ -448,6 +450,115 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const done = await waitFor(await requester(b.url), taskId, 'completed');
     expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
     expect(runsIn(counterFile)).toBe(2);
+  });
+
+  describe('tracing', () => {
+    /** Spans go to the shared storage, as Studio reads them. */
+    const traced = () => ({
+      mastraExtra: {
+        observability: new Observability({
+          configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 20 })] } },
+        }),
+      },
+    });
+
+    /** Every stored span of every trace storage lists. */
+    async function storedSpans(mastra: Mastra): Promise<SpanRecord[]> {
+      const store = (await mastra.getStorage()!.getStore('observability'))!;
+      await mastra.observability.getSelectedInstance({})?.flush();
+      const { spans: roots } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
+      const traces = await Promise.all(roots.map(root => store.getTrace({ traceId: root.traceId })));
+      return traces.flatMap(trace => trace?.spans ?? []);
+    }
+
+    async function spanNamed(mastra: Mastra, name: string) {
+      for (let i = 0; i < 100; i++) {
+        const span = (await storedSpans(mastra)).find(span => span.name === name && span.endedAt);
+        if (span) return span;
+        await sleep(50);
+      }
+      throw new Error(`no stored span "${name}"`);
+    }
+
+    it('keeps an attempt recovered on a peer in the trace of the call that created the task', async () => {
+      const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
+      const b = await instance(tasks, traced());
+      const a = await instance(tasks, traced());
+      const taskId = await call(a.url, 'crashy');
+      await until(() => runsIn(counterFile) === 1);
+      await a.mastra.backgroundTaskManager!.shutdown();
+      await waitFor(await requester(b.url), taskId, 'completed');
+
+      const root = await spanNamed(b.mastra, 'tools/call crashy');
+      const recovered = await spanNamed(b.mastra, 'task attempt crashy #2');
+      expect(root).toMatchObject({ parentSpanId: null, metadata: { mcpTaskKey: taskKeyOf(taskId) } });
+      expect(recovered).toMatchObject({
+        traceId: root.traceId,
+        parentSpanId: root.spanId,
+        metadata: {
+          mcpTaskKey: taskKeyOf(taskId),
+          attempt: 2,
+          resumed: false,
+          recovered: true,
+          mcpTaskStatus: 'completed',
+        },
+      });
+    });
+
+    it("lists a task's trace even when the instance that created it never flushes its spans again", async () => {
+      const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
+      const b = await instance(tasks, traced());
+      // A batches spans for ten minutes: without the flush on task creation, nothing it records is stored,
+      // as when it is killed within its exporter's batch window.
+      const a = await instance(tasks, {
+        mastraExtra: {
+          observability: new Observability({
+            configs: {
+              default: { serviceName: 'tasks', exporters: [new DefaultExporter({ maxBatchWaitMs: 600_000 })] },
+            },
+          }),
+        },
+      });
+      const taskId = await call(a.url, 'crashy');
+      await until(() => runsIn(counterFile) === 1);
+      await a.mastra.backgroundTaskManager!.shutdown();
+      await waitFor(await requester(b.url), taskId, 'completed');
+
+      const recovered = await spanNamed(b.mastra, 'task attempt crashy #2');
+      const store = (await b.mastra.getStorage()!.getStore('observability'))!;
+      const { spans: listed } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
+      expect(listed).toEqual([
+        expect.objectContaining({
+          name: 'tools/call crashy',
+          traceId: recovered.traceId,
+          spanId: recovered.parentSpanId,
+        }),
+      ]);
+      await a.mastra.observability.getSelectedInstance({})?.flush();
+    });
+
+    it('never stores a task id in a span', async () => {
+      const tasks = { tools: { echo: 'always' as const, approve: 'always' as const, hang: 'always' as const } };
+      const a = await instance(tasks, traced());
+      const onA = await requester(a.url);
+      const echoed = await call(a.url, 'echo', { text: 'hi' });
+      const approved = await call(a.url, 'approve', { item: 'invoice' });
+      const hung = await call(a.url, 'hang');
+      await waitFor(onA, echoed, 'completed');
+      const waiting = await waitFor(onA, approved, 'input_required');
+      const [key] = Object.keys(waiting.inputRequests!);
+      await onA.update(approved, { [key!]: { action: 'accept', content: { approver: 'bob' } } });
+      await waitFor(onA, approved, 'completed');
+      await waitFor(onA, hung, 'working');
+      await onA.cancel(hung);
+      await expect(onA.update('not-a-task', {})).rejects.toMatchObject({ code: -32602 });
+      await spanNamed(a.mastra, 'task attempt approve #2');
+      await spanNamed(a.mastra, 'task attempt hang #1');
+
+      const stored = JSON.stringify(await storedSpans(a.mastra));
+      expect(stored).toContain(taskKeyOf(echoed));
+      for (const taskId of [echoed, approved, hung, 'not-a-task']) expect(stored).not.toContain(taskId);
+    });
   });
 
   describe("an 'auto' task's first attempt, already running under its request", () => {

@@ -1,7 +1,7 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { MCPToolType } from '@mastra/core/tools';
-import { DEFAULT_TASK_TTL_MS } from '../../shared/tasks';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
 import type { InMemoryMCPTaskStore } from './in-memory-store';
 import type { MCPTaskAccess, MCPTaskCreateParams, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './store';
@@ -245,8 +245,12 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
     return (await this.#store()).cancel(taskId, access);
   }
 
+  async traceOf(taskId: string, access: MCPTaskAccess) {
+    return (await this.#store()).traceOf?.(taskId, access);
+  }
+
   run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
-    if (!this.#selected) throw new Error(`MCP task "${taskId}" not found`);
+    if (!this.#selected) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
     this.#selected.run(taskId, work, options);
   }
 }

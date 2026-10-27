@@ -2,9 +2,10 @@ import type { BackgroundTask } from '@mastra/core/background-tasks';
 import { Mastra } from '@mastra/core/mastra';
 import { InMemoryStore } from '@mastra/core/storage';
 import { afterEach, describe, expect, it, vi } from 'vitest';
+import { taskKeyOf } from '../../shared/tasks';
 import { BackgroundTaskMCPTaskStore, projectTask, TASK_EXPIRED_MESSAGE, TASK_LOST_MESSAGE } from './background-store';
 import type { BackgroundTaskEnvelope } from './background-store';
-import type { MCPTaskWork } from './store';
+import type { MCPTaskAttempt, MCPTaskWork } from './store';
 
 const sleep = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
 
@@ -129,6 +130,37 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.registerTool('tool');
     return { manager, store, storage: await manager.getStorage() };
   }
+
+  it("gives a task's trace only to its caller, and each attempt its number", async () => {
+    const attempts: MCPTaskAttempt[] = [];
+    const work: MCPTaskWork = async attempt => {
+      attempts.push(attempt);
+      return attempts.length === 1
+        ? { status: 'input_required', inputRequests: { who: { method: 'elicitation/create', params: {} } } }
+        : { status: 'completed', result: { content: [] } };
+    };
+    const { store } = await setup(work);
+    const trace = { traceId: 't'.repeat(32), spanId: 's'.repeat(16) };
+    const task = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' }, trace });
+    store.run(task.taskId, work);
+    expect(await store.traceOf(task.taskId, { principal: 'alice' })).toEqual(trace);
+    expect(await store.traceOf(task.taskId, { principal: 'bob' })).toBeUndefined();
+    expect(await store.traceOf('unknown', { principal: 'alice' })).toBeUndefined();
+
+    await until(
+      () => store.get(task.taskId, { principal: 'alice' }),
+      t => t?.status === 'input_required',
+    );
+    await store.update(task.taskId, { who: { action: 'accept', content: {} } }, { principal: 'alice' });
+    await until(
+      () => store.get(task.taskId, { principal: 'alice' }),
+      t => t?.status === 'completed',
+    );
+    expect(attempts.map(attempt => attempt.trace)).toEqual([
+      { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 1, resumed: false, recovered: false },
+      { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 2, resumed: true, recovered: false },
+    ]);
+  });
 
   it('does not acknowledge an answer that storage would not store', async () => {
     const work: MCPTaskWork = async () => ({

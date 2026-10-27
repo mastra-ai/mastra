@@ -3,7 +3,7 @@ import type { BackgroundTask, BackgroundTaskManager, TaskContext, ToolExecutor }
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { createTaskId, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
+import { createTaskId, suggestedPollIntervalMs, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
 import type {
   MCPTaskAccess,
@@ -11,6 +11,7 @@ import type {
   MCPTaskCreateParams,
   MCPTaskRunOptions,
   MCPTaskStore,
+  MCPTaskTrace,
   MCPTaskWork,
 } from './store';
 
@@ -36,6 +37,8 @@ export interface BackgroundTaskEnvelope {
   v: 1;
   /** The caller's principal, hashed with {@link principalKeyOf}. */
   principalKey: string;
+  /** The span of the request that created the task; every attempt's span is its child. */
+  trace?: MCPTaskTrace;
   /** Who sent the task, readable for operators; never a credential, and never used to authorize. */
   clientLabel?: string;
   ttlMs: number | null;
@@ -73,11 +76,6 @@ export const TASK_LOST_MESSAGE = 'task lost: the server restarted while it was r
 export const TASK_EXPIRED_MESSAGE = 'Task expired before it finished';
 const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'failed', 'cancelled', 'timed_out']);
 const UPDATE_ATTEMPTS = 3;
-
-/** The row key for a task id. The id is a bearer token, so only its hash is stored. */
-export function taskKeyOf(taskId: string): string {
-  return createHash('sha256').update(taskId).digest('base64url');
-}
 
 /** How a principal is stored. Principals can carry user and subject ids, so only their hash is kept. */
 export function principalKeyOf(principal: string): string {
@@ -259,6 +257,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       v: ENVELOPE_VERSION,
       principalKey,
       ...(clientLabel !== undefined && { clientLabel }),
+      ...(params.trace && { trace: { traceId: params.trace.traceId, spanId: params.trace.spanId } }),
       ttlMs: params.ttlMs,
       ...(params.pollIntervalMs !== undefined && { pollIntervalMs: params.pollIntervalMs }),
       recover,
@@ -324,7 +323,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
 
   run(taskId: string, work: MCPTaskWork, options: MCPTaskRunOptions = {}): void {
     const gate = this.#gates.get(taskId);
-    if (!gate) throw new Error(`MCP task "${taskId}" not found`);
+    if (!gate) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
     this.#gates.delete(taskId);
     const { initialAttempt } = options;
     if (initialAttempt && gate.rowId) {
@@ -390,11 +389,15 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     if (!stored && row.status === 'suspended') {
       const open = openInputRequests(envelope);
       if (Object.keys(inputResponses).some(key => key in open && !(key in (envelope.inputResponses ?? {})))) {
-        throw new Error(`Could not store the input responses for MCP task "${taskId}"`);
+        throw new Error(`Could not store the input responses for MCP task ${taskKeyOf(taskId)}`);
       }
     }
     if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
     return true;
+  }
+
+  async traceOf(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined> {
+    return (await this.#find(taskId, access))?.envelope.trace;
   }
 
   async cancel(taskId: string, access: MCPTaskAccess): Promise<boolean> {
@@ -603,8 +606,22 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       else signal.addEventListener('abort', abort, { once: true });
       outcome = initial.outcome.finally(() => signal.removeEventListener('abort', abort));
     } else {
+      const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: args.taskKey, perPage: 1 });
+      const row = tasks[0];
+      const trace = row && envelopeOf(row)?.trace;
       const attempt: MCPTaskAttempt = {
         signal,
+        // Every resume follows a suspension and every retry a lost attempt, so together they count attempts.
+        ...(row &&
+          trace && {
+            trace: {
+              ...trace,
+              taskKey: args.taskKey,
+              attempt: 1 + row.retryCount + envelopeOf(row)!.usedInputKeys.length,
+              resumed: resumeData !== undefined,
+              recovered: row.retryCount > 0 && resumeData === undefined,
+            },
+          }),
         ...(resumeData && {
           resume: { inputResponses: resumeData.inputResponses, suspendPayload: resumeData.suspendPayload },
         }),

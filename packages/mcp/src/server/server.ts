@@ -65,7 +65,7 @@ import type { StdioServerHandle } from '@modelcontextprotocol/server/stdio';
 import { DEFAULT_EVENTS_HEARTBEAT_INTERVAL_MS, EVENTS_EXTENSION_ID } from '../shared/events';
 import { JSON_SCHEMA_2020_12, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { withMastraToolStrictMeta } from '../shared/mastra-tool-meta';
-import { hasTasksCapability, tasksCapabilityEntry } from '../shared/tasks';
+import { hasTasksCapability, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
 import type { MCPTaskInputRequests } from '../shared/tasks';
 import { withServerTraceContext, withoutTraceContext } from '../shared/trace-context';
 import type { CallerTraceContext } from '../shared/trace-context';
@@ -90,10 +90,11 @@ import type { ContinuationEnvelope } from './request';
 import { BackgroundTaskMCPTaskStore } from './tasks/background-store';
 import { resolveTasksConfig, SelectingMCPTaskStore } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
-import { emitTaskResults, taskHandleResult } from './tasks/emit';
+import { emitTaskResults, taskHandleResult, taskOfHandleResult } from './tasks/emit';
 import { registerTaskHandlers } from './tasks/handlers';
+import type { TaskRequestTracing } from './tasks/handlers';
 import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
-import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './tasks/store';
+import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskStore, MCPTaskTrace, MCPTaskWork } from './tasks/store';
 import type {
   AppResources,
   MCPAuthInfoToUserMapper,
@@ -663,7 +664,8 @@ export class MCPServer extends MCPServerBase {
         store: this.taskStore,
         authorize: this.tasks.authorize,
         principal: principalOf,
-        trace: (instance, method, params, ctx, fn) => this.traceCustomRequest(instance, method, params, ctx, fn),
+        trace: (instance, method, params, ctx, fn, tracing) =>
+          this.traceCustomRequest(instance, method, params, ctx, fn, tracing),
       });
       // A tool handler can only return a CallToolResult; task handles are rewritten on the way out.
       const connect = server.connect.bind(server);
@@ -686,16 +688,21 @@ export class MCPServer extends MCPServerBase {
     params: Record<string, unknown>,
     ctx: ServerContext,
     fn: (requestContext: RequestContext) => Promise<T>,
+    tracing: TaskRequestTracing = {},
   ): Promise<T> {
+    if (tracing.untraced) return fn(await toRequestContext(ctx, this.mapAuthInfoToUser));
     const caller = callerTrace(ctx);
+    const { metadata } = tracing;
     let requestContext: RequestContext;
     try {
       requestContext = await toRequestContext(ctx, this.mapAuthInfoToUser);
     } catch (error) {
-      this.startRequestSpan(method, params, { server, ctx, caller })?.error({ error: error as Error });
+      this.startRequestSpan(method, params, { server, ctx, caller, metadata })?.error({ error: error as Error });
       throw error;
     }
-    const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext });
+    // A request about a task the caller may see joins the task's trace; any other stays on its own.
+    const task = await tracing.parentOf?.(requestContext).catch(() => undefined);
+    const requestSpan = this.startRequestSpan(method, params, { server, ctx, caller, requestContext, metadata, task });
     return this.traceRequest(requestSpan, () => fn(requestContext));
   }
 
@@ -763,7 +770,15 @@ export class MCPServer extends MCPServerBase {
   private startRequestSpan(
     method: string,
     params: Record<string, unknown> | undefined,
-    connection?: { server?: Server; ctx?: ServerContext; caller?: CallerTraceContext; requestContext?: RequestContext },
+    connection?: {
+      server?: Server;
+      ctx?: ServerContext;
+      caller?: CallerTraceContext;
+      requestContext?: RequestContext;
+      metadata?: Record<string, unknown>;
+      /** The trace of the task the request is about; the span becomes a child of its root. */
+      task?: MCPTaskTrace;
+    },
   ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
     // A stateless HTTP request carries its own envelope; a stdio connection
     // negotiates once and the instance holds what it agreed to.
@@ -798,6 +813,12 @@ export class MCPServer extends MCPServerBase {
       // The request keeps its own trace and links to the caller's span, so each
       // side keeps its own root and trace summary in every exporter.
       links: caller && [caller.link],
+      metadata: connection?.metadata,
+      // Same parentage as openTaskSpan.
+      ...(connection?.task && {
+        tracingOptions: { traceId: connection.task.traceId },
+        resumedFromSpanId: connection.task.spanId,
+      }),
       requestContext: connection?.requestContext,
       mastra: this.mastra,
     });
@@ -815,6 +836,17 @@ export class MCPServer extends MCPServerBase {
   ): Promise<T> {
     try {
       const result = await fn();
+      const task = taskOfHandleResult(result);
+      if (task) {
+        // The call started a task: it succeeded, and its span is the root of the task's trace.
+        const mcpTaskKey = taskKeyOf(task.taskId);
+        requestSpan?.end({
+          output: { task: { status: task.status, mcpTaskKey } },
+          metadata: { mcpTaskKey, mcpTaskStatus: task.status },
+        });
+        if (requestSpan) this.flushTaskRoot(requestSpan);
+        return result;
+      }
       const errorResult = result as { isError?: boolean; content?: Array<{ text?: string }> } | undefined;
       if (errorResult?.isError) {
         requestSpan?.error({
@@ -838,6 +870,17 @@ export class MCPServer extends MCPServerBase {
       requestSpan?.error({ error: error as Error, endTree: true });
       throw error;
     }
+  }
+
+  /**
+   * Writes a task's root span out now rather than with the exporter's next batch: the task's later
+   * spans may be recorded by another process, and if this one dies first, a trace without its root
+   * drops out of trace lists.
+   */
+  private flushTaskRoot(span: Span<SpanType.MCP_SERVER_REQUEST>): void {
+    span.observabilityInstance
+      .flush()
+      .catch(error => this.logger.debug('Could not flush a task trace root', { error }));
   }
 
   /** Answers a suspended round: one keyed form derived from the handler's `resumeSchema`. */
@@ -950,7 +993,10 @@ export class MCPServer extends MCPServerBase {
           );
         }
         if (asTask && taskMode.mode === 'always') {
-          return this.startToolTask(ctx, requestContext, name, args, taskMode, { resume });
+          return this.startToolTask(ctx, requestContext, name, args, taskMode, {
+            resume,
+            rootSpan: trace.requestSpan,
+          });
         }
         const options = {
           requestContext,
@@ -1068,6 +1114,7 @@ export class MCPServer extends MCPServerBase {
     try {
       return {
         task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
+          rootSpan: options.tracingContext?.currentSpan as Span<SpanType.MCP_SERVER_REQUEST> | undefined,
           resume:
             options.resumeData === undefined
               ? undefined
@@ -1092,7 +1139,15 @@ export class MCPServer extends MCPServerBase {
     name: string,
     args: unknown,
     taskMode: ResolvedToolTaskMode,
-    { resume, initialAttempt }: { resume?: ToolTaskContext['resume'] } & MCPTaskRunOptions,
+    {
+      resume,
+      initialAttempt,
+      rootSpan,
+    }: {
+      resume?: ToolTaskContext['resume'];
+      /** The request's span, which becomes the task's root. */
+      rootSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
+    } & MCPTaskRunOptions,
   ): Promise<CallToolResult> {
     const { persisted, dropped } = persistableRequestContext(requestContext);
     if (dropped.length > 0) {
@@ -1108,7 +1163,12 @@ export class MCPServer extends MCPServerBase {
       requestContext: persisted,
       ...(resume && { resume }),
     };
-    const params = { ttlMs: taskMode.ttlMs, principal: principalOf(ctx, requestContext), context };
+    const params = {
+      ttlMs: taskMode.ttlMs,
+      principal: principalOf(ctx, requestContext),
+      context,
+      ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
+    };
     const store = this.taskStore instanceof SelectingMCPTaskStore ? await this.taskStore.resolve() : this.taskStore;
     const task =
       store instanceof BackgroundTaskMCPTaskStore
@@ -1117,7 +1177,12 @@ export class MCPServer extends MCPServerBase {
             clientLabel: clientLabelOf(ctx, requestContext),
           })
         : await store.create(params);
-    store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
+    store.run(task.taskId, this.toolTaskWork(context), {
+      initialAttempt:
+        initialAttempt &&
+        // The store awaits this attempt instead of calling `work`, so it gets its span here.
+        this.tracedInitialAttempt(name, initialAttempt, params.trace, task.taskId, requestContext),
+    });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
   }
@@ -1151,17 +1216,141 @@ export class MCPServer extends MCPServerBase {
         resumeData = answer.content ?? {};
         suspendPayload = attempt.resume.suspendPayload;
       }
-      try {
-        const execution = await this.runTool(name, tool, context.args, {
+      const span =
+        attempt.trace &&
+        this.openTaskSpan(`task attempt ${name} #${attempt.trace.attempt}`, attempt.trace, {
           requestContext,
-          abortSignal: attempt.signal,
-          resumeData,
-          suspendPayload,
+          input: context.args,
+          mcpMethod: 'tools/call',
+          targetName: name,
+          metadata: {
+            mcpTaskKey: attempt.trace.taskKey,
+            attempt: attempt.trace.attempt,
+            resumed: attempt.trace.resumed,
+            recovered: attempt.trace.recovered,
+          },
         });
-        return this.toTaskOutcome(name, tool, execution);
-      } catch (error) {
-        return this.toolErrorOutcome(name, error);
+      return this.endAttemptSpan(
+        span,
+        attempt.signal,
+        (async () => {
+          try {
+            const execution = await this.runTool(name, tool, context.args, {
+              requestContext,
+              abortSignal: attempt.signal,
+              resumeData,
+              suspendPayload,
+              tracingContext: span ? { currentSpan: span } : undefined,
+            });
+            return this.toTaskOutcome(name, tool, execution);
+          } catch (error) {
+            return this.toolErrorOutcome(name, error);
+          }
+        })(),
+      );
+    };
+  }
+
+  /**
+   * Opens a span in a task's trace, as a child of the task's root (the `tools/call` that created
+   * it), from any process. Uses the resume parentage workflows and agents use: the root id becomes
+   * the span's Mastra parent, so storage keeps one tree. `tracingOptions.parentSpanId` would not:
+   * it only correlates with an external system, and storage would record another root.
+   */
+  private openTaskSpan(
+    name: string,
+    trace: MCPTaskTrace,
+    options: {
+      mcpMethod: string;
+      targetName?: string;
+      requestContext?: RequestContext;
+      input?: unknown;
+      metadata: Record<string, unknown>;
+    },
+  ): Span<SpanType.MCP_SERVER_REQUEST> | undefined {
+    return getOrCreateSpan({
+      type: SpanType.MCP_SERVER_REQUEST,
+      name,
+      entityType: EntityType.MCP_SERVER,
+      entityId: this.id,
+      entityName: this.name,
+      input: options.input,
+      attributes: {
+        mcpMethod: options.mcpMethod,
+        ...(options.targetName !== undefined && { targetName: options.targetName }),
+        mcpServer: this.name,
+        serverVersion: this.version,
+      },
+      metadata: options.metadata,
+      tracingOptions: { traceId: trace.traceId },
+      resumedFromSpanId: trace.spanId,
+      requestContext: options.requestContext,
+      mastra: this.mastra,
+    });
+  }
+
+  /** Ends an attempt's span with how the attempt ended, and passes the outcome on. */
+  private async endAttemptSpan(
+    span: Span<SpanType.MCP_SERVER_REQUEST> | undefined,
+    signal: AbortSignal | undefined,
+    outcome: Promise<MCPTaskAttemptOutcome>,
+  ): Promise<MCPTaskAttemptOutcome> {
+    if (!span) return outcome;
+    try {
+      const result = await outcome;
+      if (signal?.aborted) {
+        span.end({ metadata: { mcpTaskStatus: 'cancelled' } });
+      } else if (result.status === 'input_required') {
+        span.end({ metadata: { mcpTaskStatus: 'input_required' } });
+      } else if (result.result.isError) {
+        span.error({
+          error: new MastraError({
+            id: 'MCP_SERVER_TASK_ATTEMPT_FAILED',
+            domain: ErrorDomain.MCP,
+            category: ErrorCategory.USER,
+            text: result.result.content
+              .map(c => (c.type === 'text' ? c.text : ''))
+              .filter(Boolean)
+              .join('\n'),
+          }),
+          metadata: { mcpTaskStatus: 'completed' },
+        });
+      } else {
+        span.end({ output: result.result, metadata: { mcpTaskStatus: 'completed' } });
       }
+      return result;
+    } catch (error) {
+      if (signal?.aborted) span.end({ metadata: { mcpTaskStatus: 'cancelled' } });
+      else span.error({ error: error as Error, endTree: true, metadata: { mcpTaskStatus: 'failed' } });
+      throw error;
+    }
+  }
+
+  /**
+   * An `'auto'` tool's first run, already under way under the request, as attempt 1 of its task:
+   * the attempt span opens when the task is created and ends with that run.
+   */
+  private tracedInitialAttempt(
+    name: string,
+    initialAttempt: NonNullable<MCPTaskRunOptions['initialAttempt']>,
+    trace: MCPTaskTrace | undefined,
+    taskId: string,
+    requestContext: RequestContext,
+  ): NonNullable<MCPTaskRunOptions['initialAttempt']> {
+    if (!trace) return initialAttempt;
+    const span = this.openTaskSpan(`task attempt ${name} #1`, trace, {
+      mcpMethod: 'tools/call',
+      targetName: name,
+      requestContext,
+      metadata: { mcpTaskKey: taskKeyOf(taskId), attempt: 1, resumed: false, recovered: false },
+    });
+    const aborted = new AbortController();
+    return {
+      outcome: this.endAttemptSpan(span, aborted.signal, initialAttempt.outcome),
+      abort: reason => {
+        aborted.abort(reason);
+        initialAttempt.abort(reason);
+      },
     };
   }
 
