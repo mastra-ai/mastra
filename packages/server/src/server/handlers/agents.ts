@@ -2827,7 +2827,7 @@ export const OBSERVE_AGENT_STREAM_ROUTE = createRoute({
                   for (const chunk of toAgentStreamChunks(event)) {
                     controller.enqueue(chunk);
                   }
-                  if (type === 'finish' || type === 'error' || type === 'abort') {
+                  if (type === 'finish' || event.type === 'error' || type === 'abort') {
                     cleanup(controller);
                   } else {
                     resetIdleTimer(controller);

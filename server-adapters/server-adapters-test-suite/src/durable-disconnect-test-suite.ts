@@ -163,6 +163,56 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
         },
       );
 
+      it('preserves finish metadata after a model error chunk (COR-1498)', async () => {
+        fixture = await config.setupModel();
+        const agent = (kind === 'durable' ? createDurableAgent : createEventedAgent)({
+          agent: new Agent({ id: 'error-agent', name: 'Error agent', instructions: 'Unused', model: fixture.model }),
+        });
+        mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore(), logger: false });
+        server = await config.startServer(mastra, () => {});
+        const runId = `observe-model-error-${kind}`;
+        const usage = { inputTokens: 1, outputTokens: 2, totalTokens: 3 };
+        const output = { text: '', steps: [], usage };
+        const stepResult = { reason: 'error', warnings: [], isContinued: false };
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'error', runId, from: 'AGENT', payload: { error: { message: 'Provider unavailable' } } },
+        });
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+          runId,
+          type: 'chunk',
+          data: { type: 'step-finish', runId, from: 'AGENT', payload: { output, stepResult, metadata: {} } },
+        });
+        await agent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'finish', data: { output, stepResult } });
+        const reference = createDurableAgentStream({
+          pubsub: agent.pubsub,
+          runId,
+          messageId: 'reference',
+          model: { version: 'v3', modelId: undefined, provider: undefined },
+        });
+        const expected: unknown[] = [];
+        try {
+          for await (const chunk of reference.output.fullStream) {
+            const serialized = serializeStreamChunk(chunk);
+            if (!serialized.ok) throw serialized.error;
+            expected.push(JSON.parse(serialized.json));
+          }
+        } finally {
+          await reference.cleanup();
+        }
+        const response = await fetch(`${server.baseUrl}/api/agents/agent/observe`, {
+          method: 'POST',
+          headers: { 'content-type': 'application/json' },
+          body: JSON.stringify({ runId }),
+        });
+        const frames = await collectPublicFrames(response);
+        expect(frames.map(frame => frame.type)).toEqual(['error', 'step-finish', 'finish']);
+        expect(frames).toEqual(expected);
+        expect(frames.at(-1)).toMatchObject({ payload: { output: { usage }, stepResult: { reason: 'error' } } });
+        if (config.observeWithClient) expect(await config.observeWithClient(server.baseUrl, runId)).toEqual(expected);
+      });
+
       it.each([false, true])(
         'matches public finish usage when terminal raw is present: %s (COR-1498)',
         async explicit => {

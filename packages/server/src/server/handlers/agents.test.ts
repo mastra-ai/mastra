@@ -2697,7 +2697,7 @@ describe('Agent Routes Authorization', () => {
       expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
     });
 
-    it.each(['finish', 'error', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
+    it.each(['finish', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
       const runId = `observe-enveloped-${type}`;
       const event = { runId, type: 'chunk', data: { type }, index: 0 };
       const unsubscribe = vi.fn(async () => {});
