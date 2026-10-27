@@ -2169,6 +2169,12 @@ With `recover: true` the same single retry also covers an attempt that fails for
 
 `recover` doesn't affect a task waiting for input: answering it resumes it on any instance either way.
 
+### Tracing
+
+Each task is one trace. The `tools/call` that creates the task is its root span, and it ends without an error once the task starts. Every run of the tool is a `task attempt <tool> #<n>` span under it, including resumed and recovered runs on other instances, and the tool's own spans sit inside its attempt. `tasks/update` and `tasks/cancel` requests join the same trace. `tasks/get` polls aren't traced.
+
+Task details are in span metadata: `mcpTaskKey` (a SHA-256 hash of the task id), `attempt`, `resumed`, `recovered` and `mcpTaskStatus`. Spans never record the task id itself. The server writes out the root span as soon as the task starts. A trace without its root drops out of trace lists, and this keeps it listed even if that instance stops before its next export. Attempts are numbered across instances, so a run recovered after a crash shows as `#2` even when the crashed attempt's span was lost with its instance.
+
 ### Limits
 
 - Without Mastra background tasks, tasks are kept in memory. They're lost when the process restarts, and a multi-instance deployment needs every `tasks/*` request for a task to reach the instance that created it. Streamable HTTP requests carry the task id in the `Mcp-Name` header, so a load balancer can route on it.
