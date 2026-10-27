@@ -15,10 +15,11 @@
  * persistable pair with its user message through the ordinary memory path.
  *
  * Only `{ name, message }` is persisted, plus `statusCode`, a bounded
- * `responseBody`, the provider `requestId`, every provider code and the
- * innermost `reason` for provider failures — without those, an `APICallError`
- * whose message is just "Bad Request" cannot be diagnosed or classified after
- * the fact. Stack traces, causes, other custom fields and
+ * `responseBody`, the provider `requestId`, the `modelId` the request named,
+ * every provider code and the innermost `reason` for provider failures —
+ * without those, an `APICallError` whose message is just "Bad Request" cannot
+ * be diagnosed or classified after the fact. The rest of the request body,
+ * stack traces, causes, other custom fields and
  * custom `toJSON` output stay on the runtime error surfaces (stream chunk,
  * `onError`, `result.error`); thread history has to be deterministic and
  * JSON-safe.

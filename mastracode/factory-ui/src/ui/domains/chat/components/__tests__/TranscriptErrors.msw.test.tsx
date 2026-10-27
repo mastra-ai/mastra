@@ -1,18 +1,17 @@
 import type { MastraDBMessage } from '@mastra/client-js';
-import { screen } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter } from 'react-router';
-import { beforeEach, describe, expect, it, vi } from 'vitest';
+import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
-import { ChatModelsContext } from '../../context/ChatModelsContext';
-import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
-import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
-import { initialTranscript, transcriptReducer } from '../../services/transcript';
+import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '../../services/transcript';
+import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { TranscriptEntries } from '../Transcript';
 
 type LiveEvent = Extract<Parameters<typeof transcriptReducer>[1], { type: 'event' }>['event'];
@@ -22,7 +21,7 @@ const SIGN_IN_REJECTED = 'Anthropic rejected the stored sign-in.';
 function failedReply(
   message = 'Bad Request',
   name = 'AI_APICallError',
-  facts: { statusCode?: number; responseBody?: string } = {},
+  facts: { statusCode?: number; responseBody?: string; modelId?: string } = {},
 ): MastraDBMessage {
   return {
     id: 'failed-reply',
@@ -32,13 +31,10 @@ function failedReply(
   };
 }
 
-const setModel = vi.fn(async (_modelId: string) => {});
-
 function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
-  const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
   const entries = liveEvent
     ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
-    : api.transcript.entries;
+    : createInitialTranscript({ messages, threadId: 'thread-1' }).entries;
   return (
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
       <ChatSessionContext.Provider
@@ -64,32 +60,13 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
               sessionId: 'session-1',
               resourceId: 'resource-1',
               modeId: 'build',
-              modelId: 'openai/gpt-5',
+              modelId: 'openai/gpt-5.5',
             },
           }}
         >
-          <ChatModelsContext.Provider
-            value={{
-              activeModelId: 'openai/gpt-5.5',
-              defaultModelId: undefined,
-              isLoading: false,
-              error: undefined,
-              setModel,
-            }}
-          >
-            <ChatTranscriptContext.Provider
-              value={{
-                ...api,
-                busy: api.transcript.pending,
-                phase: undefined,
-                initializing: false,
-                historyInitializing: false,
-                loadMore: { hasMore: false, isLoading: false },
-              }}
-            >
-              <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
-            </ChatTranscriptContext.Provider>
-          </ChatModelsContext.Provider>
+          <ChatModelsProvider>
+            <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+          </ChatModelsProvider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
     </MemoryRouter>
@@ -105,6 +82,9 @@ describe('chat run errors', () => {
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({ models: [], modelScope: 'user', defaultModelId: null }),
       ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
     );
   });
 
@@ -117,8 +97,9 @@ describe('chat run errors', () => {
     expect(screen.queryByText('AI_APICallError')).not.toBeInTheDocument();
 
     await user.click(screen.getByRole('button', { name: 'Error details' }));
-    expect(await screen.findByText(/AI_APICallError/)).toBeVisible();
-    const copyButton = screen.getByRole('button', { name: 'Copy error details' });
+    const details = await screen.findByRole('dialog', { name: 'Error details' });
+    expect(within(details).getByText(/AI_APICallError/)).toBeVisible();
+    const copyButton = within(details).getByRole('button', { name: 'Copy error details' });
     await user.click(copyButton);
     await user.unhover(copyButton);
     const copied = JSON.parse(await navigator.clipboard.readText());
@@ -151,7 +132,15 @@ describe('chat run errors', () => {
   });
 
   it('quotes a refused model and switches the session to another one from the card', async () => {
+    const modelSwitches: unknown[] = [];
     server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
       http.get(`${TEST_BASE_URL}/web/config/models`, () =>
         HttpResponse.json({
           models: [
@@ -183,17 +172,45 @@ describe('chat run errors', () => {
     await user.click(await screen.findByRole('button', { name: 'Change model' }));
     await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
 
-    expect(setModel).toHaveBeenCalledExactlyOnceWith('openai/gpt-5.4');
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
 
-  it('uses the same explanation for a live error event', () => {
-    const { entries } = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'AI_APICallError', message: 'Bad Request' } },
-    });
-    renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
+  it('names the model a rejected key was tried with and offers another model next to the credentials', async () => {
+    const modelSwitches: unknown[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            { id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true },
+            { id: 'anthropic/claude-opus-4-5', provider: 'anthropic', modelName: 'claude-opus-4-5', hasApiKey: true },
+          ],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ErrorSession
+        messages={[
+          failedReply('Incorrect API key provided.', 'AI_APICallError', { statusCode: 401, modelId: 'gpt-5.5' }),
+        ]}
+      />,
+    );
 
-    expect(screen.getByText('Model request rejected')).toBeVisible();
+    expect(screen.getByText('Provider access failed')).toBeVisible();
+    expect(screen.getByText('Model: GPT-5.5')).toBeVisible();
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+
+    await user.click(await screen.findByRole('button', { name: 'Change model' }));
+    await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
   });
 
   it('classifies a live error by the status the server kept, not by its message alone', () => {

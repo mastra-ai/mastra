@@ -113,6 +113,9 @@ export interface ChannelAdapterBaseConfig {
    */
   approvalButtons?: boolean;
 
+  /** Who may approve or deny a tool call in a shared channel. Defaults to the requester. */
+  toolApprovers?: 'requester' | 'anyone';
+
   /**
    * Show platform typing indicators (and adaptive status text where supported,
    * e.g. Slack Assistant mode displays `<App Name> <status>`).

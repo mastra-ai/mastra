@@ -1,6 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
-import { classifyProviderError } from '@mastra/core/error';
+import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
@@ -12,7 +12,6 @@ import {
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
 import { moveCardToBoard } from '../boards/relocate.js';
-import { PROVIDER_ERROR_NAMES } from '../run-error.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
   heartbeatSessionOpenRun,
@@ -111,7 +110,7 @@ function causeOf(error: unknown): unknown {
 
 function isProviderCallError(error: unknown): boolean {
   if (!error || typeof error !== 'object') return false;
-  if ('name' in error && typeof error.name === 'string' && PROVIDER_ERROR_NAMES.has(error.name)) return true;
+  if ('name' in error && typeof error.name === 'string' && PROVIDER_CALL_ERROR_NAME.test(error.name)) return true;
   return 'statusCode' in error || 'responseBody' in error;
 }
 

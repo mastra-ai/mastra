@@ -30,13 +30,13 @@ function makeListWithPartialAttempt(attemptId: string, parts: MastraDBMessage['c
 }
 
 describe('toPersistedErrorIdentity', () => {
-  it('keeps name, message, provider HTTP details and provider facts, nothing else', () => {
+  it('keeps name, message, provider HTTP details, the requested model and provider facts, nothing else', () => {
     const error = Object.assign(new TypeError('boom'), {
       statusCode: 429,
       responseBody: '{"error":{"code":"insufficient_quota"}}',
       cause: new Error('inner'),
       url: 'https://api.example.com/v1?key=secret',
-      requestBodyValues: { messages: [{ role: 'user', content: 'my secret prompt' }] },
+      requestBodyValues: { model: 'claude-opus-4-5', messages: [{ role: 'user', content: 'my secret prompt' }] },
     });
 
     expect(toPersistedErrorIdentity(error)).toEqual({
@@ -44,6 +44,7 @@ describe('toPersistedErrorIdentity', () => {
       message: 'boom',
       statusCode: 429,
       responseBody: '{"error":{"code":"insufficient_quota"}}',
+      modelId: 'claude-opus-4-5',
       codes: ['insufficient_quota'],
     });
     expect(Object.keys(toPersistedErrorIdentity(new Error('boom')))).toEqual(['name', 'message']);

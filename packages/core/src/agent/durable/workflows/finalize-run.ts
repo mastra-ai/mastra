@@ -19,6 +19,7 @@ import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-
 import { restoreRunAgentScopes } from '../../scopes';
 import { TripWire } from '../../trip-wire';
 import type { StructuredOutputOptions } from '../../types';
+import { isDurableAgentLike } from '../../types';
 import { assertExecutionOwned, isExecutionFenceError } from '../execution-fence';
 import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from '../memory-fga';
 import { getRunRegistryEntry } from '../run-registry';
@@ -247,10 +248,11 @@ export async function runDurableFinishSideEffects({
   // returned message arrays back onto it, including removals and replacements.
   if (registryEntry?.outputProcessors?.length) {
     try {
-      let agent: AnyAgent | undefined;
-      if (mastra) {
+      let agent: AnyAgent | undefined = registryEntry.agent;
+      if (!agent && mastra) {
         try {
-          agent = mastra.getAgentById(initData.agentId);
+          const registered = mastra.getAgentById(initData.agentId);
+          agent = isDurableAgentLike(registered) && registered.agent !== registered ? registered.agent : registered;
         } catch {
           agent = undefined;
         }

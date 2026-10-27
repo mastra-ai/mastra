@@ -1,38 +1,37 @@
 import type { ChannelErrorContext } from '@mastra/core/channels';
+import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Actions, Card, CardText, LinkButton } from 'chat';
 
 import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
 import { describeRunError } from '../../run-error.js';
+import { modelSettingsLink } from './channel-reply-processor.js';
 import { sessionLinkFromRequest } from './channel-session-link-processor.js';
 
-export function slackRunErrorCard(
-  error: Error,
-  { requestContext }: ChannelErrorContext,
-  publicUrl: string | undefined,
-) {
-  const { title, message, recovery } = describeRunError(error);
-  const link = requestContext && recoveryLink(requestContext, recovery, publicUrl);
+export function slackRunErrorCard(error: Error, { requestContext }: ChannelErrorContext) {
+  const { title, message, recoveries, model } = describeRunError(error);
+  const requestId = providerRequestId(error);
+  const facts = [model && `Model: ${model}`, requestId && `Request id: ${requestId}`].filter(Boolean).join(' · ');
+  const links = requestContext ? recoveryLinks(requestContext, recoveries) : [];
   return Card({
     title: `❌ ${title}`,
-    children: [CardText(message), ...(link ? [Actions([LinkButton(link)])] : [])],
+    children: [
+      CardText(message),
+      ...(facts ? [CardText(facts, { style: 'muted' })] : []),
+      ...(links.length ? [Actions(links.map(link => LinkButton(link)))] : []),
+    ],
   });
 }
 
-function recoveryLink(
-  requestContext: RequestContext,
-  recovery: RunErrorRecovery | undefined,
-  publicUrl: string | undefined,
-) {
+function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecovery[]) {
   const factoryProjectId = readFactorySessionScope(requestContext)?.factoryProjectId;
-  if (recovery === 'credentials' && publicUrl && factoryProjectId) {
-    const origin = publicUrl.replace(/\/+$/, '');
-    return {
-      url: `${origin}/factories/${encodeURIComponent(factoryProjectId)}/settings/models`,
-      label: 'Review credentials',
-    };
-  }
-  const url = sessionLinkFromRequest(requestContext);
-  return url ? { url, label: recovery === 'model' ? 'Change model' : 'Open session' } : undefined;
+  const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
+  const sessionUrl = sessionLinkFromRequest(requestContext);
+  const links = recoveries.flatMap(recovery => {
+    if (recovery === 'credentials') return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
+    return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+  });
+  if (links.length || !sessionUrl) return links;
+  return [{ url: sessionUrl, label: 'Open session' }];
 }

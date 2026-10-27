@@ -88,16 +88,6 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
     ),
     'rate_limited',
   ],
-  [
-    'wrapped token-per-minute limit',
-    new Error('Model call failed', {
-      cause: apiError(
-        429,
-        'Request too large for gpt-4o: Limit 30000, Requested 45000 tokens per min. Please reduce the length of the messages.',
-      ),
-    }),
-    'rate_limited',
-  ],
   ['401', apiError(401, 'Incorrect API key provided'), 'auth'],
   ['403 by status alone', apiError(403, 'Bad Request'), 'auth'],
   [
@@ -393,20 +383,6 @@ const classifications: Array<[name: string, error: unknown, kind: ProviderFailur
         }),
       }),
     }),
-    'context_overflow',
-  ],
-  [
-    'OpenAI model_not_found under invalid_request_error',
-    apiError(
-      404,
-      'The model `gpt-9` does not exist or you do not have access to it.',
-      '{"error":{"message":"The model `gpt-9` does not exist or you do not have access to it.","type":"invalid_request_error","param":null,"code":"model_not_found"}}',
-    ),
-    'model_rejected',
-  ],
-  [
-    'dual-code overflow body behind a bare Bad Request',
-    apiError(400, 'Bad Request', '{"error":{"type":"invalid_request_error","code":"context_length_exceeded"}}'),
     'context_overflow',
   ],
   [

@@ -22,6 +22,7 @@ export type ProviderErrorDetails = {
   statusCode?: number;
   responseBody?: string;
   requestId?: string;
+  modelId?: string;
 };
 
 function readField(error: object, field: string): unknown {
@@ -32,13 +33,19 @@ function readField(error: object, field: string): unknown {
   }
 }
 
-function readRequestId(headers: unknown): string | undefined {
+export function readRequestId(headers: unknown): string | undefined {
   if (!headers || typeof headers !== 'object') return undefined;
   for (const header of REQUEST_ID_HEADERS) {
     const value = readField(headers, header);
     if (typeof value === 'string' && value.trim()) return value.trim();
   }
   return undefined;
+}
+
+export function readRequestedModel(requestBody: unknown): string | undefined {
+  if (!requestBody || typeof requestBody !== 'object') return undefined;
+  const model = readField(requestBody, 'model');
+  return typeof model === 'string' && model.trim() ? model.trim() : undefined;
 }
 
 export function readProviderErrorDetails(error: unknown): ProviderErrorDetails {
@@ -56,6 +63,9 @@ export function readProviderErrorDetails(error: unknown): ProviderErrorDetails {
 
   const requestId = readRequestId(readField(error, 'responseHeaders'));
   if (requestId) details.requestId = requestId;
+
+  const modelId = readRequestedModel(readField(error, 'requestBodyValues'));
+  if (modelId) details.modelId = modelId;
 
   return details;
 }

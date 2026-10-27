@@ -1,6 +1,6 @@
 {
   "name": "@mastra/mesa",
-  "version": "0.3.2",
+  "version": "0.3.3-alpha.0",
   "description": "Mesa filesystem provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -44,7 +44,7 @@
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.4.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

@@ -1150,8 +1150,7 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
   // Per HTTP attempt, not per call: the WebClient's own retry policy still
   // waits out a 429. Without it a dead socket hangs a post forever.
   const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
-  const formatError: SlackAdapterChannelConfig['formatError'] =
-    deps.adapterOptions?.formatError ?? ((error, context) => slackRunErrorCard(error, context, webPublicUrl()));
+  const formatError: SlackAdapterChannelConfig['formatError'] = deps.adapterOptions?.formatError ?? slackRunErrorCard;
   const slack =
     deps.adapterOptions?.streaming === false
       ? { adapter, ...deps.adapterOptions, formatError }

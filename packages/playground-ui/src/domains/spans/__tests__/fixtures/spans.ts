@@ -148,7 +148,13 @@ function makeSpan(overrides: Partial<SpanRow> & Pick<SpanRow, 'traceId' | 'spanI
 /** One page of span rows, as `POST /observability/spans/query` returns it. */
 export const spanRowsPage: QuerySpansResult = {
   spans: [
-    makeSpan({ traceId: 'trace-1', spanId: 'span-1', name: 'agent run: weather' }),
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'agent run: weather',
+      model: 'gpt-5.6',
+      provider: 'openai',
+    }),
     makeSpan({
       traceId: 'trace-1',
       spanId: 'span-2',

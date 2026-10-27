@@ -39,9 +39,10 @@ export type MastraStepStartPart = {
 // stack traces, causes and other custom properties stay on the runtime error
 // surfaces (stream chunk, onError, result.error) and are never written to
 // thread history. Provider HTTP failures (AI SDK `APICallError`) also keep the
-// status code, a bounded copy of the response body, the provider request id and
-// the provider facts a reload classifies by (every code, the provider's own
-// reason sentence), because their `message` is often just the HTTP status text.
+// status code, a bounded copy of the response body, the provider request id,
+// the model the request named and the provider facts a reload classifies by
+// (every code, the provider's own reason sentence), because their `message` is
+// often just the HTTP status text.
 export type MastraErrorPart = {
   type: 'error';
   error: {
@@ -49,6 +50,7 @@ export type MastraErrorPart = {
     message: string;
     responseBody?: string;
     requestId?: string;
+    modelId?: string;
   } & ProviderErrorFacts;
 } & MastraPartExtensions;
 
