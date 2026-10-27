@@ -74,6 +74,19 @@ function makeTools(probe: Probe, counterFile: string) {
       },
     }),
     crashy: makeCrashy(counterFile),
+    approveTwice: createTool({
+      id: 'approveTwice',
+      description: 'Asks who approves, then asks them to confirm',
+      inputSchema: z.object({}),
+      suspendSchema: z.object({ message: z.string() }),
+      resumeSchema: z.object({ approver: z.string().optional(), confirmed: z.boolean().optional() }),
+      execute: async (_input, context) => {
+        probe.runs.push({ tool: 'approveTwice', resumeData: context.resumeData });
+        if (context.resumeData?.confirmed) return 'confirmed';
+        const message = context.resumeData?.approver ? `Confirm, ${context.resumeData.approver}?` : 'Who approves?';
+        await context.suspend?.({ message });
+      },
+    }),
     waits: createTool({
       id: 'waits',
       description: 'Takes a while unless aborted',
@@ -291,6 +304,64 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       { tool: 'approve', resumeData: undefined },
       { tool: 'approve', resumeData: { approver: 'bob' } },
     ]);
+  });
+
+  // Fails until core can fence a write on the suspension it read (daniel/mcp-tasks-3b3-suspended-at-fence):
+  // a write is fenced only on status 'suspended', which a later suspension of the same row also has.
+  it.fails('ignores an answer to a question the task already moved past', async () => {
+    const tools = { tools: { approveTwice: 'always' as const } };
+    const a = await instance(tools);
+    const b = await instance(tools);
+    const onA = await requester(a.url);
+    const onB = await requester(b.url);
+    const taskId = await call(a.url, 'approveTwice');
+    const [k1] = Object.keys((await waitFor(onA, taskId, 'input_required')).inputRequests ?? {});
+
+    // B reads the task waiting on K1, then stalls before writing its answer.
+    const storageB = await b.mastra.backgroundTaskManager!.getStorage();
+    const write = storageB.updateTask.bind(storageB);
+    let reachedWrite!: () => void;
+    const stalled = new Promise<void>(resolve => (reachedWrite = resolve));
+    let release!: () => void;
+    const released = new Promise<void>(resolve => (release = resolve));
+    vi.spyOn(storageB, 'updateTask').mockImplementation(async (...args) => {
+      const responses = (args[1].metadata as { inputResponses?: Record<string, unknown> } | undefined)?.inputResponses;
+      if (responses && k1! in responses) {
+        reachedWrite();
+        await released;
+      }
+      return write(...args);
+    });
+    const stale = onB.update(taskId, { [k1!]: { action: 'accept', content: { approver: 'mallory' } } });
+    await stalled;
+
+    // Meanwhile K1 is answered through A, and the tool moves on to ask K2.
+    await onA.update(taskId, { [k1!]: { action: 'accept', content: { approver: 'bob' } } });
+    let waiting = await onA.get(taskId);
+    for (let i = 0; i < 200 && !Object.keys(waiting.inputRequests ?? {}).some(key => key !== k1); i++) {
+      await sleep(50);
+      waiting = await onA.get(taskId);
+    }
+    const k2Requests = waiting.inputRequests ?? {};
+    const [k2] = Object.keys(k2Requests);
+    expect(k2).toBeDefined();
+    expect(k2).not.toBe(k1);
+
+    release();
+    await stale.catch(() => undefined);
+    await sleep(LEASE_MS);
+
+    // K2's question is still open, and the tool never saw mallory's answer.
+    expect(await onA.get(taskId)).toMatchObject({ status: 'input_required', inputRequests: k2Requests });
+    expect(probe.runs.filter(run => run.tool === 'approveTwice').map(run => run.resumeData)).toEqual([
+      undefined,
+      { approver: 'bob' },
+    ]);
+
+    await onA.update(taskId, { [k2!]: { action: 'accept', content: { confirmed: true } } });
+    expect(await waitFor(onA, taskId, 'completed')).toMatchObject({
+      result: { content: [{ type: 'text', text: 'confirmed' }] },
+    });
   });
 
   // Fails until core aborts a local run whose row another process cancelled
