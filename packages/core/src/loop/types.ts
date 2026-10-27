@@ -15,6 +15,7 @@ import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
+import type { AgentStreamPublisher } from '../agent/streams/publisher';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -293,6 +294,8 @@ export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
    * which is the caller's own signal and may be reused across many runs.
    */
   runAbortSignal?: AbortSignal;
+  /** @internal Publishes the run's chunks on its agent stream topic for resumable readers. */
+  streamPublisher?: AgentStreamPublisher;
   agentName?: string;
   requestContext?: RequestContext;
   /** Trusted server-side signal for this loop's FGA checks. */

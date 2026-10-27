@@ -61,6 +61,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'agents/resumable-streams',
+              label: 'Resumable Streams',
+            },
+            {
+              type: 'doc',
               id: 'agents/guardrails',
               label: 'Guardrails',
             },

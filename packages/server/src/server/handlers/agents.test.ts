@@ -818,6 +818,50 @@ describe('Agent Routes Authorization', () => {
     return requestContext;
   }
 
+  async function persistDurableAgenticLoopRun({
+    runId,
+    resourceId,
+    status = 'running',
+    inputCheckpointed = true,
+    workflowName = 'durable-agentic-loop',
+    threadId,
+  }: {
+    runId: string;
+    resourceId?: string;
+    status?: 'running' | 'suspended' | 'pending';
+    inputCheckpointed?: boolean;
+    workflowName?: string;
+    threadId?: string;
+  }) {
+    const workflowsStore = await storage.getStore('workflows');
+    await workflowsStore?.persistWorkflowSnapshot({
+      workflowName,
+      runId,
+      resourceId,
+      snapshot: {
+        runId,
+        status,
+        value: {},
+        context: (inputCheckpointed
+          ? {
+              input: {
+                agentId: 'test-durable-agent',
+                __workflowKind: 'durable-agent',
+                state: { threadId },
+              },
+            }
+          : {}) as any,
+        activePaths: [],
+        activeStepsPath: {},
+        serializedStepGraph: [],
+        suspendedPaths: {},
+        resumeLabels: {},
+        waitingPaths: {},
+        timestamp: Date.now(),
+      },
+    });
+  }
+
   describe('agent metadata serialization', () => {
     it('includes metadata in the list agents response', async () => {
       mockAgent = new Agent({
@@ -1813,9 +1857,11 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    it('should pass abortSignal to agent.resumeStream()', async () => {
+    it('should pass abortSignal to agent.resumeStream() when the agent has no resumable streams', async () => {
       const requestContext = createContextWithReservedKeys({});
       const abortController = new AbortController();
+      // Registered agents publish by default and detach instead; see "plain Agent resumable streams".
+      vi.spyOn(mockAgent, 'hasResumableStreams').mockReturnValue(false);
 
       let capturedOptions: any;
       vi.spyOn(mockAgent, 'resumeStream').mockImplementation(async (_resumeData, options) => {
@@ -2309,51 +2355,8 @@ describe('Agent Routes Authorization', () => {
       });
     });
 
-    async function persistDurableAgenticLoopRun({
-      runId,
-      resourceId,
-      status = 'running',
-      inputCheckpointed = true,
-      workflowName = 'durable-agentic-loop',
-      threadId,
-    }: {
-      runId: string;
-      resourceId?: string;
-      status?: 'running' | 'suspended' | 'pending';
-      inputCheckpointed?: boolean;
-      workflowName?: string;
-      threadId?: string;
-    }) {
-      const workflowsStore = await storage.getStore('workflows');
-      await workflowsStore?.persistWorkflowSnapshot({
-        workflowName,
-        runId,
-        resourceId,
-        snapshot: {
-          runId,
-          status,
-          value: {},
-          context: (inputCheckpointed
-            ? {
-                input: {
-                  agentId: 'test-durable-agent',
-                  __workflowKind: 'durable-agent',
-                  state: { threadId },
-                },
-              }
-            : {}) as any,
-          activePaths: [],
-          activeStepsPath: {},
-          serializedStepGraph: [],
-          suspendedPaths: {},
-          resumeLabels: {},
-          waitingPaths: {},
-          timestamp: Date.now(),
-        },
-      });
-    }
-
-    it('returns 501 when run-scoped abort targets a non-durable agent', async () => {
+    it('returns 501 when run-scoped abort targets an agent without resumable streams', async () => {
+      vi.spyOn(mastra.getAgentById('test-agent'), 'hasResumableStreams').mockReturnValue(false);
       await expect(
         ABORT_AGENT_RUN_ROUTE.handler({
           mastra,
@@ -2666,10 +2669,68 @@ describe('Agent Routes Authorization', () => {
       });
       mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
       mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+      // Stream-mechanics tests below observe runs this process tracks, with no owner.
+      vi.spyOn(mockDurableAgent, '__getRunOwner').mockReturnValue({});
     });
 
-    it('closes an unknown run within one second', async () => {
-      expect(await collectWithDeadline(await observe(crypto.randomUUID()))).toEqual([]);
+    describe('authorization', () => {
+      const observeAs = (runId: string, resourceId?: string) =>
+        OBSERVE_AGENT_STREAM_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId,
+          requestContext: createContextWithReservedKeys({ resourceId }),
+        } as any);
+
+      it('returns 404 for a run that is neither tracked here nor stored', async () => {
+        vi.mocked(mockDurableAgent.__getRunOwner).mockReturnValue(undefined);
+        const subscribe = vi.spyOn(mockDurableAgent, '__subscribeToRunStream');
+        await expect(observeAs(crypto.randomUUID(), 'user-a')).rejects.toMatchObject({ status: 404 });
+        expect(subscribe).not.toHaveBeenCalled();
+      });
+
+      it.each([
+        ['the owner', 'user-a', true],
+        ['another resource', 'user-b', false],
+      ])('lets %s observe a run tracked in this process: %s', async (_case, caller, allowed) => {
+        vi.mocked(mockDurableAgent.__getRunOwner).mockReturnValue({ resourceId: 'user-a' });
+        const subscribe = vi
+          .spyOn(mockDurableAgent, '__subscribeToRunStream')
+          .mockImplementation(async (_runId, options) => {
+            options.onComplete?.();
+            return async () => {};
+          });
+        const observation = observeAs('tracked-run', caller);
+        if (allowed) {
+          await collectWithDeadline((await observation) as ReadableStream<any>);
+          expect(subscribe).toHaveBeenCalled();
+        } else {
+          await expect(observation).rejects.toMatchObject({ status: 403 });
+          expect(subscribe).not.toHaveBeenCalled();
+        }
+      });
+
+      it.each([
+        ['the owner', 'user-a', true],
+        ['another resource', 'user-b', false],
+      ])('lets %s observe a stored durable run from another process: %s', async (_case, caller, allowed) => {
+        vi.mocked(mockDurableAgent.__getRunOwner).mockReturnValue(undefined);
+        await persistDurableAgenticLoopRun({ runId: 'stored-run', resourceId: 'user-a' });
+        const subscribe = vi
+          .spyOn(mockDurableAgent, '__subscribeToRunStream')
+          .mockImplementation(async (_runId, options) => {
+            options.onComplete?.();
+            return async () => {};
+          });
+        const observation = observeAs('stored-run', caller);
+        if (allowed) {
+          await collectWithDeadline((await observation) as ReadableStream<any>);
+          expect(subscribe).toHaveBeenCalled();
+        } else {
+          await expect(observation).rejects.toMatchObject({ status: 403 });
+          expect(subscribe).not.toHaveBeenCalled();
+        }
+      });
     });
 
     it('closes after replay even when the offset is past the terminal event', async () => {
@@ -4597,5 +4658,213 @@ describe('extractVersionOptions', () => {
   it('should handle body requestContext without agentVersionId key', () => {
     expect(extractVersionOptions(undefined, { otherKey: 'value' })).toBeUndefined();
     expect(extractVersionOptions(undefined, {})).toBeUndefined();
+  });
+});
+
+describe('plain Agent resumable streams', () => {
+  function plainAgent(id: string, streams?: boolean) {
+    return new Agent({
+      id,
+      name: id,
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      ...(streams === undefined ? {} : { streams }),
+    });
+  }
+
+  it.each([
+    [undefined, true],
+    [false, false],
+  ])('streams: %s on a registered agent detaches on HTTP close = %s', async (streams, detaches) => {
+    const agent = plainAgent('plain-agent', streams);
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    let captured: any;
+    vi.spyOn(agent, 'stream').mockImplementation(async (_messages, options) => {
+      captured = options;
+      return { fullStream: new ReadableStream() } as any;
+    });
+    const abortSignal = new AbortController().signal;
+
+    await STREAM_GENERATE_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      requestContext: new RequestContext(),
+      abortSignal,
+      messages: [{ role: 'user', content: 'test' }],
+    } as any);
+
+    expect(captured.abortSignal).toBe(detaches ? undefined : abortSignal);
+    expect(captured._detachObserverOnCancel).toBe(detaches);
+  });
+
+  it('observes a plain Agent run from the agent stream bus', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'plain-agent',
+      name: 'plain-agent',
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      streams: { pubsub },
+    });
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+    const runId = 'plain-observe';
+    await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.FINISH,
+      data: { output: {}, stepResult: { reason: 'stop' } },
+    });
+
+    const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      runId,
+    } as any)) as ReadableStream<any>;
+    const events: any[] = [];
+    for await (const event of stream as any) events.push(event);
+
+    expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.FINISH]);
+  });
+
+  it('ends the observation when a plain Agent run suspends for approval', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const agent = new Agent({
+      id: 'plain-agent',
+      name: 'plain-agent',
+      instructions: 'test-instructions',
+      model: { specificationVersion: 'v2' } as any,
+      streams: { pubsub },
+    });
+    const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+    vi.spyOn(agent, '__getRunOwner').mockReturnValue({});
+    const runId = 'plain-suspended';
+    const bus = agent.__getStreamBus()!.pubsub;
+    // What a plain run publishes when a tool needs approval (pinned in core parity.test.ts).
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.CHUNK,
+      data: { type: 'tool-call-approval', runId, payload: { toolCallId: 'call-1', toolName: 'lookup', args: {} } },
+    });
+    await bus.publish(AGENT_STREAM_TOPIC(runId), {
+      runId,
+      type: AgentStreamEventTypes.SUSPENDED,
+      data: { type: 'approval', toolCallId: 'call-1', toolName: 'lookup', args: {} },
+    });
+
+    const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+      mastra,
+      agentId: 'plain-agent',
+      runId,
+    } as any)) as ReadableStream<any>;
+    const reader = stream.getReader();
+    const events: any[] = [];
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    await Promise.race([
+      (async () => {
+        while (true) {
+          const result = await reader.read();
+          if (result.done) return;
+          events.push(result.value);
+        }
+      })(),
+      new Promise<never>((_, reject) => {
+        timer = setTimeout(() => reject(new Error('Observation did not close after the run suspended')), 1_000);
+      }),
+    ]).finally(() => clearTimeout(timer));
+
+    expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.CHUNK, AgentStreamEventTypes.SUSPENDED]);
+  });
+
+  describe('observe authorization', () => {
+    const observeAs = (mastra: Mastra, runId: string, resourceId: string) =>
+      OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'plain-agent',
+        runId,
+        requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, resourceId]]),
+      } as any);
+
+    it.each([
+      ['the owner', 'user-a', true],
+      ['another resource', 'user-b', false],
+    ])('lets %s observe a run: %s', async (_case, caller, allowed) => {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      vi.spyOn(agent, '__getRunOwner').mockReturnValue({ resourceId: 'user-a' });
+      const runId = 'owned-run';
+      await agent.__getStreamBus()!.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: AgentStreamEventTypes.FINISH,
+        data: { output: {}, stepResult: { reason: 'stop' } },
+      });
+
+      const observation = observeAs(mastra, runId, caller);
+      if (allowed) {
+        const events: any[] = [];
+        for await (const event of (await observation) as any) events.push(event);
+        expect(events.map(event => event.type)).toEqual([AgentStreamEventTypes.FINISH]);
+      } else {
+        await expect(observation).rejects.toMatchObject({ status: 403 });
+      }
+    });
+
+    it('returns 404 for a run this server does not hold', async () => {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      await expect(observeAs(mastra, 'elsewhere', 'user-a')).rejects.toMatchObject({ status: 404 });
+    });
+  });
+
+  describe('run-scoped abort', () => {
+    function setup() {
+      const agent = plainAgent('plain-agent');
+      const mastra = new Mastra({ agents: { 'plain-agent': agent }, logger: false });
+      const abort = vi.spyOn(agent, 'abortRunStream').mockReturnValue(true);
+      return { agent, mastra, abort };
+    }
+
+    it('stops a run executing here for its owner', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'plain-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('plain-run');
+    });
+
+    it('refuses a run owned by another resource', async () => {
+      const { agent, mastra, abort } = setup();
+      vi.spyOn(agent, '__getPublishedRunOwner').mockReturnValue({ resourceId: 'user-a' });
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'plain-run',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-b']]),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it('returns 404 for a run not executing on this server', async () => {
+      const { mastra, abort } = setup();
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'plain-agent',
+          runId: 'elsewhere',
+          requestContext: new RequestContext([[MASTRA_RESOURCE_ID_KEY, 'user-a']]),
+        }),
+      ).rejects.toMatchObject({ status: 404 });
+      expect(abort).not.toHaveBeenCalled();
+    });
   });
 });

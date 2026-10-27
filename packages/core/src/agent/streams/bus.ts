@@ -28,6 +28,15 @@ export interface AgentStreamBusHooks {
  * offset. Resolution is lazy so a registered agent inherits Mastra's bus and
  * cache.
  */
+/** Runs `cleanup` after `timeoutMs`. A timeout of 0 keeps run state forever, so nothing is scheduled. */
+export function scheduleStreamCleanup(
+  timeoutMs: number,
+  cleanup: () => void,
+): ReturnType<typeof setTimeout> | undefined {
+  if (timeoutMs === 0) return undefined;
+  return setTimeout(cleanup, timeoutMs);
+}
+
 export class AgentStreamBus {
   readonly #hooks: AgentStreamBusHooks;
   /** Whether the user explicitly provided a pubsub (don't override with mastra.pubsub) */
@@ -72,6 +81,11 @@ export class AgentStreamBus {
   /** Grace period before a finished run's state is cleaned up (0 = never). */
   get cleanupTimeoutMs(): number {
     return this.#cleanupTimeoutMs;
+  }
+
+  /** Runs `cleanup` once the grace period passes. Returns no timer when cleanup is disabled. */
+  scheduleCleanup(cleanup: () => void): ReturnType<typeof setTimeout> | undefined {
+    return scheduleStreamCleanup(this.#cleanupTimeoutMs, cleanup);
   }
 
   /**
@@ -142,13 +156,14 @@ export class AgentStreamBus {
   /**
    * The bus a run's frames live on.
    *
-   * When the run's steps execute on whichever worker claims them, its frames
-   * must be on the Mastra-level bus: an observer on the agent's own bus would
-   * never see them. Using one bus also means one cache log per run — the
+   * Once registered, frames go on the Mastra-level bus so any Mastra instance
+   * sharing it can observe the run, even if this bus was resolved before
+   * registration. Using one bus also means one cache log per run — the
    * property offset replay depends on.
    *
-   * When every step runs in this process and publishes through this agent, an
-   * agent-level pubsub keeps carrying its run frames.
+   * A user-provided agent-level pubsub keeps carrying run frames, unless the
+   * run's steps execute on whichever worker claims them (evented): then an
+   * observer on the agent's own bus would never see them.
    */
   #runBus(sharedBus: PubSub | undefined): PubSub {
     return resolveRunBus({

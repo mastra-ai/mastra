@@ -118,8 +118,9 @@ Returns: `DurableAgent`
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Takes precedence over `mastra.pubsub`. When omitted, a registered agent publishes on `mastra.pubsub` and an unregistered agent uses an in-process `EventEmitterPubSub`.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',
@@ -177,8 +178,9 @@ Returns: `EventedAgent` (a subclass of `DurableAgent`)
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Once the agent is registered, evented run frames use `mastra.pubsub` instead, because evented steps publish there.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',
@@ -240,8 +242,9 @@ The `DurableAgent` class accepts the same options as `createDurableAgent`, plus 
     name: 'pubsub',
     type: 'PubSub',
     isOptional: true,
-    description: 'PubSub instance for streaming events.',
-    defaultValue: 'EventEmitterPubSub',
+    description:
+      'PubSub instance for streaming events. Takes precedence over `mastra.pubsub`. When omitted, a registered agent publishes on `mastra.pubsub` and an unregistered agent uses an in-process `EventEmitterPubSub`.',
+    defaultValue: 'mastra.pubsub, or EventEmitterPubSub when unregistered',
   },
   {
     name: 'maxSteps',

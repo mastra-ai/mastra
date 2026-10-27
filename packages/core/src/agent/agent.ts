@@ -202,6 +202,7 @@ import type {
   DurableAgentStreamOptions,
   DurableAgentStreamResult,
 } from './durable/durable-agent';
+import { createDurableAgentStream } from './durable/stream-adapter';
 import type { AgentSuspendedEventData, DurableAgentStepFinishResult } from './durable/types';
 import { GoalSignalProvider, resolveGoalStore, readObjective, writeObjective, clearObjective } from './goal';
 import { buildMcpServerGuidance } from './mcp-guidance';
@@ -221,6 +222,12 @@ import type { AgentScopesSnapshot, ResolvedAgentScopes } from './scopes';
 import type { AgentSignalInput, CreatedAgentSignal } from './signals';
 import { signalSpanAttributes } from './signals';
 import { runStreamUntilIdle, runResumeStreamUntilIdle } from './stream-until-idle';
+import { publishAbortRequest } from './streams/abort-transport';
+import { AgentStreamBus } from './streams/bus';
+import { agentStreamsConfig, areAgentStreamsEnabled, mergeDurableStreamsConfig } from './streams/config';
+import type { AgentStreamsOption } from './streams/config';
+import { createAgentStreamPublisher } from './streams/publisher';
+import type { AgentStreamPublisher } from './streams/publisher';
 import type { SubAgent, SubAgentToolCall, SubAgentToolResult } from './subagent';
 import { agentThreadStreamRuntime } from './thread-stream-runtime';
 import type { ActiveThreadRun } from './thread-stream-runtime';
@@ -919,6 +926,13 @@ export class Agent<
   #activeStreamUntilIdle = new Map<string, () => void>();
   readonly #options?: AgentCreateOptions;
   readonly #durable?: AgentDurableOption;
+  readonly #streamsOption?: AgentStreamsOption;
+  /** Resumable stream layer, built on first use once streams are enabled. */
+  #streamBus?: AgentStreamBus;
+  /** Published runs executing in this process, with the owner the abort route checks. */
+  #publishedRuns = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
+  // Owners of runs whose stream topic still holds replay history (running, suspended, or finished but not yet cleared).
+  #runOwners = new Map<string, { publisher: AgentStreamPublisher; resourceId?: string; threadId?: string }>();
   /**
    * Cached DurableAgent wrapper created on-demand by `#getStandaloneDurable()`
    * when `durable: true` is set on the config but the agent is not attached
@@ -968,6 +982,7 @@ export class Agent<
     this.#metadata = config.metadata;
     this.#options = config.options;
     this.#durable = config.durable;
+    this.#streamsOption = config.streams;
 
     if (!config.model) {
       const mastraError = new MastraError({
@@ -1657,6 +1672,129 @@ export class Agent<
   }
 
   /**
+   * The `streams` option this agent was constructed with, if any.
+   * See {@link AgentConfig.streams}.
+   */
+  get streams(): AgentStreamsOption | undefined {
+    return this.#streamsOption;
+  }
+
+  /**
+   * Options to wrap this agent with `createDurableAgent`: its `durable` option
+   * with the `streams` option folded in.
+   *
+   * @internal
+   */
+  __getDurableWrapOptions(): Record<string, unknown> {
+    const durable = this.#durable === true || !this.#durable ? {} : { ...(this.#durable as object) };
+    return mergeDurableStreamsConfig(durable, this.#streamsOption, message =>
+      this.logger.warn(`[Agent:${this.id}] ${message}`),
+    ) as Record<string, unknown>;
+  }
+
+  /**
+   * The resumable stream layer runs of this agent publish on, or `undefined`
+   * when streams are off. See {@link AgentConfig.streams}.
+   *
+   * @internal
+   */
+  __getStreamBus(): AgentStreamBus | undefined {
+    return this.#ownStreamBus();
+  }
+
+  // Not overridable: DurableAgent exposes its own bus through __getStreamBus,
+  // but runs it executes never go through this class's publisher.
+  #ownStreamBus(): AgentStreamBus | undefined {
+    // A durable agent publishes through its DurableAgent wrapper.
+    if (this.#durable) return undefined;
+    if (!areAgentStreamsEnabled(this.#streamsOption, !!this.#mastra)) return undefined;
+    if (!this.#streamBus) {
+      const config = agentStreamsConfig(this.#streamsOption);
+      this.#streamBus = new AgentStreamBus(
+        { ...config, pubsub: config.pubsub ?? this.#pubsub },
+        {
+          getMastra: () => this.#mastra,
+          // Plain agent runs execute and publish in this process.
+          usesSharedRunLog: () => false,
+          warn: message => this.logger.warn(`[Agent:${this.id}] ${message}`),
+        },
+      );
+      if (this.#mastra) this.#streamBus.registerMastra(this.#mastra.pubsub);
+    }
+    return this.#streamBus;
+  }
+
+  /**
+   * Whether runs of this agent can be followed from another reader with
+   * `observe()` (or the server's observe route): true when its runs publish
+   * on a stream topic, which is the case for durable agents and for agents
+   * with streams on. See {@link AgentConfig.streams}.
+   */
+  hasResumableStreams(): boolean {
+    return !!this.#durable || !!this.__getStreamBus();
+  }
+
+  #createStreamPublisher(
+    runId: string,
+    owner: { resourceId?: string; threadId?: string; abortSignal?: AbortSignal },
+  ): AgentStreamPublisher | undefined {
+    const bus = this.#ownStreamBus();
+    if (!bus) return undefined;
+    const publisher = createAgentStreamPublisher({
+      pubsub: bus.pubsub,
+      runId,
+      cleanupTimeoutMs: bus.cleanupTimeoutMs,
+      logger: this.logger,
+      abortSignal: owner.abortSignal,
+      onEnd: () => {
+        if (this.#publishedRuns.get(runId)?.publisher === publisher) this.#publishedRuns.delete(runId);
+      },
+      onCleared: () => {
+        if (this.#runOwners.get(runId)?.publisher === publisher) this.#runOwners.delete(runId);
+      },
+    });
+    const entry = { publisher, resourceId: owner.resourceId, threadId: owner.threadId };
+    this.#publishedRuns.set(runId, entry);
+    this.#runOwners.set(runId, entry);
+    return publisher;
+  }
+
+  /**
+   * Owner of a run whose stream topic this process still holds (running,
+   * suspended, or finished within the cleanup window), or undefined. Lets the
+   * server authorize observing a run.
+   * @internal
+   */
+  __getRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    const run = this.#runOwners.get(runId);
+    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
+  }
+
+  /**
+   * Owner of a published run executing in this process, or undefined when the
+   * run is not running here. Lets the server authorize run-scoped aborts for
+   * agents without durable run storage.
+   * @internal
+   */
+  __getPublishedRunOwner(runId: string): { resourceId?: string; threadId?: string } | undefined {
+    const run = this.#publishedRuns.get(runId);
+    return run ? { resourceId: run.resourceId, threadId: run.threadId } : undefined;
+  }
+
+  /**
+   * Ask whichever process runs `runId` to abort it, over the run's control
+   * topic. Best-effort: a failed publish is logged, and a request nobody hears
+   * is a no-op, like aborting a finished run.
+   */
+  async #requestStreamAbort(bus: AgentStreamBus, runId: string): Promise<void> {
+    try {
+      await publishAbortRequest(bus.pubsub, runId);
+    } catch (error) {
+      this.logger.warn(`[Agent:${this.id}] failed to publish abort request`, { runId, error });
+    }
+  }
+
+  /**
    * Self-referential `agent` accessor exposed only when this agent was
    * constructed with `durable: true`.
    *
@@ -1704,8 +1842,7 @@ export class Agent<
       return this.#standaloneDurable as StandaloneDurableWrapper;
     }
     const { createDurableAgent } = await import('./durable/create-durable-agent');
-    const opts = this.#durable === true ? {} : (this.#durable as object);
-    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...opts });
+    const wrapper = createDurableAgent({ agent: this as unknown as Agent, ...this.__getDurableWrapOptions() });
     this.#standaloneDurable = wrapper;
     return wrapper as unknown as StandaloneDurableWrapper;
   }
@@ -4157,6 +4294,8 @@ export class Agent<
     if (this.#standaloneDurable) {
       this.#standaloneDurable = undefined;
     }
+
+    this.#streamBus?.registerMastra(mastra.pubsub);
 
     // Propagate logger to workspace if it's a direct instance (not a factory function)
     if (this.#workspace && typeof this.#workspace !== 'function') {
@@ -8969,10 +9108,21 @@ export class Agent<
         this.#mastra?.getToolPayloadTransform?.() ?? (this.#mastra as any)?.getToolPayloadProjection?.(),
       );
 
+    const streamPublisher = this.#createStreamPublisher(runId, {
+      resourceId,
+      threadId: threadFromArgs?.id,
+      abortSignal: options.abortSignal,
+    });
+
     // Create the workflow with all necessary context
     const executionWorkflow = createPrepareStreamWorkflow<OUTPUT>({
       capabilities: capabilities as AgentCapabilities,
-      options: { ...options, methodType } as any,
+      // A published run also stops on abort requests from other readers.
+      options: {
+        ...options,
+        ...(streamPublisher ? { abortSignal: streamPublisher.abortSignal } : {}),
+        methodType,
+      } as any,
       threadFromArgs,
       resourceId,
       runId,
@@ -8987,6 +9137,7 @@ export class Agent<
       returnScorerData: options.returnScorerData,
       requireToolApproval: options.requireToolApproval,
       toolCallConcurrency: options.toolCallConcurrency,
+      streamPublisher,
       // Resolved to a boolean here, at the one entry point the contract covers, rather
       // than left undefined and defaulted deep in the loop. Anything that reaches the
       // agentic-execution workflow without coming through a regular agent call — the
@@ -9027,6 +9178,8 @@ export class Agent<
     try {
       const run = await executionWorkflow.createRun();
       const result = await run.start({ requestContext, actor: options.actor, ...observabilityContext });
+      // The loop never started, so its publisher would otherwise stay open.
+      if (result.status === 'failed') void streamPublisher?.fail(result.error);
       // A step failure surfaces as a resolved 'failed' result, not a rejection.
       // The stream terminal handlers never ran, so close the span tree here.
       if (result.status !== 'success' && agentSpan && !agentSpan.endTime) {
@@ -9069,6 +9222,7 @@ export class Agent<
               error,
             );
       agentSpan?.error({ error: spanError, endTree: true });
+      void streamPublisher?.fail(error);
       throw error;
     }
   }
@@ -9981,6 +10135,10 @@ export class Agent<
     const parked = agentThreadStreamRuntime.isRunParked(runId, this.getPubSub());
     const aborted = agentThreadStreamRuntime.abortRun(runId, this.getPubSub());
     if (aborted && parked) void this.#deleteAbortedSuspendedRun(runId);
+    // A published run may be executing in another process; it listens on its
+    // control topic.
+    const bus = this.#ownStreamBus();
+    if (!aborted && bus) void this.#requestStreamAbort(bus, runId);
     return aborted;
   }
 
@@ -11887,11 +12045,96 @@ export class Agent<
       onError?: ({ error }: { error: Error | string }) => void | Promise<void>;
       onSuspended?: (data: AgentSuspendedEventData) => void | Promise<void>;
     },
-  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }> {
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
+    const bus = this.__getStreamBus();
+    if (bus) return this.#observeStream(bus, runId, options);
     const durable = await this.#requireStandaloneDurable('observe');
     return durable.observe(runId, options) as Promise<
-      Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string }
+      Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }
     >;
+  }
+
+  /**
+   * Follow a run of this agent from its stream topic: replay what the cache
+   * kept, then tail live events. The run keeps going when the observer stops
+   * reading or detaches.
+   */
+  async #observeStream(
+    bus: AgentStreamBus,
+    runId: string,
+    options: Parameters<Agent<TAgentId, TTools, TOutput>['observe']>[1],
+  ): Promise<Omit<DurableAgentStreamResult<TOutput>, 'runId'> & { runId: string; detach: () => void }> {
+    const stream = createDurableAgentStream<TOutput>({
+      pubsub: bus.pubsub,
+      runId,
+      messageId: globalThis.crypto.randomUUID(),
+      model: { modelId: undefined, provider: undefined, version: 'v3' },
+      offset: options?.offset,
+      onChunk: options?.onChunk,
+      onStepFinish: options?.onStepFinish,
+      onFinish: options?.onFinish,
+      onError: options?.onError ? ({ error }) => options.onError!({ error }) : undefined,
+      onSuspended: options?.onSuspended,
+      // A plain agent publisher ends its stream at suspension, so the observation ends here too.
+      closeOnSuspend: true,
+      logger: this.logger,
+    });
+    const { output, detach } = stream;
+
+    // This output belongs to this observer alone: a consumer that stops reading
+    // fullStream detaches the subscription (MastraModelOutput only drops the
+    // cancelled reader's listeners).
+    const baseFullStream = Object.getOwnPropertyDescriptor(Object.getPrototypeOf(output), 'fullStream')!.get!;
+    Object.defineProperty(output, 'fullStream', {
+      configurable: true,
+      get(this: typeof output) {
+        // `this` is the real instance (the destructurable proxy reads getters
+        // with its target as receiver); the proxy itself can't reach private fields.
+        const reader = (baseFullStream.call(this) as ReadableStream<ChunkType<TOutput>>).getReader();
+        return new ReadableStream<ChunkType<TOutput>>({
+          async pull(controller) {
+            let result: ReadableStreamReadResult<ChunkType<TOutput>>;
+            try {
+              result = await reader.read();
+            } catch (error) {
+              detach();
+              throw error;
+            }
+            if (result.done) {
+              detach();
+              controller.close();
+            } else {
+              controller.enqueue(result.value);
+            }
+          },
+          cancel(reason) {
+            detach();
+            return reader.cancel(reason);
+          },
+        });
+      },
+    });
+
+    try {
+      await stream.ready;
+    } catch (error) {
+      detach();
+      throw error;
+    }
+
+    return {
+      output,
+      get fullStream() {
+        return output.fullStream as ReadableStream<any>;
+      },
+      runId,
+      // The run's publisher owns its topic; an observer only unsubscribes.
+      cleanup: detach,
+      detach,
+      abort: async () => {
+        await this.#requestStreamAbort(bus, runId);
+      },
+    };
   }
 
   /** Prepare a durable execution without starting it. Only valid when `durable: true`. */
