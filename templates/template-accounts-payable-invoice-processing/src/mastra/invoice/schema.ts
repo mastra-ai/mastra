@@ -78,7 +78,11 @@ export const ExtractedInvoiceSchema = z
         issues.push('subtotal + tax does not equal total');
 
       invoice.lines.forEach((line, index) => {
-        if (line.lineTotal === null) return;
+        if (line.lineTotal === null) {
+          if (!hasMinorUnitPrecision(line.unitPrice, digits))
+            issues.push(`lines.${index}.lineTotal is required for sub-minor-unit rates`);
+          return;
+        }
         if (!hasMinorUnitPrecision(line.lineTotal, digits))
           issues.push(`lines.${index}.lineTotal exceeds ${invoice.currency} minor-unit precision`);
         if (!reconciles([new Decimal(line.qty).mul(line.unitPrice)], line.lineTotal, digits))

@@ -625,3 +625,59 @@ it('requires distinct SimpleAuth reader and human credentials before production 
   assert.deepEqual(await auth.authenticateToken(apiToken, request), { id: 'invoice-reader', role: 'reader' });
   assert.deepEqual(await auth.authenticateToken(approvalToken, request), { id: 'human-reviewer', role: 'approver' });
 });
+
+// CodeRabbit 4383912023: a rounded unit rate cannot replace the full-precision extended amount.
+it.each([null, 5])(
+  'reviews sub-minor-unit rates before approval unless the line total is printed: %s',
+  async lineTotal => {
+    const test = await scenario({
+      state: {
+        orders: [
+          {
+            Id: 'po-1',
+            DocNumber: 'AP-PO-1001',
+            VendorRef: { value: 'vendor-1' },
+            CurrencyRef: { value: 'USD' },
+            TotalAmt: 5,
+            Line: [
+              {
+                Id: '1',
+                Amount: 5,
+                Description: 'Pens',
+                ItemBasedExpenseLineDetail: {
+                  ItemRef: { value: 'item-1' },
+                  Qty: 1000,
+                  UnitPrice: 0.005,
+                },
+              },
+            ],
+          },
+        ],
+      },
+    });
+    try {
+      const result = await test.run({
+        tool: true,
+        invoice: {
+          subtotal: 5,
+          tax: 0,
+          total: 5,
+          lines: [{ sku: 'item-1', description: 'Pens', qty: 1000, unitPrice: 0.005, lineTotal }],
+        },
+      });
+      if (lineTotal === null) {
+        assert.equal(result.status, 'needs_extraction_review');
+        assert.ok(result.reasons?.some(reason => /lineTotal.*sub-minor-unit/.test(reason.message)));
+        assert.equal((await test.state()).calls.length, 0);
+      } else {
+        assert.equal(result.approvalPending, true);
+        const approved = await test.run({ runId: result.runId, approved: true });
+        assert.equal(approved.result?.executionStatus, 'posted');
+        assert.equal((await test.state()).bills[0]?.TotalAmt, 5);
+        assert.equal((await test.state()).bills[0]?.Line[0]?.Amount, 5);
+      }
+    } finally {
+      await test.close();
+    }
+  },
+);
