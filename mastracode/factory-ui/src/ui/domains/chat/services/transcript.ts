@@ -39,7 +39,6 @@ export interface NoticeEntry {
   id: string;
   level: 'info' | 'error';
   text: string;
-  /** Run error events keep the same `{ name, message }` identity as persisted error parts. */
   error?: MastraErrorPart['error'];
 }
 
