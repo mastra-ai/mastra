@@ -1232,12 +1232,16 @@ export const DEFAULT_COMPAT_RULES: CompatRule[] = [
   stripForeignProviderExecutedTools,
   anthropicToolIdFormat,
   cerebrasStripReasoningContent,
+  // Both reactive Anthropic rules match the same "cannot be modified" 400 and `processAPIError` stops
+  // at the first rule that changes history. The orphaned-step repair goes first: it only removes a
+  // step that is provably broken, whereas the empty-signed strip also removes blocks that may be
+  // valid (Claude 5.x), so it must only run when no orphaned step explains the 400.
+  anthropicOrphanedThinkingStep,
   anthropicStripEmptySignedReasoningContent,
   anthropicStripForeignReasoningContent,
   anthropicStripForeignSignedReasoning,
   azureSystemReminderTransform,
   openaiOrphanItemId,
-  anthropicOrphanedThinkingStep,
   chatCompletionsSingleSystemMessage,
   toolCallEmptyInput,
   // Last, so it sees the prompt after other rules have dropped emptied turns.

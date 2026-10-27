@@ -2654,6 +2654,37 @@ describe('anthropicStripEmptySignedReasoningContent (reactive)', () => {
     } satisfies ProcessAPIErrorArgs;
   }
 
+  it('repairs an orphaned thinking step without dropping a valid empty signed block from an earlier message', async () => {
+    // Both rules match this 400 and the first one that changes history wins, so the orphaned-step
+    // repair has to run first: otherwise the strip rule removes the valid Claude 5.x block, the retry
+    // still fails on the orphaned step, and the retryCount guard turns it into a hard failure.
+    const args = argsFor(list => {
+      list.add([createUserMessage('q1')], 'input');
+      list.add(
+        [assistant('a1', [{ type: 'step-start' }, reasoning('VALID_EMPTY', ''), { type: 'text', text: 'one' }])],
+        'memory',
+      );
+      list.add([createUserMessage('q2')], 'input');
+      list.add(
+        [
+          assistant('a2', [
+            { type: 'step-start' },
+            reasoning('ORPHANED', 'lost step thinking'),
+            { type: 'step-start' },
+            reasoning('NEXT', 'next step thinking'),
+            { type: 'text', text: 'two' },
+          ]),
+        ],
+        'memory',
+      );
+    });
+
+    const result = await new ProviderHistoryCompat().processAPIError(args);
+
+    expect(result).toEqual({ retry: true });
+    expect(signatures(args.messageList)).toEqual([['VALID_EMPTY'], ['NEXT']]);
+  });
+
   it('drops legacy empty signed blocks from earlier messages after the 400, keeping valid ones and the trailing assistant', async () => {
     const args = argsFor(list => {
       list.add([createUserMessage('q1')], 'input');
