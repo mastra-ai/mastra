@@ -1,3 +1,5 @@
+import { capPersistedText, readRequestedModel, readRequestId } from '../loop/shared/provider-error-details';
+
 export type ProviderFailureKind =
   | 'auth'
   | 'quota'
@@ -10,7 +12,13 @@ export type ProviderFailureKind =
   | 'invalid_request'
   | 'unknown';
 
-const MAX_REASON_LENGTH = 2000;
+export interface ProviderErrorFacts {
+  statusCode?: number;
+  codes?: string[];
+  /** The innermost sentence behind HTTP phrases, envelopes, stringified layers and a wrapped provider response, when it differs from the message. */
+  reason?: string;
+}
+
 const MAX_OBJECT_DEPTH = 4;
 const ENVELOPE_TYPES = new Set(['error', 'response.failed']);
 const SYMBOLIC_STATUS = /^[A-Z][A-Z0-9_]+$/;
@@ -22,7 +30,7 @@ const USAGE_CAPPED =
 // A cap that refills within the hour is a rate limit, whatever the provider calls it.
 const RENEWS_WITHIN_THE_HOUR = /per[_ -]?(?:second|minute|hour|min|sec)\b|\b[rt]pm\b/i;
 const ACCESS_DENIED_WORDING =
-  /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|authentication[_ ]error|permission[_ ]?(?:denied|error)|access[_ ]?denied/i;
+  /invalid[_ ]api[_ ]key|incorrect api key|api key not valid|authentication[_ ]error|permission_?(?:denied|error)|access[_ ]?denied/i;
 // Bare "unauthorized" or "forbidden" in free text can come from any service a run touches, not only the model provider.
 const ACCESS_DENIED_CODE = new RegExp(`${ACCESS_DENIED_WORDING.source}|unauthorized|authentication|forbidden`, 'i');
 const CONTEXT_OVERFLOW = [
@@ -52,7 +60,6 @@ const HTTP_REASON_PHRASE =
 // A provider call saved before its status was kept says only the HTTP phrase; elsewhere a bare phrase names nobody.
 export const PROVIDER_CALL_ERROR_NAME = /^(?:AI_)?APICallError$/;
 const ACCESS_DENIED_PHRASE = /^(?:unauthorized|forbidden)\.?$/i;
-const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
 const MARKUP_OR_JSON = /^\s*[[{<]/;
 
 interface CollectedFacts {
@@ -98,7 +105,9 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   // Google's symbolic `error.status` names the failure; a lifecycle `status: 'failed'` names nothing.
   const status = readField(value, 'status');
   if (typeof status === 'string' && SYMBOLIC_STATUS.test(status.trim())) facts.codes.push(status.trim());
-  for (const candidate of [code, readField(value, 'type')]) {
+  const saved = readField(value, 'codes');
+  const savedCodes = Array.isArray(saved) ? saved : [];
+  for (const candidate of [code, readField(value, 'type'), ...savedCodes]) {
     if (typeof candidate === 'string' && candidate.trim() && !ENVELOPE_TYPES.has(candidate))
       facts.codes.push(candidate);
   }
@@ -119,6 +128,8 @@ export function classifyProviderError(error: unknown): ProviderFailureKind {
   const evidence = [...facts.codes, ...facts.texts].join('\n');
   const verdict = providerVerdict(facts.statusCode, facts.codes.join('\n'), evidence);
   if (verdict === 'invalid_request') return narrowInvalidRequest(evidence, facts.statusCode, facts.codes);
+  // A gateway can relay an upstream context overflow as a 5xx; retrying the same prompt can't succeed.
+  if (verdict === 'unavailable' && isContextOverflow(evidence)) return 'context_overflow';
   if (verdict) return verdict;
   return (
     usageKind(evidence) ??
@@ -153,9 +164,10 @@ function providerVerdict(status: number | undefined, codes: string, evidence: st
 function narrowInvalidRequest(evidence: string, status: number | undefined, codes: string[]): ProviderFailureKind {
   // Anthropic reports an exhausted credit balance as a 400 invalid request.
   if (BILLING_EXHAUSTED.test(evidence)) return 'quota';
-  // Claude Max reports an exhausted usage cap as a 400 with no code of its own; a coded rejection, a 404 or a 422 names something else.
+  // An uncoded 400 can be a usage cap (Claude Max) or a rate limit; a coded rejection, a 404 or a 422 names something else.
   const uncodedRejection = status === 400 && codes.every(code => INVALID_REQUEST_ENVELOPE.test(code));
   if (uncodedRejection && usageKind(evidence) === 'quota') return 'quota';
+  if (uncodedRejection && RATE_LIMITED.test(evidence)) return 'rate_limited';
   return terminalKindFromWording(evidence) ?? 'invalid_request';
 }
 
@@ -167,11 +179,15 @@ function usageKind(evidence: string): 'quota' | 'rate_limited' | undefined {
 
 function terminalKindFromWording(evidence: string): ProviderFailureKind | undefined {
   if (ACCESS_DENIED_WORDING.test(evidence)) return 'auth';
-  if (CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence))) return 'context_overflow';
+  if (isContextOverflow(evidence)) return 'context_overflow';
   if (MODEL_REJECTED.test(evidence)) return 'model_rejected';
   if (TOOL_HISTORY_REJECTED.test(evidence)) return 'tool_history_rejected';
   if (INVALID_REQUEST_CODE.test(evidence)) return 'invalid_request';
   return undefined;
+}
+
+function isContextOverflow(evidence: string): boolean {
+  return CONTEXT_OVERFLOW.some(pattern => pattern.test(evidence));
 }
 
 function transientKindFromWording(evidence: string): ProviderFailureKind | undefined {
@@ -181,9 +197,34 @@ function transientKindFromWording(evidence: string): ProviderFailureKind | undef
   return undefined;
 }
 
+/** The JSON-safe facts worth carrying next to a failure's name and message, on the wire and in history. */
+export function providerErrorFacts(error: unknown): ProviderErrorFacts {
+  const facts = collectFacts(error);
+  const result: ProviderErrorFacts = {};
+  if (facts.statusCode !== undefined) result.statusCode = facts.statusCode;
+  const codes = [...new Set(facts.codes)];
+  if (codes.length > 0) result.codes = codes;
+  const reason = reasonToPersist(error);
+  if (reason !== undefined) result.reason = capPersistedText(reason);
+  return result;
+}
+
+function reasonToPersist(error: unknown): string | undefined {
+  if (typeof error !== 'object' || error === null) return undefined;
+  const reason = producedByProvider(error)
+    ? innermostReason(error, 0)
+    : reasonBehindCause(readField(error, 'cause'), 1);
+  const alreadySaved = ['message', 'responseBody'].some(field => {
+    const saved = readField(error, field);
+    return typeof saved === 'string' && saved.trim() === reason;
+  });
+  return alreadySaved ? undefined : reason;
+}
+
+/** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
 export function providerErrorReason(error: unknown): string | undefined {
   const reason = innermostReason(error, 0);
-  return reason === undefined || reason.length <= MAX_REASON_LENGTH ? reason : `${reason.slice(0, MAX_REASON_LENGTH)}…`;
+  return reason === undefined ? undefined : capPersistedText(reason);
 }
 
 export function providerRequestId(error: unknown): string | undefined {
@@ -204,24 +245,11 @@ function firstAlongCauses(
 }
 
 function requestIdOf(error: object): string | undefined {
-  const kept = nonBlank(readField(error, 'requestId'));
-  if (kept) return kept;
-  const headers = readField(error, 'responseHeaders');
-  if (typeof headers !== 'object' || headers === null) return undefined;
-  for (const header of REQUEST_ID_HEADERS) {
-    const value = nonBlank(readField(headers, header));
-    if (value) return value;
-  }
-  return undefined;
+  return nonBlank(readField(error, 'requestId')) ?? readRequestId(readField(error, 'responseHeaders'));
 }
 
 function modelIdOf(error: object): string | undefined {
-  const kept = nonBlank(readField(error, 'modelId'));
-  if (kept) return kept;
-  const requestBody = readField(error, 'requestBodyValues');
-  return typeof requestBody === 'object' && requestBody !== null
-    ? nonBlank(readField(requestBody, 'model'))
-    : undefined;
+  return nonBlank(readField(error, 'modelId')) ?? readRequestedModel(readField(error, 'requestBodyValues'));
 }
 
 function nonBlank(value: unknown): string | undefined {

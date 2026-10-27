@@ -1,8 +1,8 @@
 import type { ChannelErrorContext } from '@mastra/core/channels';
+import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 import { Actions, Card, CardText, LinkButton } from 'chat';
 
-import { providerRequestId } from '../../provider-error.js';
 import { readFactorySessionScope } from '../../rules/binding-context.js';
 import type { RunErrorRecovery } from '../../run-error.js';
 import { describeRunError } from '../../run-error.js';

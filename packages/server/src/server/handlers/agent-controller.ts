@@ -10,6 +10,7 @@ import type {
   TokenUsage,
   WireDisplayState,
 } from '@mastra/core/agent-controller';
+import { toPersistedErrorIdentity } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
 // Type-only import: erased at runtime, so this cannot crash against an older
 // @mastra/core that lacks the `./agent-controller` subpath export. Controller
@@ -627,49 +628,18 @@ function carriesError(event: AgentControllerEvent): event is ErrorCarryingAgentC
 
 /**
  * An `Error`'s `message`/`name` are non-enumerable, so flatten it before JSON
- * serialization. Compact message updates and ends are already JSON-safe and
- * pass through unchanged; only `message_start` carries a message snapshot.
+ * serialization, into the same identity a saved error part keeps. Compact
+ * message updates and ends are already JSON-safe and pass through unchanged;
+ * only `message_start` carries a message snapshot.
  */
 function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent {
   if ('displayState' in event) {
     return { ...event, displayState: toWireDisplayState(event.displayState) };
   }
   if (carriesError(event)) {
-    return { ...event, error: toWireError(event.error) };
+    return { ...event, error: toPersistedErrorIdentity(event.error) };
   }
   return event;
-}
-
-type WireError = Extract<JsonReadyAgentControllerEvent, { type: 'error' }>['error'];
-type ProviderCallError = Error & {
-  statusCode?: unknown;
-  responseBody?: unknown;
-  responseHeaders?: Record<string, unknown>;
-  requestBodyValues?: { model?: unknown };
-};
-
-const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
-
-/** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError(error: ProviderCallError): WireError {
-  const wire: WireError = { name: error.name, message: error.message };
-  try {
-    const { statusCode, responseBody, responseHeaders, requestBodyValues } = error;
-    if (typeof statusCode === 'number' && Number.isInteger(statusCode)) wire.statusCode = statusCode;
-    if (typeof responseBody === 'string' && responseBody.trim()) {
-      wire.responseBody =
-        responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
-          ? `${responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
-          : responseBody;
-    }
-    const requestId = responseHeaders?.['request-id'] ?? responseHeaders?.['x-request-id'];
-    if (typeof requestId === 'string' && requestId.trim()) wire.requestId = requestId.trim();
-    const modelId = requestBodyValues?.model;
-    if (typeof modelId === 'string' && modelId.trim()) wire.modelId = modelId.trim();
-  } catch {
-    // A field that throws on read costs its details, never the stream.
-  }
-  return wire;
 }
 
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
