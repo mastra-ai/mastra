@@ -507,9 +507,11 @@ export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<Au
         requestContext.set(MASTRA_NORMALIZED_USER_KEY, normalizedUser);
       }
     } catch (normalizeError) {
-      mastra.getLogger()?.debug('Failed to normalize authenticated user to MastraUser', {
-        error: normalizeError instanceof Error ? { message: normalizeError.message } : normalizeError,
-      });
+      mastra
+        .getLogger()
+        ?.warn('Failed to normalize authenticated user to MastraUser; callbacks will see user: undefined', {
+          error: normalizeError instanceof Error ? { message: normalizeError.message } : normalizeError,
+        });
     }
 
     // Store the raw auth token so downstream code (e.g., editor MCP client
