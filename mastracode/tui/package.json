@@ -93,7 +93,7 @@
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.1",
+    "@agentclientprotocol/sdk": "^2.0.2",
     "@ai-sdk/amazon-bedrock": "^5.0.124",
     "@ai-sdk/anthropic": "^3.0.135",
     "@ai-sdk/openai": "^3.0.131",

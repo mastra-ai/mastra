@@ -63,6 +63,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.1"
+    "@agentclientprotocol/sdk": "^2.0.2"
   }
 }
