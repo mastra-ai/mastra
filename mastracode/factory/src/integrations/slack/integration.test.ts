@@ -31,26 +31,35 @@ describe('SlackIntegration transport configuration', () => {
     expect(() => new SlackIntegration({ mode: 'socket' })).toThrow("'appToken' is required");
   });
 
-  it('constructs socket mode without a signing secret and forwards its transport credentials', () => {
+  it('keeps account-link credentials out of the socket mode adapter configuration', () => {
     const integration = new SlackIntegration({
       mode: 'socket',
       appToken: 'xapp-test',
       botToken: 'xoxb-test',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
     });
 
     integration.channels(ctxWith());
 
-    expect(createSlackAdapterMock).toHaveBeenCalledWith(
+    const adapterConfig = createSlackAdapterMock.mock.calls[0]?.[0];
+    expect(adapterConfig).toEqual(
       expect.objectContaining({
         mode: 'socket',
         appToken: 'xapp-test',
         botToken: 'xoxb-test',
       }),
     );
+    expect(adapterConfig).not.toHaveProperty('clientId');
+    expect(adapterConfig).not.toHaveProperty('clientSecret');
   });
 
-  it('preserves webhook mode and forwards its signing secret', () => {
-    const integration = new SlackIntegration({ signingSecret: 'secret' });
+  it('preserves webhook mode and forwards its transport and OAuth credentials', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
 
     integration.channels(ctxWith());
 
@@ -58,6 +67,8 @@ describe('SlackIntegration transport configuration', () => {
       expect.objectContaining({
         mode: undefined,
         signingSecret: 'secret',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
       }),
     );
   });

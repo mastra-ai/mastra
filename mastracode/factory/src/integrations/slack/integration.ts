@@ -229,11 +229,13 @@ export class SlackIntegration implements FactoryIntegration {
     const sourceControls =
       ctx.storage.sourceControls ?? (ctx.storage.sourceControlOwner ? [ctx.storage.sourceControlOwner] : []);
     this.#repoBackedSessions = sourceControls.length > 0;
+    const mode = this.#config.mode ?? 'webhook';
     return createSlackChannelsConfig({
       slack: {
         mode: this.#config.mode,
-        clientId: this.#config.clientId,
-        clientSecret: this.#config.clientSecret,
+        ...(mode === 'webhook'
+          ? { clientId: this.#config.clientId, clientSecret: this.#config.clientSecret }
+          : {}),
         signingSecret: this.#config.signingSecret,
         appToken: this.#config.appToken,
         botToken: this.#config.botToken,
