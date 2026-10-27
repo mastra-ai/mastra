@@ -98,6 +98,19 @@ function normalizeRouteParams(path: string): { normalizedPath: string; paramName
 }
 
 /**
+ * Reads query params keeping every value of a repeated key (`?tag=a&tag=b` -> `{ tag: ['a', 'b'] }`), as the
+ * other adapters do; Elysia's `ctx.query` and `Object.fromEntries` keep only one.
+ */
+function searchParamsToQuery(searchParams: URLSearchParams): Record<string, string | string[]> {
+  const query: Record<string, string | string[]> = {};
+  for (const key of new Set(searchParams.keys())) {
+    const values = searchParams.getAll(key);
+    query[key] = values.length === 1 ? (values[0] as string) : values;
+  }
+  return query;
+}
+
+/**
  * Remaps Elysia's parsed params from position-based names (p0, p1, ...)
  * back to the original parameter names expected by the route handler.
  */
@@ -374,7 +387,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
     const urlParams = paramNames.length > 0 ? remapParams(rawUrlParams, paramNames) : rawUrlParams;
 
     // Query params - parse from URL
-    const queryParams = normalizeQueryParams(Object.fromEntries(url.searchParams));
+    const queryParams = normalizeQueryParams(searchParamsToQuery(url.searchParams));
 
     let body: unknown;
     let bodyParseError: { message: string } | undefined;
@@ -635,7 +648,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       // Extract params - remap from normalized param names back to original
       const rawParams = ctx.params || {};
       const urlParams = paramNames.length > 0 ? remapParams(rawParams, paramNames) : rawParams;
-      const queryParams = normalizeQueryParams(ctx.query || {});
+      const queryParams = normalizeQueryParams(searchParamsToQuery(new URL(ctx.request.url).searchParams));
       let body: unknown;
       let bodyParseError: { message: string } | undefined;
 

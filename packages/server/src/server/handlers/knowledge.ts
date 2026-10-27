@@ -36,11 +36,17 @@ import { handleError } from './error';
  * The viewer chooses the scope unless the app narrows it: the app may set the
  * request-context key `mastra__knowledgeScope` (MASTRA_KNOWLEDGE_SCOPE_KEY) to the tags a caller may hold, and a request for any tag outside
  * that set is a 403. With FGA configured, instances are filtered (and gated) by `knowledge:read`.
- * Without either, any caller who passes `knowledge:read` can view any scope, which suits a developer tool
+ * With RBAC or FGA configured, a caller with no bound scope is refused (403). With neither, any caller who passes `knowledge:read` can view any scope, which suits a developer tool
  * whose operator already controls the instance. Hosts with their own scoping (Factory) do not mount these.
  */
 
 let warnedUnbound = false;
+
+function hasAccessControl(mastra: Mastra): boolean {
+  const server = mastra.getServer?.();
+  const studio = (mastra as any).getStudio?.();
+  return Boolean(server?.rbac || server?.fga || studio?.rbac || studio?.fga);
+}
 
 async function isInstanceAccessible(
   mastra: Mastra,
@@ -104,6 +110,12 @@ async function resolveStore(
     if (outside.length > 0) {
       throw new HTTPException(403, { message: `Requested scope is outside the caller's scope: ${outside.join(', ')}` });
     }
+  } else if (hasAccessControl(mastra)) {
+    // An app that configured RBAC or FGA has said who may read what; an unbound scope would let any reader
+    // name any tags, so refuse rather than trust the request.
+    throw new HTTPException(403, {
+      message: `Knowledge scope is not bound for this caller. Set request context key "${MASTRA_KNOWLEDGE_SCOPE_KEY}" in auth.authorize.`,
+    });
   } else if (user && !warnedUnbound) {
     warnedUnbound = true;
     mastra
@@ -122,7 +134,7 @@ export const LIST_KNOWLEDGE_ROUTE = createRoute({
   responseSchema: listKnowledgeResponseSchema,
   summary: 'List Knowledge instances',
   description:
-    'Returns the Knowledge instances registered on this Mastra instance, by application key. The `scope` param on the other Knowledge routes is trusted as sent; bound it per caller by setting MASTRA_KNOWLEDGE_SCOPE_KEY in server.auth.authorize (it runs after authentication; server.middleware does not).',
+    'Returns the Knowledge instances registered on this Mastra instance, by application key. The `scope` param on the other Knowledge routes is trusted as sent unless RBAC or FGA is configured, which refuses an unbound caller with 403. Bound it per caller by setting MASTRA_KNOWLEDGE_SCOPE_KEY in server.auth.authorize (it runs after authentication; server.middleware does not).',
   tags: ['Knowledge'],
   requiresAuth: true,
   handler: async ({ mastra, requestContext }) => {

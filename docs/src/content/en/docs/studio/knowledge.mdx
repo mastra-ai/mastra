@@ -41,7 +41,7 @@ Every read takes the scope tags the viewer holds, and returns only what those ta
 
 If the viewer's tags exceed what a caller should be allowed to hold, bind them per caller by setting the `MASTRA_KNOWLEDGE_SCOPE_KEY` request-context key (the string `mastra__knowledgeScope`).
 
-Set it in `server.auth.authorize`, which runs after the caller is authenticated and receives the framework context. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
+Set it in `server.auth.authorize`, which runs after the caller is authenticated. Its `context` argument answers `context.get('requestContext')` on the Hono, Express, Fastify, Koa and Elysia adapters. The same code binds the scope on each of them. Don't set it in `server.middleware`: middleware runs **before** authentication, so the caller isn't known yet.
 
 ```typescript
 import { Mastra } from '@mastra/core'
@@ -68,7 +68,7 @@ export const mastra = new Mastra({
 
 If you configure `studio.auth`, Studio requests use it **instead of** `server.auth`, so `server.auth.authorize` never runs for them and nothing is bound. Put the same `authorize` in `studio.auth` (or in both) so the binding applies to whichever config the request uses.
 
-Never set the key to `undefined`. It reads back the same as an unset key, so the request is treated as unbound and the scope is trusted as sent.
+Never set the key to `undefined`. It reads back the same as an unset key, so the request is treated as unbound (see [Deployment notes](#deployment-notes)).
 
 Once the key is set:
 
@@ -85,5 +85,7 @@ Match on the **mounted** path, `/api/knowledge/*` by default, not the route path
 ## Deployment notes
 
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user can read any named scope unless your auth config binds scopes with the key above.
-- **Unbound scope:** if a user is authenticated but no scope is bound, requests are trusted as sent. The server logs a one-time warning. This suits an operator-controlled Studio. On a multi-tenant host, bind a scope for every user.
+- **Unbound scope with RBAC or FGA:** if an RBAC or FGA provider is configured (in `server` or `studio`) and no scope is bound for the request, every Knowledge read except `GET /knowledge` returns `403`. Bind a scope for every caller who should read Knowledge.
+- **Unbound scope without RBAC or FGA:** requests are trusted as sent, and the server logs a one-time warning. This suits an operator-controlled Studio.
+- **NestJS:** the NestJS adapter doesn't serve the Knowledge routes yet.
 - **With an FGA provider:** `GET /knowledge` lists only the instances the caller can read, and the other routes answer `404` for any other instance.

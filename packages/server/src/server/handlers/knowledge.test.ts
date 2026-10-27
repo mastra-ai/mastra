@@ -143,12 +143,41 @@ describe('Knowledge read routes', () => {
     // A provider that allows the instance reads it (check, the real IFGAProvider method).
     const check = vi.fn(async () => true);
     (mastra as any).getServer = () => ({ fga: { filterAccessible, check } });
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, org);
     const graph = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: org });
     expect(graph).toBeDefined();
     expect(check).toHaveBeenCalledWith(
       { id: 'u1' },
       { resource: { type: 'knowledge', id: expect.any(String) }, permission: 'knowledge:read' },
     );
+  });
+
+  it('refuses an unbound scope when RBAC or FGA is configured, and trusts it when neither is', async () => {
+    const rbac = { getRoles: async () => [], getPermissions: async () => ['knowledge:read'] };
+    const fga = { check: async () => true, filterAccessible: async (_u: unknown, items: unknown[]) => items };
+    for (const config of [{ server: { rbac } }, { server: { fga } }, { studio: { rbac } }, { studio: { fga } }]) {
+      const { mastra } = await setup();
+      (mastra as any).getServer = () => config.server;
+      (mastra as any).getStudio = () => config.studio;
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: 'u1' });
+      const args = { mastra, requestContext, knowledgeKey: 'main', scope: org };
+      for (const route of [GET_KNOWLEDGE_GRAPH_ROUTE, SEARCH_KNOWLEDGE_ROUTE, GET_KNOWLEDGE_ACTIVITY_ROUTE]) {
+        await expect(call(route, { ...args, q: 'pay' })).rejects.toMatchObject({
+          status: 403,
+          message: expect.stringContaining(MASTRA_KNOWLEDGE_SCOPE_KEY),
+        });
+      }
+      requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, org);
+      expect((await call(GET_KNOWLEDGE_GRAPH_ROUTE, args)).nodes).toHaveLength(1);
+    }
+
+    // No access control configured: the operator-tool default still reads the requested scope.
+    const { mastra } = await setup();
+    const requestContext = new RequestContext();
+    requestContext.set('user', { id: 'u1' });
+    const open = await call(GET_KNOWLEDGE_GRAPH_ROUTE, { mastra, requestContext, knowledgeKey: 'main', scope: team });
+    expect(open.nodes).toHaveLength(2);
   });
 
   it('parses one or many scope params and bounds them', () => {
