@@ -82,7 +82,15 @@ describe('createToken', () => {
     const { createToken } = await import('./tokens.js');
 
     await expect(createToken('tok', 'org_1', 'ci', ['databases:write'])).rejects.toThrow(
-      /mastra auth tokens revoke api_key_1/,
+      /Revoking it also failed \(.+\).*mastra auth tokens revoke api_key_1/s,
     );
+  });
+
+  it('sends a permission once even when the flag repeats it', async () => {
+    const { createToken } = await import('./tokens.js');
+
+    await createToken('tok', 'org_1', 'ci', ['databases:write', 'databases:write']);
+
+    expect(lastBody).toEqual({ name: 'ci', permissions: ['databases:write'] });
   });
 });

@@ -19,8 +19,9 @@ export async function createToken(
   token: string,
   orgId: string,
   name: string,
-  permissions: string[] = [],
+  requested: string[] = [],
 ): Promise<{ id: string; secret: string; permissions: string[] }> {
+  const permissions = [...new Set(requested)];
   const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: {
@@ -44,8 +45,11 @@ export async function createToken(
     const problem = `Token ${data.token.id} was created without ${missing.join(', ')}; this Platform may not support token permissions yet.`;
     try {
       await revokeToken(token, orgId, data.token.id);
-    } catch {
-      throw new Error(`${problem} Revoking it also failed. Revoke it with: mastra auth tokens revoke ${data.token.id}`);
+    } catch (err) {
+      const reason = err instanceof Error ? err.message : String(err);
+      throw new Error(
+        `${problem} Revoking it also failed (${reason}). Revoke it with: mastra auth tokens revoke ${data.token.id}`,
+      );
     }
     throw new Error(`${problem} It has been revoked.`);
   }

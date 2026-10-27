@@ -8,4 +8,4 @@ Added `--permission` to `mastra auth tokens create`, so an organization admin ca
 mastra auth tokens create ci --permission databases:write
 ```
 
-If the platform creates the token without a requested permission, the command revokes that token and fails, so no token with less access than asked for is left behind. `mastra auth tokens` now lists each token's permissions.
+If the platform creates the token without a requested permission, the command tries to revoke that token and fails. If revoking it also fails, the error shows the command to revoke it yourself. `mastra auth tokens` now lists each token's permissions.
