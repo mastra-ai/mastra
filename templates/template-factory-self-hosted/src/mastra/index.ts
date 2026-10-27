@@ -28,9 +28,12 @@ const databaseUrl = requiredEnv('DATABASE_URL');
 
 export const factory = new MastraFactory({
   configVersion: 'factory-self-hosted-v1',
-  // Reads WORKOS_API_KEY, WORKOS_CLIENT_ID, WORKOS_COOKIE_PASSWORD, and
-  // WORKOS_REDIRECT_URI. The redirect defaults to <publicUrl>/auth/callback.
-  auth: new MastraAuthWorkos({ fetchMemberships: true }),
+  // Reads WORKOS_API_KEY, WORKOS_CLIENT_ID, and WORKOS_REDIRECT_URI. The redirect defaults to <publicUrl>/auth/callback.
+  // Without a fixed cookie password every restart signs everyone out.
+  auth: new MastraAuthWorkos({
+    fetchMemberships: true,
+    session: { cookiePassword: requiredEnv('WORKOS_COOKIE_PASSWORD') },
+  }),
   // Encrypts stored model-provider keys and integration secrets at rest.
   secretEncryption: createFactorySecretEncryption({
     primary: { id: 'v1', key: Buffer.from(requiredEnv('FACTORY_CREDENTIAL_ENCRYPTION_KEY'), 'base64') },
