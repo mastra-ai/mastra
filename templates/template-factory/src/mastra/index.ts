@@ -36,18 +36,20 @@ if (!databaseUrl) {
 // audit rows and deferred decisions so they can be traced back to the
 // deployment that produced them — bump it when handler behavior changes.
 // Encrypts stored model-provider keys and integration secrets at rest.
-// `npm create factory` generates this key; without it the factory stores them
-// in plaintext and logs a warning.
+// `npm create factory` generates this key; keep it stable and backed up.
 const encryptionKey = process.env.FACTORY_CREDENTIAL_ENCRYPTION_KEY?.trim() || undefined;
+if (!encryptionKey) {
+  throw new Error('FACTORY_CREDENTIAL_ENCRYPTION_KEY is required. Generate one with `openssl rand -base64 32`.');
+}
 
 const factoryConfigVersion = 'mastracode-web-v1';
 
 export const factory = new MastraFactory({
   configVersion: factoryConfigVersion,
   sandboxStart: 'eager',
-  secretEncryption: encryptionKey
-    ? createFactorySecretEncryption({ primary: { id: 'v1', key: Buffer.from(encryptionKey, 'base64') } })
-    : undefined,
+  secretEncryption: createFactorySecretEncryption({
+    primary: { id: 'v1', key: Buffer.from(encryptionKey, 'base64') },
+  }),
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
   // No `sandbox`: with Platform credentials the factory uses a local sandbox
