@@ -53,7 +53,7 @@ describe('board settings helpers', () => {
     expect(parseValue('x, y', 'in', 'text')).toEqual(['x', 'y']);
     expect(parseValue('true', 'equals', 'boolean')).toBe(true);
     expect(parseValue('anything', 'exists', 'text')).toBeUndefined();
-    expect(parseValue('effort: low', 'contains', 'list')).toBe('effort: low');
+    expect(parseValue('effort:low', 'contains', 'list')).toBe('effort:low');
     expect(operatorsFor('boolean').map(op => op.value)).toEqual(['equals', 'not_equals']);
     expect(operatorsFor('list').map(op => op.value)).not.toContain('equals');
   });

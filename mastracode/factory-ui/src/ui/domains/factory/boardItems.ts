@@ -212,6 +212,66 @@ export function itemThreadSession(sessions: Record<string, WorkItemSessionRef>):
   );
 }
 
+/** A phase as the board catalog describes it: its `role` is the context its sessions run in. */
+export interface ContextPhase {
+  id: string;
+  title: string;
+  role?: string;
+}
+
+/** One of a card's sessions, named after the context it runs in. */
+export interface CardContextSession {
+  context: string;
+  /** The phases that run in this context, e.g. "Planning · Building"; the context key when no phase names it. */
+  label: string;
+  ref: WorkItemSessionRef;
+  /** The card's current phase runs in this context. */
+  current: boolean;
+}
+
+export function contextLabel(context: string, phases: readonly ContextPhase[] | undefined): string {
+  const titles = (phases ?? []).filter(phase => phase.role === context).map(phase => phase.title);
+  if (titles.length > 0) return titles.join(' · ');
+  return context.charAt(0).toUpperCase() + context.slice(1);
+}
+
+/**
+ * Every session the card holds, one per context: the current phase's context first,
+ * then the rest in the order the card last visited their phases.
+ */
+export function cardContextSessions(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string | undefined,
+): CardContextSession[] {
+  const contextOf = (stage: string) => phases?.find(phase => phase.id === stage)?.role;
+  const current = columnStage === undefined ? undefined : contextOf(columnStage);
+  const order: string[] = [];
+  if (current !== undefined) order.push(current);
+  for (const entry of [...(item.stageHistory ?? [])].reverse()) {
+    const context = contextOf(entry.stage);
+    if (context !== undefined && !order.includes(context)) order.push(context);
+  }
+  for (const context of Object.keys(item.sessions)) if (!order.includes(context)) order.push(context);
+  return order.flatMap(context => {
+    const ref = item.sessions[context];
+    return ref === undefined ? [] : [{ context, label: contextLabel(context, phases), ref, current: context === current }];
+  });
+}
+
+/**
+ * The thread the card opens: its current phase's context, else the context it was in last,
+ * else the legacy role order for cards whose board is not loaded.
+ */
+export function cardThreadSession(
+  item: Pick<WorkItem, 'sessions' | 'stageHistory'>,
+  phases: readonly ContextPhase[] | undefined,
+  columnStage: string | undefined,
+): WorkItemSessionRef | undefined {
+  if (phases === undefined) return itemThreadSession(item.sessions);
+  return cardContextSessions(item, phases, columnStage)[0]?.ref ?? itemThreadSession(item.sessions);
+}
+
 /** Source keys already materialized as cards, in either workflow — candidates matching one are dropped. */
 export function persistedSourceKeys(items: readonly WorkItem[]): ReadonlySet<string> {
   const keys = new Set<string>();

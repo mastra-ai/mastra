@@ -5,12 +5,15 @@ import { Link2 } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { Link, useMatch, useParams } from 'react-router';
 
+import { useBoardCatalog } from '../../../../hooks/useBoardCatalog';
 import { useUserSessionQuery, useWorkspacesQuery } from '../../../../hooks/useWorkspaces';
 import { useWorkItemsQuery } from '../../../../hooks/useWorkItems';
 import { ChatPageLayout } from '../../chat/components/ChatPageLayout';
 import { getUserSessionLabel } from '../../workspaces/services/sessionPresentation';
 import { UserSessionSharing } from '../../workspaces/components/UserSessionSharing';
 import { WorkspaceFilesToggle } from '../../workspace-viewer/components/WorkspaceFilesToggle';
+import { cardContextSessions } from '../boardItems';
+import { itemBoard } from '../boardStages';
 import { rememberedBoardPath } from '../services/boardViews';
 import { relatedWorkItemIndex, relationshipLabel, relationshipPath, workItemNumber } from '../services/relationships';
 import type { WorkItem, WorkItemSessionRef } from '../services/workItems';
@@ -73,17 +76,26 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
   const session = workspaces.data?.userSessions.find(entry => entry.sessionId === userSessionId) ?? sessionQuery.data;
   const workspaceTitle = !isUserThread && !currentItem ? session?.title?.trim() : undefined;
   const livePaths = new Set((workspaces.data?.workspaces ?? []).map(workspace => workspace.sessionId));
-  const isReview = currentItem ? isPullRequestSource(currentItem.source) : false;
+  const catalog = useBoardCatalog(factoryId);
+  const phases = currentItem ? catalog.data?.find(board => board.id === itemBoard(currentItem))?.phases : undefined;
+  const contexts = currentItem ? cardContextSessions(currentItem, phases, currentItem.stages[0]) : [];
+  const currentContext = contexts.find(context => context.ref.sessionId === sessionId);
+  const otherContexts = contexts.filter(context => context.ref.sessionId !== sessionId);
 
   const crumbs =
     currentItem && factoryId ? (
       <>
-        <Crumb as={Link} to={rememberedBoardPath(factoryId, isReview ? 'review' : 'work')}>
-          {isReview ? 'Review' : 'Work'}
+        <Crumb as={Link} to={rememberedBoardPath(factoryId, 'work')}>
+          Work
         </Crumb>
-        <Crumb as="span" isCurrent>
+        <Crumb as="span" isCurrent={currentContext === undefined}>
           {sessionTitle(currentItem)}
         </Crumb>
+        {currentContext ? (
+          <Crumb as="span" isCurrent>
+            {currentContext.label}
+          </Crumb>
+        ) : null}
       </>
     ) : isUserThread && session ? (
       <>
@@ -107,6 +119,24 @@ export function FactorySessionPage({ children }: { children: ReactNode }) {
       headerActions={
         <>
           {isUserThread && factoryId && session ? <UserSessionSharing factoryId={factoryId} session={session} /> : null}
+          {factoryId
+            ? otherContexts.map(context => (
+                <Button
+                  key={context.context}
+                  variant="ghost"
+                  size="sm"
+                  aria-label={`Open the ${context.label} session`}
+                  render={
+                    <Link
+                      to={`/factories/${factoryId}/workspaces/${context.ref.sessionId}/threads/${context.ref.threadId}`}
+                    />
+                  }
+                >
+                  {context.label}
+                  {context.current ? ' · current' : ''}
+                </Button>
+              ))
+            : null}
           {currentItem && factoryId && threadId ? (
             <WorkItemActions
               item={currentItem}

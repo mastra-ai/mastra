@@ -57,7 +57,7 @@ The plan must be executable by someone with no access to this conversation beyon
 
 End the run with a single `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.
 
-Request `stage: "execute"` (work board) with `rationale` (max 1000 chars) — a few sentences: what the plan delivers and why this approach. The builder implements the plan and pushes the branch; its build prompt decides whether the pull or merge request opens directly or only after self-review approves, so do not plan a PR-opening step.
+Request `stage: "execute"` using `factory_transition_work_item` with `rationale` (max 1000 chars) — a few sentences: what the plan delivers and why this approach. The builder implements the plan and pushes the branch; its build prompt decides whether the pull or merge request opens directly or only after self-review approves, so do not plan a PR-opening step.
 
 Do not call `submit_plan` — that is the interactive planning gate; in the Factory, the plan message in this conversation is the handoff.
 

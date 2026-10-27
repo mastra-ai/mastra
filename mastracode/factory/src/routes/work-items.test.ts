@@ -242,7 +242,7 @@ describe('stored board config', () => {
 
     const autoApproveWhen = {
       operator: 'OR',
-      conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }],
+      conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
     };
     planning.autoApproveWhen = autoApproveWhen;
     const boards = config.boards.map(({ id: _id, ...board }: { id: string }) => board);

@@ -7,6 +7,7 @@ import { useParams, useSearchParams } from 'react-router';
 
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { BoardCardStatus } from '../boardCardState';
+import type { CardContextSession } from '../boardItems';
 import { externalLinkLabel } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import type { CardAction } from '../cardPrimaryAction';
@@ -28,6 +29,7 @@ export function WorkItemDetailsPanel({
   activityPage,
   morph,
   relatedLinks,
+  contextSessions,
   status,
   actions,
   menu,
@@ -39,6 +41,7 @@ export function WorkItemDetailsPanel({
   activityPage?: AuditEventPage;
   morph: CardMorph;
   relatedLinks: ReactNode;
+  contextSessions: readonly CardContextSession[];
   status: BoardCardStatus;
   actions: CardAction[];
   menu: ReactNode;
@@ -122,6 +125,7 @@ export function WorkItemDetailsPanel({
         highlightCommentId={highlightCommentId}
         events={events}
         actors={actors}
+        contextSessions={contextSessions}
       />
     </CardDetailsPanel>
   );

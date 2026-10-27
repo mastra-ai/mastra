@@ -164,3 +164,38 @@ export function collapsedRowsKeepingActive(rows: readonly SessionListRow[]): Ses
   if (open && !visible.includes(open)) visible.push(open);
   return visible;
 }
+
+/** A sidebar entry: a session row, or the heading of a card whose sessions follow it. */
+export type SessionListEntry =
+  | { kind: 'row'; row: SessionListRow }
+  | { kind: 'card'; itemId: string; title: string; rows: SessionListRow[] };
+
+/**
+ * Gathers a card's sessions under one heading, each named by its context, at the
+ * position of the card's first session. A card with one session stays a plain row.
+ */
+export function nestCardSessions(rows: readonly SessionListRow[]): SessionListEntry[] {
+  const byItem = new Map<string, SessionListRow[]>();
+  for (const row of rows) {
+    if (row.itemId === undefined || row.contextLabel === undefined) continue;
+    byItem.set(row.itemId, [...(byItem.get(row.itemId) ?? []), row]);
+  }
+  const entries: SessionListEntry[] = [];
+  const placed = new Set<string>();
+  for (const row of rows) {
+    const siblings = row.itemId === undefined ? undefined : byItem.get(row.itemId);
+    if (row.itemId === undefined || siblings === undefined || siblings.length < 2) {
+      entries.push({ kind: 'row', row });
+      continue;
+    }
+    if (placed.has(row.itemId)) continue;
+    placed.add(row.itemId);
+    entries.push({
+      kind: 'card',
+      itemId: row.itemId,
+      title: row.itemTitle ?? row.name,
+      rows: siblings.map(sibling => ({ ...sibling, name: sibling.contextLabel ?? sibling.name })),
+    });
+  }
+  return entries;
+}

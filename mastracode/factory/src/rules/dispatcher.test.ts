@@ -3416,7 +3416,7 @@ describe('FactoryDecisionDispatcher', () => {
       ['triage', 'factory-triage', []],
       ['review', 'factory-self-review', []],
       ['planning', 'factory-plan', ['effort: high']],
-      ['planning', 'factory-plan', ['effort: low']],
+      ['planning', 'factory-plan', ['effort:low']],
     ] as const) {
       const storage = (await createFactoryStorageForTests()).workItems;
       const { item, transitionService } = await queueDecision(
@@ -3448,7 +3448,7 @@ describe('FactoryDecisionDispatcher', () => {
       triage: 'succeeded',
       review: 'succeeded',
       'planning (effort: high)': 'proposed',
-      'planning (effort: low)': 'succeeded',
+      'planning (effort:low)': 'succeeded',
     });
   });
 
@@ -3911,7 +3911,7 @@ describe('FactoryDecisionDispatcher', () => {
           stages: ['triage'],
           sessions: {},
           // Low effort: Planning's start rule lets the agent's move approve the plan.
-          metadata: { authorTrusted: false, labels: ['effort: low'] },
+          metadata: { authorTrusted: false, labels: ['effort:low'] },
         },
       })
     ).item;

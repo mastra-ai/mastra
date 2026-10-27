@@ -27,3 +27,15 @@ Before your first edit and again before you push, confirm you are working in the
 - Commit and push the branch.
 - Hand on exactly once, as the arguments say: open the change request, or move the card back to Review for another self-review round. Never both.
 - End with a short list: each finding, and whether you fixed it or why not.
+
+## Phase 4: Transition
+
+End the run with a single `factory_transition_work_item` call. Take the current stage and `expectedRevision` from the `factory-phase` signal.
+
+Request `stage: "review"` (work board) with the newly created Pull request information.
+
+The transition is governed by the server's rules. If it is rejected, read the stated reason, address it (re-check the revision from the latest `factory-phase` signal, rework the plan if the rejection contests it), and retry once corrected. Once the transition succeeds, report the plan headline and stop.
+
+## Behavior Rules
+
+- **One terminal call.** A single transition request ends the pass; the only permitted repeat is after a rejection, with its stated reason addressed first.

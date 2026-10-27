@@ -75,7 +75,7 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('BoardsStorage o
     ]);
     expect(work!.phases.map(phase => [phase.key, phase.autoStartWhen])).toContainEqual([
       'planning',
-      { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }] },
+      { operator: 'AND', conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }] },
     ]);
     expect(work!.phases.find(phase => phase.key === 'triage')!.autoStartWhen).toBeNull();
     expect(work!.phases.find(phase => phase.key === 'execute')!.autoStartWhen).toBeNull();

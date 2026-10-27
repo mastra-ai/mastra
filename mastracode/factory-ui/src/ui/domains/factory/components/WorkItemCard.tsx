@@ -12,7 +12,7 @@ import type { SessionRowStatus } from '../../workspaces/services/sessionStatus';
 import { boardCardState } from '../boardCardState';
 import { setDragPayload } from '../boardDrag';
 import type { DragPayload } from '../boardDrag';
-import { itemThreadSession } from '../boardItems';
+import { cardContextSessions, cardThreadSession, itemThreadSession } from '../boardItems';
 import type { BoardLayout } from '../boardLayout';
 import { itemBoard } from '../boardStages';
 import { cardActions, cardMoves, cardPrimaryAction, resumeStage, retryButton, sessionLink } from '../cardPrimaryAction';
@@ -98,7 +98,8 @@ export function WorkItemCard({
   const sessions = item.sessions;
   const moves = cardMoves(item, columnStage);
   const primaryMove = primaryCardMove(moves, columnStage, sessions);
-  const threadSession = itemThreadSession(sessions);
+  const threadSession = cardThreadSession(item, definition?.phases, columnStage);
+  const contextSessions = cardContextSessions(item, definition?.phases, columnStage);
   const nextPhase = nextBoardPhase(definition, columnStage);
   const sessionHref =
     threadSession === undefined
@@ -208,6 +209,7 @@ export function WorkItemCard({
       activityPage={activityPage}
       morph={morph}
       relatedLinks={relatedLinks}
+      contextSessions={contextSessions}
       status={status}
       actions={actions}
       menu={<WorkItemMenuItems {...panelMenu} />}

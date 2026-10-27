@@ -3,7 +3,7 @@ import type { AgentController, AgentControllerEventListener, Session } from '@ma
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
-import { cardRuleFacts, phaseAutoApproves } from '../boards/auto-approve.js';
+import { autoApprovedExitTool, cardRuleFacts, DEFAULT_EXIT_TOOL } from '../boards/auto-approve.js';
 import {
   boardForWorkItem,
   createBoardRegistry,
@@ -1182,9 +1182,10 @@ export class FactoryDecisionDispatcher {
           // cancelled mid-flight; without this the decision reports success and
           // the break is invisible on the card.
           const since = new Date();
+          const approvedTool = await this.#approveExitTool(session, record);
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: approvedTool === 'submit_plan',
             onAgentEnd: () => this.#roleSuperseded(record, decision.role),
             label: 'Factory skill run',
             runStillActive,
@@ -1672,8 +1673,9 @@ export class FactoryDecisionDispatcher {
       const item = await this.#storage.get({ orgId: record.orgId, id: record.workItemId! });
       if (!item || item.stages.length !== 1) return undefined;
       const phase = await this.#resolver!.storedPhase(item, boardForWorkItem(item), item.stages[0]!);
-      if (!phase?.exitTool || run.called(phase.exitTool)) return undefined;
-      return { item, tool: phase.exitTool, phase: phase.name };
+      const exitTool = phase?.exitTool?.id;
+      if (!phase || !exitTool || run.called(exitTool)) return undefined;
+      return { item, tool: exitTool, phase: phase.name };
     };
     try {
       await this.#nudgeToExit({ record, session, requestContext, run, deliveryId, userId, pendingExitTool });
@@ -1729,20 +1731,25 @@ export class FactoryDecisionDispatcher {
     });
   }
 
-  /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
-  async #plansAreAutoApproved({
-    orgId,
-    factoryProjectId,
-    workItemId,
-  }: {
-    orgId: string;
-    factoryProjectId: string;
-    workItemId: string | null;
-  }): Promise<boolean> {
-    // The card's phase may approve its exit tool for this card (its stored `autoApproveWhen` matches).
-    if (!this.#resolver || !workItemId) return false;
+  /**
+   * The exit tool the card's phase approves for this run, if any. A plan nobody
+   * asked us to answer is a plan someone should see. The move tool's approval is
+   * a session permission, so it is set either way: a phase that does not approve
+   * moves takes back what an earlier phase allowed.
+   */
+  async #approveExitTool(
+    session: BoundDispatcherSession,
+    { orgId, workItemId }: { orgId: string; workItemId: string | null },
+  ): Promise<string | undefined> {
+    if (!this.#resolver || !workItemId) return undefined;
     const item = await this.#storage.get({ orgId, id: workItemId });
-    return item ? await phaseAutoApproves(this.#resolver, item) : false;
+    if (!item) return undefined;
+    const tool = await autoApprovedExitTool(this.#resolver, item);
+    await session.permissions.setForTool({
+      toolName: DEFAULT_EXIT_TOOL.id,
+      policy: tool === DEFAULT_EXIT_TOOL.id ? 'allow' : 'ask',
+    });
+    return tool;
   }
 
   async #requireSession(binding: FactoryRunBindingRecord): Promise<BoundDispatcherSession> {
@@ -1936,9 +1943,10 @@ export class FactoryDecisionDispatcher {
           // execution, and completing the pending start on the delivery ack
           // alone strands the card with a success ledger entry.
           const since = new Date();
+          const approvedTool = await this.#approveExitTool(session, { ...record, workItemId: binding.workItemId });
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
+            approvePlans: approvedTool === 'submit_plan',
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

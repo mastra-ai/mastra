@@ -253,7 +253,7 @@ function AddBoard({
 }
 
 function emptyPhase(key: string, name: string, kind: StoredPhase['kind']): StoredPhase {
-  return { key, name, description: null, kind, runner: null, nextPhases: null, exitTool: null, autoApproveWhen: null };
+  return { key, name, description: null, kind, runner: null, nextPhases: null, exitTool: null };
 }
 
 function BoardEditor({
@@ -413,7 +413,6 @@ function PhaseEditor({
                       kind,
                       ...(kind === 'resting' ? { runner: null } : {}),
                       exitTool: null,
-                      autoApproveWhen: null,
                       autoStart: false,
                       autoStartWhen: null,
                     },
@@ -480,13 +479,15 @@ function PhaseEditor({
           />
           {phase.kind === 'working' && (
             <LabeledInput
-              label="Exit tool (moves the card to the next phase)"
-              placeholder="none, e.g. submit_plan"
-              value={phase.exitTool ?? ''}
+              label="Exit tool (ends the phase)"
+              placeholder="factory_transition_work_item, auto-approved"
+              value={phase.exitTool?.id ?? ''}
               disabled={disabled}
               onCommit={value => {
-                const exitTool = value.trim() || null;
-                onChange({ exitTool, ...(exitTool ? {} : { autoApproveWhen: null }) });
+                const id = value.trim();
+                onChange({
+                  exitTool: id ? { autoApprove: false, autoApproveWhen: null, ...phase.exitTool, id } : null,
+                });
               }}
             />
           )}
@@ -509,16 +510,38 @@ function PhaseEditor({
         )}
 
         {phase.kind === 'working' && phase.exitTool && (
+          <label className="flex items-center gap-2">
+            <Switch
+              aria-label={`Auto-approve ${phase.exitTool.id}`}
+              checked={phase.exitTool.autoApprove}
+              disabled={disabled}
+              onCheckedChange={autoApprove =>
+                onChange({
+                  exitTool: { ...phase.exitTool!, autoApprove, ...(autoApprove ? {} : { autoApproveWhen: null }) },
+                })
+              }
+            />
+            <Txt as="span" variant="caption" className="text-muted-foreground">
+              {phase.exitTool.autoApprove
+                ? phase.exitTool.autoApproveWhen
+                  ? `Approves ${phase.exitTool.id} on its own for cards its rule matches`
+                  : `Approves ${phase.exitTool.id} on its own, for every card`
+                : `A person approves ${phase.exitTool.id}`}
+            </Txt>
+          </label>
+        )}
+
+        {phase.kind === 'working' && phase.exitTool?.autoApprove && (
           <div className="flex flex-col gap-1">
             <Txt as="span" variant="caption" className="text-muted-foreground">
-              Auto-approve {phase.exitTool} when
+              Auto-approve {phase.exitTool.id} only when
             </Txt>
             <ConditionEditor
-              value={phase.autoApproveWhen}
+              value={phase.exitTool.autoApproveWhen}
               fields={CARD_FIELDS}
               disabled={disabled}
-              emptyText="Never — a person approves"
-              onChange={autoApproveWhen => onChange({ autoApproveWhen })}
+              emptyText="Every card"
+              onChange={autoApproveWhen => onChange({ exitTool: { ...phase.exitTool!, autoApproveWhen } })}
             />
           </div>
         )}

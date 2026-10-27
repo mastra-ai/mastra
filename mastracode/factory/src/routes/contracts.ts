@@ -504,8 +504,9 @@ const storedBoardConfigSchema = z.object({
           kind: z.enum(PHASE_KINDS),
           runner: phaseRunnerSchema.nullable(),
           nextPhases: z.array(z.string()).nullable(),
-          exitTool: z.string().nullable(),
-          autoApproveWhen: ruleGroupSchema.nullable(),
+          exitTool: z
+            .object({ id: z.string(), autoApprove: z.boolean(), autoApproveWhen: ruleGroupSchema.nullable() })
+            .nullable(),
           autoStart: z.boolean().optional(),
           autoStartWhen: ruleGroupSchema.nullable().optional(),
         }),

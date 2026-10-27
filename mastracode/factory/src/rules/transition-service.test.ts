@@ -966,7 +966,7 @@ describe('FactoryTransitionService', () => {
     };
 
     // Any agent may hand a card to Planning; the rule decides whether its plan waits.
-    expect(await agentMove('low', ['effort: low'])).toMatchObject({
+    expect(await agentMove('low', ['effort:low'])).toMatchObject({
       decision: { type: 'invokeSkill', role: 'build' },
       approvedBy: 'agent:triage-binding',
     });

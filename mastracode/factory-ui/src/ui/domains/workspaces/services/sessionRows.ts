@@ -1,6 +1,6 @@
 import type { InstalledBoardInfo } from '../../../../api/types';
 import type { WorkspacePullRequestTarget } from '../../../../hooks/useWorkspacePullRequestMerges';
-import { changeRequestNumberForItem, pullRequestStatusForItem } from '../../factory/boardItems';
+import { changeRequestNumberForItem, contextLabel, pullRequestStatusForItem } from '../../factory/boardItems';
 import { itemBoard } from '../../factory/boardStages';
 import type { ChangeRequestProvider } from '../../factory/services/githubSubscriptions';
 import { relationshipLabel } from '../../factory/services/relationships';
@@ -70,6 +70,10 @@ export interface SessionListRow {
   canRegenerateTitle: boolean;
   itemLabel?: string;
   itemTitle?: string;
+  /** The card this session works for, so the sidebar can gather a card's sessions. */
+  itemId?: string;
+  /** The phases the session runs for on its card, e.g. "Planning · Building". */
+  contextLabel?: string;
   threadId?: string;
   pullRequest?: SessionPullRequest;
   pinned: boolean;
@@ -143,6 +147,7 @@ export interface FactorySessionRowInput {
   item: WorkItem | undefined;
   boards: readonly InstalledBoardInfo[] | undefined;
   threadId: string | undefined;
+  context?: string;
   pullRequest: WorkItem | undefined;
   factoryId: string;
   routeSessionId: string | undefined;
@@ -157,6 +162,7 @@ export function buildFactorySessionRow({
   item,
   boards,
   threadId,
+  context,
   pullRequest,
   factoryId,
   routeSessionId,
@@ -188,6 +194,11 @@ export function buildFactorySessionRow({
     canRegenerateTitle: ownedByViewer && session.branch.startsWith(SLACK_SESSION_BRANCH_PREFIX),
     itemLabel: item && item.source !== 'manual' ? relationshipLabel(item) : undefined,
     itemTitle: item?.title,
+    itemId: item?.id,
+    contextLabel:
+      item && context !== undefined
+        ? contextLabel(context, boards?.find(board => board.id === itemBoard(item))?.phases)
+        : undefined,
     threadId,
     pullRequest: sessionPullRequest(pullRequest),
     pinned,

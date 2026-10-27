@@ -5,6 +5,8 @@ import { isPullRequestSource } from '../../factory/services/workItems';
 export interface SessionWorkItem {
   item: WorkItem;
   threadId: string;
+  /** The context key the card files this session under, e.g. `build`. */
+  context: string;
   pullRequest: WorkItem | undefined;
 }
 
@@ -19,11 +21,12 @@ export function sessionWorkItemIndex(workItems: readonly WorkItem[]): ReadonlyMa
 
   return new Map(
     workItems.flatMap(item => {
-      const sessionRefs = Object.values(item.sessions ?? {});
+      const sessionRefs = Object.entries(item.sessions ?? {});
       if (sessionRefs.length === 0) return [];
       const pullRequest = latestPullRequestFor(item);
       return sessionRefs.map(
-        sessionRef => [sessionRef.sessionId, { item, threadId: sessionRef.threadId, pullRequest }] as const,
+        ([context, sessionRef]) =>
+          [sessionRef.sessionId, { item, threadId: sessionRef.threadId, context, pullRequest }] as const,
       );
     }),
   );

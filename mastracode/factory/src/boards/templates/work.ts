@@ -11,10 +11,10 @@ const COMPLETE = {
   context: 'triage',
 } as const;
 
-/** Cards labelled `effort: low` plan without waiting for anyone. */
+/** Cards labelled `effort:low` plan without waiting for anyone. */
 const LOW_EFFORT: RuleGroup = {
   operator: 'AND',
-  conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort: low' }],
+  conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
 };
 /**
  * Stored form of the built-in Work board, seeded into each project. Phase keys
@@ -50,7 +50,7 @@ export const workBoardTemplate = {
       name: 'Planning',
       kind: 'working',
       runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-plan', context: 'build' },
-      exitTool: 'submit_plan',
+      exitTool: { id: 'factory_transition_work_item', autoApprove: true, autoApproveWhen: LOW_EFFORT },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
       nextPhases: ['execute', 'canceled'],
@@ -60,6 +60,9 @@ export const workBoardTemplate = {
       name: 'Building',
       kind: 'working',
       runner: { type: 'agent', agentId: CODE_AGENT_ID, skill: 'factory-build', context: 'build' },
+      exitTool: { id: 'factory_transition_work_item', autoApprove: true },
+      autoStart: true,
+      autoStartWhen: LOW_EFFORT,
       nextPhases: ['review', 'done', 'canceled'],
     },
     {
@@ -68,6 +71,7 @@ export const workBoardTemplate = {
       kind: 'working',
       runner: REVIEW,
       autoStart: true,
+      exitTool: { id: 'factory_transition_work_item', autoApprove: true },
       nextPhases: ['execute', 'done', 'canceled'],
     },
     { key: 'done', name: 'Done', kind: 'terminal', runner: COMPLETE },

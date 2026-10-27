@@ -50,6 +50,34 @@ export const phaseRunnerSchema = z.discriminatedUnion('type', [
 ]);
 export type StoredPhaseRunner = z.infer<typeof phaseRunnerSchema>;
 
+const exitToolIdSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .max(MAX_RUNNER_ID_LENGTH)
+  .regex(/^[A-Za-z0-9_-]+$/, 'Use the tool name, e.g. submit_plan.');
+
+const exitToolObjectSchema = z
+  .object({
+    id: exitToolIdSchema,
+    /** The tool's approval is given without a person. */
+    autoApprove: z.boolean().optional(),
+    /** With `autoApprove`, only cards this matches are approved on their own. */
+    autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
+  })
+  .strict()
+  .superRefine((tool, ctx) => {
+    if (tool.autoApproveWhen && !tool.autoApprove) {
+      ctx.addIssue({ code: 'custom', path: ['autoApproveWhen'], message: 'An approval condition needs autoApprove.' });
+    }
+  });
+
+/** A bare tool name is shorthand for `{ id }`: a person approves it. */
+export const exitToolSchema = z.union([
+  exitToolIdSchema.transform(id => ({ id, autoApprove: false, autoApproveWhen: null })),
+  exitToolObjectSchema,
+]);
+
 export const storedPhaseInputSchema = z
   .object({
     key: storedKeySchema,
@@ -60,17 +88,7 @@ export const storedPhaseInputSchema = z
     /** Phases a card may move to from here. Absent means any phase on the board. */
     nextPhases: z.array(storedKeySchema).max(MAX_PHASES).nullable().optional(),
     /** A successful call of this tool while the card is here moves it to the next phase in board order. */
-    exitTool: z
-      .string()
-      .trim()
-      .min(1)
-      .max(MAX_RUNNER_ID_LENGTH)
-      .regex(/^[A-Za-z0-9_-]+$/, 'Use the tool name, e.g. submit_plan.')
-      .nullable()
-      .optional(),
-    /** Card conditions under which the exit tool is approved without a person. */
-    autoApproveWhen: intakeRouteWhenSchema.nullable().optional(),
-    /** Only people move cards into this phase; an agent's move into it is refused. */
+    exitTool: exitToolSchema.nullable().optional(),
     /** The runner starts without anyone approving it, even with the project's auto-run off. */
     autoStart: z.boolean().optional(),
     autoStartWhen: intakeRouteWhenSchema.nullable().optional(),
@@ -88,9 +106,6 @@ export const storedPhaseInputSchema = z
     }
     if (phase.autoStartWhen && !phase.autoStart) {
       ctx.addIssue({ code: 'custom', path: ['autoStartWhen'], message: 'A start condition needs autoStart.' });
-    }
-    if (phase.autoApproveWhen && !phase.exitTool) {
-      ctx.addIssue({ code: 'custom', path: ['autoApproveWhen'], message: 'Auto-approval needs an exit tool.' });
     }
   });
 export type StoredPhaseInput = z.infer<typeof storedPhaseInputSchema>;
@@ -143,15 +158,17 @@ export const storedBoardInputSchema = z
     }
     const exitTools = new Set<string>();
     board.phases.forEach((phase, index) => {
-      if (!phase.exitTool) return;
-      if (exitTools.has(phase.exitTool)) {
+      const exitTool = phase.exitTool?.id;
+      // The move tool goes wherever the agent moves the card, so any phase may end with it.
+      if (!exitTool || exitTool === 'factory_transition_work_item') return;
+      if (exitTools.has(exitTool)) {
         ctx.addIssue({
           code: 'custom',
           path: ['phases', index, 'exitTool'],
-          message: `Tool '${phase.exitTool}' already ends another phase.`,
+          message: `Tool '${exitTool}' already ends another phase.`,
         });
       }
-      exitTools.add(phase.exitTool);
+      exitTools.add(exitTool);
       const next = board.phases[index + 1];
       if (!next) {
         ctx.addIssue({

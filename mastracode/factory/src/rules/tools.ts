@@ -53,6 +53,28 @@ async function cardBoards(
 }
 
 /**
+ * The phases the card may move to from where it is now. Undefined when the card is in several
+ * phases or its board is unknown; the transition service still decides those calls. The current
+ * phase is not listed, but the tool still accepts it (triage records a classification that way).
+ */
+async function allowedNextPhases(
+  options: { boards?: BoardRegistry; boardsFor?: ProjectBoards },
+  item: WorkItemRow,
+): Promise<string[] | undefined> {
+  if (item.stages.length !== 1) return undefined;
+  const board = (await cardBoards(options, item))?.get(boardForWorkItem(item));
+  if (!board) return undefined;
+  return [...new Set((board.transitions[item.stages[0]!] ?? []).map(transition => transition.to))];
+}
+
+/** The transition input, with `stage` limited to the card's next phases when they are known. */
+function gatedTransitionSchema(isTriage: boolean, currentPhase: string | undefined, nextPhases: string[] | undefined) {
+  const schema = isTriage ? triageTransitionInputSchema : transitionInputSchema;
+  if (!currentPhase || !nextPhases) return schema;
+  return schema.extend({ stage: z.enum([currentPhase, ...nextPhases] as [string, ...string[]]) });
+}
+
+/**
  * What the card's phase lets a session in `role` do: classify it (Triage), record a review verdict
  * (Review, unless this session also works the card elsewhere). Tools follow the phase, so a session
  * sees them change as the card moves.
@@ -111,15 +133,23 @@ export async function createFactoryTransitionTools(options: {
     ? await phaseGrants(options, boundItem, availableBinding.role)
     : { triage: false, review: false };
   const isTriage = grants.triage;
+  const nextPhases = boundItem ? await allowedNextPhases(options, boundItem) : undefined;
+  const nextPhasesHint = nextPhases
+    ? nextPhases.length > 0
+      ? ` From ${boundItem!.stages[0]} the card may only move to: ${nextPhases.join(', ')}.`
+      : ` The card cannot move from ${boundItem!.stages[0]}.`
+    : '';
 
   return {
     ...(grants.review ? createReviewVerdictTool(options, availableBinding.workItemId) : {}),
     factory_transition_work_item: createTool({
       id: 'factory_transition_work_item',
-      description: isTriage
-        ? "Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Classification is descriptive: follow the board's allowed next phases and automatic-start rules, without a separate acceptance step for features or other non-bug work."
-        : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.',
-      inputSchema: isTriage ? triageTransitionInputSchema : transitionInputSchema,
+      description:
+        (isTriage
+          ? "Report the triage classification and request a governed stage transition for the Factory work item exactly bound to this thread. Classification is descriptive: follow the board's allowed next phases and automatic-start rules, without a separate acceptance step for features or other non-bug work."
+          : 'Request a governed stage transition for the Factory work item exactly bound to this thread. Use the current revision from the factory-phase signal and explain why the transition is appropriate.') +
+        nextPhasesHint,
+      inputSchema: gatedTransitionSchema(isTriage, boundItem?.stages[0], nextPhases),
       requireApproval: true,
       execute: async ({ stage, expectedRevision, rationale, triageType: requestedTriageType }, execution) => {
         const currentResolution = await resolveFactorySessionAddress({

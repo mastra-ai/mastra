@@ -21,7 +21,7 @@ export interface CompilableBoard {
     readonly kind: StoredPhaseKind;
     readonly runner?: StoredPhaseRunner | null;
     readonly nextPhases?: readonly string[] | null;
-    readonly exitTool?: string | null;
+    readonly exitTool?: string | { readonly id: string } | null;
     readonly autoStart?: boolean;
     readonly autoStartWhen?: RuleGroup | null;
   }[];
@@ -198,9 +198,11 @@ export function compileStoredBoard(
     }
     Object.assign(tools, runner?.tools);
     const nextPhase = board.phases[index + 1]?.key;
-    if (phase.exitTool && nextPhase) {
+    const exitTool = typeof phase.exitTool === 'string' ? phase.exitTool : phase.exitTool?.id;
+    // The move tool moves the card itself; it needs no rule to pick the next phase.
+    if (exitTool && exitTool !== 'factory_transition_work_item' && nextPhase) {
       // Any agent working the card in this phase may finish it; the tool decides, not the session.
-      tools[phase.exitTool] = exitToolRule({ tool: phase.exitTool, phase: phase.key, nextPhase });
+      tools[exitTool] = exitToolRule({ tool: exitTool, phase: phase.key, nextPhase });
     }
   }
 

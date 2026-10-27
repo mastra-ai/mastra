@@ -87,7 +87,7 @@ describe('BoardsSection', () => {
 
     expect(within(planning).getByRole('combobox', { name: 'Field' })).toHaveTextContent('Labels');
     expect(within(planning).getByRole('combobox', { name: 'Operator' })).toHaveTextContent('contains');
-    await user.type(within(planning).getByRole('textbox', { name: 'Value' }), 'effort: low');
+    await user.type(within(planning).getByRole('textbox', { name: 'Value' }), 'effort:low');
     await user.tab();
 
     await user.click(within(phaseGroup(/Planning/)).getByRole('button', { name: 'Add condition' }));
@@ -106,7 +106,7 @@ describe('BoardsSection', () => {
     expect(planningSaved.autoApproveWhen).toEqual({
       operator: 'AND',
       conditions: [
-        { field: 'item.labels', operator: 'contains', value: 'effort: low' },
+        { field: 'item.labels', operator: 'contains', value: 'effort:low' },
         { field: 'item.author', operator: 'contains', value: 'ward' },
       ],
     });

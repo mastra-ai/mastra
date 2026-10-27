@@ -27,13 +27,19 @@ export interface StoredPhase {
   /** `null` means a card may move to any phase on the board. */
   nextPhases: string[] | null;
   /** A successful call of this tool while the card is here moves it to the next phase in board order. */
-  exitTool: string | null;
-  /** When it matches the card, the exit tool's approval is given without a person. */
-  autoApproveWhen: RuleGroup | null;
+  exitTool: StoredExitTool | null;
   /** Its runs start without anyone approving them, even with the project's auto-run off. */
   autoStart: boolean;
   /** With `autoStart`, only cards this matches start on their own; null starts every card. */
   autoStartWhen: RuleGroup | null;
+}
+
+export interface StoredExitTool {
+  id: string;
+  /** The tool's approval is given without a person. */
+  autoApprove: boolean;
+  /** With `autoApprove`, only cards this matches are approved on their own; null approves every card. */
+  autoApproveWhen: RuleGroup | null;
 }
 
 export interface StoredEventRoute {
@@ -115,6 +121,7 @@ interface PhaseRow extends Record<string, unknown> {
   runner: StoredPhaseRunner | null;
   next_phases: string[] | null;
   exit_tool?: string | null;
+  auto_approve?: boolean | null;
   auto_approve_when?: RuleGroup | null;
   auto_start?: boolean | null;
   auto_start_when?: RuleGroup | null;
@@ -226,8 +233,14 @@ export class BoardsStorage extends FactoryStorageDomain {
                 kind: phase.kind,
                 runner: phase.runner,
                 nextPhases: phase.next_phases,
-                exitTool: phase.exit_tool ?? null,
-                autoApproveWhen: phase.auto_approve_when ?? null,
+                exitTool: phase.exit_tool
+                  ? {
+                      id: phase.exit_tool,
+                      // Rows written before `auto_approve` existed approved whenever a rule was set.
+                      autoApprove: phase.auto_approve === true || !!phase.auto_approve_when,
+                      autoApproveWhen: phase.auto_approve_when ?? null,
+                    }
+                  : null,
                 autoStart: phase.auto_start === true,
                 autoStartWhen: phase.auto_start_when ?? null,
               })),
@@ -339,8 +352,9 @@ export class BoardsStorage extends FactoryStorageDomain {
               kind: phase.kind,
               runner: phase.runner ?? null,
               next_phases: phase.nextPhases ?? null,
-              exit_tool: phase.exitTool ?? null,
-              auto_approve_when: phase.autoApproveWhen ?? null,
+              exit_tool: phase.exitTool?.id ?? null,
+              auto_approve: phase.exitTool?.autoApprove ?? false,
+              auto_approve_when: phase.exitTool?.autoApproveWhen ?? null,
               auto_start: phase.autoStart ?? false,
               auto_start_when: phase.autoStartWhen ?? null,
             });
