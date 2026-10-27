@@ -260,6 +260,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     recover: boolean,
     slots = 'default',
     mode = 'always',
+    traced = false,
   ): Promise<{ url: URL; process: ChildProcess }> {
     // One node process (no tsx wrapper process), so SIGKILL kills the server itself.
     const proc = spawn(
@@ -273,6 +274,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         String(recover),
         slots,
         mode,
+        traced ? 'traced' : 'untraced',
       ],
       { cwd: join(here, '../..'), stdio: ['ignore', 'pipe', 'inherit'] },
     );
@@ -535,6 +537,33 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         }),
       ]);
       await a.mastra.observability.getSelectedInstance({})?.flush();
+    });
+
+    it('numbers and marks an attempt rerun after its server was killed, under a root that was already stored', async () => {
+      const dying = await child(true, 'default', 'always', true);
+      const taskId = await call(dying.url, 'crashy');
+      await until(() => runsIn(counterFile) === 1);
+      // Within the exporter's 5s batch: only what the server flushed on its own is stored.
+      dying.process.kill('SIGKILL');
+      const b = await instance({ tools: { crashy: { mode: 'always', recover: true } } }, traced());
+      await waitFor(await requester(b.url), taskId, 'completed');
+
+      const recovered = await spanNamed(b.mastra, 'task attempt crashy #2');
+      const store = (await b.mastra.getStorage()!.getStore('observability'))!;
+      const { spans: listed } = await store.listTraces({ pagination: { page: 0, perPage: 100 } });
+      expect(listed).toEqual([
+        expect.objectContaining({
+          name: 'tools/call crashy',
+          traceId: recovered.traceId,
+          spanId: recovered.parentSpanId,
+        }),
+      ]);
+      expect(recovered.metadata).toMatchObject({
+        attempt: 2,
+        resumed: false,
+        recovered: true,
+        mcpTaskStatus: 'completed',
+      });
     });
 
     it('never stores a task id in a span', async () => {

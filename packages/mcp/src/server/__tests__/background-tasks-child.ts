@@ -5,11 +5,12 @@
  */
 import { Mastra } from '@mastra/core/mastra';
 import { LibSQLStore } from '@mastra/libsql';
+import { DefaultExporter, Observability } from '@mastra/observability';
 import { MCPServer } from '../server';
 import { authFor, makeApprove, makeCrashy, makeHang } from './background-tasks.mock';
 import { serveHTTP } from './harness.mock';
 
-const [url, counterFile, recover, slots, mode] = process.argv.slice(2);
+const [url, counterFile, recover, slots, mode, traced] = process.argv.slice(2);
 
 const server = new MCPServer({
   name: 'Tasks',
@@ -29,6 +30,12 @@ const mastra = new Mastra({
     ...(slots === 'oneSlot' && { perOwnerConcurrency: { 'mcp-server:tasks': 1 } }),
   },
   mcpServers: { tasks: server },
+  // Spans go to the shared storage in the exporter's default batches, as in production.
+  ...(traced === 'traced' && {
+    observability: new Observability({
+      configs: { default: { serviceName: 'tasks', exporters: [new DefaultExporter()] } },
+    }),
+  }),
 });
 void mastra;
 const served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });

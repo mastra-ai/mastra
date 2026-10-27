@@ -8,6 +8,7 @@ import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputRespon
 import type {
   MCPTaskAccess,
   MCPTaskAttempt,
+  MCPTaskAttemptTrace,
   MCPTaskCreateParams,
   MCPTaskRunOptions,
   MCPTaskStore,
@@ -49,6 +50,11 @@ export interface BackgroundTaskEnvelope {
   inputResponses?: MCPTaskInputResponses;
   /** Every input key this task ever asked for; keys must be unique over its lifetime. */
   usedInputKeys: string[];
+  /**
+   * Attempts started so far, for a traced task's attempt spans. Core's reclaim of a lost attempt
+   * leaves `retryCount` alone, so the row itself can't tell a recovered run from a first one.
+   */
+  attempts?: number;
 }
 
 /** What the executor receives as `args`: it gets nothing else from the row. */
@@ -590,6 +596,28 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     }
   }
 
+  /**
+   * Counts the attempt this worker just claimed, for a traced task, and describes it for its span.
+   * The write is fenced on the claim; losing it only costs the span its number.
+   */
+  async #countAttempt(taskKey: string, resumed: boolean): Promise<MCPTaskAttemptTrace | undefined> {
+    const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 });
+    const row = tasks[0];
+    const envelope = row && envelopeOf(row);
+    if (!row || !envelope?.trace) return undefined;
+    const attempt = (envelope.attempts ?? 0) + 1;
+    const storage = await this.#manager.getStorage();
+    await storage
+      .updateTask(
+        row.id,
+        { metadata: { ...envelope, attempts: attempt } },
+        { expectedStatus: 'running', expectedOwnerId: row.ownerId ?? null },
+      )
+      .catch(() => undefined);
+    // A run that is neither the first nor a resume replaces an attempt lost with its worker.
+    return { ...envelope.trace, taskKey, attempt, resumed, recovered: !resumed && attempt > 1 };
+  }
+
   /** Runs one attempt and turns its outcome into what the background-task workflow records. */
   async #execute(
     work: MCPTaskWork,
@@ -599,6 +627,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   ): Promise<unknown> {
     const signal = options?.abortSignal ?? new AbortController().signal;
     const resumeData = options?.resumeData as RowResume | undefined;
+    const trace = await this.#countAttempt(args.taskKey, resumeData !== undefined);
     let outcome: Promise<Awaited<ReturnType<MCPTaskWork>>>;
     if (initial) {
       const abort = () => initial.abort(signal.reason);
@@ -606,22 +635,9 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       else signal.addEventListener('abort', abort, { once: true });
       outcome = initial.outcome.finally(() => signal.removeEventListener('abort', abort));
     } else {
-      const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: args.taskKey, perPage: 1 });
-      const row = tasks[0];
-      const trace = row && envelopeOf(row)?.trace;
       const attempt: MCPTaskAttempt = {
         signal,
-        // Every resume follows a suspension and every retry a lost attempt, so together they count attempts.
-        ...(row &&
-          trace && {
-            trace: {
-              ...trace,
-              taskKey: args.taskKey,
-              attempt: 1 + row.retryCount + envelopeOf(row)!.usedInputKeys.length,
-              resumed: resumeData !== undefined,
-              recovered: row.retryCount > 0 && resumeData === undefined,
-            },
-          }),
+        ...(trace && { trace }),
         ...(resumeData && {
           resume: { inputResponses: resumeData.inputResponses, suspendPayload: resumeData.suspendPayload },
         }),
