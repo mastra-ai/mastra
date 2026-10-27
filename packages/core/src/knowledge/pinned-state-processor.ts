@@ -1,7 +1,7 @@
 /**
  * PinnedStateProcessor
  *
- * Projects the Subconscious pin set onto the agent state-signal lane. Delivery
+ * Projects the Knowledge pin set onto the agent state-signal lane. Delivery
  * follows the lane's contract: when no snapshot is in the visible context
  * (state never emitted, or observational memory evicted it) emit a full
  * snapshot; otherwise emit a small delta carrying only this turn's changes;

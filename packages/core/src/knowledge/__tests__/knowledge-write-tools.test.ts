@@ -516,6 +516,27 @@ describe('Knowledge write tools', () => {
     expect(await store.getKnowledge({ id: narrow.id })).toMatchObject({ scope: ['org:acme'] });
   });
 
+  it('records the agent that removed a record as deletedBy', async () => {
+    const { store, source } = await fixture();
+    const record = await store.appendKnowledge({
+      node: source,
+      text: 'Atlas ships in March.',
+      scope,
+      resolutionScope: scope,
+      defaultScope: scope,
+      sourceThreadId: 'alpha',
+    });
+    const tools = createKnowledgeWriteTools(await hostOver(store), {
+      scope,
+      sourceThreadId: 'alpha',
+      source: 'agent:alex',
+    });
+
+    await tools.knowledge_remove!.execute?.({ recordId: record.id }, {} as any);
+
+    expect((await store.getKnowledge({ id: record.id, includeDeleted: true }))?.deletedBy).toBe('agent:alex');
+  });
+
   it('refuses to append to or remove from a node outside the curator’s visible scope', async () => {
     const { store, tools } = await fixture();
     const foreign = await store.createNode({

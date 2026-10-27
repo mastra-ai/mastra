@@ -25,8 +25,6 @@ export const DEFAULT_MAX_PINS = 20;
 export const DEFAULT_PINNED_MAX_TOKENS = 500;
 export const MAX_PINNED_MAX_TOKENS = 2_000;
 
-const PIN_IDENTITY = 'subconscious:pin';
-
 export interface PinnedKnowledgeSet {
   /** Every visible `pinned` node the set was read from. */
   nodeIds: string[];
@@ -41,7 +39,7 @@ export interface PinnedToolsOptions {
   /** Tags of `scope` the run holds read-only: pins there are delivered, never changed. */
   readOnly?: KnowledgeScope;
   sourceThreadId: string;
-  /** Stamped as `metadata.source` on every pin written, e.g. `agent:<id>`. */
+  /** Stamped as `metadata.source` on every pin written and as `deletedBy` on removals, e.g. `agent:<id>`. */
   source?: string;
   maxPins: number;
   /** Estimated-token budget for the whole pin set. */
@@ -261,7 +259,7 @@ export function createPinnedTools(
       execute: async input => {
         const store = await getStore(memory);
         const record = await requirePin(store, (input as { recordId: string }).recordId, options);
-        return store.removeKnowledge({ id: record.id, deletedBy: PIN_IDENTITY });
+        return store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
       },
     }),
     knowledge_edit_pin: createTool({
@@ -287,7 +285,7 @@ export function createPinnedTools(
         const record = await requirePin(store, value.recordId, options);
         const { pins } = await listPinnedKnowledge({ store, scope: options.scope });
         assertBudget(options, pins, value.text, record);
-        await store.removeKnowledge({ id: record.id, deletedBy: PIN_IDENTITY });
+        await store.removeKnowledge({ id: record.id, deletedBy: options.source ?? 'agent' });
         return store.appendKnowledge({
           node: record.node,
           text: value.text,
