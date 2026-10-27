@@ -177,7 +177,49 @@ function normalizeGoogleToolCallMessages(body: unknown): unknown {
   return { ...body, contents };
 }
 
-function normalizeObservationAges(body: unknown): unknown {
+function normalizeObservationHeadings(text: string): string {
+  return text
+    .replaceAll(
+      /^Date: (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}(?: \((?:today|yesterday|\d+ (?:day|week|month|year)s? ago)\))?$/gm,
+      'Date: REDACTED_DATE',
+    )
+    .replaceAll(/^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2} \d{4}:$/gm, 'REDACTED_DATE:');
+}
+
+function normalizeObserverRequest(content: unknown): unknown {
+  if (!Array.isArray(content)) return content;
+  const historyIndex = content.findIndex(
+    part => isRecord(part) && part.text === '## New Message History to Observe\n\n',
+  );
+  const task = content.at(-1);
+  if (
+    historyIndex < 0 ||
+    !isRecord(task) ||
+    typeof task.text !== 'string' ||
+    !task.text.startsWith('\n\n---\n\n## Your Task\n\n')
+  ) {
+    return content;
+  }
+  return content.map((part, index) => {
+    if (!isRecord(part) || typeof part.text !== 'string') return part;
+    let text = part.text;
+    if (index < historyIndex) {
+      text = text.replace(
+        /^(## Previous Observations\n\n)([\s\S]*?)(?=\n\n---\n\n)/,
+        (_, heading, observations) => heading + normalizeObservationHeadings(observations),
+      );
+    } else if (index > historyIndex && index < content.length - 1) {
+      // formatObserverLines puts the generated date first; user continuations below it are raw text.
+      text = text.replace(
+        /^(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2} \d{4}:(?=\n)/,
+        'REDACTED_DATE:',
+      );
+    }
+    return { ...part, text };
+  });
+}
+
+function normalizeObservationContext(body: unknown): unknown {
   if (!isRecord(body)) return body;
 
   const normalizeBlocks = (blocks: unknown[], implicitSystem = false) => {
@@ -189,7 +231,7 @@ function normalizeObservationAges(body: unknown): unknown {
           if (part === '<observations>') inObservations = true;
           else if (['</observations>', '<current-task>', '<suggested-response>'].includes(part)) inObservations = false;
           else if (inObservations) {
-            return part.replaceAll(
+            return normalizeObservationHeadings(part).replaceAll(
               /(\(meaning [^()\n]+ - )(?:today|yesterday|tomorrow|\d+ (?:day|week|month|year)s? ago|in \d+ (?:day|week|month|year)s?)(?=\))/g,
               '$1REDACTED_AGE',
             );
@@ -209,7 +251,7 @@ function normalizeObservationAges(body: unknown): unknown {
       if (!isRecord(block)) return block;
       if (!implicitSystem && block.role !== 'system' && block.role !== 'developer') {
         inObservations = false;
-        return block;
+        return block.role === 'user' ? { ...block, content: normalizeObserverRequest(block.content) } : block;
       }
       return {
         ...block,
@@ -229,7 +271,7 @@ function normalizeObservationAges(body: unknown): unknown {
 }
 
 export function transformRequest({ url, body }: { url: string; body: unknown }): { url: string; body: unknown } {
-  let normalizedBody = normalizeObservationAges(
+  let normalizedBody = normalizeObservationContext(
     normalizeOpenAIResponseFunctionCalls(normalizeNetworkFinalResultMessages(body)),
   );
   const { hostname } = new URL(url);
@@ -266,14 +308,6 @@ export function transformRequest({ url, body }: { url: string; body: unknown }):
   }
   // Normalize dates/timestamps in remembered messages (timezone/date differences cause hash mismatches)
   stringifiedBody = stringifiedBody.replaceAll(/\d{4},\s*\w{3},\s*\d{1,2}/g, 'REDACTED_DATE');
-  stringifiedBody = stringifiedBody.replaceAll(
-    /((?:\\n|"))Date: (?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2}, \d{4}(?: \((?:today|yesterday|\d+ (?:day|week|month|year)s? ago)\))?(?=\\n|")/g,
-    '$1Date: REDACTED_DATE',
-  );
-  stringifiedBody = stringifiedBody.replaceAll(
-    /((?:\\n|"))(?:Jan|Feb|Mar|Apr|May|Jun|Jul|Aug|Sep|Oct|Nov|Dec) \d{1,2} \d{4}:(?=\\n|")/g,
-    '$1REDACTED_DATE:',
-  );
   stringifiedBody = stringifiedBody.replaceAll(/\d{1,2}:\d{2}\s*(AM|PM)/gi, 'REDACTED_TIME');
   // Remove "caller" objects that may be present in some SDK versions
   // Handle both cases: with trailing comma and as last property
