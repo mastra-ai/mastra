@@ -70,6 +70,7 @@ import type { ExecuteFunctionParams } from '../../../../workflows/step';
 import type { DefaultEngineType } from '../../../../workflows/types';
 import { createStep } from '../../../../workflows/workflow';
 import { isDownloadAssetsError } from '../../../message-list/prompt/download-assets';
+import { startRunStep } from '../../../run-lease-fence';
 import { createSignal } from '../../../signals';
 import { TripWire } from '../../../trip-wire';
 import { isSupportedLanguageModel } from '../../../utils';
@@ -1712,6 +1713,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               : undefined;
 
             const releaseStreamActivity = markRunActive(runId);
+            // A run that loses its thread lease while this request streams lets the request finish before it stops.
+            const settleRequest = startRunStep(registryEntry);
             try {
               let stepStartEmitted = false;
               // Stream driver — deliberate, permanent divergence from the
@@ -2516,6 +2519,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               break; // exhausted retries, try next model
             } finally {
               releaseStreamActivity();
+              settleRequest();
             }
 
             ownership?.throwIfLost();
