@@ -93,17 +93,26 @@ jobs:
       - name: Reject unknown or ignored changeset packages
         run: node .github/scripts/check-changeset-packages.mjs
 
-      # The automated Changesets release PR only rewrites package.json versions,
-      # changelogs and .changeset/pre.json: the changesets it consumes are already
-      # in the merge base, so `--since origin/main` never sees a new changeset and
-      # the status check fails on every regeneration of that PR. Skip it — its
-      # changesets were validated on the PRs that introduced them. The branch name
-      # alone is not a trusted signal, since a fork can pick any name, so the skip
-      # also requires the head to live in this repository.
-      #
+      # Whether a change needs a release is the author's call, so a PR that adds
+      # no changeset has nothing for `changeset status` to check: the pending
+      # changesets are already on main and were validated on the PRs that added
+      # them. This also covers the automated Changesets release PR, which only
+      # deletes changesets.
+      - name: Check whether this PR adds changesets
+        id: pr-changesets
+        env:
+          BASE_SHA: ${{ github.event.pull_request.base.sha }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+        run: |
+          if git diff --name-only --diff-filter=AM "$BASE_SHA...$HEAD_SHA" -- '.changeset/*.md' | grep -qv '^\.changeset/README\.md$'; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
       # actions/checkout fetches main as origin/main, not a local main branch.
       - name: Validate changeset release plan
-        if: ${{ github.event.pull_request.head.repo.full_name != github.repository || !startsWith(github.head_ref, 'changeset-release/') }}
+        if: ${{ steps.pr-changesets.outputs.found == 'true' }}
         run: pnpm changeset-cli status --since origin/main
 
   new-package-npm-check:
