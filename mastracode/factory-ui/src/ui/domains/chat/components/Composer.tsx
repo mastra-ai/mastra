@@ -92,7 +92,8 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const composerDisabled = createDraftSessionMutation.isPending || blocked || planFeedback.isSubmitting;
   const sendDisabled = composerDisabled || draftConfigNotReady || chatPreparing || planFeedback.loading;
   const draftImagesCanBeSent = !planFeedback.pending && !liveRun;
-  const hasSubmittableDraft = draft.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
+  const shownText = preview?.text ?? draft;
+  const hasSubmittableDraft = shownText.trim().length > 0 || (images.length > 0 && draftImagesCanBeSent);
   const textareaDisabled = composerDisabled && !chatPreparing;
   const initializingPlaceholder = useInitializingPlaceholder(chatPreparing, draft.length === 0);
   const normalPlaceholder = planFeedback.pending
@@ -184,12 +185,12 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
   const onSubmit = (e: { preventDefault: () => void }) => {
     e.preventDefault();
     if (sendDisabled || !hasSubmittableDraft) return;
-    submitInput(draft.trim());
+    submitInput(shownText.trim());
   };
 
   const commandMenu = useComposerCommands({
     commands,
-    value: preview?.text ?? draft,
+    value: shownText,
     onValueChange: updateDraft,
     inputRef,
     enabled: !planFeedback.pending,
@@ -289,7 +290,7 @@ export function Composer({ variant = 'inline' }: ComposerProps) {
               </Button>
               <ComposerPrimaryAction
                 showAbort={liveRun && !hasSubmittableDraft}
-                sendDisabled={sendDisabled || (!hasSubmittableDraft && preview === undefined)}
+                sendDisabled={sendDisabled || !hasSubmittableDraft}
                 sendTitle={sendTitle}
                 onAbort={() => void abortMutation.mutateAsync()}
               />

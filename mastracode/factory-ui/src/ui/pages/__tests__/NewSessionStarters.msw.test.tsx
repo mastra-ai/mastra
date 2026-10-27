@@ -96,6 +96,27 @@ describe('the new session page', () => {
     await waitForMutationsIdle(client);
   });
 
+  it('sends the prompt on screen, not the draft behind it, when Enter is pressed while a card is hovered', async () => {
+    const route = stubDraftRoute({ workItems: [card('Login fails on Safari', ['intake'])] });
+    const user = userEvent.setup();
+    const { client } = renderDraft();
+
+    const message = await screen.findByRole<HTMLTextAreaElement>('textbox', { name: 'Message' });
+    await waitFor(() => expect(message).toBeEnabled());
+    await user.type(message, 'my own idea');
+    await user.hover(await screen.findByRole('button', { name: 'Triage it' }));
+    const shown = message.value;
+    expect(message).toHaveFocus();
+
+    await user.keyboard('{Enter}');
+
+    await waitFor(() =>
+      expect(route.createBodies).toEqual([{ sessionId: DRAFT_SESSION_ID, title: shown, visibility: 'private' }]),
+    );
+    route.finishWorkspace();
+    await waitForMutationsIdle(client);
+  });
+
   it('offers no card when nothing on the board waits on anyone', async () => {
     stubDraftRoute({ workItems: [card('building', ['execute']), card('done', ['done'])] });
     renderDraft();
