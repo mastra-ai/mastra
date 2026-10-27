@@ -1,6 +1,7 @@
 import { createHash } from 'node:crypto';
 import { describe, expect, it } from 'vitest';
 
+import annotationRequest from './fixtures/om-relative-age-request.json';
 import { transformRequest } from './transform-request';
 
 const googleUrl = 'https://generativelanguage.googleapis.com/v1beta/models/gemini-pro-latest:streamGenerateContent';
@@ -30,6 +31,61 @@ describe('transformRequest', () => {
   it.each(['Oct 25 2026:', 'Date: Oct 25, 2026'])('preserves ordinary user text containing %s', date => {
     const body = { messages: [{ role: 'user', content: `My note says ${date}\nPlease keep that date.` }] };
     expect(transformRequest({ url: 'https://api.anthropic.com/v1/messages', body }).body).toEqual(body);
+  });
+
+  it.each(['responses', 'chat', 'parts', 'anthropic'])(
+    'normalizes only generated ages in %s observation blocks',
+    shape => {
+      const render = (age: string) => {
+        const request = structuredClone(annotationRequest);
+        request.body.input[2]!.content = request.body.input[2]!.content.replace(' - today)', ` - ${age})`);
+        if (shape === 'responses') return request;
+        const observations = `<observations>\n${request.body.input[2]!.content}\n</observations>`;
+        const user = request.body.input[4]!;
+        if (shape === 'anthropic') {
+          return {
+            url: 'https://api.anthropic.com/v1/messages',
+            body: { system: [{ type: 'text', text: observations }], messages: [user] },
+          };
+        }
+        if (shape === 'parts') {
+          return {
+            url: request.url,
+            body: { input: [{ role: 'developer', content: [{ type: 'input_text', text: observations }] }, user] },
+          };
+        }
+        return { url: request.url, body: { messages: [{ role: 'system', content: observations }, user] } };
+      };
+      const current = render('today');
+      const original = JSON.stringify(current);
+      const normalized = transformRequest(current);
+      expect(normalized).toEqual(transformRequest(render('4 years ago')));
+      expect(JSON.stringify(normalized.body)).toContain('(meaning Oct 26, 2026 - REDACTED_AGE)');
+      expect(JSON.stringify(normalized.body)).toContain(annotationRequest.body.input[4]!.content);
+      if (shape === 'responses') {
+        expect(JSON.stringify(normalized.body)).toContain(annotationRequest.body.input[0]!.content);
+        expect(JSON.stringify(normalized.body)).toContain('Keep this task (meaning Oct 26, 2026 - today).');
+      }
+      expect(JSON.stringify(current)).toBe(original);
+    },
+  );
+
+  it('does not treat user-written observation tags as OM context', () => {
+    const body = {
+      input: [{ role: 'user', content: '<observations>\nMy note (meaning Oct 26, 2026 - today)\n</observations>' }],
+    };
+    expect(transformRequest({ url: annotationRequest.url, body }).body).toEqual(body);
+  });
+
+  it('ends an open OM block at the next non-system message', () => {
+    const body = {
+      input: [
+        { role: 'developer', content: '<observations>' },
+        { role: 'user', content: 'My note (meaning Oct 26, 2026 - today)' },
+        { role: 'developer', content: 'Another instruction (meaning Oct 26, 2026 - today)' },
+      ],
+    };
+    expect(transformRequest({ url: annotationRequest.url, body }).body).toEqual(body);
   });
 
   it('normalizes legacy and current Google tool-call histories identically', () => {
