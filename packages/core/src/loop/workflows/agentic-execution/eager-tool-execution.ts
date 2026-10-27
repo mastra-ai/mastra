@@ -102,8 +102,8 @@ export type CompletedEagerWork = {
   /** What the tool threw. A failed call is still a call that ran. */
   error?: unknown;
   /**
-   * The tool started, then observed the run's abort and stopped without an outcome.
-   * Kept so the aborted run records the call as incomplete, as the default pipeline does.
+   * The tool started but had no outcome when the run's cancellation window expired.
+   * Kept so the aborted run emits and records a cancellation notice as its tool result.
    */
   incomplete?: true;
   /**
