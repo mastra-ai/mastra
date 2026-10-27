@@ -73,6 +73,7 @@ function metaText(entry: MessageEntry, prose: string, reply?: string): string | 
 export function MessageBubble({
   entry,
   suspensions,
+  collapseTools = true,
   reply,
   isSubmitting,
   onRespond,
@@ -81,6 +82,8 @@ export function MessageBubble({
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  /** Fold consecutive tool updates only after the reader moves to another turn. */
+  collapseTools?: boolean;
   reply?: string;
   isSubmitting: boolean;
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
@@ -94,7 +97,7 @@ export function MessageBubble({
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
 
-  const toolGroups = collectToolGroups(parts, suspensions);
+  const toolGroups = collectToolGroups(collapseTools ? parts : [], suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;

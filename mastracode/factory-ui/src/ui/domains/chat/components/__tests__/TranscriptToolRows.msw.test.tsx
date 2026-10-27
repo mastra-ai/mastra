@@ -1,7 +1,7 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
 import type { DatePreset } from '@mastra/playground-ui/utils/date-format';
-import { screen, within } from '@testing-library/react';
+import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
 import { describe, expect, it } from 'vitest';
@@ -54,11 +54,16 @@ function runningTool(toolCallId: string, toolName: string, args: unknown): Mastr
   return { type: 'tool-invocation', toolInvocation: { state: 'call', toolCallId, toolName, args } };
 }
 
-function renderEntries(entries: TimelineEntry[]) {
+function renderEntries(entries: TimelineEntry[], currentTurn = false) {
   // The plan card resolves its workspace from the route, so entries render under a router like in the app.
+  // Row/group cases inspect history unless they explicitly exercise the current turn.
   return renderWithProviders(
     <MemoryRouter>
-      <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+      <TranscriptEntries
+        entries={currentTurn ? entries : [...entries, userMessage('next-turn', 'Next question')]}
+        onApprove={() => {}}
+        onRespond={() => {}}
+      />
     </MemoryRouter>,
   );
 }
@@ -162,24 +167,28 @@ describe('TranscriptEntries tool rows', () => {
     expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(2);
   });
 
-  it('folds a still-arriving run as it plays, so the reply reads as one busy row', async () => {
-    renderEntries([
-      assistantMessage(
-        'msg-1',
-        [
-          doneTool('call-1', 'view'),
-          doneTool('call-2', 'search_content'),
-          runningTool('call-3', 'execute_command', { command: 'pnpm test' }),
-        ],
-        undefined,
-        true,
-      ),
-    ]);
+  it('keeps a still-arriving run visible line by line', async () => {
+    renderEntries(
+      [
+        assistantMessage(
+          'msg-1',
+          [
+            doneTool('call-1', 'view'),
+            doneTool('call-2', 'search_content'),
+            runningTool('call-3', 'execute_command', { command: 'pnpm test' }),
+          ],
+          undefined,
+          true,
+        ),
+      ],
+      true,
+    );
 
-    const group = await screen.findByRole('group', { name: 'Tool group: 3 steps' }, { timeout: 5000 });
-    expect(group).toHaveAttribute('aria-busy', 'true');
-    expect(within(group).getByText('pnpm test')).toBeInTheDocument();
-    expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
+    const running = await screen.findByRole('group', { name: 'Tool: execute_command' }, { timeout: 5000 });
+    expect(running).toHaveAttribute('aria-busy', 'true');
+    expect(within(running).getByText('pnpm test')).toBeInTheDocument();
+    expect(screen.getByRole('group', { name: 'Tool: view' })).toBeInTheDocument();
+    expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
   });
 
   it('surfaces the running action live on a collapsed group header', () => {
@@ -200,10 +209,11 @@ describe('TranscriptEntries tool rows', () => {
     expect(group).toHaveAttribute('aria-busy', 'true');
   });
 
-  it('folds the rows above once a third call lands under the reader', async () => {
+  it('keeps earlier rows in place when a third call lands in the current turn', async () => {
     const restored = [doneTool('call-1', 'view'), doneTool('call-2', 'view')];
-    const { rerender } = renderEntries([assistantMessage('msg-1', restored)]);
-    expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(2);
+    const { rerender } = renderEntries([assistantMessage('msg-1', restored)], true);
+    const earlierRows = screen.getAllByRole('group', { name: 'Tool: view' });
+    expect(earlierRows).toHaveLength(2);
 
     rerender(
       <MemoryRouter>
@@ -215,8 +225,13 @@ describe('TranscriptEntries tool rows', () => {
       </MemoryRouter>,
     );
 
-    await screen.findByRole('group', { name: 'Tool group: 3 steps' }, { timeout: 3000 });
-    expect(screen.queryByRole('group', { name: 'Tool: view' })).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(3), {
+      timeout: 5000,
+    });
+    const rows = screen.getAllByRole('group', { name: 'Tool: view' });
+    expect(rows[0]).toBe(earlierRows[0]);
+    expect(rows[1]).toBe(earlierRows[1]);
+    expect(screen.queryByRole('group', { name: /Tool group/ })).not.toBeInTheDocument();
   });
 
   it('keeps the words on screen in place when an ask_user prompt fills its slot above them', () => {
@@ -377,6 +392,7 @@ describe('TranscriptEntries tool rows', () => {
               args: {},
               suspendPayload: { question: 'Which file should I edit?' },
             },
+            userMessage('next-turn', 'Next question'),
           ]}
           onApprove={() => {}}
           onRespond={() => {}}

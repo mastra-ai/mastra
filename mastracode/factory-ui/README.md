@@ -50,6 +50,10 @@ Activity's unread badge, open-item dot, and attention chime are retired, includi
 
 Successful run completions continue to use the live Ready indicator and completion sound on sidebar session rows.
 
+## Tool updates
+
+Tool updates appear line by line throughout the latest conversation turn, including after the agent finishes its reply. When the next user turn starts, runs of three or more consecutive tool calls within an earlier message fold into an expandable summary. Prose, questions, plan approvals, and suspended calls keep their own rows. Earlier turns also start folded when loading history; users can reopen their tool groups to inspect the steps and results.
+
 ## Session titles
 
 Slack sessions use the same automatic title generation as web sessions, including the preceding Slack thread context available to the agent. Until naming succeeds, the sidebar shows the session's work item title, or its branch when it has none. Older sessions that still show the generic `slack conversation` label keep it until observational memory retitles the conversation or the owner regenerates the title.

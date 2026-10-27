@@ -5,14 +5,14 @@ import { describe, expect, it } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { TranscriptEntries } from '../Transcript';
-import { runningTools, settledTools } from './fixtures/tool-outcomes';
+import { nextTurn, runningTools, settledTools } from './fixtures/tool-outcomes';
 
 describe('Transcript tool outcomes', () => {
   describe('when persisted calls have settled', () => {
     it('counts empty and false results as successful and keeps denied calls failed', async () => {
       renderWithProviders(
         <MemoryRouter>
-          <TranscriptEntries entries={[settledTools]} onApprove={() => {}} onRespond={() => {}} />
+          <TranscriptEntries entries={[settledTools, nextTurn]} onApprove={() => {}} onRespond={() => {}} />
         </MemoryRouter>,
       );
 
@@ -29,7 +29,7 @@ describe('Transcript tool outcomes', () => {
     it('keeps showing progress until the call settles', () => {
       renderWithProviders(
         <MemoryRouter>
-          <TranscriptEntries entries={[runningTools]} onApprove={() => {}} onRespond={() => {}} />
+          <TranscriptEntries entries={[runningTools, nextTurn]} onApprove={() => {}} onRespond={() => {}} />
         </MemoryRouter>,
       );
 

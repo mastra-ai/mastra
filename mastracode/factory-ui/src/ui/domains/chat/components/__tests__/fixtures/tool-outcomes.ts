@@ -1,5 +1,16 @@
 import type { MessageEntry } from '../../../services/transcript';
 
+export const nextTurn: MessageEntry = {
+  kind: 'message',
+  id: 'next-turn',
+  message: {
+    id: 'next-turn',
+    role: 'user',
+    createdAt: new Date('2026-09-16T10:01:00Z'),
+    content: { format: 2, parts: [{ type: 'text', text: 'Continue' }] },
+  },
+};
+
 export const settledTools: MessageEntry = {
   kind: 'message',
   id: 'settled-tools',

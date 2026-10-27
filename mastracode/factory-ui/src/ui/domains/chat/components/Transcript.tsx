@@ -162,6 +162,7 @@ export function TranscriptEntries({
                 <TranscriptEntryContent
                   entry={entry}
                   suspensions={suspensions}
+                  collapseTools={!isLiveTurn}
                   reply={entry === replyEnd ? reply : undefined}
                   redundantSuspension={
                     entry.kind === 'suspension' &&
@@ -197,6 +198,7 @@ export function TranscriptEntries({
 const TranscriptEntryContent = memo(function TranscriptEntryContent({
   entry,
   suspensions,
+  collapseTools,
   reply,
   redundantSuspension,
   isSubmitting,
@@ -207,6 +209,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
 }: {
   entry: TimelineEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  collapseTools: boolean;
   reply?: string;
   redundantSuspension: boolean;
   isSubmitting: boolean;
@@ -221,6 +224,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
         <MessageBubble
           entry={entry}
           suspensions={suspensions}
+          collapseTools={collapseTools}
           reply={reply}
           isSubmitting={isSubmitting}
           viewerId={viewerId}
