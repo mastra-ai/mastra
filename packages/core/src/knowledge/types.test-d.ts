@@ -2,6 +2,15 @@ import { describe, expectTypeOf, it } from 'vitest';
 import { Mastra } from '../mastra';
 import { InMemoryStore } from '../storage';
 import { Knowledge } from './index';
+import type {
+  KnowledgeConfig,
+  KnowledgeImporterDefinition,
+  KnowledgeImporterHandle,
+  KnowledgeImporterResolver,
+  KnowledgeImportersInput,
+  StaticKnowledgeImporterOperations,
+  StaticKnowledgeNodeHandle,
+} from './index';
 
 describe('Knowledge public types', () => {
   it('preserves keyed instance types through Mastra accessors', () => {
@@ -15,5 +24,47 @@ describe('Knowledge public types', () => {
       default: Knowledge;
       analytics: Knowledge;
     }>();
+  });
+
+  it('types importer registration handles', () => {
+    const knowledge = new Knowledge();
+    const handle = knowledge.registerImporter({
+      id: 'calendar-sync',
+      access: { 'org:$orgId': 'append' },
+      triggers: { webhook: { bindings: [{ source: 'calendar:primary', scope: 'org:acme' }] } },
+      handler: async context => {
+        expectTypeOf(context.payload).toEqualTypeOf<unknown>();
+        const importer = await context.importer();
+        expectTypeOf(importer).toEqualTypeOf<StaticKnowledgeImporterOperations>();
+        const node = await importer.upsertNode('event:42', { name: 'Planning', scopes: [importer.scope] });
+        expectTypeOf(node).toEqualTypeOf<StaticKnowledgeNodeHandle>();
+        await node.appendKnowledge({ text: '10:00–11:00' });
+      },
+    });
+
+    expectTypeOf(handle).toEqualTypeOf<KnowledgeImporterHandle>();
+    expectTypeOf(handle.programmatic).toEqualTypeOf<true>();
+    expectTypeOf(handle.webhookPath).toEqualTypeOf<((instanceKey: string) => string) | undefined>();
+
+    const typedHandle = knowledge.registerImporter<{ eventId: string }>({
+      id: 'typed-calendar-sync',
+      handler: async context => {
+        expectTypeOf(context.payload).toEqualTypeOf<{ eventId: string } | undefined>();
+      },
+    });
+    expectTypeOf(typedHandle).toEqualTypeOf<KnowledgeImporterHandle<{ eventId: string }>>();
+  });
+
+  it('accepts importer arrays and resolvers in KnowledgeConfig', () => {
+    const definitions: readonly KnowledgeImporterDefinition[] = [{ id: 'static-sync', handler: async () => {} }];
+    const resolver: KnowledgeImporterResolver = async () => definitions;
+
+    expectTypeOf(definitions).toExtend<KnowledgeImportersInput>();
+    expectTypeOf(resolver).toExtend<KnowledgeImportersInput>();
+    expectTypeOf<KnowledgeConfig['importers']>().toEqualTypeOf<KnowledgeImportersInput | undefined>();
+
+    void new Knowledge({ importers: definitions });
+    void new Knowledge({ importers: resolver });
+    void new Knowledge({ importers: async () => [{ id: 'inline-sync', handler: async () => {} }] });
   });
 });

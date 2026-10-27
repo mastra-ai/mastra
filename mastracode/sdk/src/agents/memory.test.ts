@@ -134,7 +134,7 @@ async function createMemoryConfig(
   memoryConstructorMock.mockClear();
   getOmScopeMock.mockReturnValue(projectScope);
 
-  const { getDynamicMemory } = await import('./memory.js');
+  const { getDynamicMemory, getKnowledgeAgentScopes } = await import('./memory.js');
   const storage = { storage: true };
   const requestContext = createRequestContext(state);
 
@@ -148,7 +148,9 @@ async function createMemoryConfig(
   };
 
   expect(memoryConstructorMock).toHaveBeenCalledTimes(1);
-  return { config: memory.config, requestContext };
+  // The code agent's own `scopes`: the trusted run scopes Subconscious reads.
+  const agentScopes = getKnowledgeAgentScopes(vector as never)({ requestContext: requestContext as never });
+  return { config: memory.config, requestContext, agentScopes };
 }
 
 describe('getDynamicMemory', () => {
@@ -294,34 +296,36 @@ describe('getDynamicMemory', () => {
   });
 
   it('keeps Subconscious memory inert unless explicitly opted in', async () => {
-    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', {
+    const { config, agentScopes } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', {
       vector: true,
     });
 
     expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
-    expect(requestContext.get('organizationId')).toBeUndefined();
+    expect(agentScopes).toEqual([]);
   });
 
   it('enables project-scoped Subconscious memory when explicitly opted in with vector storage', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const vector = { vector: true };
-    const { config, requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', vector);
+    const { config, requestContext, agentScopes } = await createMemoryConfig(
+      { projectPath: '/tmp/project' },
+      'thread',
+      vector,
+    );
 
     expect(config.vector).toBe(vector);
     // fastembed.small, wrapped so @mastra/fastembed only loads on the first embedding.
     expect(config.embedder).toMatchObject({ provider: 'fastembed', modelId: 'bge-small-en-v1.5' });
-    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
-      pins: true,
-    });
-    expect(requestContext.get('organizationId')).toBe(LOCAL_KNOWLEDGE_ORG_ID);
-    // Outside the factory there is no project id, so the knowledge scope is untouched.
-    expect(requestContext.get('knowledgeResourceId')).toBeUndefined();
+    expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({ pins: true });
+    expect(agentScopes).toEqual([`org:${LOCAL_KNOWLEDGE_ORG_ID}`]);
+    // Knowledge identity travels as agent scopes, never as request-context strings.
+    expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
+    expect(requestContext.set).not.toHaveBeenCalledWith('knowledgeResourceId', expect.anything());
   });
 
-  it('prefers the factory org id from session state over the session owner for organizationId', async () => {
+  it('holds the factory org and project from session state, never the session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const { requestContext } = await createMemoryConfig(
+    const { agentScopes } = await createMemoryConfig(
       {
         projectPath: '/tmp/project',
         factoryProjectId: 'project-1',
@@ -330,32 +334,29 @@ describe('getDynamicMemory', () => {
       'thread',
       { vector: true },
     );
-    expect(requestContext.set).toHaveBeenCalledWith('organizationId', 'org-real');
-    expect(requestContext.get('organizationId')).toBe('org-real');
+    expect(agentScopes).toEqual(['org:org-real', 'project:project-1']);
   });
 
   it('curates local (TUI/studio) knowledge under the fixed local org, never the per-checkout session owner', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const { LOCAL_KNOWLEDGE_ORG_ID: exported } = await import('./memory.js');
 
-    const { requestContext } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
-    const org = requestContext.get('organizationId');
-    expect(org).toBe('local');
-    expect(org).toBe(exported);
-    expect(org).not.toBe('mastracode-owner');
+    const { agentScopes } = await createMemoryConfig({ projectPath: '/tmp/project' }, 'thread', { vector: true });
+    expect(agentScopes).toEqual(['org:local']);
+    expect(agentScopes).toEqual([`org:${exported}`]);
+    expect(agentScopes).not.toContain('org:mastracode-owner');
   });
 
   it('refuses to curate for a factory session whose organization never resolved', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const { config, requestContext } = await createMemoryConfig(
+      const { config, agentScopes } = await createMemoryConfig(
         { projectPath: '/tmp/project', factoryProjectId: 'project-1' },
         'thread',
         { vector: true },
       );
-      expect(requestContext.get('organizationId')).toBeUndefined();
-      expect(requestContext.set).not.toHaveBeenCalledWith('organizationId', expect.anything());
+      expect(agentScopes).toEqual([]);
       expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
       expect(errorSpy).toHaveBeenCalledTimes(1);
       expect(errorSpy.mock.calls[0]?.[0]).toContain('Knowledge curation disabled');
@@ -368,12 +369,12 @@ describe('getDynamicMemory', () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
     const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
     try {
-      const { config, requestContext } = await createMemoryConfig(
+      const { config, agentScopes } = await createMemoryConfig(
         { projectPath: '/tmp/project', factoryOrgUnresolved: true },
         'thread',
         { vector: true },
       );
-      expect(requestContext.get('organizationId')).toBeUndefined();
+      expect(agentScopes).toEqual([]);
       expect(config.options.observationalMemory.experimental_subconscious).toBeUndefined();
       expect(errorSpy).toHaveBeenCalledTimes(1);
     } finally {
@@ -435,8 +436,9 @@ describe('getDynamicMemory', () => {
     try {
       vi.resetModules();
       getOmScopeMock.mockReturnValue('thread');
-      const { getDynamicMemory } = await import('./memory.js');
+      const { getDynamicMemory, getKnowledgeAgentScopes } = await import('./memory.js');
       const resolve = getDynamicMemory({ storage: true } as never, { vector: true } as never);
+      const scopesOf = getKnowledgeAgentScopes({ vector: true } as never);
 
       const contexts: Record<string, RequestContextStub> = {
         refusing: createRequestContext({ projectPath: '/tmp/project', factoryProjectId: 'project-1' }, 'session-bad'),
@@ -455,8 +457,8 @@ describe('getDynamicMemory', () => {
 
       expect(results.healthy.options.observationalMemory.experimental_subconscious).toBeDefined();
       expect(results.refusing.options.observationalMemory.experimental_subconscious).toBeUndefined();
-      expect(contexts.healthy.get('organizationId')).toBe('org-real');
-      expect(contexts.refusing.get('organizationId')).toBeUndefined();
+      expect(scopesOf({ requestContext: contexts.healthy as never })).toEqual(['org:org-real', 'project:project-1']);
+      expect(scopesOf({ requestContext: contexts.refusing as never })).toEqual([]);
     } finally {
       errorSpy.mockRestore();
     }
@@ -464,16 +466,17 @@ describe('getDynamicMemory', () => {
 
   it('anchors the knowledge scope on the factory project id when present', async () => {
     process.env.MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS = '1';
-    const { requestContext } = await createMemoryConfig(
+    const { requestContext, agentScopes } = await createMemoryConfig(
       {
         projectPath: '/tmp/project',
         factoryProjectId: 'project-1',
+        factoryOrgId: 'org-1',
       },
       'thread',
       { vector: true },
     );
-    expect(requestContext.set).toHaveBeenCalledWith('knowledgeResourceId', 'project-1');
-    expect(requestContext.get('knowledgeResourceId')).toBe('project-1');
+    expect(agentScopes).toContain('project:project-1');
+    expect(requestContext.set).not.toHaveBeenCalledWith('knowledgeResourceId', expect.anything());
   });
 
   it('configures factory curation scope and limits', async () => {
@@ -485,7 +488,6 @@ describe('getDynamicMemory', () => {
       vector,
     );
     expect(config.options.observationalMemory.experimental_subconscious?.config).toEqual({
-      defaultScope: 'resource',
       pins: true,
       maxSteps: 25,
     });

@@ -53,7 +53,7 @@ import type {
   ObservationalMemoryRecord,
   BufferedObservationChunk,
   KnowledgeStorage,
-  KnowledgeScope,
+  KnowledgeScopeIds,
 } from '@mastra/core/storage';
 import type { ToolAction } from '@mastra/core/tools';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -65,7 +65,11 @@ import { LRUCache } from 'lru-cache';
 import xxhash from 'xxhash-wasm';
 import type { ObservationalMemory, ObservationalMemoryConfig } from './processors/observational-memory';
 import { KnowledgeSemanticIndexCoordinator, Subconscious } from './processors/observational-memory/subconscious';
-import { createKnowledgeTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import { createKnowledgeReadTools } from './processors/observational-memory/subconscious/knowledge-tools';
+import {
+  createKnowledgeWriteTools,
+  resolveRunKnowledgeWriteOptions,
+} from './processors/observational-memory/subconscious/knowledge-write-tools';
 import { getRemindThreadId, isOwnedRemindThread } from './processors/observational-memory/subconscious/remind-protocol';
 import { createAskMemoryTool } from './processors/observational-memory/subconscious/remind-questions';
 import { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
@@ -104,6 +108,7 @@ export {
 } from './processors/observational-memory/subconscious';
 export type {
   KnowledgeSemanticIndexCoordinatorConfig,
+  KnowledgeSemanticSearchResult,
   ResolvedSubconsciousAgent,
   ResolvedSubconsciousConfig,
   SubconsciousBuiltInObservationAgent,
@@ -149,7 +154,7 @@ type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   /**
    * Selects the experimental Knowledge runtime used by Subconscious observation ingestion, tools, pinning,
    * curation, and semantic indexing. A string resolves a keyed instance from the owning Mastra;
-   * a Knowledge instance supports standalone wiring. Omit to use the `knowledge` domain of this Memory's own storage.
+   * a Knowledge instance supports standalone wiring. Omit when these features do not use Knowledge.
    */
   knowledge?: string | Knowledge | false;
 };
@@ -552,6 +557,9 @@ export class Memory extends MastraMemory {
     }
   }
 
+  /** Set on the Subconscious agents' own Memory: they carry their own fixed Knowledge tools. */
+  #withoutKnowledgeTools = false;
+
   /** @internal Creates isolated memory for a derived subconscious agent. */
   createSubconsciousMemory(): Memory {
     const memory = new Memory({
@@ -562,6 +570,8 @@ export class Memory extends MastraMemory {
       embedderOptions: this.embedderOptions,
       options: { observationalMemory: false },
     });
+    // Memory tools override an agent's own tools, so the flag's tools would replace the curator's.
+    memory.#withoutKnowledgeTools = true;
     if (this._mastraInstance) memory.__registerMastra(this._mastraInstance);
     return memory;
   }
@@ -676,7 +686,7 @@ export class Memory extends MastraMemory {
     }
   }
 
-  /** Returns the configured Knowledge v2 instance, or undefined when Knowledge comes from this Memory's own storage. */
+  /** Returns the configured Knowledge instance. */
   public getKnowledgeInstance(): Knowledge | undefined {
     if (this._knowledge === false || this._knowledge === undefined) return undefined;
     if (typeof this._knowledge !== 'string') return this._knowledge;
@@ -688,12 +698,18 @@ export class Memory extends MastraMemory {
     return this._mastraInstance.getKnowledge(this._knowledge);
   }
 
-  /**
-   * Resolves the one Knowledge storage domain used by every Subconscious path on this Memory.
-   * Configured v2 runtimes never fall back to Memory storage, preventing split-brain state.
-   */
+  /** The tools flag of the configured Knowledge instance; a key is read once Mastra can resolve it. */
+  private getKnowledgeToolsConfig(): { read: boolean; write: boolean } {
+    if (this.#withoutKnowledgeTools || this._knowledge === undefined || this._knowledge === false) {
+      return { read: false, write: false };
+    }
+    if (typeof this._knowledge === 'string' && !this._mastraInstance) return { read: false, write: false };
+    return this.getKnowledgeInstance()!.tools;
+  }
+
+  /** Resolves the configured Knowledge storage domain used by every Subconscious path on this Memory. */
   public async getKnowledgeStore(): Promise<KnowledgeStorage> {
-    if (this._knowledge === undefined) return this.resolveStorageKnowledgeStore();
+    if (this._knowledge === undefined) return this.resolveLegacyKnowledgeStore();
     if (this._knowledge === false) throw new Error('Knowledge is disabled for this Memory instance.');
     if (!this._knowledgeStore) {
       const promise = this.getKnowledgeInstance()!
@@ -707,7 +723,8 @@ export class Memory extends MastraMemory {
     return this._knowledgeStore;
   }
 
-  private async resolveStorageKnowledgeStore(): Promise<KnowledgeStorage> {
+  /** Bare-storage fallback: the Knowledge storage domain on the configured storage, when no Knowledge instance is set. */
+  private async resolveLegacyKnowledgeStore(): Promise<KnowledgeStorage> {
     const store = await this.storage.getStore('knowledge');
     if (!store) {
       throw new Error(`Knowledge storage domain is not available on ${this.storage.constructor.name}`);
@@ -726,6 +743,7 @@ export class Memory extends MastraMemory {
               vector: this.vector!,
               embedder: this.embedder!,
               embedderOptions: this.embedderOptions,
+              getLogger: () => this.logger,
             }),
         )
         .catch(error => {
@@ -737,8 +755,8 @@ export class Memory extends MastraMemory {
     return this._knowledgeSemanticIndex;
   }
 
-  public async drainKnowledgeSemanticIndex(scope?: KnowledgeScope): Promise<number> {
-    return (await this.getKnowledgeSemanticIndex())?.drain(scope) ?? 0;
+  public async drainKnowledgeSemanticIndex(scopeIds?: KnowledgeScopeIds): Promise<number> {
+    return (await this.getKnowledgeSemanticIndex())?.drain(scopeIds) ?? 0;
   }
 
   /**
@@ -3124,14 +3142,16 @@ Notes:
         },
       });
     }
-    if (
-      omConfig?.experimental_subconscious instanceof Subconscious &&
-      omConfig.experimental_subconscious.resolved.tools
-    ) {
-      Object.assign(tools, createKnowledgeTools(this));
-      const remind = omConfig.experimental_subconscious.resolved.observation.find(
-        agent => agent.name === 'remind' && 'builtIn' in agent,
-      );
+    const knowledgeTools = this.getKnowledgeToolsConfig();
+    const subconscious =
+      omConfig?.experimental_subconscious instanceof Subconscious && omConfig.experimental_subconscious.resolved.tools
+        ? omConfig.experimental_subconscious
+        : undefined;
+    if (subconscious || knowledgeTools.read) Object.assign(tools, createKnowledgeReadTools(this));
+    // Subconscious never gives the main agent write tools; only the Knowledge instance's flag does.
+    if (knowledgeTools.write) Object.assign(tools, createKnowledgeWriteTools(this, resolveRunKnowledgeWriteOptions));
+    if (omConfig && subconscious) {
+      const remind = subconscious.resolved.observation.find(agent => agent.name === 'remind' && 'builtIn' in agent);
       if (remind && 'builtIn' in remind) {
         tools.ask_memory = createAskMemoryTool({
           memory: this,
@@ -4388,7 +4408,10 @@ Notes:
     const alreadyConfigured = configuredProcessors.some(p => !('workflow' in p) && p.id === SUBCONSCIOUS_PINS_STATE_ID);
     if (alreadyConfigured) return null;
 
-    return new PinnedStateProcessor({ getKnowledgeStore: () => this.getKnowledgeStore() });
+    return new PinnedStateProcessor({
+      getKnowledgeInstance: () => this.getKnowledgeInstance(),
+      getKnowledgeStore: () => this.getKnowledgeStore(),
+    });
   }
 }
 
@@ -4400,6 +4423,9 @@ export type { StorageCloneThreadInput, StorageCloneThreadOutput, ThreadCloneMeta
 
 // Observational Memory utilities
 export { getObservationsAsOf } from './processors/observational-memory';
+
+export { createKnowledgeTools } from './tools/knowledge-tools';
+export type { CreateKnowledgeToolsOptions } from './tools/knowledge-tools';
 
 // Working memory state-signal processor (opt-in via workingMemory.useStateSignals)
 export {

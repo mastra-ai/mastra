@@ -322,6 +322,7 @@ const getDynamicMemoryMock = vi.fn();
 
 vi.mock('../agents/memory.js', () => ({
   getDynamicMemory: getDynamicMemoryMock,
+  getKnowledgeAgentScopes: () => () => [],
 }));
 
 vi.mock('../agents/model.js', () => ({
@@ -986,14 +987,14 @@ describe('createMastraCode', () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const { createMastraCode } = await import('../index.js');
     createKnowledgeInspectorMock.mockRejectedValueOnce(
-      new Error('Knowledge schema reset required: Missing Knowledge v2 tables.'),
+      new Error('Knowledge schema reset required: the existing Knowledge schema has no completion marker.'),
     );
 
     const code = await createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } });
 
     expect(code.knowledgeInspector).toBeUndefined();
     expect(code.knowledgeInspectorUnavailableReason).toBe(
-      'Knowledge is unavailable: Knowledge schema reset required: Missing Knowledge v2 tables.',
+      'Knowledge is unavailable: Knowledge schema reset required: the existing Knowledge schema has no completion marker.',
     );
   });
 

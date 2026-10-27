@@ -1,0 +1,22 @@
+{
+  "name": "knowledge-import-proof",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "check": "tsc --noEmit",
+    "calendar": "tsx src/calendar.ts",
+    "github": "tsx src/shipyard-github.ts",
+    "teardown": "node -e \"process.exit(0)\""
+  },
+  "dependencies": {
+    "@mastra/core": "link:__CORE_PATH__",
+    "@mastra/libsql": "link:__LIBSQL_PATH__",
+    "@mastra/memory": "link:__MEMORY_PATH__",
+    "@mastra/pg": "link:__PG_PATH__",
+    "tsx": "link:__TSX_PATH__"
+  },
+  "devDependencies": {
+    "@types/node": "link:__NODE_TYPES_PATH__",
+    "typescript": "link:__TYPESCRIPT_PATH__"
+  }
+}

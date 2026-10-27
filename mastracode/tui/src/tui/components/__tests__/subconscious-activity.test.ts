@@ -10,7 +10,7 @@ function snapshot(overrides: Record<string, unknown> = {}): any {
   return {
     updates: [
       {
-        action: 'record-created',
+        action: 'create',
         type: 'record',
         name: 'Atlas launch',
         createdAt: '2026-07-15T00:00:00.000Z',
@@ -32,7 +32,7 @@ describe('SubconsciousActivityComponent', () => {
     const rendered = text(new SubconsciousActivityComponent(parsed!));
     expect(rendered).toContain('Subconscious knowledge');
     expect(rendered).toContain('1 update · 1 hot');
-    expect(rendered).toContain('record-created: Atlas launch');
+    expect(rendered).toContain('create: Atlas launch');
     expect(rendered).toContain('Hot: Atlas launch (3)');
   });
 
@@ -48,22 +48,29 @@ describe('SubconsciousActivityComponent', () => {
   it('accepts snapshots produced by observational memory without exposing provenance', async () => {
     const storage = new InMemoryStore();
     const store = (await storage.getStore('knowledge'))!;
-    const scope = ['org:acme', 'resource:user-42', 'thread:alpha'];
-    const node = await store.createNode({ name: 'Atlas launch', kind: 'project', scope });
-    const item = await store.appendKnowledge({
-      node: node.id,
+    const scopeIds = [
+      '10000000-0000-4000-8000-000000000001',
+      '10000000-0000-4000-8000-000000000002',
+      '10000000-0000-4000-8000-000000000003',
+    ];
+    await store.createNode({ id: scopeIds[0], name: 'Acme', isScope: true, scopeIds: [] });
+    await store.createNode({ id: scopeIds[1], name: 'User 42', isScope: true, scopeIds: [scopeIds[0]!] });
+    await store.createNode({ id: scopeIds[2], name: 'Thread alpha', isScope: true, scopeIds: [scopeIds[1]!] });
+    const node = await store.createNode({ name: 'Atlas launch', kind: 'project', scopeIds: [scopeIds[2]!] });
+    const item = await store.createRecord({
+      node,
       text: 'Launches in January.',
-      scope,
-      sourceThreadId: 'private-thread',
-      resolutionScope: scope,
-      defaultScope: scope,
+      scopeIds: [scopeIds[2]!],
+      resolutionScopeIds: scopeIds,
+      source: 'private-thread',
+      metadata: { sourceThreadId: 'private-thread' },
     });
 
-    const produced = await buildSubconsciousActivitySnapshot({ store, scope, recentUpdates: 10 });
+    const produced = await buildSubconsciousActivitySnapshot({ store, scopeIds, recentUpdates: 10 });
     const parsed = parseSubconsciousActivitySnapshot(produced);
 
     expect(parsed).toBeDefined();
-    expect(text(new SubconsciousActivityComponent(parsed!))).toContain('record-created: Atlas launch');
+    expect(text(new SubconsciousActivityComponent(parsed!))).toContain('create: Atlas launch');
     expect(JSON.stringify(produced)).not.toContain(node.id);
     expect(JSON.stringify(produced)).not.toContain(item.id);
     expect(JSON.stringify(produced)).not.toContain('private-thread');
@@ -75,7 +82,7 @@ describe('SubconsciousActivityComponent', () => {
     const rendered = text(new SubconsciousActivityComponent(snapshot({ errors: ['remind model failed'] })));
     expect(rendered).toContain('1 error');
     expect(rendered).toContain('Error: remind model failed');
-    expect(rendered).toContain('record-created: Atlas launch');
+    expect(rendered).toContain('create: Atlas launch');
   });
 
   it('bounds dense activity output', () => {
