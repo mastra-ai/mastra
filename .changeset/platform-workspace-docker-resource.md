@@ -12,4 +12,4 @@ const template = Template().memoryMB(2048).docker();
 
 In a factory, turn on the **Docker** switch in the sandbox settings, or pass `docker: true` to `createRepoTemplate`.
 
-Docker is part of the template identity, so templates that leave it off keep their current IDs. E2B recommends at least 2 GB of memory for Docker.
+Docker is part of the template identity, so templates that leave it off keep their current IDs. Use at least 2 GB of memory for Docker.

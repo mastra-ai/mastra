@@ -58,7 +58,7 @@ const SETTINGS_SCHEMA = {
       type: 'boolean',
       title: 'Docker',
       description:
-        'Install Docker Engine and Compose; the daemon starts on first use. E2B recommends at least 2 GB of memory for Docker.',
+        'Install Docker Engine and Compose; the daemon starts on first use. Use at least 2 GB of memory for Docker.',
       default: DEFAULT_SETTINGS.docker,
     },
     idleTimeoutMinutes: {

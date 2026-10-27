@@ -321,7 +321,7 @@ describe('Environment settings', () => {
         settings,
       });
     };
-    const tip = /E2B recommends at least 2 GB for Docker/;
+    const tip = /Use at least 2 GB for Docker/;
     useFactory();
     useEnvironment(withSettings({ docker: true }));
     const first = renderEnvironmentSettings();
