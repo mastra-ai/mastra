@@ -210,7 +210,8 @@ interface IndexStats {
     name: 'filter',
     type: 'Record<string, any>',
     isOptional: true,
-    description: 'Metadata filter matching the items to update. Mutually exclusive with `id`. Must not be empty.',
+    description:
+      'Metadata filter matching up to 1,000 items to update. Mutually exclusive with `id`. Must not be empty.',
   },
   {
     name: 'update',

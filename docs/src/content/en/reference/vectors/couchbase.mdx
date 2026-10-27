@@ -283,7 +283,7 @@ Deletes a single vector by its ID from the index.
 
 ### `deleteVectors()`
 
-Not supported. `deleteVectors()` always throws a `MastraError` for Couchbase, whether you pass `ids` or `filter`. To remove vectors, call [`deleteVector()`](#deletevector) once per ID.
+`deleteVectors()` isn't supported for Couchbase. It always throws a `MastraError`, whether you pass `ids` or `filter`. To remove vectors, call [`deleteVector()`](#deletevector) once per ID.
 
 <PropertiesTable
   content={[
@@ -350,7 +350,7 @@ try {
 ## Limitations
 
 - Index creation delays may impact immediate querying after creation.
-- Vector dimension is enforced at ingest only after `createIndex()` is called on the same `CouchbaseVector` instance. In that case `upsert()` and `updateVector()` throw on a dimension mismatch. `query()` always checks the query vector against the index dimension.
+- Vector dimension is enforced at ingest only after `createIndex()` creates a new index on the same `CouchbaseVector` instance. Calling `createIndex()` for an index that already exists doesn't turn on the ingest check. When the check is on, `upsert()` and `updateVector()` throw on a dimension mismatch. `query()` always checks the query vector against the index dimension.
 - `deleteVectors()` isn't supported. Use `deleteVector()` for each ID instead.
 - Vector insertion and index updates are eventually consistent. Strong consistency isn't guaranteed immediately after writes.
 
