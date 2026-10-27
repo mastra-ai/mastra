@@ -29,6 +29,19 @@ describe('Observational Memory option JSDoc defaults', () => {
     expect(doc).toContain(`top-level \`model\`, else \`${other}.model\`, else \`'auto'\``);
   });
 
+  it.each([
+    'ObservationalMemoryObservationConfig',
+    'ObservationalMemoryReflectionConfig',
+    'ObservationalMemoryOptions',
+  ])('%s.model documents the Google provider eligibility override', name => {
+    const start = source.indexOf(`export interface ${name} {`);
+    const body = source.slice(start, source.indexOf('\n}\n', start));
+    const modelDoc = body.slice(0, body.indexOf("model?: AgentConfig['model']"));
+    expect(modelDoc).toContain("canUseProvider('google')");
+    expect(modelDoc).toContain('`GOOGLE_GENERATIVE_AI_API_KEY`');
+    expect(modelDoc).toContain('when no callback is configured');
+  });
+
   it('documents the observeAttachments allowlist default', () => {
     expect(documentedDefault('ObservationalMemoryObservationConfig', 'observeAttachments')).toBe(
       "['image/*', 'application/pdf']",
