@@ -5,6 +5,7 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { fileURLToPath } from 'node:url';
+import { MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
 import { FGADeniedError, MastraFGAPermissions } from '@mastra/core/auth/ee';
 import type { BackgroundTask, BackgroundTaskManagerConfig } from '@mastra/core/background-tasks';
@@ -705,17 +706,50 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
   });
 
   it("stores only a hash of the caller's principal, and still serves the task to that caller alone", async () => {
-    const a = await instance({ tools: { approve: 'always' } });
-    const b = await instance({ tools: { approve: 'always' } });
+    const researcher = new Agent({
+      id: 'researcher',
+      name: 'researcher',
+      description: 'Researches a topic',
+      instructions: 'Research',
+      model: new MockLanguageModelV2({
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'found it' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 },
+          warnings: [],
+        }),
+      }),
+    });
+    const tasks = { tools: { approve: 'always' as const }, workflows: { approval: 'always' as const } };
+    const extra = { workflows: { approval: makeApproval(probe) }, agents: { researcher } };
+    const a = await instance({ ...tasks, agents: { researcher: 'always' } }, { extra });
+    const b = await instance({ ...tasks, agents: { researcher: 'always' } }, { extra });
     const taskId = await call(a.url, 'approve', { item: 'invoice' });
     const waiting = await waitFor(await requester(b.url), taskId, 'input_required');
+    const workflowTask = await call(a.url, 'run_approval', { release: 'v6' });
+    await waitFor(await requester(b.url), workflowTask, 'input_required');
+    const agentTask = await call(a.url, 'ask_researcher', { message: 'look' });
+    await waitFor(await requester(b.url), agentTask, 'completed');
 
     // What `principalOf` resolves for alice's token (no subject, no user).
     const principal = `alice:token:${createHash('sha256').update('alice-token').digest('base64url')}`;
-    const [row] = await rows(a.mastra);
-    expect(row!.resourceId).toMatch(/^mcp-server:tasks:/);
-    expect(JSON.stringify([row!.resourceId, row!.metadata, row!.args])).not.toContain(principal);
-    expect(JSON.stringify(row)).not.toContain(principal);
+    const all = await rows(a.mastra);
+    expect(all.map(row => row.toolName).sort()).toEqual([
+      'mcp-server:tasks:approve',
+      'mcp-server:tasks:ask_researcher',
+      'mcp-server:tasks:run_approval',
+    ]);
+    for (const row of all) {
+      expect(row.resourceId).toMatch(/^mcp-server:tasks:/);
+      expect(JSON.stringify([row.resourceId, row.metadata, row.args])).not.toContain(principal);
+      expect(JSON.stringify(row)).not.toContain(principal);
+    }
+    // Cancelling the workflow task by its hashed row still reaches the run waiting for input.
+    await (await requester(b.url)).cancel(workflowTask);
+    await vi.waitFor(async () => {
+      const { runs } = await a.mastra.getWorkflow('approval').listWorkflowRuns();
+      expect((await a.mastra.getWorkflow('approval').getWorkflowRunById(runs[0]!.runId))!.status).toBe('canceled');
+    });
 
     // Another caller gets the same "not found" from either instance, and can't answer or cancel.
     const [key] = Object.keys(waiting.inputRequests ?? {});
