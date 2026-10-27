@@ -41,13 +41,12 @@ export function useItemSelection(): ItemSelectionState {
               next.add(allIds[i]);
             }
           }
-        } else {
+        } else if (next.has(id)) {
           // Single toggle
-          if (next.has(id)) {
-            next.delete(id);
-          } else {
-            next.add(id);
-          }
+
+          next.delete(id);
+        } else {
+          next.add(id);
         }
 
         return next;

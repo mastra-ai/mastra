@@ -77,7 +77,7 @@ import { ensureRemoteAbortListener } from '../../abort-transport';
 import { DurableStepIds } from '../../constants';
 import { ExecutionFence, getExecutionOwnershipGuard } from '../../execution-fence';
 import { endRunSpansWithError, getRunRegistryEntry, markRunActive } from '../../run-registry';
-import { emitChunkEvent, emitStepStartEvent } from '../../stream-adapter';
+import { createStepStartChunk, emitChunkEvent, publishStepStartChunk } from '../../stream-adapter';
 import type { DurableAgenticWorkflowInput, DurableLLMStepOutput, DurableToolCallInput } from '../../types';
 import { resolveRuntimeDependencies, resolveModelFromListEntry } from '../../utils/resolve-runtime';
 import { createRunMessageList } from '../../utils/run-message-list';
@@ -892,6 +892,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 errorProcessors: registryEntry?.errorProcessors ?? [],
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
               try {
@@ -1144,6 +1145,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     outputProcessors: [],
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
+                    agent: registryEntry?.agent,
                     processorStates: registryEntry?.processorStates,
                   })
                 : undefined;
@@ -1671,6 +1673,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
               return toolResultRunner;
@@ -1737,14 +1740,17 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // request-scoped in-process pipeline via onResult
                 // (#16687/#17370). That injection point cannot exist here
                 // (durable steps serialize at their boundaries), and porting
-                // it would double-emit lifecycle chunks. Processor visibility
-                // is unchanged: the consumer-side MastraModelOutput runs
-                // processors on every chunk either way.
+                // it would double-emit lifecycle chunks. When this producer holds the
+                // run's output processors, it runs them on step-start itself and
+                // publishes it marked processed, like every other chunk: a consumer
+                // sharing those processor states would otherwise hold a step-start
+                // that arrives after the step's held parts were released (#28231).
+                // Without them (process hop), consumers run processors on it.
                 // Keep the full model request out of the durable event stream; the helper
                 // preserves the canonical payload shape with an empty `request` object.
                 if (!stepStartEmitted && pubsub) {
                   stepStartEmitted = true;
-                  await emitStepStartEvent(pubsub, runId, {
+                  const stepStartChunk = createStepStartChunk(runId, {
                     stepId: DurableStepIds.LLM_EXECUTION,
                     messageId: currentMessageId,
                     startedAt: inferenceStartedAt,
@@ -1752,6 +1758,57 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     provider: currentModel.provider,
                     warnings,
                   });
+                  if (effectiveOutputProcessors.length > 0 && registryEntry?.processorStates) {
+                    try {
+                      await processAndEmitChunk(stepStartChunk, {
+                        runner: getToolResultRunner(),
+                        processorStates: registryEntry.processorStates,
+                        // No tracing context: the consumer pipeline owns the
+                        // processor spans. A model-step context here would end the
+                        // consumer's span and open one under the model step.
+                        observabilityContext: createObservabilityContext(),
+                        requestContext,
+                        messageList,
+                        streamWriter: outputStreamWriter,
+                        emitChunk: async chunk => {
+                          if (chunk.type === 'tripwire') {
+                            outputStreamBlocked = true;
+                          }
+                          try {
+                            if (chunk.type === 'step-start') {
+                              await publishStepStartChunk(pubsub, runId, chunk, true);
+                            } else {
+                              await emitChunkEvent(pubsub, runId, chunk, true);
+                            }
+                          } catch (error) {
+                            ownership?.throwIfLost();
+                            throw new DurableChunkPublishError(error);
+                          }
+                        },
+                        onProcessorError: error => {
+                          throwIfInterrupted();
+                          if (error instanceof DurableChunkPublishError) {
+                            throw error.cause;
+                          }
+                          throw new DurableOutputProcessorError(error);
+                        },
+                      });
+                    } catch (error) {
+                      ownership?.throwIfLost();
+                      throwIfInterrupted();
+                      if (error instanceof DurableOutputProcessorError) {
+                        const processorError = error.cause instanceof Error ? error.cause : error;
+                        terminalAttemptContext?.recordTerminalError(processorError);
+                        return emitFatalErrorBail(processorError, currentModel.modelId);
+                      }
+                      throw error;
+                    }
+                    if (outputStreamBlocked) {
+                      break;
+                    }
+                  } else {
+                    await publishStepStartChunk(pubsub, runId, stepStartChunk);
+                  }
                 }
 
                 // ── Deferred provider-executed tool results (#14282 parity port) ──
@@ -2427,6 +2484,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                     errorProcessors: registryEntryInner.errorProcessors,
                     logger: logger as any,
                     agentName: typedInput.agentName ?? typedInput.agentId,
+                    agent: registryEntryInner?.agent,
                     processorStates: registryEntryInner.processorStates,
                   });
                   const { retry } = await runner.runProcessAPIError({
@@ -2654,6 +2712,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 outputProcessors: effectiveOutputProcessors,
                 logger: logger as any,
                 agentName: typedInput.agentName ?? typedInput.agentId,
+                agent: registryEntry?.agent,
                 processorStates: registryEntry?.processorStates,
               });
 
@@ -2906,6 +2965,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   errorProcessors: registryEntry.errorProcessors,
                   logger: logger as any,
                   agentName: typedInput.agentName ?? typedInput.agentId,
+                  agent: registryEntry?.agent,
                   processorStates: registryEntry.processorStates,
                 });
                 const { retry } = await runner.runProcessAPIError({

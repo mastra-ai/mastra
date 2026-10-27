@@ -389,7 +389,15 @@ export class Scheduler extends MastraBase {
     let triggerError: string | undefined;
 
     try {
-      await this.#publishTargetStart(schedule, runId);
+      for (let attempt = 0; attempt < 3; attempt++) {
+        try {
+          await this.#publishTargetStart(schedule, runId);
+          break;
+        } catch (err) {
+          if (attempt === 2) throw err;
+          await new Promise(resolve => setTimeout(resolve, 100 * 2 ** attempt));
+        }
+      }
     } catch (err) {
       triggerStatus = 'failed';
       triggerError = err instanceof Error ? err.message : String(err);

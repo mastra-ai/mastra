@@ -349,6 +349,55 @@ describe('Span', () => {
 
       expect(tool.exportSpan()).toMatchObject({ parentEntityId: 'researcher', parentEntityVersionId: 'v1' });
     });
+
+    it('reports a version only for the span own entity', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const agent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'support',
+        entityType: EntityType.AGENT,
+        entityId: 'support',
+        entityName: 'Support',
+        metadata: { entityVersionId: 'v3' },
+      });
+      // No entity args, so it inherits the agent entity and its version
+      const sameEntityChild = tracing.startSpan({ type: SpanType.GENERIC, name: 'step', parent: agent });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'lookup',
+        parent: sameEntityChild,
+        entityType: EntityType.TOOL,
+        entityId: 'lookup',
+        entityName: 'lookup',
+      });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'researcher',
+        parent: tool,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+        metadata: { entityVersionId: 'researcher-v2' },
+      });
+
+      expect(agent.getCorrelationContext().entityVersionId).toBe('v3');
+      expect(agent.exportSpan().entityVersionId).toBe('v3');
+      expect(sameEntityChild.getCorrelationContext().entityVersionId).toBe('v3');
+      expect(sameEntityChild.exportSpan().entityVersionId).toBe('v3');
+
+      expect(tool.getCorrelationContext().entityVersionId).toBeUndefined();
+      expect(tool.exportSpan()).not.toHaveProperty('entityVersionId');
+      // Metadata is still inherited unchanged
+      expect(tool.metadata?.entityVersionId).toBe('v3');
+
+      expect(subAgent.getCorrelationContext().entityVersionId).toBe('researcher-v2');
+      expect(subAgent.exportSpan().entityVersionId).toBe('researcher-v2');
+    });
   });
 
   describe('metadata inheritance', () => {

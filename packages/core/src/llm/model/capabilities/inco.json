@@ -20,12 +20,12 @@
         "type": "toggle"
       }
     ],
-    "deepseek-v4.1-flash:fast": [
+    "glm-5.3": [
       {
         "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "deepseek-v4.1-flash:fast": [
       {
         "type": "toggle"
       }

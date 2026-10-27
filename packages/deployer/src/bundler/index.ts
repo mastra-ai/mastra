@@ -441,9 +441,7 @@ export abstract class Bundler extends MastraBundler {
     try {
       await stat(sourceDotNpmRcPath);
       await copy(sourceDotNpmRcPath, targetDotNpmRcPath);
-    } catch {
-      return;
-    }
+    } catch {}
   }
 
   /**

@@ -85,6 +85,18 @@
     "z-ai/glm-5.3-flash"
   ],
   "reasoning": {
+    "openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "minimaxai/minimax-m3.1-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "deepseek-ai/deepseek-v4.1-flash": [
       {
         "type": "effort",
@@ -95,50 +107,6 @@
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "z-ai/glm-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k3": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "moonshotai/kimi-k2.6": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/diffusiongemma-26b-a4b-it": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "google/gemma-4-31b-it": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "stepfun-ai/step-5-preview": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "nvidia/nemotron-3-ultra-550b-a55b": [
@@ -152,7 +120,7 @@
         "max": 32768
       }
     ],
-    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
+    "nvidia/llama-3.1-nemotron-ultra-253b-v1": [
       {
         "type": "toggle"
       }
@@ -167,12 +135,7 @@
         "max": 32768
       }
     ],
-    "nvidia/nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/llama-3.1-nemotron-ultra-253b-v1": [
+    "nvidia/nemotron-3.5-super-vl-120b-a12b": [
       {
         "type": "toggle"
       }
@@ -182,16 +145,53 @@
         "type": "toggle"
       }
     ],
-    "minimaxai/minimax-m3.1-flash": [
+    "nvidia/nemotron-3.5-content-safety": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
-    "openai/gpt-oss-20b": [
+    "z-ai/glm-5.3": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "z-ai/glm-5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.6": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "moonshotai/kimi-k3": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "stepfun-ai/step-5-preview": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "google/diffusiongemma-26b-a4b-it": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "google/gemma-4-31b-it": [
+      {
+        "type": "toggle"
       }
     ]
   }
