@@ -104,14 +104,17 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
  * };
  * ```
  */
-export function createBaseIterationStateUpdate(input: IterationStateUpdateInput): BaseIterationState {
+export function createBaseIterationStateUpdate(
+  input: IterationStateUpdateInput,
+): BaseIterationState & Required<Pick<BaseIterationState, 'accumulatedSteps'>> {
   const { currentState, executionOutput } = input;
+  const previousSteps = currentState.accumulatedSteps ?? [];
 
   // Legacy states with completed steps cannot prove whether their numeric totals
   // include every provider measurement. Preserve the zero identity only for a
   // pre-first-step state; otherwise migrate the accumulator to unknown.
   const currentUsage =
-    currentState.usageAggregationVersion === 1 || currentState.accumulatedSteps.length === 0
+    currentState.usageAggregationVersion === 1 || previousSteps.length === 0
       ? currentState.accumulatedUsage
       : {
           ...currentState.accumulatedUsage,
@@ -141,9 +144,7 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // the steps that rebuild from Mastra have no other source for it.
     requestContextEntries: currentState.requestContextEntries,
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
-    accumulatedSteps: signalPreempted
-      ? currentState.accumulatedSteps
-      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
+    accumulatedSteps: signalPreempted ? previousSteps : [...previousSteps, buildStepRecord(executionOutput)],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,
