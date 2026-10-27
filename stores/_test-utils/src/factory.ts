@@ -9,6 +9,7 @@ import { createFavoritesTests } from './domains/favorites';
 import { createMemoryTest } from './domains/memory';
 import { createObservabilityTests } from './domains/observability';
 import { createRunFencingTests } from './domains/run-fencing';
+import { createSavedViewsTests } from './domains/saved-views';
 import { createSchedulesTests } from './domains/schedules';
 import { createScoresTest } from './domains/scores';
 import { createSkillsTests } from './domains/skills';
@@ -142,6 +143,11 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
         clearList.push(workflowDefinitionsStorage.dangerouslyClearAll());
       }
 
+      const savedViewsStorage = await storage.getStore('savedViews');
+      if (savedViewsStorage) {
+        clearList.push(savedViewsStorage.dangerouslyClearAll());
+      }
+
       // Clear all domain data after tests
       await Promise.all(clearList);
     });
@@ -165,6 +171,7 @@ export function createTestSuite(storage: MastraStorage, capabilities: TestCapabi
     createChannelsTests({ storage });
     createToolProviderConnectionsTests({ storage });
     createWorkflowDefinitionsTests({ storage });
+    createSavedViewsTests({ storage });
     createRunFencingTests({ storage });
     createWorkflowStepGuardTests({ storage });
   });

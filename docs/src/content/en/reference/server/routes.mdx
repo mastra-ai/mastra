@@ -707,6 +707,34 @@ Each record has the shape written by [score persistence](/docs/evals/overview#sc
 
 How a supplied `id` is treated depends on the storage adapter. Some adapters upsert by it, others always generate a new ID, so retried submissions can create duplicate rows there. The response is `{ score: ScoreRowData }` with the stored record. Saving requires storage. Without it the route responds with a 500.
 
+## Saved views
+
+| Method | Path | Description |
+| - | - | - |
+| `GET` | `/api/saved-views` | List saved views, oldest first, up to 100 per page. Pass `?page=traces` to list one Studio page's views |
+| `POST` | `/api/saved-views` | Create a saved view |
+| `GET` | `/api/saved-views/:savedViewId` | Get a saved view |
+| `PATCH` | `/api/saved-views/:savedViewId` | Change a saved view's name or state |
+| `DELETE` | `/api/saved-views/:savedViewId` | Delete a saved view |
+
+A saved view's `state` stores a Studio page's setup, such as its filters, time range, sort, and columns. Views are shared between users. `authorId` records who created a view and `updatedById` who last changed it.
+
+The `page` query parameter selects a Studio page. The list paginates with `perPage` (1 to 100, default 100) and the zero-based `pageIndex`. The response's `pagination.hasMore` is `true` while more views follow. Delete answers `{ "deleted": true }`.
+
+Every route answers `501` when the storage has no `savedViews` domain, and get, update, and delete answer `404` for an unknown ID. With [stored resource scoping](/docs/auth/fga#stored-resource-scoping) on, lists only include views in the caller's scope, and views in other scopes answer `404`. On authenticated servers, the read routes require the `saved-views:read` permission, create and update require `saved-views:write`, and delete requires `saved-views:delete`.
+
+### Create saved view request body
+
+```typescript oxfmt:false
+{
+  page: string;      // Studio page, for example 'traces'
+  name: string;      // 1-80 characters
+  state: { version: number; [key: string]: unknown };  // Up to 64 KB of JSON
+}
+```
+
+The update body takes the same `name` and `state` fields, both optional. A new `state` replaces the old one as a whole. For the response shape and client methods, see the [Saved Views API reference](/reference/client-js/saved-views).
+
 ## MCP
 
 | Method | Path | Description |

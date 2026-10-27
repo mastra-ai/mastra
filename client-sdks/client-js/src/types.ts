@@ -2383,6 +2383,17 @@ export type UpdateScheduleInput = WithoutIndexSignatures<GeneratedRequest<Body<'
  */
 export type RunScheduleResponse = GeneratedResponse<'POST /schedules/:scheduleId/run'>;
 
+/** A saved view: a named, shared setup (filters and table settings) for a Studio page. */
+export type SavedViewResponse = GeneratedResponse<'GET /saved-views/:savedViewId'>;
+
+export type ListSavedViewsParams = GeneratedRequest<QueryParams<'GET /saved-views'>>;
+
+export type ListSavedViewsResponse = GeneratedResponse<'GET /saved-views'>;
+
+export type CreateSavedViewParams = GeneratedRequest<Body<'POST /saved-views'>>;
+
+export type UpdateSavedViewParams = GeneratedRequest<Body<'PATCH /saved-views/:savedViewId'>>;
+
 export interface ExperimentReviewCounts {
   experimentId: string;
   total: number;

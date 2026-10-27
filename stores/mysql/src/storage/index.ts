@@ -18,6 +18,7 @@ import { MemoryMySQL } from './domains/memory';
 import { ObservabilityMySQL } from './domains/observability';
 import { StoreOperationsMySQL } from './domains/operations';
 import { PromptBlocksMySQL } from './domains/prompt-blocks';
+import { SavedViewsMySQL } from './domains/saved-views';
 import { SchedulesMySQL } from './domains/schedules';
 import { ScorerDefinitionsMySQL } from './domains/scorer-definitions';
 import { ScoresMySQL } from './domains/scores';
@@ -43,6 +44,7 @@ export {
   ObservabilityMySQL,
   StoreOperationsMySQL,
   PromptBlocksMySQL,
+  SavedViewsMySQL,
   SchedulesMySQL,
   ScorerDefinitionsMySQL,
   ScoresMySQL,
@@ -327,6 +329,11 @@ export class MySQLStore extends MastraCompositeStore {
       operations,
       database,
     });
+    const savedViews = new SavedViewsMySQL({
+      operations,
+      skipDefaultIndexes: config.skipDefaultIndexes,
+      indexes: config.indexes,
+    });
 
     this.stores = {
       memory,
@@ -350,6 +357,7 @@ export class MySQLStore extends MastraCompositeStore {
       schedules,
       toolProviderConnections,
       workflowDefinitions,
+      savedViews,
     };
   }
 
@@ -403,6 +411,7 @@ const ALL_DOMAINS = [
   FavoritesMySQL,
   ChannelsMySQL,
   SchedulesMySQL,
+  SavedViewsMySQL,
 ] as const;
 
 /**

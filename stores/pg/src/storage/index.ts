@@ -36,6 +36,7 @@ import { ObservabilityPG } from './domains/observability';
 import { ObservabilityStoragePostgresVNext } from './domains/observability/v-next';
 import type { VNextPostgresObservabilityConfig } from './domains/observability/v-next';
 import { PromptBlocksPG } from './domains/prompt-blocks';
+import { SavedViewsPG } from './domains/saved-views';
 import { SchedulesPG } from './domains/schedules';
 import { ScorerDefinitionsPG } from './domains/scorer-definitions';
 import { ScoresPG } from './domains/scores';
@@ -119,6 +120,7 @@ const ALL_DOMAINS = [
   ChannelsPG,
   SchedulesPG,
   ThreadStatePG,
+  SavedViewsPG,
 ] as const;
 
 /**
@@ -157,6 +159,7 @@ export {
   ObservabilityPG,
   ObservabilityStoragePostgresVNext,
   PromptBlocksPG,
+  SavedViewsPG,
   ScorerDefinitionsPG,
   ScoresPG,
   SchedulesPG,
@@ -250,6 +253,7 @@ export class PostgresStore extends MastraCompositeStore {
         scores: new ScoresPG(domainConfig),
         workflows: new WorkflowsPG(domainConfig),
         workflowDefinitions: new WorkflowDefinitionsPG(domainConfig),
+        savedViews: new SavedViewsPG(domainConfig),
         memory: new MemoryPG(domainConfig),
         knowledge: new KnowledgePG({
           ...domainConfig,

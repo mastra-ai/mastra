@@ -181,6 +181,7 @@ export type RecordTypes = {
   [TABLE_NOTIFICATIONS]: Record<string, any>;
   mastra_thread_state: Record<string, any>;
   mastra_workflow_definitions: Record<string, any>;
+  mastra_saved_views: Record<string, any>;
   mastra_knowledge_nodes: Record<string, any>;
   mastra_knowledge_records: Record<string, any>;
   mastra_knowledge_mentions: Record<string, any>;

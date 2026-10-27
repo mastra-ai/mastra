@@ -869,6 +869,18 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
       });
     }
 
+    // Add test saved view so /saved-views/:savedViewId finds a row matching
+    // getDefaultValidPathParams' 'test-saved-view'
+    const savedViews = await storage.getStore('savedViews');
+    if (savedViews) {
+      await savedViews.create({
+        id: 'test-saved-view',
+        page: 'traces',
+        name: 'Test saved view',
+        state: { version: 1, timeRange: { preset: 'last-24h' } },
+      });
+    }
+
     const backgroundTasks = await storage.getStore('backgroundTasks');
     if (backgroundTasks) {
       await backgroundTasks.createTask({
