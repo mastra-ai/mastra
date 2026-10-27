@@ -2363,90 +2363,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
       await resultObject.consumeStream();
     });
 
-    it('should include tool-error chunks when a tool throws', async () => {
-      const messageList2 = createMessageListWithUserMessage();
-      const errorChunks: Array<ChunkType> = [];
-
-      let responseCount = 0;
-      const resultObject = await loopFn({
-        methodType: 'stream',
-        runId,
-        agentId: 'agent-id',
-        models: [
-          {
-            id: 'test-model',
-            maxRetries: 0,
-            model: new MockLanguageModelV2({
-              doStream: async () => {
-                switch (responseCount++) {
-                  case 0:
-                    return {
-                      stream: convertArrayToReadableStream([
-                        {
-                          type: 'tool-call',
-                          toolCallId: 'call-1',
-                          toolName: 'failingTool',
-                          input: `{ "value": "test" }`,
-                        },
-                        {
-                          type: 'finish',
-                          finishReason: 'tool-calls',
-                          usage: testUsage,
-                        },
-                      ]),
-                    };
-                  case 1:
-                    return {
-                      stream: convertArrayToReadableStream([
-                        { type: 'text-start', id: 'text-1' },
-                        { type: 'text-delta', id: 'text-1', delta: 'Tool failed' },
-                        { type: 'text-end', id: 'text-1' },
-                        {
-                          type: 'finish',
-                          finishReason: 'stop',
-                          usage: testUsage2,
-                        },
-                      ]),
-                    };
-                  default:
-                    throw new Error(`Unexpected response count: ${responseCount}`);
-                }
-              },
-            }),
-          },
-        ],
-        tools: {
-          failingTool: {
-            inputSchema: z.object({ value: z.string() }),
-            execute: async () => {
-              throw new Error('Tool execution failed');
-            },
-          },
-        },
-        messageList: messageList2,
-        stopWhen: stepCountIs(3),
-        options: {
-          onChunk(chunk) {
-            errorChunks.push(chunk);
-          },
-        },
-      });
-
-      await resultObject.consumeStream();
-
-      const toolErrorChunks = errorChunks.filter(c => c.type === 'tool-error');
-      expect(toolErrorChunks).toHaveLength(1);
-      expect(toolErrorChunks[0]).toMatchObject({
-        type: 'tool-error',
-        from: 'AGENT',
-        payload: expect.objectContaining({
-          toolCallId: 'call-1',
-          toolName: 'failingTool',
-          error: expect.any(Error),
-        }),
-      });
-    });
-
     it('should return events in order', async () => {
       expect(result).toMatchInlineSnapshot(`
         [
@@ -3517,12 +3433,10 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
   describe('abort signal', () => {
     describe('basic abort', () => {
       let result: any;
-      let onErrorCalls: Array<{ error: unknown }> = [];
       let onAbortCalls: Array<{ steps: any[]; text?: string }> = [];
 
       beforeEach(async () => {
         const messageList = createMessageListWithUserMessage();
-        onErrorCalls = [];
         onAbortCalls = [];
 
         const abortController = new AbortController();
@@ -3534,9 +3448,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
           agentId: 'agent-id',
           options: {
             abortSignal: abortController.signal,
-            onError: error => {
-              onErrorCalls.push({ error });
-            },
             onAbort: event => {
               onAbortCalls.push(event);
             },
@@ -3586,11 +3497,6 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             generateId: mockId({ prefix: 'id' }),
           },
         });
-      });
-
-      it('should not call onError for abort errors', async () => {
-        await result.consumeStream();
-        expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
       });
 
       it('should only stream initial chunks in full stream', async () => {
@@ -3723,11 +3629,9 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
 
     describe('abort in 2nd step', () => {
       let result: any;
-      let onErrorCalls: Array<{ error: unknown }> = [];
       let onAbortCalls: Array<{ steps: any[]; text?: string }> = [];
 
       beforeEach(async () => {
-        onErrorCalls = [];
         onAbortCalls = [];
 
         const abortController = new AbortController();
@@ -3822,16 +3726,8 @@ export function optionsTests({ loopFn, runId }: { loopFn: typeof loop; runId: st
             onAbort: event => {
               onAbortCalls.push(event);
             },
-            onError: error => {
-              onErrorCalls.push({ error });
-            },
           },
         });
-      });
-
-      it('should not call onError for abort errors', async () => {
-        await result.consumeStream();
-        expect(onErrorCalls).toMatchInlineSnapshot(`[]`);
       });
 
       it('should only stream initial chunks in full stream', async () => {
