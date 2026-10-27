@@ -128,4 +128,30 @@ describe('periodActivity', () => {
     expect(starts.filter(start => start.getHours() === 0)).toHaveLength(7);
     expect(week.slots.slice(1).every((slot, index) => slot.start === week.slots[index]?.end)).toBe(true);
   });
+
+  it('counts everything in the last seven days when the spring daylight-saving change made one of them shorter', () => {
+    process.env.TZ = 'Europe/Paris';
+    const week = periodActivity({
+      period: 'week',
+      now: new Date(2026, 2, 30, 0, 30).getTime(),
+      cards: [card('late-sunday', new Date(2026, 2, 22, 23, 45).getTime())],
+      runStarts: [],
+    });
+
+    expect(week.totals.cameIn).toBe(1);
+    expect(slotTotals(week)).toEqual(week.totals);
+  });
+
+  it('gives every hour of Today its own one-hour slot on both daylight-saving days', () => {
+    process.env.TZ = 'Europe/Paris';
+    for (const [now, hours] of [
+      [new Date(2026, 2, 29, 5, 30).getTime(), [0, 1, 3, 4, 5]],
+      [new Date(2026, 9, 25, 5, 30).getTime(), [0, 1, 2, 2, 3, 4, 5]],
+    ] as const) {
+      const today = periodActivity({ period: 'today', now, cards: [], runStarts: [] });
+
+      expect(today.slots.map(slot => new Date(slot.start).getHours())).toEqual(hours);
+      expect(today.slots.every(slot => slot.end - slot.start === HOUR)).toBe(true);
+    }
+  });
 });

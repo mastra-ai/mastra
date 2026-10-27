@@ -26,7 +26,8 @@ export interface Activity {
   totals: ActivityCounts;
 }
 
-const DAY_MS = 24 * 60 * 60 * 1000;
+const HOUR_MS = 60 * 60 * 1000;
+const DAY_MS = 24 * HOUR_MS;
 
 export const PERIOD_DAYS = { week: 7, month: 30 } as const;
 
@@ -43,19 +44,29 @@ export function activityStart(period: ActivityPeriod, now: number): number {
   return midnight.getTime();
 }
 
+function localHour(day: Date, daysLater: number, hour: number): number {
+  return new Date(day.getFullYear(), day.getMonth(), day.getDate() + daysLater, hour).getTime();
+}
+
 function activitySlots(period: ActivityPeriod, now: number): ActivitySlot[] {
-  const hoursPerSlot = HOURS_PER_SLOT[period];
-  const days = period === 'today' ? 1 : PERIOD_DAYS[period] + 1;
-  const today = new Date(now);
   const from = activityStart(period, now);
-  const slotsPerDay = 24 / hoursPerSlot;
-  return Array.from({ length: days * slotsPerDay }, (_, index) => {
-    const daysBack = days - 1 - Math.floor(index / slotsPerDay);
-    const hour = (index % slotsPerDay) * hoursPerSlot;
-    const at = (atHour: number) =>
-      new Date(today.getFullYear(), today.getMonth(), today.getDate() - daysBack, atHour).getTime();
-    return { start: at(hour), end: at(hour + hoursPerSlot), counts: noCounts() };
-  }).filter(slot => slot.end > from && slot.start <= now);
+  const slots: ActivitySlot[] = [];
+  if (period === 'today') {
+    for (let start = from; start <= now; start += HOUR_MS) {
+      slots.push({ start, end: start + HOUR_MS, counts: noCounts() });
+    }
+    return slots;
+  }
+  const hoursPerSlot = HOURS_PER_SLOT[period];
+  const firstDay = new Date(from);
+  for (let day = 0; ; day += 1) {
+    for (let hour = 0; hour < 24; hour += hoursPerSlot) {
+      const start = localHour(firstDay, day, hour);
+      if (start > now) return slots;
+      const end = localHour(firstDay, day, hour + hoursPerSlot);
+      if (end > from) slots.push({ start, end, counts: noCounts() });
+    }
+  }
 }
 
 export function periodActivity({
