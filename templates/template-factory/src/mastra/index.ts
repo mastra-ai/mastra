@@ -84,6 +84,8 @@ export const factory = new MastraFactory({
   }),
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
+  // Sign-in callbacks and links use this origin; defaults to http://localhost:4111.
+  publicUrl: process.env.MASTRACODE_PUBLIC_URL?.trim() || undefined,
   // Local sandboxes under `mastra dev`, Platform sandboxes (MASTRA_PROJECT_ID +
   // MASTRA_ENVIRONMENT_ID) in deployments.
   sandbox:
