@@ -30,7 +30,7 @@ describe('resolveAgentScopes', () => {
       const result = resolveAgentScopes({ callScopes: ['resource:u1', 'thread:t1', 'x-custom_1:v:with:colons'] });
       expect(result).toEqual({
         scopes: ['resource:u1', 'thread:t1', 'x-custom_1:v:with:colons'],
-        readOnly: [],
+        readOnly: ['x-custom_1:v:with:colons'],
         resourceId: 'u1',
         threadId: 't1',
       });
@@ -176,7 +176,12 @@ describe('resolveAgentScopes', () => {
         memory: { resource: 'mem-r' },
         callScopes: ['org:acme'],
       });
-      expect(result).toEqual({ scopes: ['org:acme'], readOnly: [], resourceId: 'ctx-r', threadId: undefined });
+      expect(result).toEqual({
+        scopes: ['org:acme'],
+        readOnly: ['org:acme'],
+        resourceId: 'ctx-r',
+        threadId: undefined,
+      });
     });
   });
 

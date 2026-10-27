@@ -10,8 +10,8 @@ With `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1` the code agent gets Knowledge tools (
 
 ```ts
 const code = await createMastraCode({
-  knowledge: { instance: companyKnowledge, scopes: [{ tag: 'org:acme', access: 'read' }, 'team:acme:support'] },
+  knowledge: { instance: companyKnowledge, scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }] },
 });
 ```
 
-Local sessions write under `org:local` when no scopes are given; Factory sessions always add their `org:` and `project:` tags.
+A plain scope is read-only; `{ scope, access: 'write' }` lets the agent write there. Local sessions write under `org:local` when no scopes are given; Factory sessions always add writable `org:` and `project:` tags.

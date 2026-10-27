@@ -4,13 +4,13 @@ import { knowledgeSessionTags, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionSc
 
 describe('resolveKnowledgeSessionScopes', () => {
   it('gives a local session with no host tags the fixed local org, regardless of project or machine', () => {
-    const expected = { resolved: true, scopes: ['org:local'] };
+    const expected = { resolved: true, scopes: [{ scope: 'org:local', access: 'write' }] };
     expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
     expect(resolveKnowledgeSessionScopes(undefined)).toEqual(expected);
     expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never)).toEqual(expected);
     expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/other' } as never, ['resource:u1'])).toEqual({
       resolved: true,
-      scopes: ['resource:u1', 'org:local'],
+      scopes: ['resource:u1', { scope: 'org:local', access: 'write' }],
     });
   });
 
@@ -19,18 +19,21 @@ describe('resolveKnowledgeSessionScopes', () => {
       resolved: true,
       scopes: ['team:self:x', 'agent:alex'],
     });
-    const member = [{ tag: 'org:self', access: 'read' as const }, 'team:self:x'];
+    const member = [{ scope: 'org:self', access: 'read' as const }, 'team:self:x'];
     expect(resolveKnowledgeSessionScopes(undefined, member)).toEqual({ resolved: true, scopes: member });
   });
 
   it('requires the Factory org and project tags, trimmed the way the seeder stores them', () => {
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: ' org-1 ', factoryProjectId: 'proj-1' } as never)).toEqual({
       resolved: true,
-      scopes: ['org:org-1', 'project:proj-1'],
+      scopes: [
+        { scope: 'org:org-1', access: 'write' },
+        { scope: 'project:proj-1', access: 'write' },
+      ],
     });
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'org-1' } as never, ['agent:a'])).toEqual({
       resolved: true,
-      scopes: ['agent:a', 'org:org-1'],
+      scopes: ['agent:a', { scope: 'org:org-1', access: 'write' }],
     });
   });
 

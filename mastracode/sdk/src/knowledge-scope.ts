@@ -13,8 +13,10 @@ export type KnowledgeSessionScopes =
   | { resolved: false; reason: string };
 
 function tagOf(entry: AgentScopeEntry): string {
-  return typeof entry === 'string' ? entry : entry.tag;
+  return typeof entry === 'string' ? entry : entry.scope;
 }
+
+const writable = (scope: string): AgentScopeEntry => ({ scope, access: 'write' });
 
 function isIdentityTag(tag: string): boolean {
   return tag.startsWith('resource:') || tag.startsWith('thread:');
@@ -24,6 +26,8 @@ function isIdentityTag(tag: string): boolean {
  * The scope tags a session's runs act with: the host's `knowledge.scopes` plus the session's own.
  * Every Knowledge reader and writer in a session (the code agent, the /knowledge inspector) uses
  * this, so what the agent writes is what the inspector reads.
+ *
+ * The tags this adds are writable; the host's keep the access the host gave them.
  *
  * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, so projects stay
  *   isolated. A host tag of the same type with another value is refused. A Factory session with
@@ -51,11 +55,11 @@ export function resolveKnowledgeSessionScopes(
       }
     }
     const held = new Set(hostScopes.map(tagOf));
-    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag))] };
+    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag)).map(writable)] };
   }
 
   if (hostScopes.some(entry => !isIdentityTag(tagOf(entry)))) return { resolved: true, scopes: [...hostScopes] };
-  return { resolved: true, scopes: [...hostScopes, `org:${LOCAL_KNOWLEDGE_ORG_ID}`] };
+  return { resolved: true, scopes: [...hostScopes, writable(`org:${LOCAL_KNOWLEDGE_ORG_ID}`)] };
 }
 
 /**

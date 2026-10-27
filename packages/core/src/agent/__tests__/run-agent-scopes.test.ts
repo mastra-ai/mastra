@@ -12,7 +12,7 @@ describe('getRunAgentScopes', () => {
   it('returns the scopes Core wrote for the run', () => {
     const context = new RequestContext();
     setRunAgentScopes(context, ['org:acme', 'team:acme:support']);
-    expect(getRunAgentScopes(context).map(scope => scope.tag)).toEqual(['org:acme', 'team:acme:support']);
+    expect(getRunAgentScopes(context).map(scope => scope.scope)).toEqual(['org:acme', 'team:acme:support']);
   });
 
   it('returns nothing for scopes a caller wrote into the request context itself', () => {
@@ -26,22 +26,41 @@ describe('getRunAgentScopes', () => {
     const context = new RequestContext();
     context.set(MASTRA_SCOPES_KEY, JSON.parse(JSON.stringify(['org:acme'])));
     restoreRunAgentScopes(context);
-    expect(getRunAgentScopes(context).map(scope => scope.tag)).toEqual(['org:acme']);
+    expect(getRunAgentScopes(context).map(scope => scope.scope)).toEqual(['org:acme']);
   });
 });
 
 describe('read-only scope entries', () => {
-  it('resolves { tag, access: "read" } entries; any source holding a tag read-only makes it read-only', () => {
+  it('holds plain scopes read-only and { scope, access: "write" } writable; any source holding one read-only wins', () => {
     const resolved = resolveAgentScopes({
-      agentScopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'],
-      callScopes: ['org:self', 'agent:alex'],
+      agentScopes: ['org:self', { scope: 'team:self:x', access: 'write' }],
+      callScopes: [{ scope: 'org:self', access: 'write' }, { scope: 'agent:alex', access: 'read' }, 'resource:u1'],
     });
-    expect(resolved.scopes).toEqual(['org:self', 'team:self:x', 'agent:alex']);
-    expect(resolved.readOnly).toEqual(['org:self']);
+    expect(resolved.scopes).toEqual(['org:self', 'team:self:x', 'agent:alex', 'resource:u1']);
+    // resource:/thread: are the run's Memory identity: always writable, even as plain strings.
+    expect(resolved.readOnly).toEqual(['org:self', 'agent:alex']);
+  });
+
+  it('refuses entries with another access or the old { tag } shape', () => {
+    expect(() => resolveAgentScopes({ callScopes: [{ scope: 'org:a', access: 'readwrite' } as any] })).toThrow(
+      "{ scope, access: 'read' | 'write' }",
+    );
+    expect(() => resolveAgentScopes({ callScopes: [{ tag: 'org:a', access: 'read' } as any] })).toThrow(
+      "{ scope, access: 'read' | 'write' }",
+    );
+  });
+
+  it('reads a host-set request-context key like any entries, but trusts the access map Core wrote', () => {
+    const host = new RequestContext([[MASTRA_SCOPES_KEY, ['org:self', { scope: 'team:self:x', access: 'write' }]]]);
+    expect(resolveAgentScopes({ requestContext: host }).readOnly).toEqual(['org:self']);
+
+    const fromRun = new RequestContext();
+    setRunAgentScopes(fromRun, ['org:self', 'team:self:x'], ['org:self']);
+    expect(resolveAgentScopes({ requestContext: fromRun }).readOnly).toEqual(['org:self']);
   });
 
   it('refuses read-only identity scopes', () => {
-    expect(() => resolveAgentScopes({ callScopes: [{ tag: 'thread:t1', access: 'read' }] })).toThrow(
+    expect(() => resolveAgentScopes({ callScopes: [{ scope: 'thread:t1', access: 'read' }] })).toThrow(
       "can't be read-only",
     );
   });
@@ -50,8 +69,8 @@ describe('read-only scope entries', () => {
     const context = new RequestContext();
     setRunAgentScopes(context, ['org:self', 'team:self:x'], ['org:self']);
     expect(getRunAgentScopes(context)).toEqual([
-      { tag: 'org:self', access: 'read' },
-      { tag: 'team:self:x', access: 'readwrite' },
+      { scope: 'org:self', access: 'read' },
+      { scope: 'team:self:x', access: 'write' },
     ]);
 
     const persisted = new RequestContext(
@@ -93,14 +112,17 @@ describe('read-only scope entries', () => {
     const context = new RequestContext();
     setRunAgentScopes(context, ['team:self:x']);
     const copy = new RequestContext([...context.entries()]);
-    expect(getRunAgentScopes(copy)).toEqual([{ tag: 'team:self:x', access: 'readwrite' }]);
+    expect(getRunAgentScopes(copy)).toEqual([{ scope: 'team:self:x', access: 'write' }]);
   });
 
   it('lets a resumed run narrow a tag to read but not widen a read-only one', () => {
     const snapshot = { scopes: ['org:self', 'team:self:x'], readOnly: ['org:self'] };
     expect(
-      resolveAgentScopes({ snapshot, callScopes: [{ tag: 'team:self:x', access: 'read' }] }).readOnly.sort(),
+      resolveAgentScopes({ snapshot, callScopes: [{ scope: 'team:self:x', access: 'read' }] }).readOnly.sort(),
     ).toEqual(['org:self', 'team:self:x']);
-    expect(() => resolveAgentScopes({ snapshot, callScopes: ['org:self'] })).toThrow("can't widen");
+    expect(resolveAgentScopes({ snapshot, callScopes: ['org:self'] }).readOnly).toContain('org:self');
+    expect(() => resolveAgentScopes({ snapshot, callScopes: [{ scope: 'org:self', access: 'write' }] })).toThrow(
+      "can't widen",
+    );
   });
 });

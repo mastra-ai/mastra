@@ -153,7 +153,10 @@ describe('Knowledge attached to an Agent without Memory', () => {
         [],
       ),
       knowledge,
-      scopes: ['team:acme:support', 'agent:alex'],
+      scopes: [
+        { scope: 'team:acme:support', access: 'write' },
+        { scope: 'agent:alex', access: 'write' },
+      ],
     });
     const result = await writer.generate('Note it.', { maxSteps: 2, memory: { thread: 'w-1', resource: 'alex' } });
     const [created] = toolResults(result) as any[];
@@ -199,7 +202,10 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(await (await knowledge.getStorage()).listNodes({ scope: ['team:acme:sales'] })).toEqual([]);
   });
 
-  it('holds a read-only tag for reads only: visible, left out of default writes, refused when named', async () => {
+  it.each([
+    ['a plain tag', 'org:self'],
+    ['{ access: "read" }', { scope: 'org:self', access: 'read' as const }],
+  ])('holds %s read-only: visible, left out of default writes, refused when named', async (_, orgEntry) => {
     const storage = new InMemoryStore({ id: 'read-only' });
     const knowledge = new Knowledge({ storage, tools: { write: true } });
     const store = await knowledge.getStorage();
@@ -220,7 +226,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         instructions: 'x',
         model: scriptedModel(calls, []),
         knowledge,
-        scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'],
+        scopes: [orgEntry, { scope: 'team:self:x', access: 'write' }],
       }).generate('go', { maxSteps: 2, memory: { thread: 'm-1', resource: 'member' } });
 
     const searched = await member([{ toolName: 'knowledge_search', input: { query: 'Fridays' } }]);

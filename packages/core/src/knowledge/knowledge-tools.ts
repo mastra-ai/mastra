@@ -68,8 +68,8 @@ export function resolveKnowledgeRunAccess(
   ownership?: KnowledgeOwnershipSource,
 ): KnowledgeRunAccess {
   const entries = getRunAgentScopes(context?.requestContext);
-  const tags = entries.map(entry => entry.tag);
-  const readOnly = entries.filter(entry => entry.access === 'read').map(entry => entry.tag);
+  const tags = entries.map(entry => entry.scope);
+  const readOnly = entries.filter(entry => entry.access === 'read').map(entry => entry.scope);
   const resourceId = context?.agent?.resourceId;
   const threadId = context?.agent?.threadId;
   if (resourceId) tags.push(`resource:${resourceId}`);

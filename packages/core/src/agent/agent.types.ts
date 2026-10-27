@@ -473,7 +473,9 @@ export type NetworkOptions<OUTPUT = undefined> = {
    * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
    * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
    * also set, or the call throws. Never accepted from an HTTP request body.
-   * An entry `{ tag, access: 'read' }` holds that tag read-only for this run.
+   * A plain address is read-only; `{ scope, access: 'write' }` lets the run write there too.
+   * `resource:` and `thread:` scopes are always writable. A tag any source names read-only stays
+   * read-only.
    */
   scopes?: AgentScopeEntry[];
 
@@ -627,7 +629,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
    * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
    * also set, or the call throws. Never accepted from an HTTP request body.
-   * An entry `{ tag, access: 'read' }` holds that tag read-only for this run.
+   * A plain address is read-only; `{ scope, access: 'write' }` lets the run write there too.
+   * `resource:` and `thread:` scopes are always writable. A tag any source names read-only stays
+   * read-only.
    */
   scopes?: AgentScopeEntry[];
 

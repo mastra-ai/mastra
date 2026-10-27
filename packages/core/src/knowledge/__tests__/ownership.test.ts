@@ -65,8 +65,18 @@ function companyKnowledge(id: string, role: 'owner' | 'edit' | 'append' | 'reado
   });
 }
 
+// Plain tags here are held writable; read-only cases name `{ scope, access: 'read' }`.
+const writable = (scopes: any[]) => scopes.map(s => (typeof s === 'string' ? { scope: s, access: 'write' } : s));
+
 async function run(knowledge: Knowledge, scopes: any[], calls: Call[], thread = 't-1') {
-  const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: scriptedModel(calls), knowledge, scopes });
+  const agent = new Agent({
+    id: 'a',
+    name: 'a',
+    instructions: 'x',
+    model: scriptedModel(calls),
+    knowledge,
+    scopes: writable(scopes),
+  });
   return agent.generate('go', { maxSteps: calls.length + 1, memory: { thread, resource: 'r' } });
 }
 
@@ -106,7 +116,7 @@ describe('Knowledge ownership computed from the structure', () => {
     const knowledge = companyKnowledge('own-director');
     await run(
       knowledge,
-      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
+      [{ scope: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
       [
         {
           toolName: 'knowledge_record',
@@ -142,7 +152,7 @@ describe('Knowledge ownership computed from the structure', () => {
 
     const member = await run(
       knowledge,
-      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x'],
+      [{ scope: 'org:acme', access: 'read' }, 'team:acme:x'],
       [
         { toolName: 'knowledge_search', input: { query: 'secret', scope: ['team:acme:other'] } },
         {

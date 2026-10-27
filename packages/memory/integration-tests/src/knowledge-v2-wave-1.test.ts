@@ -168,7 +168,7 @@ function createRuntime(storage: MastraCompositeStore) {
     model: curator.model,
     memory,
     knowledge: 'mastra',
-    scopes: ['org:acme'],
+    scopes: [{ scope: 'org:acme', access: 'write' }],
   });
   const mastra = new Mastra({
     agents: { curator: agent },
