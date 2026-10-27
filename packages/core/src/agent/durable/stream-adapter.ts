@@ -9,7 +9,7 @@ import type { TracingContext } from '../../observability';
 import type { OutputProcessorOrWorkflow, ProcessorState } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import { safeClose, safeEnqueue, safeError } from '../../stream/base';
-import { MastraModelOutput } from '../../stream/base/output';
+import { createDestructurableOutput, MastraModelOutput } from '../../stream/base/output';
 import { markChunkOutputProcessed } from '../../stream/base/output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from '../../stream/base/produced-at';
 import { ChunkFrom } from '../../stream/types';
@@ -49,6 +49,9 @@ const STREAM_ENDING_EVENT_TYPES = new Set<string>([
   AgentStreamEventTypes.SUSPENDED,
   AgentStreamEventTypes.ABORT,
 ]);
+
+/** How long `waitForEventDelivery` waits for already-published frames to reach the reader. */
+const LOGGED_EVENT_DELIVERY_TIMEOUT_MS = 10_000;
 
 /**
  * Decides which run-stream events a reader keeps once another execution may
@@ -287,7 +290,10 @@ export interface DurableAgentStreamResult<OUTPUT = undefined> {
    * so other readers of the run are unaffected.
    */
   fail: (error: Error) => Promise<void>;
-  /** Wait for pubsub events already delivered to this adapter to finish processing. */
+  /**
+   * Wait until this adapter has received every event the run's log held when
+   * called (bounded), then for those deliveries to finish processing.
+   */
   waitForEventDelivery: () => Promise<void>;
   /** Accepted deliveries, including hidden ownership markers, for observation reconciliation. */
   readonly activityVersion: number;
@@ -826,6 +832,14 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // life of the subscription. Track deliveries because in-process pubsub invokes
   // callbacks synchronously but does not await their promises.
   const inFlightDeliveries = new Set<Promise<void>>();
+  // The next log index this reader expects, when it reads the run's log in
+  // index order (replay or numeric offset). Live-tailing readers do not track it.
+  let nextLogIndex: number | undefined =
+    offset === undefined ? 0 : offset !== 'latest' && pubsub.supportsOffsets ? offset : undefined;
+  const logIndexWaiters = new Set<() => void>();
+  const releaseLogIndexWaiters = () => {
+    for (const release of [...logIndexWaiters]) release();
+  };
   const ackingHandleEvent = withAck(handleEvent);
   const subscribedCallback: EventCallback = (event, ack, nack) => {
     const delivery = Promise.resolve(ackingHandleEvent(event, ack, nack));
@@ -835,9 +849,50 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         inFlightDeliveries.delete(delivery);
       })
       .catch(() => {});
+    if (nextLogIndex !== undefined && typeof event.index === 'number' && event.index >= nextLogIndex) {
+      nextLogIndex = event.index + 1;
+      releaseLogIndexWaiters();
+    }
     return delivery;
   };
+  // A transport can hand already-published frames to this reader late: Redis
+  // Streams redelivers a resumed reader's retained backlog ahead of the frames
+  // published since. Wait until every frame the log held when called has
+  // reached this reader, bounded in case the transport never delivers it.
+  const waitForLoggedEvents = async () => {
+    if (nextLogIndex === undefined || !isSubscribed) return;
+    const topic = AGENT_STREAM_TOPIC(runId);
+    let target = -1;
+    try {
+      for (const event of await pubsub.getHistory(topic, nextLogIndex)) {
+        if (typeof event.index === 'number' && event.index > target) target = event.index;
+      }
+    } catch (error) {
+      logError(`[DurableAgentStream] Failed to read ${topic} history:`, error);
+      return;
+    }
+    const reached = () => cancelled || nextLogIndex === undefined || nextLogIndex > target;
+    if (reached()) return;
+    await new Promise<void>(resolve => {
+      const timer = setTimeout(() => {
+        const message = `[DurableAgentStream] ${topic} frames through index ${target} did not arrive within ${LOGGED_EVENT_DELIVERY_TIMEOUT_MS}ms; closing without them`;
+        if (logger) logger.warn(message);
+        else console.warn(message);
+        done();
+      }, LOGGED_EVENT_DELIVERY_TIMEOUT_MS);
+      const check = () => {
+        if (reached()) done();
+      };
+      const done = () => {
+        clearTimeout(timer);
+        logIndexWaiters.delete(check);
+        resolve();
+      };
+      logIndexWaiters.add(check);
+    });
+  };
   const waitForEventDelivery = async () => {
+    await waitForLoggedEvents();
     while (inFlightDeliveries.size > 0) {
       await Promise.allSettled([...inFlightDeliveries]);
     }
@@ -899,6 +954,7 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   const cleanup = () => {
     markTerminated();
     cancelled = true;
+    releaseLogIndexWaiters();
     if (isSubscribed) {
       isSubscribed = false;
       const topic = AGENT_STREAM_TOPIC(runId);
@@ -926,38 +982,40 @@ export function createDurableAgentStream<OUTPUT = undefined>(
   // onFinish is called from the pubsub FINISH handler (above) with a
   // payload built from the event data. This ensures it fires even when
   // nobody iterates the stream (e.g. resume flows with delay-only waits).
-  const output = new MastraModelOutput<OUTPUT>({
-    model,
-    stream,
-    messageList,
-    messageId,
-    initialToolCalls,
-    resumedText,
-    finishUsageIsTotal: true,
-    options: {
-      runId,
-      onStepFinish: onStepFinishWithRunId as MastraOnStepFinishCallback<OUTPUT> | undefined,
-      // For durable agents there is only one MastraModelOutput for the whole run.
-      // isLLMExecutionStep must be true so output processors run per-chunk
-      // (processOutputStream / processPart path) rather than the batch
-      // runOutputProcessors path which only fires at finish.  It also gates
-      // createObjectStreamTransformer for structured output.
-      // resolveFinalPromises forces text/finishReason promise resolution at
-      // step-finish despite isLLMExecutionStep being true — durable agents have
-      // no outer MastraModelOutput to resolve them.
-      structuredOutput: structuredOutput as any,
-      isLLMExecutionStep: true,
-      resolveFinalPromises: true,
-      outputProcessors,
-      processorStates,
-      agent,
-      returnScorerData,
-      requestContext,
-      tracingContext,
-      experimentalTransform,
-      hideSignals,
-    },
-  });
+  const output = createDestructurableOutput(
+    new MastraModelOutput<OUTPUT>({
+      model,
+      stream,
+      messageList,
+      messageId,
+      initialToolCalls,
+      resumedText,
+      finishUsageIsTotal: true,
+      options: {
+        runId,
+        onStepFinish: onStepFinishWithRunId as MastraOnStepFinishCallback<OUTPUT> | undefined,
+        // For durable agents there is only one MastraModelOutput for the whole run.
+        // isLLMExecutionStep must be true so output processors run per-chunk
+        // (processOutputStream / processPart path) rather than the batch
+        // runOutputProcessors path which only fires at finish.  It also gates
+        // createObjectStreamTransformer for structured output.
+        // resolveFinalPromises forces text/finishReason promise resolution at
+        // step-finish despite isLLMExecutionStep being true — durable agents have
+        // no outer MastraModelOutput to resolve them.
+        structuredOutput: structuredOutput as any,
+        isLLMExecutionStep: true,
+        resolveFinalPromises: true,
+        outputProcessors,
+        processorStates,
+        agent,
+        returnScorerData,
+        requestContext,
+        tracingContext,
+        experimentalTransform,
+        hideSignals,
+      },
+    }),
+  );
 
   // Fail only this reader, without publishing to the run's topic, which other
   // executions and their followers share. Waits for events already delivered.

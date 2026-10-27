@@ -32,7 +32,7 @@ import type {
   RetentionTablesDescriptor,
   TableRetentionPolicy,
 } from '@mastra/core/storage';
-import type { StepResult, WorkflowRunState } from '@mastra/core/workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '@mastra/core/workflows';
 import { withRetry } from '../../../shared/retry';
 import { DsqlDB, resolveDsqlConfig } from '../../db';
 import type { DsqlDomainConfig } from '../../db';
@@ -109,6 +109,10 @@ export class WorkflowsDSQL extends WorkflowsStorage {
   }
 
   supportsConcurrentUpdates(): boolean {
+    return true;
+  }
+
+  supportsGuardedSnapshotWrites(): boolean {
     return true;
   }
 
@@ -501,6 +505,7 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -509,19 +514,24 @@ export class WorkflowsDSQL extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     try {
       const now = new Date();
       const createdAtValue = createdAt ? createdAt : now;
       const updatedAtValue = updatedAt ? updatedAt : now;
       const resolvedFence = resolveRunFence(this, fence, runId);
-      await withRetry(() =>
+      // The status guard sits on the upsert itself, so a concurrent status change can't land
+      // between the check and the write. An empty list matches no status.
+      const guard = expectedStatus === undefined ? '' : ` WHERE t.snapshot::jsonb ->> 'status' = ANY($7::text[])`;
+      const written = await withRetry(() =>
         withRunFence(this.#db.client, this.#runOwnersTable(), resolvedFence, 'persistWorkflowSnapshot', q =>
-          q.none(
-            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
+          q.oneOrNone<{ written: number }>(
+            `INSERT INTO ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} AS t (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt")
                  VALUES ($1, $2, $3, $4, $5, $6)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6`,
+                 SET "resourceId" = $3, snapshot = $4, "updatedAt" = $6${guard}
+                 RETURNING 1 AS written`,
             [
               workflowName,
               runId,
@@ -529,10 +539,14 @@ export class WorkflowsDSQL extends WorkflowsStorage {
               JSON.stringify(snapshot),
               createdAtValue.toISOString(),
               updatedAtValue.toISOString(),
+              ...(expectedStatus === undefined
+                ? []
+                : [Array.isArray(expectedStatus) ? expectedStatus : [expectedStatus]]),
             ],
           ),
         ),
       );
+      return written !== null;
     } catch (error) {
       if (isRunFenceConflictError(error)) throw error;
       throw new MastraError(
@@ -540,6 +554,33 @@ export class WorkflowsDSQL extends WorkflowsStorage {
           id: createStorageErrorId('DSQL', 'PERSIST_WORKFLOW_SNAPSHOT', 'FAILED'),
           domain: ErrorDomain.STORAGE,
           category: ErrorCategory.THIRD_PARTY,
+        },
+        error,
+      );
+    }
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    try {
+      const row = await this.#db.client.oneOrNone<{ status: unknown }>(
+        `SELECT snapshot::jsonb ->> 'status' AS status FROM ${getTableName({ indexName: TABLE_WORKFLOW_SNAPSHOT, schemaName: getSchemaName(this.#schema) })} WHERE "workflow_name" = $1 AND "run_id" = $2 ORDER BY "createdAt" DESC LIMIT 1`,
+        [workflowName, runId],
+      );
+      const status = row?.status;
+      return (status ?? null) as WorkflowRunStatus | null;
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('DSQL', 'LOAD_WORKFLOW_RUN_STATUS', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: { workflowName, runId },
         },
         error,
       );

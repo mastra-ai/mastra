@@ -7,7 +7,7 @@ description: "Browse CommandCode model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/commandcode.svg" alt="CommandCode logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />CommandCode
 
-Access 71 CommandCode models through Mastra's model router. Authentication is handled automatically using the `CMD_API_KEY` environment variable.
+Access 72 CommandCode models through Mastra's model router. Authentication is handled automatically using the `CMD_API_KEY` environment variable.
 
 Learn more in the [CommandCode documentation](https://commandcode.ai/docs/provider).
 
@@ -464,6 +464,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 10
+  },
+  {
+    "model": "commandcode/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
   },
   {
     "model": "commandcode/meta/muse-spark-1.1",

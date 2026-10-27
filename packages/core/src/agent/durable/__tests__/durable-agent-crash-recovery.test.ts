@@ -277,6 +277,14 @@ function activeStepIds(snapshot: WorkflowRunState | undefined) {
   return Object.keys(snapshot?.activeStepsPath ?? {});
 }
 
+function hasToolResult(value: unknown, toolCallId: string): boolean {
+  if (Array.isArray(value)) return value.some(item => hasToolResult(item, toolCallId));
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (record.toolCallId === toolCallId && ('result' in record || record.state === 'result')) return true;
+  return Object.values(record).some(item => hasToolResult(item, toolCallId));
+}
+
 function describeCheckpoint({ outer, inner }: Checkpoint) {
   const part = (name: string, s?: WorkflowRunState) =>
     s ? `${name}:${s.status}[${activeStepIds(s).join('|') || '-'}]@${JSON.stringify(s.activePaths)}` : '';
@@ -593,7 +601,7 @@ describe('DurableAgent crash recovery', () => {
             c.inner?.status === 'running' &&
             activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL) &&
             JSON.stringify(c.inner).includes('call-1') &&
-            !JSON.stringify(c.inner).includes('"toolCallId":"call-1","result"'),
+            !hasToolResult(c.inner, 'call-1'),
         );
         expect(beforeSecondTool.length).toBeGreaterThan(0);
 
