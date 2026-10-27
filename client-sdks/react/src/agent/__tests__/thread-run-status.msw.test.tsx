@@ -7,6 +7,100 @@ import { renderHookWithProviders, TEST_BASE_URL } from '../../test/render';
 import { useChat } from '../hooks';
 
 describe('useChat thread outcomes (COR-1500)', () => {
+  it.each(
+    (['history', 'send-message', 'status-before-response'] as const).flatMap(identitySource =>
+      (['success', 'failed', 'aborted', 'suspended'] as const).map(status => ({ identitySource, status })),
+    ),
+  )('settles $status identified by $identitySource without a start frame', async ({ identitySource, status }) => {
+    let controller: ReadableStreamDefaultController<Uint8Array> | undefined;
+    const response = Promise.withResolvers<void>();
+    let requested = false;
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agents/agent-1/threads/subscribe`,
+        () =>
+          new HttpResponse(
+            new ReadableStream<Uint8Array>({
+              start(value) {
+                controller = value;
+              },
+            }),
+            {
+              headers: { 'content-type': 'text/event-stream' },
+            },
+          ),
+      ),
+      http.post(`${TEST_BASE_URL}/api/agents/agent-1/send-message`, async () => {
+        requested = true;
+        await response.promise;
+        return HttpResponse.json({ runId: 'recovered-run', signal: { id: 'signal-1' } });
+      }),
+    );
+    const { result, unmount } = renderHookWithProviders(() =>
+      useChat({
+        agentId: 'agent-1',
+        resourceId: 'resource-1',
+        threadId: 'thread-1',
+        enableThreadSignals: true,
+        withInitialHistory: true,
+      }),
+    );
+    const emit = async (chunk: unknown) => {
+      await act(async () => {
+        controller?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+      });
+    };
+    let sending: Promise<void> | undefined;
+    try {
+      await waitFor(() => expect(controller).toBeDefined());
+      act(() => {
+        sending = result.current.sendMessage({ message: 'Recover my reply', threadId: 'thread-1' });
+      });
+      await waitFor(() => expect(requested).toBe(true));
+      expect(result.current.isRunning).toBe(true);
+      if (identitySource === 'history') {
+        await emit({
+          type: 'thread-history',
+          runId: '',
+          from: 'AGENT',
+          payload: { messages: [], hasMore: false, activeRunId: 'recovered-run' },
+        });
+      } else if (identitySource === 'send-message') {
+        response.resolve();
+        await act(async () => {
+          await sending;
+        });
+      }
+      await emit({ type: 'thread-run-status', runId: 'old-run', from: 'AGENT', payload: { status: 'success' } });
+      expect(result.current.isRunning).toBe(true);
+      await emit({
+        type: 'thread-run-status',
+        runId: 'recovered-run',
+        from: 'AGENT',
+        payload: { status },
+      });
+      if (identitySource === 'status-before-response') {
+        response.resolve();
+        await act(async () => {
+          await sending;
+        });
+      }
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+      await emit({ type: 'start', runId: 'newer-run', from: 'AGENT', payload: {} });
+      response.resolve();
+      await act(async () => {
+        await sending;
+      });
+      expect(result.current.isRunning).toBe(true);
+      await emit({ type: 'thread-run-status', runId: 'newer-run', from: 'AGENT', payload: { status: 'success' } });
+      await waitFor(() => expect(result.current.isRunning).toBe(false));
+    } finally {
+      response.resolve();
+      await sending;
+      unmount();
+      controller?.close();
+    }
+  });
   it.each(['success', 'failed', 'aborted', 'suspended'] as const)(
     'stops the matching run on %s while ignoring historical outcomes',
     async status => {

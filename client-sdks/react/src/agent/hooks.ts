@@ -7,7 +7,7 @@ import type { CoreUserMessage } from '@mastra/core/llm';
 import type { TracingOptions } from '@mastra/core/observability';
 import type { RequestContext } from '@mastra/core/request-context';
 import type { TaskItem } from '@mastra/core/signals';
-import type { ChunkType, DataChunkType, NetworkChunkType } from '@mastra/core/stream';
+import type { ChunkType, DataChunkType, NetworkChunkType, ThreadRunStatusChunk } from '@mastra/core/stream';
 import { useCallback, useEffect, useRef, useState } from 'react';
 import {
   accumulateChunk,
@@ -362,6 +362,7 @@ export const useChat = ({
   const liveApprovalIds = useRef(new Set<string>());
   const liveRunId = useRef<string | undefined>(undefined);
   const liveRunFinished = useRef(false);
+  const pendingRunStatuses = useRef<Map<string, ThreadRunStatusChunk> | undefined>(undefined);
   const [isAwaitingToolApproval, setIsAwaitingToolApproval] = useState(false);
 
   const baseClient = useMastraClient();
@@ -672,7 +673,17 @@ export const useChat = ({
               onChunk: chunk => {
                 if (chunk.type === 'thread-history') {
                   if (_threadSubscriptionAbortRef.current === subscriptionAbort) {
-                    const { hasMore } = chunk.payload;
+                    const { hasMore, activeRunId } = chunk.payload;
+                    if (
+                      activeRunId &&
+                      activeRunId !== liveRunId.current &&
+                      (!liveRunId.current || liveRunFinished.current)
+                    ) {
+                      liveRunId.current = activeRunId;
+                      liveRunFinished.current = false;
+                      _currentRunId.current = activeRunId;
+                      setIsRunning(pendingToolApprovalIdsRef.current.size === 0);
+                    }
                     setSubscriptionPagination(
                       typeof hasMore === 'boolean' ? { key: subscriptionKey, pagination: { hasMore } } : undefined,
                     );
@@ -691,7 +702,10 @@ export const useChat = ({
                   return;
                 }
                 if (chunk.type === 'thread-run-status') {
-                  if (chunk.runId !== liveRunId.current) return;
+                  if (chunk.runId !== liveRunId.current) {
+                    pendingRunStatuses.current?.set(chunk.runId, chunk);
+                    return;
+                  }
                   setIsRunning(false);
                   if (chunk.payload.status !== 'suspended') {
                     liveRunFinished.current = true;
@@ -1020,6 +1034,10 @@ export const useChat = ({
       clientToolsResolver,
     };
 
+    const liveRunIdBeforeSend = liveRunId.current;
+    // An outcome can reach SSE before the acceptance response supplies its run ID.
+    const earlyRunStatuses = new Map<string, ThreadRunStatusChunk>();
+    pendingRunStatuses.current = earlyRunStatuses;
     try {
       const result = await agent.sendMessage({
         message:
@@ -1040,6 +1058,27 @@ export const useChat = ({
           },
         },
       });
+      // SSE may already have finished this run or moved on while the request was pending.
+      if (
+        _streamAbortRef.current === internalAbort &&
+        liveRunId.current === liveRunIdBeforeSend &&
+        liveRunId.current !== result.runId
+      ) {
+        liveApprovalIds.current.clear();
+        liveRunId.current = result.runId;
+        liveRunFinished.current = false;
+        _currentRunId.current = result.runId;
+        const earlyStatus = earlyRunStatuses.get(result.runId);
+        if (earlyStatus) {
+          setIsRunning(false);
+          if (earlyStatus.payload.status !== 'suspended') {
+            liveRunFinished.current = true;
+            for (const toolCallId of pendingToolApprovalIdsRef.current) liveApprovalIds.current.add(toolCallId);
+            pendingToolApprovalIdsRef.current.clear();
+            setIsAwaitingToolApproval(false);
+          }
+        }
+      }
       const echoedSignalId =
         result.signal &&
         typeof result.signal === 'object' &&
@@ -1079,6 +1118,8 @@ export const useChat = ({
         }
       }
       throw error;
+    } finally {
+      if (pendingRunStatuses.current === earlyRunStatuses) pendingRunStatuses.current = undefined;
     }
 
     if (_streamAbortRef.current === internalAbort) {
