@@ -4,7 +4,15 @@ import type { MCPToolType } from '@mastra/core/tools';
 import { DEFAULT_TASK_TTL_MS } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
 import type { InMemoryMCPTaskStore } from './in-memory-store';
-import type { MCPTaskAccess, MCPTaskCreateParams, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './store';
+import { isMCPTaskStoreAdmin } from './store';
+import type {
+  MCPTaskAccess,
+  MCPTaskCreateParams,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskStoreAdmin,
+  MCPTaskWork,
+} from './store';
 
 /**
  * How a tool answers `tools/call` for a client that declared the Tasks extension.
@@ -248,5 +256,10 @@ export class SelectingMCPTaskStore implements MCPTaskStore {
   run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void {
     if (!this.#selected) throw new Error(`MCP task "${taskId}" not found`);
     this.#selected.run(taskId, work, options);
+  }
+  /** The chosen store's admin view, or `undefined` when it has none. */
+  async admin(): Promise<MCPTaskStoreAdmin | undefined> {
+    const store = await this.#store();
+    return isMCPTaskStoreAdmin(store) ? store : undefined;
   }
 }

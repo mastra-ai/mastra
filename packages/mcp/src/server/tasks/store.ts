@@ -1,5 +1,22 @@
+import { createHash } from 'node:crypto';
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
+import type {
+  MCPDetailedTask,
+  MCPTask,
+  MCPTaskInputRequests,
+  MCPTaskInputResponses,
+  MCPTaskStatus,
+} from '../../shared/tasks';
+
+/**
+ * The key a task id is stored and administered under. The id is a bearer token, so stores and
+ * admin views only ever keep and show its SHA-256 hash.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export function taskKeyOf(taskId: string): string {
+  return createHash('sha256').update(taskId).digest('base64url');
+}
 
 /**
  * What {@link MCPTaskStore.create} durably records.
@@ -109,3 +126,80 @@ export type MCPTaskAttemptOutcome =
 
 /** @experimental SEP-2663 extension; API may change. */
 export type MCPTaskWork = (attempt: MCPTaskAttempt) => Promise<MCPTaskAttemptOutcome>;
+
+/**
+ * A task as an {@link MCPTaskStoreAdmin} lists it. Carries the task key, never the task id.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPTaskListing {
+  taskKey: string;
+  /** The principal that created the task. Admin views must not show it unhashed. */
+  principal: string;
+  /** The `context` given to `create`. */
+  context?: Record<string, unknown>;
+  status: MCPTaskStatus;
+  statusMessage?: string;
+  createdAt: string;
+  lastUpdatedAt: string;
+  ttlMs: number | null;
+  /** Open input requests, while `input_required`. */
+  inputRequests?: MCPTaskInputRequests;
+  result?: Record<string, unknown>;
+  /** A JSON-RPC error object. */
+  error?: Record<string, unknown>;
+}
+
+/**
+ * What an admin action on a task did: `not_found` for an unknown or expired task, `ignored` when the
+ * task was found but nothing changed (already finished, or not waiting for those inputs).
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export type MCPTaskAdminOutcome = 'done' | 'ignored' | 'not_found';
+
+/**
+ * Optional admin view of an {@link MCPTaskStore}, for Studio. It is not part of the protocol, and
+ * works on task keys ({@link taskKeyOf}) rather than task ids, across all principals. `updateByKey`
+ * and `cancelByKey` must run the same code as `update` and `cancel`.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPTaskStoreAdmin {
+  /** Most recently created first. */
+  list(options?: { limit?: number }): Promise<MCPTaskListing[]>;
+  updateByKey(taskKey: string, inputResponses: MCPTaskInputResponses): Promise<MCPTaskAdminOutcome>;
+  cancelByKey(taskKey: string): Promise<MCPTaskAdminOutcome>;
+}
+
+/** @experimental SEP-2663 extension; API may change. */
+export function isMCPTaskStoreAdmin(store: MCPTaskStore): store is MCPTaskStore & MCPTaskStoreAdmin {
+  const admin = store as Partial<MCPTaskStoreAdmin>;
+  return (
+    typeof admin.list === 'function' &&
+    typeof admin.updateByKey === 'function' &&
+    typeof admin.cancelByKey === 'function'
+  );
+}
+
+/** Projects a detailed task onto a listing. */
+export function toListing(
+  taskKey: string,
+  principal: string,
+  context: Record<string, unknown> | undefined,
+  task: MCPDetailedTask,
+): MCPTaskListing {
+  return {
+    taskKey,
+    principal,
+    ...(context && { context }),
+    status: task.status,
+    ...(task.statusMessage !== undefined && { statusMessage: task.statusMessage }),
+    createdAt: task.createdAt,
+    lastUpdatedAt: task.lastUpdatedAt,
+    ttlMs: task.ttlMs,
+    ...(task.status === 'input_required' && { inputRequests: task.inputRequests }),
+    ...(task.status === 'completed' && { result: task.result }),
+    ...(task.status === 'failed' && { error: task.error }),
+  };
+}

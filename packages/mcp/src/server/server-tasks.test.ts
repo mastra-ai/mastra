@@ -468,6 +468,80 @@ describe.each([
     expect((await unknown.get(result.taskId)).status).toBe('working');
   });
 
+  it('describes its task surfaces for Studio without changing tools/list', async () => {
+    const { server } = await start({
+      default: 'off',
+      tools: { echo: 'always', quick: { mode: 'auto', ttlMs: 5_000, recover: true } },
+      required: ['echo'],
+    });
+    expect(server.getTasksInfo()).toEqual({
+      enabled: true,
+      required: true,
+      listable: true,
+      surfaces: [
+        { name: 'echo', type: 'tool', mode: 'always', recover: false, ttlMs: 86_400_000 },
+        { name: 'quick', type: 'tool', mode: 'auto', recover: true, ttlMs: 5_000 },
+      ],
+    });
+    const listed = await rawRequest(served!.url, { method: 'tools/list', params: {}, capabilities: TASKS_CLIENT });
+    expect(JSON.stringify(await listed.json())).not.toMatch(/"(mode|recover|surfaces)"/);
+  });
+
+  it('has no task info or inspector without a tasks config', async () => {
+    const { server } = await start(undefined);
+    expect(server.getTasksInfo()).toBeUndefined();
+    expect(server.getTasksInspector()).toBeUndefined();
+  });
+
+  it("lets Studio list every principal's tasks by key and answer or cancel them like tasks/update and tasks/cancel", async () => {
+    const { server } = await start({ tools: { approve: 'always', hang: 'always' } });
+    const asking = (await call('approve', { item: 'invoice' }, { user: 'alice' })).result.taskId;
+    const hanging = (await call('hang', {}, { user: 'bob' })).result.taskId;
+    const alice = await requester('alice');
+    await waitFor(alice, asking, 'input_required');
+
+    const inspector = server.getTasksInspector()!;
+    const { tasks } = await inspector.list({});
+    const serialized = JSON.stringify(tasks);
+    for (const secret of [asking, hanging, 'alice-token', 'bob-token', 'alice', 'bob']) {
+      expect(serialized).not.toContain(secret);
+    }
+    const bySurface = Object.fromEntries(tasks.map(task => [task.surface, task]));
+    expect(bySurface.hang).toMatchObject({ status: 'working', expiresAt: expect.any(String) });
+    expect(bySurface.approve).toMatchObject({
+      status: 'input_required',
+      inputRequests: { [Object.keys(bySurface.approve!.inputRequests!)[0]!]: { method: 'elicitation/create' } },
+    });
+    expect(bySurface.approve!.principalKey).not.toBe(bySurface.hang!.principalKey);
+
+    const [key] = Object.keys(bySurface.approve!.inputRequests!);
+    const answer = { [key!]: { action: 'accept', content: { approver: 'studio' } } };
+    expect(await inspector.answer(bySurface.approve!.taskKey, answer)).toBe(true);
+    const done = await waitFor(alice, asking, 'completed');
+    expect(JSON.stringify(done.result)).toContain('invoice approved by studio');
+    expect(await inspector.answer(bySurface.approve!.taskKey, answer)).toBe(false);
+
+    expect(await inspector.cancel(bySurface.hang!.taskKey)).toBe(true);
+    await waitFor(await requester('bob'), hanging, 'cancelled');
+    expect(await inspector.cancel(bySurface.hang!.taskKey)).toBe(false);
+    expect(await inspector.cancel(hanging)).toBe(false);
+  });
+
+  it('reports a custom store without the admin view as not listable', async () => {
+    const custom = new InMemoryMCPTaskStore();
+    const store: MCPTaskStore = {
+      create: params => custom.create(params),
+      get: (id, access) => custom.get(id, access),
+      update: (id, responses, access) => custom.update(id, responses, access),
+      cancel: (id, access) => custom.cancel(id, access),
+      run: (id, work, options) => custom.run(id, work, options),
+    };
+    const { server } = await start({ tools: { echo: 'always' }, store });
+    expect(server.getTasksInfo()).toMatchObject({ enabled: true, listable: false });
+    expect(server.getTasksInspector()).toBeUndefined();
+    custom.close();
+  });
+
   it('fails a task whose TTL elapses and aborts its work', async () => {
     const { probe } = await start({ tools: { expiring: { mode: 'always', ttlMs: 200 } } });
     const { result } = await call('expiring');

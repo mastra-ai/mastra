@@ -9,6 +9,8 @@ import type {
   MCPServerEventInfo,
   MCPServerEventsInspector,
   MCPServerFGAConfig,
+  MCPServerTasksInfo,
+  MCPServerTasksInspector,
   MCPToolExecutionResultV2,
   ServerDetailInfo,
   ServerInfo,
@@ -92,6 +94,8 @@ import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode }
 import { emitTaskResults, taskHandleResult } from './tasks/emit';
 import { registerTaskHandlers } from './tasks/handlers';
 import { InMemoryMCPTaskStore } from './tasks/in-memory-store';
+import { createTasksInspector, tasksInfo } from './tasks/inspector';
+import { isMCPTaskStoreAdmin } from './tasks/store';
 import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './tasks/store';
 import type {
   AppResources,
@@ -258,6 +262,7 @@ export class MCPServer extends MCPServerBase {
   private readonly eventRegistry: ServerEventRegistry;
   private readonly eventsOptions: MCPServerEventsOptions;
   private eventsInspector: MCPServerEventsInspector | undefined;
+  private tasksInspector: MCPServerTasksInspector | undefined;
   private readonly webhooks?: WebhookDispatcher;
   private readonly legacy: 'reject' | 'stateless';
   private readonly tasks: ResolvedTasksConfig;
@@ -1783,6 +1788,35 @@ export class MCPServer extends MCPServerBase {
     if (this.eventRegistry.size === 0) return undefined;
     this.eventsInspector ??= createEventsInspector(this.eventsDeps());
     return this.eventsInspector;
+  }
+
+  /**
+   * Which tools run as MCP tasks and whether the task store can be listed, or `undefined` when
+   * no tool runs as a task. Used by Studio.
+   * @experimental
+   */
+  getTasksInfo(): MCPServerTasksInfo | undefined {
+    if (!this.tasks.enabled) return undefined;
+    return tasksInfo(this.tasks, this.taskToolTypes());
+  }
+
+  /**
+   * Lists, cancels and answers this server's tasks across principals, through the task store's
+   * admin view, or `undefined` when no tool runs as a task or the store can't be listed. Used by
+   * Studio; there is no protocol equivalent of the listing.
+   * @experimental
+   */
+  getTasksInspector(): MCPServerTasksInspector | undefined {
+    if (!this.getTasksInfo()?.listable) return undefined;
+    this.tasksInspector ??= createTasksInspector(async () => {
+      if (this.taskStore instanceof SelectingMCPTaskStore) return this.taskStore.admin();
+      return isMCPTaskStoreAdmin(this.taskStore) ? this.taskStore : undefined;
+    });
+    return this.tasksInspector;
+  }
+
+  private taskToolTypes(): Array<[string, MCPToolType | undefined]> {
+    return Object.entries(this.convertedTools).map(([name, tool]) => [name, tool.mcp?.toolType]);
   }
 
   private eventsDeps() {

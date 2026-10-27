@@ -1,5 +1,9 @@
+export { isMCPTaskStoreAdmin, taskKeyOf } from './store';
 export type {
   MCPTaskAccess,
+  MCPTaskAdminOutcome,
+  MCPTaskListing,
+  MCPTaskStoreAdmin,
   MCPTaskAttempt,
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
