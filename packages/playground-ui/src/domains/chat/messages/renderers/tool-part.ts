@@ -9,6 +9,8 @@ export interface ToolPartFields {
   input: unknown;
   output: unknown;
   modelOutput?: unknown;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
   state?: string;
   errorText?: string;
 }
@@ -20,6 +22,14 @@ const readField = (value: unknown, key: string): unknown => (isRecord(value) ? v
 const readModelOutput = (part: ToolPart): unknown => {
   const providerMetadata = readField(part, 'resultProviderMetadata') ?? readField(part, 'providerMetadata');
   return readField(readField(providerMetadata, 'mastra'), 'modelOutput');
+};
+
+const readBackgroundTaskId = (part: ToolPart): string | undefined => {
+  for (const key of ['resultProviderMetadata', 'callProviderMetadata', 'providerMetadata']) {
+    const taskId = readField(readField(readField(readField(part, key), 'mastra'), 'backgroundTask'), 'taskId');
+    if (typeof taskId === 'string') return taskId;
+  }
+  return undefined;
 };
 
 export function isToolPart(part: MessageFactoryPart): part is ToolPart {
@@ -35,6 +45,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
       input: 'args' in invocation ? invocation.args : undefined,
       output: 'result' in invocation ? invocation.result : undefined,
       modelOutput: readModelOutput(part),
+      backgroundTaskId: readBackgroundTaskId(part),
       state:
         invocation.state === 'result' && 'isError' in invocation && invocation.isError === true
           ? 'output-error'
@@ -48,6 +59,7 @@ export function readToolPart(part: ToolPart): ToolPartFields {
     input: part.input,
     output: part.output,
     modelOutput: readModelOutput(part),
+    backgroundTaskId: readBackgroundTaskId(part),
     state: part.state,
     errorText: part.errorText,
   };

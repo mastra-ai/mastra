@@ -154,6 +154,32 @@ describe('readToolPart', () => {
     });
   });
 
+  describe('when the call was deferred to a background task', () => {
+    it('reads the background task id from a persisted invocation', () => {
+      const part = Object.assign(invocation({ state: 'result', result: 'started' }), {
+        providerMetadata: { mastra: { backgroundTask: { taskId: 'bg-1', status: 'running' } } },
+      });
+
+      expect(readToolPart(part).backgroundTaskId).toBe('bg-1');
+    });
+
+    it('reads the background task id from a streamed part', () => {
+      const part = Object.assign(
+        {
+          type: 'dynamic-tool' as const,
+          toolName: 'reports_slow_report',
+          toolCallId: 'call-1',
+          state: 'output-available',
+          input: {},
+          output: [],
+        },
+        { callProviderMetadata: { mastra: { backgroundTask: { taskId: 'bg-2' } } } },
+      );
+
+      expect(readToolPart(part).backgroundTaskId).toBe('bg-2');
+    });
+  });
+
   it('names a typed v5 part after its type when it carries no tool name, and gives it an empty id', () => {
     expect(readToolPart({ type: 'tool-search', input: {} })).toMatchObject({ toolName: 'search', toolCallId: '' });
   });

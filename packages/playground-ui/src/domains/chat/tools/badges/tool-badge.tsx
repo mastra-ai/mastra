@@ -1,5 +1,5 @@
 import { BackgroundTaskMetadataDialogTrigger } from './background-task-metadata-dialog';
-import { McpTaskChip } from './mcp-task-chip';
+import { BackgroundMcpTaskChip, McpTaskChip } from './mcp-task-chip';
 import { useMcpTaskProgress } from './use-mcp-task-progress';
 import type { MessageMetadata } from '@/domains/chat';
 import { NetworkChoiceMetadataDialogTrigger } from '@/domains/chat/components/network-choice-metadata-dialog';
@@ -37,6 +37,8 @@ export interface ToolBadgeProps extends Omit<ToolApprovalRequest, 'toolCalled'> 
   toolCalled?: boolean;
   withoutArgs?: boolean;
   status?: ActivityStatus;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
 }
 
 export const ToolBadge = ({
@@ -52,6 +54,7 @@ export const ToolBadge = ({
   toolCalled: toolCalledProp,
   withoutArgs,
   status = 'idle',
+  backgroundTaskId,
 }: ToolBadgeProps) => {
   const { pretty: argsPretty, parsed: argsObject } = formatArgs(args);
   const { icon: ToolIcon, label, detail, description } = presentTool(toolName, argsObject);
@@ -103,7 +106,12 @@ export const ToolBadge = ({
           />
         ) : mcpTask || (bgEntry?.taskId && bgEntry?.startedAt) ? (
           <>
-            {mcpTask && <McpTaskChip task={mcpTask} />}
+            {mcpTask &&
+              (backgroundTaskId ? (
+                <BackgroundMcpTaskChip task={mcpTask} backgroundTaskId={backgroundTaskId} />
+              ) : (
+                <McpTaskChip task={mcpTask} />
+              ))}
             {bgEntry?.taskId && bgEntry?.startedAt && <BackgroundTaskMetadataDialogTrigger backgroundTask={bgEntry} />}
           </>
         ) : null

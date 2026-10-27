@@ -37,6 +37,8 @@ export interface ToolCardProps {
   input: any;
   output: any;
   modelOutput?: unknown;
+  /** The Mastra background task running the call, when it was deferred. */
+  backgroundTaskId?: string;
   toolCallId: string;
   /** Part state: v5 `output-available`/`output-error`/`input-available`, or v4 `result`/`call`. */
   state?: string;
@@ -66,6 +68,7 @@ export const ToolCardInner = ({
   input,
   output,
   modelOutput,
+  backgroundTaskId,
   toolCallId,
   state,
   errorText,
@@ -242,6 +245,7 @@ export const ToolCardInner = ({
         isNetwork={isNetwork}
         toolCalled={toolCalled}
         status={status}
+        backgroundTaskId={backgroundTaskId}
       />
       <ToolResultMedia modelOutput={modelOutput} />
       {mcpAppInfo && output !== undefined && (
