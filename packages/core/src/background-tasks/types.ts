@@ -298,6 +298,20 @@ export interface ToolBackgroundConfig {
    *   opts in via `_background` — eligibility only grants the *option*.
    */
   defaultDisposition?: 'foreground' | 'deferred';
+  /**
+   * Whether the model can override background execution per call with the
+   * `_background` field. Default: true.
+   *
+   * When `false`, the tool stays background-eligible but its input schema and
+   * the background system prompt omit `_background`, and any `_background`
+   * the model sends is ignored. Each overridable tool adds five optional
+   * parameters to the request schema, which counts against provider limits
+   * such as Anthropic's cap on optional parameters across strict tools.
+   *
+   * Combined with `defaultDisposition: 'foreground'`, the tool never runs in
+   * the background.
+   */
+  modelOverrides?: boolean;
   /** Override the manager's default timeout for this tool */
   timeoutMs?: number;
   /** Override retry config for this tool */
@@ -312,7 +326,13 @@ export interface ToolBackgroundConfig {
 
 export type AgentBackgroundToolConfig =
   | boolean
-  | { enabled: boolean; timeoutMs?: number; defaultDisposition?: 'foreground' | 'deferred' };
+  | {
+      enabled: boolean;
+      timeoutMs?: number;
+      defaultDisposition?: 'foreground' | 'deferred';
+      /** Overrides the tool's `background.modelOverrides` for this agent. */
+      modelOverrides?: boolean;
+    };
 
 export interface AgentBackgroundConfig {
   /**
@@ -329,7 +349,7 @@ export interface AgentBackgroundConfig {
    * tool run inline unless the call opts in via `_background`.
    * - `true`: allow the tool's own background config
    * - `false`: always foreground, even if the tool is eligible
-   * - `{ enabled, timeoutMs, defaultDisposition }`: override specific settings
+   * - `{ enabled, timeoutMs, defaultDisposition, modelOverrides }`: override specific settings
    * - `'all'`: make all tools eligible for background execution
    */
   tools?: Record<string, AgentBackgroundToolConfig> | 'all';

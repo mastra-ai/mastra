@@ -20,6 +20,7 @@ import type { ActorSignal } from '../../auth/ee';
 import {
   backgroundOverrideJsonSchema,
   backgroundOverrideZodSchema,
+  isModelBackgroundOverrideAllowed,
   isToolBackgroundEligible,
 } from '../../background-tasks';
 import { MastraBase } from '../../base';
@@ -307,14 +308,19 @@ export class CoreToolBuilder extends MastraBase {
     // every user tool's schema would advertise `_background` even though the
     // runtime would never honor it (issue #22724), and mutating every schema
     // with a v4 Zod field breaks v3-authored tools (keyValidator._parse
-    // crashes in schema-compat validation).
-    const isBackgroundEligible =
+    // crashes in schema-compat validation). Eligible tools that set
+    // `modelOverrides: false` also skip it: each injected `_background` adds
+    // five optional parameters, which can push strict tools past provider
+    // limits (issue #28638).
+    const backgroundConfigInput = {
+      toolName: this.options.name,
+      toolConfig: this.options.backgroundConfig,
+      agentConfig: this.options.agentBackgroundConfig,
+    };
+    const injectBackgroundOverride =
       !!input.backgroundTaskEnabled &&
-      isToolBackgroundEligible({
-        toolName: this.options.name,
-        toolConfig: this.options.backgroundConfig,
-        agentConfig: this.options.agentBackgroundConfig,
-      });
+      isToolBackgroundEligible(backgroundConfigInput) &&
+      isModelBackgroundOverrideAllowed(backgroundConfigInput);
     this.isResumableTool = Boolean(
       input.autoResumeSuspendedTools ||
       (this.originalTool as unknown as ToolAction<any, any>).id?.startsWith('agent-') ||
@@ -322,7 +328,7 @@ export class CoreToolBuilder extends MastraBase {
     );
 
     if (!isVercelTool(this.originalTool) && !isProviderDefinedTool(this.originalTool)) {
-      if (isBackgroundEligible || this.isResumableTool) {
+      if (injectBackgroundOverride || this.isResumableTool) {
         let schema = this.originalTool.inputSchema;
         if (typeof schema === 'function' && !isStandardSchemaWithJSON(schema)) {
           schema = schema();
@@ -344,7 +350,7 @@ export class CoreToolBuilder extends MastraBase {
         //   `TypeError: keyValidator._parse is not a function`.
         if (isZodObject(schema) && isZodV4Schema(schema)) {
           let nextSchema: z.ZodObject<any> = schema as z.ZodObject<any>;
-          if (isBackgroundEligible) {
+          if (injectBackgroundOverride) {
             nextSchema = safeExtendZodObject(nextSchema, {
               _background: backgroundOverrideZodSchema,
             });
@@ -362,7 +368,7 @@ export class CoreToolBuilder extends MastraBase {
             const properties: Record<string, JSONSchema7Definition> = { ...(jsonSchema.properties ?? {}) };
             const injectedKeys: string[] = [];
 
-            if (isBackgroundEligible) {
+            if (injectBackgroundOverride) {
               properties._background = backgroundOverrideJsonSchema;
               injectedKeys.push('_background');
             }

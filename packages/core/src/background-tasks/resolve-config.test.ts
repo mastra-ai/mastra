@@ -1,5 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { isToolBackgroundEligible, resolveBackgroundConfig } from './resolve-config';
+import { isModelBackgroundOverrideAllowed, isToolBackgroundEligible, resolveBackgroundConfig } from './resolve-config';
 
 /**
  * Regression tests for https://github.com/mastra-ai/mastra/issues/16783.
@@ -250,5 +250,109 @@ describe('isToolBackgroundEligible', () => {
         agentConfig: { disabled: true, tools: 'all' },
       }),
     ).toBe(false);
+  });
+});
+
+/**
+ * Regression tests for https://github.com/mastra-ai/mastra/issues/28638.
+ *
+ * `modelOverrides: false` keeps a tool background-eligible while removing the
+ * model's per-call `_background` override, so dispatch must ignore one the
+ * model sends anyway.
+ */
+describe('resolveBackgroundConfig with modelOverrides: false', () => {
+  it('ignores the model override and keeps the configured settings', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'foreground', timeoutMs: 1, maxRetries: 9 },
+      toolName: 'research',
+      toolConfig: { enabled: true, modelOverrides: false, timeoutMs: 5000, maxRetries: 2 },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved).toEqual({ runInBackground: true, disposition: 'deferred', timeoutMs: 5000, maxRetries: 2 });
+  });
+
+  it('keeps a foreground-default tool in the foreground even when the model asks for background', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'deferred' },
+      toolName: 'research',
+      toolConfig: { enabled: true, defaultDisposition: 'foreground', modelOverrides: false },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved.runInBackground).toBe(false);
+    expect(resolved.disposition).toBe('foreground');
+  });
+
+  it('honors an agent per-tool modelOverrides: false over the tool config', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { enabled: false },
+      toolName: 'research',
+      toolConfig: { enabled: true, modelOverrides: true },
+      agentConfig: { tools: { research: { enabled: true, modelOverrides: false } } },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved.disposition).toBe('deferred');
+  });
+
+  it('still applies the model override when modelOverrides is unset', () => {
+    const resolved = resolveBackgroundConfig({
+      llmBgOverrides: { disposition: 'foreground' },
+      toolName: 'research',
+      toolConfig: { enabled: true },
+      managerConfig: { enabled: true },
+    });
+
+    expect(resolved.disposition).toBe('foreground');
+  });
+});
+
+describe('isModelBackgroundOverrideAllowed', () => {
+  it('defaults to true', () => {
+    expect(isModelBackgroundOverrideAllowed({ toolName: 'research', toolConfig: { enabled: true } })).toBe(true);
+  });
+
+  it('reads the tool config', () => {
+    expect(
+      isModelBackgroundOverrideAllowed({ toolName: 'research', toolConfig: { enabled: true, modelOverrides: false } }),
+    ).toBe(false);
+  });
+
+  it('lets the agent per-tool entry win in either direction', () => {
+    expect(
+      isModelBackgroundOverrideAllowed({
+        toolName: 'research',
+        toolConfig: { enabled: true, modelOverrides: false },
+        agentConfig: { tools: { research: { enabled: true, modelOverrides: true } } },
+      }),
+    ).toBe(true);
+    expect(
+      isModelBackgroundOverrideAllowed({
+        toolName: 'research',
+        toolConfig: { enabled: true },
+        agentConfig: { tools: { research: { enabled: true, modelOverrides: false } } },
+      }),
+    ).toBe(false);
+  });
+
+  it('falls back to the tool config for boolean entries and tools: "all"', () => {
+    const toolConfig = { enabled: true, modelOverrides: false };
+    expect(
+      isModelBackgroundOverrideAllowed({
+        toolName: 'research',
+        toolConfig,
+        agentConfig: { tools: { research: true } },
+      }),
+    ).toBe(false);
+    expect(isModelBackgroundOverrideAllowed({ toolName: 'research', toolConfig, agentConfig: { tools: 'all' } })).toBe(
+      false,
+    );
+  });
+
+  it('strips agent- and workflow- prefixes', () => {
+    const agentConfig = { tools: { biExecutor: { enabled: true, modelOverrides: false } } };
+    expect(isModelBackgroundOverrideAllowed({ toolName: 'agent-biExecutor', agentConfig })).toBe(false);
+    expect(isModelBackgroundOverrideAllowed({ toolName: 'workflow-biExecutor', agentConfig })).toBe(false);
   });
 });
