@@ -1,10 +1,12 @@
 /**
- * Where a DurableAgent run keeps its step records (`accumulatedSteps`).
+ * Where a DurableAgent run keeps its step records (`accumulatedSteps`), and
+ * that a stored run finishes with all of them.
  *
  * New runs seed them into workflow state once and append there, so a persisted
  * snapshot holds one copy (in `value`) instead of one per step payload. Runs
  * persisted before that change keep them in step payloads and must finish that
- * way.
+ * way. A run stored in one workflow storage version finishes in it after the
+ * agent starts storing new runs in the other.
  */
 import type { LanguageModelV2 } from '@ai-sdk/provider-v5';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
@@ -19,6 +21,7 @@ import { Agent } from '../../agent';
 import { DurableStepIds } from '../constants';
 import { createDurableAgent } from '../create-durable-agent';
 import { globalRunRegistry } from '../run-registry';
+import { storeRunsInV2 } from './storage-version';
 
 const usage = { inputTokens: 1, outputTokens: 1, totalTokens: 2 };
 
@@ -67,18 +70,19 @@ describe('DurableAgent step records', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     globalRunRegistry.clear();
     await pubsub.close();
   });
 
-  async function suspendAtApproval() {
-    const storage = new InMemoryStore();
+  /** `v2` sets whether it stores new runs in storage v2; it defaults to the agent's default. */
+  function createAgent(storage: InMemoryStore, model: LanguageModelV2, v2?: boolean) {
     const agent = createDurableAgent({
       agent: new Agent({
         id: 'steps-agent',
         name: 'Steps Agent',
         instructions: 'Use the tools.',
-        model: createModel() as LanguageModelV2,
+        model,
         tools: {
           lookup: createTool({
             id: 'lookup',
@@ -97,9 +101,18 @@ describe('DurableAgent step records', () => {
       }),
       pubsub,
     });
+    if (v2 !== undefined) storeRunsInV2(agent, v2);
     // Persist `running` checkpoints too, so the resumed run's writes are observable.
     new Mastra({ logger: false, storage, pubsub, agents: { stepsAgent: agent }, recovery: { durableAgents: 'auto' } });
+    return agent;
+  }
 
+  async function suspendAtApproval({
+    storage = new InMemoryStore(),
+    model = createModel() as LanguageModelV2,
+    v2,
+  }: { storage?: InMemoryStore; model?: LanguageModelV2; v2?: boolean } = {}) {
+    const agent = createAgent(storage, model, v2);
     const onSuspended = vi.fn();
     const initial = await agent.stream('Go', { onSuspended });
     await vi.waitFor(() => expect(onSuspended).toHaveBeenCalled());
@@ -110,9 +123,9 @@ describe('DurableAgent step records', () => {
       expect(runs).toHaveLength(1);
       return runs[0]!;
     };
-    const resumeToFinish = async () => {
+    const resumeToFinish = async (by = agent) => {
       const onFinish = vi.fn();
-      const resumed = await agent.resume(initial.runId, { approved: true }, { onFinish });
+      const resumed = await by.resume(initial.runId, { approved: true }, { onFinish });
       await vi.waitFor(() => expect(onFinish).toHaveBeenCalled());
       resumed.cleanup();
       initial.cleanup();
@@ -139,8 +152,62 @@ describe('DurableAgent step records', () => {
     expect(finish.text).toBe('done');
   });
 
+  it('keeps the transcript along with them when a step is aborted', async () => {
+    // The first step aborts, so its partial answer is a new message: one added
+    // to an earlier response message would also show up in the state the
+    // step started from, which shares that message.
+    const model = new MockLanguageModelV2({
+      doStream: async ({ abortSignal }) => ({
+        stream: new ReadableStream({
+          start(controller) {
+            controller.enqueue({ type: 'stream-start', warnings: [] });
+            controller.enqueue({ type: 'text-start', id: 'partial' });
+            controller.enqueue({ type: 'text-delta', id: 'partial', delta: 'Partial answer' });
+            abortSignal?.addEventListener(
+              'abort',
+              () => {
+                const error = new Error('Aborted');
+                error.name = 'AbortError';
+                controller.error(error);
+              },
+              { once: true },
+            );
+          },
+        }),
+        rawCall: { rawPrompt: null, rawSettings: {} },
+      }),
+    });
+    const storage = new InMemoryStore();
+    // Asserts on v1 snapshot writes.
+    const agent = createAgent(storage, model as LanguageModelV2, false);
+    const workflows = (await storage.getStore('workflows'))!;
+    const written: WorkflowRunState['value'][] = [];
+    const persist = workflows.persistWorkflowSnapshot.bind(workflows);
+    workflows.persistWorkflowSnapshot = async args => {
+      written.push(JSON.parse(JSON.stringify(args.snapshot.value)));
+      return persist(args);
+    };
+    const onAbort = vi.fn();
+
+    const { output, abort, cleanup } = await agent.stream('Go', { onAbort });
+    for await (const chunk of output.fullStream) {
+      if (chunk.type === 'text-delta') await abort();
+    }
+    await vi.waitFor(() => expect(onAbort).toHaveBeenCalled());
+    cleanup();
+
+    // A run that crashes between the aborted step and finishing is recovered from these.
+    const afterAbort = written.filter(state => state.accumulatedSteps?.length === 1 && state.messageListState);
+    expect(afterAbort.length).toBeGreaterThan(0);
+    for (const state of afterAbort) {
+      expect(state.accumulatedSteps).toMatchObject([{ finishReason: 'abort' }]);
+      expect(JSON.stringify(state.messageListState)).toContain('Partial answer');
+    }
+  });
+
   it('finishes a run persisted with them in step payloads, keeping them there', async () => {
-    const { workflows, load, resumeToFinish } = await suspendAtApproval();
+    // Runs with step records in step payloads were only ever stored in v1.
+    const { workflows, load, resumeToFinish } = await suspendAtApproval({ v2: false });
 
     // Rewrite the suspended run into the shape persisted before the move:
     // no step records in workflow state, the nested run's input carries them.
@@ -171,5 +238,44 @@ describe('DurableAgent step records', () => {
     for (const snapshot of writes) {
       expect(snapshot.value).not.toHaveProperty('accumulatedSteps');
     }
+  });
+
+  it.each([
+    [1, 2],
+    [2, 1],
+  ])('finishes a run stored in v%i in that version after a restart stores new runs in v%i', async (from, to) => {
+    const storage = new InMemoryStore();
+    const model = createModel() as LanguageModelV2;
+    const { workflows, resumeToFinish } = await suspendAtApproval({ storage, model, v2: from === 2 });
+
+    const writesIn = (version: 1 | 2) =>
+      (version === 1
+        ? [vi.spyOn(workflows, 'persistWorkflowSnapshot'), vi.spyOn(workflows, 'updateWorkflowState')]
+        : [
+            vi.spyOn(workflows, 'appendWorkflowRunEntries'),
+            vi.spyOn(workflows, 'writeWorkflowRunCheckpoint'),
+            vi.spyOn(workflows, 'updateWorkflowRunHeader'),
+          ]
+      ).map(spy => spy.mock.calls);
+    const count = (calls: unknown[][][]) => calls.reduce((n, c) => n + c.length, 0);
+    const [fromWrites, toWrites] = [writesIn(from as 1 | 2), writesIn(to as 1 | 2)];
+
+    // A new process, whose agent stores new runs in the other version.
+    globalRunRegistry.clear();
+    const restarted = createAgent(storage, model, to === 2);
+
+    const finish = await resumeToFinish(restarted);
+    expect(finish.steps.map((step: any) => step.finishReason)).toEqual(['tool-calls', 'tool-calls', 'stop']);
+    expect(JSON.stringify(finish.steps[0])).toContain('lookup');
+    expect(finish.text).toBe('done');
+    expect(count(fromWrites)).toBeGreaterThan(0);
+    expect(count(toWrites)).toBe(0);
+
+    // The restarted agent's new runs are stored in the other version.
+    const onFinish = vi.fn();
+    const fresh = await restarted.stream('Go', { onFinish });
+    await vi.waitFor(() => expect(onFinish).toHaveBeenCalled());
+    fresh.cleanup();
+    expect(count(toWrites)).toBeGreaterThan(0);
   });
 });

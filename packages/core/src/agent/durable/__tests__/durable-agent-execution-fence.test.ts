@@ -49,6 +49,7 @@ import {
 import { runInRunFenceScope } from '../run-fence-scope';
 import { globalRunRegistry } from '../run-registry';
 import { emitChunkEvent, emitErrorEvent } from '../stream-adapter';
+import { storeRunsInV2 } from './storage-version';
 
 const THREAD = 'fence-thread';
 const RESOURCE = 'fence-resource';
@@ -392,7 +393,8 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
         model: model.model as LanguageModelV2,
         memory,
       });
-      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      // The recoverer's checkpoint below is a v1 snapshot, which only replaces a run stored in v1.
+      const durableAgent = storeRunsInV2(createDurableAgent({ agent: baseAgent, pubsub }), false);
       new Mastra({ agents: { 'fence-agent': durableAgent as any }, logger: false, storage, pubsub });
 
       const result = await durableAgent.stream('What is the answer?', {
@@ -1562,7 +1564,14 @@ describe.each(['durable', 'evented'] as const)('%s agent: the storage fence cove
     const workflows = storage.stores.workflows!;
     let segment = 0;
     const writes: Array<{ segment: number; workflowName: string; runId: string; fence: unknown }> = [];
-    for (const method of ['persistWorkflowSnapshot', 'updateWorkflowResults', 'updateWorkflowState'] as const) {
+    for (const method of [
+      'persistWorkflowSnapshot',
+      'updateWorkflowResults',
+      'updateWorkflowState',
+      'appendWorkflowRunEntries',
+      'writeWorkflowRunCheckpoint',
+      'updateWorkflowRunHeader',
+    ] as const) {
       const write = workflows[method].bind(workflows) as (args: any) => Promise<any>;
       vi.spyOn(workflows, method).mockImplementation(async (args: any) => {
         writes.push({
