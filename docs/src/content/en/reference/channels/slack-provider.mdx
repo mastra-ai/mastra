@@ -125,6 +125,14 @@ await slack.configure({
       "How tool calls are rendered in Slack: `'cards'`, `'text'`, `'timeline'`, `'grouped'`, `'hidden'`, or a function. `'hidden'` suppresses tool call/result rendering entirely. `'timeline'` and `'grouped'` require streaming. With `streaming: false`, only static modes are available and the default is `'cards'`.",
   },
   {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who can approve or deny tool calls. By default, only the user whose message triggered the call can respond. Set `'anyone'` to allow another member of the shared Slack channel to approve or deny. This bypasses only the requester check; the action still requires a pending approval in the same thread.",
+  },
+  {
     name: 'typingStatus',
     type: 'boolean | TypingStatusFn',
     isOptional: true,

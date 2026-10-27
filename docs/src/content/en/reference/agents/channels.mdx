@@ -245,6 +245,14 @@ const agent = new Agent({
       'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the streaming widget, or `undefined` to skip rendering that event. Add `openIfEmpty: false` to a stream result when its chunk should only apply to an active streaming session. Approve/deny prompts render as a separate built-in card in every string mode; a `toolDisplay` function receives the `approval` event and may replace the card by returning `{ kind: "post", message }`.',
   },
   {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who may approve or deny a pending tool call in this adapter's channel. By default, only the user who triggered the call can respond. Set `'anyone'` to allow another channel member to respond. Pending-approval and thread-mapping checks still apply.",
+  },
+  {
     name: 'typingStatus',
     type: 'boolean | ((chunk: AgentChunkType, ctx: TypingStatusContext) => string | false | null | undefined | void)',
     isOptional: true,
