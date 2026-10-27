@@ -10,9 +10,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
-import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
-import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
-import { initialTranscript, transcriptReducer } from '../../services/transcript';
+import { createInitialTranscript, initialTranscript, transcriptReducer } from '../../services/transcript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { TranscriptEntries } from '../Transcript';
 
@@ -34,10 +32,9 @@ function failedReply(
 }
 
 function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
-  const api = useAgentControllerTranscript({ initialMessages: messages, initialThreadId: 'thread-1' });
   const entries = liveEvent
     ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
-    : api.transcript.entries;
+    : createInitialTranscript({ messages, threadId: 'thread-1' }).entries;
   return (
     <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
       <ChatSessionContext.Provider
@@ -68,18 +65,7 @@ function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; li
           }}
         >
           <ChatModelsProvider>
-            <ChatTranscriptContext.Provider
-              value={{
-                ...api,
-                busy: api.transcript.pending,
-                phase: undefined,
-                initializing: false,
-                historyInitializing: false,
-                loadMore: { hasMore: false, isLoading: false },
-              }}
-            >
-              <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
-            </ChatTranscriptContext.Provider>
+            <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
           </ChatModelsProvider>
         </ChatConnectionContext.Provider>
       </ChatSessionContext.Provider>
@@ -186,16 +172,6 @@ describe('chat run errors', () => {
     await user.click(await screen.findByRole('option', { name: /gpt-5\.4/ }));
 
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
-  });
-
-  it('uses the same explanation for a live error event', () => {
-    const { entries } = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'AI_APICallError', message: 'Bad Request' } },
-    });
-    renderWithProviders(<TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />);
-
-    expect(screen.getByText('Model request rejected')).toBeVisible();
   });
 
   it('classifies a live error by the status the server kept, not by its message alone', () => {

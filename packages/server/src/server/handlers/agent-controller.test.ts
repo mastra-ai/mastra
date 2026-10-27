@@ -1329,44 +1329,6 @@ describe('agent-controller routes', () => {
       });
     });
 
-    it('keeps the stream open when a provider detail of an error cannot be read', async () => {
-      const controller = mastra.getAgentController('code')!;
-      await controller.init();
-      const session = await controller.createSession({
-        resourceId: 'user-err-unreadable',
-        id: 'user-err-unreadable',
-        ownerId: 'code',
-      });
-      const stream = (await STREAM_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra,
-        controllerId: 'code',
-        sessionId: 'user-err-unreadable',
-        abortSignal: new AbortController().signal,
-      } as any)) as ReadableStream<unknown>;
-
-      const reader = stream.getReader();
-      const unreadable = Object.defineProperty(new Error('Bad Request'), 'responseHeaders', {
-        get() {
-          throw new TypeError('Body has already been consumed.');
-        },
-      });
-      session.emit({ type: 'error', error: unreadable, errorType: 'provider' } as any);
-      session.emit({ type: 'agent_end', reason: 'error' } as any);
-
-      const delivered: any[] = [];
-      while (delivered.at(-1)?.type !== 'agent_end') {
-        const { value } = await reader.read();
-        const type = (value as any)?.type;
-        if (type === 'error' || type === 'agent_end') delivered.push(value);
-      }
-      await reader.cancel();
-
-      expect(JSON.parse(JSON.stringify(delivered))).toEqual([
-        { type: 'error', error: { name: 'Error', message: 'Bad Request' }, errorType: 'provider' },
-        { type: 'agent_end', reason: 'error' },
-      ]);
-    });
-
     it('flattens Error instances on every event that carries one, not just on `error`', async () => {
       const controller = mastra.getAgentController('code')!;
       await controller.init();

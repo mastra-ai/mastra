@@ -1,6 +1,3 @@
-// Reads an APICallError, a raw stream error frame, a cause chain or the saved
-// `{ name, message, statusCode?, responseBody? }` identity. The status and symbolic codes are the provider's
-// verdict; wording only narrows an invalid request, or speaks when the provider named nothing.
 export type ProviderFailureKind =
   | 'auth'
   | 'quota'
@@ -49,7 +46,6 @@ const TIMED_OUT = /timed ?out|timeout|deadline[_ ]exceeded/i;
 const RATE_LIMITED = /rate[_ ]limit|too many requests|resource_exhausted|throttl/i;
 const UNAVAILABLE =
   /internal server error|server_error|internal_error|service[_ ]?unavailable|temporarily[_ ]?unavailable|bad gateway|overloaded/i;
-// What an HTTP client reports when the body said nothing; not a reason a person can act on.
 const HTTP_REASON_PHRASE =
   /^(?:bad request|unauthorized|payment required|forbidden|not found|method not allowed|not acceptable|proxy authentication required|request timeout|conflict|gone|length required|precondition failed|(?:payload|content|request entity) too large|(?:request-)?uri too long|unsupported media type|(?:requested )?range not satisfiable|expectation failed|i'm a teapot|misdirected request|unprocessable (?:entity|content)|locked|failed dependency|too early|upgrade required|precondition required|too many requests|request header fields too large|unavailable for legal reasons|internal server error|not implemented|bad gateway|service unavailable|gateway timeout|http version not supported|variant also negotiates|insufficient storage|loop detected|not extended|network authentication required)\.?$/i;
 
@@ -185,7 +181,6 @@ function transientKindFromWording(evidence: string): ProviderFailureKind | undef
   return undefined;
 }
 
-/** The innermost sentence a provider wrote for a person, unwrapped from envelopes, stringified layers and a wrapped provider response. */
 export function providerErrorReason(error: unknown): string | undefined {
   const reason = innermostReason(error, 0);
   return reason === undefined || reason.length <= MAX_REASON_LENGTH ? reason : `${reason.slice(0, MAX_REASON_LENGTH)}…`;

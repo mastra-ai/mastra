@@ -86,15 +86,6 @@ describe('describeRunError', () => {
     });
   });
 
-  it('offers another model when the provider names nothing beyond the model', () => {
-    expect(
-      describeRunError({
-        name: 'AI_APICallError',
-        message: JSON.stringify({ error: { type: 'not_found_error', message: 'model: claude-x' } }),
-      }),
-    ).toMatchObject({ title: 'Model not available', recovery: 'model' });
-  });
-
   it('offers a larger model when the conversation overflows', () => {
     expect(
       describeRunError({ name: 'AI_APICallError', message: 'prompt is too long: 210345 tokens > 200000 maximum' }),

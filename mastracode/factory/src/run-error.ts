@@ -10,7 +10,6 @@ export interface RunErrorDescription {
   recovery?: RunErrorRecovery;
 }
 
-/** A live error, a wire error or a saved error part: classification reads whatever provider facts it carries. */
 export interface RunErrorIdentity {
   name: string;
   message: string;

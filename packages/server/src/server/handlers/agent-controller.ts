@@ -641,42 +641,27 @@ function toWireEvent(event: AgentControllerEvent): JsonReadyAgentControllerEvent
 }
 
 type WireError = Extract<JsonReadyAgentControllerEvent, { type: 'error' }>['error'];
+type ProviderCallError = Error & {
+  statusCode?: unknown;
+  responseBody?: unknown;
+  responseHeaders?: Record<string, unknown>;
+};
 
 const MAX_WIRE_RESPONSE_BODY_LENGTH = 2000;
-const REQUEST_ID_HEADERS = ['request-id', 'x-request-id'];
 
 /** Keeps what core saves on an error part, so a live error reads the same as a reloaded one. */
-function toWireError(error: Error): WireError {
-  const wire: WireError = { name: error.name, message: error.message };
-  const statusCode = readField(error, 'statusCode');
-  if (typeof statusCode === 'number' && Number.isInteger(statusCode)) wire.statusCode = statusCode;
-  const responseBody = readField(error, 'responseBody');
+function toWireError({ name, message, statusCode, responseBody, responseHeaders }: ProviderCallError): WireError {
+  const wire: WireError = { name, message };
+  if (typeof statusCode === 'number') wire.statusCode = statusCode;
   if (typeof responseBody === 'string' && responseBody.trim()) {
     wire.responseBody =
       responseBody.length > MAX_WIRE_RESPONSE_BODY_LENGTH
         ? `${responseBody.slice(0, MAX_WIRE_RESPONSE_BODY_LENGTH)}…`
         : responseBody;
   }
-  const requestId = readRequestId(readField(error, 'responseHeaders'));
-  if (requestId) wire.requestId = requestId;
+  const requestId = responseHeaders?.['request-id'] ?? responseHeaders?.['x-request-id'];
+  if (typeof requestId === 'string' && requestId) wire.requestId = requestId;
   return wire;
-}
-
-function readRequestId(headers: unknown): string | undefined {
-  if (!headers || typeof headers !== 'object') return undefined;
-  for (const header of REQUEST_ID_HEADERS) {
-    const value = readField(headers, header);
-    if (typeof value === 'string' && value.trim()) return value.trim();
-  }
-  return undefined;
-}
-
-function readField(source: object, field: string): unknown {
-  try {
-    return (source as Record<string, unknown>)[field];
-  } catch {
-    return undefined;
-  }
 }
 
 export const STREAM_AGENT_CONTROLLER_SESSION_ROUTE = createRoute({
