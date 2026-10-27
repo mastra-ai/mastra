@@ -782,11 +782,19 @@ describe('createMastraCode', () => {
     );
   });
 
-  it.each([{}, { subagents: undefined }])(
-    'registers native defaults when subagents is omitted or undefined (%j)',
-    async config => {
-      const { createMastraCode } = await import('../index.js');
-      await createMastraCode(config);
+  it.each([{}, { subagents: undefined }])('registers no subagents when subagents is omitted (%j)', async config => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode(config);
+    expect(controllerConstructorMock.mock.calls[0]![0].subagents).toEqual([]);
+  });
+
+  it.each([['builtinSubagents'], ['resolveSubagentsSetting(true)']])(
+    'registers the built-in subagents with mode default models when opted in via %s',
+    async via => {
+      const { createMastraCode, builtinSubagents, resolveSubagentsSetting } = await import('../index.js');
+      await createMastraCode({
+        subagents: via === 'builtinSubagents' ? [...builtinSubagents] : resolveSubagentsSetting(true),
+      });
       const { subagents, modes } = controllerConstructorMock.mock.calls[0]![0];
       expect(subagents.map((agent: { id: string }) => agent.id)).toEqual(['explore', 'plan', 'execute']);
       for (const [index, modeId] of ['fast', 'plan', 'build'].entries()) {
@@ -806,7 +814,11 @@ describe('createMastraCode', () => {
 
   it('uses the default custom mode model when native modes are absent', async () => {
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({
+      modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }],
+      subagents: [...builtinSubagents],
+    });
     expect(
       controllerConstructorMock.mock.calls[0]![0].subagents.map(
         (agent: { defaultModelId: string }) => agent.defaultModelId,
@@ -866,7 +878,8 @@ describe('createMastraCode', () => {
   it('filters disabled workspace tools from native subagent allowlists', async () => {
     const { createMastraCode } = await import('../index.js');
     const { executeSubagent } = await import('../agents/subagents/execute.js');
-    await createMastraCode({ disabledTools: ['execute_command'] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({ disabledTools: ['execute_command'], subagents: [...builtinSubagents] });
     const registered = controllerConstructorMock.mock.calls[0]![0].subagents as {
       id: string;
       allowedWorkspaceTools?: string[];
@@ -1745,12 +1758,23 @@ describe('createMastraCode', () => {
     // Third matcher: provider server failures use the same retry budget and visible status.
     const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
-    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
+    expect(
+      serverErrorPolicy.match!({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }),
+    ).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
     // Gateway timeouts (504) exhaust the transient budget before the
     // account-rotation processor may classify them as a persistent outage.
     expect(serverErrorPolicy.match!(Object.assign(new Error('Gateway timeout'), { statusCode: 504 }))).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Server error'), { statusCode: 500 }))).toBe(true);
+    expect(
+      serverErrorPolicy.match!(
+        Object.assign(new Error('Service Unavailable'), {
+          statusCode: 503,
+          responseBody: '{"error":{"message":"prompt is too long: 210345 tokens > 200000 maximum"}}',
+        }),
+      ),
+    ).toBe(false);
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');

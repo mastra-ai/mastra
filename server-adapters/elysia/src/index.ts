@@ -621,7 +621,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
       if (hasAuth) {
         const hasPermission = await loadHasPermission();
         if (hasPermission) {
-          const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+          const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
           const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, ctx.requestContext);
           if (permissionError) {
             return new Response(JSON.stringify({ error: permissionError.error, message: permissionError.message }), {
@@ -893,7 +893,7 @@ export class MastraServer extends MastraServerBase<Elysia, Request, Response> {
             if (hasAuth) {
               const hasPermission = await loadHasPermission();
               if (hasPermission) {
-                const userPermissions = ctx.requestContext.get('userPermissions') as string[] | undefined;
+                const userPermissions = ctx.requestContext.get('mastra__userPermissions') as string[] | undefined;
                 const permissionError = this.checkRoutePermission(
                   serverRoute,
                   userPermissions,

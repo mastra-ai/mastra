@@ -31,11 +31,31 @@ export function MetricsShareList({
   className,
   ...props
 }: MetricsShareListProps) {
-  const { columns = [], valueLabel, valueWidth = 'w-14' } = props;
+  const {
+    columns = [],
+    valueLabel,
+    valueWidth = 'w-14',
+    valueSortKey,
+    valueDescription,
+    showShare = true,
+    showStrip = true,
+    sort,
+    onSortChange,
+  } = props;
   const belowStrip = headerPlacement === 'below-strip';
   const header = showHeader && (
     <div className={cn('flex justify-end', belowStrip && 'pt-3 pb-0.5')}>
-      <MetricsShareListHeader columns={columns} valueLabel={valueLabel} valueWidth={valueWidth} />
+      <MetricsShareListHeader
+        columns={columns}
+        valueLabel={valueLabel}
+        valueWidth={valueWidth}
+        valueSortKey={valueSortKey}
+        valueDescription={valueDescription}
+        showShare={showShare}
+        showStrip={showStrip}
+        sort={sort}
+        onSortChange={onSortChange}
+      />
     </div>
   );
   return (
@@ -62,6 +82,9 @@ function ShareListBody({
   emptyState = 'No data in this range.',
   isLoading = false,
   LinkComponent,
+  showShare = true,
+  showStrip = true,
+  sort,
   header,
 }: Omit<MetricsShareListProps, 'showHeader' | 'headerPlacement' | 'className'> & {
   /** Column headers between the strip and the rows (`headerPlacement="below-strip"`). */
@@ -78,6 +101,8 @@ function ShareListBody({
         rows={overflow === 'other' ? limit + 1 : limit}
         columns={columns}
         valueWidth={valueWidth}
+        showShare={showShare}
+        showStrip={showStrip}
         header={header}
       />
     );
@@ -97,30 +122,32 @@ function ShareListBody({
 
   const total = sumShares(ranked);
   const paging = overflow === 'more';
-  const { shown, rest } = paging
-    ? pageRows(ranked, { count, activeKey, color, palette })
-    : foldRows(ranked, { limit, other, color, palette });
-  const segments = stripSegments(shown, rest);
+  const { shown, strip, rest } = paging
+    ? pageRows(ranked, { count, activeKey, color, palette, sort })
+    : foldRows(ranked, { limit, other, color, palette, sort });
+  const segments = stripSegments(strip, rest);
   const litSegment = hoveredSegment(shown, hover);
   const clearHover = () => setHover(undefined);
 
   return (
     <>
-      <div className="flex h-2 gap-0.5" onMouseLeave={clearHover}>
-        {segments.map(s => (
-          <span
-            key={s.key}
-            data-testid="metrics-share-segment"
-            onMouseEnter={() => setHover(s.key)}
-            className="h-full min-w-[3px] transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
-            style={{
-              flex: `${s.grow} 1 0`,
-              backgroundColor: s.paint.color,
-              opacity: s.paint.alpha * (isSegmentDimmed(s.key, litSegment) ? 0.3 : 1),
-            }}
-          />
-        ))}
-      </div>
+      {showStrip && (
+        <div className="flex h-2 gap-0.5" onMouseLeave={clearHover}>
+          {segments.map(s => (
+            <span
+              key={s.key}
+              data-testid="metrics-share-segment"
+              onMouseEnter={() => setHover(s.key)}
+              className="h-full min-w-[3px] transition-opacity duration-150 first:rounded-l-full last:rounded-r-full"
+              style={{
+                flex: `${s.grow} 1 0`,
+                backgroundColor: s.paint.color,
+                opacity: s.paint.alpha * (isSegmentDimmed(s.key, litSegment) ? 0.3 : 1),
+              }}
+            />
+          ))}
+        </div>
+      )}
       {header}
       <ul className="grid min-w-0 grid-cols-1 gap-0.5" onMouseLeave={clearHover}>
         {shown.map(r => (
@@ -129,7 +156,8 @@ function ShareListBody({
             row={r}
             columns={columns}
             valueWidth={valueWidth}
-            share={fmtShare(r.share, total)}
+            share={showShare ? fmtShare(r.share, total) : undefined}
+            swatch={showStrip}
             highlighted={hover === r.key || activeKey === r.key}
             dimmed={isRowDimmed(r, hover)}
             onHover={() => setHover(r.key)}

@@ -21,10 +21,13 @@ export default async function setup(project: TestProject) {
   }
 
   // Local path: snapshot-version and publish this suite's roots ourselves.
+  // Resolve verdaccio first: prepareMonorepo mutates the repo, and a throw
+  // after it would skip the teardown that restores it. verdaccio only
+  // exports `.` and `./package.json`, so locate the bin from the manifest.
+  const verdaccioPath = join(dirname(require.resolve('verdaccio/package.json')), 'bin', 'verdaccio');
   const tag = 'softwarefactory-e2e-test';
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
-  const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');
   const port = await getPort();
   const registryLocation = await mkdtemp(join(tmpdir(), 'mastra-softwarefactory-registry'));
   await copyFile(join(__dirname, '../_local-registry-setup/verdaccio.yaml'), join(registryLocation, 'verdaccio.yaml'));

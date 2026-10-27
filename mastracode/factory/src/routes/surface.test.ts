@@ -677,7 +677,7 @@ describe('prepareFactoryRuleBinding', () => {
     ).resolves.toHaveLength(0);
   });
 
-  it("names the card's repository when it is linked but turned out of the environment", async () => {
+  it("names the card's repository when it is linked but not pre-cloned", async () => {
     const { seeded, sourceControl, project, projectRepository, github } = await seedFactoryWithRepository();
     await sourceControl.projectRepositories.update({
       orgId: 'org-1',
@@ -697,7 +697,7 @@ describe('prepareFactoryRuleBinding', () => {
     expect(error).toBeInstanceOf(FactoryDispatchError);
     expect(error).toMatchObject({ code: 'source_repository_missing' });
     expect(error.message).toBe(
-      "Repository mastra-ai/mastra is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.",
+      'Repository mastra-ai/mastra is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.',
     );
     expect(prepare).not.toHaveBeenCalled();
   });

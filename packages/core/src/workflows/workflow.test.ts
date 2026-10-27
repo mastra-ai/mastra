@@ -10,6 +10,7 @@ import type {
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../agent';
+import { FGADeniedError } from '../auth/ee/fga-check';
 import { MastraNonRetryableError } from '../error';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import { MastraLanguageModelV2Mock as MockLanguageModelV2 } from '../loop/test-utils/MastraLanguageModelV2Mock';
@@ -1442,6 +1443,63 @@ describe('Workflow (Default Engine Specifics)', () => {
 
       await expect(run.resume({ resumeData: { approved: true } })).resolves.toMatchObject({ status: 'success' });
       expect(fgaProvider.require).not.toHaveBeenCalled();
+    });
+
+    describe('nested user workflows', () => {
+      function createNestedWorkflows() {
+        const step = createStep({
+          id: 'nested-fga-step',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          execute: async ({ inputData }) => inputData,
+        });
+        const inner = createWorkflow({
+          id: 'fga-inner',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [step],
+        })
+          .then(step)
+          .commit();
+        const outer = createWorkflow({
+          id: 'fga-outer',
+          inputSchema: z.object({ value: z.string() }),
+          outputSchema: z.object({ value: z.string() }),
+          steps: [inner],
+        })
+          .then(inner)
+          .commit();
+        return outer;
+      }
+
+      async function runAs(grants: string[]) {
+        const fgaProvider = {
+          require: vi.fn(async (user: any, { resource, permission }: any) => {
+            if (!grants.includes(`${user?.id}:${resource.id}:${permission}`)) {
+              throw new FGADeniedError(user, resource, permission);
+            }
+          }),
+          check: vi.fn(),
+          filterAccessible: vi.fn(),
+        };
+        const outer = createNestedWorkflows();
+        new Mastra({ logger: false, storage: new MockStore(), server: { fga: fgaProvider }, workflows: { outer } });
+        const requestContext = new RequestContext();
+        requestContext.set('user', { id: 'user-1' });
+        const run = await outer.createRun();
+        return run.start({ inputData: { value: 'ok' }, requestContext });
+      }
+
+      it('denies a user who may run the outer workflow but not the nested one', async () => {
+        const result = await runAs(['user-1:fga-outer:workflows:execute']);
+        expect(result.status).toBe('failed');
+        expect(JSON.stringify(result)).toContain('fga-inner');
+      });
+
+      it('runs when the user may execute both workflows', async () => {
+        const result = await runAs(['user-1:fga-outer:workflows:execute', 'user-1:fga-inner:workflows:execute']);
+        expect(result).toMatchObject({ status: 'success', result: { value: 'ok' } });
+      });
     });
   });
 

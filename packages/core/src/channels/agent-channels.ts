@@ -774,7 +774,7 @@ export class AgentChannels {
                             )
                             .filter((id): id is string => !!id),
                         );
-                        if (!requesterId && authors.size > 1) {
+                        if (adapterConfig?.toolApprovers !== 'anyone' && !requesterId && authors.size > 1) {
                           this.log('info', 'Ignoring tool approval action: requester is ambiguous', actionEventContext);
                           return;
                         }
@@ -795,7 +795,7 @@ export class AgentChannels {
               // Only the user whose message triggered the tool call may answer
               // its approval card. Skip the check when either identity is unknown.
               const actorId = event.user?.userId;
-              if (requesterId && actorId && requesterId !== actorId) {
+              if (adapterConfig?.toolApprovers !== 'anyone' && requesterId && actorId && requesterId !== actorId) {
                 this.log('info', `Ignoring tool approval action from ${actorId}: only ${requesterId} may answer`, {
                   ...actionEventContext,
                   requesterId,
@@ -972,7 +972,7 @@ export class AgentChannels {
                   const error = err instanceof Error ? err : new Error(String(err));
                   const adapterConfig = this.adapterConfigs[event.adapter.name];
                   const errorMessage = adapterConfig?.formatError
-                    ? adapterConfig.formatError(error)
+                    ? adapterConfig.formatError(error, { requestContext: handlerContext.requestContext })
                     : `❌ Error: ${error.message}`;
                   await thread.post(errorMessage);
                 }
@@ -1375,11 +1375,16 @@ export class AgentChannels {
         eventType,
       );
     } catch (err) {
-      await this.handleRunError(chatThread, message, err);
+      await this.handleRunError(chatThread, message, err, requestContext);
     }
   }
 
-  private async handleRunError(chatThread: Thread, message: Message, err: unknown): Promise<void> {
+  private async handleRunError(
+    chatThread: Thread,
+    message: Message,
+    err: unknown,
+    requestContext: RequestContext,
+  ): Promise<void> {
     const error = err instanceof Error ? err : new Error(String(err));
     // A refused request is not a malfunction: the host decided this sender
     // gets nothing. Log it and stop — posting would echo the host's
@@ -1421,7 +1426,9 @@ export class AgentChannels {
     this.log('error', `Error handling message ${JSON.stringify(diagnostic)}`, diagnostic);
     try {
       const adapterConfig = this.adapterConfigs[chatThread.adapter.name];
-      const errorMessage = adapterConfig?.formatError ? adapterConfig.formatError(error) : `❌ Error: ${error.message}`;
+      const errorMessage = adapterConfig?.formatError
+        ? adapterConfig.formatError(error, { requestContext })
+        : `❌ Error: ${error.message}`;
       await chatThread.post(errorMessage);
     } catch (postErr) {
       this.log('warn', 'Failed to post error message to thread', {

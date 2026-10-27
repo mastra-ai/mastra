@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { bucketGrid, bucketPlan, bucketStart, bucketWindow, gridIndex, nextBucket } from './metrics-buckets';
 
 const HOUR = 3_600_000;
@@ -25,9 +25,9 @@ describe('bucketStart and nextBucket', () => {
     expect(nextBucket(new Date(2026, 9, 6, 12).getTime(), 6)).toBe(new Date(2026, 9, 6, 18).getTime());
   });
 
-  it('starts daily buckets on local midnight', () => {
-    expect(bucketStart(NOW.getTime(), 24)).toBe(new Date(2026, 9, 6).getTime());
-    expect(nextBucket(new Date(2026, 9, 6).getTime(), 24)).toBe(new Date(2026, 9, 7).getTime());
+  it('starts daily buckets on UTC midnight, like the API', () => {
+    expect(bucketStart(NOW.getTime(), 24)).toBe(Date.UTC(2026, 9, 6));
+    expect(nextBucket(Date.UTC(2026, 9, 6), 24)).toBe(Date.UTC(2026, 9, 7));
   });
 });
 
@@ -75,5 +75,37 @@ describe('bucketWindow', () => {
   it('spans one bucket, for opening its traces', () => {
     const ts = new Date(2026, 9, 6, 12).getTime();
     expect(bucketWindow(ts, 6)).toEqual({ from: new Date(ts), to: new Date(2026, 9, 6, 18) });
+  });
+});
+
+describe('daily buckets outside UTC', () => {
+  /** The API's 1d buckets for a 30-day window ending Oct 21, 2026, 7:45 PM UTC. */
+  const end = new Date(Date.UTC(2026, 9, 21, 19, 45));
+  const start = new Date(end.getTime() - 30 * DAY);
+  const apiDays = Array.from({ length: 31 }, (_, i) => new Date(Date.UTC(2026, 8, 21 + i)).toISOString());
+
+  describe.each(['America/New_York', 'Asia/Tokyo'])('when the browser is in %s', timeZone => {
+    const original = process.env.TZ;
+    beforeAll(() => {
+      process.env.TZ = timeZone;
+    });
+    afterAll(() => {
+      process.env.TZ = original;
+    });
+
+    it('puts every API day in its own bucket', () => {
+      const grid = bucketGrid(start, end, 24);
+      const indexOf = gridIndex(grid, 24);
+      const indexes = apiDays.map(timestamp => indexOf({ timestamp, value: 1 }));
+      expect(indexes).toEqual(apiDays.map((_, i) => i));
+      expect(grid).toHaveLength(apiDays.length);
+    });
+
+    it('labels each bucket with its UTC date', () => {
+      const grid = bucketGrid(start, end, 24);
+      expect(grid[0]?.label).toBe('Sep 21');
+      expect(grid.at(-1)?.label).toBe('Oct 21');
+      expect(grid.at(-1)?.time).toBe('Wed, Oct 21');
+    });
   });
 });

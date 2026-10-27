@@ -80,6 +80,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   CreateSpanRecord,
   GetRootSpanArgs,
@@ -1173,6 +1174,17 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     for (const record of args.records) {
       await this.updateSpan(record);
     }
+  }
+
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    const updated: BatchUpdateUnendedSpansResponse['updated'] = [];
+    for (const record of args.records) {
+      const span = this.db.traces.get(record.traceId)?.spans[record.spanId];
+      if (!span || span.endedAt != null) continue;
+      await this.updateSpan(record);
+      updated.push({ traceId: record.traceId, spanId: record.spanId });
+    }
+    return { updated };
   }
 
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {

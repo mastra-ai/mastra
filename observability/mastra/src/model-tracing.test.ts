@@ -91,6 +91,42 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  describe('gateway routing', () => {
+    it('exports which provider served each step when the model ran through Vercel AI Gateway', async () => {
+      const modelSpan = tracing.startSpan({
+        type: SpanType.MODEL_GENERATION,
+        name: 'test-generation',
+        attributes: { model: 'anthropic/claude-sonnet-5', provider: 'gateway' },
+      });
+      const tracker = new ModelSpanTracker(modelSpan);
+      const routing = { finalProvider: 'anthropic', resolvedProvider: 'bedrock' };
+
+      const chunks = [
+        { type: 'step-start', payload: { messageId: 'm1', request: {}, warnings: [] } },
+        { type: 'text-delta', payload: { id: 't1', text: 'hi' } },
+        {
+          type: 'step-finish',
+          payload: {
+            output: { usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
+            stepResult: { reason: 'stop', isContinued: false, warnings: [] },
+            metadata: {
+              providerMetadata: { gateway: { routing, cost: '0.001' }, anthropic: {} },
+              headers: { 'x-vercel-id': 'req_1' },
+            },
+          },
+        },
+      ];
+      await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+      modelSpan.end();
+
+      const [stepSpan] = testExporter.getSpansByType(SpanType.MODEL_STEP);
+      expect(stepSpan?.metadata).toEqual({
+        headers: { 'x-vercel-id': 'req_1' },
+        providerMetadata: { gateway: { routing } },
+      });
+    });
+  });
+
   describe('provider-reported costs', () => {
     it('sums a BYOK upstream cost across steps, even when the OpenRouter surcharge is zero', () => {
       const modelSpan = tracing.startSpan({

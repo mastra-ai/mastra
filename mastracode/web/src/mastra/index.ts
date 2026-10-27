@@ -235,6 +235,7 @@ const linear =
 // visible `jira` connections. Partial direct configuration falls back
 // to Platform Jira when Platform credentials are available.
 const jiraBaseUrl = process.env.JIRA_BASE_URL?.trim();
+const jiraApiBaseUrl = process.env.JIRA_API_BASE_URL?.trim();
 const jiraEmail = process.env.JIRA_EMAIL?.trim();
 const jiraApiToken = process.env.JIRA_API_TOKEN?.trim();
 const jiraDirectVars = [jiraBaseUrl, jiraEmail, jiraApiToken];
@@ -249,6 +250,7 @@ const jira =
   jiraBaseUrl && jiraEmail && jiraApiToken
     ? new JiraIntegration({
         baseUrl: jiraBaseUrl,
+        ...(jiraApiBaseUrl ? { apiBaseUrl: jiraApiBaseUrl } : {}),
         email: jiraEmail,
         apiToken: jiraApiToken,
       })

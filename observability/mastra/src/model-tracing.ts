@@ -626,8 +626,20 @@ export class ModelSpanTracker {
    * feature flag, or when called without an active step span. Auto-invoked from
    * chunk handlers as a safety net; explicit callers get the most accurate
    * start time.
+   *
+   * `payload.modelId` / `payload.provider` name the model the caller is about
+   * to invoke and are recorded on MODEL_STEP, also when a fallback attempt
+   * reuses the step's open inference span. The safety net never records them:
+   * a replayed step-start chunk names the model of the original call.
    */
   startInference(payload?: StepStartPayload): void {
+    if (payload?.modelId && payload.provider) {
+      this.#currentStepSpan?.update({ attributes: { model: payload.modelId, provider: payload.provider } });
+    }
+    this.#openInference(payload);
+  }
+
+  #openInference(payload?: StepStartPayload): void {
     if (!supportsModelInference()) {
       return;
     }
@@ -789,7 +801,7 @@ export class ModelSpanTracker {
       this.startStep();
     }
     if (!this.#currentInferenceSpan) {
-      this.startInference();
+      this.#openInference();
     }
   }
 
@@ -1092,7 +1104,7 @@ export class ModelSpanTracker {
               // explicitly call startInference() before invoking the model —
               // chunks that follow will parent under MODEL_INFERENCE.
               if (!this.#currentInferenceSpan) {
-                this.startInference(chunk.payload);
+                this.#openInference(chunk.payload);
               }
               break;
 

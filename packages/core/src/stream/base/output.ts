@@ -1370,7 +1370,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // A retried attempt was rolled back, so the last response content belongs to an earlier step.
                 content: isRetriedStep
                   ? []
-                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                  : ((chunk.payload as any)?._durableStepContent ??
+                    messageList.get.response.aiV5.modelContent(
+                      -1,
+                      self.#bufferedByStep.toolCalls.map(call => call.payload.toolCallId),
+                    )),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -1926,17 +1930,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
                   text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
-                  finishReason: outputResultError ? 'error' : chunk.payload.stepResult.reason,
+                  finishReason:
+                    outputResultError || self.#status === 'failed' ? 'error' : chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
-                  request: await self.request,
+                  // A preceding error may have rejected result promises already accessed by callers.
+                  // Finish bookkeeping uses the final buffers, independently of those promises.
+                  request: self.#request || {},
                   error: self.error,
-                  reasoning: await self.reasoning,
-                  reasoningText: await self.reasoningText,
-                  sources: await self.sources,
-                  files: await self.files,
+                  reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                  reasoningText,
+                  sources: self.#bufferedSources,
+                  files: self.#bufferedFiles,
                   steps: self.#bufferedSteps,
                   response: {
-                    ...(await self.response),
+                    ...response,
                     ...baseFinishStep.response,
                     messages: messageList.get.response.aiV5.model(),
                     dbMessages: self.messageList.get.response.db(),
@@ -1944,16 +1951,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
                   ...(self.#generationReportedUsage && { generationReportedUsage: self.#generationReportedUsage }),
-                  toolCalls: await self.toolCalls,
-                  toolResults: await self.toolResults,
-                  staticToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === false),
-                  staticToolResults: (await self.toolResults).filter(
-                    toolResult => toolResult?.payload?.dynamic === false,
-                  ),
-                  dynamicToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === true),
-                  dynamicToolResults: (await self.toolResults).filter(
-                    toolResult => toolResult?.payload?.dynamic === true,
-                  ),
+                  toolCalls: self.#toolCalls,
+                  toolResults: self.#toolResults,
+                  staticToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
+                  staticToolResults: self.#toolResults.filter(toolResult => toolResult?.payload?.dynamic === false),
+                  dynamicToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === true),
+                  dynamicToolResults: self.#toolResults.filter(toolResult => toolResult?.payload?.dynamic === true),
                   // Custom properties (not part of standard callback)
                   ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   usedFallbackValue: self.#usedFallbackValue,

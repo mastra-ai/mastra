@@ -54,7 +54,7 @@ describe('mixed-version compat: events from an older origin', () => {
     await emit({ type: 'run-completed', runId, streamId });
     await nextTicks();
 
-    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish']);
+    expect(collected.map(part => part.type)).toEqual(['start', 'text-delta', 'finish', 'thread-run-status']);
 
     subscription.unsubscribe();
     await consumed;
@@ -82,7 +82,7 @@ describe('mixed-version compat: events from an older origin', () => {
     await emit({ type: 'run-completed', runId, streamId });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
@@ -104,7 +104,7 @@ describe('mixed-version compat: events from an older origin', () => {
     });
     await nextTicks();
 
-    expect(collected).toEqual([]);
+    expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
     subscription.unsubscribe();
     await consumed;
@@ -155,7 +155,9 @@ describe('adversarial orderings of registration/terminal among stream parts', ()
       //    duplication, no fabricated parts).
       const publishedOrder = parts.map(part => part.type);
       let cursor = 0;
-      for (const part of collected) {
+      const output = collected.filter(part => part.type !== 'thread-run-status');
+      expect(collected.filter(part => part.type === 'thread-run-status')).toHaveLength(1);
+      for (const part of output) {
         const idx = publishedOrder.indexOf(part.type, cursor);
         expect(idx, `part ${part.type} out of order in ${collected.map(p => p.type).join(',')}`).toBeGreaterThanOrEqual(
           0,
@@ -164,7 +166,7 @@ describe('adversarial orderings of registration/terminal among stream parts', ()
       }
       // 2. persisted: true terminal means everything buffered before the
       //    terminal must be delivered — a clean run is never silently dropped.
-      expect(collected.length).toBeGreaterThanOrEqual(partsBeforeTerminal);
+      expect(output.length).toBeGreaterThanOrEqual(partsBeforeTerminal);
 
       // 3. No hang: unsubscribe ends the consumer loop promptly.
       subscription.unsubscribe();
@@ -190,7 +192,7 @@ describe('adversarial orderings of registration/terminal among stream parts', ()
       // Parts published before the terminal must never surface. Parts that
       // arrive after the run was discarded are tolerated only if the run is
       // re-buffered and never released (still nothing delivered).
-      expect(collected).toEqual([]);
+      expect(collected.filter(part => part.type !== 'thread-run-status')).toEqual([]);
 
       subscription.unsubscribe();
       await consumed;

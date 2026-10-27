@@ -328,7 +328,7 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "videoInput": false,
     "toolUsage": true,
     "reasoning": true,
-    "contextWindow": 1050000,
+    "contextWindow": 1056784,
     "maxOutput": 1050000,
     "inputCost": 0.15,
     "outputCost": 0.6
@@ -1136,6 +1136,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 10
+  },
+  {
+    "model": "llmgateway/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
   },
   {
     "model": "llmgateway/gpt-live-transcribe",
@@ -2026,18 +2038,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.8
   },
   {
-    "model": "llmgateway/qwen3-235b-a22b-instruct-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 8192,
-    "inputCost": 0.09,
-    "outputCost": 0.58
-  },
-  {
     "model": "llmgateway/qwen3-235b-a22b-thinking-2507",
     "imageInput": false,
     "audioInput": false,
@@ -2156,18 +2156,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.2,
     "outputCost": 0.88
-  },
-  {
-    "model": "llmgateway/qwen3-vl-235b-a22b-thinking",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.98,
-    "outputCost": 3.95
   },
   {
     "model": "llmgateway/qwen3-vl-30b-a3b-instruct",
@@ -2372,6 +2360,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1000000,
     "inputCost": 1.54,
     "outputCost": 4.631
+  },
+  {
+    "model": "llmgateway/qwen3.8-omni-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 983616,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
   },
   {
     "model": "llmgateway/qwen35-397b-a17b",

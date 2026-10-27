@@ -7,7 +7,7 @@ description: "Browse AI/ML API model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/aimlapi.svg" alt="AI/ML API logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />AI/ML API
 
-Access 171 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
+Access 172 AI/ML API models through Mastra's model router. Authentication is handled automatically using the `AIMLAPI_API_KEY` environment variable.
 
 Learn more in the [AI/ML API documentation](https://docs.aimlapi.com).
 
@@ -1580,6 +1580,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 128000,
     "inputCost": 2,
     "outputCost": 10
+  },
+  {
+    "model": "aimlapi/openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
   },
   {
     "model": "aimlapi/openai/gpt-oss-120b",
