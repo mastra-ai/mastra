@@ -1,5 +1,5 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
-import { buttonVariants } from '@mastra/playground-ui/components/Button';
+import { Notice } from '@mastra/playground-ui/components/Notice';
 import {
   Command,
   CommandEmpty,
@@ -10,9 +10,9 @@ import {
   CommandSeparator,
 } from '@mastra/playground-ui/components/Command';
 import { Popover, PopoverContent, PopoverTrigger } from '@mastra/playground-ui/components/Popover';
+import type { PopoverTriggerProps } from '@mastra/playground-ui/components/Popover';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { toast } from '@mastra/playground-ui/components/Toaster';
-import { cn } from '@mastra/playground-ui/utils/cn';
 import { compareModelReleaseDates, formatModelName } from '@mastra/playground-ui/utils/model';
 import { Check, ChevronDown, RotateCcw } from 'lucide-react';
 import { useState } from 'react';
@@ -96,12 +96,12 @@ type ModelSwitch = ReturnType<typeof useModelSwitch>;
 
 interface ModelMenuProps {
   modelSwitch: ModelSwitch;
-  triggerClassName: string;
+  trigger: Pick<PopoverTriggerProps, 'variant' | 'size' | 'className' | 'render'>;
   triggerAriaLabel?: string;
   children: ReactNode;
 }
 
-function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }: ModelMenuProps) {
+function ModelMenu({ modelSwitch, trigger, triggerAriaLabel, children }: ModelMenuProps) {
   const { modelsQuery, selectedModelId, defaultModelId, canReset, locked, pickModel } = modelSwitch;
   const { factoryId } = useParams<{ factoryId: string }>();
   const organizationScoped = useOrganizationScopedFactory();
@@ -115,11 +115,11 @@ function ModelMenu({ modelSwitch, triggerClassName, triggerAriaLabel, children }
   return (
     <Popover open={open} onOpenChange={setOpen}>
       <PopoverTrigger
+        {...trigger}
         type="button"
         disabled={locked}
         aria-label={triggerAriaLabel}
         aria-busy={locked}
-        className={triggerClassName}
         title={selectedModelId}
       >
         {children}
@@ -248,10 +248,11 @@ export function ModelPicker() {
       <ModelMenu
         modelSwitch={modelSwitch}
         triggerAriaLabel={notConfigured ? `Session model, ${label} is not configured` : 'Session model'}
-        triggerClassName={cn(
-          buttonVariants({ variant: 'ghost', size: 'sm' }),
-          notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
-        )}
+        trigger={{
+          variant: 'ghost',
+          size: 'sm',
+          className: notConfigured ? 'text-destructive-foreground' : 'text-muted-foreground',
+        }}
       >
         <span className="max-w-48 truncate">
           {label}
@@ -266,7 +267,7 @@ export function ChangeModelAction() {
   const modelSwitch = useModelSwitch();
   if (!modelSwitch.switchable || !modelSwitch.modelsQuery.data?.length) return null;
   return (
-    <ModelMenu modelSwitch={modelSwitch} triggerClassName={cn(buttonVariants({ variant: 'link' }), 'text-foreground')}>
+    <ModelMenu modelSwitch={modelSwitch} trigger={{ render: <Notice.Button /> }}>
       Change model
     </ModelMenu>
   );
