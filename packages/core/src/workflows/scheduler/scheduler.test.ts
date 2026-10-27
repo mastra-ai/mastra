@@ -1181,7 +1181,8 @@ describe('Scheduler', () => {
 
       await scheduler.start();
       await wait(250);
-      expect(listDue).toHaveBeenCalledOnce();
+      // Warm-up tick plus one bounded earliest-fire lookup, then nothing.
+      expect(listDue).toHaveBeenCalledTimes(2);
       // No timer is armed at all: an idle scheduler waits for a wake.
       expect(stSpy.mock.calls.some(call => (call[1] ?? 0) >= 60_000)).toBe(false);
 
@@ -1199,12 +1200,37 @@ describe('Scheduler', () => {
 
       await scheduler.start();
       await wait(150);
-      // Warm-up tick only: no polling while waiting for the fire.
-      expect(listDue).toHaveBeenCalledOnce();
+      // Warm-up tick plus one earliest-fire lookup: no polling while waiting for the fire.
+      expect(listDue).toHaveBeenCalledTimes(2);
       expect(events).toHaveLength(0);
 
       await wait(400);
       expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('looks up the next fire with one bounded query instead of loading every active schedule', async () => {
+      const { store } = makeStore();
+      const far = Date.now() + 3_600_000;
+      for (let i = 0; i < 50; i++) await store.createSchedule(row(`sched-${i}`, far + i * 1000));
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { tickIntervalMs: 20 },
+      });
+      const listAll = vi.spyOn(store, 'listSchedules');
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      scheduler.wake();
+      scheduler.wake();
+      await wait(100);
+
+      expect(listAll).not.toHaveBeenCalled();
+      const lookups = listDue.mock.calls.filter(([now]) => now === Number.MAX_SAFE_INTEGER);
+      expect(lookups.length).toBeGreaterThan(0);
+      for (const [, limit] of lookups) expect(limit).toBe(1);
 
       await scheduler.stop();
     });

@@ -215,16 +215,17 @@ export class Scheduler extends MastraBase {
   async #nextDelay(): Promise<number | undefined> {
     const interval = this.#config.tickIntervalMs;
     if (this.#config.enabled === true || this.#lastTickBusy) return interval;
-    let active: Schedule[];
+    let next: Schedule[];
     try {
-      active = await this.#schedulesStore.listSchedules({ status: 'active' });
+      // Every adapter returns due rows ordered by nextFireAt, so asking for one
+      // row with an unbounded `now` is a bounded earliest-fire lookup.
+      next = await this.#schedulesStore.listDueSchedules(Number.MAX_SAFE_INTEGER, 1);
     } catch (err) {
-      this.logger.error('Failed to list active schedules', { error: err });
+      this.logger.error('Failed to look up the next scheduled fire', { error: err });
       return interval;
     }
-    if (active.length === 0) return undefined;
-    const earliest = active.reduce((min, schedule) => Math.min(min, schedule.nextFireAt), Infinity);
-    return Math.max(interval, Math.min(earliest - Date.now(), MAX_TIMER_DELAY_MS));
+    if (next.length === 0) return undefined;
+    return Math.max(interval, Math.min(next[0]!.nextFireAt - Date.now(), MAX_TIMER_DELAY_MS));
   }
 
   #clearTimer(): void {
