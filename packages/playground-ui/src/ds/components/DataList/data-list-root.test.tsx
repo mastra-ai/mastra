@@ -414,5 +414,23 @@ describe('DataListRoot', () => {
         'Time to first chunk, not sorted, sort ascending',
       );
     });
+
+    it('keeps the sort button after the label when the header is end-aligned', () => {
+      render(
+        <DataList columns="1fr">
+          <DataList.Top>
+            <DataList.SortableTopCell sortKey="ttfc" align="end" onSortChange={vi.fn()}>
+              TTFC
+            </DataList.SortableTopCell>
+          </DataList.Top>
+        </DataList>,
+      );
+
+      const button = screen.getByRole('button');
+      const cell = button.parentElement;
+      expect(cell?.className).toContain('justify-end');
+      expect(cell?.className).not.toContain('flex-row-reverse');
+      expect(cell?.lastElementChild).toBe(button);
+    });
   });
 });
