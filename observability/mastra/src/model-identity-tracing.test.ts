@@ -259,6 +259,31 @@ describe.each<Engine>(['agent', 'durable', 'evented'])('%s: model on agent run a
     expect(spansOf(exporter, SpanType.MODEL_STEP).map(identity)).toEqual(engine === 'agent' ? [none] : []);
   });
 
+  it('a run whose processor returns invalid timeout settings names the model on the agent run and none on a step', async () => {
+    const badTimeout: Processor = {
+      id: 'bad-timeout',
+      processInputStep: async () => ({ modelSettings: { timeout: 'soon' as never } }),
+    };
+    const agent = new Agent({
+      id: 'weather',
+      name: 'weather',
+      instructions: 'x',
+      model: scriptedModel('acme', 'acme-large'),
+      inputProcessors: [badTimeout],
+    });
+    const { exporter, run } = setup(engine, agent);
+    await run('hi');
+
+    // The regular agent leaves these spans open when the validation throws, so
+    // read every exported span rather than only the ended ones.
+    const spans = exporter.getAllSpans();
+    expect(spans.filter(span => span.type === SpanType.AGENT_RUN).map(identity)).toEqual([acmeLarge]);
+    // The settings fail validation before the model is called, so no step names it.
+    const steps = spans.filter(span => span.type === SpanType.MODEL_STEP);
+    expect(steps.length).toBeGreaterThan(0);
+    expect(steps.map(identity)).toEqual(steps.map(() => none));
+  });
+
   it('a step whose provider call fails still names the model it called', async () => {
     const agent = new Agent({
       id: 'weather',

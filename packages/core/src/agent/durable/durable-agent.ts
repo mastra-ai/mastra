@@ -1614,6 +1614,7 @@ export class DurableAgent<
         }
       }
       try {
+        const persistedHead = persistedModelList?.find(entry => entry.enabled);
         const rawConfig =
           typeof (wrapped as any).toRawConfig === 'function' ? (wrapped as any).toRawConfig() : undefined;
         const resolvedVersionId = rawConfig?.resolvedVersionId as string | undefined;
@@ -1625,10 +1626,12 @@ export class DurableAgent<
           entityType: EntityType.AGENT,
           entityId: wrapped.id,
           entityName: wrapped.name,
-          // The persisted list is the run's shape: its first enabled entry is the
-          // candidate the recovered step tries first, whether the live resolver
-          // still returns it or the step rebuilds it from the serialized config.
-          attributes: modelSpanAttributes(persistedModelList?.find(entry => entry.enabled)?.config ?? model),
+          // The persisted list is the run's shape: the recovered step tries its
+          // first enabled entry first, as the live model rebound to that id, or
+          // rebuilt from the serialized config when the resolver no longer returns it.
+          attributes: modelSpanAttributes(
+            modelList?.find(entry => entry.id === persistedHead?.id)?.model ?? persistedHead?.config ?? model,
+          ),
           metadata: {
             runId,
             recovered: true,

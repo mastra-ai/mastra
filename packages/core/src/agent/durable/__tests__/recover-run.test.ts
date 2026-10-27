@@ -1545,10 +1545,11 @@ describe('DurableAgent.recover(runId) tracing', () => {
     expect(recoveredCall.attributes).toMatchObject({ model: 'mock-model-id', provider: 'mock-provider' });
   });
 
-  it('names the first persisted fallback candidate on the recovered span, even when the resolver reorders the list', async () => {
-    // The recovered step tries the persisted list in its persisted order, so
-    // the span must name that head, not whichever model the reordered resolver
-    // returned first.
+  it('names the live model bound to the first persisted candidate on the recovered span, even when the resolver reorders the list', async () => {
+    // The recovered step tries the persisted list in its persisted order, with
+    // the live model rebound to each id, so the span must name the recovery-time
+    // model behind that head, not the stale persisted one and not whichever
+    // model the reordered resolver returned first.
     let reordered = false;
     let resolveCount = 0;
     const baseAgent = new Agent({
@@ -1572,7 +1573,9 @@ describe('DurableAgent.recover(runId) tracing', () => {
       .mocked(instance.startSpan)
       .mock.calls.map(([opts]) => opts as any)
       .find(opts => opts.name?.includes('(recovered)'));
+    // The prepare-time model was `model-a-1`; recovery rebinds the id to a fresh live instance.
     expect(recoveredCall.attributes.model).toMatch(/^model-a-/);
+    expect(recoveredCall.attributes.model).not.toBe('model-a-1');
     expect(recoveredCall.attributes.provider).toBe('mock-provider');
   });
 
