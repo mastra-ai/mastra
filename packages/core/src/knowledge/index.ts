@@ -495,13 +495,9 @@ export class Knowledge extends MastraBase {
 }
 
 export * from '../storage/domains/knowledge';
-export * from './knowledge-tools';
-export * from './knowledge-write-tools';
-export * from './pinned';
-export * from './pinned-state-processor';
-export * from './semantic-index';
-export * from './instructions';
-export type { KnowledgeToolGroups, KnowledgeToolHost } from './attach';
+export type { KnowledgeInstructionParts, KnowledgeInstructionsOption } from './instructions';
+/** @internal Used by Mastra Code's Factory Knowledge routes. */
+export { listPinnedKnowledge } from './pinned';
 export type { KnowledgeConfig } from './config';
 export type {
   KnowledgeScopeAccessConfig,

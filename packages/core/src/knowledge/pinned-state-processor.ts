@@ -21,6 +21,7 @@ import type {
   ProcessInputArgs,
   ProcessInputResult,
 } from '../processors';
+import { STATE_SIGNAL_WITHOUT_MEMORY } from '../processors/state-signal-without-memory';
 import type { KnowledgeScope, KnowledgeStorage } from '../storage';
 
 import { resolveKnowledgeRunScope } from './knowledge-tools';
@@ -114,14 +115,14 @@ export interface PinnedStateProcessorDeps {
 }
 
 /** Request-context key memoizing a turn's pin read; pin writes clear it so the next step reads fresh. */
-export const PINNED_READ_MEMO_KEY = '__subconsciousPinnedRead';
+export const PINNED_READ_MEMO_KEY = '__knowledgePinnedRead';
 const MEMO_KEY = PINNED_READ_MEMO_KEY;
 
 export class PinnedStateProcessor implements Processor<typeof PINNED_KNOWLEDGE_STATE_ID> {
   readonly id = PINNED_KNOWLEDGE_STATE_ID;
   readonly stateId = PINNED_KNOWLEDGE_STATE_ID;
   // Pins reach agents without Memory too: the snapshot is rebuilt from the store each call.
-  readonly stateSignalWithoutMemory = true;
+  readonly [STATE_SIGNAL_WITHOUT_MEMORY] = true;
 
   constructor(private readonly deps: PinnedStateProcessorDeps) {}
 

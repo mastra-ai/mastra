@@ -69,6 +69,7 @@ import type {
 import { TokenCounter } from './processors/observational-memory/token-counter';
 import type { WidenedObservationalMemoryModel } from './processors/observational-memory/types';
 import { WorkingMemoryExtractor } from './processors/observational-memory/working-memory-extractor';
+import { SUBCONSCIOUS_REMOVED_MESSAGE } from './removed-subconscious';
 import { isSystemReminderMessage } from './system-reminders';
 import { recallTool } from './tools/om-tools';
 import { createWorkingMemoryTool, deepMergeWorkingMemory, parseWorkingMemoryJson } from './tools/working-memory';
@@ -90,8 +91,21 @@ export {
   resolveAutoModelId,
   type ResolveAutoModelIdOptions,
 } from './processors/observational-memory/auto-model';
-export { KnowledgeSemanticIndexCoordinator, StaleKnowledgeSemanticIndexError } from '@mastra/core/knowledge';
-export type { KnowledgeSemanticIndexCoordinatorConfig } from '@mastra/core/knowledge';
+export {
+  KnowledgeSemanticIndexCoordinator,
+  StaleKnowledgeSemanticIndexError,
+  Subconscious,
+} from './removed-subconscious';
+export type {
+  KnowledgeSemanticIndexCoordinatorConfig,
+  ResolvedSubconsciousAgent,
+  ResolvedSubconsciousConfig,
+  SubconsciousBuiltInObservationAgent,
+  SubconsciousBuiltInObservationConfig,
+  SubconsciousConfig,
+  SubconsciousCustomObservationConfig,
+  SubconsciousObservationEntry,
+} from './removed-subconscious';
 export { summarizeConversation, SUMMARIZE_THREAD_DEFAULTS } from './processors/observational-memory/summarize';
 export type {
   SummarizeConversationOptions,
@@ -116,6 +130,8 @@ type MemoryObservationalMemoryOptions = Omit<ObservationalMemoryOptions, 'model'
   autoModels?: ObservationalMemoryConfig['autoModels'];
   canUseProvider?: ObservationalMemoryConfig['canUseProvider'];
   resolveModel?: ObservationalMemoryConfig['resolveModel'];
+  /** @deprecated Subconscious was removed; attach `Knowledge` to the agent instead. Setting it throws. */
+  experimental_subconscious?: unknown;
 };
 
 type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
@@ -124,6 +140,8 @@ type MemoryOptions = Omit<MemoryConfigInternal, 'observationalMemory'> & {
 
 type MemoryConstructorConfig = Omit<SharedMemoryConfig, 'options'> & {
   options?: MemoryOptions;
+  /** @deprecated Memory no longer selects a Knowledge; attach `Knowledge` to the agent instead. Setting it throws. */
+  knowledge?: unknown;
 };
 
 type RuntimeMemoryConfig = Omit<MemoryConfig, 'observationalMemory'> & {
@@ -573,7 +591,15 @@ export class Memory extends MastraMemory {
   }
 
   constructor(config: MemoryConstructorConfig = {}) {
-    super({ name: 'Memory', ...config } as { name: string } & SharedMemoryConfig);
+    const om = config.options?.observationalMemory;
+    if (
+      (config.knowledge !== undefined && config.knowledge !== false) ||
+      (typeof om === 'object' && om?.experimental_subconscious !== undefined)
+    ) {
+      throw new Error(SUBCONSCIOUS_REMOVED_MESSAGE);
+    }
+    const { knowledge: _knowledge, ...sharedConfig } = config;
+    super({ name: 'Memory', ...sharedConfig } as { name: string } & SharedMemoryConfig);
 
     const mergedConfig = this.getMergedThreadConfig({
       workingMemory: config.options?.workingMemory || {
