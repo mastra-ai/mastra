@@ -284,6 +284,14 @@ export class BackgroundTasksMSSQL extends BackgroundTasksStorage {
         predicates.push(`[leaseExpiresAt] = @p${idx++}`);
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        predicates.push(`[suspendedAt] IS NULL`);
+      } else {
+        params[`p${idx}`] = options.expectedSuspendedAt.toISOString();
+        predicates.push(`[suspendedAt] = @p${idx++}`);
+      }
+    }
     const predicateSql = predicates.length > 0 ? ` AND ${predicates.join(' AND ')}` : '';
 
     const request = this.pool.request();

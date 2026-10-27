@@ -40,6 +40,12 @@ export class BackgroundTasksInMemory extends BackgroundTasksStorage {
     ) {
       return false;
     }
+    if (
+      options?.expectedSuspendedAt !== undefined &&
+      (existing.suspendedAt?.getTime() ?? null) !== (options.expectedSuspendedAt?.getTime() ?? null)
+    ) {
+      return false;
+    }
     this.db.backgroundTasks.set(taskId, { ...existing, ...update });
     return true;
   }

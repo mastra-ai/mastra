@@ -864,5 +864,110 @@ export function createBackgroundTasksTests({ storage }: BackgroundTasksTestOptio
         expect(cleared!.leaseExpiresAt ?? null).toBeNull();
       });
     });
+
+    describe('suspension fence', () => {
+      // A suspended task's open questions live in its metadata. A reply to the
+      // first suspension that arrives after the task resumed and suspended
+      // again must not overwrite the second suspension's questions: status is
+      // `suspended` both times and owner/lease are cleared on suspend, so only
+      // `suspendedAt` tells the two suspensions apart.
+      const firstSuspendedAt = new Date(Date.now() - 60_000);
+      const secondSuspendedAt = new Date(Date.now() - 10_000);
+
+      const suspendTwice = async () => {
+        const task = createSampleTask({
+          status: 'suspended',
+          startedAt: new Date(Date.now() - 120_000),
+          suspendedAt: firstSuspendedAt,
+          metadata: { question: 'K1' },
+        });
+        await bgStorage.createTask(task);
+        // Fence on values read back through the store; adapters round-trip
+        // timestamps with differing precision.
+        const first = (await bgStorage.getTask(task.id))!;
+
+        // Resumed, ran, and suspended again on a new question.
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'running', suspendedAt: undefined, ownerId: 'worker-a' },
+            { expectedStatus: 'suspended', expectedSuspendedAt: first.suspendedAt ?? null },
+          ),
+        ).toBe(true);
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { status: 'suspended', suspendedAt: secondSuspendedAt, ownerId: undefined, metadata: { question: 'K2' } },
+            { expectedStatus: 'running' },
+          ),
+        ).toBe(true);
+        const second = (await bgStorage.getTask(task.id))!;
+        return { task, first, second };
+      };
+
+      it('rejects an answer meant for an earlier suspension of the task', async () => {
+        if (!bgStorage) return;
+        const { task, first } = await suspendTwice();
+
+        const stale = await bgStorage.updateTask(
+          task.id,
+          { metadata: { question: 'K1', answer: 'for K1' } },
+          { expectedStatus: 'suspended', expectedSuspendedAt: first.suspendedAt ?? null },
+        );
+
+        expect(stale).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.metadata).toEqual({ question: 'K2' });
+      });
+
+      it('applies an answer for the current suspension', async () => {
+        if (!bgStorage) return;
+        const { task, second } = await suspendTwice();
+        expect(second.suspendedAt).toBeDefined();
+
+        const applied = await bgStorage.updateTask(
+          task.id,
+          { metadata: { question: 'K2', answer: 'for K2' } },
+          { expectedStatus: 'suspended', expectedSuspendedAt: second.suspendedAt ?? null },
+        );
+
+        expect(applied).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.metadata).toEqual({ question: 'K2', answer: 'for K2' });
+      });
+
+      it('matches a null fence against a task that was never suspended', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'pending' });
+        await bgStorage.createTask(task);
+
+        expect(await bgStorage.updateTask(task.id, { retryCount: 1 }, { expectedSuspendedAt: null })).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(1);
+      });
+
+      it('rejects a null fence against a suspended task', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'suspended', suspendedAt: firstSuspendedAt, retryCount: 0 });
+        await bgStorage.createTask(task);
+
+        expect(await bgStorage.updateTask(task.id, { retryCount: 1 }, { expectedSuspendedAt: null })).toBe(false);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(0);
+      });
+
+      it('matches a null fence once the suspension time has been cleared on resume', async () => {
+        if (!bgStorage) return;
+        const task = createSampleTask({ status: 'suspended', suspendedAt: firstSuspendedAt });
+        await bgStorage.createTask(task);
+        expect(await bgStorage.updateTask(task.id, { status: 'running', suspendedAt: undefined })).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.suspendedAt ?? null).toBeNull();
+
+        expect(
+          await bgStorage.updateTask(
+            task.id,
+            { retryCount: 1 },
+            { expectedStatus: 'running', expectedSuspendedAt: null },
+          ),
+        ).toBe(true);
+        expect((await bgStorage.getTask(task.id))!.retryCount).toBe(1);
+      });
+    });
   });
 }

@@ -230,6 +230,14 @@ export class BackgroundTasksLibSQL extends BackgroundTasksStorage {
         params.push(options.expectedLeaseExpiresAt.toISOString());
       }
     }
+    if (options?.expectedSuspendedAt !== undefined) {
+      if (options.expectedSuspendedAt === null) {
+        where += ' AND suspendedAt IS NULL';
+      } else {
+        where += ' AND suspendedAt = ?';
+        params.push(options.expectedSuspendedAt.toISOString());
+      }
+    }
     const result = await this.#client.execute({
       sql: `UPDATE ${TABLE_BACKGROUND_TASKS} SET ${setClauses.join(', ')} WHERE ${where}`,
       args: params,
