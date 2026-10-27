@@ -2,7 +2,7 @@
 '@mastra/factory': patch
 ---
 
-Improved Factory Settings with consistent headers, action icons, provider logos, and full-width action rows.
+Reorganized Factory Settings so each setting has one home and every page uses the same rows, drawers, and connection flows.
 
 - Manage repository linking, clone order, pre-cloning, setup, and teardown together in **Repositories**. Add repositories from a searchable drawer and expand each repository to configure it.
 - Find global sandbox resources, workspace setup, and build controls in **Manage Factory**, instead of a separate Environment page. Old Environment links and bookmarks open **Repositories**.
