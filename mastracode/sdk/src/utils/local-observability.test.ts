@@ -119,6 +119,21 @@ describe('openLocalObservabilityStore', () => {
     ]);
   });
 
+  it('releases the file lock when a newly opened store closes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-local-obs-'));
+    dirs.push(dir);
+    const path = join(dir, 'observability.duckdb');
+    const opened = await openLocalObservabilityStore(path);
+    stores.push(opened.store);
+    await opened.pruned;
+    await opened.store.close();
+
+    const reopened = await openLocalObservabilityStore(path);
+    stores.push(reopened.store);
+    await reopened.pruned;
+    await reopened.store.close();
+  });
+
   it('opens a brand-new file without logging a prune error', async () => {
     const dir = mkdtempSync(join(tmpdir(), 'mc-local-obs-'));
     dirs.push(dir);

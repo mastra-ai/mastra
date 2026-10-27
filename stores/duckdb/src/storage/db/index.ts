@@ -140,7 +140,34 @@ export class DuckDBConnection extends MastraBase {
     }
     this.activeConnections++;
     try {
-      return await this.instance.connect();
+      const connection = await this.instance.connect();
+      let released = false;
+      const release = () => {
+        if (!released) {
+          released = true;
+          this.releaseConnection();
+        }
+      };
+      return new Proxy(connection, {
+        get(target, key) {
+          const value = Reflect.get(target, key, target);
+          if (typeof value !== 'function') return value;
+          if (key === 'closeSync' || key === 'disconnectSync' || key === 'close' || key === 'disconnect') {
+            return (...args: unknown[]) => {
+              try {
+                const result = value.apply(target, args);
+                if (result instanceof Promise) return result.finally(release);
+                release();
+                return result;
+              } catch (error) {
+                release();
+                throw error;
+              }
+            };
+          }
+          return value.bind(target);
+        },
+      });
     } catch (error) {
       this.releaseConnection();
       throw error;
@@ -181,8 +208,6 @@ export class DuckDBConnection extends MastraBase {
       }
     } catch {
       // Ignore close failures to avoid masking query/execute errors.
-    } finally {
-      this.releaseConnection();
     }
   }
 

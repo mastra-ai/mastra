@@ -102,6 +102,15 @@ describe('DuckDBStore.close()', () => {
     reopenInAnotherProcess();
   });
 
+  it('drains a publicly acquired connection when the caller closes it', async () => {
+    duck = new DuckDBStore({ path: dbPath });
+    const connection = await duck.db.getConnection();
+    connection.closeSync();
+
+    await duck.close();
+    reopenInAnotherProcess();
+  });
+
   it('waits for an active observability read before releasing the file lock', async () => {
     duck = new DuckDBStore({ path: dbPath });
     await duck.observability.init();
