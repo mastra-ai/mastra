@@ -65,3 +65,5 @@ Conversation memory does not count as approval. Approval evidence uses the revie
 This is an official Mastra template. Official templates live in the [Mastra monorepo](https://github.com/mastra-ai/mastra) and are synchronized to standalone repositories.
 
 [Want to contribute?](https://github.com/mastra-ai/mastra/blob/main/templates/template-accounts-payable-invoice-processing/CONTRIBUTING.md)
+
+Purchase-order search uses the official MCP date filters to inspect all result windows and detects duplicate PO numbers across them. A date with 1,000 or more POs cannot be exhausted through the current MCP search interface; processing returns a retry reason instead of accepting an incomplete match. The adapter rechecks an approved PO by ID with `get_purchase_order` immediately before posting.

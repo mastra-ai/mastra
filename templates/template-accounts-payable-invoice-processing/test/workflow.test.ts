@@ -168,7 +168,15 @@ it('never posts blocked, review, low-confidence, read-only or unavailable-provid
       disposition: 'blocked',
     },
     { name: 'missing PO', state: { orders: [] }, disposition: 'review' },
-    { name: 'PO mismatch', invoice: { total: 101, subtotal: 101, lines: [{ sku: 'item-1', description: 'Pens', qty: 10, unitPrice: 10.1, lineTotal: 101 }] }, disposition: 'review' },
+    {
+      name: 'PO mismatch',
+      invoice: {
+        total: 101,
+        subtotal: 101,
+        lines: [{ sku: 'item-1', description: 'Pens', qty: 10, unitPrice: 10.1, lineTotal: 101 }],
+      },
+      disposition: 'review',
+    },
     { name: 'no printed PO', invoice: { poNumber: null }, disposition: 'review' },
     { name: 'low confidence', invoice: { overallConfidence: 0.5 }, disposition: 'verify_extraction' },
     { name: 'missing confidence', invoice: { confidence: [] }, disposition: 'verify_extraction' },
@@ -473,3 +481,40 @@ it('requires explicit human approval for tool-submitted invoice fields below the
     }
   }
 });
+
+// PR #28532, CodeRabbit 4383787230: the official search has date filters but no DocNumber or offset.
+it.each(['outside window', 'duplicate outside window', 'saturated day'])(
+  'safely resolves purchase orders when the initial search is incomplete: %s',
+  async mode => {
+    const test = await scenario();
+    try {
+      const template = (await test.state()).orders[0] as Record<string, unknown>;
+      const orders = Array.from({ length: 1200 }, (_, index) => ({
+        ...template,
+        Id: `po-${index}`,
+        DocNumber: index === 1100 || (mode !== 'outside window' && index === 10) ? 'AP-PO-1001' : `OTHER-${index}`,
+        TxnDate: mode === 'saturated day' || index < 600 ? '2026-01-01' : '2026-02-01',
+      }));
+      await test.updateState({ orders });
+      const result = await test.run();
+      const state = await test.state();
+      if (mode === 'outside window') {
+        assert.equal(result.result?.executionStatus, 'posted');
+        assert.equal(state.bills[0]?.LinkedTxn[0]?.TxnId, 'po-1100');
+        assert.ok(state.calls.some(call => call.name === 'get_purchase_order'));
+      } else {
+        assert.equal(result.result?.disposition, mode === 'saturated day' ? 'retry' : 'review');
+        assert.equal(state.bills.length, 0);
+        assert.ok(
+          result.result?.decisions.some(decision =>
+            decision.reasons.some(
+              reason => reason.code === (mode === 'saturated day' ? 'MATCH_LOOKUP_UNAVAILABLE' : 'PO_AMBIGUOUS'),
+            ),
+          ),
+        );
+      }
+    } finally {
+      await test.close();
+    }
+  },
+);

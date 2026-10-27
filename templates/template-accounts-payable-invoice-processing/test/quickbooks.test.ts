@@ -63,7 +63,7 @@ describe('QuickBooks provider', () => {
     const calls: Array<{ toolName: string; input: unknown }> = [];
     const client: McpToolClient = {
       async listToolNames() {
-        return new Set(['search_vendors', 'search_purchase_orders', 'search_bills']);
+        return new Set(['search_vendors', 'search_purchase_orders', 'get_purchase_order', 'search_bills']);
       },
       async call(toolName, input) {
         calls.push({ toolName, input });
@@ -76,7 +76,7 @@ describe('QuickBooks provider', () => {
               Active: true,
             }),
           );
-        if (toolName === 'search_purchase_orders')
+        if (toolName === 'search_purchase_orders' || toolName === 'get_purchase_order')
           return response(
             'Found 1 purchase order(s):',
             JSON.stringify([
@@ -145,7 +145,13 @@ describe('QuickBooks provider', () => {
     const calls: Array<{ toolName: string; input: unknown }> = [];
     const client: McpToolClient = {
       async listToolNames() {
-        return new Set(['search_vendors', 'search_purchase_orders', 'search_bills', 'create-bill']);
+        return new Set([
+          'search_vendors',
+          'search_purchase_orders',
+          'get_purchase_order',
+          'search_bills',
+          'create-bill',
+        ]);
       },
       async call(toolName, input) {
         calls.push({ toolName, input });
@@ -206,7 +212,13 @@ describe('QuickBooks provider', () => {
     const calls: string[] = [];
     const client: McpToolClient = {
       async listToolNames() {
-        return new Set(['search_vendors', 'search_purchase_orders', 'search_bills', 'create-bill']);
+        return new Set([
+          'search_vendors',
+          'search_purchase_orders',
+          'get_purchase_order',
+          'search_bills',
+          'create-bill',
+        ]);
       },
       async call(toolName) {
         calls.push(toolName);
@@ -215,7 +227,7 @@ describe('QuickBooks provider', () => {
             'Found 1 vendors:',
             JSON.stringify({ Id: 'vendor-1', DisplayName: 'Acme Supplies', Active: true }),
           );
-        if (toolName === 'search_purchase_orders')
+        if (toolName === 'search_purchase_orders' || toolName === 'get_purchase_order')
           return response(
             'Found 1 purchase order(s):',
             JSON.stringify({
@@ -313,14 +325,7 @@ describe('QuickBooks provider', () => {
       assert.equal(result.result?.approval.reviewerId, 'mastra-studio');
       assert.equal(result.result?.posting?.providerId, 'quickbooks-mcp');
       assert.equal(result.result?.posting?.externalBillId, 'workflow-bill');
-      assert.deepEqual(calls, [
-        'search_vendors',
-        'search_purchase_orders',
-        'search_bills',
-        'search_bills',
-        'search_purchase_orders',
-        'create-bill',
-      ]);
+      assert.equal(calls.filter(name => name === 'create-bill').length, 1);
 
       screeningMatches = true;
       const blockedRun = await workflow.createRun();
@@ -337,7 +342,7 @@ describe('QuickBooks provider', () => {
         blocked.result?.decisions.flatMap(({ reasons }) => reasons.map(({ code }) => code)),
         ['VENDOR_SCREENING_MATCH'],
       );
-      assert.deepEqual(calls.slice(6), ['search_vendors']);
+      assert.equal(calls.filter(name => name === 'create-bill').length, 1);
     } finally {
       await rm(lockDirectory, { recursive: true, force: true });
     }

@@ -37,6 +37,7 @@ function createQuickBooksMcpToolClient(options: { enablePosting?: boolean } = {}
   const allowedTools = new Set([
     'search_vendors',
     'search_purchase_orders',
+    'get_purchase_order',
     'search_bills',
     ...(options.enablePosting ? ['create-bill'] : []),
   ]);
@@ -161,13 +162,16 @@ const mapBill = (bill: QuickBooksBill) => {
   });
 };
 
-const requiredTools = ['search_vendors', 'search_purchase_orders', 'search_bills'] as const;
+const requiredTools = ['search_vendors', 'search_purchase_orders', 'search_bills', 'get_purchase_order'] as const;
 const postingTool = 'create-bill' as const;
 const ToolResultSchema = z.object({
   isError: z.boolean().optional(),
   content: z.array(z.object({ type: z.string(), text: z.string().optional() })),
 });
-const isResultSummary = (text: string) => /^Found \d+ .+:$/i.test(text.trim()) || /^Count:\s*\d+$/i.test(text.trim());
+const isResultSummary = (text: string) =>
+  /^Found \d+ .+:$/i.test(text.trim()) ||
+  /^Count:\s*\d+$/i.test(text.trim()) ||
+  /^Purchase order found:$/i.test(text.trim());
 
 export const parseQuickBooksRecords = (result: unknown) => {
   const parsed = ToolResultSchema.parse(result),
@@ -231,11 +235,56 @@ const createQuickBooksConnector = (client: McpToolClient, postingConfig?: QuickB
     return rows.map(row => mapVendor(row as QuickBooksVendor));
   };
   const findPurchaseOrders = async (poNumber: string) => {
-    const rows = await call('search_purchase_orders', { limit: 1000 }),
-      matches = rows.filter(row => row.DocNumber === poNumber);
-    if (!matches.length && rows.length === 1000)
-      throw new ProviderUnavailableError('quickbooks-mcp', 'search_purchase_orders result window exhausted');
-    return matches.map(row => mapPurchaseOrder(row as QuickBooksPurchaseOrder));
+    // The official tool supports date filters, but neither DocNumber nor offset.
+    // Split saturated ranges into disjoint dates so a hidden duplicate cannot be missed.
+    let searches = 0;
+    const adjacentDate = (date: string, offset: number) => {
+      const value = new Date(`${date}T00:00:00Z`);
+      value.setUTCDate(value.getUTCDate() + offset);
+      const serialized = value.toISOString();
+      return serialized.length === 24 ? serialized.slice(0, 10) : undefined;
+    };
+    const scan = async (from?: string, to?: string): Promise<Record<string, unknown>[]> => {
+      if (++searches > 256)
+        throw new ProviderUnavailableError(
+          'quickbooks-mcp',
+          'purchase-order search budget exhausted; narrow the accounting dataset',
+        );
+      const rows = await call('search_purchase_orders', {
+        limit: 1000,
+        ...(from && { txn_date_from: from }),
+        ...(to && { txn_date_to: to }),
+      });
+      if (rows.length < 1000) return rows;
+      if (from && from === to)
+        throw new ProviderUnavailableError(
+          'quickbooks-mcp',
+          'purchase-order result window exhausted for one date; completeness cannot be verified',
+        );
+      const dates = rows
+        .map(row => {
+          const parsed = z.iso.date().safeParse(row.TxnDate);
+          if (!parsed.success)
+            throw new ProviderUnavailableError(
+              'quickbooks-mcp',
+              'purchase-order dates are unavailable for a complete search',
+            );
+          return parsed.data;
+        })
+        .sort();
+      if (dates.some(date => (from && date < from) || (to && date > to)))
+        throw new ProviderUnavailableError('quickbooks-mcp', 'purchase-order date filters were not honored');
+      const pivot = dates[Math.floor(dates.length / 2)]!;
+      const before = adjacentDate(pivot, -1),
+        after = adjacentDate(pivot, 1);
+      const earlier = before && (!from || from < pivot) ? await scan(from, before) : [];
+      const sameDay = await scan(pivot, pivot);
+      const later = after && (!to || pivot < to) ? await scan(after, to) : [];
+      return [...earlier, ...sameDay, ...later];
+    };
+    return (await scan())
+      .filter(row => row.DocNumber === poNumber)
+      .map(row => mapPurchaseOrder(row as QuickBooksPurchaseOrder));
   };
   const listBills = async () =>
     (await call('search_bills', { fetchAll: true })).map(row => mapBill(row as QuickBooksBill));
@@ -243,8 +292,9 @@ const createQuickBooksConnector = (client: McpToolClient, postingConfig?: QuickB
   const purchaseOrderLineLinks = async (input: PostingRequest) => {
     const approvedOrder = input.purchaseOrder;
     if (!approvedOrder) return undefined;
-    const rows = await call('search_purchase_orders', { limit: 1000 });
-    const current = rows.find(row => row.Id === approvedOrder.id) as QuickBooksPurchaseOrder | undefined;
+    const current = (await call('get_purchase_order', { id: approvedOrder.id }))[0] as
+      | QuickBooksPurchaseOrder
+      | undefined;
     if (!current || JSON.stringify(mapPurchaseOrder(current)) !== JSON.stringify(approvedOrder))
       throw new Error('QuickBooks purchase order changed or is unavailable; reassess the invoice before posting');
     const rawLines = (current.Line ?? []).filter(line => line.ItemBasedExpenseLineDetail);
