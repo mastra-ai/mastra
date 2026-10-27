@@ -87,12 +87,14 @@ query({
   query,
   topK = 10,
   randomWalkSteps = 100,
-  restartProb = 0.15
+  restartProb = 0.15,
+  filter
 }: {
   query: number[];
   topK?: number;
   randomWalkSteps?: number;
   restartProb?: number;
+  filter?: Partial<GraphMetadata>;
 }): RankedNode[]
 ```
 
@@ -126,6 +128,12 @@ query({
     description: 'Probability of restarting walk from query node',
     isOptional: true,
     defaultValue: '0.15',
+  },
+  {
+    name: 'filter',
+    type: 'Partial<GraphMetadata>',
+    description: 'Strict metadata filter. Only nodes whose metadata matches every key-value pair are returned.',
+    isOptional: true,
   },
 ]}
 />

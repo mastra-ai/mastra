@@ -20,8 +20,24 @@ import { createRoute } from '@mastra/server/server-adapter'
 ## Signature
 
 ```typescript
-function createRoute<TPath, TQuery, TBody, TResponse, TResponseType>(
-  config: RouteConfig<TPath, TQuery, TBody, TResponse, TResponseType>,
+function createRoute<
+  TPathSchema,
+  TQuerySchema,
+  TBodySchema,
+  TResponseSchema,
+  TResponseType,
+  TMethod,
+  TPath,
+>(
+  config: RouteConfig<
+    TPathSchema,
+    TQuerySchema,
+    TBodySchema,
+    TResponseSchema,
+    TResponseType,
+    TMethod,
+    TPath
+  >,
 ): ServerRoute
 ```
 
@@ -135,12 +151,12 @@ handler: async params => {
   params.filter // From queryParamSchema
   params.name // From bodySchema
 
-  // Runtime context (always available)
+  // Runtime context
   params.mastra // Mastra instance
   params.requestContext // Request-scoped context
-  params.tools // Available tools
+  params.registeredTools // Registered tools (optional)
   params.abortSignal // Request cancellation signal
-  params.taskStore // A2A task storage
+  params.taskStore // A2A task storage (optional)
 }
 ```
 

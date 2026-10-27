@@ -120,10 +120,10 @@ const scorer = createScorer({
   },
   {
     name: 'type',
-    type: 'string',
+    type: "'agent' | 'trajectory' | { input: ZodSchema; output: ZodSchema }",
     isOptional: true,
     description:
-      "Type specification for input/output. Use 'agent' for automatic agent types. For custom types, use the generic approach instead.",
+      "Type specification for input/output. Use 'agent' for agent input/output types, or 'trajectory' for agent input with a trajectory output. Pass an object with Zod schemas for input and output to infer custom run types.",
   },
   {
     name: 'prepareRun',

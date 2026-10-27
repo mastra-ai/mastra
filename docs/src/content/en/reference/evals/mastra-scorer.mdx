@@ -105,8 +105,9 @@ const result = await scorer.run({
   },
   {
     name: 'reason',
-    type: 'string',
-    description: 'Explanation for the score, if generateReason step was defined (optional).',
+    type: 'unknown',
+    description:
+      'Value returned by the generateReason step, typically a string explanation for the score. Undefined if no generateReason step was defined (optional).',
   },
   {
     name: 'preprocessStepResult',
