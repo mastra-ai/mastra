@@ -347,20 +347,21 @@ const stateSecret =
 // integration wires itself.
 const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
 const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
-const slack = slackAppToken || slackSigningSecret
-  ? new SlackIntegration({
-      mode: slackAppToken ? 'socket' : 'webhook',
-      appToken: slackAppToken,
-      signingSecret: slackSigningSecret,
-      botToken: process.env.SLACK_APP_BOT_TOKEN,
-      clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
-      clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
-      // Slack requires an HTTPS redirect_uri, which locally is the tunnel
-      // origin rather than the app's own public URL.
-      oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
-      uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
-    })
-  : undefined;
+const slack =
+  slackAppToken || slackSigningSecret
+    ? new SlackIntegration({
+        mode: slackAppToken ? 'socket' : 'webhook',
+        appToken: slackAppToken,
+        signingSecret: slackSigningSecret,
+        botToken: process.env.SLACK_APP_BOT_TOKEN,
+        clientId: process.env.SLACK_APP_CLIENT_ID?.trim(),
+        clientSecret: process.env.SLACK_APP_CLIENT_SECRET?.trim(),
+        // Slack requires an HTTPS redirect_uri, which locally is the tunnel
+        // origin rather than the app's own public URL.
+        oidcRedirectBaseUrl: process.env.MASTRACODE_CHANNELS_PUBLIC_URL ?? process.env.MASTRACODE_PUBLIC_URL,
+        uiOrigin: process.env.MASTRACODE_PUBLIC_URL,
+      })
+    : undefined;
 
 const integrations = [
   ...(github ? [github] : []),
