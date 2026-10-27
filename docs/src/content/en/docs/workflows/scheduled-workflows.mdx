@@ -45,7 +45,7 @@ A separate "register schedule" call won't happen. The scheduler reads `schedule`
 
 ## Delivery guarantees
 
-Scheduled workflow publication is best-effort. The scheduler claims each occurrence before publishing its start event, so a publication failure or process crash can skip that occurrence. It is not automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence; this does not confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+Scheduled workflow publication is best-effort. Because each occurrence is claimed before its start event is published, a publication failure or process crash can skip that occurrence. Skipped occurrences aren't automatically replayed, but later recurring fires can continue. A schedule marked `completed` has exhausted its cadence, which doesn't confirm execution. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
 
 ## Execution engine
 

@@ -20,7 +20,7 @@ Schedules require a [storage](/docs/storage) adapter that implements the schedul
 
 :::
 
-Persisting a schedule does not guarantee delivery of each occurrence. Publication is best-effort: a rejected publish or publisher crash can skip an occurrence without replaying it, while later recurring fires can continue. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
+Persisting a schedule doesn't guarantee delivery of each occurrence. Publication is best-effort: a rejected publish or publisher crash can skip an occurrence without replaying it, while later recurring fires can continue. See [Schedule delivery guarantees](/reference/schedules/overview#delivery-guarantees) for failure reporting and manual rerun precautions.
 
 ## Quickstart
 

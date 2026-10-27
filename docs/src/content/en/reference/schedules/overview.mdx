@@ -17,11 +17,13 @@ For usage patterns and concepts, see [Schedules](/docs/harness/schedules).
 
 Scheduled publication is best-effort, not at-least-once delivery. The scheduler atomically claims an occurrence and advances `nextFireAt` before publishing the agent or workflow start event. An exhausted cron schedule is marked `completed` in that claim. Completion means there are no remaining occurrences, not that the target started or succeeded.
 
-If publication rejects, the scheduler logs the schedule ID, run ID, scheduled fire time, and `publicationOutcome: 'unknown'`, invokes the configured `scheduler.onError` hook, and attempts to record a trigger with outcome `failed`. The failure describes the publication attempt, not proof that the target never started: a transport can accept an event before returning an error. The scheduler does not retry that occurrence. Recurring schedules remain active and can fire at their next scheduled time; terminal schedules remain completed with any recorded failure details in trigger history.
+If publication rejects, the scheduler logs the schedule ID, run ID, scheduled fire time, and `publicationOutcome: 'unknown'`. It invokes the configured `scheduler.onError` hook and attempts to record a trigger with outcome `failed`. This failure describes only the publication attempt. It doesn't prove that the target never started. A transport can accept an event before returning an error.
 
-If a publisher process dies after the claim commits, or confirmation is lost, that occurrence may be skipped without a failed trigger. A replacement scheduler cannot distinguish an unpublished event from one accepted before the crash using claim metadata or missing trigger history. It does not replay the occurrence or block later recurring fires. A publication acknowledgement also does not guarantee target execution, and transport redelivery can produce duplicates.
+The scheduler doesn't retry that occurrence. Recurring schedules remain active and can fire at their next scheduled time. Terminal schedules remain completed with any recorded failure details in trigger history.
 
-Before manually rerunning missed work, check target execution and transport records independently. Missing trigger history or a failed publication attempt alone is not evidence that rerunning is safe.
+If a publisher process dies after the claim commits, or confirmation is lost, that occurrence may be skipped without a failed trigger. A replacement scheduler can't distinguish an unpublished event from one accepted before the crash using claim metadata or missing trigger history. It doesn't replay the occurrence or block later recurring fires. A publication acknowledgement also doesn't guarantee target execution, and transport redelivery can produce duplicates.
+
+Before manually rerunning missed work, check target execution and transport records independently. Missing trigger history or a failed publication attempt alone isn't evidence that rerunning is safe.
 
 ## Usage example
 
