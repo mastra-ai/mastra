@@ -13,7 +13,8 @@
     "lint:fix": "oxlint --type-aware --fix .",
     "test": "vitest run",
     "test:unit": "vitest run --project unit:factory-ui",
-    "test:msw": "vitest run --project msw:factory-ui"
+    "test:msw": "vitest run --project msw:factory-ui",
+    "test:e2e:production": "playwright test --config e2e/playwright.production.config.ts"
   },
   "dependencies": {
     "@fontsource-variable/mona-sans": "5.3.0",
