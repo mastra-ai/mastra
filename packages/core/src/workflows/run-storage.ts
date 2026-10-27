@@ -20,10 +20,16 @@ export interface RunStorage {
   loadForResume(opts: { wait: boolean }): Promise<WorkflowRunState | null>;
   /** Fully materialized, for restart and time travel. */
   loadFull(): Promise<WorkflowRunState | null>;
-  /** The pending/waiting snapshot written before the engine runs. */
-  writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void>;
+  /**
+   * The pending/waiting snapshot written before the engine runs. With `inheritsState` (a storage v2
+   * nested run starting from its parent's stored state), the state isn't stored: the parent's is
+   * read in its place.
+   */
+  writeInitial(snapshot: WorkflowRunState, resourceId?: string, opts?: { inheritsState?: boolean }): Promise<void>;
   /** After a claim: has nothing been written to the run since `claimed` was loaded? */
   isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean>;
+  /** What the store reported for the state of a snapshot loaded by `loadForResume` or `loadFull`. */
+  statePatchBytes(snapshot: WorkflowRunState): number | undefined;
 }
 
 type RunStorageArgs = {
@@ -120,11 +126,16 @@ class RunStorageV1 implements RunStorage {
       resumedStepResult?.status === 'suspended'
     );
   }
+
+  statePatchBytes(): undefined {
+    return undefined;
+  }
 }
 
 // Keyed by the loaded snapshot, not the RunStorage: the parent-claim path loads a parent's
 // snapshot through a throwaway RunStorage, and the parent Run's own RunStorage releases it.
 const claimedSeqs = new WeakMap<WorkflowRunState, number>();
+const loadedStatePatchBytes = new WeakMap<WorkflowRunState, number>();
 
 class RunStorageV2 implements RunStorage {
   readonly #workflowName: string;
@@ -150,6 +161,7 @@ class RunStorageV2 implements RunStorage {
     }
     const snapshot = { ...run.header, context, value: run.state } as WorkflowRunState;
     claimedSeqs.set(snapshot, run.lastSeq);
+    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
     return snapshot;
   }
 
@@ -188,10 +200,16 @@ class RunStorageV2 implements RunStorage {
       successfulSteps: 'full',
     });
     if (!run) return null;
-    return { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
+    const snapshot = { ...run.header, context: run.steps, value: run.state } as WorkflowRunState;
+    loadedStatePatchBytes.set(snapshot, run.statePatchBytes);
+    return snapshot;
   }
 
-  async writeInitial(snapshot: WorkflowRunState, resourceId?: string): Promise<void> {
+  async writeInitial(
+    snapshot: WorkflowRunState,
+    resourceId?: string,
+    { inheritsState = false }: { inheritsState?: boolean } = {},
+  ): Promise<void> {
     const store = await this.#getStore();
     const { context, value, ...header } = snapshot;
     await store?.writeWorkflowRunCheckpoint({
@@ -201,8 +219,12 @@ class RunStorageV2 implements RunStorage {
       threadId: getSnapshotMemoryInfo(snapshot)?.threadId,
       header,
       steps: context,
-      state: value,
+      state: inheritsState ? undefined : value,
     });
+  }
+
+  statePatchBytes(snapshot: WorkflowRunState): number | undefined {
+    return loadedStatePatchBytes.get(snapshot);
   }
 
   async isClaimUnused(claimed: WorkflowRunState, resumedStepId: string): Promise<boolean> {
