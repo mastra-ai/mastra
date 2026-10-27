@@ -1619,6 +1619,81 @@ describe('Span', () => {
       });
     });
 
+    it('keeps Vercel AI Gateway routing on model step metadata while stripping the rest of provider metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const routing = {
+        finalProvider: 'anthropic',
+        resolvedProvider: 'bedrock',
+        modelAttempts: [
+          {
+            providerAttempts: [
+              { provider: 'bedrock', success: false, statusCode: 429 },
+              { provider: 'anthropic', success: true, statusCode: 200 },
+            ],
+          },
+        ],
+      };
+      const providerMetadata = {
+        gateway: { routing, cost: '0.0045', generationId: 'gen_1' },
+        anthropic: { cacheCreationInputTokens: 0 },
+      };
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: providerMetadata, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, headers: { 'x-vercel-id': 'req_1' } } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-gateway');
+
+      expect(stepSpan?.metadata).toEqual({
+        keep: 'metadata',
+        headers: { 'x-vercel-id': 'req_1' },
+        providerMetadata: { gateway: { routing } },
+      });
+    });
+
+    it('still strips model step provider metadata when reading gateway routing throws', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const providerMetadata: Record<string, unknown> = { openai: { secretish: true } };
+      Object.defineProperty(providerMetadata, 'gateway', {
+        enumerable: true,
+        get() {
+          throw new Error('gateway getter failed');
+        },
+      });
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-throwing-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: { legacy: true }, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, endKeep: 'metadata' } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-throwing-gateway');
+
+      expect(stepSpan?.metadata).toEqual({ keep: 'metadata', endKeep: 'metadata' });
+    });
+
     it('does not throw when model step metadata has throwing getters during construction', () => {
       const tracing = new DefaultObservabilityInstance({
         serviceName: 'test-tracing',
