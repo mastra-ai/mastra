@@ -5495,7 +5495,7 @@ export class DurableAgent<
     const callback: ReturnType<typeof withAck> = (event, ...args) => {
       if (!subscribed) return args[0]?.() ?? Promise.resolve();
       activityVersion++;
-      if (bufferingReplay && event.index !== undefined) {
+      if (bufferingReplay) {
         bufferedEvents.push(async () => {
           await acknowledge(event, ...args);
         });
@@ -5503,31 +5503,31 @@ export class DurableAgent<
       }
       return acknowledge(event, ...args);
     };
-
-    await (options.offset !== undefined
-      ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
-      : this.pubsub.subscribeWithReplay(topic, callback));
-    await replayFloor.refreshReplayFilter?.();
-    while (bufferedEvents.length) {
-      await bufferedEvents.shift()!();
-    }
-    bufferingReplay = false;
-
     const unsubscribe = async () => {
       if (!subscribed) return;
       subscribed = false;
       await this.pubsub.unsubscribe(topic, callback);
     };
+
     try {
+      await (options.offset !== undefined
+        ? this.pubsub.subscribeFromOffset(topic, options.offset, callback)
+        : this.pubsub.subscribeWithReplay(topic, callback));
+      await replayFloor.refreshReplayFilter?.();
+      while (bufferedEvents.length) {
+        await bufferedEvents.shift()!();
+      }
+      bufferingReplay = false;
+
       const reconciledVersion = activityVersion;
       if (options.onComplete && (await this.#isObservationComplete(runId)) && activityVersion === reconciledVersion) {
         options.onComplete();
       }
+      return unsubscribe;
     } catch (error) {
       await unsubscribe();
       throw error;
     }
-    return unsubscribe;
   }
 
   /**

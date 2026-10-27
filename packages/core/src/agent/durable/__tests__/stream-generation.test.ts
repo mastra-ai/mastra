@@ -308,14 +308,31 @@ describe('observe() from an offset', () => {
         if (event.index === 0) {
           expect(ackReplay).not.toHaveBeenCalled();
           await emitOwnershipClaimedEvent(pubsub, runId, recovered.record!.generation, 1);
+          await cb({ ...event, index: undefined, data: textChunk('unindexed') }, ack, nack);
         }
       }),
     );
     const chunks: any[] = [];
     const unsubscribe = await durable.__subscribeToRunStream(runId, {}, event => chunks.push(event));
     expect(ackReplay).toHaveBeenCalledOnce();
-    expect(texts(chunks.map(event => event.data))).toEqual(['committed']);
+    expect(texts(chunks.map(event => event.data))).toEqual(['committed', 'unindexed']);
     await unsubscribe();
+    await transport.close();
+  });
+
+  it('unsubscribes if buffered replay delivery throws', async () => {
+    const { durable, pubsub, transport } = await observedAgent();
+    const runId = 'replay-delivery-error';
+    await emitChunkEvent(pubsub, runId, textChunk('replayed'));
+    const unsubscribe = vi.spyOn(pubsub, 'unsubscribe');
+    const onEvent = vi.fn(() => {
+      throw new Error('consumer failed');
+    });
+
+    await expect(durable.__subscribeToRunStream(runId, {}, onEvent)).rejects.toThrow('consumer failed');
+    expect(unsubscribe).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+    await emitChunkEvent(pubsub, runId, textChunk('later'));
+    expect(onEvent).toHaveBeenCalledOnce();
     await transport.close();
   });
 
