@@ -5,6 +5,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEffect, useState } from 'react';
 import { McpServerEventsList } from './mcp-server-events-list';
+import { McpServerTasksList } from './mcp-server-tasks-list';
 import { McpServerToolsList } from './mcp-server-tools-list';
 
 export interface MCPDetailProps {
@@ -119,6 +120,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
       </Card>
 
       <McpServerToolsList server={server} />
+      {server.tasks_capability && <McpServerTasksList server={server} />}
       {server.events_capability && <McpServerEventsList server={server} />}
     </div>
   );

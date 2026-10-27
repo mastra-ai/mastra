@@ -1,4 +1,4 @@
-import type { McpServerInfo, McpToolInfo } from '@mastra/client-js';
+import type { McpServerInfo, McpServerTaskSurface, McpToolInfo } from '@mastra/client-js';
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
@@ -8,9 +8,11 @@ import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
 import { useMCPServerTools } from '@mastra/react/hooks/mcps';
 import { useMemo, useState } from 'react';
 import { z } from 'zod';
+import { useMcpServerTasks } from '../hooks/use-mcp-server-tasks';
 import { ToolIconMap } from '@/domains/tools/components/ToolIcon';
 
 const COLUMNS = 'auto 1fr auto';
+const COLUMNS_WITH_TASKS = 'auto 1fr auto auto';
 
 const TOOL_TYPE_LABELS = { tool: 'Tool', agent: 'Agent', workflow: 'Workflow' } as const;
 
@@ -47,10 +49,41 @@ function hasAppUi(meta: McpToolInfo['_meta']): boolean {
   );
 }
 
+type TaskSurface = McpServerTaskSurface | undefined;
+
+/** How a tool runs as an MCP task: always, or only when the client asks (`auto`). */
+function TaskModeBadge({ surface }: { surface: TaskSurface }) {
+  if (!surface) return null;
+  return (
+    <Tooltip>
+      <TooltipTrigger asChild>
+        <span className="inline-flex items-center gap-1">
+          <Badge size="xs" variant={surface.mode === 'always' ? 'info' : 'neutral'} emphasis="subtle">
+            {surface.mode}
+          </Badge>
+          {surface.recover && (
+            <Badge size="xs" variant="neutral" emphasis="subtle">
+              recover
+            </Badge>
+          )}
+        </span>
+      </TooltipTrigger>
+      <TooltipContent>
+        {surface.mode === 'always' ? 'Always runs as a task' : 'Runs as a task when the client asks for one'}
+        {surface.recover ? '; resumed after a server restart' : ''}
+      </TooltipContent>
+    </Tooltip>
+  );
+}
+
 export function McpServerToolsList({ server }: { server: McpServerInfo }) {
   const [search, setSearch] = useState('');
   const { data: tools = {}, isLoading } = useMCPServerTools({ selectedServer: server });
   const { Link, paths } = useLinkComponent();
+  const { data: tasks } = useMcpServerTasks(server.id, { enabled: Boolean(server.tasks_capability) });
+  const surfaces = useMemo(() => new Map(tasks?.surfaces.map(surface => [surface.name, surface])), [tasks]);
+  const showTasks = Boolean(server.tasks_capability);
+  const columns = showTasks ? COLUMNS_WITH_TASKS : COLUMNS;
 
   const filteredTools = useMemo(() => {
     const term = search.toLowerCase();
@@ -73,13 +106,14 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
       </div>
 
       {isLoading ? (
-        <DataListSkeleton columns={COLUMNS} />
+        <DataListSkeleton columns={columns} />
       ) : (
-        <DataList columns={COLUMNS} scrollRef={containerRef}>
+        <DataList columns={columns} scrollRef={containerRef}>
           <DataList.Top>
             <DataList.TopCell>Name</DataList.TopCell>
             <DataList.TopCell>Description</DataList.TopCell>
             <DataList.TopCell className="justify-center text-center">Type</DataList.TopCell>
+            {showTasks && <DataList.TopCell>Task</DataList.TopCell>}
           </DataList.Top>
 
           {filteredTools.length === 0 && search ? <DataList.NoMatch message="No tools match your search" /> : null}
@@ -101,6 +135,11 @@ export function McpServerToolsList({ server }: { server: McpServerInfo }) {
               <DataList.TextCell className="justify-center text-center">
                 <ToolTypeIcon type={tool.toolType ?? 'tool'} />
               </DataList.TextCell>
+              {showTasks && (
+                <DataList.Cell>
+                  <TaskModeBadge surface={surfaces.get(tool.name)} />
+                </DataList.Cell>
+              )}
             </DataList.RowLink>
           ))}
         </DataList>
