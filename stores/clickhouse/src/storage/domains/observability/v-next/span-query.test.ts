@@ -44,6 +44,7 @@ it('keeps completed threads visible before pending and completed root copies mer
     const endedAt = new Date(startedAt.getTime() + 1000);
     const plan = planThreadRowsQuery({
       timeRange: { traces: { from: startedAt.toISOString(), to: new Date(endedAt.getTime() + 1000).toISOString() } },
+      page: { limit: 40 },
     });
     // Repeated public writes reproduce the nondeterministic tie reported in PR #27652.
     for (let index = 0; index < 40; index++) {
@@ -95,7 +96,10 @@ it('rejects broad queries over large histories while allowing narrow queries and
   ).rejects.toBeInstanceOf(TraceQueryResourceLimitError);
   const narrow = await storage.queryThreads(
     planThreadRowsQuery(
-      { timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } } },
+      {
+        timeRange: { traces: { from: '2026-01-01T00:00:01Z', to: '2026-01-01T01:00:00Z' } },
+        page: { limit: 100 },
+      },
       { scope: { organizationId: 'large' } },
     ),
   );
