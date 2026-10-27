@@ -2112,6 +2112,7 @@ export const mastra = new Mastra({
 - Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
 - An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
 - Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance.
+- `tasks/cancel` can reach any instance. If the task's first attempt is still waiting for a slot on the instance that started it, that instance stops it on its next sweep, up to one lease (`leaseDurationMs`) later.
 
 Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<server id>` with resource id `mcp-server:<server id>:<caller>`:
 
