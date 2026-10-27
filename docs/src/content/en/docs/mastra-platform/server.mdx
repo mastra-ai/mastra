@@ -45,8 +45,8 @@ Server deploy provisions hosted storage automatically. If you override storage w
     The command runs `mastra build` and uploads its artifact, then builds and deploys a Docker image. On first deploy, the CLI creates a `.mastra-project.json` file linking your local project to the platform. Commit this file so subsequent deploys and CI/CD target the same project.
 
     :::note
-    The CLI uploads environment variables from one env file. It uses `.env.<environment>` if it exists (for example `.env.production` for the default `production` environment), otherwise the only `.env` or `.env.*` file. If there are several and none matches, it asks which one to use; in non-interactive runs (`--yes` or CI), pass `--env-file <file>` instead. Pass `--env-file` to override the choice. On the first deploy, the uploaded vars seed the project if no env vars are set yet. After that, manage env vars through the web dashboard. If no env file exists, nothing is uploaded and the environment keeps its stored env vars.
-    Review and sanitize the selected file before first deploy to avoid uploading development-only or personal secrets.
+    The CLI uploads environment variables from one env file. It uses `.env.<environment>` if it exists (for example `.env.production` for the default `production` environment), otherwise the only `.env` or `.env.*` file. If there are several and none matches, it asks which one to use; in non-interactive runs (`--yes` or CI), pass `--env-file <file>` instead. Pass `--env-file` to override the choice. Every deploy merges the file's vars into the environment's stored env vars: values from the file win, except that an empty value doesn't clear a stored one. The CLI lists the keys it will overwrite and asks you to confirm (skipped with `--yes` or in CI). To manage a var only in the dashboard, remove it from the env file. If no env file exists, nothing is uploaded and the environment keeps its stored env vars.
+    Review and sanitize the selected file before deploying to avoid uploading development-only or personal secrets.
     :::
 
     See the [CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags.
