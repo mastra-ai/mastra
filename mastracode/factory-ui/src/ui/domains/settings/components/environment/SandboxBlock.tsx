@@ -93,7 +93,8 @@ export function SandboxBlock({
       {rows}
       {dockerLowMemory && (
         <Notice variant="warning">
-          Docker is on with {memoryMb} MB of memory. Use at least 2 GB for Docker; containers may run out of memory.
+          Docker is on with {memoryMb} MB of memory. We recommend at least 2 GB for Docker; with less, containers may
+          run out of memory.
         </Notice>
       )}
     </>
