@@ -156,13 +156,14 @@ export class AgentStreamBus {
   /**
    * The bus a run's frames live on.
    *
-   * When the run's steps execute on whichever worker claims them, its frames
-   * must be on the Mastra-level bus: an observer on the agent's own bus would
-   * never see them. Using one bus also means one cache log per run — the
+   * Once registered, frames go on the Mastra-level bus so any Mastra instance
+   * sharing it can observe the run, even if this bus was resolved before
+   * registration. Using one bus also means one cache log per run — the
    * property offset replay depends on.
    *
-   * When every step runs in this process and publishes through this agent, an
-   * agent-level pubsub keeps carrying its run frames.
+   * A user-provided agent-level pubsub keeps carrying run frames, unless the
+   * run's steps execute on whichever worker claims them (evented): then an
+   * observer on the agent's own bus would never see them.
    */
   #runBus(sharedBus: PubSub | undefined): PubSub {
     return resolveRunBus({

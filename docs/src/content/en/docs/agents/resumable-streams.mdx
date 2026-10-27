@@ -20,7 +20,7 @@ Resumable streams don't make the run itself durable. If the process running the 
 | Standalone (`new Agent()` without `Mastra`) | Off |
 | Durable agent (`durable: true`, `createDurableAgent()`) | Always published; `streams: false` only turns off the replay cache |
 
-A registered agent publishes on `mastra.pubsub` and caches events in `mastra.serverCache`, or an in-memory cache when the server has none.
+A registered agent, durable or not, publishes on `mastra.pubsub` and caches events in `mastra.serverCache`, or an in-memory cache when the server has none. Every `Mastra` instance that shares that PubSub and cache can observe the run. An agent-level `pubsub` takes precedence, except on the evented engine, whose steps always publish on `mastra.pubsub`.
 
 ## Configure streams
 
