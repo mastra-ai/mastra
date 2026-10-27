@@ -4,7 +4,7 @@ import { loadSettings, resolveDefaultThinkingLevel } from '../onboarding/setting
 import { createAcpSession } from './runtime.js';
 
 vi.mock('../onboarding/settings.js', () => ({
-  loadSettings: vi.fn(() => ({})),
+  loadSettings: vi.fn(() => ({ preferences: { subagentsEnabled: false } })),
   resolveDefaultThinkingLevel: vi.fn(() => ({ level: 'medium' })),
 }));
 
@@ -76,11 +76,19 @@ describe('ACP runtime factory', () => {
     boot.session.mode.get.mockReturnValue('plan');
     expect(runtime.getThinkingLevel?.()).toBe('medium');
     expect(loadSettings).toHaveBeenCalledOnce();
-    expect(resolveDefaultThinkingLevel).toHaveBeenLastCalledWith({}, 'plan');
+    expect(resolveDefaultThinkingLevel).toHaveBeenLastCalledWith({ preferences: { subagentsEnabled: false } }, 'plan');
     boot.session.state.get.mockReturnValue({ thinkingLevel: 'high' });
     expect(runtime.getThinkingLevel?.()).toBe('high');
     expect(resolveDefaultThinkingLevel).toHaveBeenCalledTimes(2);
     await runtime.cleanup?.();
+  });
+
+  it('registers the built-in subagents when the subagentsEnabled setting is on', async () => {
+    vi.mocked(loadSettings).mockReturnValueOnce({ preferences: { subagentsEnabled: true } } as never);
+    vi.mocked(createMastraCode).mockResolvedValueOnce(bootResult() as never);
+    await createAcpSession({ cwd: '/project', mcpServers: [] });
+    const { subagents } = vi.mocked(createMastraCode).mock.lastCall![0]!;
+    expect(subagents?.map(agent => agent.id)).toEqual(['explore', 'plan', 'execute']);
   });
 
   it('preserves co-author configuration when booting a session', async () => {
