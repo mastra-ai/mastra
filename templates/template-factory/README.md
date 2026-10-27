@@ -53,13 +53,7 @@ Choose authentication, storage, and sandboxes independently. Model providers and
 
 The generated server uses `DATABASE_URL` for PostgreSQL with pgvector. To use the included local PostgreSQL service, run `npm run db:up` and set `DATABASE_URL` to its connection string in `.env`. The generated `docker-compose.yml` contains the connection settings.
 
-Mastra platform sandboxes use `MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`, together with `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. To run commands on the Factory Server's machine, set this override in `.env`:
-
-```dotenv
-FACTORY_SANDBOX_PROVIDER=local
-```
-
-Install Git and your repository's build tools on that machine. Authentication and storage can continue to use Mastra platform. The separate `SANDBOX_PROVIDER` setting selects the backend used by Mastra platform sandboxes.
+With `MASTRA_PLATFORM_SECRET_KEY` (or `MASTRA_PLATFORM_ACCESS_TOKEN`) set, `npm run dev` runs agent commands in local sandboxes on your machine, and deployments use Mastra platform sandboxes, which also need `MASTRA_PROJECT_ID` and `MASTRA_ENVIRONMENT_ID`. To pick a sandbox yourself, pass `sandbox` to `MastraFactory` in `src/mastra/index.ts`, for example `new LocalFactorySandbox()` from `@mastra/factory`.
 
 ## Deploy
 

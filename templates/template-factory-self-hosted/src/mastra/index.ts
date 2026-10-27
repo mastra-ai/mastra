@@ -12,8 +12,6 @@
  * instance.
  */
 
-import { homedir } from 'node:os';
-import { join } from 'node:path';
 import { Mastra } from '@mastra/core/mastra';
 import { MastraAuthWorkos } from '@mastra/auth-workos';
 import { createFactorySecretEncryption, LocalFactorySandbox, MastraFactory } from '@mastra/factory';
@@ -24,10 +22,6 @@ function requiredEnv(name: string): string {
   const value = process.env[name]?.trim();
   if (!value) throw new Error(`${name} is required. See .env.example.`);
   return value;
-}
-
-function pickEnv(names: string[]): Record<string, string> {
-  return Object.fromEntries(names.flatMap(name => (process.env[name] ? [[name, process.env[name]]] : [])));
 }
 
 const databaseUrl = requiredEnv('DATABASE_URL');
@@ -53,12 +47,10 @@ export const factory = new MastraFactory({
       webhookSecret: requiredEnv('GITHUB_APP_WEBHOOK_SECRET'),
     }),
   ],
-  // Runs agent commands on this machine as the server user. Only the listed
-  // host variables reach sandbox commands so server secrets stay out.
-  sandbox: new LocalFactorySandbox({
-    root: join(homedir(), '.mastra', 'factory', 'sandboxes'),
-    env: pickEnv(['HOME', 'USER', 'LOGNAME', 'SHELL', 'PATH', 'TMPDIR', 'LANG', 'LC_ALL', 'TERM', 'TZ']),
-  }),
+  // Runs agent commands on this machine as the server user, under
+  // ~/.mastracode/web/sandboxes. Only an allow-list of host variables (HOME,
+  // USER, SHELL, locale, TLS certs) reaches sandbox commands.
+  sandbox: new LocalFactorySandbox(),
   publicUrl: process.env.MASTRACODE_PUBLIC_URL,
   // Signs OAuth `state` for integration connect flows; stable across restarts.
   stateSecret: requiredEnv('GITHUB_APP_WEBHOOK_SECRET'),

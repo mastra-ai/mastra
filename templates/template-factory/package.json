@@ -21,7 +21,6 @@
     "@mastra/core": "latest",
     "@mastra/factory": "latest",
     "@mastra/pg": "latest",
-    "@mastra/platform-workspace": "latest",
     "zod": "^4.4.3"
   },
   "devDependencies": {

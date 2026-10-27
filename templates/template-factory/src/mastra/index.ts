@@ -20,22 +20,6 @@
 import { Mastra } from '@mastra/core/mastra';
 import { MastraFactory } from '@mastra/factory';
 import { PgFactoryStorage, PgVector } from '@mastra/pg';
-import { PlatformFactorySandbox } from '@mastra/platform-workspace';
-
-// Session sandboxes run on Mastra Platform; the sandbox client reads the
-// MASTRA_PLATFORM_* env itself.
-const PLATFORM_SANDBOX_ENV_KEYS = [
-  'MASTRA_PLATFORM_ACCESS_TOKEN',
-  'MASTRA_ENVIRONMENT_ID',
-  'MASTRA_PROJECT_ID',
-] as const;
-const hasPlatformSandboxEnv = PLATFORM_SANDBOX_ENV_KEYS.every(key => Boolean(process.env[key]?.trim()));
-
-if (!hasPlatformSandboxEnv) {
-  throw new Error(
-    'MASTRA_PLATFORM_ACCESS_TOKEN, MASTRA_ENVIRONMENT_ID, and MASTRA_PROJECT_ID are required when using the platform integration.',
-  );
-}
 
 // One FactoryStorage backend powers agent storage, the factory app tables,
 // the distributed project lock, and better-auth; the paired PgVector rides
@@ -58,7 +42,8 @@ export const factory = new MastraFactory({
   sandboxStart: 'eager',
   storage: new PgFactoryStorage({ id: 'factory-storage', connectionString: databaseUrl }),
   vector: new PgVector({ id: 'factory-vectors', connectionString: databaseUrl }),
-  sandbox: new PlatformFactorySandbox({ defaults: { memoryMb: 1024 * 8, cpuCount: 4 } }),
+  // No `sandbox`: with Platform credentials the factory uses a local sandbox
+  // under `mastra dev` and a Platform sandbox in deployments.
 });
 
 const preparedArgs = await factory.prepare();
