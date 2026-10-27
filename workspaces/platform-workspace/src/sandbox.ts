@@ -309,6 +309,9 @@ export type CaptureCheckpointResult =
  * instance are cleared, so the next `ensureRunning()` on a reused instance
  * will re-provision cleanly.
  */
+/** E2B's sandbox control port (envd). Never exposed as a preview. */
+const E2B_CONTROL_PORT = 49983;
+
 export class SandboxDestroyedError extends Error {
   readonly sandboxId: string | undefined;
   readonly command: string;
@@ -1314,24 +1317,35 @@ export class PlatformSandbox extends MastraSandbox {
   }
 
   /**
-   * The public HTTPS URL for a port inside the sandbox, so a server running
-   * there can be reached from outside. Anyone with the URL can reach that
-   * port, so don't share it with people who shouldn't see what it serves.
+   * Links that open a port of the sandbox in a browser. Sandbox ports are
+   * private:
+   *
+   * - `url` is the port's address. Anyone with access to the sandbox's
+   *   project can open it after signing in to the platform; anyone else is
+   *   turned away. It doesn't expire, so it's the link to share.
+   * - `signInUrl` opens the same port in a browser that can't sign in to the
+   *   platform, such as an agent's own browser. It works once and expires
+   *   after a minute; never share it.
+   *
    * The sandbox control port is refused.
    */
-  async getPortUrl(port: number): Promise<string> {
+  async getPortUrl(port: number): Promise<{ url: string; signInUrl: string }> {
     if (!Number.isInteger(port) || port < 1 || port > 65_535) {
       throw new RangeError(`Port must be an integer from 1 to 65535, got ${port}`);
     }
-    await this.ensureRunning();
-    const lease = await this._ensureLease();
-    const endpoint = new URL(lease.wsEndpoint);
-    const [controlPort, ...rest] = endpoint.hostname.split('-');
-    if (lease.provider !== 'e2b' || controlPort === undefined || !/^\d+$/.test(controlPort)) {
-      throw new Error(`Port URLs aren't available for ${lease.provider} sandboxes`);
+    if (port === E2B_CONTROL_PORT) throw new Error(`Port ${port} is the sandbox control port`);
+    if (this._client.sandboxProvider !== 'e2b') {
+      throw new Error(`Port URLs aren't available for ${this._client.sandboxProvider} sandboxes`);
     }
-    if (String(port) === controlPort) throw new Error(`Port ${port} is the sandbox control port`);
-    return `https://${port}-${rest.join('-')}`;
+    await this.ensureRunning();
+    if (!this._sandboxId) throw new SandboxNotReadyError(this.id);
+    const response = await this._request(`/sandbox/${encodeURIComponent(this._sandboxId)}/preview-grants`, {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify({ port }),
+    });
+    const { url: signInUrl } = (await response.json()) as { url: string };
+    return { url: `${new URL(signInUrl).origin}/`, signInUrl };
   }
 
   /**

@@ -73,18 +73,23 @@ function portUrlTool(sandbox: object | undefined, found = true) {
 }
 
 describe('factory_sandbox_port_url', () => {
-  it("returns the public URL from the calling session's own sandbox", async () => {
-    const getPortUrl = vi.fn(async (port: number) => `https://${port}-e2b-sbx-1.e2b.app`);
+  it("returns the links from the calling session's own sandbox", async () => {
+    const links = {
+      url: 'https://3000.sbx-1.preview.test/',
+      signInUrl: 'https://3000.sbx-1.preview.test/__mastra/grant?g=abc',
+    };
+    const getPortUrl = vi.fn(async () => links);
     const { run, findSandbox } = portUrlTool({ getPortUrl });
 
-    await expect(run(3000)).resolves.toEqual({ url: 'https://3000-e2b-sbx-1.e2b.app' });
+    await expect(run(3000)).resolves.toEqual(links);
     expect(findSandbox).toHaveBeenCalledWith({ sourceControl, orgId: 'org-1', sessionId: 'session-1' });
     expect(getPortUrl).toHaveBeenCalledWith(3000);
   });
 
-  it('tells the agent the URL is public', () => {
+  it('tells the agent which link to share and which to keep to itself', () => {
     const { tool } = portUrlTool(undefined);
-    expect(tool.description).toContain('Anyone with the URL can reach that port');
+    expect(tool.description).toContain('`url` is the link to share');
+    expect(tool.description).toContain('Never share it or post it anywhere.');
   });
 
   it.each([

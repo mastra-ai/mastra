@@ -15,7 +15,7 @@ export interface FactorySandboxToolDependencies {
 }
 
 interface PortUrlSandbox {
-  getPortUrl(port: number): Promise<string>;
+  getPortUrl(port: number): Promise<{ url: string; signInUrl: string }>;
 }
 
 function hasPortUrl(sandbox: object): sandbox is PortUrlSandbox {
@@ -60,8 +60,11 @@ export function createFactorySandboxTools(
   const portUrl = createTool({
     id: 'factory_sandbox_port_url',
     description: [
-      'Get the public URL for a port in your sandbox, so you or the person you are working with can open a server you started there (a dev server, a preview, an API).',
-      'Start the server first and bind it to 0.0.0.0, not 127.0.0.1. Anyone with the URL can reach that port, so only share it with the person you are working with.',
+      'Get links that open a port in your sandbox in a browser, so you or the person you are working with can see a server you started there (a dev server, a preview, an API).',
+      'Start the server first and bind it to 0.0.0.0, not 127.0.0.1.',
+      '`url` is the link to share: it only opens for people signed in with access to this sandbox, and it does not expire.',
+      '`signInUrl` is only for your own browser tool, which cannot sign in. It works once and expires after a minute. Never share it or post it anywhere.',
+      'A browser signed in to one port can reach every port of this sandbox, so a page can call an API on another port.',
     ].join(' '),
     inputSchema: z
       .object({
@@ -74,7 +77,7 @@ export function createFactorySandboxTools(
         sourceControl && (await deps.findSandbox({ sourceControl, orgId: scope.orgId, sessionId: scope.sessionId }));
       if (!sandbox) throw new Error('This session has no sandbox running yet. Run a command to start one.');
       if (!hasPortUrl(sandbox)) throw new Error("This session's sandbox can't expose ports.");
-      return { url: await sandbox.getPortUrl(port) };
+      return sandbox.getPortUrl(port);
     },
   });
 
