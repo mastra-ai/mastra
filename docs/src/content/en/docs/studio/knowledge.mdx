@@ -10,7 +10,7 @@ packages:
 
 Studio can browse the Knowledge instances registered on your Mastra server: a graph of nodes, records and pins, name search, activity, and a scope view. The page is read-only.
 
-The routes that feed it are **off by default**. Until you enable them, the Knowledge page in Studio shows "Knowledge browsing is not enabled".
+The routes that feed it are **off by default**. Until you enable them, the Knowledge page in Studio shows an explainer saying Knowledge browsing isn't enabled.
 
 ## Enable the routes
 
@@ -85,5 +85,5 @@ Match on the **mounted** path, `/api/knowledge/*` by default, not the route path
 ## Deployment notes
 
 - **No RBAC provider:** the `knowledge:read` check is skipped, so any authenticated user can read any named scope unless your auth config binds scopes with the key above.
-- **Unbound scope:** if a user is authenticated but no scope is bound, requests are trusted as sent. The server logs a one-time warning. This suits an operator-controlled Studio, not a multi-tenant host.
+- **Unbound scope:** if a user is authenticated but no scope is bound, requests are trusted as sent. The server logs a one-time warning. This suits an operator-controlled Studio. On a multi-tenant host, bind a scope for every user.
 - **With an FGA provider:** `GET /knowledge` lists only the instances the caller can read, and the other routes answer `404` for any other instance.
