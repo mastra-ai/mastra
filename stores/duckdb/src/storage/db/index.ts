@@ -90,6 +90,9 @@ export class DuckDBConnection extends MastraBase {
   private initialized = false;
   private initPromise: Promise<void> | null = null;
   private closed = false;
+  private activeConnections = 0;
+  private drainPromise: Promise<void> | null = null;
+  private finishDrain: (() => void) | null = null;
   private path: string;
   private instanceOptions: Record<string, string>;
 
@@ -135,7 +138,22 @@ export class DuckDBConnection extends MastraBase {
     if (!this.instance) {
       throw new Error('DuckDB instance not initialized');
     }
-    return this.instance.connect();
+    this.activeConnections++;
+    try {
+      return await this.instance.connect();
+    } catch (error) {
+      this.releaseConnection();
+      throw error;
+    }
+  }
+
+  private releaseConnection(): void {
+    this.activeConnections--;
+    if (this.activeConnections === 0) {
+      this.finishDrain?.();
+      this.finishDrain = null;
+      this.drainPromise = null;
+    }
   }
 
   private closeConnection(connection: unknown): void {
@@ -163,6 +181,8 @@ export class DuckDBConnection extends MastraBase {
       }
     } catch {
       // Ignore close failures to avoid masking query/execute errors.
+    } finally {
+      this.releaseConnection();
     }
   }
 
@@ -346,6 +366,10 @@ export class DuckDBConnection extends MastraBase {
   async close(): Promise<void> {
     this.closed = true;
     await this.initPromise?.catch(() => undefined);
+    if (this.activeConnections > 0) {
+      this.drainPromise ??= new Promise<void>(resolve => (this.finishDrain = resolve));
+      await this.drainPromise;
+    }
     if (this.instance) {
       try {
         const instance = this.instance as unknown as { closeSync?: () => void; close?: () => void };

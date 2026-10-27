@@ -5,8 +5,9 @@ import { join } from 'node:path';
 
 import { Mastra } from '@mastra/core';
 import { MastraCompositeStore } from '@mastra/core/storage';
-import { afterEach, beforeEach, describe, expect, it } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { DuckDBConnection } from './db';
 import { DuckDBStore } from './index';
 
 describe('DuckDBStore.close()', () => {
@@ -20,6 +21,7 @@ describe('DuckDBStore.close()', () => {
   });
 
   afterEach(async () => {
+    vi.restoreAllMocks();
     await duck?.close();
     rmSync(dir, { recursive: true, force: true });
   });
@@ -100,13 +102,34 @@ describe('DuckDBStore.close()', () => {
     reopenInAnotherProcess();
   });
 
-  it('does not reopen the file when an observability read races with shutdown', async () => {
+  it('waits for an active observability read before releasing the file lock', async () => {
     duck = new DuckDBStore({ path: dbPath });
     await duck.observability.init();
-    const read = duck.observability.getSpan({ spanId: 'missing' });
-    await duck.close();
-    await Promise.allSettled([read]);
 
+    let releaseRead!: () => void;
+    const paused = new Promise<void>(resolve => (releaseRead = resolve));
+    let readStarted!: () => void;
+    const started = new Promise<void>(resolve => (readStarted = resolve));
+    const getConnection = DuckDBConnection.prototype.getConnection;
+    vi.spyOn(DuckDBConnection.prototype, 'getConnection').mockImplementation(async function (this: DuckDBConnection) {
+      const connection = await getConnection.call(this);
+      readStarted();
+      await paused;
+      return connection;
+    });
+
+    const read = duck.observability.getSpan({ spanId: 'missing' });
+    await started; // The native connection is open before shutdown begins.
+    let closed = false;
+    const closing = duck.close().then(() => (closed = true));
+    try {
+      await new Promise<void>(resolve => setImmediate(resolve));
+      expect(closed).toBe(false);
+    } finally {
+      releaseRead();
+      await closing;
+    }
+    await expect(read).resolves.toBeNull();
     reopenInAnotherProcess();
   });
 
