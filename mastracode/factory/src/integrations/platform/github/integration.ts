@@ -1173,6 +1173,15 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return repos;
   }
 
+  /**
+   * The Platform has no single-repository endpoint, so read the (cached)
+   * installation listing. The repo picker's search warms that cache.
+   */
+  async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
+    const repositories = await this.listInstallationRepos(installationId);
+    return repositories.find(repository => repository.fullName === repoFullName) ?? null;
+  }
+
   async mintInstallationToken(installationId: number): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
     if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {

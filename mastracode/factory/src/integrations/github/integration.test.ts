@@ -223,6 +223,70 @@ describe('GithubIntegration installation Octokit', () => {
   });
 });
 
+describe('GithubIntegration.getInstallationRepo', () => {
+  afterEach(() => {
+    vi.unstubAllGlobals();
+  });
+
+  function stubRepoApi() {
+    const json = (status: number, body: unknown) =>
+      new Response(JSON.stringify(body), { status, headers: { 'content-type': 'application/json' } });
+    const repoRequests: string[] = [];
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (url: string) => {
+        if (url.endsWith('/app/installations/7/access_tokens')) {
+          return json(201, {
+            token: 'ghs_1',
+            expires_at: new Date(Date.now() + 60 * 60_000).toISOString(),
+            permissions: { metadata: 'read' },
+            repository_selection: 'all',
+          });
+        }
+        const path = new URL(url).pathname;
+        repoRequests.push(path);
+        if (path === '/repos/acme/api') {
+          return json(200, {
+            id: 456,
+            full_name: 'acme/api',
+            name: 'api',
+            owner: { login: 'acme' },
+            default_branch: 'main',
+            private: true,
+          });
+        }
+        if (path === '/repos/acme/gone') return json(404, { message: 'Not Found' });
+        return json(500, { message: 'Server Error' });
+      }),
+    );
+    return repoRequests;
+  }
+
+  it('reads one repository with a single request', async () => {
+    const repoRequests = stubRepoApi();
+    const github = new GithubIntegration(validConfig());
+
+    await expect(github.getInstallationRepo(7, 'acme/api')).resolves.toEqual({
+      id: 456,
+      fullName: 'acme/api',
+      name: 'api',
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: true,
+      installationId: 7,
+    });
+    expect(repoRequests).toEqual(['/repos/acme/api']);
+  });
+
+  it('returns null when the installation cannot see the repository, and throws on upstream failures', async () => {
+    stubRepoApi();
+    const github = new GithubIntegration(validConfig());
+
+    await expect(github.getInstallationRepo(7, 'acme/gone')).resolves.toBeNull();
+    await expect(github.getInstallationRepo(7, 'acme/boom')).rejects.toMatchObject({ status: 500 });
+  });
+});
+
 describe('GithubIntegration collaborator permission coalescing', () => {
   it('shares one in-flight request between overlapping lookups for the same login', async () => {
     const github = new GithubIntegration(validConfig());

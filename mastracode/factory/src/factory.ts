@@ -1058,9 +1058,8 @@ export class MastraFactory {
                   id: installationId,
                 });
                 if (!installation) return null;
-                const repositories = await githubIntegration.listInstallationRepos(Number(installation.externalId));
-                const selected = repositories.find(repo => repo.id.toString() === externalId && repo.fullName === slug);
-                if (!selected) return null;
+                const selected = await githubIntegration.getInstallationRepo(Number(installation.externalId), slug);
+                if (!selected || selected.id.toString() !== externalId || selected.fullName !== slug) return null;
                 return githubIntegration.sourceControlStorage.repositories.upsert({
                   orgId,
                   input: {

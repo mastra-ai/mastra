@@ -2428,16 +2428,14 @@ describe('MastraFactory.prepare integrations', () => {
     const github = fakeIntegration({
       id: 'github',
       sourceControlStorage,
-      listInstallationRepos: vi.fn(async () => [
-        {
-          id: 456,
-          fullName: 'acme/api',
-          name: 'api',
-          owner: 'acme',
-          defaultBranch: 'invalid branch',
-          private: false,
-        },
-      ]),
+      getInstallationRepo: vi.fn(async () => ({
+        id: 456,
+        fullName: 'acme/api',
+        name: 'api',
+        owner: 'acme',
+        defaultBranch: 'invalid branch',
+        private: false,
+      })),
     } as Partial<FactoryIntegration> & { id: string });
 
     await prepareFactory({ storage, integrations: [github] });
@@ -2451,6 +2449,39 @@ describe('MastraFactory.prepare integrations', () => {
     });
 
     expect(repository?.defaultBranch).toBe('main');
+  });
+
+  it('resolves a selected GitHub repository with one lookup and rejects a different repository at that name', async () => {
+    const storage = fakeStorage();
+    const installation = { id: 'installation-1', externalId: '123' };
+    const upsert = vi.fn(async ({ input }: { input: unknown }) => input);
+    const getInstallationRepo = vi.fn(async () => ({
+      id: 789,
+      fullName: 'acme/api',
+      name: 'api',
+      owner: 'acme',
+      defaultBranch: 'main',
+      private: false,
+    }));
+    const listInstallationRepos = vi.fn(async () => []);
+    const github = fakeIntegration({
+      id: 'github',
+      sourceControlStorage: { installations: { get: vi.fn(async () => installation) }, repositories: { upsert } },
+      getInstallationRepo,
+      listInstallationRepos,
+    } as Partial<FactoryIntegration> & { id: string });
+
+    await prepareFactory({ storage, integrations: [github] });
+    const resolveRepository = projectRouteOptions.at(-1)?.resolveRepository;
+    const input = { integrationId: 'github', orgId: 'org-1', installationId: installation.id, slug: 'acme/api' };
+
+    await expect(resolveRepository?.({ ...input, externalId: '456' })).resolves.toBeNull();
+    expect(upsert).not.toHaveBeenCalled();
+
+    await expect(resolveRepository?.({ ...input, externalId: '789' })).resolves.toMatchObject({ externalId: '789' });
+    expect(getInstallationRepo).toHaveBeenCalledWith(123, 'acme/api');
+    expect(getInstallationRepo).toHaveBeenCalledTimes(2);
+    expect(listInstallationRepos).not.toHaveBeenCalled();
   });
 
   it('initializes version-control capabilities with integration-scoped storage', async () => {

@@ -8,13 +8,15 @@
  * (MSW) on the ApiConfig base URL the test providers inject.
  */
 import { http, HttpResponse } from 'msw';
+import { act } from '@testing-library/react';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderHookWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../e2e/ui/render';
+import { queryKeys } from '../../api/keys';
 import type { IntakeConfig } from '../../ui/domains/factory/services/intake';
 import type { GitLabRepository } from '../../ui/domains/factory/services/gitlab';
-import type { GithubRepo } from '../../ui/domains/workspaces/services/github';
+import type { FactoryProject, GithubRepo } from '../../ui/domains/workspaces/services/github';
 import { useFactoriesQuery, useLinkRepositoryMutation } from '../useFactories';
 import { useIntakeConfigQuery } from '../useIntakeConfig';
 
@@ -251,5 +253,44 @@ describe('useLinkRepositoryMutation', () => {
     await waitForMutationsIdle(client);
     expect(result.current.link.error?.message).toBe('invalid_config');
     expect(factoryListReads).toBe(2);
+  });
+
+  it('given a slow Factory list, when a repository is linked, then the link settles only once the list shows it', async () => {
+    let linked = false;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, async () => {
+        await new Promise(resolve => setTimeout(resolve, 100));
+        return HttpResponse.json({ projects: [{ id: 'fp-1', name: 'Factory' }] });
+      }),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections`, () =>
+        HttpResponse.json({
+          connections: [
+            {
+              id: 'conn-1',
+              installationId: 'inst-7',
+              repositories: linked ? [{ id: 'ghp_1', repository: { slug: 'octo/hello' } }] : [],
+            },
+          ],
+        }),
+      ),
+      http.post(`${TEST_BASE_URL}/web/factory/projects/fp-1/source-control-connections/conn-1/repositories`, () => {
+        linked = true;
+        return HttpResponse.json({ projectRepository: { id: 'ghp_1', repository: { slug: 'octo/hello' } } });
+      }),
+      http.get(CONFIG_URL, () =>
+        HttpResponse.json({ config: { github: { enabled: true, sourceIds: ['octo/hello'] } } }),
+      ),
+    );
+
+    const { client, result } = renderHookWithProviders(() => ({
+      link: useLinkRepositoryMutation(),
+      factories: useFactoriesQuery(),
+    }));
+    await waitForMutationsIdle(client);
+
+    await act(() => result.current.link.mutateAsync({ factoryProjectId: 'fp-1', repo }));
+
+    const factories = client.getQueryData<FactoryProject[]>(queryKeys.factories());
+    expect(factories?.[0]?.repositories.map(repository => repository.slug)).toEqual(['octo/hello']);
   });
 });

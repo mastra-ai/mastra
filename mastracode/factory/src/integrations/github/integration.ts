@@ -639,8 +639,9 @@ export class GithubIntegration implements FactoryIntegration {
   /**
    * Fetch a single repo's metadata through an installation token and confirm
    * the installation actually has access to it. Returns `null` when the repo
-   * is not accessible to the installation (so a client can't create a project
-   * for an arbitrary repo under an installation id it merely owns).
+   * is not accessible to the installation (GitHub answers 404), so a client
+   * can't link an arbitrary repo under an installation id it merely owns.
+   * Other upstream failures throw.
    */
   async getInstallationRepo(installationId: number, repoFullName: string): Promise<RepoSummary | null> {
     const parts = splitRepoFullName(repoFullName);
@@ -657,8 +658,9 @@ export class GithubIntegration implements FactoryIntegration {
         private: data.private,
         installationId,
       };
-    } catch {
-      return null;
+    } catch (error) {
+      if ((error as { status?: number }).status === 404) return null;
+      throw error;
     }
   }
 
