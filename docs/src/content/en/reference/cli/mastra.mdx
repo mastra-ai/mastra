@@ -925,6 +925,12 @@ Creates a new API token. The secret is displayed once and can't be retrieved aga
 mastra auth tokens create <name>
 ```
 
+Use `--permission` to grant the token extra access, for example to let a CI token create and delete databases. Only organization admins can create tokens with permissions. Repeat the flag to grant more than one.
+
+```bash
+mastra auth tokens create ci --permission databases:write
+```
+
 #### `mastra auth tokens revoke`
 
 Revokes an API token.

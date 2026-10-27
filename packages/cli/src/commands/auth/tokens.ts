@@ -11,16 +11,23 @@ interface TokenInfo {
   obfuscatedValue: string;
   lastUsedAt: string | null;
   createdAt: string;
+  /** Absent from Platform versions that predate token permissions. */
+  permissions?: string[];
 }
 
-export async function createToken(token: string, orgId: string, name: string): Promise<{ id: string; secret: string }> {
+export async function createToken(
+  token: string,
+  orgId: string,
+  name: string,
+  permissions: string[] = [],
+): Promise<{ id: string; secret: string; permissions: string[] }> {
   const resp = await platformFetch(`${MASTRA_PLATFORM_API_URL}/v1/auth/tokens`, {
     method: 'POST',
     headers: {
       ...authHeaders(token, orgId),
       'Content-Type': 'application/json',
     },
-    body: JSON.stringify({ name }),
+    body: JSON.stringify(permissions.length > 0 ? { name, permissions } : { name }),
   });
 
   if (!resp.ok) {
@@ -29,19 +36,32 @@ export async function createToken(token: string, orgId: string, name: string): P
   }
 
   const data = (await resp.json()) as { token: TokenInfo; secret: string };
-  return { id: data.token.id, secret: data.secret };
+  const granted = data.token.permissions ?? [];
+  // A Platform that predates token permissions ignores the field and mints a
+  // plain key; fail rather than hand back a key that will 403 later.
+  const missing = permissions.filter(p => !granted.includes(p));
+  if (missing.length > 0) {
+    throw new Error(
+      `Token ${data.token.id} was created without ${missing.join(', ')}; this Platform may not support token ` +
+        `permissions yet. Revoke it with: mastra auth tokens revoke ${data.token.id}`,
+    );
+  }
+  return { id: data.token.id, secret: data.secret, permissions: granted };
 }
 
-export async function createTokenAction(name: string) {
+export async function createTokenAction(name: string, options: { permission?: string[] } = {}) {
   const token = await getToken();
   const orgId = await resolveOrgId();
   if (!orgId) throw new Error('No organization selected. Run: mastra auth orgs switch');
 
-  const result = await createToken(token, orgId, name);
+  const result = await createToken(token, orgId, name, options.permission ?? []);
 
   console.info('\nToken created successfully!\n');
   console.info(`  Name:    ${name}`);
   console.info(`  ID:      ${result.id}`);
+  if (result.permissions.length > 0) {
+    console.info(`  Permissions: ${result.permissions.join(', ')}`);
+  }
   console.info('');
   console.info(`  Secret:  ${result.secret}`);
   console.info('');
@@ -75,6 +95,9 @@ export async function listTokensAction() {
     const lastUsed = t.lastUsedAt ? new Date(t.lastUsedAt).toLocaleDateString() : 'never';
     console.info(`  ${t.name}`);
     console.info(`    ID: ${t.id}  Key: ${t.obfuscatedValue}  Last used: ${lastUsed}`);
+    if (t.permissions?.length) {
+      console.info(`    Permissions: ${t.permissions.join(', ')}`);
+    }
   }
   console.info('');
 }
