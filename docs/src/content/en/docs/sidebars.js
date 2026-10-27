@@ -205,6 +205,11 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'memory/observational-memory-advanced',
+              label: 'Observational Memory: advanced',
+            },
+            {
+              type: 'doc',
               id: 'memory/working-memory',
               label: 'Working Memory',
             },
