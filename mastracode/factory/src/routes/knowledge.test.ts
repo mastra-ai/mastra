@@ -218,6 +218,515 @@ async function nodeDetail(
 }
 
 describe('KnowledgeRoutes', () => {
+  it.each(['address', 'alias', 'name'])('renders imported %s links with their backing record', async kind => {
+    const h = await createHarness();
+    const scopeIds = [(await scopePathIds(h.knowledge, h.projectScope)).at(-1)!];
+    const claimant = {
+      importerId: 'fixture:account-a',
+      source: 'fixture:account-a',
+      binding: knowledgeImporterBindingKey({ source: 'fixture:account-a', scope: h.projectScope.at(-1)! }),
+    };
+    const origin = await h.knowledge.createNode({
+      name: 'Imported origin',
+      scopeIds,
+      claimant,
+      metadata: { address: 'provider:origin' },
+    });
+    const target = await h.knowledge.createNode({
+      name: 'Imported target',
+      scopeIds,
+      claimant,
+      metadata: { address: 'provider:target', addressAliases: ['provider:slug'] },
+    });
+    const link =
+      kind === 'name' ? { name: target.name } : { address: kind === 'alias' ? 'provider:slug' : 'provider:target' };
+    const backing = await h.knowledge.createRecord({
+      node: origin,
+      text: 'Provider relationship without raw wikilinks',
+      scopeIds,
+      source: claimant.source,
+      claimant,
+      metadata: { links: [link, link, { address: 'provider:origin' }, { address: 42 }, null] },
+    });
+    const response = await graph(h);
+    expect(response.status).toBe(200);
+    expect(response.body.edges).toEqual([
+      expect.objectContaining({ source: origin.id, target: target.id, recordId: backing.id }),
+    ]);
+    expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+    expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+  });
+
+  it.each(['account', 'destination', 'scope', 'unclaimed', 'ambiguous'])(
+    'does not project imported links across %s boundaries',
+    async boundary => {
+      const h = await createHarness();
+      const scopeIds = [(await scopePathIds(h.knowledge, h.projectScope)).at(-1)!];
+      const claimant = {
+        importerId: 'fixture:account-a',
+        source: 'fixture:account-a',
+        binding: knowledgeImporterBindingKey({ source: 'fixture:account-a', scope: h.projectScope.at(-1)! }),
+      };
+      const origin = await h.knowledge.createNode({ name: 'Imported origin', scopeIds, claimant });
+      const targetClaimant =
+        boundary === 'account'
+          ? { ...claimant, importerId: 'fixture:account-b', source: 'fixture:account-b' }
+          : boundary === 'destination'
+            ? { ...claimant, binding: knowledgeImporterBindingKey({ source: claimant.source, scope: 'project:other' }) }
+            : claimant;
+      const targetScopeIds = boundary === 'scope' ? [(await scopePathIds(h.knowledge, h.orgScope)).at(-1)!] : scopeIds;
+      await h.knowledge.createNode({
+        name: 'Foreign target',
+        scopeIds: targetScopeIds,
+        ...(boundary === 'unclaimed' ? {} : { claimant: targetClaimant }),
+        metadata: { address: 'provider:target' },
+      });
+      if (boundary === 'ambiguous') {
+        await h.knowledge.createNode({
+          name: 'Alias collision',
+          scopeIds,
+          claimant,
+          metadata: { addressAliases: ['provider:target'] },
+        });
+      }
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'No raw wikilinks',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target', name: 'Foreign target' }] },
+      });
+      const response = await graph(h);
+      expect(response.status).toBe(200);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    },
+  );
+
+  describe('imported relationship isolation', () => {
+    async function fixture(boundary?: string) {
+      const h = await createHarness(boundary === 'off-window' ? { limits: { maxNodes: 1 } } : {});
+      const scopeIds = [(await scopePathIds(h.knowledge, h.projectScope)).at(-1)!];
+      const claimant = {
+        importerId: 'fixture:a',
+        source: 'fixture:a',
+        binding: knowledgeImporterBindingKey({ source: 'fixture:a', scope: h.projectScope.at(-1)! }),
+      };
+      const origin = await h.knowledge.createNode({ name: 'Origin', scopeIds, claimant });
+      const targetScopes =
+        boundary === 'foreign-project'
+          ? [`org:${ORG}`, 'project:foreign']
+          : boundary === 'foreign-thread'
+            ? h.threadScope('other-thread')
+            : undefined;
+      const target = await h.knowledge.createNode({
+        name: 'Target',
+        scopeIds: targetScopes ? [(await scopePathIds(h.knowledge, targetScopes)).at(-1)!] : scopeIds,
+        claimant,
+        isScope: boundary === 'scope-node',
+        metadata: { address: 'provider:target', addressAliases: ['slug', 'slug'] },
+      });
+      return { h, scopeIds, claimant, origin, target };
+    }
+
+    it.each(['off-window', 'scope-node', 'foreign-project', 'foreign-thread'])(
+      'omits %s metadata targets without a fallback',
+      async boundary => {
+        const { h, scopeIds, claimant, origin, target } = await fixture(boundary);
+        const backing = await h.knowledge.createRecord({
+          node: origin,
+          text: 'relationship',
+          scopeIds,
+          source: claimant.source,
+          claimant,
+          metadata: { links: [{ address: 'provider:target', name: 'Target' }] },
+        });
+        const response = await graph(h);
+        expect(response.status).toBe(200);
+        expect(response.body.edges).toEqual([]);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+        expect(response.body.nodes.map(value => value.id)).not.toContain(target.id);
+        expect(response.body.outOfWindow).toEqual([]);
+      },
+    );
+
+    it.each(['importerId', 'source', 'binding', 'record-unclaimed'])(
+      'does not borrow another claimant identity: %s',
+      async boundary => {
+        const { h, scopeIds, claimant, origin, target } = await fixture();
+        const recordClaimant =
+          boundary === 'record-unclaimed'
+            ? undefined
+            : {
+                ...claimant,
+                [boundary]:
+                  boundary === 'binding'
+                    ? knowledgeImporterBindingKey({ source: claimant.source, scope: 'project:other' })
+                    : 'other',
+              };
+        const backing = await h.knowledge.createRecord({
+          node: origin,
+          text: 'relationship',
+          scopeIds,
+          source: recordClaimant?.source ?? claimant.source,
+          claimant: recordClaimant,
+          metadata: { links: [{ address: 'provider:target' }] },
+        });
+        const response = await graph(h);
+        expect(response.body.edges).toEqual([]);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+        expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+      },
+    );
+
+    it.each(['unclaimed', 'identity', 'placement'])('requires independent origin provenance: %s', async boundary => {
+      const { h, scopeIds, claimant, target } = await fixture();
+      let origin = await h.knowledge.createNode({
+        name: 'Separate origin',
+        scopeIds,
+        ...(boundary === 'identity' ? { claimant: { ...claimant, importerId: 'other' } } : {}),
+      });
+      if (boundary === 'placement')
+        origin = await h.knowledge.setNodeScopes({
+          id: origin.id,
+          version: origin.version,
+          claimant,
+          scopeIds: [(await scopePathIds(h.knowledge, h.orgScope)).at(-1)!],
+        });
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      const response = await graph(h);
+      expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    });
+
+    it.each(['origin', 'target'])('does not widen %s placement via retirement markers', async side => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      let retained = await h.knowledge.createNode({
+        name: 'Unclaimed placement',
+        scopeIds,
+        metadata: { address: 'retained' },
+      });
+      retained = await h.knowledge.setNodeScopes({
+        id: retained.id,
+        version: retained.version,
+        claimant,
+        scopeIds: [(await scopePathIds(h.knowledge, h.orgScope)).at(-1)!],
+      });
+      const parent = side === 'origin' ? retained : origin;
+      const backing = await h.knowledge.createRecord({
+        node: parent,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: side === 'target' ? 'retained' : 'provider:target' }] },
+      });
+      for (let iteration = 0; iteration < 2; iteration++) {
+        const response = await graph(h);
+        expect(response.body.edges).toEqual([]);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([parent.id]);
+        expect(await h.knowledge.getRecord({ id: backing.id })).toEqual(backing);
+        expect(await h.knowledge.getNode(retained.id)).toEqual(retained);
+        expect(response.body.nodes.map(value => value.id)).toContain(target.id);
+        await h.knowledge.releaseImportClaims({ importerId: claimant.importerId, binding: claimant.binding });
+      }
+    });
+
+    it.each(['missing', '', ' ', 42, null])(
+      'never falls back from supplied address %j to a valid name',
+      async address => {
+        const { h, scopeIds, claimant, origin } = await fixture();
+        const backing = await h.knowledge.createRecord({
+          node: origin,
+          text: 'relationship',
+          scopeIds,
+          source: claimant.source,
+          claimant,
+          metadata: { links: [{ address, name: 'Target' }] },
+        });
+        const response = await graph(h);
+        expect(response.body.edges).toEqual([]);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      },
+    );
+
+    it('does not authorize matching-claim links with aggregate placements from other claimants', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const org = (await scopePathIds(h.knowledge, h.orgScope)).at(-1)!;
+      const moved = await h.knowledge.setNodeScopes({
+        id: target.id,
+        version: target.version,
+        scopeIds: [org],
+        claimant,
+      });
+      await h.knowledge.setNodeScopes({
+        id: target.id,
+        version: moved.version,
+        scopeIds,
+        claimant: { ...claimant, importerId: 'other' },
+      });
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      const response = await graph(h);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    });
+
+    it('keeps two accounts with identical visible provider addresses separate', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const other = { ...claimant, importerId: 'fixture:b', source: 'fixture:b' };
+      const originB = await h.knowledge.createNode({ name: 'Origin B', scopeIds, claimant: other });
+      const targetB = await h.knowledge.createNode({
+        name: 'Target B',
+        scopeIds,
+        claimant: other,
+        metadata: target.metadata,
+      });
+      for (const [parent, expected, writer] of [
+        [origin, target, claimant],
+        [originB, targetB, other],
+      ] as const) {
+        const backing = await h.knowledge.createRecord({
+          node: parent,
+          text: 'relationship',
+          scopeIds,
+          source: writer.source,
+          claimant: writer,
+          metadata: { links: [{ address: 'provider:target' }, { name: expected.name }] },
+        });
+        const response = await graph(h);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([parent.id, expected.id]);
+        expect(response.body.edges.filter(edge => edge.source === parent.id)).toEqual([
+          expect.objectContaining({ target: expected.id, recordId: backing.id }),
+        ]);
+      }
+    });
+
+    it('keeps record arity and deduplicates aliases, text links and supporting records', async () => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const second = await h.knowledge.createNode({
+        name: 'Second',
+        scopeIds,
+        claimant,
+        metadata: { address: 'provider:second' },
+      });
+      const records = [];
+      for (const text of ['[[Target]]', 'Another supporting record']) {
+        records.push(
+          await h.knowledge.createRecord({
+            node: origin,
+            text,
+            scopeIds,
+            resolutionScopeIds: scopeIds,
+            source: claimant.source,
+            claimant,
+            metadata: { links: [{ address: 'slug' }, { address: 'provider:target' }, { address: 'provider:second' }] },
+          }),
+        );
+      }
+      const response = await graph(h);
+      for (const backing of records) {
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([
+          origin.id,
+          target.id,
+          second.id,
+        ]);
+      }
+      expect(response.body.edges).toHaveLength(2);
+    });
+
+    it.each(['target', 'record'])('fails closed on outside-edited %s provenance', async edited => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      if (edited === 'target')
+        await h.knowledge.updateNode({
+          id: target.id,
+          version: target.version,
+          metadata: { address: 'provider:target', changed: true },
+        });
+      else
+        await h.knowledge.setRecordScopes({
+          id: backing.id,
+          version: backing.version,
+          scopeIds: [...scopeIds, (await scopePathIds(h.knowledge, h.orgScope)).at(-1)!],
+        });
+      const response = await graph(h);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    });
+
+    it.each(['unsupported', 'broken'])('preserves text links only when provenance reads are %s', async failure => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: '[[Target]]',
+        scopeIds,
+        resolutionScopeIds: scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      h.knowledge.listImportClaims = async () => {
+        throw failure === 'unsupported' ? new KnowledgeUnsupportedError() : new Error('claim read failed');
+      };
+      const response = await graph(h);
+      expect(response.status).toBe(failure === 'unsupported' ? 200 : 500);
+      if (failure === 'unsupported') {
+        expect(response.body.edges).toEqual([expect.objectContaining({ target: target.id })]);
+        expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id, target.id]);
+      }
+    });
+
+    it('does not choose between same-named targets in distinct visible placements', async () => {
+      const { h, scopeIds, claimant, origin } = await fixture();
+      const org = (await scopePathIds(h.knowledge, h.orgScope)).at(-1)!;
+      await h.knowledge.createNode({ name: 'Target', scopeIds: [org], claimant });
+      const parent = await h.knowledge.setNodeScopes({
+        id: origin.id,
+        version: origin.version,
+        scopeIds: [...scopeIds, org],
+        claimant,
+      });
+      const backing = await h.knowledge.createRecord({
+        node: parent,
+        text: 'relationship',
+        scopeIds: [...scopeIds, org],
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ name: 'Target' }] },
+      });
+      const response = await graph(h);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    });
+
+    it.each(['node', 'record'])('fails closed at the %s claim budget without partial resolution', async kind => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      for (let index = 0; index < 100; index++) {
+        const writer = { ...claimant, importerId: `other:${index}` };
+        if (kind === 'node')
+          await h.knowledge.setNodeScopes({
+            id: target.id,
+            version: (await h.knowledge.getNode(target.id))!.version,
+            scopeIds,
+            claimant: writer,
+          });
+        else
+          await h.knowledge.claimRecord({
+            id: backing.id,
+            version: (await h.knowledge.getRecord({ id: backing.id }))!.version,
+            scopeIds,
+            claimant: writer,
+          });
+      }
+      const secondTarget = await h.knowledge.createNode({
+        name: 'Second target',
+        scopeIds,
+        claimant,
+        metadata: { address: 'second' },
+      });
+      const other = await h.knowledge.createRecord({
+        node: origin,
+        text: 'other',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'second' }] },
+      });
+      const response = await graph(h);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      expect(response.body.records.find(value => value.id === other.id)?.nodeIds).toEqual(
+        kind === 'node' ? [origin.id] : [origin.id, secondTarget.id],
+      );
+      expect(response.body.edges).toEqual(
+        kind === 'node'
+          ? []
+          : [expect.objectContaining({ source: origin.id, target: secondTarget.id, recordId: other.id })],
+      );
+    });
+
+    it('omits all metadata projections when the complete identity index exceeds its budget', async () => {
+      const { h, scopeIds, claimant, origin } = await fixture();
+      for (let index = 0; index < 200; index++) {
+        await h.knowledge.createNode({
+          name: `Other ${index}`,
+          scopeIds,
+          claimant,
+          metadata: { addressAliases: Array.from({ length: 100 }, (_, alias) => `provider:${index}:${alias}`) },
+        });
+      }
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: { links: [{ address: 'provider:target' }] },
+      });
+      const response = await graph(h);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+    });
+
+    it.each(['aliases', 'links'])('does not resolve from a partial %s budget', async budget => {
+      const { h, scopeIds, claimant, origin, target } = await fixture();
+      if (budget === 'aliases')
+        await h.knowledge.updateNode({
+          id: target.id,
+          version: target.version,
+          claimant,
+          metadata: {
+            address: 'provider:target',
+            addressAliases: Array.from({ length: 101 }, (_, index) => `alias:${index}`),
+          },
+        });
+      const backing = await h.knowledge.createRecord({
+        node: origin,
+        text: 'relationship',
+        scopeIds,
+        source: claimant.source,
+        claimant,
+        metadata: {
+          links: Array.from({ length: budget === 'links' ? 101 : 1 }, () => ({ address: 'provider:target' })),
+        },
+      });
+      const response = await graph(h);
+      expect(response.body.edges).toEqual([]);
+      expect(response.body.records.find(value => value.id === backing.id)?.nodeIds).toEqual([origin.id]);
+      expect(response.body.outOfWindow).toEqual([]);
+    });
+  });
+
   it.each(['project', 'custom'])('rejects a sibling project %s selector across content routes', async kind => {
     const h = await createHarness();
     await node(h.knowledge, 'Own project exists', h.projectScope);

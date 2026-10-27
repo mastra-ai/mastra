@@ -25,6 +25,7 @@ import {
 import type { Context } from 'hono';
 
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { importedGraphTargets } from './knowledge-imported-links.js';
 import type { RouteDependencies } from './route.js';
 import { Route } from './route.js';
 
@@ -1461,6 +1462,7 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
             recordWindow.length = this.#limits.maxRecords;
           }
           const resolver = await WikilinkResolver.create(store, contentNodes, this.#limits.maxFallbackLookups);
+          const importedTargets = await importedGraphTargets(store, contentNodes, recordWindow);
           const edges: KnowledgeGraphEdge[] = scopeNodeId
             ? directMembers.map(node => ({
                 id: `contains:${selected.id}:${node.id}`,
@@ -1476,9 +1478,13 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           for (const record of recordWindow) {
             recordCounts.set(record.nodeId, (recordCounts.get(record.nodeId) ?? 0) + 1);
             const nodeIds = [record.nodeId];
+            const targets = [...(importedTargets.get(record.id) ?? [])];
             for (const name of parseKnowledgeWikilinks(record.text)) {
               const target = await resolver.resolve(name, resolutionScopeIds);
-              if (!target || target.id === record.nodeId) continue;
+              if (target) targets.push(target);
+            }
+            for (const target of targets) {
+              if (target.id === record.nodeId) continue;
               if (!nodeIds.includes(target.id)) nodeIds.push(target.id);
               if (!resolver.inWindowId(target.id)) {
                 boundaryNodes.set(target.id, target);
