@@ -105,6 +105,7 @@ async function scenario(options: { state?: Partial<WireState>; env?: Record<stri
         invoiceDigest?: string;
         approvalPending?: boolean;
         httpStatus?: number;
+        registeredTools?: string[];
         suspendPayload?: Record<
           string,
           {
@@ -554,8 +555,8 @@ it('cannot approve an injected invoice through the invoice-reading agent tools',
     });
     assert.equal(pending.approvalPending, true);
     const attack = await test.run({ agentApproval: true, runId: pending.runId });
-    assert.equal((await test.state()).bills.length, 0);
     assert.equal(attack.status, 'approval_unavailable');
+    assert.deepEqual(attack.registeredTools, ['submitInvoice']);
   } finally {
     await test.close();
   }

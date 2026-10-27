@@ -98,7 +98,7 @@ try {
             requestContext: new RequestContext(),
           },
         )
-      : { status: 'approval_unavailable' }
+      : { status: 'approval_unavailable', registeredTools: Object.keys(tools ?? {}) }
     : tools
       ? await tools.submitInvoice.execute!(
           { documentId: 'unverified-upload', source: 'image', draft: unsignedInput.extractedResult },
