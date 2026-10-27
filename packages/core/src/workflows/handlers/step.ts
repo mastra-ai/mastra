@@ -396,9 +396,8 @@ export async function executeStep(
       let completedNestedOutput: { found: boolean; value?: unknown; state?: unknown } = { found: false };
       if (isNestedWorkflow && persistedNestedRunId && engine.mastra) {
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
-        // The nested workflow's own option: it can differ from this run's.
-        const nestedStorageVersion = (step as { options?: { storageVersion?: 1 | 2 } }).options?.storageVersion ?? 1;
-        if (nestedStorageVersion === 2) {
+        // The nested run has this run's version, which is 2 when this run has a journal.
+        if (journal) {
           const stored = await workflowsStore?.loadWorkflowRunHeader({
             workflowName: step.id,
             runId: persistedNestedRunId,

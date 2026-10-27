@@ -3743,19 +3743,6 @@ export class WorkflowEventProcessor extends EventProcessor {
       return;
     }
 
-    // A storage v2 workflow nested in an evented parent would otherwise run here and be stored as v1.
-    if (type === 'workflow.start' && workflow?.options.storageVersion === 2) {
-      return this.errorWorkflow(
-        workflowData,
-        new MastraError({
-          id: 'WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE',
-          text: `Workflow "${workflowData.workflowId}" sets storageVersion: 2, which the evented engine doesn't support yet. Use storageVersion: 1.`,
-          domain: ErrorDomain.MASTRA_WORKFLOW,
-          category: ErrorCategory.USER,
-        }),
-      );
-    }
-
     if (type === 'workflow.start' || type === 'workflow.resume') {
       const { runId } = workflowData;
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {

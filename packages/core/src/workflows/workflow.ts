@@ -1849,7 +1849,12 @@ export class Workflow<
   public origin: 'code' | 'dynamic' = 'code';
   public isInternal = false;
   /** Handed from execute() to the createRun() call right after it; see createRun. */
-  #nestedRunStart?: { input: TInput; state: TState; inheritedState?: Record<string, unknown> };
+  #nestedRun?: {
+    /** The parent run's storage version, which a new nested run takes. */
+    storageVersion: 1 | 2;
+    /** Set when execute() starts the nested run rather than resuming or restarting it. */
+    start?: { input: TInput; state: TState; inheritedState?: Record<string, unknown> };
+  };
   public committed: boolean = false;
   protected stepFlow: StepFlowEntry<TEngineType>[];
   protected serializedStepFlow: SerializedStepFlowEntry[];
@@ -2929,8 +2934,9 @@ export class Workflow<
   }): Promise<Run<TEngineType, TSteps, TState, TInput, TOutput, TRequestContext>> {
     // Taken before the first await: concurrent parent runs share this workflow
     // instance, so a later execute() would otherwise swap in its own input and state.
-    const nestedRunStart = this.#nestedRunStart;
-    this.#nestedRunStart = undefined;
+    const nestedRun = this.#nestedRun;
+    this.#nestedRun = undefined;
+    const nestedRunStart = nestedRun?.start;
     if (this.stepFlow.length === 0) {
       throw new Error(
         'Execution flow of workflow is not defined. Add steps to the workflow via .then(), .branch(), etc.',
@@ -2940,8 +2946,9 @@ export class Workflow<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
     // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
+    // A nested run doesn't use the workflow's option, so it never hits this.
     let unsupportedV2 = false;
-    if (this.#options.storageVersion === 2) {
+    if (!nestedRun && this.#options.storageVersion === 2) {
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
       unsupportedV2 = !!workflowsStore && !workflowsStore.supportsRunJournal();
     }
@@ -2976,10 +2983,14 @@ export class Workflow<
     // round trip per streamed chunk on the agent output-processor hot path (#19015).
     const lookUpStoredRun = shouldPersistSnapshot || !!options?.runId;
     // A stored run keeps the version it was created with, whatever the workflow sets now. A new
-    // run takes the workflow's. The version's table is probed first; only a caller-given id can
-    // name a run stored in the other one, and a cached run's version is already known.
-    let storageVersion: 1 | 2 = cachedRun?.storageVersion ?? (unsupportedV2 ? 1 : (this.#options.storageVersion ?? 1));
-    const probeOtherVersion = !!options?.runId && !cachedRun;
+    // nested run takes its parent run's, and a new top-level run the workflow's. The version's
+    // table is probed first; only a caller-given top-level id can name a run stored in the other
+    // one. A cached run's version is already known, and a nested run is stored in its parent's.
+    let storageVersion: 1 | 2 =
+      cachedRun?.storageVersion ??
+      nestedRun?.storageVersion ??
+      (unsupportedV2 ? 1 : (this.#options.storageVersion ?? 1));
+    const probeOtherVersion = !!options?.runId && !cachedRun && !nestedRun;
     const loadStoredHeader = (version: 1 | 2) =>
       createRunStorage({
         storageVersion: version,
@@ -3092,7 +3103,8 @@ export class Workflow<
         timestamp: Date.now(),
       };
       await run.runStorage.writeInitial(
-        this.#options.pruneSnapshot
+        // Storage v2 doesn't prune; a nested workflow with the hook can still run as v2 under a v2 parent.
+        this.#options.pruneSnapshot && storageVersion === 1
           ? this.#options.pruneSnapshot({ snapshot: initialSnapshot, workflowStatus: 'pending' })
           : initialSnapshot,
         options?.resourceId,
@@ -3256,20 +3268,23 @@ export class Workflow<
     const useSharedPubsub = !!this.#options?.sharePubsub;
     const nestedPubsub = useSharedPubsub ? pubsub : undefined;
     // Nothing may await between this and createRun(), which takes it synchronously.
-    // Only storage v2 stores a nested run's state as its changes to the parent's.
-    const linkedState = this.#options.storageVersion === 2 ? parentState : undefined;
-    this.#nestedRunStart =
-      !restart && !isResume
-        ? {
-            input: inputData,
-            state,
-            inheritedState: linkedState?.inheritableState(state),
-          }
-        : undefined;
+    // The nested run takes the parent run's version. Only a storage v2 parent hands over its
+    // state link, and it stores the nested run's state as its changes to the parent's.
+    this.#nestedRun = {
+      storageVersion: parentState ? 2 : 1,
+      start:
+        !restart && !isResume
+          ? {
+              input: inputData,
+              state,
+              inheritedState: parentState?.inheritableState(state),
+            }
+          : undefined,
+    };
     const run = isResume
       ? await this.createRun({ runId: resume.runId, resourceId, pubsub: nestedPubsub, parentWorkflow })
       : await this.createRun({ runId, resourceId, pubsub: nestedPubsub, parentWorkflow });
-    run.copyStateOnPause = !!linkedState?.copyStateOnPause;
+    run.copyStateOnPause = !!parentState?.copyStateOnPause;
     const nestedAbortCb = () => {
       abort();
     };
@@ -4284,7 +4299,7 @@ export class Run<
         };
         try {
           await this.runStorage.writeInitial(
-            this.executionEngine.options.pruneSnapshot
+            this.executionEngine.options.pruneSnapshot && this.storageVersion === 1
               ? this.executionEngine.options.pruneSnapshot({ snapshot: initialRunSnapshot, workflowStatus: 'waiting' })
               : initialRunSnapshot,
             this.resourceId,

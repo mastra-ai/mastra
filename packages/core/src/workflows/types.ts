@@ -618,7 +618,8 @@ export interface WorkflowOptions {
    * combined with `pruneSnapshot`. Steps read earlier results with
    * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
    * they were created with: a run resumed after this option changes continues
-   * in its stored version.
+   * in its stored version. A nested workflow's run uses its parent run's
+   * version, so this option applies only when the workflow runs on its own.
    *
    * @experimental
    */

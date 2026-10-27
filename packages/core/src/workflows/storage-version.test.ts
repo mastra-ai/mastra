@@ -75,7 +75,7 @@ describe('storageVersion guards', () => {
     await expect(workflow.createRun()).rejects.toThrow(/storage adapter doesn't support yet/);
   });
 
-  it('fails a storageVersion: 2 workflow nested in an evented parent instead of storing it as v1', async () => {
+  it('runs a storageVersion: 2 workflow nested in an evented parent on v1, like its parent', async () => {
     const nested = createWorkflow({
       id: 'nested-v2',
       inputSchema: z.object({}),
@@ -101,9 +101,9 @@ describe('storageVersion guards', () => {
       const run = await parent.createRun();
       const result = await run.start({ inputData: {} });
 
-      expect(result.status).toBe('failed');
-      expect((result as any).error.code).toBe('WORKFLOW_STORAGE_V2_UNSUPPORTED_ENGINE');
-      expect((result as any).steps['nested-v2'].status).toBe('failed');
+      expect(result.status).toBe('success');
+      expect((result as any).steps['nested-v2'].status).toBe('success');
+      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
     } finally {
       await mastra.stopWorkers();
     }
@@ -1157,63 +1157,69 @@ async function storedStates(storage: InstanceType<typeof MockStore>, storageVers
 }
 
 describe('storage v2 nested runs', () => {
-  it("stores a nested run's state as changes to its parent's, so a loop over it stores bytes linear in the state", async () => {
-    async function nestedLoop(iterations: number) {
-      const storage = new MockStore();
-      const sends = recordStateSends(storage);
-      const append = createStep({
-        id: 'append',
-        inputSchema: num,
-        outputSchema: num,
-        stateSchema: items,
-        execute: async ({ inputData, state, setState }) => {
-          await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
-          return { n: inputData.n + 1 };
-        },
-      });
-      const inner = createWorkflow({
-        id: 'inner',
-        inputSchema: num,
-        outputSchema: num,
-        stateSchema: items,
-        options: { storageVersion: 2 },
-      })
-        .then(append)
-        .commit();
-      const outer = createWorkflow({
-        id: 'outer',
-        inputSchema: num,
-        outputSchema: num,
-        stateSchema: items,
-        options: { storageVersion: 2 },
-      })
-        .dowhile(inner, async ({ inputData }) => inputData.n < iterations)
-        .commit();
-      new Mastra({ logger: false, storage, workflows: { outer } });
+  it.each([
+    ['sets storageVersion: 2', { storageVersion: 2 }],
+    ["doesn't set a storage version", {}],
+  ] as const)(
+    "stores a nested run's state as changes to its parent's, so a loop over it stores bytes linear in the state, when the nested workflow %s",
+    async (_, innerOptions) => {
+      async function nestedLoop(iterations: number) {
+        const storage = new MockStore();
+        const sends = recordStateSends(storage);
+        const append = createStep({
+          id: 'append',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          execute: async ({ inputData, state, setState }) => {
+            await setState({ items: [...state.items, String(inputData.n % 10).repeat(1024)] });
+            return { n: inputData.n + 1 };
+          },
+        });
+        const inner = createWorkflow({
+          id: 'inner',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: innerOptions,
+        })
+          .then(append)
+          .commit();
+        const outer = createWorkflow({
+          id: 'outer',
+          inputSchema: num,
+          outputSchema: num,
+          stateSchema: items,
+          options: { storageVersion: 2 },
+        })
+          .dowhile(inner, async ({ inputData }) => inputData.n < iterations)
+          .commit();
+        new Mastra({ logger: false, storage, workflows: { outer } });
 
-      const run = await outer.createRun();
-      expect((await run.start({ inputData: { n: 0 }, initialState: { items: [] } })).status).toBe('success');
-      const store = storage.stores.workflows!;
-      const load = (workflowName: string) =>
-        store.loadWorkflowRun({ workflowName, runId: run.runId, successfulSteps: 'full' });
-      const [outerRun, innerRun] = await Promise.all([load('outer'), load('inner')]);
-      expect(outerRun!.state.items).toHaveLength(iterations);
-      expect(innerRun!.state).toEqual(outerRun!.state);
-      return {
-        innerCheckpoints: innerCheckpoints(sends),
-        sent: sends.reduce((sum, { bytes }) => sum + bytes, 0),
-        final: JSON.stringify(outerRun!.state).length,
-      };
-    }
+        const run = await outer.createRun();
+        expect((await run.start({ inputData: { n: 0 }, initialState: { items: [] } })).status).toBe('success');
+        const store = storage.stores.workflows!;
+        const load = (workflowName: string) =>
+          store.loadWorkflowRun({ workflowName, runId: run.runId, successfulSteps: 'full' });
+        const [outerRun, innerRun] = await Promise.all([load('outer'), load('inner')]);
+        expect(outerRun!.state.items).toHaveLength(iterations);
+        expect(innerRun!.state).toEqual(outerRun!.state);
+        return {
+          innerCheckpoints: innerCheckpoints(sends),
+          sent: sends.reduce((sum, { bytes }) => sum + bytes, 0),
+          final: JSON.stringify(outerRun!.state).length,
+        };
+      }
 
-    for (const iterations of [4, 8, 16]) {
-      const { innerCheckpoints, sent, final } = await nestedLoop(iterations);
-      // Every iteration re-checkpoints the nested run, which reuses the parent's run id.
-      expect(innerCheckpoints).toEqual([Array(iterations + 1).fill('none')]);
-      // Copying the state into every iteration's checkpoint would send about iterations / 2 times the final state.
-      expect(sent).toBeLessThanOrEqual(2.5 * final);
-    }
-  });
+      for (const iterations of [4, 8, 16]) {
+        const { innerCheckpoints, sent, final } = await nestedLoop(iterations);
+        // Every iteration re-checkpoints the nested run, which reuses the parent's run id.
+        expect(innerCheckpoints).toEqual([Array(iterations + 1).fill('none')]);
+        // Copying the state into every iteration's checkpoint would send about iterations / 2 times the final state.
+        expect(sent).toBeLessThanOrEqual(2.5 * final);
+      }
+    },
+  );
 
   describe.each(['restart', 'restartAllActiveWorkflowRuns'] as const)('a nested run that died mid-step', how => {
     it(`rebuilds its state from the parent's stored state on ${how}, as v1 does`, async () => {
@@ -1276,6 +1282,43 @@ describe('storage v2 nested runs', () => {
     });
   });
 
+  it("runs a nested workflow that prunes its snapshots as v2 under a v2 parent, so it doesn't prune", async () => {
+    const storage = new MockStore();
+    const v1Calls = recordStoreCalls(storage, V1_METHODS);
+    const prune = vi.fn(({ snapshot }) => snapshot);
+    const inner = createWorkflow({
+      id: 'inner',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { pruneSnapshot: prune },
+    })
+      .then(gateStep())
+      .commit();
+    const outer = createWorkflow({
+      id: 'outer',
+      inputSchema: z.object({}),
+      outputSchema: z.any(),
+      options: { storageVersion: 2 },
+    })
+      .then(inner)
+      .commit();
+    new Mastra({ logger: false, storage, workflows: { outer } });
+
+    const run = await outer.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    const resumed = await (
+      await outer.createRun({ runId: run.runId })
+    ).resume({ step: ['inner', 'gate'], resumeData: true });
+
+    expect(resumed.status).toBe('success');
+    expect(prune).not.toHaveBeenCalled();
+    expect(v1Calls).toEqual([]);
+    const store = storage.stores.workflows!;
+    expect(await store.loadWorkflowRunHeader({ workflowName: 'inner', runId: run.runId })).toMatchObject({
+      header: { status: 'success' },
+    });
+  });
+
   describe('copies the state into a nested run outside a block whose parent has not stored the state it starts from', () => {
     const inner = () =>
       createWorkflow({
@@ -1300,21 +1343,6 @@ describe('storage v2 nested runs', () => {
               shouldPersistSnapshot: ({ stepResults }) =>
                 stepResults.before?.status !== 'success' || stepResults.inner !== undefined,
             },
-          })
-            .then(appendItem('before'))
-            .then(inner())
-            .commit(),
-        checkpoints: [['full', 'full']],
-        state: [PAD, 'before:0', 'inner-add:1'],
-      },
-      'the parent is on storage v1': {
-        build: () =>
-          createWorkflow({
-            id: 'outer',
-            inputSchema: num,
-            outputSchema: num,
-            stateSchema: items,
-            options: { storageVersion: 1 },
           })
             .then(appendItem('before'))
             .then(inner())
@@ -1757,13 +1785,13 @@ describe('storage v2 nested runs', () => {
 
 describe('a re-driven nested step whose nested run already finished', () => {
   /** A foreach over `inner`, which suspends, then appends twice once resumed. */
-  const build = (storageVersion: 1 | 2) => {
+  const build = (storageVersion: 1 | 2, innerStorageVersion: 1 | 2) => {
     const inner = createWorkflow({
       id: 'inner',
       inputSchema: num,
       outputSchema: num,
       stateSchema: items,
-      options: { storageVersion },
+      options: { storageVersion: innerStorageVersion },
     })
       .then(appendItem('inner-wait', { suspends: true }))
       .then(appendItem('inner-b'))
@@ -1803,9 +1831,14 @@ describe('a re-driven nested step whose nested run already finished', () => {
     return dead.then(() => (dying = false));
   }
 
-  it.each([1, 2] as const)('keeps its state changes on v%s', async storageVersion => {
+  it.each([
+    [1, 1],
+    [2, 2],
+    [1, 2],
+    [2, 1],
+  ] as const)('keeps its state changes on v%s (nested workflow set to v%s)', async (storageVersion, innerVersion) => {
     const storage = new MockStore();
-    const dying = build(storageVersion);
+    const dying = build(storageVersion, innerVersion);
     new Mastra({ logger: false, storage, workflows: { outer: dying } });
     const run = await dying.createRun({ runId: 'run-1' });
     expect((await run.start({ inputData: [{ n: 0 }], initialState: { items: [PAD] } })).status).toBe('suspended');
@@ -1813,7 +1846,7 @@ describe('a re-driven nested step whose nested run already finished', () => {
     void run.resume({ step: ['inner', 'inner-wait'], resumeData: true });
     await dead;
 
-    const outer = build(storageVersion);
+    const outer = build(storageVersion, innerVersion);
     new Mastra({ logger: false, storage, workflows: { outer } });
     const result = await (await outer.createRun({ runId: 'run-1' })).restart({ outputOptions: { includeState: true } });
 
@@ -2068,10 +2101,10 @@ describe('storage v2 memory', () => {
     [1, 2],
     [2, 1],
   ] as const)(
-    'reads and writes a nested workflow by its own storage version (parent v%i, child v%i)',
+    "reads and writes a nested workflow in its parent run's storage version (parent v%i, child v%i)",
     async (parentVersion, childVersion) => {
       const storage = new MockStore();
-      const calls = recordStoreCalls(storage, childVersion === 2 ? V1_METHODS : V2_METHODS);
+      const calls = recordStoreCalls(storage, parentVersion === 2 ? V1_METHODS : V2_METHODS);
       const inner = createWorkflow({
         id: 'inner',
         inputSchema: z.object({}),
@@ -2101,11 +2134,9 @@ describe('storage v2 memory', () => {
       });
 
       expect(result.status).toBe('success');
-      // A nested run reuses the parent's runId, so its first createRun probes v1 for the
-      // version-mismatch error. That probe is the only other-version call.
-      expect(calls.filter(c => c.workflowName === 'inner').map(c => c.call)).toEqual(
-        childVersion === 2 ? ['loadWorkflowSnapshot v1'] : [],
-      );
+      // The nested run reuses the parent's runId, but it is never stored in the other version's
+      // table, so it doesn't probe that one either.
+      expect(calls.filter(c => c.workflowName === 'inner').map(c => c.call)).toEqual([]);
     },
   );
 
