@@ -130,6 +130,7 @@ export async function extractMastraOption<T extends keyof MastraConfig>(
     dir: outputDir,
     format: 'es',
     entryFileNames: '[name].mjs',
+    chunkFileNames: '[name]-[hash].mjs',
   });
 
   if (result.hasCustomConfig) {

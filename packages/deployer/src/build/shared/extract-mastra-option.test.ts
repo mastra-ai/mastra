@@ -1,4 +1,4 @@
-import { existsSync } from 'node:fs';
+import { existsSync, readdirSync } from 'node:fs';
 import { mkdir, rm } from 'node:fs/promises';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
@@ -34,6 +34,23 @@ describe('Extract Mastra option', () => {
     } finally {
       delete process.env.DEPLOYMENT_WORKER_NAME;
     }
+  });
+
+  it('emits code-split chunks as .mjs so they load as ESM regardless of package type', async () => {
+    const entryFile = join(_dirname, '../plugins/__fixtures__/dynamic-import/index.js');
+    const outputDir = join(testOutputDir, 'dynamic-import');
+    const result = await extractMastraOption('server', entryFile, outputDir);
+
+    expect(result).not.toBeNull();
+    const chunks = result!.bundleOutput.output.filter(item => item.type === 'chunk' && !item.isEntry);
+    expect(chunks.length).toBeGreaterThan(0);
+    for (const chunk of chunks) {
+      expect(chunk.fileName).toMatch(/\.mjs$/);
+    }
+    for (const file of readdirSync(outputDir)) {
+      expect(file).toMatch(/\.mjs$/);
+    }
+    await expect(result!.getConfig()).resolves.toMatchObject({ port: 4199 });
   });
 
   describe.each([['bundler'], ['deployer'], ['server']] as const)('%s', name => {
