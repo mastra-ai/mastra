@@ -157,13 +157,12 @@ import { LibSQLStore } from '@mastra/libsql'
 const memory = new Memory({
   storage: new LibSQLStore({ id: 'collab-storage', url: 'file:./collab.db' }),
   options: {
-    lastMessages: 20,
     observationalMemory: true,
   },
 })
 ```
 
-OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/convex`, or `@mastra/oracledb`.
+OM replaces `lastMessages` history loading, so leave `lastMessages` out when OM is on. OM requires a storage adapter that supports it: `@mastra/libsql`, `@mastra/pg`, `@mastra/mongodb`, `@mastra/mysql`, `@mastra/convex`, or `@mastra/oracledb`.
 
 :::note
 
