@@ -36,6 +36,7 @@ import { createLLMExecutionStep } from './workflows/agentic-execution/llm-execut
 import { createLLMMappingStep } from './workflows/agentic-execution/llm-mapping-step';
 import {
   normalizeToolCallConcurrency,
+  canToolCallRunAfterSuspend,
   resolveEmittedToolCallConcurrency,
   resolveToolCallConcurrency,
 } from './workflows/agentic-execution/tool-call-concurrency';
@@ -389,6 +390,20 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
         { id: 'map-tool-calls' },
       )
       .foreach(toolCallStep, {
+        // A suspending tool call must not stop its plain siblings: they run, and
+        // the step suspends once nothing runnable is left (#26514). Approval-gated
+        // and suspend-capable calls wait for the resume so approvals stay serial.
+        continueAfterSuspend: toolCall => {
+          const scopeCtx = { mastra: rest.mastra, runId: rest.runId, _internal };
+          return canToolCallRunAfterSuspend({
+            requireToolApproval: rest.requireToolApproval ?? rest.requestContext?.get('__mastra_requireToolApproval'),
+            tools: (readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as Tools | undefined) ?? rest.tools,
+            toolCall,
+            approvalVerdicts: readScoped(scopeCtx, TOOL_APPROVAL_VERDICTS_KEY, 'toolApprovalVerdicts') as
+              | Map<string, boolean>
+              | undefined,
+          });
+        },
         // On a resume that re-enters the suspended foreach, map-tool-calls already
         // completed in the snapshot and is skipped, so the limit above was never
         // recomputed for this instance. Derive it from the persisted tool-call batch

@@ -63,7 +63,7 @@ import { ChunkFrom } from '../../../../stream/types';
 import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { findProviderToolByName, inferProviderExecuted } from '../../../../tools/provider-tool-utils';
 import type { ToolToConvert } from '../../../../tools/tool-builder/builder';
-import { isMastraTool } from '../../../../tools/toolchecks';
+import { getNeedsApprovalFn, isMastraTool } from '../../../../tools/toolchecks';
 import type { CoreTool } from '../../../../tools/types';
 import { createMastraProxy, makeProcessorCoreTool } from '../../../../utils';
 import { PUBSUB_SYMBOL } from '../../../../workflows/constants';
@@ -2210,7 +2210,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       providerExecuted: payload.providerExecuted,
                       output: payload.output,
                       activeTools: currentActiveTools ?? null,
-                      ...(effectiveTool?.requireApproval ? { requireApproval: true } : {}),
+                      ...(effectiveTool?.requireApproval || (effectiveTool && getNeedsApprovalFn(effectiveTool as any))
+                        ? { requireApproval: true }
+                        : {}),
                       ...(effectiveTool?.hasSuspendSchema ? { hasSuspendSchema: true } : {}),
                     });
                     break;

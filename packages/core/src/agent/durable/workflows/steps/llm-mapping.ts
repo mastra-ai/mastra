@@ -1,15 +1,10 @@
 import { compactDurableStepContent } from '@internal/core/durable';
 import { z } from 'zod';
 import { MastraFGAPermissions } from '../../../../auth/ee';
-import {
-  commitToolResult,
-  computeModelOutputProviderMetadata,
-} from '../../../../loop/shared/steps/tool-result-commit-core';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
 import { persistProcessorDataChunk } from '../../../../stream/base/output';
-import { withToolPayloadTransformProviderMetadata } from '../../../../tools/payload-transform';
 import { createStep } from '../../../../workflows/workflow';
 import { MessageList } from '../../../message-list';
 import { DurableStepIds } from '../../constants';
@@ -24,6 +19,7 @@ import type {
   SerializableDurableState,
 } from '../../types';
 import { rebuildRunToolsFromMastra } from '../../utils/resolve-runtime';
+import { commitDurableToolResults, isPendingDurableClientCall } from '../shared/commit-tool-results';
 import { readMessageListState, storeMessageListState } from '../shared/message-list-state';
 
 /**
@@ -129,32 +125,6 @@ export function createDurableLLMMappingStep() {
         } satisfies DurableAgenticExecutionOutput;
       }
 
-      // A declined approval has no `result` but is fully resolved: persist it as `output-denied`
-      // with the approval decision (rather than as a successful `result`) so it round-trips on
-      // recall. Mirrors the non-durable llm-mapping-step.
-      const isDeniedApproval = (toolResult: { approval?: { approved?: boolean } }) =>
-        toolResult?.approval?.approved === false;
-
-      // A pending client-side / HITL call: no result, no error, not provider-executed and
-      // not a resolved denial. The client answers it on a follow-up request, so it must
-      // stay in `call` state, must not appear as a tool result anywhere, and must end the
-      // turn — the durable counterpart of the non-durable llm-mapping-step's
-      // `hasPendingHITL` (issue #23295).
-      //
-      // Aborted calls also lack a result/error but were cancelled, not awaiting input,
-      // so they must not count as a HITL suspension (mirrors the non-durable predicate's
-      // `!tc.aborted`). Tripwire-blocked calls (`resultBlocked`) are resolved by policy,
-      // not awaiting a client answer, so they keep the pre-existing continuation
-      // semantics (isContinued follows tool errors / the model's stepResult) instead of
-      // force-ending the turn.
-      const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
-        toolResult.result === undefined &&
-        !toolResult.error &&
-        !toolResult.aborted &&
-        !toolResult.resultBlocked &&
-        !toolResult.providerExecuted &&
-        !isDeniedApproval(toolResult);
-
       // 2. Add tool results to message list
       // Look up tools from the in-process registry for toModelOutput support
       const registryTools = registryEntry?.tools;
@@ -176,127 +146,15 @@ export function createDurableLLMMappingStep() {
         }
       }
 
-      if (toolResults.length > 0) {
-        for (const toolResult of toolResults) {
-          if (toolResult.mappingError) {
-            const mappingError = new Error(toolResult.mappingError.message);
-            mappingError.name = toolResult.mappingError.name;
-            mappingError.stack = toolResult.mappingError.stack;
-            throw mappingError;
-          }
-
-          // An aborted call was cancelled mid-flight, not completed: recording it
-          // would fake-complete the call (`result: undefined` reads as success on
-          // resume), so leave the invocation incomplete. Mirrors the non-durable
-          // llm-mapping-step's aborted exclusion.
-          if (toolResult.aborted) {
-            continue;
-          }
-
-          // A processToolResult processor blocked this result via tripwire at
-          // tool-call time: a tripwire chunk was emitted instead of the
-          // tool-result, and no result crossed the boundary. Leave the
-          // invocation incomplete, mirroring the main loop's tripwire handling
-          // (commit and emission both skipped).
-          if (toolResult.resultBlocked) {
-            continue;
-          }
-
-          // Provider-executed results are already committed by llm-execution's
-          // buildMessagesFromChunks when the result arrives in-stream; committing
-          // here again would overwrite that entry with the serialized copy (and
-          // clobber the providerMetadata captured from the live stream chunk).
-          // A deferred provider result (no output yet) has nothing to commit.
-          // Mirrors the non-durable llm-mapping-step's providerExecuted gate.
-          if (toolResult.providerExecuted) {
-            continue;
-          }
-
-          if (isDeniedApproval(toolResult)) {
-            commitToolResult({
-              messageList,
-              outcome: {
-                kind: 'denied',
-                approval: {
-                  id: toolResult.approval!.id,
-                  approved: false,
-                  reason: toolResult.approval!.reason,
-                },
-              },
-              toolCallId: toolResult.toolCallId,
-              toolName: toolResult.toolName,
-              toolArgs: toolResult.args,
-            });
-            continue;
-          }
-
-          // Recording a pending call as a `result` would overwrite the invocation with an
-          // undefined value and feed the model a fabricated tool output on the next turn.
-          if (isPendingClientCall(toolResult)) {
-            continue;
-          }
-
-          // Compute toModelOutput for successful tool results (Bug 9 parity).
-          // Start from the existing providerMetadata so tools without a mapper
-          // preserve their metadata. Results that already carry a mapped output
-          // from tool-call.ts (`modelOutputComputed`) are not recomputed: the
-          // serialization boundary is why tool-call maps eagerly, and this step
-          // only covers results that crossed the boundary unmapped (background
-          // completion, provider fallback).
-          let providerMetadata: Record<string, unknown> | undefined = toolResult.providerMetadata as
-            | Record<string, unknown>
-            | undefined;
-          if (
-            !toolResult.error &&
-            toolResult.result != null &&
-            !toolResult.providerExecuted &&
-            !toolResult.modelOutputComputed
-          ) {
-            providerMetadata = await computeModelOutputProviderMetadata({
-              tool: registryTools?.[toolResult.toolName] as
-                | { toModelOutput?: (output: unknown) => unknown }
-                | undefined,
-              toolName: toolResult.toolName,
-              toolCallId: toolResult.toolCallId,
-              result: toolResult.result,
-              existingProviderMetadata: toolResult.providerMetadata as Record<string, unknown> | undefined,
-              parentSpan: stepSpan,
-            });
-          }
-
-          // Layer the tool-payload-transform metadata captured at emission time
-          // on top (L18b). The tool-call step's messageList is a local copy, so
-          // the chunk-level metadata travels on the output record and is merged
-          // into the persisted providerMetadata here — matching the main loop's
-          // llm-mapping, which reads it off the live chunk. Without it,
-          // transcript-target transforms would not apply to the persisted
-          // args/result on recall.
-          if (toolResult.transformMetadata) {
-            providerMetadata = withToolPayloadTransformProviderMetadata(
-              providerMetadata,
-              toolResult.transformMetadata,
-            ) as Record<string, unknown> | undefined;
-          }
-
-          // A tool error must be recorded as `output-error` with the message in
-          // `errorText` so the transcript/adapters read it as a failure rather than
-          // a normal result. Successful results keep `state: 'result'` + `result`.
-          // The approval decision for an approved approval-gated tool is preserved
-          // so it round-trips on recall as `approval: { approved: true }`.
-          commitToolResult({
-            messageList,
-            outcome: toolResult.error
-              ? { kind: 'error', errorText: toolResult.error.message }
-              : { kind: 'result', result: toolResult.result },
-            toolCallId: toolResult.toolCallId,
-            toolName: toolResult.toolName,
-            toolArgs: toolResult.args,
-            approval: toolResult.approval,
-            providerMetadata: providerMetadata as any,
-            fallbackAppend: true,
-          });
+      for (const toolResult of toolResults) {
+        if (toolResult.mappingError) {
+          const mappingError = new Error(toolResult.mappingError.message);
+          mappingError.name = toolResult.mappingError.name;
+          mappingError.stack = toolResult.mappingError.stack;
+          throw mappingError;
         }
       }
+      await commitDurableToolResults(messageList, toolResults, { tools: registryTools, parentSpan: stepSpan });
 
       // 2a. Persist processor-emitted data-* chunks (#19375 parity port).
       // The tool-call step's messageList is a local copy whose mutations don't
@@ -342,7 +200,7 @@ export function createDurableLLMMappingStep() {
       const hasToolErrors = toolResults.some(r => r.error !== undefined);
       // A pending client call ends the turn so the client can answer it. Without this the
       // loop re-invoked the model on a result nobody produced.
-      const hasPendingHITL = toolResults.some(isPendingClientCall);
+      const hasPendingHITL = toolResults.some(isPendingDurableClientCall);
       const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel

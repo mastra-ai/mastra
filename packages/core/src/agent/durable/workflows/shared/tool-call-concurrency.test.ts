@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import { DurableAgentDefaults } from '../../constants';
 import type { DurableToolCallInput, SerializableToolMetadata } from '../../types';
-import { resolveDurableToolCallConcurrency } from './tool-call-concurrency';
+import { canDurableToolCallRunAfterSuspend, resolveDurableToolCallConcurrency } from './tool-call-concurrency';
 
 function tool(overrides: Partial<SerializableToolMetadata> & { name: string }): SerializableToolMetadata {
   return {
@@ -257,5 +257,33 @@ describe('resolveDurableToolCallConcurrency', () => {
         }),
       ).toBe(1);
     });
+  });
+});
+
+describe('canDurableToolCallRunAfterSuspend', () => {
+  const toolsMetadata = [
+    tool({ name: 'safe' }),
+    tool({ name: 'approval', requireApproval: true }),
+    tool({ name: 'suspend', hasSuspendSchema: true }),
+  ];
+
+  it('lets plain tools run past a suspended sibling', () => {
+    expect(canDurableToolCallRunAfterSuspend({ toolsMetadata, toolCall: { toolName: 'safe' } })).toBe(true);
+  });
+
+  it('holds back approval-gated and suspend-capable tools', () => {
+    expect(canDurableToolCallRunAfterSuspend({ toolsMetadata, toolCall: { toolName: 'approval' } })).toBe(false);
+    expect(canDurableToolCallRunAfterSuspend({ toolsMetadata, toolCall: { toolName: 'suspend' } })).toBe(false);
+    expect(
+      canDurableToolCallRunAfterSuspend({ toolsMetadata, toolCall: { toolName: 'safe', requireApproval: true } }),
+    ).toBe(false);
+    expect(
+      canDurableToolCallRunAfterSuspend({
+        options: { requireToolApproval: true },
+        toolsMetadata,
+        toolCall: { toolName: 'safe' },
+      }),
+    ).toBe(false);
+    expect(canDurableToolCallRunAfterSuspend({ toolsMetadata })).toBe(false);
   });
 });

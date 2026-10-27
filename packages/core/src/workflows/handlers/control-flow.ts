@@ -1018,10 +1018,11 @@ export async function executeForeach(
   const { step, opts } = entry;
   const stepId = getEntryId(step);
   const results: any[] = [];
-  const concurrency = resolveForeachConcurrency(opts, {
+  const foreachContext = {
     inputData: prevOutput,
     getInitData: () => stepResults?.input,
-  });
+  };
+  const concurrency = resolveForeachConcurrency(opts, foreachContext);
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
@@ -1175,6 +1176,7 @@ export async function executeForeach(
   let exitResult = null as ForeachStepResult | null;
   let canceledResult: ForeachStepResult | null = null;
   let inFlight = 0;
+  let suspendSeen = false;
   let resolveCompletion: (() => void) | undefined;
 
   /** Publish a workflow-step-progress event for a single foreach iteration. */
@@ -1240,6 +1242,10 @@ export async function executeForeach(
         };
       }
       await emitIterationProgress(k, 'suspended');
+      if (opts?.continueAfterSuspend) {
+        suspendSeen = true;
+        return;
+      }
     } else if (result.status === 'failed') {
       completedCount++;
       await emitIterationProgress(k, 'failed');
@@ -1288,6 +1294,14 @@ export async function executeForeach(
           };
         }
         killQueue();
+        inFlight--;
+        cb(null);
+        if (inFlight === 0) resolveCompletion?.();
+        return;
+      }
+
+      // After a suspend, items the predicate rejects stay unrun and are picked up on resume.
+      if (suspendSeen && !opts?.continueAfterSuspend?.(item, foreachContext)) {
         inFlight--;
         cb(null);
         if (inFlight === 0) resolveCompletion?.();

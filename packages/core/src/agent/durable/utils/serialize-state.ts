@@ -3,6 +3,7 @@ import type { ScoringFilter } from '../../../evals/predicate';
 import type { MastraLanguageModel } from '../../../llm/model/shared.types';
 import type { ToolCallConcurrency } from '../../../loop/types';
 import type { MemoryConfig } from '../../../memory/types';
+import { getNeedsApprovalFn } from '../../../tools/toolchecks';
 import type { CoreTool } from '../../../tools/types';
 import { boundedStringify } from '../../../utils/safe-stringify';
 import type { MessageList } from '../../message-list';
@@ -50,7 +51,8 @@ export function serializeToolMetadata(name: string, tool: CoreTool): Serializabl
     name,
     description: tool.description,
     inputSchema,
-    requireApproval: (tool as any).requireApproval,
+    // A per-call approval function can't be serialized; treat the tool as gated.
+    requireApproval: (tool as any).requireApproval || (getNeedsApprovalFn(tool) ? true : undefined),
     hasSuspendSchema: (tool as any).hasSuspendSchema,
   };
 }
@@ -262,7 +264,7 @@ export function serializeClientTools(
       id: meta.id,
       description: meta.description,
       inputSchema: meta.inputSchema,
-      requireApproval: meta.requireApproval,
+      requireApproval: (tool as any).requireApproval,
     };
   }
   return Object.keys(out).length > 0 ? out : undefined;

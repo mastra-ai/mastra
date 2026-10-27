@@ -65,6 +65,7 @@ import {
   assertExecutionOwned,
   executionLeaseKey,
   fencePubSub,
+  isExecutionFenceError,
   readRunGeneration,
   RECOVER_RUN_ACTIVE_LOCALLY_ERROR_ID,
   resolveLeaseProvider,
@@ -113,6 +114,7 @@ import type {
 import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { commitSuspendedDurableSiblings } from './workflows/shared/commit-suspended-siblings';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
@@ -2515,6 +2517,24 @@ export class DurableAgent<
     // Only announce a suspension the engine actually persisted; if persisting failed,
     // the run isn't resumable and the queued events would advertise a dead question.
     if ((result as { status?: string } | undefined)?.status === 'suspended') {
+      // Before the suspension is announced, so a caller that resumes on the
+      // announcement already sees the finished siblings in memory (#26514).
+      try {
+        const suspended = result as { steps?: Record<string, unknown>; input?: DurableAgenticWorkflowInput };
+        const state = suspended.input?.state;
+        await commitSuspendedDurableSiblings({
+          result: suspended,
+          memory: entry.memory ?? (await this.getMemory({ requestContext: entry.requestContext })),
+          threadId: state?.threadId,
+          resourceId: state?.resourceId,
+          memoryConfig: state?.memoryConfig,
+          tools: entry.tools,
+          logger: this.logger,
+        });
+      } catch (error) {
+        if (isExecutionFenceError(error)) throw error;
+        this.logger.warn('Failed to commit finished sibling tool results of a suspended step', { runId, error });
+      }
       for (const publish of pending) {
         try {
           await publish();

@@ -598,14 +598,30 @@ export async function processWorkflowForEach(
   const suspendedIndices =
     currentResult?.output?.flatMap((result: any, index: number) => (result?.status === 'suspended' ? [index] : [])) ??
     [];
-  const activeIterations = runningIterations + suspendedIndices.length;
+  // With continueAfterSuspend, a suspended iteration doesn't hold a slot and
+  // later items the predicate allows keep running. The foreach suspends once
+  // nothing allowed is left to run.
+  const continueAfterSuspend = step.opts?.continueAfterSuspend;
+  const activeIterations = runningIterations + (continueAfterSuspend ? 0 : suspendedIndices.length);
+  const nextBlockedBySuspend =
+    !!continueAfterSuspend &&
+    suspendedIndices.length > 0 &&
+    idx < targetLen &&
+    !continueAfterSuspend((prevResult as any)?.output?.[idx], {
+      inputData: (prevResult as any)?.output,
+      getInitData: () => (stepResults as any)?.input,
+    });
 
   if (
     suspendedIndices.length > 0 &&
     runningIterations === 0 &&
-    (idx >= targetLen || (concurrency !== undefined && activeIterations >= concurrency))
+    (idx >= targetLen || nextBlockedBySuspend || (concurrency !== undefined && activeIterations >= concurrency))
   ) {
     await publishSuspendedState(suspendedIndices[0]);
+    return;
+  }
+
+  if (nextBlockedBySuspend) {
     return;
   }
 
