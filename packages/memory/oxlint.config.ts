@@ -8,7 +8,11 @@ export default defineConfig({
     {
       // Linted without type information until now (ESLint's disableTypeChecked).
       files: ['integration-tests/**/*', 'scripts/**/*'],
-      rules: { 'typescript/no-floating-promises': 'off', 'typescript/no-misused-promises': 'off' },
+      rules: {
+        'typescript/no-duplicate-type-constituents': 'off',
+        'typescript/no-floating-promises': 'off',
+        'typescript/no-misused-promises': 'off',
+      },
     },
   ],
 });

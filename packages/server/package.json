@@ -100,7 +100,7 @@
     "pull:openapispec": "node src/server/openapi.script.js",
     "generate:permissions": "tsx scripts/generate-permissions.ts",
     "generate:api-cli-route-metadata": "tsx scripts/generate-api-cli-route-metadata.ts",
-    "generate:route-types": "tsx scripts/generate-route-types.ts",
+    "generate:route-types": "tsx scripts/generate-route-types.ts && cd ../../client-sdks/client-js && oxlint --type-aware --fix src/route-types.generated.ts && oxfmt src/route-types.generated.ts",
     "check:permissions": "tsx scripts/check-permissions.ts",
     "test": "vitest run",
     "lint": "oxlint --type-aware .",

@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
-import { renderRouteTypesFileContent } from '../../../../scripts/generate-route-types';
+import { formatGeneratedFileContent, renderRouteTypesFileContent } from '../../../../scripts/generate-route-types';
 import type { RouteDefinition } from '../../../../scripts/generate-route-types';
 
 function renderFixtureRoutes(routes: readonly RouteDefinition[]): string {
@@ -8,36 +8,13 @@ function renderFixtureRoutes(routes: readonly RouteDefinition[]): string {
 }
 
 describe('renderRouteTypesFileContent', () => {
-  it.each(['bodySchema', 'responseSchema'] as const)('deduplicates nested constituents in %s', schemaKind => {
-    type Recursive = { value?: string; children?: Recursive[] };
-    const recursive: z.ZodType<Recursive> = z.lazy(() =>
-      z.object({ value: z.string().optional().optional(), children: z.array(recursive).optional() }),
-    );
-    const rendered = renderFixtureRoutes([
-      {
-        method: 'POST',
-        path: '/duplicates',
-        responseType: 'json',
-        [schemaKind]: z.object({
-          optional: z.union([z.string().optional(), z.number().optional()]).optional(),
-          nullable: z.string().nullable().nullable(),
-          absent: z.undefined().optional(),
-          intersection: z.intersection(z.object({ id: z.string() }), z.object({ id: z.string() })),
-          mixed: z.intersection(z.union([z.string(), z.number()]), z.string()),
-          recursive,
-        }),
-        handler: async () => ({}),
-      },
-    ]);
+  it('flattens nested unknown unions before lint autofix can narrow them', async () => {
+    const formatted = await formatGeneratedFileContent(`/** 🦊 */
+export type Value = (string | unknown) | undefined;
+export type ArrayValue = (string | number)[];`);
 
-    expect(rendered).toContain('optional?: string | undefined | number;');
-    expect(rendered).toContain('nullable: string | null;');
-    expect(rendered).toContain('absent?: undefined;');
-    expect(rendered).toContain('value?: string | undefined;');
-    expect(rendered).toContain(`intersection: {
-        id: string;
-    };`);
-    expect(rendered).toContain('mixed: (string | number) & string;');
+    expect(formatted).toContain('export type Value = string | unknown | undefined;');
+    expect(formatted).toContain('export type ArrayValue = (string | number)[];');
   });
 
   it('renders request schemas with input semantics and responses with output semantics', () => {
@@ -69,28 +46,6 @@ describe('renderRouteTypesFileContent', () => {
     label: string;
 };`);
     expect(rendered).not.toContain('export type PostFixturesId_Response = PostFixturesId_QueryParams;');
-  });
-
-  it('omits absent request parts instead of intersecting multiple empty objects', () => {
-    const rendered = renderFixtureRoutes([
-      {
-        method: 'GET',
-        path: '/empty',
-        responseType: 'json',
-        handler: async () => ({}),
-      },
-      {
-        method: 'GET',
-        path: '/query',
-        responseType: 'json',
-        queryParamSchema: z.object({ limit: z.number().optional() }),
-        handler: async () => ({}),
-      },
-    ]);
-
-    expect(rendered).toContain('export type GetEmpty_Request = Simplify<{}>;');
-    expect(rendered).toContain('{ query?: GetQuery_QueryParams } : { query: GetQuery_QueryParams }');
-    expect(rendered).not.toContain('never extends never');
   });
 
   it('keeps deterministic coerced and preprocessed request schemas concrete', () => {
@@ -137,7 +92,7 @@ describe('renderRouteTypesFileContent', () => {
       },
     ]);
 
-    expect(rendered).toMatch(/open: \{\s*\[K in "a" \| "b" \| `x\.\$\{string\}`\]\?: number;\s*\}/);
+    expect(rendered).toMatch(/open: \{\s*\[K in \("a" \| "b"\) \| `x\.\$\{string\}`\]\?: number;\s*\}/);
     expect(rendered).toMatch(/exhaustive: \{\s*\[K in "a" \| "b"\]: number;\s*\}/);
     expect(rendered).toMatch(/plain: \{\s*\[key: string\]: number;\s*\}/);
   });

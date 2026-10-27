@@ -40,47 +40,6 @@ type PathRouteMethod = {
   contractName: string;
 };
 
-/** Flatten nested unions/intersections from Zod wrappers before comparing their constituents. */
-function printNormalizedNode(node: ts.Node): string {
-  const result = ts.transform(node, [
-    context => {
-      const visit: ts.Visitor = node => {
-        const visited = ts.visitEachChild(node, visit, context);
-        if (!ts.isUnionTypeNode(visited) && !ts.isIntersectionTypeNode(visited)) {
-          return visited;
-        }
-
-        const constituents = new Map<string, ts.TypeNode>();
-        const collect = (type: ts.TypeNode): void => {
-          while (ts.isParenthesizedTypeNode(type)) {
-            type = type.type;
-          }
-          if (type.kind === visited.kind && (ts.isUnionTypeNode(type) || ts.isIntersectionTypeNode(type))) {
-            type.types.forEach(collect);
-          } else {
-            constituents.set(printNode(type), type);
-          }
-        };
-        visited.types.forEach(collect);
-        const types = [...constituents.values()];
-        if (types.length === 1) {
-          return types[0]!;
-        }
-        return ts.isUnionTypeNode(visited)
-          ? ts.factory.createUnionTypeNode(types)
-          : ts.factory.createIntersectionTypeNode(types);
-      };
-      return node => ts.visitNode(node, visit) as ts.Node;
-    },
-  ]);
-
-  try {
-    return printNode(result.transformed[0]!);
-  } finally {
-    result.dispose();
-  }
-}
-
 function toPascalCase(value: string): string {
   return value
     .split(/[^a-zA-Z0-9]+/)
@@ -232,7 +191,7 @@ function createSchemaOverrideFunction(io: ZodIo) {
       });
       state.promotionInProgress.delete(schema);
 
-      const printed = printNormalizedNode(node);
+      const printed = printNode(node);
       if (printed.length < MIN_SHARED_TYPE_LENGTH) {
         sharedName = null;
       } else {
@@ -280,7 +239,7 @@ function renderSchemaType(aliasName: string, schema: z4.$ZodType, deprecated: bo
     overrideFunction: createSchemaOverrideFunction(io),
   });
 
-  const printed = printNormalizedNode(node);
+  const printed = printNode(node);
   const existingTextAlias = state.renderedTextAliases.get(printed);
   if (existingTextAlias) {
     state.renderedSchemaAliases.set(schema, existingTextAlias);
@@ -324,21 +283,19 @@ function renderRequestType(
   body: GeneratedRoutePart | null,
   deprecated: boolean,
 ): string {
-  const parts: string[] = [];
-  if (pathParams) {
-    const type = pathParams.aliasName;
-    parts.push(`(${type} extends never ? {} : { params: ${type} })`);
-  }
-  if (queryParams) {
-    const type = queryParams.aliasName;
-    parts.push(`(${type} extends never ? {} : {} extends ${type} ? { query?: ${type} } : { query: ${type} })`);
-  }
-  if (body) {
-    const type = body.aliasName;
-    parts.push(`(${type} extends never ? {} : {} extends ${type} ? { body?: ${type} } : { body: ${type} })`);
-  }
+  const pathParamsType = getRouteMapTypeName(pathParams);
+  const queryParamsType = getRouteMapTypeName(queryParams);
+  const bodyType = getRouteMapTypeName(body);
 
-  return `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = Simplify<${parts.join(' &\n') || '{}'}>;`;
+  return `${deprecated ? '/** @deprecated */\n' : ''}export type ${aliasName} = Simplify<
+  (${pathParamsType} extends never ? {} : { params: ${pathParamsType} }) &
+    (${queryParamsType} extends never
+      ? {}
+      : {} extends ${queryParamsType}
+        ? { query?: ${queryParamsType} }
+        : { query: ${queryParamsType} }) &
+    (${bodyType} extends never ? {} : {} extends ${bodyType} ? { body?: ${bodyType} } : { body: ${bodyType} })
+>;`;
 }
 
 export type RouteDefinition = (typeof SERVER_ROUTES)[number];
@@ -426,7 +383,7 @@ function generateRouteTypesFileContent(routes: readonly RouteDefinition[]): stri
 
   const auxiliaryDeclarations = (['input', 'output'] as const)
     .flatMap(io => [...renderStates[io].auxiliaryTypeStore.definitions.values()])
-    .map(definition => printNormalizedNode(definition.node))
+    .map(definition => printNode(definition.node))
     .join('\n\n');
 
   const sharedDeclarations = (['input', 'output'] as const)
@@ -490,8 +447,22 @@ export type ClientResponseKind<P extends ClientPath, M extends ClientMethod<P>> 
 `;
 }
 
-async function formatGeneratedFileContent(fileContent: string): Promise<string> {
-  const result = await format(OUTPUT_PATH, fileContent, OXFMT_CONFIG);
+export async function formatGeneratedFileContent(fileContent: string): Promise<string> {
+  // Flatten union wrappers so Oxlint's autofix cannot narrow `(string | unknown) | undefined` to `string | undefined`.
+  const source = ts.createSourceFile(OUTPUT_PATH, fileContent, ts.ScriptTarget.Latest, true);
+  const redundantParens = new Set<number>();
+  const visit = (node: ts.Node): void => {
+    if (ts.isParenthesizedTypeNode(node) && ts.isUnionTypeNode(node.type) && ts.isUnionTypeNode(node.parent)) {
+      redundantParens.add(node.getStart(source)).add(node.end - 1);
+    }
+    ts.forEachChild(node, visit);
+  };
+  visit(source);
+  const normalized = fileContent
+    .split('')
+    .filter((_, index) => !redundantParens.has(index))
+    .join('');
+  const result = await format(OUTPUT_PATH, normalized, OXFMT_CONFIG);
 
   if (result.errors.length > 0) {
     throw new Error(

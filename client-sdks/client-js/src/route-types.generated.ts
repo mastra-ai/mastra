@@ -2199,6 +2199,15 @@ type InputShared_Type_112 = {
 };
 
 type InputShared_Type_113 = {
+  behavior?: 'deliver' | 'persist' | 'discard' | undefined;
+  attributes?:
+    | {
+        [key: string]: string | number | boolean | null | undefined;
+      }
+    | undefined;
+};
+
+type InputShared_Type_114 = {
   behavior?: 'wake' | 'persist' | 'discard' | undefined;
   attributes?:
     | {
@@ -4739,11 +4748,12 @@ export type GetAgents_Response = {
 };
 
 export type GetAgents_Request = Simplify<
-  GetAgents_QueryParams extends never
-    ? {}
-    : {} extends GetAgents_QueryParams
-      ? { query?: GetAgents_QueryParams }
-      : { query: GetAgents_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetAgents_QueryParams extends never
+      ? {}
+      : {} extends GetAgents_QueryParams
+        ? { query?: GetAgents_QueryParams }
+        : { query: GetAgents_QueryParams })
 >;
 
 export interface GetAgents_RouteContract {
@@ -4762,7 +4772,7 @@ export type GetAgentsProviders_Response = {
   providers: Shared_Type_7[];
 };
 
-export type GetAgentsProviders_Request = Simplify<{}>;
+export type GetAgentsProviders_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAgentsProviders_RouteContract {
   pathParams: never;
@@ -4796,7 +4806,8 @@ export type GetAgentsAgentId_Request = Simplify<
       ? {}
       : {} extends GetAgentsAgentId_QueryParams
         ? { query?: GetAgentsAgentId_QueryParams }
-        : { query: GetAgentsAgentId_QueryParams })
+        : { query: GetAgentsAgentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentId_RouteContract {
@@ -4830,6 +4841,7 @@ export type PostAgentsAgentIdClone_Response = Shared_Type_45;
 
 export type PostAgentsAgentIdClone_Request = Simplify<
   (PostAgentsAgentIdClone_PathParams extends never ? {} : { params: PostAgentsAgentIdClone_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdClone_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdClone_Body
@@ -4860,7 +4872,8 @@ export type GetAgentsAgentIdVoiceSpeakers_Response = {
 }[];
 
 export type GetAgentsAgentIdVoiceSpeakers_Request = Simplify<
-  GetAgentsAgentIdVoiceSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceSpeakers_PathParams }
+  (GetAgentsAgentIdVoiceSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceSpeakers_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentsAgentIdVoiceSpeakers_RouteContract {
@@ -4883,7 +4896,8 @@ export type GetAgentsAgentIdSpeakers_Response = GetAgentsAgentIdVoiceSpeakers_Re
 
 /** @deprecated */
 export type GetAgentsAgentIdSpeakers_Request = Simplify<
-  GetAgentsAgentIdSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdSpeakers_PathParams }
+  (GetAgentsAgentIdSpeakers_PathParams extends never ? {} : { params: GetAgentsAgentIdSpeakers_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 /** @deprecated */
@@ -4975,6 +4989,7 @@ export type PostAgentsAgentIdGenerate_Response = unknown;
 
 export type PostAgentsAgentIdGenerate_Request = Simplify<
   (PostAgentsAgentIdGenerate_PathParams extends never ? {} : { params: PostAgentsAgentIdGenerate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdGenerate_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdGenerate_Body
@@ -5004,6 +5019,7 @@ export type PostAgentsAgentIdGenerateVnext_Request = Simplify<
   (PostAgentsAgentIdGenerateVnext_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdGenerateVnext_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdGenerateVnext_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdGenerateVnext_Body
@@ -5031,6 +5047,7 @@ export type PostAgentsAgentIdStream_Response = PostAgentsAgentIdGenerate_Respons
 
 export type PostAgentsAgentIdStream_Request = Simplify<
   (PostAgentsAgentIdStream_PathParams extends never ? {} : { params: PostAgentsAgentIdStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStream_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStream_Body
@@ -5129,6 +5146,7 @@ export type PostAgentsAgentIdStreamUntilIdle_Request = Simplify<
   (PostAgentsAgentIdStreamUntilIdle_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdStreamUntilIdle_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamUntilIdle_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamUntilIdle_Body
@@ -5160,6 +5178,7 @@ export type PostAgentsAgentIdStreamVnext_Response = PostAgentsAgentIdGenerate_Re
 /** @deprecated */
 export type PostAgentsAgentIdStreamVnext_Request = Simplify<
   (PostAgentsAgentIdStreamVnext_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamVnext_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamVnext_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamVnext_Body
@@ -5193,6 +5212,7 @@ export type PostAgentsAgentIdObserve_Response = PostAgentsAgentIdGenerate_Respon
 
 export type PostAgentsAgentIdObserve_Request = Simplify<
   (PostAgentsAgentIdObserve_PathParams extends never ? {} : { params: PostAgentsAgentIdObserve_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdObserve_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdObserve_Body
@@ -5240,6 +5260,7 @@ export type PostAgentsAgentIdSendMessage_Response = {
 
 export type PostAgentsAgentIdSendMessage_Request = Simplify<
   (PostAgentsAgentIdSendMessage_PathParams extends never ? {} : { params: PostAgentsAgentIdSendMessage_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdSendMessage_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdSendMessage_Body
@@ -5267,6 +5288,7 @@ export type PostAgentsAgentIdQueueMessage_Response = PostAgentsAgentIdSendMessag
 
 export type PostAgentsAgentIdQueueMessage_Request = Simplify<
   (PostAgentsAgentIdQueueMessage_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueMessage_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdQueueMessage_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdQueueMessage_Body
@@ -5310,6 +5332,7 @@ export type PostAgentsAgentIdQueueSignal_Response = PostAgentsAgentIdSendMessage
 
 export type PostAgentsAgentIdQueueSignal_Request = Simplify<
   (PostAgentsAgentIdQueueSignal_PathParams extends never ? {} : { params: PostAgentsAgentIdQueueSignal_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdQueueSignal_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdQueueSignal_Body
@@ -5337,6 +5360,7 @@ export type PostAgentsAgentIdSignals_Response = PostAgentsAgentIdSendMessage_Res
 
 export type PostAgentsAgentIdSignals_Request = Simplify<
   (PostAgentsAgentIdSignals_PathParams extends never ? {} : { params: PostAgentsAgentIdSignals_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdSignals_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdSignals_Body
@@ -5368,7 +5392,10 @@ export type PostAgentsAgentIdRunsRunIdAbort_Response = {
 };
 
 export type PostAgentsAgentIdRunsRunIdAbort_Request = Simplify<
-  PostAgentsAgentIdRunsRunIdAbort_PathParams extends never ? {} : { params: PostAgentsAgentIdRunsRunIdAbort_PathParams }
+  (PostAgentsAgentIdRunsRunIdAbort_PathParams extends never
+    ? {}
+    : { params: PostAgentsAgentIdRunsRunIdAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostAgentsAgentIdRunsRunIdAbort_RouteContract {
@@ -5396,6 +5423,7 @@ export type PostAgentsAgentIdThreadsAbort_Response = PostAgentsAgentIdRunsRunIdA
 
 export type PostAgentsAgentIdThreadsAbort_Request = Simplify<
   (PostAgentsAgentIdThreadsAbort_PathParams extends never ? {} : { params: PostAgentsAgentIdThreadsAbort_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdThreadsAbort_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdThreadsAbort_Body
@@ -5431,6 +5459,7 @@ export type PostAgentsAgentIdThreadsSignalsCancel_Request = Simplify<
   (PostAgentsAgentIdThreadsSignalsCancel_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdThreadsSignalsCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdThreadsSignalsCancel_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdThreadsSignalsCancel_Body
@@ -5470,6 +5499,7 @@ export type PostAgentsAgentIdThreadsSubscribe_Request = Simplify<
   (PostAgentsAgentIdThreadsSubscribe_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdThreadsSubscribe_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdThreadsSubscribe_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdThreadsSubscribe_Body
@@ -5511,6 +5541,7 @@ export type PostAgentsAgentIdToolsToolIdExecute_Request = Simplify<
   (PostAgentsAgentIdToolsToolIdExecute_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdToolsToolIdExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdToolsToolIdExecute_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdToolsToolIdExecute_Body
@@ -5565,6 +5596,7 @@ export type PostAgentsAgentIdApproveToolCall_Request = Simplify<
   (PostAgentsAgentIdApproveToolCall_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdApproveToolCall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdApproveToolCall_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdApproveToolCall_Body
@@ -5612,6 +5644,7 @@ export type PostAgentsAgentIdSendToolApproval_Request = Simplify<
   (PostAgentsAgentIdSendToolApproval_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdSendToolApproval_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdSendToolApproval_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdSendToolApproval_Body
@@ -5666,7 +5699,8 @@ export type GetAgentsAgentIdSuspendedRuns_Request = Simplify<
       ? {}
       : {} extends GetAgentsAgentIdSuspendedRuns_QueryParams
         ? { query?: GetAgentsAgentIdSuspendedRuns_QueryParams }
-        : { query: GetAgentsAgentIdSuspendedRuns_QueryParams })
+        : { query: GetAgentsAgentIdSuspendedRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdSuspendedRuns_RouteContract {
@@ -5715,6 +5749,7 @@ export type PostAgentsAgentIdDeclineToolCall_Request = Simplify<
   (PostAgentsAgentIdDeclineToolCall_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdDeclineToolCall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdDeclineToolCall_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdDeclineToolCall_Body
@@ -5811,6 +5846,7 @@ export type PostAgentsAgentIdResumeStream_Response = PostAgentsAgentIdGenerate_R
 
 export type PostAgentsAgentIdResumeStream_Request = Simplify<
   (PostAgentsAgentIdResumeStream_PathParams extends never ? {} : { params: PostAgentsAgentIdResumeStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdResumeStream_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdResumeStream_Body
@@ -5861,6 +5897,7 @@ export type PostAgentsAgentIdRecover_Response = PostAgentsAgentIdGenerate_Respon
 
 export type PostAgentsAgentIdRecover_Request = Simplify<
   (PostAgentsAgentIdRecover_PathParams extends never ? {} : { params: PostAgentsAgentIdRecover_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdRecover_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdRecover_Body
@@ -5890,6 +5927,7 @@ export type PostAgentsAgentIdApproveToolCallGenerate_Request = Simplify<
   (PostAgentsAgentIdApproveToolCallGenerate_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdApproveToolCallGenerate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdApproveToolCallGenerate_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdApproveToolCallGenerate_Body
@@ -5919,6 +5957,7 @@ export type PostAgentsAgentIdDeclineToolCallGenerate_Request = Simplify<
   (PostAgentsAgentIdDeclineToolCallGenerate_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdDeclineToolCallGenerate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdDeclineToolCallGenerate_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdDeclineToolCallGenerate_Body
@@ -5957,6 +5996,7 @@ export type PostAgentsAgentIdApproveNetworkToolCall_Request = Simplify<
   (PostAgentsAgentIdApproveNetworkToolCall_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdApproveNetworkToolCall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdApproveNetworkToolCall_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdApproveNetworkToolCall_Body
@@ -5996,6 +6036,7 @@ export type PostAgentsAgentIdDeclineNetworkToolCall_Request = Simplify<
   (PostAgentsAgentIdDeclineNetworkToolCall_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdDeclineNetworkToolCall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdDeclineNetworkToolCall_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdDeclineNetworkToolCall_Body
@@ -6095,6 +6136,7 @@ export type PostAgentsAgentIdResumeStreamUntilIdle_Request = Simplify<
   (PostAgentsAgentIdResumeStreamUntilIdle_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdResumeStreamUntilIdle_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdResumeStreamUntilIdle_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdResumeStreamUntilIdle_Body
@@ -6122,6 +6164,7 @@ export type PostAgentsAgentIdNetwork_Response = PostAgentsAgentIdGenerate_Respon
 
 export type PostAgentsAgentIdNetwork_Request = Simplify<
   (PostAgentsAgentIdNetwork_PathParams extends never ? {} : { params: PostAgentsAgentIdNetwork_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdNetwork_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdNetwork_Body
@@ -6154,6 +6197,7 @@ export type PostAgentsAgentIdModel_Response = {
 
 export type PostAgentsAgentIdModel_Request = Simplify<
   (PostAgentsAgentIdModel_PathParams extends never ? {} : { params: PostAgentsAgentIdModel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdModel_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdModel_Body
@@ -6178,7 +6222,8 @@ export type PostAgentsAgentIdModelReset_PathParams = GetAgentsAgentId_PathParams
 export type PostAgentsAgentIdModelReset_Response = PostAgentsAgentIdModel_Response;
 
 export type PostAgentsAgentIdModelReset_Request = Simplify<
-  PostAgentsAgentIdModelReset_PathParams extends never ? {} : { params: PostAgentsAgentIdModelReset_PathParams }
+  (PostAgentsAgentIdModelReset_PathParams extends never ? {} : { params: PostAgentsAgentIdModelReset_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostAgentsAgentIdModelReset_RouteContract {
@@ -6205,6 +6250,7 @@ export type PostAgentsAgentIdModelsReorder_Request = Simplify<
   (PostAgentsAgentIdModelsReorder_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdModelsReorder_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdModelsReorder_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdModelsReorder_Body
@@ -6248,6 +6294,7 @@ export type PostAgentsAgentIdModelsModelConfigId_Request = Simplify<
   (PostAgentsAgentIdModelsModelConfigId_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdModelsModelConfigId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdModelsModelConfigId_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdModelsModelConfigId_Body
@@ -6287,6 +6334,7 @@ export type PostAgentsAgentIdInstructionsEnhance_Request = Simplify<
   (PostAgentsAgentIdInstructionsEnhance_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdInstructionsEnhance_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdInstructionsEnhance_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdInstructionsEnhance_Body
@@ -6311,7 +6359,8 @@ export type GetAgentsAgentIdToolsToolId_PathParams = PostAgentsAgentIdToolsToolI
 export type GetAgentsAgentIdToolsToolId_Response = Shared_Type_0;
 
 export type GetAgentsAgentIdToolsToolId_Request = Simplify<
-  GetAgentsAgentIdToolsToolId_PathParams extends never ? {} : { params: GetAgentsAgentIdToolsToolId_PathParams }
+  (GetAgentsAgentIdToolsToolId_PathParams extends never ? {} : { params: GetAgentsAgentIdToolsToolId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentsAgentIdToolsToolId_RouteContract {
@@ -6348,7 +6397,8 @@ export type GetAgentsAgentIdPlansFile_Request = Simplify<
       ? {}
       : {} extends GetAgentsAgentIdPlansFile_QueryParams
         ? { query?: GetAgentsAgentIdPlansFile_QueryParams }
-        : { query: GetAgentsAgentIdPlansFile_QueryParams })
+        : { query: GetAgentsAgentIdPlansFile_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdPlansFile_RouteContract {
@@ -6414,7 +6464,8 @@ export type GetAgentsAgentIdSkillsSkillName_Request = Simplify<
       ? {}
       : {} extends GetAgentsAgentIdSkillsSkillName_QueryParams
         ? { query?: GetAgentsAgentIdSkillsSkillName_QueryParams }
-        : { query: GetAgentsAgentIdSkillsSkillName_QueryParams })
+        : { query: GetAgentsAgentIdSkillsSkillName_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentsAgentIdSkillsSkillName_RouteContract {
@@ -6446,6 +6497,7 @@ export type PostAgentsAgentIdVoiceSpeak_Response = PostAgentsAgentIdGenerate_Res
 
 export type PostAgentsAgentIdVoiceSpeak_Request = Simplify<
   (PostAgentsAgentIdVoiceSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceSpeak_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdVoiceSpeak_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdVoiceSpeak_Body
@@ -6477,6 +6529,7 @@ export type PostAgentsAgentIdSpeak_Response = PostAgentsAgentIdGenerate_Response
 /** @deprecated */
 export type PostAgentsAgentIdSpeak_Request = Simplify<
   (PostAgentsAgentIdSpeak_PathParams extends never ? {} : { params: PostAgentsAgentIdSpeak_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdSpeak_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdSpeak_Body
@@ -6514,6 +6567,7 @@ export type PostAgentsAgentIdVoiceListen_Response = {
 
 export type PostAgentsAgentIdVoiceListen_Request = Simplify<
   (PostAgentsAgentIdVoiceListen_PathParams extends never ? {} : { params: PostAgentsAgentIdVoiceListen_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdVoiceListen_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdVoiceListen_Body
@@ -6545,6 +6599,7 @@ export type PostAgentsAgentIdListen_Response = PostAgentsAgentIdVoiceListen_Resp
 /** @deprecated */
 export type PostAgentsAgentIdListen_Request = Simplify<
   (PostAgentsAgentIdListen_PathParams extends never ? {} : { params: PostAgentsAgentIdListen_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdListen_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdListen_Body
@@ -6570,7 +6625,8 @@ export type GetAgentsAgentIdVoiceListener_PathParams = GetAgentsAgentIdVoiceSpea
 export type GetAgentsAgentIdVoiceListener_Response = PostAgentsAgentIdGenerate_Response;
 
 export type GetAgentsAgentIdVoiceListener_Request = Simplify<
-  GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }
+  (GetAgentsAgentIdVoiceListener_PathParams extends never ? {} : { params: GetAgentsAgentIdVoiceListener_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentsAgentIdVoiceListener_RouteContract {
@@ -6597,6 +6653,7 @@ export type PostAgentsAgentIdStreamVNext_Response = PostAgentsAgentIdGenerate_Re
 /** @deprecated */
 export type PostAgentsAgentIdStreamVNext_Request = Simplify<
   (PostAgentsAgentIdStreamVNext_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamVNext_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamVNext_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamVNext_Body
@@ -6631,6 +6688,7 @@ export type PostAgentsAgentIdStreamVnextUi_Request = Simplify<
   (PostAgentsAgentIdStreamVnextUi_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdStreamVnextUi_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamVnextUi_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamVnextUi_Body
@@ -6663,6 +6721,7 @@ export type PostAgentsAgentIdStreamUi_Response = PostAgentsAgentIdGenerate_Respo
 /** @deprecated */
 export type PostAgentsAgentIdStreamUi_Request = Simplify<
   (PostAgentsAgentIdStreamUi_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamUi_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamUi_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamUi_Body
@@ -6710,7 +6769,7 @@ export type GetAuthCapabilities_Response =
       login: Shared_Type_46 | null;
     };
 
-export type GetAuthCapabilities_Request = Simplify<{}>;
+export type GetAuthCapabilities_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAuthCapabilities_RouteContract {
   pathParams: never;
@@ -6733,7 +6792,7 @@ export type GetAuthMe_Response = {
   permissions?: string[] | undefined;
 } | null;
 
-export type GetAuthMe_Request = Simplify<{}>;
+export type GetAuthMe_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAuthMe_RouteContract {
   pathParams: never;
@@ -6752,11 +6811,12 @@ export type GetAuthSsoLogin_QueryParams = {
 };
 
 export type GetAuthSsoLogin_Request = Simplify<
-  GetAuthSsoLogin_QueryParams extends never
-    ? {}
-    : {} extends GetAuthSsoLogin_QueryParams
-      ? { query?: GetAuthSsoLogin_QueryParams }
-      : { query: GetAuthSsoLogin_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetAuthSsoLogin_QueryParams extends never
+      ? {}
+      : {} extends GetAuthSsoLogin_QueryParams
+        ? { query?: GetAuthSsoLogin_QueryParams }
+        : { query: GetAuthSsoLogin_QueryParams })
 >;
 
 export interface GetAuthSsoLogin_RouteContract {
@@ -6777,11 +6837,12 @@ export type GetAuthSsoCallback_QueryParams = {
 };
 
 export type GetAuthSsoCallback_Request = Simplify<
-  GetAuthSsoCallback_QueryParams extends never
-    ? {}
-    : {} extends GetAuthSsoCallback_QueryParams
-      ? { query?: GetAuthSsoCallback_QueryParams }
-      : { query: GetAuthSsoCallback_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetAuthSsoCallback_QueryParams extends never
+      ? {}
+      : {} extends GetAuthSsoCallback_QueryParams
+        ? { query?: GetAuthSsoCallback_QueryParams }
+        : { query: GetAuthSsoCallback_QueryParams })
 >;
 
 export interface GetAuthSsoCallback_RouteContract {
@@ -6796,7 +6857,7 @@ export interface GetAuthSsoCallback_RouteContract {
 // ============================================================================
 // Route: POST /auth/logout
 // ============================================================================
-export type PostAuthLogout_Request = Simplify<{}>;
+export type PostAuthLogout_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface PostAuthLogout_RouteContract {
   pathParams: never;
@@ -6814,7 +6875,7 @@ export type PostAuthRefresh_Response = {
   success: boolean;
 };
 
-export type PostAuthRefresh_Request = Simplify<{}>;
+export type PostAuthRefresh_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface PostAuthRefresh_RouteContract {
   pathParams: never;
@@ -6834,11 +6895,12 @@ export type PostAuthCredentialsSignIn_Body = {
 };
 
 export type PostAuthCredentialsSignIn_Request = Simplify<
-  PostAuthCredentialsSignIn_Body extends never
-    ? {}
-    : {} extends PostAuthCredentialsSignIn_Body
-      ? { body?: PostAuthCredentialsSignIn_Body }
-      : { body: PostAuthCredentialsSignIn_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostAuthCredentialsSignIn_Body extends never
+      ? {}
+      : {} extends PostAuthCredentialsSignIn_Body
+        ? { body?: PostAuthCredentialsSignIn_Body }
+        : { body: PostAuthCredentialsSignIn_Body })
 >;
 
 export interface PostAuthCredentialsSignIn_RouteContract {
@@ -6860,11 +6922,12 @@ export type PostAuthCredentialsSignUp_Body = {
 };
 
 export type PostAuthCredentialsSignUp_Request = Simplify<
-  PostAuthCredentialsSignUp_Body extends never
-    ? {}
-    : {} extends PostAuthCredentialsSignUp_Body
-      ? { body?: PostAuthCredentialsSignUp_Body }
-      : { body: PostAuthCredentialsSignUp_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostAuthCredentialsSignUp_Body extends never
+      ? {}
+      : {} extends PostAuthCredentialsSignUp_Body
+        ? { body?: PostAuthCredentialsSignUp_Body }
+        : { body: PostAuthCredentialsSignUp_Body })
 >;
 
 export interface PostAuthCredentialsSignUp_RouteContract {
@@ -6889,7 +6952,8 @@ export type GetAuthRolesRoleIdPermissions_Response = {
 };
 
 export type GetAuthRolesRoleIdPermissions_Request = Simplify<
-  GetAuthRolesRoleIdPermissions_PathParams extends never ? {} : { params: GetAuthRolesRoleIdPermissions_PathParams }
+  (GetAuthRolesRoleIdPermissions_PathParams extends never ? {} : { params: GetAuthRolesRoleIdPermissions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAuthRolesRoleIdPermissions_RouteContract {
@@ -6908,7 +6972,7 @@ export type GetAuthPermissionPatterns_Response = {
   patterns: string[];
 };
 
-export type GetAuthPermissionPatterns_Request = Simplify<{}>;
+export type GetAuthPermissionPatterns_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAuthPermissionPatterns_RouteContract {
   pathParams: never;
@@ -6929,11 +6993,12 @@ export type GetWorkflows_Response = {
 };
 
 export type GetWorkflows_Request = Simplify<
-  GetWorkflows_QueryParams extends never
-    ? {}
-    : {} extends GetWorkflows_QueryParams
-      ? { query?: GetWorkflows_QueryParams }
-      : { query: GetWorkflows_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetWorkflows_QueryParams extends never
+      ? {}
+      : {} extends GetWorkflows_QueryParams
+        ? { query?: GetWorkflows_QueryParams }
+        : { query: GetWorkflows_QueryParams })
 >;
 
 export interface GetWorkflows_RouteContract {
@@ -6955,7 +7020,7 @@ export type GetWorkflowsRunCounts_Response = {
   };
 };
 
-export type GetWorkflowsRunCounts_Request = Simplify<{}>;
+export type GetWorkflowsRunCounts_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetWorkflowsRunCounts_RouteContract {
   pathParams: never;
@@ -6977,7 +7042,8 @@ export type GetWorkflowsWorkflowId_PathParams = {
 export type GetWorkflowsWorkflowId_Response = Shared_Type_49;
 
 export type GetWorkflowsWorkflowId_Request = Simplify<
-  GetWorkflowsWorkflowId_PathParams extends never ? {} : { params: GetWorkflowsWorkflowId_PathParams }
+  (GetWorkflowsWorkflowId_PathParams extends never ? {} : { params: GetWorkflowsWorkflowId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetWorkflowsWorkflowId_RouteContract {
@@ -7041,7 +7107,8 @@ export type GetWorkflowsWorkflowIdRuns_Request = Simplify<
       ? {}
       : {} extends GetWorkflowsWorkflowIdRuns_QueryParams
         ? { query?: GetWorkflowsWorkflowIdRuns_QueryParams }
-        : { query: GetWorkflowsWorkflowIdRuns_QueryParams })
+        : { query: GetWorkflowsWorkflowIdRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkflowsWorkflowIdRuns_RouteContract {
@@ -7117,7 +7184,8 @@ export type GetWorkflowsWorkflowIdRunsRunId_Request = Simplify<
       ? {}
       : {} extends GetWorkflowsWorkflowIdRunsRunId_QueryParams
         ? { query?: GetWorkflowsWorkflowIdRunsRunId_QueryParams }
-        : { query: GetWorkflowsWorkflowIdRunsRunId_QueryParams })
+        : { query: GetWorkflowsWorkflowIdRunsRunId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkflowsWorkflowIdRunsRunId_RouteContract {
@@ -7137,9 +7205,10 @@ export type DeleteWorkflowsWorkflowIdRunsRunId_PathParams = GetWorkflowsWorkflow
 export type DeleteWorkflowsWorkflowIdRunsRunId_Response = PostAgentsAgentIdModel_Response;
 
 export type DeleteWorkflowsWorkflowIdRunsRunId_Request = Simplify<
-  DeleteWorkflowsWorkflowIdRunsRunId_PathParams extends never
+  (DeleteWorkflowsWorkflowIdRunsRunId_PathParams extends never
     ? {}
-    : { params: DeleteWorkflowsWorkflowIdRunsRunId_PathParams }
+    : { params: DeleteWorkflowsWorkflowIdRunsRunId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteWorkflowsWorkflowIdRunsRunId_RouteContract {
@@ -7420,7 +7489,8 @@ export type PostWorkflowsWorkflowIdObserve_Request = Simplify<
       ? {}
       : {} extends PostWorkflowsWorkflowIdObserve_QueryParams
         ? { query?: PostWorkflowsWorkflowIdObserve_QueryParams }
-        : { query: PostWorkflowsWorkflowIdObserve_QueryParams })
+        : { query: PostWorkflowsWorkflowIdObserve_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostWorkflowsWorkflowIdObserve_RouteContract {
@@ -7546,9 +7616,10 @@ export type PostWorkflowsWorkflowIdRunsRunIdCancel_PathParams = GetWorkflowsWork
 export type PostWorkflowsWorkflowIdRunsRunIdCancel_Response = PostAgentsAgentIdModel_Response;
 
 export type PostWorkflowsWorkflowIdRunsRunIdCancel_Request = Simplify<
-  PostWorkflowsWorkflowIdRunsRunIdCancel_PathParams extends never
+  (PostWorkflowsWorkflowIdRunsRunIdCancel_PathParams extends never
     ? {}
-    : { params: PostWorkflowsWorkflowIdRunsRunIdCancel_PathParams }
+    : { params: PostWorkflowsWorkflowIdRunsRunIdCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostWorkflowsWorkflowIdRunsRunIdCancel_RouteContract {
@@ -7777,9 +7848,10 @@ export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_PathParams = Get
 export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_Response = PostAgentsAgentIdModel_Response;
 
 export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_Request = Simplify<
-  PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_PathParams extends never
+  (PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_PathParams extends never
     ? {}
-    : { params: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_PathParams }
+    : { params: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRuns_RouteContract {
@@ -7799,9 +7871,10 @@ export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_PathParams 
 export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_Response = PostAgentsAgentIdModel_Response;
 
 export type PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_Request = Simplify<
-  PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_PathParams extends never
+  (PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_PathParams extends never
     ? {}
-    : { params: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_PathParams }
+    : { params: PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostWorkflowsWorkflowIdRestartAllActiveWorkflowRunsAsync_RouteContract {
@@ -7846,6 +7919,7 @@ export type PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Request = Simplify<
   (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams extends never
     ? {}
     : { params: PostWorkflowsWorkflowIdRunsRunIdStepsExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body extends never
       ? {}
       : {} extends PostWorkflowsWorkflowIdRunsRunIdStepsExecute_Body
@@ -7884,11 +7958,12 @@ export type PostWorkflowsEvents_Response = {
 };
 
 export type PostWorkflowsEvents_Request = Simplify<
-  PostWorkflowsEvents_Body extends never
-    ? {}
-    : {} extends PostWorkflowsEvents_Body
-      ? { body?: PostWorkflowsEvents_Body }
-      : { body: PostWorkflowsEvents_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostWorkflowsEvents_Body extends never
+      ? {}
+      : {} extends PostWorkflowsEvents_Body
+        ? { body?: PostWorkflowsEvents_Body }
+        : { body: PostWorkflowsEvents_Body })
 >;
 
 export interface PostWorkflowsEvents_RouteContract {
@@ -7907,7 +7982,7 @@ export type GetTools_Response = {
   [key: string]: Shared_Type_0;
 };
 
-export type GetTools_Request = Simplify<{}>;
+export type GetTools_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetTools_RouteContract {
   pathParams: never;
@@ -7929,7 +8004,8 @@ export type GetToolsToolId_PathParams = {
 export type GetToolsToolId_Response = GetAgentsAgentIdToolsToolId_Response;
 
 export type GetToolsToolId_Request = Simplify<
-  GetToolsToolId_PathParams extends never ? {} : { params: GetToolsToolId_PathParams }
+  (GetToolsToolId_PathParams extends never ? {} : { params: GetToolsToolId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetToolsToolId_RouteContract {
@@ -7993,7 +8069,7 @@ export type GetProcessors_Response = {
   };
 };
 
-export type GetProcessors_Request = Simplify<{}>;
+export type GetProcessors_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetProcessors_RouteContract {
   pathParams: never;
@@ -8026,7 +8102,8 @@ export type GetProcessorsProcessorId_Response = {
 };
 
 export type GetProcessorsProcessorId_Request = Simplify<
-  GetProcessorsProcessorId_PathParams extends never ? {} : { params: GetProcessorsProcessorId_PathParams }
+  (GetProcessorsProcessorId_PathParams extends never ? {} : { params: GetProcessorsProcessorId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetProcessorsProcessorId_RouteContract {
@@ -8090,6 +8167,7 @@ export type PostProcessorsProcessorIdExecute_Request = Simplify<
   (PostProcessorsProcessorIdExecute_PathParams extends never
     ? {}
     : { params: PostProcessorsProcessorIdExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostProcessorsProcessorIdExecute_Body extends never
       ? {}
       : {} extends PostProcessorsProcessorIdExecute_Body
@@ -8267,11 +8345,12 @@ export type PostV1Responses_Response = {
 };
 
 export type PostV1Responses_Request = Simplify<
-  PostV1Responses_Body extends never
-    ? {}
-    : {} extends PostV1Responses_Body
-      ? { body?: PostV1Responses_Body }
-      : { body: PostV1Responses_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostV1Responses_Body extends never
+      ? {}
+      : {} extends PostV1Responses_Body
+        ? { body?: PostV1Responses_Body }
+        : { body: PostV1Responses_Body })
 >;
 
 export interface PostV1Responses_RouteContract {
@@ -8294,7 +8373,8 @@ export type GetV1ResponsesResponseId_PathParams = {
 export type GetV1ResponsesResponseId_Response = PostV1Responses_Response;
 
 export type GetV1ResponsesResponseId_Request = Simplify<
-  GetV1ResponsesResponseId_PathParams extends never ? {} : { params: GetV1ResponsesResponseId_PathParams }
+  (GetV1ResponsesResponseId_PathParams extends never ? {} : { params: GetV1ResponsesResponseId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetV1ResponsesResponseId_RouteContract {
@@ -8318,7 +8398,8 @@ export type DeleteV1ResponsesResponseId_Response = {
 };
 
 export type DeleteV1ResponsesResponseId_Request = Simplify<
-  DeleteV1ResponsesResponseId_PathParams extends never ? {} : { params: DeleteV1ResponsesResponseId_PathParams }
+  (DeleteV1ResponsesResponseId_PathParams extends never ? {} : { params: DeleteV1ResponsesResponseId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteV1ResponsesResponseId_RouteContract {
@@ -8355,11 +8436,12 @@ export type PostV1Conversations_Response = {
 };
 
 export type PostV1Conversations_Request = Simplify<
-  PostV1Conversations_Body extends never
-    ? {}
-    : {} extends PostV1Conversations_Body
-      ? { body?: PostV1Conversations_Body }
-      : { body: PostV1Conversations_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostV1Conversations_Body extends never
+      ? {}
+      : {} extends PostV1Conversations_Body
+        ? { body?: PostV1Conversations_Body }
+        : { body: PostV1Conversations_Body })
 >;
 
 export interface PostV1Conversations_RouteContract {
@@ -8382,9 +8464,10 @@ export type GetV1ConversationsConversationId_PathParams = {
 export type GetV1ConversationsConversationId_Response = PostV1Conversations_Response;
 
 export type GetV1ConversationsConversationId_Request = Simplify<
-  GetV1ConversationsConversationId_PathParams extends never
+  (GetV1ConversationsConversationId_PathParams extends never
     ? {}
-    : { params: GetV1ConversationsConversationId_PathParams }
+    : { params: GetV1ConversationsConversationId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetV1ConversationsConversationId_RouteContract {
@@ -8436,9 +8519,10 @@ export type GetV1ConversationsConversationIdItems_Response = {
 };
 
 export type GetV1ConversationsConversationIdItems_Request = Simplify<
-  GetV1ConversationsConversationIdItems_PathParams extends never
+  (GetV1ConversationsConversationIdItems_PathParams extends never
     ? {}
-    : { params: GetV1ConversationsConversationIdItems_PathParams }
+    : { params: GetV1ConversationsConversationIdItems_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetV1ConversationsConversationIdItems_RouteContract {
@@ -8462,9 +8546,10 @@ export type DeleteV1ConversationsConversationId_Response = {
 };
 
 export type DeleteV1ConversationsConversationId_Request = Simplify<
-  DeleteV1ConversationsConversationId_PathParams extends never
+  (DeleteV1ConversationsConversationId_PathParams extends never
     ? {}
-    : { params: DeleteV1ConversationsConversationId_PathParams }
+    : { params: DeleteV1ConversationsConversationId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteV1ConversationsConversationId_RouteContract {
@@ -8503,11 +8588,12 @@ export type GetMemoryStatus_Response = {
 };
 
 export type GetMemoryStatus_Request = Simplify<
-  GetMemoryStatus_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryStatus_QueryParams
-      ? { query?: GetMemoryStatus_QueryParams }
-      : { query: GetMemoryStatus_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryStatus_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryStatus_QueryParams
+        ? { query?: GetMemoryStatus_QueryParams }
+        : { query: GetMemoryStatus_QueryParams })
 >;
 
 export interface GetMemoryStatus_RouteContract {
@@ -8586,11 +8672,12 @@ export type GetMemoryConfig_Response = {
 };
 
 export type GetMemoryConfig_Request = Simplify<
-  GetMemoryConfig_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryConfig_QueryParams
-      ? { query?: GetMemoryConfig_QueryParams }
-      : { query: GetMemoryConfig_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryConfig_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryConfig_QueryParams
+        ? { query?: GetMemoryConfig_QueryParams }
+        : { query: GetMemoryConfig_QueryParams })
 >;
 
 export interface GetMemoryConfig_RouteContract {
@@ -8621,11 +8708,12 @@ export type GetMemoryObservationalMemory_Response = {
 };
 
 export type GetMemoryObservationalMemory_Request = Simplify<
-  GetMemoryObservationalMemory_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryObservationalMemory_QueryParams
-      ? { query?: GetMemoryObservationalMemory_QueryParams }
-      : { query: GetMemoryObservationalMemory_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryObservationalMemory_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryObservationalMemory_QueryParams
+        ? { query?: GetMemoryObservationalMemory_QueryParams }
+        : { query: GetMemoryObservationalMemory_QueryParams })
 >;
 
 export interface GetMemoryObservationalMemory_RouteContract {
@@ -8647,11 +8735,12 @@ export type PostMemoryObservationalMemoryBufferStatus_Response = {
 };
 
 export type PostMemoryObservationalMemoryBufferStatus_Request = Simplify<
-  PostMemoryObservationalMemoryBufferStatus_Body extends never
-    ? {}
-    : {} extends PostMemoryObservationalMemoryBufferStatus_Body
-      ? { body?: PostMemoryObservationalMemoryBufferStatus_Body }
-      : { body: PostMemoryObservationalMemoryBufferStatus_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryObservationalMemoryBufferStatus_Body extends never
+      ? {}
+      : {} extends PostMemoryObservationalMemoryBufferStatus_Body
+        ? { body?: PostMemoryObservationalMemoryBufferStatus_Body }
+        : { body: PostMemoryObservationalMemoryBufferStatus_Body })
 >;
 
 export interface PostMemoryObservationalMemoryBufferStatus_RouteContract {
@@ -8693,11 +8782,12 @@ export type GetMemoryThreads_Response = {
 };
 
 export type GetMemoryThreads_Request = Simplify<
-  GetMemoryThreads_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryThreads_QueryParams
-      ? { query?: GetMemoryThreads_QueryParams }
-      : { query: GetMemoryThreads_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryThreads_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryThreads_QueryParams
+        ? { query?: GetMemoryThreads_QueryParams }
+        : { query: GetMemoryThreads_QueryParams })
 >;
 
 export interface GetMemoryThreads_RouteContract {
@@ -8730,7 +8820,8 @@ export type GetMemoryThreadsThreadId_Request = Simplify<
       ? {}
       : {} extends GetMemoryThreadsThreadId_QueryParams
         ? { query?: GetMemoryThreadsThreadId_QueryParams }
-        : { query: GetMemoryThreadsThreadId_QueryParams })
+        : { query: GetMemoryThreadsThreadId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMemoryThreadsThreadId_RouteContract {
@@ -8787,7 +8878,8 @@ export type GetMemoryThreadsThreadIdMessages_Request = Simplify<
       ? {}
       : {} extends GetMemoryThreadsThreadIdMessages_QueryParams
         ? { query?: GetMemoryThreadsThreadIdMessages_QueryParams }
-        : { query: GetMemoryThreadsThreadIdMessages_QueryParams })
+        : { query: GetMemoryThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMemoryThreadsThreadIdMessages_RouteContract {
@@ -8829,7 +8921,8 @@ export type GetMemoryThreadsThreadIdWorkingMemory_Request = Simplify<
       ? {}
       : {} extends GetMemoryThreadsThreadIdWorkingMemory_QueryParams
         ? { query?: GetMemoryThreadsThreadIdWorkingMemory_QueryParams }
-        : { query: GetMemoryThreadsThreadIdWorkingMemory_QueryParams })
+        : { query: GetMemoryThreadsThreadIdWorkingMemory_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMemoryThreadsThreadIdWorkingMemory_RouteContract {
@@ -8855,11 +8948,12 @@ export type PostMemorySaveMessages_Response = {
 };
 
 export type PostMemorySaveMessages_Request = Simplify<
-  (PostMemorySaveMessages_QueryParams extends never
-    ? {}
-    : {} extends PostMemorySaveMessages_QueryParams
-      ? { query?: PostMemorySaveMessages_QueryParams }
-      : { query: PostMemorySaveMessages_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemorySaveMessages_QueryParams extends never
+      ? {}
+      : {} extends PostMemorySaveMessages_QueryParams
+        ? { query?: PostMemorySaveMessages_QueryParams }
+        : { query: PostMemorySaveMessages_QueryParams }) &
     (PostMemorySaveMessages_Body extends never
       ? {}
       : {} extends PostMemorySaveMessages_Body
@@ -8895,11 +8989,12 @@ export type PostMemoryThreads_Body = {
 export type PostMemoryThreads_Response = GetMemoryThreadsThreadId_Response;
 
 export type PostMemoryThreads_Request = Simplify<
-  (PostMemoryThreads_QueryParams extends never
-    ? {}
-    : {} extends PostMemoryThreads_QueryParams
-      ? { query?: PostMemoryThreads_QueryParams }
-      : { query: PostMemoryThreads_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryThreads_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryThreads_QueryParams
+        ? { query?: PostMemoryThreads_QueryParams }
+        : { query: PostMemoryThreads_QueryParams }) &
     (PostMemoryThreads_Body extends never
       ? {}
       : {} extends PostMemoryThreads_Body
@@ -8978,7 +9073,8 @@ export type DeleteMemoryThreadsThreadId_Request = Simplify<
       ? {}
       : {} extends DeleteMemoryThreadsThreadId_QueryParams
         ? { query?: DeleteMemoryThreadsThreadId_QueryParams }
-        : { query: DeleteMemoryThreadsThreadId_QueryParams })
+        : { query: DeleteMemoryThreadsThreadId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteMemoryThreadsThreadId_RouteContract {
@@ -9158,11 +9254,12 @@ export type PostMemoryMessagesDelete_Response = {
 };
 
 export type PostMemoryMessagesDelete_Request = Simplify<
-  (PostMemoryMessagesDelete_QueryParams extends never
-    ? {}
-    : {} extends PostMemoryMessagesDelete_QueryParams
-      ? { query?: PostMemoryMessagesDelete_QueryParams }
-      : { query: PostMemoryMessagesDelete_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryMessagesDelete_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryMessagesDelete_QueryParams
+        ? { query?: PostMemoryMessagesDelete_QueryParams }
+        : { query: PostMemoryMessagesDelete_QueryParams }) &
     (PostMemoryMessagesDelete_Body extends never
       ? {}
       : {} extends PostMemoryMessagesDelete_Body
@@ -9204,11 +9301,12 @@ export type GetMemorySearch_Response = {
 };
 
 export type GetMemorySearch_Request = Simplify<
-  GetMemorySearch_QueryParams extends never
-    ? {}
-    : {} extends GetMemorySearch_QueryParams
-      ? { query?: GetMemorySearch_QueryParams }
-      : { query: GetMemorySearch_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemorySearch_QueryParams extends never
+      ? {}
+      : {} extends GetMemorySearch_QueryParams
+        ? { query?: GetMemorySearch_QueryParams }
+        : { query: GetMemorySearch_QueryParams })
 >;
 
 export interface GetMemorySearch_RouteContract {
@@ -9228,11 +9326,12 @@ export type GetMemoryNetworkStatus_QueryParams = GetMemoryConfig_QueryParams;
 export type GetMemoryNetworkStatus_Response = GetMemoryStatus_Response;
 
 export type GetMemoryNetworkStatus_Request = Simplify<
-  GetMemoryNetworkStatus_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryNetworkStatus_QueryParams
-      ? { query?: GetMemoryNetworkStatus_QueryParams }
-      : { query: GetMemoryNetworkStatus_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryNetworkStatus_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryNetworkStatus_QueryParams
+        ? { query?: GetMemoryNetworkStatus_QueryParams }
+        : { query: GetMemoryNetworkStatus_QueryParams })
 >;
 
 export interface GetMemoryNetworkStatus_RouteContract {
@@ -9252,11 +9351,12 @@ export type GetMemoryNetworkThreads_QueryParams = GetMemoryThreads_QueryParams;
 export type GetMemoryNetworkThreads_Response = GetMemoryThreads_Response;
 
 export type GetMemoryNetworkThreads_Request = Simplify<
-  GetMemoryNetworkThreads_QueryParams extends never
-    ? {}
-    : {} extends GetMemoryNetworkThreads_QueryParams
-      ? { query?: GetMemoryNetworkThreads_QueryParams }
-      : { query: GetMemoryNetworkThreads_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMemoryNetworkThreads_QueryParams extends never
+      ? {}
+      : {} extends GetMemoryNetworkThreads_QueryParams
+        ? { query?: GetMemoryNetworkThreads_QueryParams }
+        : { query: GetMemoryNetworkThreads_QueryParams })
 >;
 
 export interface GetMemoryNetworkThreads_RouteContract {
@@ -9285,7 +9385,8 @@ export type GetMemoryNetworkThreadsThreadId_Request = Simplify<
       ? {}
       : {} extends GetMemoryNetworkThreadsThreadId_QueryParams
         ? { query?: GetMemoryNetworkThreadsThreadId_QueryParams }
-        : { query: GetMemoryNetworkThreadsThreadId_QueryParams })
+        : { query: GetMemoryNetworkThreadsThreadId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMemoryNetworkThreadsThreadId_RouteContract {
@@ -9334,7 +9435,8 @@ export type GetMemoryNetworkThreadsThreadIdMessages_Request = Simplify<
       ? {}
       : {} extends GetMemoryNetworkThreadsThreadIdMessages_QueryParams
         ? { query?: GetMemoryNetworkThreadsThreadIdMessages_QueryParams }
-        : { query: GetMemoryNetworkThreadsThreadIdMessages_QueryParams })
+        : { query: GetMemoryNetworkThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMemoryNetworkThreadsThreadIdMessages_RouteContract {
@@ -9356,11 +9458,12 @@ export type PostMemoryNetworkSaveMessages_Body = PostMemorySaveMessages_Body;
 export type PostMemoryNetworkSaveMessages_Response = PostMemorySaveMessages_Response;
 
 export type PostMemoryNetworkSaveMessages_Request = Simplify<
-  (PostMemoryNetworkSaveMessages_QueryParams extends never
-    ? {}
-    : {} extends PostMemoryNetworkSaveMessages_QueryParams
-      ? { query?: PostMemoryNetworkSaveMessages_QueryParams }
-      : { query: PostMemoryNetworkSaveMessages_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryNetworkSaveMessages_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryNetworkSaveMessages_QueryParams
+        ? { query?: PostMemoryNetworkSaveMessages_QueryParams }
+        : { query: PostMemoryNetworkSaveMessages_QueryParams }) &
     (PostMemoryNetworkSaveMessages_Body extends never
       ? {}
       : {} extends PostMemoryNetworkSaveMessages_Body
@@ -9387,11 +9490,12 @@ export type PostMemoryNetworkThreads_Body = PostMemoryThreads_Body;
 export type PostMemoryNetworkThreads_Response = GetMemoryThreadsThreadId_Response;
 
 export type PostMemoryNetworkThreads_Request = Simplify<
-  (PostMemoryNetworkThreads_QueryParams extends never
-    ? {}
-    : {} extends PostMemoryNetworkThreads_QueryParams
-      ? { query?: PostMemoryNetworkThreads_QueryParams }
-      : { query: PostMemoryNetworkThreads_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryNetworkThreads_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryNetworkThreads_QueryParams
+        ? { query?: PostMemoryNetworkThreads_QueryParams }
+        : { query: PostMemoryNetworkThreads_QueryParams }) &
     (PostMemoryNetworkThreads_Body extends never
       ? {}
       : {} extends PostMemoryNetworkThreads_Body
@@ -9461,7 +9565,8 @@ export type DeleteMemoryNetworkThreadsThreadId_Request = Simplify<
       ? {}
       : {} extends DeleteMemoryNetworkThreadsThreadId_QueryParams
         ? { query?: DeleteMemoryNetworkThreadsThreadId_QueryParams }
-        : { query: DeleteMemoryNetworkThreadsThreadId_QueryParams })
+        : { query: DeleteMemoryNetworkThreadsThreadId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteMemoryNetworkThreadsThreadId_RouteContract {
@@ -9483,11 +9588,12 @@ export type PostMemoryNetworkMessagesDelete_Body = PostMemoryMessagesDelete_Body
 export type PostMemoryNetworkMessagesDelete_Response = PostMemoryMessagesDelete_Response;
 
 export type PostMemoryNetworkMessagesDelete_Request = Simplify<
-  (PostMemoryNetworkMessagesDelete_QueryParams extends never
-    ? {}
-    : {} extends PostMemoryNetworkMessagesDelete_QueryParams
-      ? { query?: PostMemoryNetworkMessagesDelete_QueryParams }
-      : { query: PostMemoryNetworkMessagesDelete_QueryParams }) &
+  (never extends never ? {} : { params: never }) &
+    (PostMemoryNetworkMessagesDelete_QueryParams extends never
+      ? {}
+      : {} extends PostMemoryNetworkMessagesDelete_QueryParams
+        ? { query?: PostMemoryNetworkMessagesDelete_QueryParams }
+        : { query: PostMemoryNetworkMessagesDelete_QueryParams }) &
     (PostMemoryNetworkMessagesDelete_Body extends never
       ? {}
       : {} extends PostMemoryNetworkMessagesDelete_Body
@@ -9511,7 +9617,7 @@ export type GetScoresScorers_Response = {
   [key: string]: Shared_Type_56;
 };
 
-export type GetScoresScorers_Request = Simplify<{}>;
+export type GetScoresScorers_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetScoresScorers_RouteContract {
   pathParams: never;
@@ -9533,7 +9639,8 @@ export type GetScoresScorersScorerId_PathParams = {
 export type GetScoresScorersScorerId_Response = Shared_Type_56 | null;
 
 export type GetScoresScorersScorerId_Request = Simplify<
-  GetScoresScorersScorerId_PathParams extends never ? {} : { params: GetScoresScorersScorerId_PathParams }
+  (GetScoresScorersScorerId_PathParams extends never ? {} : { params: GetScoresScorersScorerId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetScoresScorersScorerId_RouteContract {
@@ -9571,7 +9678,8 @@ export type GetScoresRunRunId_Request = Simplify<
       ? {}
       : {} extends GetScoresRunRunId_QueryParams
         ? { query?: GetScoresRunRunId_QueryParams }
-        : { query: GetScoresRunRunId_QueryParams })
+        : { query: GetScoresRunRunId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetScoresRunRunId_RouteContract {
@@ -9603,7 +9711,8 @@ export type GetScoresScorerScorerId_Request = Simplify<
       ? {}
       : {} extends GetScoresScorerScorerId_QueryParams
         ? { query?: GetScoresScorerScorerId_QueryParams }
-        : { query: GetScoresScorerScorerId_QueryParams })
+        : { query: GetScoresScorerScorerId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetScoresScorerScorerId_RouteContract {
@@ -9637,7 +9746,8 @@ export type GetScoresEntityEntityTypeEntityId_Request = Simplify<
       ? {}
       : {} extends GetScoresEntityEntityTypeEntityId_QueryParams
         ? { query?: GetScoresEntityEntityTypeEntityId_QueryParams }
-        : { query: GetScoresEntityEntityTypeEntityId_QueryParams })
+        : { query: GetScoresEntityEntityTypeEntityId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetScoresEntityEntityTypeEntityId_RouteContract {
@@ -9661,11 +9771,12 @@ export type PostScores_Response = {
 };
 
 export type PostScores_Request = Simplify<
-  PostScores_Body extends never
-    ? {}
-    : {} extends PostScores_Body
-      ? { body?: PostScores_Body }
-      : { body: PostScores_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostScores_Body extends never
+      ? {}
+      : {} extends PostScores_Body
+        ? { body?: PostScores_Body }
+        : { body: PostScores_Body })
 >;
 
 export interface PostScores_RouteContract {
@@ -9750,11 +9861,12 @@ export type GetObservabilityTraces_Response = {
 };
 
 export type GetObservabilityTraces_Request = Simplify<
-  GetObservabilityTraces_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityTraces_QueryParams
-      ? { query?: GetObservabilityTraces_QueryParams }
-      : { query: GetObservabilityTraces_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityTraces_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityTraces_QueryParams
+        ? { query?: GetObservabilityTraces_QueryParams }
+        : { query: GetObservabilityTraces_QueryParams })
 >;
 
 export interface GetObservabilityTraces_RouteContract {
@@ -9781,11 +9893,12 @@ export type GetObservabilityTracesLight_Response = {
 };
 
 export type GetObservabilityTracesLight_Request = Simplify<
-  GetObservabilityTracesLight_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityTracesLight_QueryParams
-      ? { query?: GetObservabilityTracesLight_QueryParams }
-      : { query: GetObservabilityTracesLight_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityTracesLight_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityTracesLight_QueryParams
+        ? { query?: GetObservabilityTracesLight_QueryParams }
+        : { query: GetObservabilityTracesLight_QueryParams })
 >;
 
 export interface GetObservabilityTracesLight_RouteContract {
@@ -9867,11 +9980,12 @@ export type GetObservabilityBranches_Response = {
 };
 
 export type GetObservabilityBranches_Request = Simplify<
-  GetObservabilityBranches_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityBranches_QueryParams
-      ? { query?: GetObservabilityBranches_QueryParams }
-      : { query: GetObservabilityBranches_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityBranches_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityBranches_QueryParams
+        ? { query?: GetObservabilityBranches_QueryParams }
+        : { query: GetObservabilityBranches_QueryParams })
 >;
 
 export interface GetObservabilityBranches_RouteContract {
@@ -9912,7 +10026,8 @@ export type GetObservabilityTracesTraceIdBranchesSpanId_Request = Simplify<
       ? {}
       : {} extends GetObservabilityTracesTraceIdBranchesSpanId_QueryParams
         ? { query?: GetObservabilityTracesTraceIdBranchesSpanId_QueryParams }
-        : { query: GetObservabilityTracesTraceIdBranchesSpanId_QueryParams })
+        : { query: GetObservabilityTracesTraceIdBranchesSpanId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetObservabilityTracesTraceIdBranchesSpanId_RouteContract {
@@ -9939,7 +10054,8 @@ export type GetObservabilityTracesTraceId_Response = {
 };
 
 export type GetObservabilityTracesTraceId_Request = Simplify<
-  GetObservabilityTracesTraceId_PathParams extends never ? {} : { params: GetObservabilityTracesTraceId_PathParams }
+  (GetObservabilityTracesTraceId_PathParams extends never ? {} : { params: GetObservabilityTracesTraceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetObservabilityTracesTraceId_RouteContract {
@@ -9963,9 +10079,10 @@ export type GetObservabilityTracesTraceIdLight_Response = {
 };
 
 export type GetObservabilityTracesTraceIdLight_Request = Simplify<
-  GetObservabilityTracesTraceIdLight_PathParams extends never
+  (GetObservabilityTracesTraceIdLight_PathParams extends never
     ? {}
-    : { params: GetObservabilityTracesTraceIdLight_PathParams }
+    : { params: GetObservabilityTracesTraceIdLight_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetObservabilityTracesTraceIdLight_RouteContract {
@@ -9989,9 +10106,10 @@ export type GetObservabilityTracesTraceIdSpansSpanId_Response = {
 };
 
 export type GetObservabilityTracesTraceIdSpansSpanId_Request = Simplify<
-  GetObservabilityTracesTraceIdSpansSpanId_PathParams extends never
+  (GetObservabilityTracesTraceIdSpansSpanId_PathParams extends never
     ? {}
-    : { params: GetObservabilityTracesTraceIdSpansSpanId_PathParams }
+    : { params: GetObservabilityTracesTraceIdSpansSpanId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetObservabilityTracesTraceIdSpansSpanId_RouteContract {
@@ -10016,9 +10134,10 @@ export type GetObservabilityTracesTraceIdTrajectory_Response = {
 };
 
 export type GetObservabilityTracesTraceIdTrajectory_Request = Simplify<
-  GetObservabilityTracesTraceIdTrajectory_PathParams extends never
+  (GetObservabilityTracesTraceIdTrajectory_PathParams extends never
     ? {}
-    : { params: GetObservabilityTracesTraceIdTrajectory_PathParams }
+    : { params: GetObservabilityTracesTraceIdTrajectory_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetObservabilityTracesTraceIdTrajectory_RouteContract {
@@ -10043,11 +10162,12 @@ export type PostObservabilityTracesDelete_Response = {
 };
 
 export type PostObservabilityTracesDelete_Request = Simplify<
-  PostObservabilityTracesDelete_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesDelete_Body
-      ? { body?: PostObservabilityTracesDelete_Body }
-      : { body: PostObservabilityTracesDelete_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesDelete_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesDelete_Body
+        ? { body?: PostObservabilityTracesDelete_Body }
+        : { body: PostObservabilityTracesDelete_Body })
 >;
 
 export interface PostObservabilityTracesDelete_RouteContract {
@@ -10079,11 +10199,12 @@ export type PostObservabilityTracesScore_Response = {
 };
 
 export type PostObservabilityTracesScore_Request = Simplify<
-  PostObservabilityTracesScore_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesScore_Body
-      ? { body?: PostObservabilityTracesScore_Body }
-      : { body: PostObservabilityTracesScore_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesScore_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesScore_Body
+        ? { body?: PostObservabilityTracesScore_Body }
+        : { body: PostObservabilityTracesScore_Body })
 >;
 
 export interface PostObservabilityTracesScore_RouteContract {
@@ -10228,7 +10349,8 @@ export type GetObservabilityTracesTraceIdSpanIdScores_Request = Simplify<
       ? {}
       : {} extends GetObservabilityTracesTraceIdSpanIdScores_QueryParams
         ? { query?: GetObservabilityTracesTraceIdSpanIdScores_QueryParams }
-        : { query: GetObservabilityTracesTraceIdSpanIdScores_QueryParams })
+        : { query: GetObservabilityTracesTraceIdSpanIdScores_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetObservabilityTracesTraceIdSpanIdScores_RouteContract {
@@ -10312,11 +10434,12 @@ export type PostObservabilityTracesQuery_Response =
     };
 
 export type PostObservabilityTracesQuery_Request = Simplify<
-  PostObservabilityTracesQuery_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesQuery_Body
-      ? { body?: PostObservabilityTracesQuery_Body }
-      : { body: PostObservabilityTracesQuery_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQuery_Body
+        ? { body?: PostObservabilityTracesQuery_Body }
+        : { body: PostObservabilityTracesQuery_Body })
 >;
 
 export interface PostObservabilityTracesQuery_RouteContract {
@@ -10393,11 +10516,12 @@ export type PostObservabilityTracesAggregate_Response = {
 };
 
 export type PostObservabilityTracesAggregate_Request = Simplify<
-  PostObservabilityTracesAggregate_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesAggregate_Body
-      ? { body?: PostObservabilityTracesAggregate_Body }
-      : { body: PostObservabilityTracesAggregate_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesAggregate_Body
+        ? { body?: PostObservabilityTracesAggregate_Body }
+        : { body: PostObservabilityTracesAggregate_Body })
 >;
 
 export interface PostObservabilityTracesAggregate_RouteContract {
@@ -10432,11 +10556,12 @@ export type PostObservabilitySpansAggregate_Body = {
 export type PostObservabilitySpansAggregate_Response = PostObservabilityTracesAggregate_Response;
 
 export type PostObservabilitySpansAggregate_Request = Simplify<
-  PostObservabilitySpansAggregate_Body extends never
-    ? {}
-    : {} extends PostObservabilitySpansAggregate_Body
-      ? { body?: PostObservabilitySpansAggregate_Body }
-      : { body: PostObservabilitySpansAggregate_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilitySpansAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilitySpansAggregate_Body
+        ? { body?: PostObservabilitySpansAggregate_Body }
+        : { body: PostObservabilitySpansAggregate_Body })
 >;
 
 export interface PostObservabilitySpansAggregate_RouteContract {
@@ -10537,11 +10662,12 @@ export type PostObservabilityThreadsQuery_Response =
     };
 
 export type PostObservabilityThreadsQuery_Request = Simplify<
-  PostObservabilityThreadsQuery_Body extends never
-    ? {}
-    : {} extends PostObservabilityThreadsQuery_Body
-      ? { body?: PostObservabilityThreadsQuery_Body }
-      : { body: PostObservabilityThreadsQuery_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityThreadsQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilityThreadsQuery_Body
+        ? { body?: PostObservabilityThreadsQuery_Body }
+        : { body: PostObservabilityThreadsQuery_Body })
 >;
 
 export interface PostObservabilityThreadsQuery_RouteContract {
@@ -10619,11 +10745,12 @@ export type PostObservabilitySpansQuery_Response = {
 };
 
 export type PostObservabilitySpansQuery_Request = Simplify<
-  PostObservabilitySpansQuery_Body extends never
-    ? {}
-    : {} extends PostObservabilitySpansQuery_Body
-      ? { body?: PostObservabilitySpansQuery_Body }
-      : { body: PostObservabilitySpansQuery_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilitySpansQuery_Body extends never
+      ? {}
+      : {} extends PostObservabilitySpansQuery_Body
+        ? { body?: PostObservabilitySpansQuery_Body }
+        : { body: PostObservabilitySpansQuery_Body })
 >;
 
 export interface PostObservabilitySpansQuery_RouteContract {
@@ -10697,11 +10824,12 @@ export type PostObservabilityTracesQueryFields_Response = {
 };
 
 export type PostObservabilityTracesQueryFields_Request = Simplify<
-  PostObservabilityTracesQueryFields_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesQueryFields_Body
-      ? { body?: PostObservabilityTracesQueryFields_Body }
-      : { body: PostObservabilityTracesQueryFields_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesQueryFields_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQueryFields_Body
+        ? { body?: PostObservabilityTracesQueryFields_Body }
+        : { body: PostObservabilityTracesQueryFields_Body })
 >;
 
 export interface PostObservabilityTracesQueryFields_RouteContract {
@@ -10736,11 +10864,12 @@ export type PostObservabilityTracesQueryValues_Response = {
 };
 
 export type PostObservabilityTracesQueryValues_Request = Simplify<
-  PostObservabilityTracesQueryValues_Body extends never
-    ? {}
-    : {} extends PostObservabilityTracesQueryValues_Body
-      ? { body?: PostObservabilityTracesQueryValues_Body }
-      : { body: PostObservabilityTracesQueryValues_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityTracesQueryValues_Body extends never
+      ? {}
+      : {} extends PostObservabilityTracesQueryValues_Body
+        ? { body?: PostObservabilityTracesQueryValues_Body }
+        : { body: PostObservabilityTracesQueryValues_Body })
 >;
 
 export interface PostObservabilityTracesQueryValues_RouteContract {
@@ -10881,11 +11010,12 @@ export type GetObservabilityMetrics_Response = {
 };
 
 export type GetObservabilityMetrics_Request = Simplify<
-  GetObservabilityMetrics_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityMetrics_QueryParams
-      ? { query?: GetObservabilityMetrics_QueryParams }
-      : { query: GetObservabilityMetrics_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityMetrics_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityMetrics_QueryParams
+        ? { query?: GetObservabilityMetrics_QueryParams }
+        : { query: GetObservabilityMetrics_QueryParams })
 >;
 
 export interface GetObservabilityMetrics_RouteContract {
@@ -11008,11 +11138,12 @@ export type GetObservabilityLogs_Response = {
 };
 
 export type GetObservabilityLogs_Request = Simplify<
-  GetObservabilityLogs_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityLogs_QueryParams
-      ? { query?: GetObservabilityLogs_QueryParams }
-      : { query: GetObservabilityLogs_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityLogs_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityLogs_QueryParams
+        ? { query?: GetObservabilityLogs_QueryParams }
+        : { query: GetObservabilityLogs_QueryParams })
 >;
 
 export interface GetObservabilityLogs_RouteContract {
@@ -11089,11 +11220,12 @@ export type GetObservabilityScores_Response = {
 };
 
 export type GetObservabilityScores_Request = Simplify<
-  GetObservabilityScores_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityScores_QueryParams
-      ? { query?: GetObservabilityScores_QueryParams }
-      : { query: GetObservabilityScores_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityScores_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityScores_QueryParams
+        ? { query?: GetObservabilityScores_QueryParams }
+        : { query: GetObservabilityScores_QueryParams })
 >;
 
 export interface GetObservabilityScores_RouteContract {
@@ -11170,11 +11302,12 @@ export type PostObservabilityScores_Body = {
 export type PostObservabilityScores_Response = PostAuthRefresh_Response;
 
 export type PostObservabilityScores_Request = Simplify<
-  PostObservabilityScores_Body extends never
-    ? {}
-    : {} extends PostObservabilityScores_Body
-      ? { body?: PostObservabilityScores_Body }
-      : { body: PostObservabilityScores_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityScores_Body extends never
+      ? {}
+      : {} extends PostObservabilityScores_Body
+        ? { body?: PostObservabilityScores_Body }
+        : { body: PostObservabilityScores_Body })
 >;
 
 export interface PostObservabilityScores_RouteContract {
@@ -11201,11 +11334,12 @@ export type DeleteObservabilityScores_Body = {
 export type DeleteObservabilityScores_Response = PostAuthRefresh_Response;
 
 export type DeleteObservabilityScores_Request = Simplify<
-  DeleteObservabilityScores_Body extends never
-    ? {}
-    : {} extends DeleteObservabilityScores_Body
-      ? { body?: DeleteObservabilityScores_Body }
-      : { body: DeleteObservabilityScores_Body }
+  (never extends never ? {} : { params: never }) &
+    (DeleteObservabilityScores_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityScores_Body
+        ? { body?: DeleteObservabilityScores_Body }
+        : { body: DeleteObservabilityScores_Body })
 >;
 
 export interface DeleteObservabilityScores_RouteContract {
@@ -11230,7 +11364,8 @@ export type GetObservabilityScoresScoreId_Response = {
 };
 
 export type GetObservabilityScoresScoreId_Request = Simplify<
-  GetObservabilityScoresScoreId_PathParams extends never ? {} : { params: GetObservabilityScoresScoreId_PathParams }
+  (GetObservabilityScoresScoreId_PathParams extends never ? {} : { params: GetObservabilityScoresScoreId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetObservabilityScoresScoreId_RouteContract {
@@ -11268,11 +11403,12 @@ export type PostObservabilityScoresAggregate_Response = {
 };
 
 export type PostObservabilityScoresAggregate_Request = Simplify<
-  PostObservabilityScoresAggregate_Body extends never
-    ? {}
-    : {} extends PostObservabilityScoresAggregate_Body
-      ? { body?: PostObservabilityScoresAggregate_Body }
-      : { body: PostObservabilityScoresAggregate_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityScoresAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilityScoresAggregate_Body
+        ? { body?: PostObservabilityScoresAggregate_Body }
+        : { body: PostObservabilityScoresAggregate_Body })
 >;
 
 export interface PostObservabilityScoresAggregate_RouteContract {
@@ -11312,11 +11448,12 @@ export type PostObservabilityScoresBreakdown_Response = {
 };
 
 export type PostObservabilityScoresBreakdown_Request = Simplify<
-  PostObservabilityScoresBreakdown_Body extends never
-    ? {}
-    : {} extends PostObservabilityScoresBreakdown_Body
-      ? { body?: PostObservabilityScoresBreakdown_Body }
-      : { body: PostObservabilityScoresBreakdown_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityScoresBreakdown_Body extends never
+      ? {}
+      : {} extends PostObservabilityScoresBreakdown_Body
+        ? { body?: PostObservabilityScoresBreakdown_Body }
+        : { body: PostObservabilityScoresBreakdown_Body })
 >;
 
 export interface PostObservabilityScoresBreakdown_RouteContract {
@@ -11360,11 +11497,12 @@ export type PostObservabilityScoresTimeseries_Response = {
 };
 
 export type PostObservabilityScoresTimeseries_Request = Simplify<
-  PostObservabilityScoresTimeseries_Body extends never
-    ? {}
-    : {} extends PostObservabilityScoresTimeseries_Body
-      ? { body?: PostObservabilityScoresTimeseries_Body }
-      : { body: PostObservabilityScoresTimeseries_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityScoresTimeseries_Body extends never
+      ? {}
+      : {} extends PostObservabilityScoresTimeseries_Body
+        ? { body?: PostObservabilityScoresTimeseries_Body }
+        : { body: PostObservabilityScoresTimeseries_Body })
 >;
 
 export interface PostObservabilityScoresTimeseries_RouteContract {
@@ -11406,11 +11544,12 @@ export type PostObservabilityScoresPercentiles_Response = {
 };
 
 export type PostObservabilityScoresPercentiles_Request = Simplify<
-  PostObservabilityScoresPercentiles_Body extends never
-    ? {}
-    : {} extends PostObservabilityScoresPercentiles_Body
-      ? { body?: PostObservabilityScoresPercentiles_Body }
-      : { body: PostObservabilityScoresPercentiles_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityScoresPercentiles_Body extends never
+      ? {}
+      : {} extends PostObservabilityScoresPercentiles_Body
+        ? { body?: PostObservabilityScoresPercentiles_Body }
+        : { body: PostObservabilityScoresPercentiles_Body })
 >;
 
 export interface PostObservabilityScoresPercentiles_RouteContract {
@@ -11546,11 +11685,12 @@ export type GetObservabilityFeedback_Response = {
 };
 
 export type GetObservabilityFeedback_Request = Simplify<
-  GetObservabilityFeedback_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityFeedback_QueryParams
-      ? { query?: GetObservabilityFeedback_QueryParams }
-      : { query: GetObservabilityFeedback_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityFeedback_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityFeedback_QueryParams
+        ? { query?: GetObservabilityFeedback_QueryParams }
+        : { query: GetObservabilityFeedback_QueryParams })
 >;
 
 export interface GetObservabilityFeedback_RouteContract {
@@ -11628,11 +11768,12 @@ export type PostObservabilityFeedback_Body = {
 export type PostObservabilityFeedback_Response = PostAuthRefresh_Response;
 
 export type PostObservabilityFeedback_Request = Simplify<
-  PostObservabilityFeedback_Body extends never
-    ? {}
-    : {} extends PostObservabilityFeedback_Body
-      ? { body?: PostObservabilityFeedback_Body }
-      : { body: PostObservabilityFeedback_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityFeedback_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedback_Body
+        ? { body?: PostObservabilityFeedback_Body }
+        : { body: PostObservabilityFeedback_Body })
 >;
 
 export interface PostObservabilityFeedback_RouteContract {
@@ -11659,11 +11800,12 @@ export type DeleteObservabilityFeedback_Body = {
 export type DeleteObservabilityFeedback_Response = PostAuthRefresh_Response;
 
 export type DeleteObservabilityFeedback_Request = Simplify<
-  DeleteObservabilityFeedback_Body extends never
-    ? {}
-    : {} extends DeleteObservabilityFeedback_Body
-      ? { body?: DeleteObservabilityFeedback_Body }
-      : { body: DeleteObservabilityFeedback_Body }
+  (never extends never ? {} : { params: never }) &
+    (DeleteObservabilityFeedback_Body extends never
+      ? {}
+      : {} extends DeleteObservabilityFeedback_Body
+        ? { body?: DeleteObservabilityFeedback_Body }
+        : { body: DeleteObservabilityFeedback_Body })
 >;
 
 export interface DeleteObservabilityFeedback_RouteContract {
@@ -11750,6 +11892,7 @@ export type PatchObservabilityFeedbackFeedbackIdReviewStatus_Request = Simplify<
   (PatchObservabilityFeedbackFeedbackIdReviewStatus_PathParams extends never
     ? {}
     : { params: PatchObservabilityFeedbackFeedbackIdReviewStatus_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchObservabilityFeedbackFeedbackIdReviewStatus_Body extends never
       ? {}
       : {} extends PatchObservabilityFeedbackFeedbackIdReviewStatus_Body
@@ -11785,11 +11928,12 @@ export type PostObservabilityFeedbackAggregate_Body = {
 export type PostObservabilityFeedbackAggregate_Response = PostObservabilityScoresAggregate_Response;
 
 export type PostObservabilityFeedbackAggregate_Request = Simplify<
-  PostObservabilityFeedbackAggregate_Body extends never
-    ? {}
-    : {} extends PostObservabilityFeedbackAggregate_Body
-      ? { body?: PostObservabilityFeedbackAggregate_Body }
-      : { body: PostObservabilityFeedbackAggregate_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityFeedbackAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedbackAggregate_Body
+        ? { body?: PostObservabilityFeedbackAggregate_Body }
+        : { body: PostObservabilityFeedbackAggregate_Body })
 >;
 
 export interface PostObservabilityFeedbackAggregate_RouteContract {
@@ -11820,11 +11964,12 @@ export type PostObservabilityFeedbackBreakdown_Body = {
 export type PostObservabilityFeedbackBreakdown_Response = PostObservabilityScoresBreakdown_Response;
 
 export type PostObservabilityFeedbackBreakdown_Request = Simplify<
-  PostObservabilityFeedbackBreakdown_Body extends never
-    ? {}
-    : {} extends PostObservabilityFeedbackBreakdown_Body
-      ? { body?: PostObservabilityFeedbackBreakdown_Body }
-      : { body: PostObservabilityFeedbackBreakdown_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityFeedbackBreakdown_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedbackBreakdown_Body
+        ? { body?: PostObservabilityFeedbackBreakdown_Body }
+        : { body: PostObservabilityFeedbackBreakdown_Body })
 >;
 
 export interface PostObservabilityFeedbackBreakdown_RouteContract {
@@ -11868,11 +12013,12 @@ export type PostObservabilityFeedbackTimeseries_Response = {
 };
 
 export type PostObservabilityFeedbackTimeseries_Request = Simplify<
-  PostObservabilityFeedbackTimeseries_Body extends never
-    ? {}
-    : {} extends PostObservabilityFeedbackTimeseries_Body
-      ? { body?: PostObservabilityFeedbackTimeseries_Body }
-      : { body: PostObservabilityFeedbackTimeseries_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityFeedbackTimeseries_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedbackTimeseries_Body
+        ? { body?: PostObservabilityFeedbackTimeseries_Body }
+        : { body: PostObservabilityFeedbackTimeseries_Body })
 >;
 
 export interface PostObservabilityFeedbackTimeseries_RouteContract {
@@ -11903,11 +12049,12 @@ export type PostObservabilityFeedbackPercentiles_Body = {
 export type PostObservabilityFeedbackPercentiles_Response = PostObservabilityScoresPercentiles_Response;
 
 export type PostObservabilityFeedbackPercentiles_Request = Simplify<
-  PostObservabilityFeedbackPercentiles_Body extends never
-    ? {}
-    : {} extends PostObservabilityFeedbackPercentiles_Body
-      ? { body?: PostObservabilityFeedbackPercentiles_Body }
-      : { body: PostObservabilityFeedbackPercentiles_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityFeedbackPercentiles_Body extends never
+      ? {}
+      : {} extends PostObservabilityFeedbackPercentiles_Body
+        ? { body?: PostObservabilityFeedbackPercentiles_Body }
+        : { body: PostObservabilityFeedbackPercentiles_Body })
 >;
 
 export interface PostObservabilityFeedbackPercentiles_RouteContract {
@@ -11953,11 +12100,12 @@ export type PostObservabilityMetricsAggregate_Response = {
 };
 
 export type PostObservabilityMetricsAggregate_Request = Simplify<
-  PostObservabilityMetricsAggregate_Body extends never
-    ? {}
-    : {} extends PostObservabilityMetricsAggregate_Body
-      ? { body?: PostObservabilityMetricsAggregate_Body }
-      : { body: PostObservabilityMetricsAggregate_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityMetricsAggregate_Body extends never
+      ? {}
+      : {} extends PostObservabilityMetricsAggregate_Body
+        ? { body?: PostObservabilityMetricsAggregate_Body }
+        : { body: PostObservabilityMetricsAggregate_Body })
 >;
 
 export interface PostObservabilityMetricsAggregate_RouteContract {
@@ -12005,11 +12153,12 @@ export type PostObservabilityMetricsBreakdown_Response = {
 };
 
 export type PostObservabilityMetricsBreakdown_Request = Simplify<
-  PostObservabilityMetricsBreakdown_Body extends never
-    ? {}
-    : {} extends PostObservabilityMetricsBreakdown_Body
-      ? { body?: PostObservabilityMetricsBreakdown_Body }
-      : { body: PostObservabilityMetricsBreakdown_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityMetricsBreakdown_Body extends never
+      ? {}
+      : {} extends PostObservabilityMetricsBreakdown_Body
+        ? { body?: PostObservabilityMetricsBreakdown_Body }
+        : { body: PostObservabilityMetricsBreakdown_Body })
 >;
 
 export interface PostObservabilityMetricsBreakdown_RouteContract {
@@ -12057,11 +12206,12 @@ export type PostObservabilityMetricsTimeseries_Response = {
 };
 
 export type PostObservabilityMetricsTimeseries_Request = Simplify<
-  PostObservabilityMetricsTimeseries_Body extends never
-    ? {}
-    : {} extends PostObservabilityMetricsTimeseries_Body
-      ? { body?: PostObservabilityMetricsTimeseries_Body }
-      : { body: PostObservabilityMetricsTimeseries_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityMetricsTimeseries_Body extends never
+      ? {}
+      : {} extends PostObservabilityMetricsTimeseries_Body
+        ? { body?: PostObservabilityMetricsTimeseries_Body }
+        : { body: PostObservabilityMetricsTimeseries_Body })
 >;
 
 export interface PostObservabilityMetricsTimeseries_RouteContract {
@@ -12090,11 +12240,12 @@ export type PostObservabilityMetricsPercentiles_Body = {
 export type PostObservabilityMetricsPercentiles_Response = PostObservabilityScoresPercentiles_Response;
 
 export type PostObservabilityMetricsPercentiles_Request = Simplify<
-  PostObservabilityMetricsPercentiles_Body extends never
-    ? {}
-    : {} extends PostObservabilityMetricsPercentiles_Body
-      ? { body?: PostObservabilityMetricsPercentiles_Body }
-      : { body: PostObservabilityMetricsPercentiles_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostObservabilityMetricsPercentiles_Body extends never
+      ? {}
+      : {} extends PostObservabilityMetricsPercentiles_Body
+        ? { body?: PostObservabilityMetricsPercentiles_Body }
+        : { body: PostObservabilityMetricsPercentiles_Body })
 >;
 
 export interface PostObservabilityMetricsPercentiles_RouteContract {
@@ -12122,11 +12273,12 @@ export type GetObservabilityDiscoveryMetricNames_Response = {
 };
 
 export type GetObservabilityDiscoveryMetricNames_Request = Simplify<
-  GetObservabilityDiscoveryMetricNames_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityDiscoveryMetricNames_QueryParams
-      ? { query?: GetObservabilityDiscoveryMetricNames_QueryParams }
-      : { query: GetObservabilityDiscoveryMetricNames_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryMetricNames_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryMetricNames_QueryParams
+        ? { query?: GetObservabilityDiscoveryMetricNames_QueryParams }
+        : { query: GetObservabilityDiscoveryMetricNames_QueryParams })
 >;
 
 export interface GetObservabilityDiscoveryMetricNames_RouteContract {
@@ -12152,11 +12304,12 @@ export type GetObservabilityDiscoveryMetricLabelKeys_Response = {
 };
 
 export type GetObservabilityDiscoveryMetricLabelKeys_Request = Simplify<
-  GetObservabilityDiscoveryMetricLabelKeys_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityDiscoveryMetricLabelKeys_QueryParams
-      ? { query?: GetObservabilityDiscoveryMetricLabelKeys_QueryParams }
-      : { query: GetObservabilityDiscoveryMetricLabelKeys_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryMetricLabelKeys_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryMetricLabelKeys_QueryParams
+        ? { query?: GetObservabilityDiscoveryMetricLabelKeys_QueryParams }
+        : { query: GetObservabilityDiscoveryMetricLabelKeys_QueryParams })
 >;
 
 export interface GetObservabilityDiscoveryMetricLabelKeys_RouteContract {
@@ -12188,11 +12341,12 @@ export type GetObservabilityDiscoveryMetricLabelValues_Response = {
 };
 
 export type GetObservabilityDiscoveryMetricLabelValues_Request = Simplify<
-  GetObservabilityDiscoveryMetricLabelValues_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityDiscoveryMetricLabelValues_QueryParams
-      ? { query?: GetObservabilityDiscoveryMetricLabelValues_QueryParams }
-      : { query: GetObservabilityDiscoveryMetricLabelValues_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryMetricLabelValues_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryMetricLabelValues_QueryParams
+        ? { query?: GetObservabilityDiscoveryMetricLabelValues_QueryParams }
+        : { query: GetObservabilityDiscoveryMetricLabelValues_QueryParams })
 >;
 
 export interface GetObservabilityDiscoveryMetricLabelValues_RouteContract {
@@ -12212,7 +12366,7 @@ export type GetObservabilityDiscoveryEntityTypes_Response = {
   entityTypes: Shared_Type_60[];
 };
 
-export type GetObservabilityDiscoveryEntityTypes_Request = Simplify<{}>;
+export type GetObservabilityDiscoveryEntityTypes_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetObservabilityDiscoveryEntityTypes_RouteContract {
   pathParams: never;
@@ -12237,11 +12391,12 @@ export type GetObservabilityDiscoveryEntityNames_Response = {
 };
 
 export type GetObservabilityDiscoveryEntityNames_Request = Simplify<
-  GetObservabilityDiscoveryEntityNames_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityDiscoveryEntityNames_QueryParams
-      ? { query?: GetObservabilityDiscoveryEntityNames_QueryParams }
-      : { query: GetObservabilityDiscoveryEntityNames_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryEntityNames_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryEntityNames_QueryParams
+        ? { query?: GetObservabilityDiscoveryEntityNames_QueryParams }
+        : { query: GetObservabilityDiscoveryEntityNames_QueryParams })
 >;
 
 export interface GetObservabilityDiscoveryEntityNames_RouteContract {
@@ -12261,7 +12416,7 @@ export type GetObservabilityDiscoveryServiceNames_Response = {
   serviceNames: string[];
 };
 
-export type GetObservabilityDiscoveryServiceNames_Request = Simplify<{}>;
+export type GetObservabilityDiscoveryServiceNames_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetObservabilityDiscoveryServiceNames_RouteContract {
   pathParams: never;
@@ -12280,7 +12435,7 @@ export type GetObservabilityDiscoveryEnvironments_Response = {
   environments: string[];
 };
 
-export type GetObservabilityDiscoveryEnvironments_Request = Simplify<{}>;
+export type GetObservabilityDiscoveryEnvironments_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetObservabilityDiscoveryEnvironments_RouteContract {
   pathParams: never;
@@ -12302,11 +12457,12 @@ export type GetObservabilityDiscoveryTags_Response = {
 };
 
 export type GetObservabilityDiscoveryTags_Request = Simplify<
-  GetObservabilityDiscoveryTags_QueryParams extends never
-    ? {}
-    : {} extends GetObservabilityDiscoveryTags_QueryParams
-      ? { query?: GetObservabilityDiscoveryTags_QueryParams }
-      : { query: GetObservabilityDiscoveryTags_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetObservabilityDiscoveryTags_QueryParams extends never
+      ? {}
+      : {} extends GetObservabilityDiscoveryTags_QueryParams
+        ? { query?: GetObservabilityDiscoveryTags_QueryParams }
+        : { query: GetObservabilityDiscoveryTags_QueryParams })
 >;
 
 export interface GetObservabilityDiscoveryTags_RouteContract {
@@ -12327,7 +12483,7 @@ export type GetObservabilityCapabilities_Response = {
   capabilities: Shared_Type_67;
 };
 
-export type GetObservabilityCapabilities_Request = Simplify<{}>;
+export type GetObservabilityCapabilities_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetObservabilityCapabilities_RouteContract {
   pathParams: never;
@@ -12345,7 +12501,7 @@ export type GetLogsTransports_Response = {
   transports: string[];
 };
 
-export type GetLogsTransports_Request = Simplify<{}>;
+export type GetLogsTransports_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetLogsTransports_RouteContract {
   pathParams: never;
@@ -12391,11 +12547,12 @@ export type GetLogs_Response = {
 };
 
 export type GetLogs_Request = Simplify<
-  GetLogs_QueryParams extends never
-    ? {}
-    : {} extends GetLogs_QueryParams
-      ? { query?: GetLogs_QueryParams }
-      : { query: GetLogs_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetLogs_QueryParams extends never
+      ? {}
+      : {} extends GetLogs_QueryParams
+        ? { query?: GetLogs_QueryParams }
+        : { query: GetLogs_QueryParams })
 >;
 
 export interface GetLogs_RouteContract {
@@ -12422,7 +12579,8 @@ export type GetLogsRunId_Request = Simplify<
       ? {}
       : {} extends GetLogsRunId_QueryParams
         ? { query?: GetLogsRunId_QueryParams }
-        : { query: GetLogsRunId_QueryParams })
+        : { query: GetLogsRunId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetLogsRunId_RouteContract {
@@ -12459,6 +12617,7 @@ export type PostVectorVectorNameUpsert_Response = {
 
 export type PostVectorVectorNameUpsert_Request = Simplify<
   (PostVectorVectorNameUpsert_PathParams extends never ? {} : { params: PostVectorVectorNameUpsert_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostVectorVectorNameUpsert_Body extends never
       ? {}
       : {} extends PostVectorVectorNameUpsert_Body
@@ -12492,6 +12651,7 @@ export type PostVectorVectorNameCreateIndex_Request = Simplify<
   (PostVectorVectorNameCreateIndex_PathParams extends never
     ? {}
     : { params: PostVectorVectorNameCreateIndex_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostVectorVectorNameCreateIndex_Body extends never
       ? {}
       : {} extends PostVectorVectorNameCreateIndex_Body
@@ -12529,6 +12689,7 @@ export type PostVectorVectorNameQuery_Response = unknown[];
 
 export type PostVectorVectorNameQuery_Request = Simplify<
   (PostVectorVectorNameQuery_PathParams extends never ? {} : { params: PostVectorVectorNameQuery_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostVectorVectorNameQuery_Body extends never
       ? {}
       : {} extends PostVectorVectorNameQuery_Body
@@ -12553,7 +12714,8 @@ export type GetVectorVectorNameIndexes_PathParams = PostVectorVectorNameUpsert_P
 export type GetVectorVectorNameIndexes_Response = string[];
 
 export type GetVectorVectorNameIndexes_Request = Simplify<
-  GetVectorVectorNameIndexes_PathParams extends never ? {} : { params: GetVectorVectorNameIndexes_PathParams }
+  (GetVectorVectorNameIndexes_PathParams extends never ? {} : { params: GetVectorVectorNameIndexes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetVectorVectorNameIndexes_RouteContract {
@@ -12582,9 +12744,10 @@ export type GetVectorVectorNameIndexesIndexName_Response = {
 };
 
 export type GetVectorVectorNameIndexesIndexName_Request = Simplify<
-  GetVectorVectorNameIndexesIndexName_PathParams extends never
+  (GetVectorVectorNameIndexesIndexName_PathParams extends never
     ? {}
-    : { params: GetVectorVectorNameIndexesIndexName_PathParams }
+    : { params: GetVectorVectorNameIndexesIndexName_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetVectorVectorNameIndexesIndexName_RouteContract {
@@ -12604,9 +12767,10 @@ export type DeleteVectorVectorNameIndexesIndexName_PathParams = GetVectorVectorN
 export type DeleteVectorVectorNameIndexesIndexName_Response = PostAuthRefresh_Response;
 
 export type DeleteVectorVectorNameIndexesIndexName_Request = Simplify<
-  DeleteVectorVectorNameIndexesIndexName_PathParams extends never
+  (DeleteVectorVectorNameIndexesIndexName_PathParams extends never
     ? {}
-    : { params: DeleteVectorVectorNameIndexesIndexName_PathParams }
+    : { params: DeleteVectorVectorNameIndexesIndexName_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteVectorVectorNameIndexesIndexName_RouteContract {
@@ -12630,7 +12794,7 @@ export type GetVectors_Response = {
   }[];
 };
 
-export type GetVectors_Request = Simplify<{}>;
+export type GetVectors_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetVectors_RouteContract {
   pathParams: never;
@@ -12655,7 +12819,7 @@ export type GetEmbedders_Response = {
   }[];
 };
 
-export type GetEmbedders_Request = Simplify<{}>;
+export type GetEmbedders_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEmbedders_RouteContract {
   pathParams: never;
@@ -12775,9 +12939,10 @@ export type GetWellKnownAgentIdAgentCardJson_Response =
     };
 
 export type GetWellKnownAgentIdAgentCardJson_Request = Simplify<
-  GetWellKnownAgentIdAgentCardJson_PathParams extends never
+  (GetWellKnownAgentIdAgentCardJson_PathParams extends never
     ? {}
-    : { params: GetWellKnownAgentIdAgentCardJson_PathParams }
+    : { params: GetWellKnownAgentIdAgentCardJson_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetWellKnownAgentIdAgentCardJson_RouteContract {
@@ -12980,6 +13145,7 @@ export type PostA2aAgentId_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostA2aAgentId_Request = Simplify<
   (PostA2aAgentId_PathParams extends never ? {} : { params: PostA2aAgentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostA2aAgentId_Body extends never
       ? {}
       : {} extends PostA2aAgentId_Body
@@ -13021,7 +13187,7 @@ export type GetWorkspaces_Response = {
   }[];
 };
 
-export type GetWorkspaces_Request = Simplify<{}>;
+export type GetWorkspaces_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetWorkspaces_RouteContract {
   pathParams: never;
@@ -13096,7 +13262,8 @@ export type GetWorkspacesWorkspaceId_Response = {
 };
 
 export type GetWorkspacesWorkspaceId_Request = Simplify<
-  GetWorkspacesWorkspaceId_PathParams extends never ? {} : { params: GetWorkspacesWorkspaceId_PathParams }
+  (GetWorkspacesWorkspaceId_PathParams extends never ? {} : { params: GetWorkspacesWorkspaceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetWorkspacesWorkspaceId_RouteContract {
@@ -13136,7 +13303,8 @@ export type GetWorkspacesWorkspaceIdFsRead_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdFsRead_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdFsRead_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdFsRead_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdFsRead_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdFsRead_RouteContract {
@@ -13173,6 +13341,7 @@ export type PostWorkspacesWorkspaceIdFsWrite_Request = Simplify<
   (PostWorkspacesWorkspaceIdFsWrite_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdFsWrite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdFsWrite_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdFsWrite_Body
@@ -13239,7 +13408,8 @@ export type GetWorkspacesWorkspaceIdFsList_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdFsList_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdFsList_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdFsList_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdFsList_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdFsList_RouteContract {
@@ -13275,7 +13445,8 @@ export type DeleteWorkspacesWorkspaceIdFsDelete_Request = Simplify<
       ? {}
       : {} extends DeleteWorkspacesWorkspaceIdFsDelete_QueryParams
         ? { query?: DeleteWorkspacesWorkspaceIdFsDelete_QueryParams }
-        : { query: DeleteWorkspacesWorkspaceIdFsDelete_QueryParams })
+        : { query: DeleteWorkspacesWorkspaceIdFsDelete_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteWorkspacesWorkspaceIdFsDelete_RouteContract {
@@ -13305,6 +13476,7 @@ export type PostWorkspacesWorkspaceIdFsMkdir_Request = Simplify<
   (PostWorkspacesWorkspaceIdFsMkdir_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdFsMkdir_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdFsMkdir_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdFsMkdir_Body
@@ -13348,7 +13520,8 @@ export type GetWorkspacesWorkspaceIdFsStat_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdFsStat_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdFsStat_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdFsStat_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdFsStat_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdFsStat_RouteContract {
@@ -13407,7 +13580,8 @@ export type GetWorkspacesWorkspaceIdSearch_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSearch_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSearch_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSearch_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSearch_RouteContract {
@@ -13443,6 +13617,7 @@ export type PostWorkspacesWorkspaceIdIndex_Request = Simplify<
   (PostWorkspacesWorkspaceIdIndex_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdIndex_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdIndex_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdIndex_Body
@@ -13508,7 +13683,8 @@ export type GetWorkspacesWorkspaceIdSkillsSearch_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsSearch_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsSearch_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsSearch_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsSearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsSearch_RouteContract {
@@ -13551,7 +13727,10 @@ export type GetWorkspacesWorkspaceIdSkills_Response = {
 };
 
 export type GetWorkspacesWorkspaceIdSkills_Request = Simplify<
-  GetWorkspacesWorkspaceIdSkills_PathParams extends never ? {} : { params: GetWorkspacesWorkspaceIdSkills_PathParams }
+  (GetWorkspacesWorkspaceIdSkills_PathParams extends never
+    ? {}
+    : { params: GetWorkspacesWorkspaceIdSkills_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkills_RouteContract {
@@ -13613,7 +13792,8 @@ export type GetWorkspacesWorkspaceIdSkillsSkillName_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsSkillName_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsSkillName_RouteContract {
@@ -13646,7 +13826,8 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferences_Request = Simplify
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsSkillNameReferences_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsSkillNameReferences_RouteContract {
@@ -13687,7 +13868,8 @@ export type GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_Reque
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsSkillNameReferencesReferencePath_RouteContract {
@@ -13731,7 +13913,8 @@ export type GetWorkspacesWorkspaceIdSkillsShSearch_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsShSearch_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsShSearch_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsShSearch_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsShSearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsShSearch_RouteContract {
@@ -13775,7 +13958,8 @@ export type GetWorkspacesWorkspaceIdSkillsShPopular_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsShPopular_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsShPopular_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsShPopular_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsShPopular_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsShPopular_RouteContract {
@@ -13813,7 +13997,8 @@ export type GetWorkspacesWorkspaceIdSkillsShPreview_Request = Simplify<
       ? {}
       : {} extends GetWorkspacesWorkspaceIdSkillsShPreview_QueryParams
         ? { query?: GetWorkspacesWorkspaceIdSkillsShPreview_QueryParams }
-        : { query: GetWorkspacesWorkspaceIdSkillsShPreview_QueryParams })
+        : { query: GetWorkspacesWorkspaceIdSkillsShPreview_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetWorkspacesWorkspaceIdSkillsShPreview_RouteContract {
@@ -13852,6 +14037,7 @@ export type PostWorkspacesWorkspaceIdSkillsShInstall_Request = Simplify<
   (PostWorkspacesWorkspaceIdSkillsShInstall_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdSkillsShInstall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdSkillsShInstall_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdSkillsShInstall_Body
@@ -13888,6 +14074,7 @@ export type PostWorkspacesWorkspaceIdSkillsShRemove_Request = Simplify<
   (PostWorkspacesWorkspaceIdSkillsShRemove_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdSkillsShRemove_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdSkillsShRemove_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdSkillsShRemove_Body
@@ -13927,6 +14114,7 @@ export type PostWorkspacesWorkspaceIdSkillsShUpdate_Request = Simplify<
   (PostWorkspacesWorkspaceIdSkillsShUpdate_PathParams extends never
     ? {}
     : { params: PostWorkspacesWorkspaceIdSkillsShUpdate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostWorkspacesWorkspaceIdSkillsShUpdate_Body extends never
       ? {}
       : {} extends PostWorkspacesWorkspaceIdSkillsShUpdate_Body
@@ -14027,6 +14215,7 @@ export type PostAgentsAgentIdGenerateLegacy_Request = Simplify<
   (PostAgentsAgentIdGenerateLegacy_PathParams extends never
     ? {}
     : { params: PostAgentsAgentIdGenerateLegacy_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdGenerateLegacy_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdGenerateLegacy_Body
@@ -14054,6 +14243,7 @@ export type PostAgentsAgentIdStreamLegacy_Response = PostAgentsAgentIdGenerate_R
 
 export type PostAgentsAgentIdStreamLegacy_Request = Simplify<
   (PostAgentsAgentIdStreamLegacy_PathParams extends never ? {} : { params: PostAgentsAgentIdStreamLegacy_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostAgentsAgentIdStreamLegacy_Body extends never
       ? {}
       : {} extends PostAgentsAgentIdStreamLegacy_Body
@@ -14123,7 +14313,8 @@ export type PostWorkflowsWorkflowIdObserveStreamLegacy_Request = Simplify<
       ? {}
       : {} extends PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams
         ? { query?: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams }
-        : { query: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams })
+        : { query: PostWorkflowsWorkflowIdObserveStreamLegacy_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostWorkflowsWorkflowIdObserveStreamLegacy_RouteContract {
@@ -14162,11 +14353,12 @@ export type GetMcpV0Servers_Response = {
 };
 
 export type GetMcpV0Servers_Request = Simplify<
-  GetMcpV0Servers_QueryParams extends never
-    ? {}
-    : {} extends GetMcpV0Servers_QueryParams
-      ? { query?: GetMcpV0Servers_QueryParams }
-      : { query: GetMcpV0Servers_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetMcpV0Servers_QueryParams extends never
+      ? {}
+      : {} extends GetMcpV0Servers_QueryParams
+        ? { query?: GetMcpV0Servers_QueryParams }
+        : { query: GetMcpV0Servers_QueryParams })
 >;
 
 export interface GetMcpV0Servers_RouteContract {
@@ -14212,7 +14404,8 @@ export type GetMcpV0ServersId_Request = Simplify<
       ? {}
       : {} extends GetMcpV0ServersId_QueryParams
         ? { query?: GetMcpV0ServersId_QueryParams }
-        : { query: GetMcpV0ServersId_QueryParams })
+        : { query: GetMcpV0ServersId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetMcpV0ServersId_RouteContract {
@@ -14237,7 +14430,8 @@ export type GetMcpServerIdTools_Response = {
 };
 
 export type GetMcpServerIdTools_Request = Simplify<
-  GetMcpServerIdTools_PathParams extends never ? {} : { params: GetMcpServerIdTools_PathParams }
+  (GetMcpServerIdTools_PathParams extends never ? {} : { params: GetMcpServerIdTools_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetMcpServerIdTools_RouteContract {
@@ -14262,7 +14456,8 @@ export type GetMcpServerIdToolsToolId_PathParams = {
 export type GetMcpServerIdToolsToolId_Response = Shared_Type_68;
 
 export type GetMcpServerIdToolsToolId_Request = Simplify<
-  GetMcpServerIdToolsToolId_PathParams extends never ? {} : { params: GetMcpServerIdToolsToolId_PathParams }
+  (GetMcpServerIdToolsToolId_PathParams extends never ? {} : { params: GetMcpServerIdToolsToolId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetMcpServerIdToolsToolId_RouteContract {
@@ -14304,6 +14499,7 @@ export type PostMcpServerIdToolsToolIdExecute_Request = Simplify<
   (PostMcpServerIdToolsToolIdExecute_PathParams extends never
     ? {}
     : { params: PostMcpServerIdToolsToolIdExecute_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostMcpServerIdToolsToolIdExecute_Body extends never
       ? {}
       : {} extends PostMcpServerIdToolsToolIdExecute_Body
@@ -14340,7 +14536,8 @@ export type GetMcpServerIdResources_Response = {
 };
 
 export type GetMcpServerIdResources_Request = Simplify<
-  GetMcpServerIdResources_PathParams extends never ? {} : { params: GetMcpServerIdResources_PathParams }
+  (GetMcpServerIdResources_PathParams extends never ? {} : { params: GetMcpServerIdResources_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetMcpServerIdResources_RouteContract {
@@ -14378,6 +14575,7 @@ export type PostMcpServerIdResourcesRead_Response = {
 
 export type PostMcpServerIdResourcesRead_Request = Simplify<
   (PostMcpServerIdResourcesRead_PathParams extends never ? {} : { params: PostMcpServerIdResourcesRead_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostMcpServerIdResourcesRead_Body extends never
       ? {}
       : {} extends PostMcpServerIdResourcesRead_Body
@@ -14420,7 +14618,8 @@ export type GetMcpServerIdEvents_Response = {
 };
 
 export type GetMcpServerIdEvents_Request = Simplify<
-  GetMcpServerIdEvents_PathParams extends never ? {} : { params: GetMcpServerIdEvents_PathParams }
+  (GetMcpServerIdEvents_PathParams extends never ? {} : { params: GetMcpServerIdEvents_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetMcpServerIdEvents_RouteContract {
@@ -14464,6 +14663,7 @@ export type PostMcpServerIdEventsEventNamePoll_Request = Simplify<
   (PostMcpServerIdEventsEventNamePoll_PathParams extends never
     ? {}
     : { params: PostMcpServerIdEventsEventNamePoll_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostMcpServerIdEventsEventNamePoll_Body extends never
       ? {}
       : {} extends PostMcpServerIdEventsEventNamePoll_Body
@@ -14520,6 +14720,7 @@ export type PostMcpServerIdEventsEventNameStream_Request = Simplify<
   (PostMcpServerIdEventsEventNameStream_PathParams extends never
     ? {}
     : { params: PostMcpServerIdEventsEventNameStream_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostMcpServerIdEventsEventNameStream_Body extends never
       ? {}
       : {} extends PostMcpServerIdEventsEventNameStream_Body
@@ -14555,6 +14756,7 @@ export type PostMcpServerIdEventsEventNameEmit_Request = Simplify<
   (PostMcpServerIdEventsEventNameEmit_PathParams extends never
     ? {}
     : { params: PostMcpServerIdEventsEventNameEmit_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostMcpServerIdEventsEventNameEmit_Body extends never
       ? {}
       : {} extends PostMcpServerIdEventsEventNameEmit_Body
@@ -14577,7 +14779,8 @@ export interface PostMcpServerIdEventsEventNameEmit_RouteContract {
 export type AllMcpServerIdMcp_PathParams = GetMcpServerIdTools_PathParams;
 
 export type AllMcpServerIdMcp_Request = Simplify<
-  AllMcpServerIdMcp_PathParams extends never ? {} : { params: AllMcpServerIdMcp_PathParams }
+  (AllMcpServerIdMcp_PathParams extends never ? {} : { params: AllMcpServerIdMcp_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface AllMcpServerIdMcp_RouteContract {
@@ -14595,7 +14798,8 @@ export interface AllMcpServerIdMcp_RouteContract {
 export type AllMcpServerIdSse_PathParams = GetMcpServerIdTools_PathParams;
 
 export type AllMcpServerIdSse_Request = Simplify<
-  AllMcpServerIdSse_PathParams extends never ? {} : { params: AllMcpServerIdSse_PathParams }
+  (AllMcpServerIdSse_PathParams extends never ? {} : { params: AllMcpServerIdSse_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface AllMcpServerIdSse_RouteContract {
@@ -14613,7 +14817,8 @@ export interface AllMcpServerIdSse_RouteContract {
 export type PostMcpServerIdMessages_PathParams = GetMcpServerIdTools_PathParams;
 
 export type PostMcpServerIdMessages_Request = Simplify<
-  PostMcpServerIdMessages_PathParams extends never ? {} : { params: PostMcpServerIdMessages_PathParams }
+  (PostMcpServerIdMessages_PathParams extends never ? {} : { params: PostMcpServerIdMessages_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostMcpServerIdMessages_RouteContract {
@@ -14664,11 +14869,12 @@ export type GetStoredAgents_Response = {
 };
 
 export type GetStoredAgents_Request = Simplify<
-  GetStoredAgents_QueryParams extends never
-    ? {}
-    : {} extends GetStoredAgents_QueryParams
-      ? { query?: GetStoredAgents_QueryParams }
-      : { query: GetStoredAgents_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredAgents_QueryParams extends never
+      ? {}
+      : {} extends GetStoredAgents_QueryParams
+        ? { query?: GetStoredAgents_QueryParams }
+        : { query: GetStoredAgents_QueryParams })
 >;
 
 export interface GetStoredAgents_RouteContract {
@@ -14700,11 +14906,12 @@ export type PostStoredAgentsPreviewInstructions_Response = {
 };
 
 export type PostStoredAgentsPreviewInstructions_Request = Simplify<
-  PostStoredAgentsPreviewInstructions_Body extends never
-    ? {}
-    : {} extends PostStoredAgentsPreviewInstructions_Body
-      ? { body?: PostStoredAgentsPreviewInstructions_Body }
-      : { body: PostStoredAgentsPreviewInstructions_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredAgentsPreviewInstructions_Body extends never
+      ? {}
+      : {} extends PostStoredAgentsPreviewInstructions_Body
+        ? { body?: PostStoredAgentsPreviewInstructions_Body }
+        : { body: PostStoredAgentsPreviewInstructions_Body })
 >;
 
 export interface PostStoredAgentsPreviewInstructions_RouteContract {
@@ -14733,9 +14940,10 @@ export type GetStoredAgentsStoredAgentIdDependents_Response = {
 };
 
 export type GetStoredAgentsStoredAgentIdDependents_Request = Simplify<
-  GetStoredAgentsStoredAgentIdDependents_PathParams extends never
+  (GetStoredAgentsStoredAgentIdDependents_PathParams extends never
     ? {}
-    : { params: GetStoredAgentsStoredAgentIdDependents_PathParams }
+    : { params: GetStoredAgentsStoredAgentIdDependents_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredAgentsStoredAgentIdDependents_RouteContract {
@@ -14850,6 +15058,7 @@ export type PostStoredAgentsStoredAgentIdExport_Request = Simplify<
   (PostStoredAgentsStoredAgentIdExport_PathParams extends never
     ? {}
     : { params: PostStoredAgentsStoredAgentIdExport_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredAgentsStoredAgentIdExport_Body extends never
       ? {}
       : {} extends PostStoredAgentsStoredAgentIdExport_Body
@@ -14969,6 +15178,7 @@ export type PostStoredAgentsStoredAgentIdChangeRequest_Request = Simplify<
   (PostStoredAgentsStoredAgentIdChangeRequest_PathParams extends never
     ? {}
     : { params: PostStoredAgentsStoredAgentIdChangeRequest_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredAgentsStoredAgentIdChangeRequest_Body extends never
       ? {}
       : {} extends PostStoredAgentsStoredAgentIdChangeRequest_Body
@@ -15003,7 +15213,8 @@ export type GetStoredAgentsStoredAgentId_Request = Simplify<
       ? {}
       : {} extends GetStoredAgentsStoredAgentId_QueryParams
         ? { query?: GetStoredAgentsStoredAgentId_QueryParams }
-        : { query: GetStoredAgentsStoredAgentId_QueryParams })
+        : { query: GetStoredAgentsStoredAgentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredAgentsStoredAgentId_RouteContract {
@@ -15142,11 +15353,12 @@ export type PostStoredAgents_Body = {
 export type PostStoredAgents_Response = PostAgentsAgentIdClone_Response;
 
 export type PostStoredAgents_Request = Simplify<
-  PostStoredAgents_Body extends never
-    ? {}
-    : {} extends PostStoredAgents_Body
-      ? { body?: PostStoredAgents_Body }
-      : { body: PostStoredAgents_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredAgents_Body extends never
+      ? {}
+      : {} extends PostStoredAgents_Body
+        ? { body?: PostStoredAgents_Body }
+        : { body: PostStoredAgents_Body })
 >;
 
 export interface PostStoredAgents_RouteContract {
@@ -15283,6 +15495,7 @@ export type PatchStoredAgentsStoredAgentId_Request = Simplify<
   (PatchStoredAgentsStoredAgentId_PathParams extends never
     ? {}
     : { params: PatchStoredAgentsStoredAgentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredAgentsStoredAgentId_Body extends never
       ? {}
       : {} extends PatchStoredAgentsStoredAgentId_Body
@@ -15307,7 +15520,10 @@ export type DeleteStoredAgentsStoredAgentId_PathParams = GetStoredAgentsStoredAg
 export type DeleteStoredAgentsStoredAgentId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredAgentsStoredAgentId_Request = Simplify<
-  DeleteStoredAgentsStoredAgentId_PathParams extends never ? {} : { params: DeleteStoredAgentsStoredAgentId_PathParams }
+  (DeleteStoredAgentsStoredAgentId_PathParams extends never
+    ? {}
+    : { params: DeleteStoredAgentsStoredAgentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredAgentsStoredAgentId_RouteContract {
@@ -15354,7 +15570,8 @@ export type GetStoredAgentsAgentIdVersions_Request = Simplify<
       ? {}
       : {} extends GetStoredAgentsAgentIdVersions_QueryParams
         ? { query?: GetStoredAgentsAgentIdVersions_QueryParams }
-        : { query: GetStoredAgentsAgentIdVersions_QueryParams })
+        : { query: GetStoredAgentsAgentIdVersions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredAgentsAgentIdVersions_RouteContract {
@@ -15502,6 +15719,7 @@ export type PostStoredAgentsAgentIdVersions_Request = Simplify<
   (PostStoredAgentsAgentIdVersions_PathParams extends never
     ? {}
     : { params: PostStoredAgentsAgentIdVersions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredAgentsAgentIdVersions_Body extends never
       ? {}
       : {} extends PostStoredAgentsAgentIdVersions_Body
@@ -15785,7 +16003,8 @@ export type GetStoredAgentsAgentIdVersionsCompare_Request = Simplify<
       ? {}
       : {} extends GetStoredAgentsAgentIdVersionsCompare_QueryParams
         ? { query?: GetStoredAgentsAgentIdVersionsCompare_QueryParams }
-        : { query: GetStoredAgentsAgentIdVersionsCompare_QueryParams })
+        : { query: GetStoredAgentsAgentIdVersionsCompare_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredAgentsAgentIdVersionsCompare_RouteContract {
@@ -15810,9 +16029,10 @@ export type GetStoredAgentsAgentIdVersionsVersionId_PathParams = {
 export type GetStoredAgentsAgentIdVersionsVersionId_Response = Shared_Type_70;
 
 export type GetStoredAgentsAgentIdVersionsVersionId_Request = Simplify<
-  GetStoredAgentsAgentIdVersionsVersionId_PathParams extends never
+  (GetStoredAgentsAgentIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: GetStoredAgentsAgentIdVersionsVersionId_PathParams }
+    : { params: GetStoredAgentsAgentIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredAgentsAgentIdVersionsVersionId_RouteContract {
@@ -15837,9 +16057,10 @@ export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Response = {
 };
 
 export type PostStoredAgentsAgentIdVersionsVersionIdActivate_Request = Simplify<
-  PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams extends never
+  (PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams extends never
     ? {}
-    : { params: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams }
+    : { params: PostStoredAgentsAgentIdVersionsVersionIdActivate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredAgentsAgentIdVersionsVersionIdActivate_RouteContract {
@@ -15979,9 +16200,10 @@ export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Response = {
 };
 
 export type PostStoredAgentsAgentIdVersionsVersionIdRestore_Request = Simplify<
-  PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams extends never
+  (PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams extends never
     ? {}
-    : { params: PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams }
+    : { params: PostStoredAgentsAgentIdVersionsVersionIdRestore_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredAgentsAgentIdVersionsVersionIdRestore_RouteContract {
@@ -16001,9 +16223,10 @@ export type DeleteStoredAgentsAgentIdVersionsVersionId_PathParams = GetStoredAge
 export type DeleteStoredAgentsAgentIdVersionsVersionId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredAgentsAgentIdVersionsVersionId_Request = Simplify<
-  DeleteStoredAgentsAgentIdVersionsVersionId_PathParams extends never
+  (DeleteStoredAgentsAgentIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: DeleteStoredAgentsAgentIdVersionsVersionId_PathParams }
+    : { params: DeleteStoredAgentsAgentIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredAgentsAgentIdVersionsVersionId_RouteContract {
@@ -16028,9 +16251,10 @@ export type PutStoredAgentsStoredAgentIdFavorite_Response = {
 };
 
 export type PutStoredAgentsStoredAgentIdFavorite_Request = Simplify<
-  PutStoredAgentsStoredAgentIdFavorite_PathParams extends never
+  (PutStoredAgentsStoredAgentIdFavorite_PathParams extends never
     ? {}
-    : { params: PutStoredAgentsStoredAgentIdFavorite_PathParams }
+    : { params: PutStoredAgentsStoredAgentIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PutStoredAgentsStoredAgentIdFavorite_RouteContract {
@@ -16050,9 +16274,10 @@ export type DeleteStoredAgentsStoredAgentIdFavorite_PathParams = GetStoredAgents
 export type DeleteStoredAgentsStoredAgentIdFavorite_Response = PutStoredAgentsStoredAgentIdFavorite_Response;
 
 export type DeleteStoredAgentsStoredAgentIdFavorite_Request = Simplify<
-  DeleteStoredAgentsStoredAgentIdFavorite_PathParams extends never
+  (DeleteStoredAgentsStoredAgentIdFavorite_PathParams extends never
     ? {}
-    : { params: DeleteStoredAgentsStoredAgentIdFavorite_PathParams }
+    : { params: DeleteStoredAgentsStoredAgentIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredAgentsStoredAgentIdFavorite_RouteContract {
@@ -16080,11 +16305,12 @@ export type GetStoredWorkflows_Response = {
 };
 
 export type GetStoredWorkflows_Request = Simplify<
-  GetStoredWorkflows_QueryParams extends never
-    ? {}
-    : {} extends GetStoredWorkflows_QueryParams
-      ? { query?: GetStoredWorkflows_QueryParams }
-      : { query: GetStoredWorkflows_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredWorkflows_QueryParams extends never
+      ? {}
+      : {} extends GetStoredWorkflows_QueryParams
+        ? { query?: GetStoredWorkflows_QueryParams }
+        : { query: GetStoredWorkflows_QueryParams })
 >;
 
 export interface GetStoredWorkflows_RouteContract {
@@ -16171,11 +16397,12 @@ export type PostStoredWorkflows_Response = {
 };
 
 export type PostStoredWorkflows_Request = Simplify<
-  PostStoredWorkflows_Body extends never
-    ? {}
-    : {} extends PostStoredWorkflows_Body
-      ? { body?: PostStoredWorkflows_Body }
-      : { body: PostStoredWorkflows_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredWorkflows_Body extends never
+      ? {}
+      : {} extends PostStoredWorkflows_Body
+        ? { body?: PostStoredWorkflows_Body }
+        : { body: PostStoredWorkflows_Body })
 >;
 
 export interface PostStoredWorkflows_RouteContract {
@@ -16198,9 +16425,10 @@ export type GetStoredWorkflowsDynamicWorkflowId_PathParams = {
 export type GetStoredWorkflowsDynamicWorkflowId_Response = Shared_Type_72;
 
 export type GetStoredWorkflowsDynamicWorkflowId_Request = Simplify<
-  GetStoredWorkflowsDynamicWorkflowId_PathParams extends never
+  (GetStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: GetStoredWorkflowsDynamicWorkflowId_PathParams }
+    : { params: GetStoredWorkflowsDynamicWorkflowId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredWorkflowsDynamicWorkflowId_RouteContract {
@@ -16223,9 +16451,10 @@ export type DeleteStoredWorkflowsDynamicWorkflowId_Response = {
 };
 
 export type DeleteStoredWorkflowsDynamicWorkflowId_Request = Simplify<
-  DeleteStoredWorkflowsDynamicWorkflowId_PathParams extends never
+  (DeleteStoredWorkflowsDynamicWorkflowId_PathParams extends never
     ? {}
-    : { params: DeleteStoredWorkflowsDynamicWorkflowId_PathParams }
+    : { params: DeleteStoredWorkflowsDynamicWorkflowId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredWorkflowsDynamicWorkflowId_RouteContract {
@@ -16270,11 +16499,12 @@ export type GetStoredMcpClients_Response = {
 };
 
 export type GetStoredMcpClients_Request = Simplify<
-  GetStoredMcpClients_QueryParams extends never
-    ? {}
-    : {} extends GetStoredMcpClients_QueryParams
-      ? { query?: GetStoredMcpClients_QueryParams }
-      : { query: GetStoredMcpClients_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredMcpClients_QueryParams extends never
+      ? {}
+      : {} extends GetStoredMcpClients_QueryParams
+        ? { query?: GetStoredMcpClients_QueryParams }
+        : { query: GetStoredMcpClients_QueryParams })
 >;
 
 export interface GetStoredMcpClients_RouteContract {
@@ -16306,7 +16536,8 @@ export type GetStoredMcpClientsStoredMCPClientId_Request = Simplify<
       ? {}
       : {} extends GetStoredMcpClientsStoredMCPClientId_QueryParams
         ? { query?: GetStoredMcpClientsStoredMCPClientId_QueryParams }
-        : { query: GetStoredMcpClientsStoredMCPClientId_QueryParams })
+        : { query: GetStoredMcpClientsStoredMCPClientId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredMcpClientsStoredMCPClientId_RouteContract {
@@ -16345,11 +16576,12 @@ export type PostStoredMcpClients_Body = {
 export type PostStoredMcpClients_Response = GetStoredMcpClientsStoredMCPClientId_Response;
 
 export type PostStoredMcpClients_Request = Simplify<
-  PostStoredMcpClients_Body extends never
-    ? {}
-    : {} extends PostStoredMcpClients_Body
-      ? { body?: PostStoredMcpClients_Body }
-      : { body: PostStoredMcpClients_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredMcpClients_Body extends never
+      ? {}
+      : {} extends PostStoredMcpClients_Body
+        ? { body?: PostStoredMcpClients_Body }
+        : { body: PostStoredMcpClients_Body })
 >;
 
 export interface PostStoredMcpClients_RouteContract {
@@ -16405,6 +16637,7 @@ export type PatchStoredMcpClientsStoredMCPClientId_Request = Simplify<
   (PatchStoredMcpClientsStoredMCPClientId_PathParams extends never
     ? {}
     : { params: PatchStoredMcpClientsStoredMCPClientId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredMcpClientsStoredMCPClientId_Body extends never
       ? {}
       : {} extends PatchStoredMcpClientsStoredMCPClientId_Body
@@ -16429,9 +16662,10 @@ export type DeleteStoredMcpClientsStoredMCPClientId_PathParams = GetStoredMcpCli
 export type DeleteStoredMcpClientsStoredMCPClientId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredMcpClientsStoredMCPClientId_Request = Simplify<
-  DeleteStoredMcpClientsStoredMCPClientId_PathParams extends never
+  (DeleteStoredMcpClientsStoredMCPClientId_PathParams extends never
     ? {}
-    : { params: DeleteStoredMcpClientsStoredMCPClientId_PathParams }
+    : { params: DeleteStoredMcpClientsStoredMCPClientId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredMcpClientsStoredMCPClientId_RouteContract {
@@ -16469,7 +16703,8 @@ export type GetStoredMcpClientsMcpClientIdVersions_Request = Simplify<
       ? {}
       : {} extends GetStoredMcpClientsMcpClientIdVersions_QueryParams
         ? { query?: GetStoredMcpClientsMcpClientIdVersions_QueryParams }
-        : { query: GetStoredMcpClientsMcpClientIdVersions_QueryParams })
+        : { query: GetStoredMcpClientsMcpClientIdVersions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredMcpClientsMcpClientIdVersions_RouteContract {
@@ -16512,6 +16747,7 @@ export type PostStoredMcpClientsMcpClientIdVersions_Request = Simplify<
   (PostStoredMcpClientsMcpClientIdVersions_PathParams extends never
     ? {}
     : { params: PostStoredMcpClientsMcpClientIdVersions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredMcpClientsMcpClientIdVersions_Body extends never
       ? {}
       : {} extends PostStoredMcpClientsMcpClientIdVersions_Body
@@ -16594,7 +16830,8 @@ export type GetStoredMcpClientsMcpClientIdVersionsCompare_Request = Simplify<
       ? {}
       : {} extends GetStoredMcpClientsMcpClientIdVersionsCompare_QueryParams
         ? { query?: GetStoredMcpClientsMcpClientIdVersionsCompare_QueryParams }
-        : { query: GetStoredMcpClientsMcpClientIdVersionsCompare_QueryParams })
+        : { query: GetStoredMcpClientsMcpClientIdVersionsCompare_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredMcpClientsMcpClientIdVersionsCompare_RouteContract {
@@ -16619,9 +16856,10 @@ export type GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams = {
 export type GetStoredMcpClientsMcpClientIdVersionsVersionId_Response = Shared_Type_76;
 
 export type GetStoredMcpClientsMcpClientIdVersionsVersionId_Request = Simplify<
-  GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams extends never
+  (GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams }
+    : { params: GetStoredMcpClientsMcpClientIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredMcpClientsMcpClientIdVersionsVersionId_RouteContract {
@@ -16643,9 +16881,10 @@ export type PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_Response =
   PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
 
 export type PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_Request = Simplify<
-  PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_PathParams extends never
+  (PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_PathParams extends never
     ? {}
-    : { params: PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_PathParams }
+    : { params: PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredMcpClientsMcpClientIdVersionsVersionIdActivate_RouteContract {
@@ -16667,9 +16906,10 @@ export type PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_Response =
   GetStoredMcpClientsMcpClientIdVersionsVersionId_Response;
 
 export type PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_Request = Simplify<
-  PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_PathParams extends never
+  (PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_PathParams extends never
     ? {}
-    : { params: PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_PathParams }
+    : { params: PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredMcpClientsMcpClientIdVersionsVersionIdRestore_RouteContract {
@@ -16690,9 +16930,10 @@ export type DeleteStoredMcpClientsMcpClientIdVersionsVersionId_PathParams =
 export type DeleteStoredMcpClientsMcpClientIdVersionsVersionId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredMcpClientsMcpClientIdVersionsVersionId_Request = Simplify<
-  DeleteStoredMcpClientsMcpClientIdVersionsVersionId_PathParams extends never
+  (DeleteStoredMcpClientsMcpClientIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: DeleteStoredMcpClientsMcpClientIdVersionsVersionId_PathParams }
+    : { params: DeleteStoredMcpClientsMcpClientIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredMcpClientsMcpClientIdVersionsVersionId_RouteContract {
@@ -16737,11 +16978,12 @@ export type GetStoredPromptBlocks_Response = {
 };
 
 export type GetStoredPromptBlocks_Request = Simplify<
-  GetStoredPromptBlocks_QueryParams extends never
-    ? {}
-    : {} extends GetStoredPromptBlocks_QueryParams
-      ? { query?: GetStoredPromptBlocks_QueryParams }
-      : { query: GetStoredPromptBlocks_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredPromptBlocks_QueryParams extends never
+      ? {}
+      : {} extends GetStoredPromptBlocks_QueryParams
+        ? { query?: GetStoredPromptBlocks_QueryParams }
+        : { query: GetStoredPromptBlocks_QueryParams })
 >;
 
 export interface GetStoredPromptBlocks_RouteContract {
@@ -16773,7 +17015,8 @@ export type GetStoredPromptBlocksStoredPromptBlockId_Request = Simplify<
       ? {}
       : {} extends GetStoredPromptBlocksStoredPromptBlockId_QueryParams
         ? { query?: GetStoredPromptBlocksStoredPromptBlockId_QueryParams }
-        : { query: GetStoredPromptBlocksStoredPromptBlockId_QueryParams })
+        : { query: GetStoredPromptBlocksStoredPromptBlockId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredPromptBlocksStoredPromptBlockId_RouteContract {
@@ -16823,11 +17066,12 @@ export type PostStoredPromptBlocks_Body = {
 export type PostStoredPromptBlocks_Response = GetStoredPromptBlocksStoredPromptBlockId_Response;
 
 export type PostStoredPromptBlocks_Request = Simplify<
-  PostStoredPromptBlocks_Body extends never
-    ? {}
-    : {} extends PostStoredPromptBlocks_Body
-      ? { body?: PostStoredPromptBlocks_Body }
-      : { body: PostStoredPromptBlocks_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredPromptBlocks_Body extends never
+      ? {}
+      : {} extends PostStoredPromptBlocks_Body
+        ? { body?: PostStoredPromptBlocks_Body }
+        : { body: PostStoredPromptBlocks_Body })
 >;
 
 export interface PostStoredPromptBlocks_RouteContract {
@@ -16892,6 +17136,7 @@ export type PatchStoredPromptBlocksStoredPromptBlockId_Request = Simplify<
   (PatchStoredPromptBlocksStoredPromptBlockId_PathParams extends never
     ? {}
     : { params: PatchStoredPromptBlocksStoredPromptBlockId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredPromptBlocksStoredPromptBlockId_Body extends never
       ? {}
       : {} extends PatchStoredPromptBlocksStoredPromptBlockId_Body
@@ -16917,9 +17162,10 @@ export type DeleteStoredPromptBlocksStoredPromptBlockId_PathParams =
 export type DeleteStoredPromptBlocksStoredPromptBlockId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredPromptBlocksStoredPromptBlockId_Request = Simplify<
-  DeleteStoredPromptBlocksStoredPromptBlockId_PathParams extends never
+  (DeleteStoredPromptBlocksStoredPromptBlockId_PathParams extends never
     ? {}
-    : { params: DeleteStoredPromptBlocksStoredPromptBlockId_PathParams }
+    : { params: DeleteStoredPromptBlocksStoredPromptBlockId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredPromptBlocksStoredPromptBlockId_RouteContract {
@@ -16957,7 +17203,8 @@ export type GetStoredPromptBlocksPromptBlockIdVersions_Request = Simplify<
       ? {}
       : {} extends GetStoredPromptBlocksPromptBlockIdVersions_QueryParams
         ? { query?: GetStoredPromptBlocksPromptBlockIdVersions_QueryParams }
-        : { query: GetStoredPromptBlocksPromptBlockIdVersions_QueryParams })
+        : { query: GetStoredPromptBlocksPromptBlockIdVersions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredPromptBlocksPromptBlockIdVersions_RouteContract {
@@ -17006,6 +17253,7 @@ export type PostStoredPromptBlocksPromptBlockIdVersions_Request = Simplify<
   (PostStoredPromptBlocksPromptBlockIdVersions_PathParams extends never
     ? {}
     : { params: PostStoredPromptBlocksPromptBlockIdVersions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredPromptBlocksPromptBlockIdVersions_Body extends never
       ? {}
       : {} extends PostStoredPromptBlocksPromptBlockIdVersions_Body
@@ -17102,7 +17350,8 @@ export type GetStoredPromptBlocksPromptBlockIdVersionsCompare_Request = Simplify
       ? {}
       : {} extends GetStoredPromptBlocksPromptBlockIdVersionsCompare_QueryParams
         ? { query?: GetStoredPromptBlocksPromptBlockIdVersionsCompare_QueryParams }
-        : { query: GetStoredPromptBlocksPromptBlockIdVersionsCompare_QueryParams })
+        : { query: GetStoredPromptBlocksPromptBlockIdVersionsCompare_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredPromptBlocksPromptBlockIdVersionsCompare_RouteContract {
@@ -17127,9 +17376,10 @@ export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams = {
 export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Response = Shared_Type_78;
 
 export type GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Request = Simplify<
-  GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams extends never
+  (GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams }
+    : { params: GetStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredPromptBlocksPromptBlockIdVersionsVersionId_RouteContract {
@@ -17151,9 +17401,10 @@ export type PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_Respons
   PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
 
 export type PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_Request = Simplify<
-  PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_PathParams extends never
+  (PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_PathParams extends never
     ? {}
-    : { params: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_PathParams }
+    : { params: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredPromptBlocksPromptBlockIdVersionsVersionIdActivate_RouteContract {
@@ -17175,9 +17426,10 @@ export type PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_Response
   GetStoredPromptBlocksPromptBlockIdVersionsVersionId_Response;
 
 export type PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_Request = Simplify<
-  PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_PathParams extends never
+  (PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_PathParams extends never
     ? {}
-    : { params: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_PathParams }
+    : { params: PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredPromptBlocksPromptBlockIdVersionsVersionIdRestore_RouteContract {
@@ -17198,9 +17450,10 @@ export type DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams =
 export type DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_Request = Simplify<
-  DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams extends never
+  (DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams }
+    : { params: DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredPromptBlocksPromptBlockIdVersionsVersionId_RouteContract {
@@ -17245,11 +17498,12 @@ export type GetStoredScorers_Response = {
 };
 
 export type GetStoredScorers_Request = Simplify<
-  GetStoredScorers_QueryParams extends never
-    ? {}
-    : {} extends GetStoredScorers_QueryParams
-      ? { query?: GetStoredScorers_QueryParams }
-      : { query: GetStoredScorers_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredScorers_QueryParams extends never
+      ? {}
+      : {} extends GetStoredScorers_QueryParams
+        ? { query?: GetStoredScorers_QueryParams }
+        : { query: GetStoredScorers_QueryParams })
 >;
 
 export interface GetStoredScorers_RouteContract {
@@ -17281,7 +17535,8 @@ export type GetStoredScorersStoredScorerId_Request = Simplify<
       ? {}
       : {} extends GetStoredScorersStoredScorerId_QueryParams
         ? { query?: GetStoredScorersStoredScorerId_QueryParams }
-        : { query: GetStoredScorersStoredScorerId_QueryParams })
+        : { query: GetStoredScorersStoredScorerId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredScorersStoredScorerId_RouteContract {
@@ -17340,11 +17595,12 @@ export type PostStoredScorers_Body = {
 export type PostStoredScorers_Response = GetStoredScorersStoredScorerId_Response;
 
 export type PostStoredScorers_Request = Simplify<
-  PostStoredScorers_Body extends never
-    ? {}
-    : {} extends PostStoredScorers_Body
-      ? { body?: PostStoredScorers_Body }
-      : { body: PostStoredScorers_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredScorers_Body extends never
+      ? {}
+      : {} extends PostStoredScorers_Body
+        ? { body?: PostStoredScorers_Body }
+        : { body: PostStoredScorers_Body })
 >;
 
 export interface PostStoredScorers_RouteContract {
@@ -17418,6 +17674,7 @@ export type PatchStoredScorersStoredScorerId_Request = Simplify<
   (PatchStoredScorersStoredScorerId_PathParams extends never
     ? {}
     : { params: PatchStoredScorersStoredScorerId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredScorersStoredScorerId_Body extends never
       ? {}
       : {} extends PatchStoredScorersStoredScorerId_Body
@@ -17442,9 +17699,10 @@ export type DeleteStoredScorersStoredScorerId_PathParams = GetStoredScorersStore
 export type DeleteStoredScorersStoredScorerId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredScorersStoredScorerId_Request = Simplify<
-  DeleteStoredScorersStoredScorerId_PathParams extends never
+  (DeleteStoredScorersStoredScorerId_PathParams extends never
     ? {}
-    : { params: DeleteStoredScorersStoredScorerId_PathParams }
+    : { params: DeleteStoredScorersStoredScorerId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredScorersStoredScorerId_RouteContract {
@@ -17482,7 +17740,8 @@ export type GetStoredScorersScorerIdVersions_Request = Simplify<
       ? {}
       : {} extends GetStoredScorersScorerIdVersions_QueryParams
         ? { query?: GetStoredScorersScorerIdVersions_QueryParams }
-        : { query: GetStoredScorersScorerIdVersions_QueryParams })
+        : { query: GetStoredScorersScorerIdVersions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredScorersScorerIdVersions_RouteContract {
@@ -17543,6 +17802,7 @@ export type PostStoredScorersScorerIdVersions_Request = Simplify<
   (PostStoredScorersScorerIdVersions_PathParams extends never
     ? {}
     : { params: PostStoredScorersScorerIdVersions_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredScorersScorerIdVersions_Body extends never
       ? {}
       : {} extends PostStoredScorersScorerIdVersions_Body
@@ -17663,7 +17923,8 @@ export type GetStoredScorersScorerIdVersionsCompare_Request = Simplify<
       ? {}
       : {} extends GetStoredScorersScorerIdVersionsCompare_QueryParams
         ? { query?: GetStoredScorersScorerIdVersionsCompare_QueryParams }
-        : { query: GetStoredScorersScorerIdVersionsCompare_QueryParams })
+        : { query: GetStoredScorersScorerIdVersionsCompare_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetStoredScorersScorerIdVersionsCompare_RouteContract {
@@ -17688,9 +17949,10 @@ export type GetStoredScorersScorerIdVersionsVersionId_PathParams = {
 export type GetStoredScorersScorerIdVersionsVersionId_Response = Shared_Type_81;
 
 export type GetStoredScorersScorerIdVersionsVersionId_Request = Simplify<
-  GetStoredScorersScorerIdVersionsVersionId_PathParams extends never
+  (GetStoredScorersScorerIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: GetStoredScorersScorerIdVersionsVersionId_PathParams }
+    : { params: GetStoredScorersScorerIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredScorersScorerIdVersionsVersionId_RouteContract {
@@ -17712,9 +17974,10 @@ export type PostStoredScorersScorerIdVersionsVersionIdActivate_Response =
   PostStoredAgentsAgentIdVersionsVersionIdActivate_Response;
 
 export type PostStoredScorersScorerIdVersionsVersionIdActivate_Request = Simplify<
-  PostStoredScorersScorerIdVersionsVersionIdActivate_PathParams extends never
+  (PostStoredScorersScorerIdVersionsVersionIdActivate_PathParams extends never
     ? {}
-    : { params: PostStoredScorersScorerIdVersionsVersionIdActivate_PathParams }
+    : { params: PostStoredScorersScorerIdVersionsVersionIdActivate_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredScorersScorerIdVersionsVersionIdActivate_RouteContract {
@@ -17736,9 +17999,10 @@ export type PostStoredScorersScorerIdVersionsVersionIdRestore_Response =
   GetStoredScorersScorerIdVersionsVersionId_Response;
 
 export type PostStoredScorersScorerIdVersionsVersionIdRestore_Request = Simplify<
-  PostStoredScorersScorerIdVersionsVersionIdRestore_PathParams extends never
+  (PostStoredScorersScorerIdVersionsVersionIdRestore_PathParams extends never
     ? {}
-    : { params: PostStoredScorersScorerIdVersionsVersionIdRestore_PathParams }
+    : { params: PostStoredScorersScorerIdVersionsVersionIdRestore_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostStoredScorersScorerIdVersionsVersionIdRestore_RouteContract {
@@ -17759,9 +18023,10 @@ export type DeleteStoredScorersScorerIdVersionsVersionId_PathParams =
 export type DeleteStoredScorersScorerIdVersionsVersionId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredScorersScorerIdVersionsVersionId_Request = Simplify<
-  DeleteStoredScorersScorerIdVersionsVersionId_PathParams extends never
+  (DeleteStoredScorersScorerIdVersionsVersionId_PathParams extends never
     ? {}
-    : { params: DeleteStoredScorersScorerIdVersionsVersionId_PathParams }
+    : { params: DeleteStoredScorersScorerIdVersionsVersionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredScorersScorerIdVersionsVersionId_RouteContract {
@@ -17839,11 +18104,12 @@ export type GetStoredWorkspaces_Response = {
 };
 
 export type GetStoredWorkspaces_Request = Simplify<
-  GetStoredWorkspaces_QueryParams extends never
-    ? {}
-    : {} extends GetStoredWorkspaces_QueryParams
-      ? { query?: GetStoredWorkspaces_QueryParams }
-      : { query: GetStoredWorkspaces_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredWorkspaces_QueryParams extends never
+      ? {}
+      : {} extends GetStoredWorkspaces_QueryParams
+        ? { query?: GetStoredWorkspaces_QueryParams }
+        : { query: GetStoredWorkspaces_QueryParams })
 >;
 
 export interface GetStoredWorkspaces_RouteContract {
@@ -17866,9 +18132,10 @@ export type GetStoredWorkspacesStoredWorkspaceId_PathParams = {
 export type GetStoredWorkspacesStoredWorkspaceId_Response = Shared_Type_82;
 
 export type GetStoredWorkspacesStoredWorkspaceId_Request = Simplify<
-  GetStoredWorkspacesStoredWorkspaceId_PathParams extends never
+  (GetStoredWorkspacesStoredWorkspaceId_PathParams extends never
     ? {}
-    : { params: GetStoredWorkspacesStoredWorkspaceId_PathParams }
+    : { params: GetStoredWorkspacesStoredWorkspaceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredWorkspacesStoredWorkspaceId_RouteContract {
@@ -17919,11 +18186,12 @@ export type PostStoredWorkspaces_Body = {
 export type PostStoredWorkspaces_Response = GetStoredWorkspacesStoredWorkspaceId_Response;
 
 export type PostStoredWorkspaces_Request = Simplify<
-  PostStoredWorkspaces_Body extends never
-    ? {}
-    : {} extends PostStoredWorkspaces_Body
-      ? { body?: PostStoredWorkspaces_Body }
-      : { body: PostStoredWorkspaces_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredWorkspaces_Body extends never
+      ? {}
+      : {} extends PostStoredWorkspaces_Body
+        ? { body?: PostStoredWorkspaces_Body }
+        : { body: PostStoredWorkspaces_Body })
 >;
 
 export interface PostStoredWorkspaces_RouteContract {
@@ -17988,6 +18256,7 @@ export type PatchStoredWorkspacesStoredWorkspaceId_Request = Simplify<
   (PatchStoredWorkspacesStoredWorkspaceId_PathParams extends never
     ? {}
     : { params: PatchStoredWorkspacesStoredWorkspaceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredWorkspacesStoredWorkspaceId_Body extends never
       ? {}
       : {} extends PatchStoredWorkspacesStoredWorkspaceId_Body
@@ -18012,9 +18281,10 @@ export type DeleteStoredWorkspacesStoredWorkspaceId_PathParams = GetStoredWorksp
 export type DeleteStoredWorkspacesStoredWorkspaceId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredWorkspacesStoredWorkspaceId_Request = Simplify<
-  DeleteStoredWorkspacesStoredWorkspaceId_PathParams extends never
+  (DeleteStoredWorkspacesStoredWorkspaceId_PathParams extends never
     ? {}
-    : { params: DeleteStoredWorkspacesStoredWorkspaceId_PathParams }
+    : { params: DeleteStoredWorkspacesStoredWorkspaceId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredWorkspacesStoredWorkspaceId_RouteContract {
@@ -18065,11 +18335,12 @@ export type GetStoredSkills_Response = {
 };
 
 export type GetStoredSkills_Request = Simplify<
-  GetStoredSkills_QueryParams extends never
-    ? {}
-    : {} extends GetStoredSkills_QueryParams
-      ? { query?: GetStoredSkills_QueryParams }
-      : { query: GetStoredSkills_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetStoredSkills_QueryParams extends never
+      ? {}
+      : {} extends GetStoredSkills_QueryParams
+        ? { query?: GetStoredSkills_QueryParams }
+        : { query: GetStoredSkills_QueryParams })
 >;
 
 export interface GetStoredSkills_RouteContract {
@@ -18092,7 +18363,8 @@ export type GetStoredSkillsStoredSkillId_PathParams = {
 export type GetStoredSkillsStoredSkillId_Response = Shared_Type_84;
 
 export type GetStoredSkillsStoredSkillId_Request = Simplify<
-  GetStoredSkillsStoredSkillId_PathParams extends never ? {} : { params: GetStoredSkillsStoredSkillId_PathParams }
+  (GetStoredSkillsStoredSkillId_PathParams extends never ? {} : { params: GetStoredSkillsStoredSkillId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetStoredSkillsStoredSkillId_RouteContract {
@@ -18145,11 +18417,12 @@ export type PostStoredSkills_Body = {
 export type PostStoredSkills_Response = GetStoredSkillsStoredSkillId_Response;
 
 export type PostStoredSkills_Request = Simplify<
-  PostStoredSkills_Body extends never
-    ? {}
-    : {} extends PostStoredSkills_Body
-      ? { body?: PostStoredSkills_Body }
-      : { body: PostStoredSkills_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostStoredSkills_Body extends never
+      ? {}
+      : {} extends PostStoredSkills_Body
+        ? { body?: PostStoredSkills_Body }
+        : { body: PostStoredSkills_Body })
 >;
 
 export interface PostStoredSkills_RouteContract {
@@ -18214,6 +18487,7 @@ export type PatchStoredSkillsStoredSkillId_Request = Simplify<
   (PatchStoredSkillsStoredSkillId_PathParams extends never
     ? {}
     : { params: PatchStoredSkillsStoredSkillId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchStoredSkillsStoredSkillId_Body extends never
       ? {}
       : {} extends PatchStoredSkillsStoredSkillId_Body
@@ -18238,7 +18512,10 @@ export type DeleteStoredSkillsStoredSkillId_PathParams = GetStoredSkillsStoredSk
 export type DeleteStoredSkillsStoredSkillId_Response = PostMemoryMessagesDelete_Response;
 
 export type DeleteStoredSkillsStoredSkillId_Request = Simplify<
-  DeleteStoredSkillsStoredSkillId_PathParams extends never ? {} : { params: DeleteStoredSkillsStoredSkillId_PathParams }
+  (DeleteStoredSkillsStoredSkillId_PathParams extends never
+    ? {}
+    : { params: DeleteStoredSkillsStoredSkillId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredSkillsStoredSkillId_RouteContract {
@@ -18266,6 +18543,7 @@ export type PostStoredSkillsStoredSkillIdPublish_Request = Simplify<
   (PostStoredSkillsStoredSkillIdPublish_PathParams extends never
     ? {}
     : { params: PostStoredSkillsStoredSkillIdPublish_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostStoredSkillsStoredSkillIdPublish_Body extends never
       ? {}
       : {} extends PostStoredSkillsStoredSkillIdPublish_Body
@@ -18290,9 +18568,10 @@ export type PutStoredSkillsStoredSkillIdFavorite_PathParams = GetStoredSkillsSto
 export type PutStoredSkillsStoredSkillIdFavorite_Response = PutStoredAgentsStoredAgentIdFavorite_Response;
 
 export type PutStoredSkillsStoredSkillIdFavorite_Request = Simplify<
-  PutStoredSkillsStoredSkillIdFavorite_PathParams extends never
+  (PutStoredSkillsStoredSkillIdFavorite_PathParams extends never
     ? {}
-    : { params: PutStoredSkillsStoredSkillIdFavorite_PathParams }
+    : { params: PutStoredSkillsStoredSkillIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PutStoredSkillsStoredSkillIdFavorite_RouteContract {
@@ -18312,9 +18591,10 @@ export type DeleteStoredSkillsStoredSkillIdFavorite_PathParams = GetStoredSkills
 export type DeleteStoredSkillsStoredSkillIdFavorite_Response = PutStoredAgentsStoredAgentIdFavorite_Response;
 
 export type DeleteStoredSkillsStoredSkillIdFavorite_Request = Simplify<
-  DeleteStoredSkillsStoredSkillIdFavorite_PathParams extends never
+  (DeleteStoredSkillsStoredSkillIdFavorite_PathParams extends never
     ? {}
-    : { params: DeleteStoredSkillsStoredSkillIdFavorite_PathParams }
+    : { params: DeleteStoredSkillsStoredSkillIdFavorite_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteStoredSkillsStoredSkillIdFavorite_RouteContract {
@@ -18346,7 +18626,7 @@ export type GetToolProviders_Response = {
   }[];
 };
 
-export type GetToolProviders_Request = Simplify<{}>;
+export type GetToolProviders_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetToolProviders_RouteContract {
   pathParams: never;
@@ -18383,9 +18663,10 @@ export type GetToolProvidersProviderIdToolkits_Response = {
 };
 
 export type GetToolProvidersProviderIdToolkits_Request = Simplify<
-  GetToolProvidersProviderIdToolkits_PathParams extends never
+  (GetToolProvidersProviderIdToolkits_PathParams extends never
     ? {}
-    : { params: GetToolProvidersProviderIdToolkits_PathParams }
+    : { params: GetToolProvidersProviderIdToolkits_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetToolProvidersProviderIdToolkits_RouteContract {
@@ -18438,7 +18719,8 @@ export type GetToolProvidersProviderIdTools_Request = Simplify<
       ? {}
       : {} extends GetToolProvidersProviderIdTools_QueryParams
         ? { query?: GetToolProvidersProviderIdTools_QueryParams }
-        : { query: GetToolProvidersProviderIdTools_QueryParams })
+        : { query: GetToolProvidersProviderIdTools_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetToolProvidersProviderIdTools_RouteContract {
@@ -18465,9 +18747,10 @@ export type GetToolProvidersProviderIdToolsToolSlugSchema_Response = {
 };
 
 export type GetToolProvidersProviderIdToolsToolSlugSchema_Request = Simplify<
-  GetToolProvidersProviderIdToolsToolSlugSchema_PathParams extends never
+  (GetToolProvidersProviderIdToolsToolSlugSchema_PathParams extends never
     ? {}
-    : { params: GetToolProvidersProviderIdToolsToolSlugSchema_PathParams }
+    : { params: GetToolProvidersProviderIdToolsToolSlugSchema_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetToolProvidersProviderIdToolsToolSlugSchema_RouteContract {
@@ -18512,6 +18795,7 @@ export type PostToolProvidersProviderIdAuthorize_Request = Simplify<
   (PostToolProvidersProviderIdAuthorize_PathParams extends never
     ? {}
     : { params: PostToolProvidersProviderIdAuthorize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostToolProvidersProviderIdAuthorize_Body extends never
       ? {}
       : {} extends PostToolProvidersProviderIdAuthorize_Body
@@ -18543,9 +18827,10 @@ export type GetToolProvidersProviderIdAuthStatusAuthId_Response = {
 };
 
 export type GetToolProvidersProviderIdAuthStatusAuthId_Request = Simplify<
-  GetToolProvidersProviderIdAuthStatusAuthId_PathParams extends never
+  (GetToolProvidersProviderIdAuthStatusAuthId_PathParams extends never
     ? {}
-    : { params: GetToolProvidersProviderIdAuthStatusAuthId_PathParams }
+    : { params: GetToolProvidersProviderIdAuthStatusAuthId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetToolProvidersProviderIdAuthStatusAuthId_RouteContract {
@@ -18582,6 +18867,7 @@ export type PostToolProvidersProviderIdConnectionStatus_Request = Simplify<
   (PostToolProvidersProviderIdConnectionStatus_PathParams extends never
     ? {}
     : { params: PostToolProvidersProviderIdConnectionStatus_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostToolProvidersProviderIdConnectionStatus_Body extends never
       ? {}
       : {} extends PostToolProvidersProviderIdConnectionStatus_Body
@@ -18646,7 +18932,8 @@ export type GetToolProvidersProviderIdConnections_Request = Simplify<
       ? {}
       : {} extends GetToolProvidersProviderIdConnections_QueryParams
         ? { query?: GetToolProvidersProviderIdConnections_QueryParams }
-        : { query: GetToolProvidersProviderIdConnections_QueryParams })
+        : { query: GetToolProvidersProviderIdConnections_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetToolProvidersProviderIdConnections_RouteContract {
@@ -18687,7 +18974,8 @@ export type GetToolProvidersProviderIdConnectionFields_Request = Simplify<
       ? {}
       : {} extends GetToolProvidersProviderIdConnectionFields_QueryParams
         ? { query?: GetToolProvidersProviderIdConnectionFields_QueryParams }
-        : { query: GetToolProvidersProviderIdConnectionFields_QueryParams })
+        : { query: GetToolProvidersProviderIdConnectionFields_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetToolProvidersProviderIdConnectionFields_RouteContract {
@@ -18730,7 +19018,8 @@ export type DeleteToolProvidersProviderIdConnectionsConnectionId_Request = Simpl
       ? {}
       : {} extends DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams
         ? { query?: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams }
-        : { query: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams })
+        : { query: DeleteToolProvidersProviderIdConnectionsConnectionId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteToolProvidersProviderIdConnectionsConnectionId_RouteContract {
@@ -18763,6 +19052,7 @@ export type PatchToolProvidersProviderIdConnectionsConnectionId_Request = Simpli
   (PatchToolProvidersProviderIdConnectionsConnectionId_PathParams extends never
     ? {}
     : { params: PatchToolProvidersProviderIdConnectionsConnectionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchToolProvidersProviderIdConnectionsConnectionId_Body extends never
       ? {}
       : {} extends PatchToolProvidersProviderIdConnectionsConnectionId_Body
@@ -18805,7 +19095,8 @@ export type GetToolProvidersProviderIdConnectionsConnectionIdUsage_Request = Sim
       ? {}
       : {} extends GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams
         ? { query?: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams }
-        : { query: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams })
+        : { query: GetToolProvidersProviderIdConnectionsConnectionIdUsage_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetToolProvidersProviderIdConnectionsConnectionIdUsage_RouteContract {
@@ -18833,9 +19124,10 @@ export type GetToolProvidersProviderIdHealth_Response = {
 };
 
 export type GetToolProvidersProviderIdHealth_Request = Simplify<
-  GetToolProvidersProviderIdHealth_PathParams extends never
+  (GetToolProvidersProviderIdHealth_PathParams extends never
     ? {}
-    : { params: GetToolProvidersProviderIdHealth_PathParams }
+    : { params: GetToolProvidersProviderIdHealth_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetToolProvidersProviderIdHealth_RouteContract {
@@ -18866,7 +19158,7 @@ export type GetProcessorProviders_Response = {
   }[];
 };
 
-export type GetProcessorProviders_Request = Simplify<{}>;
+export type GetProcessorProviders_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetProcessorProviders_RouteContract {
   pathParams: never;
@@ -18903,7 +19195,10 @@ export type GetProcessorProvidersProviderId_Response = {
 };
 
 export type GetProcessorProvidersProviderId_Request = Simplify<
-  GetProcessorProvidersProviderId_PathParams extends never ? {} : { params: GetProcessorProvidersProviderId_PathParams }
+  (GetProcessorProvidersProviderId_PathParams extends never
+    ? {}
+    : { params: GetProcessorProvidersProviderId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetProcessorProvidersProviderId_RouteContract {
@@ -18950,7 +19245,7 @@ export type GetSystemPackages_Response = {
   observabilityRuntimeStrategy?: 'realtime' | 'batch-with-updates' | 'insert-only' | 'event-sourced' | undefined;
 };
 
-export type GetSystemPackages_Request = Simplify<{}>;
+export type GetSystemPackages_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetSystemPackages_RouteContract {
   pathParams: never;
@@ -18998,7 +19293,7 @@ export type GetSystemApiSchema_Response = {
   }[];
 };
 
-export type GetSystemApiSchema_Request = Simplify<{}>;
+export type GetSystemApiSchema_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetSystemApiSchema_RouteContract {
   pathParams: never;
@@ -19040,11 +19335,12 @@ export type GetDatasets_Response = {
 };
 
 export type GetDatasets_Request = Simplify<
-  GetDatasets_QueryParams extends never
-    ? {}
-    : {} extends GetDatasets_QueryParams
-      ? { query?: GetDatasets_QueryParams }
-      : { query: GetDatasets_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetDatasets_QueryParams extends never
+      ? {}
+      : {} extends GetDatasets_QueryParams
+        ? { query?: GetDatasets_QueryParams }
+        : { query: GetDatasets_QueryParams })
 >;
 
 export interface GetDatasets_RouteContract {
@@ -19102,11 +19398,12 @@ export type PostDatasets_Body = {
 export type PostDatasets_Response = Shared_Type_85;
 
 export type PostDatasets_Request = Simplify<
-  PostDatasets_Body extends never
-    ? {}
-    : {} extends PostDatasets_Body
-      ? { body?: PostDatasets_Body }
-      : { body: PostDatasets_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostDatasets_Body extends never
+      ? {}
+      : {} extends PostDatasets_Body
+        ? { body?: PostDatasets_Body }
+        : { body: PostDatasets_Body })
 >;
 
 export interface PostDatasets_RouteContract {
@@ -19141,7 +19438,8 @@ export type GetDatasetsDatasetId_Request = Simplify<
       ? {}
       : {} extends GetDatasetsDatasetId_QueryParams
         ? { query?: GetDatasetsDatasetId_QueryParams }
-        : { query: GetDatasetsDatasetId_QueryParams })
+        : { query: GetDatasetsDatasetId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetId_RouteContract {
@@ -19242,7 +19540,8 @@ export type DeleteDatasetsDatasetId_Request = Simplify<
       ? {}
       : {} extends DeleteDatasetsDatasetId_QueryParams
         ? { query?: DeleteDatasetsDatasetId_QueryParams }
-        : { query: DeleteDatasetsDatasetId_QueryParams })
+        : { query: DeleteDatasetsDatasetId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetId_RouteContract {
@@ -19288,7 +19587,8 @@ export type GetDatasetsDatasetIdItems_Request = Simplify<
       ? {}
       : {} extends GetDatasetsDatasetIdItems_QueryParams
         ? { query?: GetDatasetsDatasetIdItems_QueryParams }
-        : { query: GetDatasetsDatasetIdItems_QueryParams })
+        : { query: GetDatasetsDatasetIdItems_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetIdItems_RouteContract {
@@ -19340,6 +19640,7 @@ export type PostDatasetsDatasetIdItems_Response = Shared_Type_88;
 
 export type PostDatasetsDatasetIdItems_Request = Simplify<
   (PostDatasetsDatasetIdItems_PathParams extends never ? {} : { params: PostDatasetsDatasetIdItems_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdItems_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdItems_Body
@@ -19397,6 +19698,7 @@ export type PostDatasetsDatasetIdItemsBatch_Request = Simplify<
   (PostDatasetsDatasetIdItemsBatch_PathParams extends never
     ? {}
     : { params: PostDatasetsDatasetIdItemsBatch_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdItemsBatch_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdItemsBatch_Body
@@ -19431,6 +19733,7 @@ export type DeleteDatasetsDatasetIdItemsBatch_Request = Simplify<
   (DeleteDatasetsDatasetIdItemsBatch_PathParams extends never
     ? {}
     : { params: DeleteDatasetsDatasetIdItemsBatch_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (DeleteDatasetsDatasetIdItemsBatch_Body extends never
       ? {}
       : {} extends DeleteDatasetsDatasetIdItemsBatch_Body
@@ -19460,7 +19763,10 @@ export type GetDatasetsDatasetIdItemsItemId_PathParams = {
 export type GetDatasetsDatasetIdItemsItemId_Response = PostDatasetsDatasetIdItems_Response;
 
 export type GetDatasetsDatasetIdItemsItemId_Request = Simplify<
-  GetDatasetsDatasetIdItemsItemId_PathParams extends never ? {} : { params: GetDatasetsDatasetIdItemsItemId_PathParams }
+  (GetDatasetsDatasetIdItemsItemId_PathParams extends never
+    ? {}
+    : { params: GetDatasetsDatasetIdItemsItemId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetDatasetsDatasetIdItemsItemId_RouteContract {
@@ -19512,6 +19818,7 @@ export type PatchDatasetsDatasetIdItemsItemId_Request = Simplify<
   (PatchDatasetsDatasetIdItemsItemId_PathParams extends never
     ? {}
     : { params: PatchDatasetsDatasetIdItemsItemId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchDatasetsDatasetIdItemsItemId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetIdItemsItemId_Body
@@ -19545,7 +19852,8 @@ export type DeleteDatasetsDatasetIdItemsItemIdPurge_Request = Simplify<
       ? {}
       : {} extends DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams
         ? { query?: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }
-        : { query: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams })
+        : { query: DeleteDatasetsDatasetIdItemsItemIdPurge_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetIdItemsItemIdPurge_RouteContract {
@@ -19565,9 +19873,10 @@ export type DeleteDatasetsDatasetIdItemsItemId_PathParams = GetDatasetsDatasetId
 export type DeleteDatasetsDatasetIdItemsItemId_Response = PostAuthRefresh_Response;
 
 export type DeleteDatasetsDatasetIdItemsItemId_Request = Simplify<
-  DeleteDatasetsDatasetIdItemsItemId_PathParams extends never
+  (DeleteDatasetsDatasetIdItemsItemId_PathParams extends never
     ? {}
-    : { params: DeleteDatasetsDatasetIdItemsItemId_PathParams }
+    : { params: DeleteDatasetsDatasetIdItemsItemId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteDatasetsDatasetIdItemsItemId_RouteContract {
@@ -19607,7 +19916,8 @@ export type GetDatasetsDatasetIdVersions_Request = Simplify<
       ? {}
       : {} extends GetDatasetsDatasetIdVersions_QueryParams
         ? { query?: GetDatasetsDatasetIdVersions_QueryParams }
-        : { query: GetDatasetsDatasetIdVersions_QueryParams })
+        : { query: GetDatasetsDatasetIdVersions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetIdVersions_RouteContract {
@@ -19657,9 +19967,10 @@ export type GetDatasetsDatasetIdItemsItemIdHistory_Response = {
 };
 
 export type GetDatasetsDatasetIdItemsItemIdHistory_Request = Simplify<
-  GetDatasetsDatasetIdItemsItemIdHistory_PathParams extends never
+  (GetDatasetsDatasetIdItemsItemIdHistory_PathParams extends never
     ? {}
-    : { params: GetDatasetsDatasetIdItemsItemIdHistory_PathParams }
+    : { params: GetDatasetsDatasetIdItemsItemIdHistory_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetDatasetsDatasetIdItemsItemIdHistory_RouteContract {
@@ -19686,9 +19997,10 @@ export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams = {
 export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Response = PostDatasetsDatasetIdItems_Response;
 
 export type GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_Request = Simplify<
-  GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams extends never
+  (GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams extends never
     ? {}
-    : { params: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams }
+    : { params: GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetDatasetsDatasetIdItemsItemIdVersionsDatasetVersion_RouteContract {
@@ -19733,11 +20045,12 @@ export type GetExperiments_Response = {
 };
 
 export type GetExperiments_Request = Simplify<
-  GetExperiments_QueryParams extends never
-    ? {}
-    : {} extends GetExperiments_QueryParams
-      ? { query?: GetExperiments_QueryParams }
-      : { query: GetExperiments_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetExperiments_QueryParams extends never
+      ? {}
+      : {} extends GetExperiments_QueryParams
+        ? { query?: GetExperiments_QueryParams }
+        : { query: GetExperiments_QueryParams })
 >;
 
 export interface GetExperiments_RouteContract {
@@ -19762,7 +20075,7 @@ export type GetExperimentsReviewSummary_Response = {
   }[];
 };
 
-export type GetExperimentsReviewSummary_Request = Simplify<{}>;
+export type GetExperimentsReviewSummary_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetExperimentsReviewSummary_RouteContract {
   pathParams: never;
@@ -19791,7 +20104,8 @@ export type GetExperimentsExperimentId_Request = Simplify<
       ? {}
       : {} extends GetExperimentsExperimentId_QueryParams
         ? { query?: GetExperimentsExperimentId_QueryParams }
-        : { query: GetExperimentsExperimentId_QueryParams })
+        : { query: GetExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetExperimentsExperimentId_RouteContract {
@@ -19818,7 +20132,8 @@ export type DeleteExperimentsExperimentId_Request = Simplify<
       ? {}
       : {} extends DeleteExperimentsExperimentId_QueryParams
         ? { query?: DeleteExperimentsExperimentId_QueryParams }
-        : { query: DeleteExperimentsExperimentId_QueryParams })
+        : { query: DeleteExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteExperimentsExperimentId_RouteContract {
@@ -19847,7 +20162,8 @@ export type GetDatasetsDatasetIdExperiments_Request = Simplify<
       ? {}
       : {} extends GetDatasetsDatasetIdExperiments_QueryParams
         ? { query?: GetDatasetsDatasetIdExperiments_QueryParams }
-        : { query: GetDatasetsDatasetIdExperiments_QueryParams })
+        : { query: GetDatasetsDatasetIdExperiments_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetIdExperiments_RouteContract {
@@ -19987,6 +20303,7 @@ export type PostDatasetsDatasetIdExperiments_Request = Simplify<
   (PostDatasetsDatasetIdExperiments_PathParams extends never
     ? {}
     : { params: PostDatasetsDatasetIdExperiments_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdExperiments_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdExperiments_Body
@@ -20051,6 +20368,7 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Request =
   (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams extends never
     ? {}
     : { params: PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdExperimentsExperimentIdItemsItemIdRun_Body
@@ -20125,6 +20443,7 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdResults_Request = Simpli
   (PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams extends never
     ? {}
     : { params: PostDatasetsDatasetIdExperimentsExperimentIdResults_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdExperimentsExperimentIdResults_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdExperimentsExperimentIdResults_Body
@@ -20150,9 +20469,10 @@ export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams =
 export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Response = GetExperimentsExperimentId_Response;
 
 export type PostDatasetsDatasetIdExperimentsExperimentIdFinalize_Request = Simplify<
-  PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams extends never
+  (PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams extends never
     ? {}
-    : { params: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams }
+    : { params: PostDatasetsDatasetIdExperimentsExperimentIdFinalize_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostDatasetsDatasetIdExperimentsExperimentIdFinalize_RouteContract {
@@ -20173,9 +20493,10 @@ export type GetDatasetsDatasetIdExperimentsExperimentId_PathParams =
 export type GetDatasetsDatasetIdExperimentsExperimentId_Response = Shared_Type_90 | null;
 
 export type GetDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
-  GetDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
+  (GetDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
     ? {}
-    : { params: GetDatasetsDatasetIdExperimentsExperimentId_PathParams }
+    : { params: GetDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetDatasetsDatasetIdExperimentsExperimentId_RouteContract {
@@ -20205,7 +20526,8 @@ export type DeleteDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
       ? {}
       : {} extends DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams
         ? { query?: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }
-        : { query: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams })
+        : { query: DeleteDatasetsDatasetIdExperimentsExperimentId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteDatasetsDatasetIdExperimentsExperimentId_RouteContract {
@@ -20242,6 +20564,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentId_Request = Simplify<
   (PatchDatasetsDatasetIdExperimentsExperimentId_PathParams extends never
     ? {}
     : { params: PatchDatasetsDatasetIdExperimentsExperimentId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchDatasetsDatasetIdExperimentsExperimentId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetIdExperimentsExperimentId_Body
@@ -20295,7 +20618,8 @@ export type GetDatasetsDatasetIdExperimentsExperimentIdResults_Request = Simplif
       ? {}
       : {} extends GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams
         ? { query?: GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams }
-        : { query: GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams })
+        : { query: GetDatasetsDatasetIdExperimentsExperimentIdResults_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetDatasetsDatasetIdExperimentsExperimentIdResults_RouteContract {
@@ -20332,6 +20656,7 @@ export type PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Request
   (PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathParams extends never
     ? {}
     : { params: PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body extends never
       ? {}
       : {} extends PatchDatasetsDatasetIdExperimentsExperimentIdResultsResultId_Body
@@ -20386,6 +20711,7 @@ export type PostDatasetsDatasetIdCompare_Response = {
 
 export type PostDatasetsDatasetIdCompare_Request = Simplify<
   (PostDatasetsDatasetIdCompare_PathParams extends never ? {} : { params: PostDatasetsDatasetIdCompare_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdCompare_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdCompare_Body
@@ -20435,6 +20761,7 @@ export type PostDatasetsDatasetIdGenerateItems_Request = Simplify<
   (PostDatasetsDatasetIdGenerateItems_PathParams extends never
     ? {}
     : { params: PostDatasetsDatasetIdGenerateItems_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostDatasetsDatasetIdGenerateItems_Body extends never
       ? {}
       : {} extends PostDatasetsDatasetIdGenerateItems_Body
@@ -20499,11 +20826,12 @@ export type PostDatasetsClusterFailures_Response = {
 };
 
 export type PostDatasetsClusterFailures_Request = Simplify<
-  PostDatasetsClusterFailures_Body extends never
-    ? {}
-    : {} extends PostDatasetsClusterFailures_Body
-      ? { body?: PostDatasetsClusterFailures_Body }
-      : { body: PostDatasetsClusterFailures_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostDatasetsClusterFailures_Body extends never
+      ? {}
+      : {} extends PostDatasetsClusterFailures_Body
+        ? { body?: PostDatasetsClusterFailures_Body }
+        : { body: PostDatasetsClusterFailures_Body })
 >;
 
 export interface PostDatasetsClusterFailures_RouteContract {
@@ -20529,11 +20857,12 @@ export type GetBackgroundTasksStream_QueryParams = {
 export type GetBackgroundTasksStream_Response = PostAgentsAgentIdGenerate_Response;
 
 export type GetBackgroundTasksStream_Request = Simplify<
-  GetBackgroundTasksStream_QueryParams extends never
-    ? {}
-    : {} extends GetBackgroundTasksStream_QueryParams
-      ? { query?: GetBackgroundTasksStream_QueryParams }
-      : { query: GetBackgroundTasksStream_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetBackgroundTasksStream_QueryParams extends never
+      ? {}
+      : {} extends GetBackgroundTasksStream_QueryParams
+        ? { query?: GetBackgroundTasksStream_QueryParams }
+        : { query: GetBackgroundTasksStream_QueryParams })
 >;
 
 export interface GetBackgroundTasksStream_RouteContract {
@@ -20571,11 +20900,12 @@ export type GetBackgroundTasks_Response = {
 };
 
 export type GetBackgroundTasks_Request = Simplify<
-  GetBackgroundTasks_QueryParams extends never
-    ? {}
-    : {} extends GetBackgroundTasks_QueryParams
-      ? { query?: GetBackgroundTasks_QueryParams }
-      : { query: GetBackgroundTasks_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetBackgroundTasks_QueryParams extends never
+      ? {}
+      : {} extends GetBackgroundTasks_QueryParams
+        ? { query?: GetBackgroundTasks_QueryParams }
+        : { query: GetBackgroundTasks_QueryParams })
 >;
 
 export interface GetBackgroundTasks_RouteContract {
@@ -20597,9 +20927,10 @@ export type GetBackgroundTasksBackgroundTaskId_PathParams = {
 export type GetBackgroundTasksBackgroundTaskId_Response = Shared_Type_96;
 
 export type GetBackgroundTasksBackgroundTaskId_Request = Simplify<
-  GetBackgroundTasksBackgroundTaskId_PathParams extends never
+  (GetBackgroundTasksBackgroundTaskId_PathParams extends never
     ? {}
-    : { params: GetBackgroundTasksBackgroundTaskId_PathParams }
+    : { params: GetBackgroundTasksBackgroundTaskId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetBackgroundTasksBackgroundTaskId_RouteContract {
@@ -20683,7 +21014,7 @@ export type GetEditorBuilderSettings_Response = {
   modelPolicyWarnings?: string[] | undefined;
 };
 
-export type GetEditorBuilderSettings_Request = Simplify<{}>;
+export type GetEditorBuilderSettings_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEditorBuilderSettings_RouteContract {
   pathParams: never;
@@ -20709,7 +21040,7 @@ export type GetEditorWorkflowBuilderSettings_Response = {
     | undefined;
 };
 
-export type GetEditorWorkflowBuilderSettings_Request = Simplify<{}>;
+export type GetEditorWorkflowBuilderSettings_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEditorWorkflowBuilderSettings_RouteContract {
   pathParams: never;
@@ -20728,11 +21059,12 @@ export type PostEditorWorkflowBuilderStream_Body = PostAgentsAgentIdGenerate_Bod
 export type PostEditorWorkflowBuilderStream_Response = PostAgentsAgentIdGenerate_Response;
 
 export type PostEditorWorkflowBuilderStream_Request = Simplify<
-  PostEditorWorkflowBuilderStream_Body extends never
-    ? {}
-    : {} extends PostEditorWorkflowBuilderStream_Body
-      ? { body?: PostEditorWorkflowBuilderStream_Body }
-      : { body: PostEditorWorkflowBuilderStream_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostEditorWorkflowBuilderStream_Body extends never
+      ? {}
+      : {} extends PostEditorWorkflowBuilderStream_Body
+        ? { body?: PostEditorWorkflowBuilderStream_Body }
+        : { body: PostEditorWorkflowBuilderStream_Body })
 >;
 
 export interface PostEditorWorkflowBuilderStream_RouteContract {
@@ -20749,7 +21081,7 @@ export interface PostEditorWorkflowBuilderStream_RouteContract {
 // ============================================================================
 export type GetEditorBuilderModelsAvailable_Response = GetAgentsProviders_Response;
 
-export type GetEditorBuilderModelsAvailable_Request = Simplify<{}>;
+export type GetEditorBuilderModelsAvailable_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEditorBuilderModelsAvailable_RouteContract {
   pathParams: never;
@@ -20805,7 +21137,7 @@ export type GetEditorBuilderInfrastructure_Response = {
   };
 };
 
-export type GetEditorBuilderInfrastructure_Request = Simplify<{}>;
+export type GetEditorBuilderInfrastructure_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEditorBuilderInfrastructure_RouteContract {
   pathParams: never;
@@ -20830,7 +21162,7 @@ export type GetEditorBuilderRegistries_Response = {
   }[];
 };
 
-export type GetEditorBuilderRegistries_Request = Simplify<{}>;
+export type GetEditorBuilderRegistries_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetEditorBuilderRegistries_RouteContract {
   pathParams: never;
@@ -20866,7 +21198,8 @@ export type GetEditorBuilderRegistriesRegistryIdSearch_Request = Simplify<
       ? {}
       : {} extends GetEditorBuilderRegistriesRegistryIdSearch_QueryParams
         ? { query?: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams }
-        : { query: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams })
+        : { query: GetEditorBuilderRegistriesRegistryIdSearch_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetEditorBuilderRegistriesRegistryIdSearch_RouteContract {
@@ -20901,7 +21234,8 @@ export type GetEditorBuilderRegistriesRegistryIdPopular_Request = Simplify<
       ? {}
       : {} extends GetEditorBuilderRegistriesRegistryIdPopular_QueryParams
         ? { query?: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams }
-        : { query: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams })
+        : { query: GetEditorBuilderRegistriesRegistryIdPopular_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetEditorBuilderRegistriesRegistryIdPopular_RouteContract {
@@ -20938,7 +21272,8 @@ export type GetEditorBuilderRegistriesRegistryIdPreview_Request = Simplify<
       ? {}
       : {} extends GetEditorBuilderRegistriesRegistryIdPreview_QueryParams
         ? { query?: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams }
-        : { query: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams })
+        : { query: GetEditorBuilderRegistriesRegistryIdPreview_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetEditorBuilderRegistriesRegistryIdPreview_RouteContract {
@@ -20980,6 +21315,7 @@ export type PostEditorBuilderRegistriesRegistryIdInstall_Request = Simplify<
   (PostEditorBuilderRegistriesRegistryIdInstall_PathParams extends never
     ? {}
     : { params: PostEditorBuilderRegistriesRegistryIdInstall_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostEditorBuilderRegistriesRegistryIdInstall_Body extends never
       ? {}
       : {} extends PostEditorBuilderRegistriesRegistryIdInstall_Body
@@ -21001,7 +21337,7 @@ export interface PostEditorBuilderRegistriesRegistryIdInstall_RouteContract {
 // ============================================================================
 export type GetAgentBuilder_Response = GetWorkflows_Response;
 
-export type GetAgentBuilder_Request = Simplify<{}>;
+export type GetAgentBuilder_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAgentBuilder_RouteContract {
   pathParams: never;
@@ -21023,7 +21359,8 @@ export type GetAgentBuilderActionId_PathParams = {
 export type GetAgentBuilderActionId_Response = GetWorkflowsWorkflowId_Response;
 
 export type GetAgentBuilderActionId_Request = Simplify<
-  GetAgentBuilderActionId_PathParams extends never ? {} : { params: GetAgentBuilderActionId_PathParams }
+  (GetAgentBuilderActionId_PathParams extends never ? {} : { params: GetAgentBuilderActionId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentBuilderActionId_RouteContract {
@@ -21050,7 +21387,8 @@ export type GetAgentBuilderActionIdRuns_Request = Simplify<
       ? {}
       : {} extends GetAgentBuilderActionIdRuns_QueryParams
         ? { query?: GetAgentBuilderActionIdRuns_QueryParams }
-        : { query: GetAgentBuilderActionIdRuns_QueryParams })
+        : { query: GetAgentBuilderActionIdRuns_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentBuilderActionIdRuns_RouteContract {
@@ -21084,7 +21422,8 @@ export type GetAgentBuilderActionIdRunsRunId_Request = Simplify<
       ? {}
       : {} extends GetAgentBuilderActionIdRunsRunId_QueryParams
         ? { query?: GetAgentBuilderActionIdRunsRunId_QueryParams }
-        : { query: GetAgentBuilderActionIdRunsRunId_QueryParams })
+        : { query: GetAgentBuilderActionIdRunsRunId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentBuilderActionIdRunsRunId_RouteContract {
@@ -21113,7 +21452,8 @@ export type PostAgentBuilderActionIdCreateRun_Request = Simplify<
       ? {}
       : {} extends PostAgentBuilderActionIdCreateRun_QueryParams
         ? { query?: PostAgentBuilderActionIdCreateRun_QueryParams }
-        : { query: PostAgentBuilderActionIdCreateRun_QueryParams })
+        : { query: PostAgentBuilderActionIdCreateRun_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentBuilderActionIdCreateRun_RouteContract {
@@ -21284,7 +21624,8 @@ export type PostAgentBuilderActionIdObserve_Request = Simplify<
       ? {}
       : {} extends PostAgentBuilderActionIdObserve_QueryParams
         ? { query?: PostAgentBuilderActionIdObserve_QueryParams }
-        : { query: PostAgentBuilderActionIdObserve_QueryParams })
+        : { query: PostAgentBuilderActionIdObserve_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentBuilderActionIdObserve_RouteContract {
@@ -21313,7 +21654,8 @@ export type PostAgentBuilderActionIdObserveStreamLegacy_Request = Simplify<
       ? {}
       : {} extends PostAgentBuilderActionIdObserveStreamLegacy_QueryParams
         ? { query?: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }
-        : { query: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams })
+        : { query: PostAgentBuilderActionIdObserveStreamLegacy_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentBuilderActionIdObserveStreamLegacy_RouteContract {
@@ -21477,9 +21819,10 @@ export type PostAgentBuilderActionIdRunsRunIdCancel_PathParams = GetAgentBuilder
 export type PostAgentBuilderActionIdRunsRunIdCancel_Response = PostAgentsAgentIdModel_Response;
 
 export type PostAgentBuilderActionIdRunsRunIdCancel_Request = Simplify<
-  PostAgentBuilderActionIdRunsRunIdCancel_PathParams extends never
+  (PostAgentBuilderActionIdRunsRunIdCancel_PathParams extends never
     ? {}
-    : { params: PostAgentBuilderActionIdRunsRunIdCancel_PathParams }
+    : { params: PostAgentBuilderActionIdRunsRunIdCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostAgentBuilderActionIdRunsRunIdCancel_RouteContract {
@@ -21508,11 +21851,12 @@ export type GetSchedules_Response = {
 };
 
 export type GetSchedules_Request = Simplify<
-  GetSchedules_QueryParams extends never
-    ? {}
-    : {} extends GetSchedules_QueryParams
-      ? { query?: GetSchedules_QueryParams }
-      : { query: GetSchedules_QueryParams }
+  (never extends never ? {} : { params: never }) &
+    (GetSchedules_QueryParams extends never
+      ? {}
+      : {} extends GetSchedules_QueryParams
+        ? { query?: GetSchedules_QueryParams }
+        : { query: GetSchedules_QueryParams })
 >;
 
 export interface GetSchedules_RouteContract {
@@ -21534,7 +21878,8 @@ export type GetSchedulesScheduleId_PathParams = {
 export type GetSchedulesScheduleId_Response = Shared_Type_101 | Shared_Type_103;
 
 export type GetSchedulesScheduleId_Request = Simplify<
-  GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }
+  (GetSchedulesScheduleId_PathParams extends never ? {} : { params: GetSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetSchedulesScheduleId_RouteContract {
@@ -21566,8 +21911,8 @@ export type PostSchedules_Body =
             [key: string]: string | number | boolean | null | undefined;
           }
         | undefined;
-      ifActive?: InputShared_Type_4 | undefined;
-      ifIdle?: InputShared_Type_113 | undefined;
+      ifActive?: InputShared_Type_113 | undefined;
+      ifIdle?: InputShared_Type_114 | undefined;
       providerOptions?:
         | {
             [key: string]: unknown;
@@ -21602,11 +21947,12 @@ export type PostSchedules_Body =
 export type PostSchedules_Response = GetSchedulesScheduleId_Response;
 
 export type PostSchedules_Request = Simplify<
-  PostSchedules_Body extends never
-    ? {}
-    : {} extends PostSchedules_Body
-      ? { body?: PostSchedules_Body }
-      : { body: PostSchedules_Body }
+  (never extends never ? {} : { params: never }) &
+    (PostSchedules_Body extends never
+      ? {}
+      : {} extends PostSchedules_Body
+        ? { body?: PostSchedules_Body }
+        : { body: PostSchedules_Body })
 >;
 
 export interface PostSchedules_RouteContract {
@@ -21641,8 +21987,8 @@ export type PatchSchedulesScheduleId_Body = {
         [key: string]: string | number | boolean | null | undefined;
       }
     | undefined;
-  ifActive?: InputShared_Type_4 | undefined;
-  ifIdle?: InputShared_Type_113 | undefined;
+  ifActive?: InputShared_Type_113 | undefined;
+  ifIdle?: InputShared_Type_114 | undefined;
   providerOptions?:
     | {
         [key: string]: unknown;
@@ -21662,6 +22008,7 @@ export type PatchSchedulesScheduleId_Response = GetSchedulesScheduleId_Response;
 
 export type PatchSchedulesScheduleId_Request = Simplify<
   (PatchSchedulesScheduleId_PathParams extends never ? {} : { params: PatchSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PatchSchedulesScheduleId_Body extends never
       ? {}
       : {} extends PatchSchedulesScheduleId_Body
@@ -21686,7 +22033,8 @@ export type DeleteSchedulesScheduleId_PathParams = GetSchedulesScheduleId_PathPa
 export type DeleteSchedulesScheduleId_Response = PostAgentsAgentIdModel_Response;
 
 export type DeleteSchedulesScheduleId_Request = Simplify<
-  DeleteSchedulesScheduleId_PathParams extends never ? {} : { params: DeleteSchedulesScheduleId_PathParams }
+  (DeleteSchedulesScheduleId_PathParams extends never ? {} : { params: DeleteSchedulesScheduleId_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface DeleteSchedulesScheduleId_RouteContract {
@@ -21752,7 +22100,8 @@ export type GetSchedulesScheduleIdTriggers_Request = Simplify<
       ? {}
       : {} extends GetSchedulesScheduleIdTriggers_QueryParams
         ? { query?: GetSchedulesScheduleIdTriggers_QueryParams }
-        : { query: GetSchedulesScheduleIdTriggers_QueryParams })
+        : { query: GetSchedulesScheduleIdTriggers_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetSchedulesScheduleIdTriggers_RouteContract {
@@ -21772,7 +22121,8 @@ export type PostSchedulesScheduleIdPause_PathParams = GetSchedulesScheduleId_Pat
 export type PostSchedulesScheduleIdPause_Response = GetSchedulesScheduleId_Response;
 
 export type PostSchedulesScheduleIdPause_Request = Simplify<
-  PostSchedulesScheduleIdPause_PathParams extends never ? {} : { params: PostSchedulesScheduleIdPause_PathParams }
+  (PostSchedulesScheduleIdPause_PathParams extends never ? {} : { params: PostSchedulesScheduleIdPause_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostSchedulesScheduleIdPause_RouteContract {
@@ -21792,7 +22142,8 @@ export type PostSchedulesScheduleIdResume_PathParams = GetSchedulesScheduleId_Pa
 export type PostSchedulesScheduleIdResume_Response = GetSchedulesScheduleId_Response;
 
 export type PostSchedulesScheduleIdResume_Request = Simplify<
-  PostSchedulesScheduleIdResume_PathParams extends never ? {} : { params: PostSchedulesScheduleIdResume_PathParams }
+  (PostSchedulesScheduleIdResume_PathParams extends never ? {} : { params: PostSchedulesScheduleIdResume_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostSchedulesScheduleIdResume_RouteContract {
@@ -21816,7 +22167,8 @@ export type PostSchedulesScheduleIdRun_Response = {
 };
 
 export type PostSchedulesScheduleIdRun_Request = Simplify<
-  PostSchedulesScheduleIdRun_PathParams extends never ? {} : { params: PostSchedulesScheduleIdRun_PathParams }
+  (PostSchedulesScheduleIdRun_PathParams extends never ? {} : { params: PostSchedulesScheduleIdRun_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostSchedulesScheduleIdRun_RouteContract {
@@ -21846,7 +22198,7 @@ export type GetChannelsPlatforms_Response = {
     | undefined;
 }[];
 
-export type GetChannelsPlatforms_Request = Simplify<{}>;
+export type GetChannelsPlatforms_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetChannelsPlatforms_RouteContract {
   pathParams: never;
@@ -21868,9 +22220,10 @@ export type GetChannelsPlatformInstallations_PathParams = {
 export type GetChannelsPlatformInstallations_Response = Shared_Type_104[];
 
 export type GetChannelsPlatformInstallations_Request = Simplify<
-  GetChannelsPlatformInstallations_PathParams extends never
+  (GetChannelsPlatformInstallations_PathParams extends never
     ? {}
-    : { params: GetChannelsPlatformInstallations_PathParams }
+    : { params: GetChannelsPlatformInstallations_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetChannelsPlatformInstallations_RouteContract {
@@ -21924,6 +22277,7 @@ export type PostChannelsPlatformConnect_Response =
 
 export type PostChannelsPlatformConnect_Request = Simplify<
   (PostChannelsPlatformConnect_PathParams extends never ? {} : { params: PostChannelsPlatformConnect_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
     (PostChannelsPlatformConnect_Body extends never
       ? {}
       : {} extends PostChannelsPlatformConnect_Body
@@ -21953,9 +22307,10 @@ export type PostChannelsPlatformAgentIdReconcile_PathParams = {
 export type PostChannelsPlatformAgentIdReconcile_Response = Shared_Type_104 | null;
 
 export type PostChannelsPlatformAgentIdReconcile_Request = Simplify<
-  PostChannelsPlatformAgentIdReconcile_PathParams extends never
+  (PostChannelsPlatformAgentIdReconcile_PathParams extends never
     ? {}
-    : { params: PostChannelsPlatformAgentIdReconcile_PathParams }
+    : { params: PostChannelsPlatformAgentIdReconcile_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostChannelsPlatformAgentIdReconcile_RouteContract {
@@ -21975,9 +22330,10 @@ export type PostChannelsPlatformAgentIdDisconnect_PathParams = PostChannelsPlatf
 export type PostChannelsPlatformAgentIdDisconnect_Response = PostAuthRefresh_Response;
 
 export type PostChannelsPlatformAgentIdDisconnect_Request = Simplify<
-  PostChannelsPlatformAgentIdDisconnect_PathParams extends never
+  (PostChannelsPlatformAgentIdDisconnect_PathParams extends never
     ? {}
-    : { params: PostChannelsPlatformAgentIdDisconnect_PathParams }
+    : { params: PostChannelsPlatformAgentIdDisconnect_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface PostChannelsPlatformAgentIdDisconnect_RouteContract {
@@ -21998,7 +22354,7 @@ export type GetAgentController_Response = {
   }[];
 };
 
-export type GetAgentController_Request = Simplify<{}>;
+export type GetAgentController_Request = Simplify<never extends never ? {} : { params: never }>;
 
 export interface GetAgentController_RouteContract {
   pathParams: never;
@@ -22024,9 +22380,10 @@ export type GetAgentControllerControllerIdModes_Response = {
 };
 
 export type GetAgentControllerControllerIdModes_Request = Simplify<
-  GetAgentControllerControllerIdModes_PathParams extends never
+  (GetAgentControllerControllerIdModes_PathParams extends never
     ? {}
-    : { params: GetAgentControllerControllerIdModes_PathParams }
+    : { params: GetAgentControllerControllerIdModes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentControllerControllerIdModes_RouteContract {
@@ -22055,9 +22412,10 @@ export type GetAgentControllerControllerIdModels_Response = {
 };
 
 export type GetAgentControllerControllerIdModels_Request = Simplify<
-  GetAgentControllerControllerIdModels_PathParams extends never
+  (GetAgentControllerControllerIdModels_PathParams extends never
     ? {}
-    : { params: GetAgentControllerControllerIdModels_PathParams }
+    : { params: GetAgentControllerControllerIdModels_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentControllerControllerIdModels_RouteContract {
@@ -22083,9 +22441,10 @@ export type GetAgentControllerControllerIdActiveRuns_Response = {
 };
 
 export type GetAgentControllerControllerIdActiveRuns_Request = Simplify<
-  GetAgentControllerControllerIdActiveRuns_PathParams extends never
+  (GetAgentControllerControllerIdActiveRuns_PathParams extends never
     ? {}
-    : { params: GetAgentControllerControllerIdActiveRuns_PathParams }
+    : { params: GetAgentControllerControllerIdActiveRuns_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentControllerControllerIdActiveRuns_RouteContract {
@@ -22223,7 +22582,8 @@ export type GetAgentControllerControllerIdSessionsSessionId_Request = Simplify<
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionId_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionId_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionId_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionId_RouteContract {
@@ -22273,7 +22633,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdThreads_Request = Sim
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdThreads_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdThreads_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdThreads_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdThreads_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdThreads_RouteContract {
@@ -22355,7 +22716,8 @@ export type DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Re
       ? {}
       : {} extends DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams
         ? { query?: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }
-        : { query: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams })
+        : { query: DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_RouteContract {
@@ -22509,7 +22871,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessag
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdMessages_RouteContract {
@@ -22540,7 +22903,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simp
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdStream_RouteContract {
@@ -22705,7 +23069,8 @@ export type PostAgentControllerControllerIdSessionsSessionIdAbort_Request = Simp
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams
         ? { query?: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams }
-        : { query: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams })
+        : { query: PostAgentControllerControllerIdSessionsSessionIdAbort_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentControllerControllerIdSessionsSessionIdAbort_RouteContract {
@@ -22961,7 +23326,8 @@ export type PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner
       ? {}
       : {} extends PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams
         ? { query?: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams }
-        : { query: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams })
+        : { query: PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface PostAgentControllerControllerIdSessionsSessionIdThreadsThreadIdOwner_RouteContract {
@@ -23046,9 +23412,10 @@ export type GetAgentControllerControllerIdWorkspace_Response = {
 };
 
 export type GetAgentControllerControllerIdWorkspace_Request = Simplify<
-  GetAgentControllerControllerIdWorkspace_PathParams extends never
+  (GetAgentControllerControllerIdWorkspace_PathParams extends never
     ? {}
-    : { params: GetAgentControllerControllerIdWorkspace_PathParams }
+    : { params: GetAgentControllerControllerIdWorkspace_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never })
 >;
 
 export interface GetAgentControllerControllerIdWorkspace_RouteContract {
@@ -23081,7 +23448,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdOm_Request = Simplify
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdOm_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdOm_RouteContract {
@@ -23155,7 +23523,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdResources_Request = S
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdResources_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdResources_RouteContract {
@@ -23200,7 +23569,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdGoal_Request = Simpli
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
@@ -23318,7 +23688,8 @@ export type DeleteAgentControllerControllerIdSessionsSessionIdGoal_Request = Sim
       ? {}
       : {} extends DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams
         ? { query?: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }
-        : { query: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams })
+        : { query: DeleteAgentControllerControllerIdSessionsSessionIdGoal_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface DeleteAgentControllerControllerIdSessionsSessionIdGoal_RouteContract {
@@ -23360,7 +23731,8 @@ export type GetAgentControllerControllerIdSessionsSessionIdPermissions_Request =
       ? {}
       : {} extends GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams
         ? { query?: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams }
-        : { query: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams })
+        : { query: GetAgentControllerControllerIdSessionsSessionIdPermissions_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
 >;
 
 export interface GetAgentControllerControllerIdSessionsSessionIdPermissions_RouteContract {
