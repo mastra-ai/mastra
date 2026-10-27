@@ -87,6 +87,77 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       fixture = undefined;
     });
 
+    it('forwards history and ordered run outcomes without closing the thread subscription (COR-1500)', async () => {
+      fixture = await config.setupModel();
+      fixture.addResponse(0, { content: 'first answer' });
+      fixture.addResponse(1, { content: 'second answer' });
+      const inner = new Agent({
+        id: 'subscription-agent',
+        name: 'Subscription agent',
+        instructions: 'Answer briefly.',
+        model: fixture.model,
+        memory: new MockMemory({ storage: new InMemoryStore() }),
+      });
+      const agent =
+        kind === 'durable'
+          ? createDurableAgent({ agent: inner })
+          : kind === 'evented'
+            ? createEventedAgent({ agent: inner })
+            : inner;
+      mastra = new Mastra({ agents: { agent }, storage: new InMemoryStore() });
+      server = await config.startServer(mastra, () => {});
+      const controller = new AbortController();
+      const coordinates = { resourceId: 'subscription-user', threadId: `subscription-${kind}` };
+      const response = await fetch(`${server.baseUrl}/api/agents/agent/threads/subscribe`, {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ ...coordinates, withInitialHistory: true, withRunStatus: true }),
+        signal: controller.signal,
+      });
+      expect(response.status).toBe(200);
+      const reader = response.body!.getReader();
+      const decoder = new TextDecoder();
+      let buffered = '';
+      async function nextChunk(): Promise<{ type: string; runId: string; payload: Record<string, unknown> }> {
+        for (;;) {
+          const boundary = buffered.indexOf('\n\n');
+          if (boundary !== -1) {
+            const frame = buffered.slice(0, boundary);
+            buffered = buffered.slice(boundary + 2);
+            const data = frame.split('\n').find(line => line.startsWith('data: '));
+            if (data) return JSON.parse(data.slice(6));
+          } else {
+            const next = await reader.read();
+            expect(next.done).toBe(false);
+            buffered += decoder.decode(next.value, { stream: true });
+          }
+        }
+      }
+      try {
+        expect(await nextChunk()).toMatchObject({ type: 'thread-history', payload: { activeRunId: null } });
+        for (const answer of ['first answer', 'second answer']) {
+          const reading = (async () => {
+            let text = '';
+            for (;;) {
+              const chunk = await nextChunk();
+              if (chunk.type === 'text-delta') text += chunk.payload.text;
+              if (chunk.type === 'thread-run-status') return { text, runId: chunk.runId, status: chunk.payload.status };
+            }
+          })();
+          const output = await agent.stream('Hello', {
+            memory: { thread: coordinates.threadId, resource: coordinates.resourceId },
+          });
+          for await (const _chunk of output.fullStream) {
+            /* Drain the producer as well as its HTTP observer. */
+          }
+          expect(await reading).toEqual({ text: answer, runId: output.runId, status: 'success' });
+        }
+      } finally {
+        controller.abort();
+        await reader.cancel().catch(() => {});
+      }
+    }, 30_000);
+
     if (kind !== 'plain') {
       it.each(['error', 'abort', 'abort-without-text', 'aborted-finish'] as const)(
         'replays %s as public terminal frames (COR-1498)',

@@ -2500,6 +2500,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
     resourceId,
     threadId,
     withInitialHistory,
+    withRunStatus,
     abortSignal,
     requestContext: serverRequestContext,
   }) => {
@@ -2543,6 +2544,7 @@ export const SUBSCRIBE_AGENT_THREAD_ROUTE = createRoute({
         resourceId: effectiveResourceId,
         threadId: effectiveThreadId,
         ...(withInitialHistory ? { withInitialHistory, requestContext: serverRequestContext } : {}),
+        ...(withRunStatus ? { withRunStatus } : {}),
       });
 
       let cleanedUp = false;
