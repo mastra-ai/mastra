@@ -5,6 +5,7 @@ import type {
   MCPServerBase as MastraMCPServerImplementation,
   MCPServerEventStreamFrame,
   MCPServerEventsInspector,
+  MCPServerTasksInspector,
   MCPToolExecutionResultV2,
   ServerInfo,
 } from '@mastra/core/mcp';
@@ -33,11 +34,17 @@ import {
   mcpServerEventStreamFrameSchema,
   emitMcpServerEventBodySchema,
   emitMcpServerEventResponseSchema,
+  mcpServerTaskPathParams,
+  listMcpServerTasksQuerySchema,
+  listMcpServerTasksResponseSchema,
+  answerMcpServerTaskBodySchema,
+  mcpServerTaskActionResponseSchema,
 } from '../schemas/mcp';
 import type { MCPServerTransport } from '../schemas/mcp';
 import type { ServerContext } from '../server-adapter';
 import type { SetMcpRequestAuth } from '../server-adapter/mcp-auth';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { getContextResourceId } from './utils';
 
 // ============================================================================
 // Route Definitions (createRoute pattern for server adapters)
@@ -55,6 +62,7 @@ export interface MCPServerInfoResponse extends ServerInfo {
   /** Endpoints served under `/mcp/:serverId`; 2026-07-28 servers speak Streamable HTTP only. */
   transports: MCPServerTransport[];
   events_capability?: boolean;
+  tasks_capability?: boolean;
 }
 
 function transportsOf(server: MastraMCPServerImplementation): MCPServerTransport[] {
@@ -134,6 +142,7 @@ export const LIST_MCP_SERVERS_ROUTE = createRoute({
       ...server.getServerInfo(),
       transports: transportsOf(server),
       ...eventsCapabilityOf(server),
+      ...tasksCapabilityOf(server),
     }));
 
     return {
@@ -170,6 +179,7 @@ export const GET_MCP_SERVER_DETAIL_ROUTE = createRoute({
       ...server.getServerDetail(),
       transports: transportsOf(server),
       ...eventsCapabilityOf(server),
+      ...tasksCapabilityOf(server),
     };
 
     // If a specific version was requested, check if it matches
@@ -622,6 +632,139 @@ export const EMIT_MCP_SERVER_EVENT_ROUTE = createRoute({
     } catch (error) {
       throw toEventsHttpError(error, mastra, `emit ${serverId}/${eventName}`);
     }
+  },
+});
+
+// ============================================================================
+// MCP Task Routes (experimental; Studio admin view)
+// ============================================================================
+
+/** Present only for servers that run something as an MCP task, so older responses stay unchanged. */
+function tasksCapabilityOf(server: MastraMCPServerImplementation): { tasks_capability?: true } {
+  const info = typeof server.getTasksInfo === 'function' ? server.getTasksInfo() : undefined;
+  return info?.enabled ? { tasks_capability: true } : {};
+}
+
+const TASK_NOT_FOUND = 'Task not found';
+
+/**
+ * Tasks belong to MCP principals, which have no mapping to Mastra resources, so a
+ * resource-scoped caller can't be shown or act on any of them. Only an unscoped caller
+ * (no resource in the request context) gets the inspector.
+ */
+function getTasksInspector(
+  server: MastraMCPServerImplementation,
+  requestContext: ServerContext['requestContext'],
+): MCPServerTasksInspector | undefined {
+  if (getContextResourceId(requestContext) !== undefined) return undefined;
+  return typeof server.getTasksInspector === 'function' ? server.getTasksInspector() : undefined;
+}
+
+function toTasksHttpError(error: unknown, mastra: Mastra | undefined, context: string): HTTPException {
+  if (error instanceof HTTPException) return error;
+  mastra?.getLogger()?.error(`MCP task request failed: ${context}`, { error });
+  return new HTTPException(500, { message: 'Task request failed' });
+}
+
+export const LIST_MCP_SERVER_TASKS_ROUTE = createRoute({
+  method: 'GET',
+  path: '/mcp/:serverId/tasks',
+  responseType: 'json',
+  pathParamSchema: mcpServerIdPathParams,
+  queryParamSchema: listMcpServerTasksQuerySchema,
+  responseSchema: listMcpServerTasksResponseSchema,
+  summary: 'List MCP server tasks',
+  description:
+    "Returns which tools run as MCP tasks and the server's recent tasks across principals, identified by task key; never task ids or principals (experimental)",
+  tags: ['MCP'],
+  requiresAuth: true,
+  handler: async ({
+    mastra,
+    serverId,
+    limit,
+    requestContext,
+  }: ServerContext & { serverId: string; limit?: number }) => {
+    const server = getEventsServer(mastra, serverId);
+    const info = typeof server.getTasksInfo === 'function' ? server.getTasksInfo() : undefined;
+    if (!info?.enabled) return { required: false, surfaces: [], tasks: [] };
+    const base = { required: info.required, surfaces: info.surfaces };
+    if (getContextResourceId(requestContext) !== undefined) {
+      return { ...base, unavailable: 'resource_scoped' as const, tasks: [] };
+    }
+    const inspector = getTasksInspector(server, requestContext);
+    if (!inspector) return { ...base, unavailable: 'not_listable' as const, tasks: [] };
+    try {
+      return { ...base, tasks: (await inspector.list({ limit })).tasks };
+    } catch (error) {
+      throw toTasksHttpError(error, mastra, `list ${serverId}`);
+    }
+  },
+});
+
+export const CANCEL_MCP_SERVER_TASK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/tasks/:taskKey/cancel',
+  responseType: 'json',
+  pathParamSchema: mcpServerTaskPathParams,
+  responseSchema: mcpServerTaskActionResponseSchema,
+  summary: 'Cancel an MCP server task',
+  description: 'Cancels a running task by key, like the tasks/cancel MCP request (experimental)',
+  tags: ['MCP'],
+  requiresAuth: true,
+  requiresPermission: 'mcp:execute',
+  handler: async ({
+    mastra,
+    serverId,
+    taskKey,
+    requestContext,
+  }: ServerContext & { serverId: string; taskKey: string }) => {
+    const inspector = getTasksInspector(getEventsServer(mastra, serverId), requestContext);
+    if (!inspector) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    let cancelled: boolean;
+    try {
+      cancelled = await inspector.cancel(taskKey);
+    } catch (error) {
+      throw toTasksHttpError(error, mastra, `cancel ${serverId}`);
+    }
+    if (!cancelled) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    return { success: true as const };
+  },
+});
+
+export const ANSWER_MCP_SERVER_TASK_ROUTE = createRoute({
+  method: 'POST',
+  path: '/mcp/:serverId/tasks/:taskKey/input',
+  responseType: 'json',
+  pathParamSchema: mcpServerTaskPathParams,
+  bodySchema: answerMcpServerTaskBodySchema,
+  responseSchema: mcpServerTaskActionResponseSchema,
+  summary: 'Answer an MCP server task input request',
+  description:
+    "Answers a task's open input requests by key, like the tasks/update MCP request; 404 unless the task is waiting for one of them (experimental)",
+  tags: ['MCP'],
+  requiresAuth: true,
+  requiresPermission: 'mcp:execute',
+  handler: async ({
+    mastra,
+    serverId,
+    taskKey,
+    inputResponses,
+    requestContext,
+  }: ServerContext & {
+    serverId: string;
+    taskKey: string;
+    inputResponses: Record<string, Record<string, unknown>>;
+  }) => {
+    const inspector = getTasksInspector(getEventsServer(mastra, serverId), requestContext);
+    if (!inspector) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    let answered: boolean;
+    try {
+      answered = await inspector.answer(taskKey, inputResponses);
+    } catch (error) {
+      throw toTasksHttpError(error, mastra, `answer ${serverId}`);
+    }
+    if (!answered) throw new HTTPException(404, { message: TASK_NOT_FOUND });
+    return { success: true as const };
   },
 });
 

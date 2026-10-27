@@ -182,7 +182,7 @@ type InputShared_Auxiliary_278 =
           };
     };
 
-type InputShared_Auxiliary_710 =
+type InputShared_Auxiliary_713 =
   | {
       op: 'eq' | 'ne' | 'lt' | 'lte' | 'gt' | 'gte';
       left:
@@ -227,27 +227,27 @@ type InputShared_Auxiliary_710 =
     }
   | {
       op: 'and' | 'or';
-      args: InputShared_Auxiliary_710[];
+      args: InputShared_Auxiliary_713[];
     }
   | {
       op: 'not';
-      arg: InputShared_Auxiliary_710;
+      arg: InputShared_Auxiliary_713;
     };
 
-type InputShared_Auxiliary_784 = {
+type InputShared_Auxiliary_787 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: InputShared_Auxiliary_784[] | undefined;
+  children?: InputShared_Auxiliary_787[] | undefined;
 };
 
-type Shared_Auxiliary_777 = {
+type Shared_Auxiliary_782 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_777[] | undefined;
+  children?: Shared_Auxiliary_782[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -1833,7 +1833,7 @@ type InputShared_Type_89 = {
       }
     | undefined;
   steps: InputShared_Type_84[];
-  predicates: InputShared_Auxiliary_710[];
+  predicates: InputShared_Auxiliary_713[];
 };
 
 type InputShared_Type_90 = {
@@ -1847,7 +1847,7 @@ type InputShared_Type_90 = {
     | undefined;
   step: InputShared_Type_84;
   loopType: 'dowhile' | 'dountil';
-  predicate: InputShared_Auxiliary_710;
+  predicate: InputShared_Auxiliary_713;
 };
 
 type InputShared_Type_91 =
@@ -4304,7 +4304,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_777[] | undefined;
+  files?: Shared_Auxiliary_782[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -14646,6 +14646,7 @@ export type GetMcpV0Servers_Response = {
     };
     transports?: ('streamable-http' | 'sse')[] | undefined;
     events_capability?: boolean | undefined;
+    tasks_capability?: boolean | undefined;
   }[];
   total_count: number;
   next: string | null;
@@ -14696,6 +14697,7 @@ export type GetMcpV0ServersId_Response = {
   remotes?: unknown[] | undefined;
   transports?: ('streamable-http' | 'sse')[] | undefined;
   events_capability?: boolean | undefined;
+  tasks_capability?: boolean | undefined;
 };
 
 export type GetMcpV0ServersId_Request = Simplify<
@@ -15074,6 +15076,144 @@ export interface PostMcpServerIdEventsEventNameEmit_RouteContract {
   body: PostMcpServerIdEventsEventNameEmit_Body;
   request: PostMcpServerIdEventsEventNameEmit_Request;
   response: PostMcpServerIdEventsEventNameEmit_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /mcp/:serverId/tasks
+// ============================================================================
+export type GetMcpServerIdTasks_PathParams = GetMcpServerIdTools_PathParams;
+
+export type GetMcpServerIdTasks_QueryParams = {
+  limit?: number | undefined;
+};
+
+export type GetMcpServerIdTasks_Response = {
+  required: boolean;
+  surfaces: {
+    name: string;
+    type: 'tool' | 'workflow' | 'agent';
+    mode: 'auto' | 'always';
+    recover: boolean;
+    ttlMs: number | null;
+  }[];
+  unavailable?: ('not_listable' | 'resource_scoped') | undefined;
+  tasks: {
+    taskKey: string;
+    surface: string;
+    status: 'working' | 'input_required' | 'completed' | 'failed' | 'cancelled';
+    statusMessage?: string | undefined;
+    createdAt: string;
+    lastUpdatedAt: string;
+    expiresAt?: string | undefined;
+    principalKey: string;
+    inputRequests?:
+      | {
+          [key: string]: {
+            method: string;
+            params?:
+              | {
+                  [key: string]: unknown;
+                }
+              | undefined;
+            [x: string]: unknown;
+          };
+        }
+      | undefined;
+    result?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+    error?:
+      | {
+          [key: string]: unknown;
+        }
+      | undefined;
+  }[];
+};
+
+export type GetMcpServerIdTasks_Request = Simplify<
+  (GetMcpServerIdTasks_PathParams extends never ? {} : { params: GetMcpServerIdTasks_PathParams }) &
+    (GetMcpServerIdTasks_QueryParams extends never
+      ? {}
+      : {} extends GetMcpServerIdTasks_QueryParams
+        ? { query?: GetMcpServerIdTasks_QueryParams }
+        : { query: GetMcpServerIdTasks_QueryParams }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetMcpServerIdTasks_RouteContract {
+  pathParams: GetMcpServerIdTasks_PathParams;
+  queryParams: GetMcpServerIdTasks_QueryParams;
+  body: never;
+  request: GetMcpServerIdTasks_Request;
+  response: GetMcpServerIdTasks_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /mcp/:serverId/tasks/:taskKey/cancel
+// ============================================================================
+export type PostMcpServerIdTasksTaskKeyCancel_PathParams = {
+  /** MCP server ID */
+  serverId: string;
+  /** Task key (a hash of the task id, as listed) */
+  taskKey: string;
+};
+
+export type PostMcpServerIdTasksTaskKeyCancel_Response = PostObservabilityTracesDelete_Response;
+
+export type PostMcpServerIdTasksTaskKeyCancel_Request = Simplify<
+  (PostMcpServerIdTasksTaskKeyCancel_PathParams extends never
+    ? {}
+    : { params: PostMcpServerIdTasksTaskKeyCancel_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface PostMcpServerIdTasksTaskKeyCancel_RouteContract {
+  pathParams: PostMcpServerIdTasksTaskKeyCancel_PathParams;
+  queryParams: never;
+  body: never;
+  request: PostMcpServerIdTasksTaskKeyCancel_Request;
+  response: PostMcpServerIdTasksTaskKeyCancel_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: POST /mcp/:serverId/tasks/:taskKey/input
+// ============================================================================
+export type PostMcpServerIdTasksTaskKeyInput_PathParams = PostMcpServerIdTasksTaskKeyCancel_PathParams;
+
+export type PostMcpServerIdTasksTaskKeyInput_Body = {
+  inputResponses: {
+    [key: string]: {
+      [key: string]: unknown;
+    };
+  };
+};
+
+export type PostMcpServerIdTasksTaskKeyInput_Response = PostObservabilityTracesDelete_Response;
+
+export type PostMcpServerIdTasksTaskKeyInput_Request = Simplify<
+  (PostMcpServerIdTasksTaskKeyInput_PathParams extends never
+    ? {}
+    : { params: PostMcpServerIdTasksTaskKeyInput_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (PostMcpServerIdTasksTaskKeyInput_Body extends never
+      ? {}
+      : {} extends PostMcpServerIdTasksTaskKeyInput_Body
+        ? { body?: PostMcpServerIdTasksTaskKeyInput_Body }
+        : { body: PostMcpServerIdTasksTaskKeyInput_Body })
+>;
+
+export interface PostMcpServerIdTasksTaskKeyInput_RouteContract {
+  pathParams: PostMcpServerIdTasksTaskKeyInput_PathParams;
+  queryParams: never;
+  body: PostMcpServerIdTasksTaskKeyInput_Body;
+  request: PostMcpServerIdTasksTaskKeyInput_Request;
+  response: PostMcpServerIdTasksTaskKeyInput_Response;
   responseType: 'json';
 }
 
@@ -19016,7 +19156,7 @@ export type PostStoredSkills_Body = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: InputShared_Auxiliary_784[] | undefined;
+  files?: InputShared_Auxiliary_787[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -19074,7 +19214,7 @@ export type PatchStoredSkillsStoredSkillId_Body = {
   /** List of asset file paths */
   assets?: (string[] | undefined) | undefined;
   /** Full file tree structure for the skill */
-  files?: (InputShared_Auxiliary_784[] | undefined) | undefined;
+  files?: (InputShared_Auxiliary_787[] | undefined) | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | (
@@ -24822,6 +24962,9 @@ export interface RouteTypes {
   'POST /mcp/:serverId/events/:eventName/poll': PostMcpServerIdEventsEventNamePoll_RouteContract;
   'POST /mcp/:serverId/events/:eventName/stream': PostMcpServerIdEventsEventNameStream_RouteContract;
   'POST /mcp/:serverId/events/:eventName/emit': PostMcpServerIdEventsEventNameEmit_RouteContract;
+  'GET /mcp/:serverId/tasks': GetMcpServerIdTasks_RouteContract;
+  'POST /mcp/:serverId/tasks/:taskKey/cancel': PostMcpServerIdTasksTaskKeyCancel_RouteContract;
+  'POST /mcp/:serverId/tasks/:taskKey/input': PostMcpServerIdTasksTaskKeyInput_RouteContract;
   'ALL /mcp/:serverId/mcp': AllMcpServerIdMcp_RouteContract;
   'ALL /mcp/:serverId/sse': AllMcpServerIdSse_RouteContract;
   'POST /mcp/:serverId/messages': PostMcpServerIdMessages_RouteContract;
@@ -25541,6 +25684,15 @@ export interface Client {
   };
   '/mcp/:serverId/sse': {
     ALL: AllMcpServerIdSse_RouteContract;
+  };
+  '/mcp/:serverId/tasks': {
+    GET: GetMcpServerIdTasks_RouteContract;
+  };
+  '/mcp/:serverId/tasks/:taskKey/cancel': {
+    POST: PostMcpServerIdTasksTaskKeyCancel_RouteContract;
+  };
+  '/mcp/:serverId/tasks/:taskKey/input': {
+    POST: PostMcpServerIdTasksTaskKeyInput_RouteContract;
   };
   '/mcp/:serverId/tools': {
     GET: GetMcpServerIdTools_RouteContract;

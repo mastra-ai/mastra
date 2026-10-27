@@ -3634,6 +3634,54 @@ export const API_ROUTE_METADATA = {
       "kind": "single"
     }
   },
+  "GET /mcp/:serverId/tasks": {
+    "method": "GET",
+    "path": "/mcp/:serverId/tasks",
+    "pathParams": [
+      "serverId"
+    ],
+    "queryParams": [
+      "limit"
+    ],
+    "bodyParams": [],
+    "hasQuery": true,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/:taskKey/cancel": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/:taskKey/cancel",
+    "pathParams": [
+      "serverId",
+      "taskKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
+  "POST /mcp/:serverId/tasks/:taskKey/input": {
+    "method": "POST",
+    "path": "/mcp/:serverId/tasks/:taskKey/input",
+    "pathParams": [
+      "serverId",
+      "taskKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [
+      "inputResponses"
+    ],
+    "hasQuery": false,
+    "hasBody": true,
+    "responseShape": {
+      "kind": "single"
+    }
+  },
   "GET /stored/agents": {
     "method": "GET",
     "path": "/stored/agents",

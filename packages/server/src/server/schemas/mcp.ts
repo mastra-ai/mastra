@@ -55,6 +55,7 @@ export const serverInfoSchema = z.object({
   transports: z.array(mcpServerTransportSchema).optional(),
   /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
   events_capability: z.boolean().optional(),
+  tasks_capability: z.boolean().optional(),
 });
 
 export const listMcpServersResponseSchema = z.object({
@@ -75,6 +76,7 @@ export const serverDetailSchema = z.object({
   transports: z.array(mcpServerTransportSchema).optional(),
   /** Whether the server declares event types (experimental); see `GET /mcp/:serverId/events`. */
   events_capability: z.boolean().optional(),
+  tasks_capability: z.boolean().optional(),
 });
 
 // Tool schemas
@@ -216,3 +218,57 @@ export const emitMcpServerEventBodySchema = z.object({
 export const emitMcpServerEventResponseSchema = z.object({
   occurrence: mcpServerEventOccurrenceSchema,
 });
+
+// Task schemas (experimental; Studio admin view)
+export const mcpServerTaskPathParams = z.object({
+  serverId: z.string().describe('MCP server ID'),
+  taskKey: z.string().describe('Task key (a hash of the task id, as listed)'),
+});
+
+export const listMcpServerTasksQuerySchema = z.object({
+  limit: z.coerce.number().int().min(1).max(200).optional(),
+});
+
+const mcpServerTaskStatusSchema = z.enum(['working', 'input_required', 'completed', 'failed', 'cancelled']);
+
+export const mcpServerTaskSurfaceSchema = z.object({
+  name: z.string(),
+  type: z.enum(['tool', 'workflow', 'agent']),
+  mode: z.enum(['auto', 'always']),
+  recover: z.boolean(),
+  ttlMs: z.number().nullable(),
+});
+
+export const mcpServerTaskSummarySchema = z.object({
+  taskKey: z.string(),
+  surface: z.string(),
+  status: mcpServerTaskStatusSchema,
+  statusMessage: z.string().optional(),
+  createdAt: z.string(),
+  lastUpdatedAt: z.string(),
+  expiresAt: z.string().optional(),
+  principalKey: z.string(),
+  inputRequests: z
+    .record(z.string(), z.object({ method: z.string(), params: jsonObjectSchema.optional() }).passthrough())
+    .optional(),
+  result: jsonObjectSchema.optional(),
+  error: jsonObjectSchema.optional(),
+});
+
+export const listMcpServerTasksResponseSchema = z.object({
+  /** Whether the server requires task-capable clients for some surfaces. */
+  required: z.boolean(),
+  surfaces: z.array(mcpServerTaskSurfaceSchema),
+  /**
+   * Why `tasks` is empty regardless of what exists: the task store can't be listed, or the
+   * caller is scoped to a resource, which has no mapping to MCP principals.
+   */
+  unavailable: z.enum(['not_listable', 'resource_scoped']).optional(),
+  tasks: z.array(mcpServerTaskSummarySchema),
+});
+
+export const answerMcpServerTaskBodySchema = z.object({
+  inputResponses: z.record(z.string(), jsonObjectSchema),
+});
+
+export const mcpServerTaskActionResponseSchema = z.object({ success: z.literal(true) });
