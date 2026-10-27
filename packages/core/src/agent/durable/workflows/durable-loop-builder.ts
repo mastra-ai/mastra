@@ -107,6 +107,12 @@ export interface DurableAgenticWorkflowOptions {
    * `recovery.durableAgents: 'auto'` is configured.
    */
   shouldPersistSnapshot?: ShouldPersistSnapshotFn;
+  /**
+   * Sets `autoStorageVersion` on the outer loop workflow, so new runs are
+   * stored as version 2 where the engine and store support it. The
+   * iteration workflow's runs are nested, so they follow the outer run.
+   */
+  autoStorageVersion?: boolean;
 }
 
 /**
@@ -933,7 +939,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
           // Agent-loop snapshots are pure resume artifacts — strip everything a
           // resume never reads. This loop reads iteration state from workflow
           // `value`, so it has no declared step-result reads (see pruneSnapshotHook).
+          // Runs stored as v2 (see autoStorageVersion) skip this.
           pruneSnapshot: this.pruneSnapshotHook(),
+          autoStorageVersion: this.#options?.autoStorageVersion,
           // Snapshots written up to the end reference this process's saved
           // rows, so release them only once the run has persisted its result.
           // A suspended run releases too: it may wait indefinitely, and on

@@ -626,6 +626,16 @@ export interface WorkflowOptions {
   storageVersion?: 1 | 2;
 
   /**
+   * When `storageVersion` isn't set, a new top-level run takes version 2 if
+   * it runs on the default engine and the store supports it, otherwise 1.
+   * Unlike an explicit `storageVersion: 2`, this never throws, and runs it
+   * stores as version 2 skip `pruneSnapshot`.
+   *
+   * @internal
+   */
+  autoStorageVersion?: boolean;
+
+  /**
    * Called before a workflow run starts executing, and awaited.
    * This callback is invoked server-side without requiring client-side .watch().
    *

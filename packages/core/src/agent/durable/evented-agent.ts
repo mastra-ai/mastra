@@ -105,6 +105,15 @@ export class EventedAgent<
   }
 
   /**
+   * The evented engine stores runs only as version 1, and a hostless
+   * EventedAgent that falls back to the default engine stays on version 1 too.
+   * @internal
+   */
+  protected override get storesRunsInJournal(): boolean {
+    return false;
+  }
+
+  /**
    * EventedAgent owns its snapshot-persistence policy and always persists the
    * full set (`pending | paused | suspended | running`), ignoring any
    * user-supplied `shouldPersistSnapshot`.

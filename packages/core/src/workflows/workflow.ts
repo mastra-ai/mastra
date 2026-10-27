@@ -1935,6 +1935,7 @@ export class Workflow<
       isForeignExecution: options.isForeignExecution,
       pruneSnapshot: options.pruneSnapshot,
       storageVersion: options.storageVersion,
+      autoStorageVersion: options.autoStorageVersion,
       tracingPolicy: options.tracingPolicy,
       onStart: options.onStart,
       onFinish: options.onFinish,
@@ -2946,11 +2947,16 @@ export class Workflow<
       throw new Error('Uncommitted step flow changes detected. Call .commit() to register the steps.');
     }
     // A v2 run can't be stored where the store has no journal, so only a stored v1 run may continue.
-    // A nested run doesn't use the workflow's option, so it never hits this.
+    // With autoStorageVersion, a new run takes v2 only where it can be stored as v2.
+    // A nested run doesn't use the workflow's options, so it never hits either.
+    const { storageVersion: optionVersion, autoStorageVersion } = this.#options;
     let unsupportedV2 = false;
-    if (!nestedRun && this.#options.storageVersion === 2) {
+    let autoVersion: 1 | 2 | undefined;
+    if (!nestedRun && (optionVersion === 2 || (optionVersion === undefined && autoStorageVersion))) {
       const workflowsStore = await this.#mastra?.getStorage()?.getStore('workflows');
-      unsupportedV2 = !!workflowsStore && !workflowsStore.supportsRunJournal();
+      const journal = !!workflowsStore?.supportsRunJournal();
+      if (optionVersion === 2) unsupportedV2 = !!workflowsStore && !journal;
+      else autoVersion = journal && this.engineType === 'default' ? 2 : 1;
     }
     const throwUnsupportedV2 = (): never => {
       throw new MastraError({
@@ -2989,7 +2995,7 @@ export class Workflow<
     let storageVersion: 1 | 2 =
       cachedRun?.storageVersion ??
       nestedRun?.storageVersion ??
-      (unsupportedV2 ? 1 : (this.#options.storageVersion ?? 1));
+      (unsupportedV2 ? 1 : (optionVersion ?? autoVersion ?? 1));
     const probeOtherVersion = !!options?.runId && !cachedRun && !nestedRun;
     const loadStoredHeader = (version: 1 | 2) =>
       createRunStorage({

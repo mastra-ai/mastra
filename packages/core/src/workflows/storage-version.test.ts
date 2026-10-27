@@ -496,6 +496,99 @@ describe('storageVersion per run', () => {
   });
 });
 
+describe('autoStorageVersion', () => {
+  function autoGated(options: { storageVersion?: 1 | 2; pruneSnapshot?: (args: { snapshot: any }) => any } = {}) {
+    return createWorkflow({
+      id: 'gated',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ approved: z.boolean() }),
+      options: { autoStorageVersion: true, ...options },
+    })
+      .then(gateStep())
+      .commit();
+  }
+
+  it("stores a new run as v2 on a store with run journals, so it doesn't prune", async () => {
+    const storage = new MockStore();
+    const prune = vi.fn(({ snapshot }) => snapshot);
+    const workflow = autoGated({ pruneSnapshot: prune });
+    host(storage, workflow);
+
+    const run = await workflow.createRun();
+    expect(run.storageVersion).toBe(2);
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    expect(prune).not.toHaveBeenCalled();
+
+    const store = (await storage.getStore('workflows'))!;
+    expect(await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 })).toBeNull();
+    expect((await store.loadWorkflowRunHeader({ workflowName: 'gated', runId: run.runId }))?.header.status).toBe(
+      'suspended',
+    );
+  });
+
+  it('stores a new run as v1 on a store without run journals, and prunes it', async () => {
+    const storage = new MockStore();
+    const prune = vi.fn(({ snapshot }) => snapshot);
+    const workflow = autoGated({ pruneSnapshot: prune });
+    host(storage, workflow);
+    const store = (await storage.getStore('workflows'))!;
+    vi.spyOn(store, 'supportsRunJournal').mockReturnValue(false);
+
+    const run = await workflow.createRun();
+    expect(run.storageVersion).toBe(1);
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+    expect(prune).toHaveBeenCalled();
+    expect(
+      (await store.loadWorkflowSnapshot({ workflowName: 'gated', runId: run.runId, storageVersion: 1 }))?.status,
+    ).toBe('suspended');
+  });
+
+  it('stores a new run as v1 on the evented engine', async () => {
+    const workflow = createEventedWorkflow({
+      id: 'evented-auto',
+      inputSchema: z.object({}),
+      outputSchema: z.object({}),
+      options: { autoStorageVersion: true },
+    })
+      .then(createStep({ id: 's', inputSchema: z.object({}), outputSchema: z.object({}), execute: async () => ({}) }))
+      .commit();
+    const storage = new MockStore();
+    const mastra = new Mastra({ logger: false, storage, pubsub: new EventEmitterPubSub(), workflows: { workflow } });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      expect(run.storageVersion).toBe(1);
+      expect((await run.start({ inputData: {} })).status).toBe('success');
+      expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('leaves the version to an explicit storageVersion', async () => {
+    const storage = new MockStore();
+    const workflow = autoGated({ storageVersion: 1 });
+    host(storage, workflow);
+    expect((await workflow.createRun()).storageVersion).toBe(1);
+  });
+
+  it('finishes a v1 run stored before it was set in v1', async () => {
+    const storage = new MockStore();
+    const before = gateWorkflow();
+    host(storage, before);
+    const run = await before.createRun();
+    expect((await run.start({ inputData: {} })).status).toBe('suspended');
+
+    const after = autoGated();
+    host(storage, after);
+    const continued = await after.createRun({ runId: run.runId });
+    expect(continued.storageVersion).toBe(1);
+    expect((await continued.resume({ step: 'gate', resumeData: true })).status).toBe('success');
+    expect((storage.stores.workflows as any).db.workflowRunHeaders.size).toBe(0);
+    expect((await after.createRun()).storageVersion).toBe(2);
+  });
+});
+
 const num = z.object({ n: z.number() });
 const marks = z.object({ marked: z.number().optional() });
 const items = z.object({ items: z.array(z.string()) });

@@ -2116,6 +2116,17 @@ export class DurableAgent<
   }
 
   /**
+   * Whether new runs of this agent's loop are stored as workflow storage
+   * version 2 where the engine and store support it (see the workflow's
+   * `autoStorageVersion` option). A resumed run stays in its stored version.
+   * EventedAgent overrides this to `false`.
+   * @internal
+   */
+  protected get storesRunsInJournal(): boolean {
+    return false;
+  }
+
+  /**
    * Resolve the engine this agent's workflow instance actually runs on.
    *
    * An evented agent without a Mastra host cannot execute evented runs — the
@@ -2299,6 +2310,7 @@ export class DurableAgent<
       // in-process engine (see resolveWorkflowEngine).
       engine: this.resolveWorkflowEngine(),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
+      autoStorageVersion: this.storesRunsInJournal,
     });
   }
 
