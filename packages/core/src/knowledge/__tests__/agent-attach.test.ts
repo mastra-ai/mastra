@@ -64,7 +64,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' } });
 
   it('gives the agent read and write tools and its usage instructions', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), tools: true });
     const prompts: unknown[][] = [];
     const agent = new Agent({
       id: 'writer',
@@ -103,7 +103,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(system).toContain(KNOWLEDGE_WRITE_INSTRUCTIONS);
   });
 
-  it('attaches read tools only by default, and no instruction block when instructions is false', async () => {
+  it('attaches no tools by default, and no instruction block when instructions is false', async () => {
     const prompts: unknown[][] = [];
     const agent = new Agent({
       id: 'reader',
@@ -123,6 +123,27 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(systemText(prompts[0]!)).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
   });
 
+  it('gives no tools by default; { read: true } the two read tools; true all four; pinnedContext adds knowledge_pin', () => {
+    const names = (config: ConstructorParameters<typeof Knowledge>[0]) =>
+      Object.keys(new Knowledge(config).createTools()).sort();
+    expect(names({})).toEqual([]);
+    expect(new Knowledge({}).getInstructions()).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
+    expect(names({ tools: { read: true } })).toEqual(['knowledge_read', 'knowledge_search']);
+    expect(names({ tools: true })).toEqual([
+      'knowledge_node',
+      'knowledge_read',
+      'knowledge_record',
+      'knowledge_search',
+    ]);
+    expect(names({ tools: true, pinnedContext: true })).toEqual([
+      'knowledge_node',
+      'knowledge_pin',
+      'knowledge_read',
+      'knowledge_record',
+      'knowledge_search',
+    ]);
+  });
+
   it('resolves Knowledge registered on Mastra by key', async () => {
     const { Mastra } = await import('../../mastra');
     const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'registered' }) });
@@ -138,7 +159,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   });
 
   it('scopes tools by the run tags: another run with different tags sees nothing', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tags' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tags' }), tools: true });
     const writer = new Agent({
       id: 'writer',
       name: 'writer',
@@ -179,7 +200,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   });
 
   it('refuses a write naming a tag the run does not hold', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'refuse' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'refuse' }), tools: true });
     const agent = new Agent({
       id: 'writer',
       name: 'writer',
@@ -207,7 +228,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     ['{ access: "read" }', { scope: 'org:self', access: 'read' as const }],
   ])('holds %s read-only: visible, left out of default writes, refused when named', async (_, orgEntry) => {
     const storage = new InMemoryStore({ id: 'read-only' });
-    const knowledge = new Knowledge({ storage, tools: { write: true } });
+    const knowledge = new Knowledge({ storage, tools: true });
     const store = await knowledge.getStorage();
     const orgNode = await store.createNode({ name: 'Org policy', kind: 'policy', scope: ['org:self'] });
     await store.appendKnowledge({
@@ -258,7 +279,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   });
 
   it('delivers pins to an agent without Memory within the call that pins and on the next call', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-memory' }), pins: true });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-memory' }), pinnedContext: true });
     const prompts: unknown[][] = [];
     const agent = (calls: Call[]) =>
       new Agent({

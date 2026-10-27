@@ -80,7 +80,7 @@ describe('Pinned knowledge live proof', () => {
         lastMessages: 20,
       },
     });
-    const knowledge = new Knowledge({ id: 'proof', storage, pins: { maxPins: 20, maxTokens: 500 } });
+    const knowledge = new Knowledge({ id: 'proof', storage, pinnedContext: { maxPins: 20, maxTokens: 500 } });
 
     const agent = new Agent({
       id: 'proof-agent',

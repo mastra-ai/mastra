@@ -58,7 +58,7 @@ function toolResults(result: Awaited<ReturnType<Agent['generate']>>): any[] {
 function companyKnowledge(id: string, role: 'owner' | 'edit' | 'append' | 'readonly' = 'owner') {
   return new Knowledge({
     storage: new InMemoryStore({ id }),
-    tools: { write: true },
+    tools: true,
     scopes: {
       'team:$orgId:$teamId': { access: [{ principal: 'org:$orgId', role }] },
     },
@@ -244,7 +244,7 @@ describe('Knowledge ownership computed from the structure', () => {
   it('grants nothing through unbound $param, self, parent or mirror principals', async () => {
     const knowledge = new Knowledge({
       storage: new InMemoryStore({ id: 'own-ignored-principals' }),
-      tools: { write: true },
+      tools: true,
       scopes: {
         'team:$orgId:$teamId': {
           access: [
@@ -271,7 +271,7 @@ describe('Knowledge ownership computed from the structure', () => {
   it('uses the strongest role across principals and names held and needed roles when short', async () => {
     const knowledge = new Knowledge({
       storage: new InMemoryStore({ id: 'own-strongest' }),
-      tools: { write: true },
+      tools: true,
       scopes: {
         'team:$orgId:$teamId': {
           access: [

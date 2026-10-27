@@ -1893,7 +1893,7 @@ export class Agent<
     if (instructions && !configuredIds.has(KNOWLEDGE_INSTRUCTIONS_PROCESSOR_ID)) {
       processors.push(new KnowledgeInstructionsProcessor(instructions));
     }
-    if (knowledge.pinsEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
+    if (knowledge.pinnedContextEnabled && !configuredIds.has(PINNED_KNOWLEDGE_STATE_ID)) {
       processors.push(new PinnedStateProcessor({ getKnowledgeStore: () => knowledge.getStorage() }));
     }
     return processors;

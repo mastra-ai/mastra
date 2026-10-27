@@ -155,7 +155,7 @@ function createRuntime(storage: MastraCompositeStore) {
     description: 'Product architecture, repository work, and operational knowledge for Mastra.',
     storage,
     structure,
-    tools: { read: true, write: true },
+    tools: true,
   });
   const curator = deterministicObservationModel(true);
   const memory = new Memory({ storage });

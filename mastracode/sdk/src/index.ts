@@ -877,8 +877,8 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
               id: 'mastracode',
               name: 'MastraCode Knowledge',
               storage,
-              tools: { read: true, write: true },
-              pins: true,
+              tools: true,
+              pinnedContext: true,
             })
           : undefined));
   const knowledgeKey = configuredKnowledgeKey ?? 'default';

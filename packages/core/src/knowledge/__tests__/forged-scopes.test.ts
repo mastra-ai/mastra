@@ -77,7 +77,7 @@ async function nodesAt(knowledge: Knowledge, scope: string[]) {
 
 describe('Knowledge tools with tampered or forged run scopes', () => {
   it('refuses a read-only tag after code inside the run deletes the access map', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-delete' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-delete' }), tools: true });
     const agent = new Agent({
       id: 'member',
       name: 'member',
@@ -104,7 +104,7 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
   });
 
   it('gives knowledge tools nothing when code inside the run writes its own mastra__scopes', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-forge' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-forge' }), tools: true });
     const agent = new Agent({
       id: 'no-memory',
       name: 'no-memory',
@@ -129,7 +129,7 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
 
   it('refuses request-context scopes behind a server that predates agent scopes, before any tool runs', async () => {
     class OutdatedServer extends MastraServerBase {}
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'outdated' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'outdated' }), tools: true });
     const agent = new Agent({
       id: 'agent',
       name: 'agent',

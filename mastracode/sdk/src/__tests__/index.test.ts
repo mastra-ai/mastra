@@ -999,7 +999,7 @@ describe('createMastraCode', () => {
       const on = await createMastraCode();
       const tools = Object.keys(on.knowledge!.createTools());
       expect(tools).toEqual(expect.arrayContaining(['knowledge_search', 'knowledge_record', 'knowledge_pin']));
-      expect(on.knowledge!.pinsEnabled).toBe(true);
+      expect(on.knowledge!.pinnedContextEnabled).toBe(true);
       expect(codeAgentConfig().knowledge).toBe(on.knowledge);
 
       const off = await createMastraCode({ knowledge: false });

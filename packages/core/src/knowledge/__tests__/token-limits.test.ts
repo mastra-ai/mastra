@@ -32,9 +32,9 @@ describe('Knowledge limits are counted in tokens', () => {
 
   it('defaults pins to 500 tokens and refuses a budget over 2000', () => {
     expect(DEFAULT_PINNED_MAX_TOKENS).toBe(500);
-    expect(() => new Knowledge({ pins: { maxTokens: MAX_PINNED_MAX_TOKENS + 1 } })).toThrow(
-      'pins.maxTokens is at most 2000',
+    expect(() => new Knowledge({ pinnedContext: { maxTokens: MAX_PINNED_MAX_TOKENS + 1 } })).toThrow(
+      'pinnedContext.maxTokens is at most 2000',
     );
-    expect(new Knowledge({ pins: { maxTokens: MAX_PINNED_MAX_TOKENS } }).pinsEnabled).toBe(true);
+    expect(new Knowledge({ pinnedContext: { maxTokens: MAX_PINNED_MAX_TOKENS } }).pinnedContextEnabled).toBe(true);
   });
 });
