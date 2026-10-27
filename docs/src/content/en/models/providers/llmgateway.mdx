@@ -2170,18 +2170,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.88
   },
   {
-    "model": "llmgateway/qwen3-vl-235b-a22b-thinking",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 131072,
-    "maxOutput": 8192,
-    "inputCost": 0.98,
-    "outputCost": 3.95
-  },
-  {
     "model": "llmgateway/qwen3-vl-30b-a3b-instruct",
     "imageInput": true,
     "audioInput": false,
@@ -2384,6 +2372,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1000000,
     "inputCost": 1.54,
     "outputCost": 4.631
+  },
+  {
+    "model": "llmgateway/qwen3.8-omni-flash",
+    "imageInput": true,
+    "audioInput": true,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 983616,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.47
   },
   {
     "model": "llmgateway/qwen35-397b-a17b",
