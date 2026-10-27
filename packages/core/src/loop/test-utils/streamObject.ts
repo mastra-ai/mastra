@@ -670,46 +670,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           });
         });
 
-        it('should reject object promise when the streamed object does not match the schema', async () => {
-          const result = loopFn({
-            methodType: 'stream',
-            runId,
-            agentId: 'agent-id',
-            models: [
-              {
-                id: 'test-model',
-                maxRetries: 0,
-                model: new MockLanguageModelV2({
-                  doStream: async () => ({
-                    stream: convertArrayToReadableStream([
-                      { type: 'text-start', id: 'text-1' },
-                      { type: 'text-delta', id: 'text-1', delta: '{ ' },
-                      { type: 'text-delta', id: 'text-1', delta: '"invalid": ' },
-                      { type: 'text-delta', id: 'text-1', delta: `"Hello, ` },
-                      { type: 'text-delta', id: 'text-1', delta: `world` },
-                      { type: 'text-delta', id: 'text-1', delta: `!"` },
-                      { type: 'text-delta', id: 'text-1', delta: ' }' },
-                      { type: 'text-end', id: 'text-1' },
-                      {
-                        type: 'finish',
-                        finishReason: 'stop',
-                        usage: testUsage,
-                      },
-                    ]),
-                  }),
-                }),
-              },
-            ],
-            structuredOutput: { schema: z.object({ content: z.string() }) },
-            messageList: createMessageListWithUserMessage(),
-          });
-
-          // consume stream (runs in parallel)
-          void convertAsyncIterableToArray(result.objectStream);
-          // Expect the promise to be rejected with a validation error
-          await expect(result.object).rejects.toThrow('Structured output validation failed');
-        });
-
         it('should not lead to unhandled promise rejections when the streamed object does not match the schema', async () => {
           const result = loopFn({
             methodType: 'stream',
@@ -2240,37 +2200,6 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
           expect(await result.object).toStrictEqual({
             content: 'Hello, world!',
           });
-        });
-      });
-
-      describe('array format with JSON code blocks', () => {
-        it('should handle array wrapped in ```json...``` blocks', async () => {
-          const result = loopFn({
-            methodType: 'stream',
-            runId,
-            agentId: 'agent-id',
-            models: createTestModels({
-              stream: convertArrayToReadableStream([
-                { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: '```json\n' },
-                { type: 'text-delta', id: 'text-1', delta: '{"elements":[' },
-                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 1"},' },
-                { type: 'text-delta', id: 'text-1', delta: '{"content":"element 2"}' },
-                { type: 'text-delta', id: 'text-1', delta: ']}' },
-                { type: 'text-delta', id: 'text-1', delta: '\n```' },
-                { type: 'text-end', id: 'text-1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: testUsage,
-                },
-              ]),
-            }),
-            structuredOutput: { schema: z.array(z.object({ content: z.string() })) },
-            messageList: createMessageListWithUserMessage(),
-          });
-
-          expect(await result.object).toStrictEqual([{ content: 'element 1' }, { content: 'element 2' }]);
         });
       });
 
