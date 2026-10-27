@@ -14,7 +14,7 @@ Under the composer, in the same tray, illustrated cards show what waits on your 
 - **Not yet accepted**, _Help me decide_: cards triage classified, other than bugs, that nobody accepted yet. Suggests Accept and plan, Accept and build, or Close for each, and changes nothing until you say so.
 - **Untriaged in Intake**, _Triage the 5 newest_: Work board Intake cards triage has not classified.
 - **Bugs with no plan**, _Plan a fix for one_: plans a fix for the highest-impact bug nobody has planned or started.
-- **Agents backlog**, _Group by root cause_: the area label with the most cards nobody has started, grouped by root cause with duplicates flagged and a plan for the biggest group. Labels such as `p: high` and GitHub's default labels such as `enhancement` are not areas.
+- **Agents backlog**, _Group by root cause_: the area label with the most cards nobody has started, grouped by root cause with duplicates flagged and a plan for the biggest group. It reads the whole area, since five cards show no pattern, and changes nothing until you say so. Labels such as `p: high` and GitHub's default labels such as `enhancement` are not areas.
 - **Stale pull requests**, _Flag what to close_: pull requests waiting over a month, each with a close-or-keep suggestion, and nothing closed without your go.
 
 Pointing at or focusing a card shows its prompt in the composer at the composer's current size, so nothing moves under the pointer, and moving away brings your own draft back. Clicking starts the session with that prompt. The Factory name and branch line under the composer is gone.

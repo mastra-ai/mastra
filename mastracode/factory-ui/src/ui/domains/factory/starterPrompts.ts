@@ -48,7 +48,7 @@ const PROMPTS: Record<StarterKind, string> = {
   triage: `Triage the ${BATCH} newest untriaged cards in Intake on the Work board. Accept the clear ones and flag the rest for me.`,
   bug: 'Of the open bugs on the Work board that nobody has planned yet, pick the one with the biggest impact and draft a plan to fix it.',
   sweep:
-    'Find the area label with the most open cards on the Work board that nobody has started yet. Group those cards by root cause, point out duplicates, and draft a plan for the biggest group.',
+    'Find the area label with the most open cards on the Work board that nobody has started yet. Group those cards by root cause, point out duplicates, and draft a plan for the biggest group. Change nothing until I say so.',
   stale: `Go through the ${BATCH} oldest pull requests that have waited in Intake on the Review board for over a month. For each one, suggest closing it or keeping it open, and say why. Close nothing until I say so.`,
 };
 
