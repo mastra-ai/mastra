@@ -35,6 +35,7 @@ import {
   emitMcpServerEventBodySchema,
   emitMcpServerEventResponseSchema,
   mcpServerTaskPathParams,
+  DEFAULT_MCP_SERVER_TASKS_LIMIT,
   listMcpServerTasksQuerySchema,
   listMcpServerTasksResponseSchema,
   answerMcpServerTaskBodySchema,
@@ -686,15 +687,18 @@ export const LIST_MCP_SERVER_TASKS_ROUTE = createRoute({
   }: ServerContext & { serverId: string; limit?: number }) => {
     const server = getEventsServer(mastra, serverId);
     const info = typeof server.getTasksInfo === 'function' ? server.getTasksInfo() : undefined;
-    if (!info?.enabled) return { required: false, surfaces: [], tasks: [] };
-    const base = { required: info.required, surfaces: info.surfaces };
+    if (!info?.enabled) return { surfaces: [], tasks: [], hasMore: false };
+    const base = { surfaces: info.surfaces, hasMore: false };
     if (getContextResourceId(requestContext) !== undefined) {
       return { ...base, unavailable: 'resource_scoped' as const, tasks: [] };
     }
     const inspector = getTasksInspector(server, requestContext);
     if (!inspector) return { ...base, unavailable: 'not_listable' as const, tasks: [] };
+    const max = limit ?? DEFAULT_MCP_SERVER_TASKS_LIMIT;
     try {
-      return { ...base, tasks: (await inspector.list({ limit })).tasks };
+      // One extra task tells whether there are more than `max`.
+      const { tasks } = await inspector.list({ limit: max + 1 });
+      return { ...base, tasks: tasks.slice(0, max), hasMore: tasks.length > max };
     } catch (error) {
       throw toTasksHttpError(error, mastra, `list ${serverId}`);
     }

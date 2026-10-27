@@ -10,7 +10,11 @@ import type {
 import { MASTRA_RESOURCE_ID_KEY } from '@mastra/core/request-context';
 import { describe, expect, it, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import { answerMcpServerTaskBodySchema, listMcpServerTasksResponseSchema } from '../schemas/mcp';
+import {
+  answerMcpServerTaskBodySchema,
+  listMcpServerTasksQuerySchema,
+  listMcpServerTasksResponseSchema,
+} from '../schemas/mcp';
 import {
   ANSWER_MCP_SERVER_TASK_ROUTE,
   CANCEL_MCP_SERVER_TASK_ROUTE,
@@ -28,9 +32,8 @@ const info: ServerInfo = {
 
 const tasksInfo: MCPServerTasksInfo = {
   enabled: true,
-  required: false,
   listable: true,
-  surfaces: [{ name: 'slow_report', type: 'tool', mode: 'always', recover: false, ttlMs: 60_000 }],
+  surfaces: [{ name: 'slow_report', type: 'tool', mode: 'always', recover: false, required: true, ttlMs: 60_000 }],
 };
 
 const waiting: MCPServerTaskSummary = {
@@ -117,12 +120,30 @@ describe('MCP task routes', () => {
 
       const result = await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks', limit: 10 });
 
-      expect(inspector.list).toHaveBeenCalledWith({ limit: 10 });
+      expect(inspector.list).toHaveBeenCalledWith({ limit: 11 });
       expect(listMcpServerTasksResponseSchema.parse(result)).toEqual({
-        required: false,
         surfaces: tasksInfo.surfaces,
         tasks: [waiting],
+        hasMore: false,
       });
+    });
+
+    it('lists the 50 most recent tasks by default and says when there are more', async () => {
+      const inspector = fakeInspector();
+      const many = Array.from({ length: 51 }, (_, index) => ({ ...waiting, taskKey: `key-${index}` }));
+      inspector.list.mockResolvedValueOnce({ tasks: many });
+      const { mastra } = makeMastra(makeServer(inspector));
+
+      const result = await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks' });
+
+      expect(inspector.list).toHaveBeenCalledWith({ limit: 51 });
+      expect(result.tasks.map(task => task.taskKey)).toEqual(many.slice(0, 50).map(task => task.taskKey));
+      expect(result.hasMore).toBe(true);
+    });
+
+    it('rejects a limit above 200', () => {
+      expect(listMcpServerTasksQuerySchema.safeParse({ limit: '201' }).success).toBe(false);
+      expect(listMcpServerTasksQuerySchema.parse({ limit: '200' })).toEqual({ limit: 200 });
     });
 
     it('lists nothing for a resource-scoped caller, without asking the store', async () => {
@@ -133,10 +154,10 @@ describe('MCP task routes', () => {
       const result = await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra, 'user-1'), serverId: 'tasks' });
 
       expect(result).toEqual({
-        required: false,
         surfaces: tasksInfo.surfaces,
         unavailable: 'resource_scoped',
         tasks: [],
+        hasMore: false,
       });
       expect(inspector.list).not.toHaveBeenCalled();
       expect(server.getTasksInspector).not.toHaveBeenCalled();
@@ -159,9 +180,9 @@ describe('MCP task routes', () => {
     it('answers empty for a server without tasks and 404 for an unknown server', async () => {
       const { mastra } = makeMastra(makeServer(undefined, null));
       expect(await LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'tasks' })).toEqual({
-        required: false,
         surfaces: [],
         tasks: [],
+        hasMore: false,
       });
       expect(await status(LIST_MCP_SERVER_TASKS_ROUTE.handler({ ...context(mastra), serverId: 'nope' }))).toBe(404);
     });
@@ -179,7 +200,7 @@ describe('MCP task routes', () => {
 
     it('drops fields outside the summary shape, so a raw task id or principal never leaves', () => {
       const leaky = { ...waiting, taskId: 'raw-task-id', principal: 'client:sub:alice', token: 'alice-token' };
-      const parsed = listMcpServerTasksResponseSchema.parse({ required: false, surfaces: [], tasks: [leaky] });
+      const parsed = listMcpServerTasksResponseSchema.parse({ surfaces: [], tasks: [leaky], hasMore: false });
       expect(JSON.stringify(parsed)).not.toMatch(/raw-task-id|client:sub:alice|alice-token/);
     });
   });

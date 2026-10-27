@@ -30,8 +30,8 @@ export const reportTools: McpServerToolListResponse = {
 };
 
 export const surfaces: McpServerTaskSurface[] = [
-  { name: 'slow_report', type: 'tool', mode: 'always', recover: true, ttlMs: 60_000 },
-  { name: 'approve_and_send', type: 'tool', mode: 'auto', recover: false, ttlMs: null },
+  { name: 'slow_report', type: 'tool', mode: 'always', recover: true, required: true, ttlMs: 60_000 },
+  { name: 'approve_and_send', type: 'tool', mode: 'auto', recover: false, required: false, ttlMs: null },
 ];
 
 const createdAt = '2026-10-27T12:00:00.000Z';
@@ -88,12 +88,12 @@ export const failedTask: McpServerTask = {
 
 export const cancelledTask: McpServerTask = { ...base('cancelledKey01', 'slow_report'), status: 'cancelled' };
 
-export const taskList = (tasks: McpServerTask[]): McpServerTaskListResponse => ({
-  required: false,
+export const taskList = (tasks: McpServerTask[], hasMore = false): McpServerTaskListResponse => ({
   surfaces,
   tasks,
+  hasMore,
 });
 
 export const unavailableTaskList = (
   unavailable: NonNullable<McpServerTaskListResponse['unavailable']>,
-): McpServerTaskListResponse => ({ required: false, surfaces, unavailable, tasks: [] });
+): McpServerTaskListResponse => ({ surfaces, unavailable, tasks: [], hasMore: false });

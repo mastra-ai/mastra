@@ -487,6 +487,8 @@ export interface MCPServerTaskSurfaceInfo {
   mode: 'auto' | 'always';
   /** Whether an interrupted task is run again after a restart. */
   recover: boolean;
+  /** Clients that don't declare the tasks extension are refused for this surface. */
+  required: boolean;
   /** How long a task is kept from creation; `null` until the server closes. */
   ttlMs: number | null;
 }
@@ -497,8 +499,6 @@ export interface MCPServerTaskSurfaceInfo {
  */
 export interface MCPServerTasksInfo {
   enabled: boolean;
-  /** Clients that don't declare the tasks extension are refused. */
-  required: boolean;
   /** Whether the task store can list tasks for {@link MCPServerTasksInspector}. */
   listable: boolean;
   surfaces: MCPServerTaskSurfaceInfo[];

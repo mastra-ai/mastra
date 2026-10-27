@@ -61,6 +61,11 @@ function TaskModeBadge({ surface }: { surface: TaskSurface }) {
           <Badge size="xs" variant={surface.mode === 'always' ? 'info' : 'neutral'} emphasis="subtle">
             {surface.mode}
           </Badge>
+          {surface.required && (
+            <Badge size="xs" variant="warning" emphasis="subtle">
+              required
+            </Badge>
+          )}
           {surface.recover && (
             <Badge size="xs" variant="neutral" emphasis="subtle">
               recover
@@ -70,6 +75,7 @@ function TaskModeBadge({ surface }: { surface: TaskSurface }) {
       </TooltipTrigger>
       <TooltipContent>
         {surface.mode === 'always' ? 'Always runs as a task' : 'Runs as a task when the client asks for one'}
+        {surface.required ? '; clients without task support are refused' : ''}
         {surface.recover ? '; resumed after a server restart' : ''}
       </TooltipContent>
     </Tooltip>

@@ -2068,7 +2068,7 @@ A task id is an unguessable bearer token, and each task is bound to the caller t
 
 ### Tasks in Studio
 
-The Studio page of a server with `tasks` shows which tools run as tasks (`always` or `auto`, and `recover`), and lists the server's recent tasks across all callers: their status, open input requests, and when they expire. Opening a task shows its result or error. From there you can cancel it, or answer an elicitation it's waiting on. Cancelling and answering run the same code as `tasks/cancel` and `tasks/update`, but skip `authorize`.
+The Studio page of a server with `tasks` shows which tools run as tasks (`always` or `auto`, plus `required` and `recover`), and lists the server's 50 most recent tasks across all callers: their status, open input requests, and when they expire. Opening a task shows its result or error. From there you can cancel it, or answer an elicitation it's waiting on. Cancelling and answering run the same code as `tasks/cancel` and `tasks/update`, but skip `authorize`.
 
 - Studio identifies a task by a hash of its id, and the caller by a hash of its identity. Neither can be used over MCP, and the raw values are never sent to Studio.
 - Only Studio sessions without a resource scope get the list. MCP callers and Mastra resources are separate identities, so a session scoped to a resource gets no tasks and can't cancel or answer one.

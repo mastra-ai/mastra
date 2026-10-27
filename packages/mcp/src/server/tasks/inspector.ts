@@ -23,6 +23,7 @@ export function listTaskSurfaces(
       type: toolType === 'workflow' ? 'workflow' : toolType === 'agent' ? 'agent' : 'tool',
       mode,
       recover,
+      required: tasks.required.has(name),
       ttlMs,
     });
   }
@@ -35,7 +36,6 @@ export function tasksInfo(
 ): MCPServerTasksInfo {
   return {
     enabled: tasks.enabled,
-    required: tasks.required.size > 0,
     // The default stores (in-memory, background tasks) can list; a custom store only if it has the admin view.
     listable: !tasks.store || isMCPTaskStoreAdmin(tasks.store),
     surfaces: listTaskSurfaces(tasks, tools),

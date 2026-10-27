@@ -15089,12 +15089,12 @@ export type GetMcpServerIdTasks_QueryParams = {
 };
 
 export type GetMcpServerIdTasks_Response = {
-  required: boolean;
   surfaces: {
     name: string;
     type: 'tool' | 'workflow' | 'agent';
     mode: 'auto' | 'always';
     recover: boolean;
+    required: boolean;
     ttlMs: number | null;
   }[];
   unavailable?: ('not_listable' | 'resource_scoped') | undefined;
@@ -15131,6 +15131,7 @@ export type GetMcpServerIdTasks_Response = {
         }
       | undefined;
   }[];
+  hasMore: boolean;
 };
 
 export type GetMcpServerIdTasks_Request = Simplify<

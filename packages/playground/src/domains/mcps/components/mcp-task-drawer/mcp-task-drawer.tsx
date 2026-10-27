@@ -101,7 +101,7 @@ function McpTaskDrawerBody({ serverId, task }: { serverId: string; task: McpServ
       {!isTerminalTask(task) && (
         <div className="flex flex-col gap-2">
           <Button
-            variant="destructive"
+            variant="destructive-ghost"
             className="self-start"
             disabled={cancel.isPending}
             onClick={() => cancel.mutate(task.taskKey)}
@@ -152,6 +152,7 @@ function McpTaskInputRequest({
             onSubmit={values => respond({ action: 'accept', content: values ?? {} })}
             isSubmitLoading={answer.isPending}
             submitButtonLabel="Accept"
+            submitButtonVariant="primary"
             submitActions={
               <Button type="button" disabled={answer.isPending} onClick={() => respond({ action: 'decline' })}>
                 Decline

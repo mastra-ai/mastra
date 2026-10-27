@@ -67,15 +67,17 @@ describe('MCPDetail tasks section', () => {
   });
 
   describe('when the server runs tools as tasks', () => {
-    it('marks each task tool with its mode and recovery, and leaves other tools blank', async () => {
+    it('marks each task tool with its mode, whether it is required and recovery, and leaves other tools blank', async () => {
       useTasks();
       renderDetail();
 
       const slow = (await screen.findByText('slow_report')).closest('a');
       await waitFor(() => expect(slow?.textContent).toContain('always'));
+      expect(slow?.textContent).toContain('required');
       expect(slow?.textContent).toContain('recover');
       const approve = screen.getByText('approve_and_send').closest('a');
       expect(approve?.textContent).toContain('auto');
+      expect(approve?.textContent).not.toContain('required');
       expect(approve?.textContent).not.toContain('recover');
       const echo = screen.getByText('quick_echo').closest('a');
       expect(echo?.textContent).not.toMatch(/always|auto/);
@@ -100,6 +102,29 @@ describe('MCPDetail tasks section', () => {
           .getByRole('link', { name: /slow_report task workingK/ })
           .getAttribute('href'),
       ).toBe('/mcps/reports?task=workingKey0001');
+    });
+  });
+
+  describe('when the server has more tasks than were listed', () => {
+    it('says only the most recent are shown', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
+        http.get(TASKS_URL, () => HttpResponse.json(taskList([workingTask, completedTask], true))),
+      );
+      renderDetail();
+
+      expect(await within(await tasksSection()).findByText('Showing the 2 most recent tasks.')).not.toBeNull();
+    });
+  });
+
+  describe('when every task was listed', () => {
+    it('does not say the list was cut short', async () => {
+      useTasks(workingTask, completedTask);
+      renderDetail();
+
+      const section = await tasksSection();
+      await within(section).findByRole('link', { name: /slow_report task workingK/ });
+      expect(within(section).queryByText(/most recent tasks/)).toBeNull();
     });
   });
 

@@ -1,5 +1,4 @@
 import type { McpServerInfo } from '@mastra/client-js';
-import { Badge } from '@mastra/playground-ui/components/Badge';
 import { DataList, DataListSkeleton, useDataListKeyboard } from '@mastra/playground-ui/components/DataList';
 import { Notice } from '@mastra/playground-ui/components/Notice';
 import { RelativeTimestamp } from '@mastra/playground-ui/components/RelativeTimestamp';
@@ -28,16 +27,9 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
 
   return (
     <section aria-label="Tasks" className="flex flex-col gap-3">
-      <div className="flex items-center gap-2">
-        <Txt as="h2" variant="heading">
-          Tasks
-        </Txt>
-        {data?.required && (
-          <Badge size="sm" variant="warning" emphasis="subtle">
-            requires task-capable clients
-          </Badge>
-        )}
-      </div>
+      <Txt as="h2" variant="heading">
+        Tasks
+      </Txt>
 
       {isLoading && <DataListSkeleton columns={COLUMNS} />}
       {isError && <Notice variant="destructive">Could not load this server's tasks.</Notice>}
@@ -82,6 +74,11 @@ export function McpServerTasksList({ server }: { server: McpServerInfo }) {
             </DataList.RowLink>
           ))}
         </DataList>
+      )}
+      {data?.hasMore && (
+        <Txt variant="caption" tone="muted">
+          Showing the {tasks.length} most recent tasks.
+        </Txt>
       )}
     </section>
   );

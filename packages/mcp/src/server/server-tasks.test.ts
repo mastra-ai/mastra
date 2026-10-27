@@ -476,11 +476,10 @@ describe.each([
     });
     expect(server.getTasksInfo()).toEqual({
       enabled: true,
-      required: true,
       listable: true,
       surfaces: [
-        { name: 'echo', type: 'tool', mode: 'always', recover: false, ttlMs: 86_400_000 },
-        { name: 'quick', type: 'tool', mode: 'auto', recover: true, ttlMs: 5_000 },
+        { name: 'echo', type: 'tool', mode: 'always', recover: false, required: true, ttlMs: 86_400_000 },
+        { name: 'quick', type: 'tool', mode: 'auto', recover: true, required: false, ttlMs: 5_000 },
       ],
     });
     const listed = await rawRequest(served!.url, { method: 'tools/list', params: {}, capabilities: TASKS_CLIENT });
