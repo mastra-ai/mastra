@@ -1,7 +1,7 @@
 import assert from 'node:assert/strict';
 import { mkdir, mkdtemp, rm } from 'node:fs/promises';
-import { afterEach, describe, it } from 'node:test';
 import { join, resolve } from 'node:path';
+import { afterEach, describe, it } from 'vitest';
 import { Mastra } from '@mastra/core';
 import { LibSQLStore } from '@mastra/libsql';
 import {

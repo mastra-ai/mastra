@@ -2,8 +2,8 @@ import assert from 'node:assert/strict';
 import { execFile } from 'node:child_process';
 import { mkdir, mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { join, resolve } from 'node:path';
-import { it } from 'node:test';
 import { promisify } from 'node:util';
+import { it } from 'vitest';
 import { invoiceInput } from './helpers/invoice.ts';
 import type { InvoiceResult } from '../src/mastra/invoice/schema.ts';
 

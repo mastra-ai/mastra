@@ -20,7 +20,7 @@ Copy `.env.example` to `.env` for development and follow the [README](https://gi
 ## Making changes
 
 - Preserve the provider interface, deterministic controls, and explicit approval boundary.
-- Use `node:test` and real Mastra workflows with LibSQL persistence. Simulate external systems at their transport boundary; do not replace the workflow or storage under test.
+- Use Vitest and real Mastra workflows with LibSQL persistence. The package-local `vitest.config.ts` lets the monorepo changed-test gate discover the same deterministic suite; the live sandbox integration suite remains separate. Simulate external systems at their transport boundary; do not replace the workflow or storage under test.
 - Reproduce bugs before fixing them and verify that each regression fails without its fix.
 - Keep credentials and generated data out of commits. Put the external MCP in `.local/quickbooks-online-mcp-server` without changing its source.
 

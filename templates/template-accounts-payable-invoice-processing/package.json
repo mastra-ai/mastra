@@ -10,7 +10,7 @@
     "build": "mastra build",
     "start": "mastra start",
     "typecheck": "tsc --noEmit",
-    "test": "node --experimental-strip-types --test test/*.test.ts",
+    "test": "vitest run",
     "check": "npm run format:check && npm run lint && npm run typecheck && npm test && npm run build",
     "format": "oxfmt --config .oxfmtrc.json .",
     "format:check": "oxfmt --config .oxfmtrc.json --check .",
@@ -32,7 +32,8 @@
     "mastra": "latest",
     "oxfmt": "0.74.0",
     "oxlint": "1.89.0",
-    "typescript": "^5.9.3"
+    "typescript": "^5.9.3",
+    "vitest": "4.1.12"
   },
   "engines": {
     "node": ">=22.13.0"

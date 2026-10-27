@@ -1,5 +1,5 @@
 import assert from 'node:assert/strict';
-import { describe, it } from 'node:test';
+import { describe, it } from 'vitest';
 import type { InvoiceRuntime } from '../src/mastra/accounting/providers.ts';
 import { makeDuplicateDetection } from '../src/mastra/invoice/controls/duplicates.ts';
 import { makeInvoiceMatch } from '../src/mastra/invoice/controls/matching.ts';
