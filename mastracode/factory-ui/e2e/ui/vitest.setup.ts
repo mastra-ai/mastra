@@ -9,8 +9,9 @@ import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 // path and fails to resolve it.
 expect.extend(matchers);
 
-// Cold lazy routes include Vite's first module transform in the DOM wait.
-configure({ asyncUtilTimeout: 5_000 });
+// Match the other UI suites: cold route imports and MSW round-trips can exceed
+// Testing Library's default one-second DOM wait.
+configure({ asyncUtilTimeout: 3_000 });
 
 import { server } from './msw-server';
 
