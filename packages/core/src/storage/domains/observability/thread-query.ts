@@ -91,6 +91,8 @@ export const threadQueryRowSchema = threadQueryIdentitySchema
     startedAt: timestamp,
     endedAt: timestamp,
     timeToFirstChunkMs: z.number().nonnegative().nullable(),
+    /** Absent when the store lacks the `trace-query-time-to-first-token` feature. */
+    timeToFirstTokenMs: z.number().nonnegative().nullable().optional(),
     inputPreview: z.string().nullable(),
     outputPreview: z.string().nullable(),
     errorPreview: z.string().nullable(),

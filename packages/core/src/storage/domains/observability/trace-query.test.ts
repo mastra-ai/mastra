@@ -372,36 +372,39 @@ describe('planTraceQuery', () => {
     });
   });
 
-  it('plans numeric time to first chunk predicates on the root and on spans', () => {
-    const plan = planTraceQuery(
-      parsed({
-        ...baseRequest,
-        where: {
-          op: 'and',
-          args: [
-            { op: 'lte', left: { path: 'timeToFirstChunkMs' }, right: { literal: 0 } },
-            { op: 'notExists', path: 'timeToFirstChunkMs' },
-            { spans: { some: { op: 'gt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 800 } } } },
-          ],
-        },
-      }),
-    );
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'plans numeric %s predicates on the root and on spans',
+    field => {
+      const plan = planTraceQuery(
+        parsed({
+          ...baseRequest,
+          where: {
+            op: 'and',
+            args: [
+              { op: 'lte', left: { path: field }, right: { literal: 0 } },
+              { op: 'notExists', path: field },
+              { spans: { some: { op: 'gt', left: { path: field }, right: { literal: 800 } } } },
+            ],
+          },
+        }),
+      );
 
-    expect(plan.where).toEqual({
-      type: 'boolean',
-      operator: 'and',
-      args: [
-        { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'lte', value: 0 },
-        { type: 'presence', field: 'timeToFirstChunkMs', operator: 'notExists' },
-        {
-          type: 'relation',
-          collection: 'spans',
-          quantifier: 'some',
-          predicate: { type: 'comparison', field: 'timeToFirstChunkMs', operator: 'gt', value: 800 },
-        },
-      ],
-    });
-  });
+      expect(plan.where).toEqual({
+        type: 'boolean',
+        operator: 'and',
+        args: [
+          { type: 'comparison', field, operator: 'lte', value: 0 },
+          { type: 'presence', field, operator: 'notExists' },
+          {
+            type: 'relation',
+            collection: 'spans',
+            quantifier: 'some',
+            predicate: { type: 'comparison', field, operator: 'gt', value: 800 },
+          },
+        ],
+      });
+    },
+  );
 
   it('rejects invalid root duration literals', () => {
     const stringLiteral = validationError(() =>
@@ -1813,30 +1816,33 @@ describe('trace-query cursors', () => {
     ).toThrowError(expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_CONFLICT' }));
   });
 
-  it('round-trips numeric and empty time to first chunk cursors and rejects other kinds', () => {
-    const request = parsed({ ...baseRequest, orderBy: [{ field: 'timeToFirstChunkMs', direction: 'asc' }] });
-    const plan = planTraceQuery(request);
-    for (const sortValue of [250, 0, null]) {
-      const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue, traceId: 'trace-3' });
-      expect(planTraceQuery({ ...request, page: { limit: 100, after } })).toMatchObject({
-        cursor: { sortValue, traceId: 'trace-3' },
-      });
-    }
+  it.each(['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const)(
+    'round-trips numeric and empty %s cursors and rejects other kinds',
+    field => {
+      const request = parsed({ ...baseRequest, orderBy: [{ field, direction: 'asc' }] });
+      const plan = planTraceQuery(request);
+      for (const sortValue of [250, 0, null]) {
+        const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue, traceId: 'trace-3' });
+        expect(planTraceQuery({ ...request, page: { limit: 100, after } })).toMatchObject({
+          cursor: { sortValue, traceId: 'trace-3' },
+        });
+      }
 
-    const forged = encodeTraceQueryCursor(plan, {
-      result: 'traces',
-      sortValue: '2026-08-03T00:00:00.000Z',
-      traceId: 'trace-3',
-    });
-    expect(() => planTraceQuery({ ...request, page: { limit: 100, after: forged } })).toThrowError(
-      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
-    );
-    const startedAtPlan = planTraceQuery(parsed());
-    const numeric = encodeTraceQueryCursor(startedAtPlan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
-    expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: numeric } }))).toThrowError(
-      expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
-    );
-  });
+      const forged = encodeTraceQueryCursor(plan, {
+        result: 'traces',
+        sortValue: '2026-08-03T00:00:00.000Z',
+        traceId: 'trace-3',
+      });
+      expect(() => planTraceQuery({ ...request, page: { limit: 100, after: forged } })).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+      const startedAtPlan = planTraceQuery(parsed());
+      const numeric = encodeTraceQueryCursor(startedAtPlan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
+      expect(() => planTraceQuery(parsed({ ...baseRequest, page: { after: numeric } }))).toThrowError(
+        expect.objectContaining<Partial<TraceQueryCursorError>>({ code: 'TRACE_QUERY_CURSOR_MALFORMED' }),
+      );
+    },
+  );
 
   it('rejects a cursor after the sort field or direction changes', () => {
     const plan = planTraceQuery(
@@ -1845,6 +1851,7 @@ describe('trace-query cursors', () => {
     const after = encodeTraceQueryCursor(plan, { result: 'traces', sortValue: 250, traceId: 'trace-3' });
     for (const orderBy of [
       [{ field: 'timeToFirstChunkMs', direction: 'desc' }],
+      [{ field: 'timeToFirstTokenMs', direction: 'asc' }],
       [{ field: 'startedAt', direction: 'asc' }],
     ] as const) {
       expect(() => planTraceQuery(parsed({ ...baseRequest, orderBy: [...orderBy], page: { after } }))).toThrowError(

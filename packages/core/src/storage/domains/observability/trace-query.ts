@@ -23,18 +23,22 @@ export const TRACE_QUERY_DISCOVERY_MAX_SEARCH_LENGTH = 256;
 export const TRACE_QUERY_DEFAULT_TIMEOUT_MS = 15_000;
 export const TRACE_QUERY_MAX_TIMEOUT_MS = 300_000;
 
+const TRACE_QUERY_NUMERIC_ORDER_FIELDS = ['timeToFirstChunkMs', 'timeToFirstTokenMs'] as const;
+
 /**
- * Fields trace and span queries can sort by. `timeToFirstChunkMs` is a number that can be empty;
- * empty values sort last in both directions.
+ * Fields trace and span queries can sort by. `timeToFirstChunkMs` and `timeToFirstTokenMs` are
+ * numbers that can be empty; empty values sort last in both directions.
  */
-export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', 'timeToFirstChunkMs'] as const;
+export const TRACE_QUERY_ORDER_FIELDS = ['startedAt', 'endedAt', ...TRACE_QUERY_NUMERIC_ORDER_FIELDS] as const;
 export type TraceQueryOrderField = (typeof TRACE_QUERY_ORDER_FIELDS)[number];
-/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for `timeToFirstChunkMs`. */
+/** A keyset cursor's sort value: an ISO timestamp, or a number or `null` for a numeric order field. */
 export type TraceQuerySortValue = string | number | null;
 
 /** @internal Whether a decoded cursor's sort value has the kind its order field produces. */
 export function isTraceQuerySortValueFor(field: TraceQueryOrderField, value: TraceQuerySortValue): boolean {
-  return field === 'timeToFirstChunkMs' ? value === null || typeof value === 'number' : typeof value === 'string';
+  return (TRACE_QUERY_NUMERIC_ORDER_FIELDS as readonly string[]).includes(field)
+    ? value === null || typeof value === 'number'
+    : typeof value === 'string';
 }
 
 /** @internal Cursor sort values: ISO timestamps, or finite numbers and `null` for numeric fields. */
@@ -446,6 +450,11 @@ export const traceQueryTraceSchema = z
      * Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
      */
     timeToFirstChunkMs: z.number().nullable().optional(),
+    /**
+     * The root span's time to first token; `null` when the root has none.
+     * Absent when the store lacks the `trace-query-time-to-first-token` feature.
+     */
+    timeToFirstTokenMs: z.number().nullable().optional(),
   })
   .strict();
 
@@ -600,6 +609,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
     timeToFirstChunkMs: orderedField('number'),
+    timeToFirstTokenMs: orderedField('number'),
     entityId: stringField(false),
     entityName: stringField(true),
     entityType: stringField(true),
@@ -618,6 +628,7 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     endedAt: orderedField('timestamp'),
     durationMs: orderedField('number'),
     timeToFirstChunkMs: orderedField('number'),
+    timeToFirstTokenMs: orderedField('number'),
     status: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
@@ -666,6 +677,7 @@ export const SPAN_QUERY_FIELD_REGISTRY = {
   endedAt: orderedField('timestamp'),
   durationMs: orderedField('number'),
   timeToFirstChunkMs: orderedField('number'),
+  timeToFirstTokenMs: orderedField('number'),
   traceId: stringField(false),
   spanId: stringField(false),
   parentSpanId: stringField(false),
@@ -720,6 +732,7 @@ export const THREAD_QUERY_FIELD_REGISTRY = {
   endedAt: orderedField('timestamp'),
   traceCount: { ...orderedField('number'), operators: ['eq', 'ne', 'lt', 'lte', 'gt', 'gte'] },
   timeToFirstChunkMs: orderedField('number'),
+  timeToFirstTokenMs: orderedField('number'),
 } as const satisfies Record<string, FieldRule>;
 
 export type ThreadQueryField = keyof typeof THREAD_QUERY_FIELD_REGISTRY;
@@ -834,7 +847,7 @@ export interface TrustedTraceQueryPagePlan {
 
 interface TrustedTraceQueryTracesBasePlan extends TrustedTraceQueryBasePlan {
   result: 'traces';
-  /** Empty `timeToFirstChunkMs` values sort last in both directions; ties break by ascending `traceId`. */
+  /** Empty numeric sort values sort last in both directions; ties break by ascending `traceId`. */
   orderBy: {
     field: TraceQueryOrderField;
     direction: 'asc' | 'desc';
