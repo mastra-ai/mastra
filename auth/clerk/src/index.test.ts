@@ -820,4 +820,11 @@ describe('MastraAuthClerk', () => {
       expect(auth.getFapiUrl()).toBe('https://clerk.example.com');
     });
   });
+
+  describe('getOAuthMetadata', () => {
+    it('advertises the Clerk Frontend API as the authorization server', () => {
+      const auth = new MastraAuthClerk(mockOptions);
+      expect(auth.getOAuthMetadata()).toEqual({ authorizationServers: ['https://brief-amoeba-71.clerk.accounts.dev'] });
+    });
+  });
 });

@@ -128,3 +128,73 @@ describe('CompositeAuth.consumePendingResponseHeaders', () => {
     expect(composite.consumePendingResponseHeaders(req)).toEqual({ 'X-Test': '1' });
   });
 });
+
+class TokenAuth extends MastraAuthProvider<{ token: string; aud?: string }> {
+  constructor(
+    private readonly accepts: string,
+    private readonly hooks: { servers?: string[]; scopes?: string[]; audience?: boolean } = {},
+  ) {
+    super({});
+    if (hooks.audience) {
+      this.verifyAudience = (user, audience) => user.aud === audience;
+    }
+    if (hooks.servers || hooks.scopes) {
+      this.getOAuthMetadata = () => ({ authorizationServers: hooks.servers, scopesSupported: hooks.scopes });
+    }
+  }
+
+  async authenticateToken(token: string) {
+    return token.startsWith(this.accepts) ? { token, aud: token.split('|')[1] } : null;
+  }
+
+  async authorizeUser() {
+    return true;
+  }
+
+  mapUserToResourceId(user: { token: string }) {
+    return user.token;
+  }
+}
+
+describe('CompositeAuth OAuth hooks', () => {
+  const req = {} as HonoRequest;
+
+  it('unions authorization servers and scopes across providers', () => {
+    const composite = new CompositeAuth([
+      new TokenAuth('a', { servers: ['https://as-a'], scopes: ['read'] }),
+      new TokenAuth('b'),
+      new TokenAuth('c', { servers: ['https://as-a', 'https://as-c'] }),
+    ]);
+    expect(composite.getOAuthMetadata()).toEqual({
+      authorizationServers: ['https://as-a', 'https://as-c'],
+      scopesSupported: ['read'],
+    });
+    expect(new CompositeAuth([new TokenAuth('a')]).getOAuthMetadata()).toBeUndefined();
+  });
+
+  it('delegates verifyAudience to the provider that authenticated the user', async () => {
+    const composite = new CompositeAuth([new TokenAuth('a', { audience: true }), new TokenAuth('b')]);
+
+    const fromA = await composite.authenticateToken('a|https://mcp', req);
+    expect(await composite.verifyAudience(fromA, 'https://mcp')).toBe(true);
+    const wrongAud = await composite.authenticateToken('a|https://other', req);
+    expect(await composite.verifyAudience(wrongAud, 'https://mcp')).toBe(false);
+
+    // Provider b has no hook, so audience is not enforced for its users.
+    const fromB = await composite.authenticateToken('b|https://other', req);
+    expect(await composite.verifyAudience(fromB, 'https://mcp')).toBe(true);
+  });
+
+  it('still finds the authenticating provider after resource-id mapping', async () => {
+    const composite = new CompositeAuth([new TokenAuth('a', { audience: true })]);
+    const user = await composite.authenticateToken('a|https://other', req);
+    expect(composite.mapUserToResourceId?.(user)).toBe('a|https://other');
+    expect(await composite.verifyAudience(user, 'https://mcp')).toBe(false);
+  });
+
+  it('exposes inner providers in order', () => {
+    const a = new TokenAuth('a');
+    const b = new TokenAuth('b');
+    expect(new CompositeAuth([a, b]).getProviders()).toEqual([a, b]);
+  });
+});

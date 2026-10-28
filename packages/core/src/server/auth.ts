@@ -9,7 +9,7 @@ export {
   isAuthHttpHandler,
   hasAuthInit,
 } from '@internal/auth/provider';
-export type { IMastraAuthProvider, MastraAuthProviderOptions } from '@internal/auth/provider';
+export type { IMastraAuthProvider, MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
 export type {
   AuthInitContext,
   IAuthHttpHandler,

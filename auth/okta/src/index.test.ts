@@ -307,6 +307,18 @@ describe('MastraAuthOkta', () => {
       expect(user).toBeNull();
     });
   });
+
+  describe('getOAuthMetadata', () => {
+    test('advertises the default Okta authorization server', () => {
+      const auth = new MastraAuthOkta();
+      expect(auth.getOAuthMetadata()).toEqual({ authorizationServers: ['https://dev-123456.okta.com/oauth2/default'] });
+    });
+
+    test('advertises a custom issuer', () => {
+      const auth = new MastraAuthOkta({ issuer: 'https://dev-123456.okta.com/oauth2/aus123' });
+      expect(auth.getOAuthMetadata()).toEqual({ authorizationServers: ['https://dev-123456.okta.com/oauth2/aus123'] });
+    });
+  });
 });
 
 describe('MastraRBACOkta', () => {

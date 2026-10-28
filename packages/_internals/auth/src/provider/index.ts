@@ -131,6 +131,30 @@ export interface IMastraAuthProvider<TUser = unknown> {
    * reach the browser.
    */
   consumePendingResponseHeaders?(request: MastraAuthRequest): Record<string, string> | undefined;
+  /**
+   * OAuth 2.0 Protected Resource Metadata (RFC 9728) hints, used by the built-in MCP server's
+   * `/.well-known/oauth-protected-resource` endpoint when `server.mcp.oauth` does not set them.
+   */
+  getOAuthMetadata?(): MastraAuthOAuthMetadata | undefined;
+  /**
+   * Whether the token that authenticated `user` was issued for `audience` (its `aud` claim includes it).
+   * `user` is the value returned by `authenticateToken`. Called by the built-in MCP server when
+   * `server.mcp.oauth.resource` is set.
+   */
+  verifyAudience?(user: TUser, audience: string): boolean | Promise<boolean>;
+}
+
+/** Authorization server hints for MCP clients (RFC 9728). */
+export interface MastraAuthOAuthMetadata {
+  /** Issuer URLs of the authorization servers that issue tokens accepted by this provider. */
+  authorizationServers?: string[];
+  /** OAuth scopes the provider understands. */
+  scopesSupported?: string[];
+}
+
+/** Whether a JWT `aud` claim (string or array) includes `audience`. */
+export function jwtAudienceIncludes(aud: unknown, audience: string): boolean {
+  return Array.isArray(aud) ? aud.includes(audience) : aud === audience;
 }
 
 export abstract class MastraAuthProvider<TUser = unknown> extends MastraBase implements IMastraAuthProvider<TUser> {
@@ -329,9 +353,8 @@ export class CompositeAuth
 
   private takeAuthenticatedProvider(user: unknown): IMastraAuthProvider | undefined {
     if (isObjectLike(user)) {
-      const provider = this.authenticatedProviderByObject.get(user);
-      this.authenticatedProviderByObject.delete(user);
-      return provider;
+      // Kept (WeakMap) so later per-request hooks such as verifyAudience still find the provider.
+      return this.authenticatedProviderByObject.get(user);
     }
 
     const primitiveUser = user as PrimitiveAuthUser;
@@ -429,6 +452,37 @@ export class CompositeAuth
       }
     }
     return merged;
+  }
+
+  /** The wrapped providers, in the order they are tried. */
+  getProviders(): readonly IMastraAuthProvider[] {
+    return this.providers;
+  }
+
+  /** Union of the wrapped providers' OAuth metadata. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata | undefined {
+    const authorizationServers = new Set<string>();
+    const scopesSupported = new Set<string>();
+    for (const provider of this.providers) {
+      const metadata = provider.getOAuthMetadata?.();
+      metadata?.authorizationServers?.forEach(server => authorizationServers.add(server));
+      metadata?.scopesSupported?.forEach(scope => scopesSupported.add(scope));
+    }
+    if (!authorizationServers.size && !scopesSupported.size) return undefined;
+    return {
+      ...(authorizationServers.size && { authorizationServers: [...authorizationServers] }),
+      ...(scopesSupported.size && { scopesSupported: [...scopesSupported] }),
+    };
+  }
+
+  /**
+   * Delegates to the provider that authenticated `user`. Returns true (audience not enforced)
+   * when that provider has no `verifyAudience`.
+   */
+  async verifyAudience(user: unknown, audience: string): Promise<boolean> {
+    const provider = isObjectLike(user) ? this.authenticatedProviderByObject.get(user) : undefined;
+    if (typeof provider?.verifyAudience !== 'function') return true;
+    return provider.verifyAudience(user, audience);
   }
 
   async authorizeUser(user: unknown, request: MastraAuthRequest): Promise<boolean> {

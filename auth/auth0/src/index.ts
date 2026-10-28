@@ -9,8 +9,8 @@ import type {
 } from '@internal/auth';
 import { getRequestHeader } from '@internal/auth';
 import type { EEUser } from '@internal/auth/ee';
-import type { MastraAuthProviderOptions } from '@internal/auth/provider';
-import { MastraAuthProvider } from '@internal/auth/provider';
+import type { MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
+import { MastraAuthProvider, jwtAudienceIncludes } from '@internal/auth/provider';
 import { createRemoteJWKSet, jwtVerify } from 'jose';
 import type { JWTPayload } from 'jose';
 
@@ -376,6 +376,15 @@ export class MastraAuthAuth0 extends MastraAuthProvider<Auth0User> implements IU
       console.error('Auth0 token verification failed:', err);
       return null;
     }
+  }
+
+  /** The Auth0 tenant is the authorization server for MCP clients. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata {
+    return { authorizationServers: [`https://${this.domain}/`] };
+  }
+
+  verifyAudience(user: Auth0User, audience: string): boolean {
+    return jwtAudienceIncludes(user.aud, audience);
   }
 
   async authorizeUser(user: Auth0User): Promise<boolean> {

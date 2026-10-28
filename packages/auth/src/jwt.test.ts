@@ -1,5 +1,10 @@
+import { createServer } from 'node:http';
+import type { Server } from 'node:http';
+import type { AddressInfo } from 'node:net';
+
+import { SignJWT, exportJWK, generateKeyPair } from 'jose';
 import jwt from 'jsonwebtoken';
-import { describe, it, expect } from 'vitest';
+import { afterAll, beforeAll, describe, it, expect } from 'vitest';
 
 import { MastraJwtAuth } from './jwt';
 
@@ -191,6 +196,102 @@ describe('MastraJwtAuth', () => {
       const payload = await auth.authenticateToken(token);
 
       expect(payload.sub).toBe('user-123');
+    });
+
+    it('enforces the issuer when configured', async () => {
+      const auth = new MastraJwtAuth({ secret: SECRET, issuer: 'https://issuer.example' });
+
+      await expect(
+        auth.authenticateToken(jwt.sign({ sub: 'u', iss: 'https://issuer.example' }, SECRET)),
+      ).resolves.toEqual(expect.objectContaining({ sub: 'u' }));
+      await expect(
+        auth.authenticateToken(jwt.sign({ sub: 'u', iss: 'https://other.example' }, SECRET)),
+      ).rejects.toThrow(/issuer/);
+      await expect(auth.authenticateToken(signToken({ sub: 'u' }))).rejects.toThrow(/issuer/);
+    });
+  });
+
+  describe('construction', () => {
+    it('rejects both a secret and a jwksUri', () => {
+      expect(() => new MastraJwtAuth({ secret: SECRET, jwksUri: 'http://localhost/jwks' })).toThrow(/either/);
+    });
+  });
+
+  describe('JWKS', () => {
+    const ISSUER = 'https://issuer.example';
+    let server: Server;
+    let jwksUri: string;
+    let privateKey: CryptoKey;
+    let otherPrivateKey: CryptoKey;
+
+    beforeAll(async () => {
+      const pair = await generateKeyPair('RS256');
+      privateKey = pair.privateKey;
+      otherPrivateKey = (await generateKeyPair('RS256')).privateKey;
+      const jwk = { ...(await exportJWK(pair.publicKey)), kid: 'key-1', alg: 'RS256', use: 'sig' };
+      server = createServer((_req, res) => {
+        res.setHeader('content-type', 'application/json');
+        res.end(JSON.stringify({ keys: [jwk] }));
+      });
+      await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+      jwksUri = `http://127.0.0.1:${(server.address() as AddressInfo).port}/.well-known/jwks.json`;
+    });
+
+    afterAll(async () => {
+      await new Promise(resolve => server.close(resolve));
+    });
+
+    function sign(claims: Record<string, unknown>, key: CryptoKey = privateKey) {
+      return new SignJWT(claims)
+        .setProtectedHeader({ alg: 'RS256', kid: 'key-1' })
+        .setIssuer(ISSUER)
+        .setIssuedAt()
+        .setExpirationTime('5m')
+        .sign(key);
+    }
+
+    it('verifies tokens signed by a key in the JWKS', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const payload = await auth.authenticateToken(await sign({ sub: 'user-1' }));
+      expect(payload).toEqual(expect.objectContaining({ sub: 'user-1', iss: ISSUER }));
+    });
+
+    it('rejects tokens signed by another key', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      await expect(auth.authenticateToken(await sign({ sub: 'user-1' }, otherPrivateKey))).rejects.toThrow(/signature/);
+    });
+
+    it('rejects HMAC tokens signed with the public key material (algorithm confusion)', async () => {
+      const auth = new MastraJwtAuth({ jwksUri });
+      const forged = jwt.sign({ sub: 'attacker' }, 'anything', { header: { alg: 'HS256', kid: 'key-1' } });
+      await expect(auth.authenticateToken(forged)).rejects.toThrow();
+    });
+
+    it('rejects tokens from another issuer', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: 'https://someone-else.example' });
+      await expect(auth.authenticateToken(await sign({ sub: 'user-1' }))).rejects.toThrow(/issuer/);
+    });
+
+    it('advertises the issuer as authorization server', () => {
+      expect(new MastraJwtAuth({ jwksUri, issuer: ISSUER }).getOAuthMetadata()).toEqual({
+        authorizationServers: [ISSUER],
+      });
+      expect(new MastraJwtAuth({ jwksUri }).getOAuthMetadata()).toBeUndefined();
+    });
+
+    it('checks the token audience for string and array aud claims', async () => {
+      const auth = new MastraJwtAuth({ jwksUri, issuer: ISSUER });
+      const resource = 'https://api.example.com/api/mcp';
+
+      const single = await auth.authenticateToken(await sign({ sub: 'u', aud: resource }));
+      const multiple = await auth.authenticateToken(await sign({ sub: 'u', aud: ['https://other', resource] }));
+      const other = await auth.authenticateToken(await sign({ sub: 'u', aud: 'https://other' }));
+      const none = await auth.authenticateToken(await sign({ sub: 'u' }));
+
+      expect(auth.verifyAudience(single, resource)).toBe(true);
+      expect(auth.verifyAudience(multiple, resource)).toBe(true);
+      expect(auth.verifyAudience(other, resource)).toBe(false);
+      expect(auth.verifyAudience(none, resource)).toBe(false);
     });
   });
 });

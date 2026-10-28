@@ -1,5 +1,5 @@
 import type { MastraUser } from '@internal/auth';
-import type { MastraAuthProviderOptions } from '@internal/auth/provider';
+import type { MastraAuthOAuthMetadata, MastraAuthProviderOptions } from '@internal/auth/provider';
 import { MastraAuthProvider, normalizeMastraUser } from '@internal/auth/provider';
 
 import { createClient } from '@supabase/supabase-js';
@@ -12,6 +12,7 @@ interface MastraAuthSupabaseOptions extends MastraAuthProviderOptions<User> {
 
 export class MastraAuthSupabase extends MastraAuthProvider<User> {
   protected supabase: SupabaseClient;
+  protected url: string;
 
   constructor(options?: MastraAuthSupabaseOptions) {
     super({ name: options?.name ?? 'supabase' });
@@ -25,9 +26,15 @@ export class MastraAuthSupabase extends MastraAuthProvider<User> {
       );
     }
 
+    this.url = supabaseUrl.replace(/\/+$/, '');
     this.supabase = createClient(supabaseUrl, supabaseAnonKey);
 
     this.registerOptions(options);
+  }
+
+  /** Supabase Auth (`<project>/auth/v1`) is the authorization server for MCP clients. */
+  getOAuthMetadata(): MastraAuthOAuthMetadata {
+    return { authorizationServers: [`${this.url}/auth/v1`] };
   }
 
   async authenticateToken(token: string): Promise<User | null> {

@@ -626,4 +626,20 @@ describe('MastraAuthAuth0', () => {
       expect(user).toEqual({ sub: 'auth0|jwt-user' });
     });
   });
+
+  describe('OAuth protected-resource hooks', () => {
+    it('advertises the Auth0 tenant as the authorization server', () => {
+      const auth0 = new MastraAuthAuth0(mockOptions);
+      expect(auth0.getOAuthMetadata()).toEqual({ authorizationServers: ['https://test-tenant.auth0.com/'] });
+    });
+
+    it('verifies string and array audiences', () => {
+      const auth0 = new MastraAuthAuth0(mockOptions);
+      const resource = 'https://api.example.com/api/mcp';
+      expect(auth0.verifyAudience({ aud: resource }, resource)).toBe(true);
+      expect(auth0.verifyAudience({ aud: ['https://test-api', resource] }, resource)).toBe(true);
+      expect(auth0.verifyAudience({ aud: 'https://test-api' }, resource)).toBe(false);
+      expect(auth0.verifyAudience({}, resource)).toBe(false);
+    });
+  });
 });
