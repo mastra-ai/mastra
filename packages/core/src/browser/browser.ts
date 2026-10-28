@@ -769,7 +769,9 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
   async close(): Promise<void> {
-    this.pendingCookies.clear();
+    for (const key of new Set([...this.pendingCookies.keys(), ...this.cookieQueueUpdates.keys()])) {
+      this.dropQueuedCookies(key);
+    }
     // Already closed
     if (this.status === 'closed') {
       return;
@@ -1419,7 +1421,7 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async closeThreadSession(threadId: string): Promise<void> {
     // A shared browser outlives any one thread, so its queue stays.
-    if (this.getScope() === 'thread') this.pendingCookies.delete(threadId);
+    if (this.getScope() === 'thread') this.dropQueuedCookies(threadId);
     if (!this.threadManager) {
       return;
     }
@@ -1549,9 +1551,16 @@ export abstract class MastraBrowser extends MastraBase {
   /** Cookies waiting for a browser to open, by thread (one shared entry with `scope: 'shared'`). */
   private readonly pendingCookies = new Map<string, BrowserCookie[]>();
 
-  /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
   /** The last queued cookie update per queue key, so updates run one at a time. */
   private readonly cookieQueueUpdates = new Map<string, Promise<unknown>>();
+
+  /** Bumped when a queue is dropped, so an update already under way can't queue its cookies again. */
+  private readonly cookieQueueGenerations = new Map<string, number>();
+
+  private dropQueuedCookies(key: string): void {
+    this.pendingCookies.delete(key);
+    this.cookieQueueGenerations.set(key, (this.cookieQueueGenerations.get(key) ?? 0) + 1);
+  }
 
   /** Run cookie updates for one queue key in call order, so overlapping calls don't lose cookies. */
   private updateCookieQueue<T>(key: string, update: () => Promise<T>): Promise<T> {
@@ -1564,6 +1573,7 @@ export abstract class MastraBrowser extends MastraBase {
     return result;
   }
 
+  /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
   private cookieQueueKey(threadId: string): string {
     return this.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
   }
@@ -1586,14 +1596,18 @@ export abstract class MastraBrowser extends MastraBase {
     }
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const key = this.cookieQueueKey(effectiveThreadId);
+    const generation = this.cookieQueueGenerations.get(key) ?? 0;
+    const dropped = () => (this.cookieQueueGenerations.get(key) ?? 0) !== generation;
     await this.updateCookieQueue(key, async () => {
+      // The thread or browser closed after this call: its cookies go with it.
+      if (dropped()) return;
       // Cookies still waiting go first, so an older value never overwrites a newer one.
       const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
       if (await this.addCookiesToOpenBrowser(all, effectiveThreadId)) {
         this.pendingCookies.delete(key);
         return;
       }
-      this.pendingCookies.set(key, all);
+      if (!dropped()) this.pendingCookies.set(key, all);
     });
   }
 

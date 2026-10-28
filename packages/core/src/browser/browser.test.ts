@@ -215,6 +215,20 @@ describe('MastraBrowser.setCookies', () => {
     expect(browser.added).toEqual([]);
   });
 
+  it.each(['closeThreadSession', 'close'] as const)(
+    "doesn't bring back cookies from a setCookies call still running when %s is called",
+    async method => {
+      const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+
+      const pending = browser.setCookies([{ name: 'secret', value: 'v', url: 'https://example.com' }], 'thread-1');
+      await (method === 'close' ? browser.close() : browser.closeThreadSession('thread-1'));
+      await pending;
+      await browser.openThread('thread-1');
+
+      expect(browser.added).toEqual([]);
+    },
+  );
+
   it('drops cookies queued for a thread that closes before its browser opens', async () => {
     const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
     await browser.setCookies([{ name: 'kept', value: 'v', url: 'https://example.com' }], 'thread-1');

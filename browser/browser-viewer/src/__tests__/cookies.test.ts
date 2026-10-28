@@ -114,4 +114,21 @@ describe.skipIf(!canLaunchBrowser)('BrowserViewer.setCookies', () => {
       await viewer.close();
     }
   }, 60_000);
+
+  it("doesn't tell ready listeners the browser is ready when its cookies can't be added", async () => {
+    for (const scope of ['shared', 'thread'] as const) {
+      viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope });
+      // Passes setCookies' own check, but the browser rejects it.
+      await viewer.setCookies([{ name: 'bad', value: 'v', url: 'not-a-url' }], 'thread-1');
+      viewer.setCurrentThread('thread-1');
+      let ready = 0;
+      viewer.onBrowserReady(() => ready++, scope === 'thread' ? 'thread-1' : undefined);
+
+      await expect(viewer.launch('thread-1')).rejects.toThrow();
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(ready).toBe(0);
+      await viewer.close();
+    }
+  }, 60_000);
 });

@@ -88,9 +88,11 @@ export class BrowserViewer extends MastraBrowser {
       onSessionCreated: session => {
         // Add waiting cookies first, so a ready listener that navigates is already signed in.
         // Then notify listeners so screencast can start for this thread.
-        void this.addPendingCookies(session.threadId)
-          .catch(error => this.logger?.warn?.(`Couldn't add cookies for thread ${session.threadId}: ${error}`))
-          .then(() => this.notifyBrowserReady(session.threadId));
+        // If they can't be added, launch() rejects with the error and listeners aren't told it's ready.
+        void this.addPendingCookies(session.threadId).then(
+          () => this.notifyBrowserReady(session.threadId),
+          error => this.logger?.warn?.(`Couldn't add cookies for thread ${session.threadId}: ${error}`),
+        );
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {
         this.logger?.debug?.(`Browser created for thread ${threadId}`);
