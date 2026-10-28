@@ -114,7 +114,12 @@ describe('Anthropic signed thinking round-trip', () => {
         throw new Error('abort');
       }) as any,
     });
-    expect(getAssistantReasoningParts(result?.prompt ?? prompt)).toHaveLength(1);
+    expect(getAssistantReasoningParts(result?.prompt ?? prompt)).toEqual([
+      expect.objectContaining({
+        text: '',
+        providerOptions: { anthropic: { signature: 'sig-without-thinking-text' } },
+      }),
+    ]);
 
     const mutated = anthropicStripEmptySignedReasoningContent.fix!(list.get.all.db());
     expect(mutated).toBe(true);
