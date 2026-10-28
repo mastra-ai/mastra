@@ -8,6 +8,7 @@ import {
 import type { CreateSpanRecord, ObservabilityStorage, ThreadQueryRequest, ThreadQueryRow } from '@mastra/core/storage';
 import { beforeEach, describe, expect, it } from 'vitest';
 import { makeSpan } from './data';
+import { TIMING_FIELDS, timingValue } from './timing-fields';
 
 /** Public storage conformance shared by ClickHouse, PostgreSQL and DuckDB. */
 export function createThreadQueryTests(
@@ -262,52 +263,60 @@ export function createThreadQueryTests(
       });
     });
 
-    it('filters first-trace typed values and does not borrow TTFC from a later trace', async () => {
-      await getStorage().batchCreateSpans({
-        records: [
-          root('a', 15, { source: 'api', requestId: 'request-first', timeToFirstChunkMs: 125 }),
-          root('b', 16, { source: 'studio', requestId: 'request-last', timeToFirstChunkMs: 900 }),
-        ],
-      });
-      const result = await query({
-        where: {
-          op: 'and',
-          args: [
-            { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'api' } },
-            { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-first' } },
-            { op: 'lt', left: { path: 'timeToFirstChunkMs' }, right: { literal: 200 } },
-            { op: 'gte', left: { path: 'startedAt' }, right: { literal: at(15).toISOString() } },
+    it.each(TIMING_FIELDS)(
+      'filters first-trace typed values and does not borrow $field from a later trace',
+      async ({ field }) => {
+        await getStorage().batchCreateSpans({
+          records: [
+            root('a', 15, { source: 'api', requestId: 'request-first', ...timingValue(field, 125) }),
+            root('b', 16, { source: 'studio', requestId: 'request-last', ...timingValue(field, 900) }),
           ],
-        },
-      });
-      expect(result.threads[0]).toMatchObject({
-        executionSource: 'api',
-        requestId: 'request-first',
-        timeToFirstChunkMs: 125,
-      });
-    });
+        });
+        const result = await query({
+          where: {
+            op: 'and',
+            args: [
+              { op: 'eq', left: { path: 'executionSource' }, right: { literal: 'api' } },
+              { op: 'eq', left: { path: 'requestId' }, right: { literal: 'request-first' } },
+              { op: 'lt', left: { path: field }, right: { literal: 200 } },
+              { op: 'gte', left: { path: 'startedAt' }, right: { literal: at(15).toISOString() } },
+            ],
+          },
+        });
+        expect(result.threads[0]).toMatchObject({
+          executionSource: 'api',
+          requestId: 'request-first',
+          [field]: 125,
+        });
+      },
+    );
 
-    it('returns null time to first chunk for a non-agent first trace and no model or provider', async () => {
-      await getStorage().batchCreateSpans({
-        records: [
-          root('a', 15, { spanType: SpanType.WORKFLOW_RUN, timeToFirstChunkMs: 100 }),
-          root('b', 16, { timeToFirstChunkMs: 200 }),
-          root('a', 15.1, {
-            spanId: 'model',
-            parentSpanId: 'root-a',
-            spanType: SpanType.MODEL_GENERATION,
-            attributes: { model: 'gpt-4o', provider: 'openai' },
-          }),
-        ],
-      });
-      // Read the store's own rows: the response schema would drop extra keys.
-      const { threads } = (await getStorage().queryThreads(planThreadRowsQuery({ timeRange: { traces: range } }))) as {
-        threads: Record<string, unknown>[];
-      };
-      expect(threads[0]).toMatchObject({ timeToFirstChunkMs: null });
-      expect(threads[0]).not.toHaveProperty('model');
-      expect(threads[0]).not.toHaveProperty('provider');
-    });
+    it.each(TIMING_FIELDS)(
+      'returns null $field for a non-agent first trace and no model or provider',
+      async ({ field }) => {
+        await getStorage().batchCreateSpans({
+          records: [
+            root('a', 15, { spanType: SpanType.WORKFLOW_RUN, ...timingValue(field, 100) }),
+            root('b', 16, timingValue(field, 200)),
+            root('a', 15.1, {
+              spanId: 'model',
+              parentSpanId: 'root-a',
+              spanType: SpanType.MODEL_GENERATION,
+              attributes: { model: 'gpt-4o', provider: 'openai' },
+            }),
+          ],
+        });
+        // Read the store's own rows: the response schema would drop extra keys.
+        const { threads } = (await getStorage().queryThreads(
+          planThreadRowsQuery({ timeRange: { traces: range } }),
+        )) as {
+          threads: Record<string, unknown>[];
+        };
+        expect(threads[0]).toMatchObject({ [field]: null });
+        expect(threads[0]).not.toHaveProperty('model');
+        expect(threads[0]).not.toHaveProperty('provider');
+      },
+    );
 
     it('hydrates the maximum page, defaults to 25 rows and keeps the continuation', async () => {
       await getStorage().batchCreateSpans({

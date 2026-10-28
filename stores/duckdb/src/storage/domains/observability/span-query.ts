@@ -8,7 +8,7 @@ import type {
 } from '@mastra/core/storage';
 import { DuckDBQueryTimeoutError } from '../../db';
 import type { DuckDBConnection } from '../../db';
-import { timeToFirstChunkSupported } from '../../features';
+import { timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
 import { payloadColumnSql } from './helpers';
 import { buildSpanQueryResponse, missingPreviewSql, readPreview } from './preview-compat';
 import { compileSpanQueryPredicate } from './trace-query';
@@ -44,6 +44,7 @@ const fields = [
   'environment',
   'executionSource',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
 ];
 
 function keys(rows: SpanQueryIdentity[], values: unknown[], alias = ''): string {
@@ -180,14 +181,19 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
   };
   const compiled = compileDuckDBSpanQuery(plan);
   const rows = await query<Selected>(compiled.sql, compiled.values);
-  const selected = rows.map(({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
-    ...row,
-    startedAt: startedAt.toISOString(),
-    endedAt: endedAt.toISOString(),
-    ...(timeToFirstChunkSupported && {
-      timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+  const selected = rows.map(
+    ({ cursorId: _cursorId, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+      ...row,
+      startedAt: startedAt.toISOString(),
+      endedAt: endedAt.toISOString(),
+      ...(timeToFirstChunkSupported && {
+        timeToFirstChunkMs: timeToFirstChunkMs == null ? null : Number(timeToFirstChunkMs),
+      }),
+      ...(timeToFirstTokenSupported && {
+        timeToFirstTokenMs: timeToFirstTokenMs == null ? null : Number(timeToFirstTokenMs),
+      }),
     }),
-  }));
+  );
   const page = rows.slice(0, plan.limit);
   if (!page.length) return buildSpanQueryResponse(plan, [], []);
   const payloadValues: unknown[] = [];

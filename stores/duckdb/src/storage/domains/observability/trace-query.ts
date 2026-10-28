@@ -21,7 +21,7 @@ import type {
 } from '@mastra/core/storage';
 
 import type { DuckDBConnection } from '../../db/index';
-import { timeToFirstChunkSupported } from '../../features';
+import { timeToFirstChunkSupported, timeToFirstTokenSupported } from '../../features';
 import { apiPreview, parseJson, payloadColumnSql, previewFromPayload } from './helpers';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { needsPreview } from './preview-compat';
@@ -61,6 +61,7 @@ const TRACE_FIELDS = {
   endedAt: { sql: 'r.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: durationMsSql('r.startedAt', 'r.endedAt'), parameterType: 'scalar' },
   timeToFirstChunkMs: { sql: 'r.timeToFirstChunkMs', parameterType: 'scalar' },
+  timeToFirstTokenMs: { sql: 'r.timeToFirstTokenMs', parameterType: 'scalar' },
   entityId: { sql: 'r.entityId', parameterType: 'scalar' },
   entityName: { sql: 'r.entityName', parameterType: 'scalar' },
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
@@ -80,6 +81,7 @@ const SPAN_FIELDS = {
   endedAt: { sql: 's.endedAt', parameterType: 'timestamp' },
   durationMs: { sql: 's.durationMs', parameterType: 'scalar' },
   timeToFirstChunkMs: { sql: 's.timeToFirstChunkMs', parameterType: 'scalar' },
+  timeToFirstTokenMs: { sql: 's.timeToFirstTokenMs', parameterType: 'scalar' },
   status: { sql: 's.status', parameterType: 'scalar' },
   error: { sql: 's.error', parameterType: 'scalar' },
   entityType: { sql: 's.entityType', parameterType: 'scalar' },
@@ -157,6 +159,7 @@ const TRACE_SELECT = `
   r.startedAt AS startedAt,
   r.endedAt AS endedAt,
   r.timeToFirstChunkMs AS timeToFirstChunkMs,
+  r.timeToFirstTokenMs AS timeToFirstTokenMs,
   r.entityName AS entityName,
   r.entityType AS entityType,
   r.environment AS environment,
@@ -413,6 +416,7 @@ const ROOT_PUSHDOWN_FIELDS = new Set<string>([
   'organizationId',
   'endedAt',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
   'entityId',
   'entityName',
   'entityType',
@@ -565,6 +569,7 @@ function compileDuckDBTraceScope(
         endedAt,
         ${durationMsSql('startedAt', 'endedAt')} AS durationMs,
         timeToFirstChunkMs,
+        timeToFirstTokenMs,
         CASE WHEN error IS NOT NULL THEN 'error' ELSE 'success' END AS status,
         error,
         entityType,
@@ -973,6 +978,9 @@ function traceFromRow(row: Record<string, unknown>) {
     status: row.status,
     ...(timeToFirstChunkSupported && {
       timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
+    ...(timeToFirstTokenSupported && {
+      timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
     }),
   };
 }

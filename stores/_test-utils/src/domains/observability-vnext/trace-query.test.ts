@@ -248,6 +248,7 @@ describe('trace-query reference evaluator', () => {
           environment: 'production',
           status: 'success',
           timeToFirstChunkMs: null,
+          timeToFirstTokenMs: null,
         },
       ],
       page: { next: null },
