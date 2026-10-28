@@ -584,7 +584,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           interruptionOutcome = {
             outcome: 'interrupted',
             stopReason: 'signal_received',
-            stopReasonContext: { reason: 'signal_received', signals: snapshotSignalOutcome(signals) },
+            stopReasonContext: { signals: snapshotSignalOutcome(signals) },
           };
           interruption.abort(new Error('Interrupted by a queued signal'));
         }
@@ -868,7 +868,12 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               const termination = agentLoopTermination({
                 tripwire:
                   cause instanceof TripWire
-                    ? { reason: cause.message, processorId: cause.processorId, metadata: cause.options?.metadata }
+                    ? {
+                        reason: cause.message,
+                        processorId: cause.processorId,
+                        retry: cause.options?.retry,
+                        metadata: cause.options?.metadata,
+                      }
                     : cause,
               });
               modelSpanTracker?.getTracingContext().currentSpan?.endTree(termination);

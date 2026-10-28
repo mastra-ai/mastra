@@ -384,7 +384,6 @@ export function createMapResultsStep<OUTPUT = undefined>({
               stopReasonContext:
                 payload.suspendReason === 'tool-call-approval'
                   ? {
-                      reason: 'approval_required',
                       toolName: payload.toolName,
                       toolCallId: payload.toolCallId,
                     }

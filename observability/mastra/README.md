@@ -73,7 +73,7 @@ Here `instance` is the configured observability instance. `end({ endTree: true, 
 
 ### Runtime mapping and typed detail
 
-Every context has a `reason` discriminator matching its reason code. Reason-specific facts are optional unless stated otherwise. Contexts may also contain `signals`, using the serialized `AgentSignalDataPart['data']` transport shape.
+Terminal results use the enclosing `stopReason` as their discriminator; `stopReasonContext` does not repeat it. Reason-specific facts are optional unless stated otherwise. All contexts may contain `tripwire` details (`processorId`, human-readable `reason`, `retry`, and serializable `metadata`) and relevant `signals` in the serialized `AgentSignalDataPart['data']` transport shape. A tripwire describes the mechanism; the outcome and stop reason describe its execution meaning.
 
 | Runtime boundary                                               | Outcome / reason                                                                 | Context facts                                                       |
 | -------------------------------------------------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------- |
@@ -85,7 +85,7 @@ Every context has a `reason` discriminator matching its reason code. Reason-spec
 | Caller cancellation                                            | `abort / caller_cancelled`                                                       | `message`                                                           |
 | Observer failure stops the primary                             | `interrupted / observer_failed`                                                  | Required nested `cause: SpanTermination`; optional `observerSpanId` |
 | Structured observer/provider context exhaustion                | `limit / context_window_exceeded`                                                | Failure facts, `model`, `contextWindow`                             |
-| Processor tripwire                                             | `blocked / guardrail`                                                            | `processorId`, `message`                                            |
+| Guardrail fires a tripwire                                             | `blocked / guardrail`                                                            | Nested `tripwire` details                                          |
 | Provider content filter                                        | `blocked / content_filter`                                                       | `provider`, `message`                                               |
 | Approval pauses execution                                      | `suspend / approval_required`                                                    | `toolCallId`, `toolName`                                            |
 | Authentication / authorization denial                          | `blocked / authentication` or `blocked / authorization`                          | Failure facts                                                       |
@@ -108,7 +108,6 @@ Signal context preserves serialized identity, timestamps, text/file contents, at
 | Default, evented `start`/`startAsync`, and Inngest workflows    | Root/step success, failure, bail, recovered retry, guardrail, cancellation, suspension/resume; typed causes propagate through nested results                                                                                                     |
 | Parallel, conditional, until/while, foreach, and waits          | Container, item/body, predicate, and wait boundaries; distinct resumed blocks; completed peers are preserved                                                                                                                                     |
 | Default executor yielding                                       | `interrupted`, preserving public `waiting` status and already completed work                                                                                                                                                                     |
-| Durable/evented agent recovery                                  | Abandoned agent/model-generation executions end as interrupted; recovered executions have separate identities                                                                                                                                    |
 
 True and false predicate results are successful evaluations. Conditional predicate failure retains its runtime error even when the existing false-branch fallback lets the workflow succeed. Thrown loop conditions retain their failure while completed bodies stay successful. Evented dynamic wait calculation errors retain their cause while its existing zero-duration fallback can recover. Unselected branches emit no execution. Public workflow statuses and existing fallback behavior remain unchanged.
 

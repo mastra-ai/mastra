@@ -24,7 +24,7 @@ export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOu
         ? {
             outcome: 'blocked',
             stopReason: 'guardrail',
-            stopReasonContext: { reason: 'guardrail', message: 'Policy rejected', processorId: 'policy' },
+            stopReasonContext: { tripwire: { reason: 'Policy rejected', processorId: 'policy' } },
           }
         : mode === 'suspend'
           ? { outcome: 'suspend', stopReason: null }
@@ -132,7 +132,7 @@ export function expectConditionalOutcome(
       expect(evaluation).toMatchObject({
         outcome: 'error',
         stopReason: 'runtime_error',
-        stopReasonContext: { reason: 'runtime_error', message: expect.stringContaining('Condition failed') },
+        stopReasonContext: { message: expect.stringContaining('Condition failed') },
       });
     else
       expect(evaluation).toMatchObject({
@@ -217,7 +217,7 @@ export function expectLoopConditionFailure(spans: AnyExportedSpan[], hasBlock = 
   for (const execution of [...blocks, ...evaluations])
     expect(execution).toMatchObject({
       ...failure,
-      stopReasonContext: { reason: 'runtime_error', message: 'Condition failed' },
+      stopReasonContext: { message: 'Condition failed' },
     });
 }
 
@@ -262,13 +262,10 @@ export function expectControlFlowSegments(
       expect(span).toMatchObject({
         stopReason: outcome === 'error' ? 'runtime_error' : outcome === 'blocked' ? 'guardrail' : null,
       });
-      if (outcome === 'error')
-        expect(span.stopReasonContext).toMatchObject({ reason: 'runtime_error', message: 'Resumed execution failed' });
+      if (outcome === 'error') expect(span.stopReasonContext).toMatchObject({ message: 'Resumed execution failed' });
       if (outcome === 'blocked')
         expect(span.stopReasonContext).toMatchObject({
-          reason: 'guardrail',
-          message: 'Policy rejected',
-          processorId: 'policy',
+          tripwire: { reason: 'Policy rejected', processorId: 'policy' },
         });
     });
   }

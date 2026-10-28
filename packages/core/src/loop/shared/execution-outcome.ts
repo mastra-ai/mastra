@@ -1,4 +1,5 @@
-import type { ObserverFailureMetadata, SpanTermination } from '../../observability/types/outcome';
+import { tripwireTermination } from '../../observability/execution-outcome';
+import type { SpanTermination, SpanTripwireContext } from '../../observability/types/outcome';
 import type { ContinuationStopCause } from './continuation-core';
 
 export { executionFailureTermination } from '../../observability/execution-outcome';
@@ -13,47 +14,19 @@ export function agentLoopTermination(input: {
   finishReason?: string;
   maxSteps?: number;
   suspension?: { approvalRequired: boolean; toolCallId?: string; toolName?: string };
-  tripwire?: { reason?: string; processorId?: string; metadata?: unknown };
+  tripwire?: SpanTripwireContext;
 }): SpanTermination {
   const { stopCause, finishReason, maxSteps, tripwire } = input;
-  if (tripwire || finishReason === 'tripwire') {
-    const metadata = tripwire?.metadata as Partial<ObserverFailureMetadata> | undefined;
-    const cause = metadata?.observerFailure?.cause;
-    // Only OM's typed failure marker changes a tripwire's execution meaning.
-    // Ordinary guardrail metadata continues to report a policy block.
-    if (cause && ['error', 'abort', 'interrupted', 'limit', 'blocked', 'unknown'].includes(cause.outcome)) {
-      return {
-        outcome: 'interrupted',
-        stopReason: 'observer_failed',
-        stopReasonContext: {
-          reason: 'observer_failed',
-          observerSpanId:
-            typeof metadata?.observerFailure?.observerSpanId === 'string'
-              ? metadata.observerFailure.observerSpanId
-              : undefined,
-          cause,
-        },
-      };
-    }
-    return {
-      outcome: 'blocked',
-      stopReason: 'guardrail',
-      stopReasonContext: {
-        reason: 'guardrail',
-        processorId: tripwire?.processorId,
-        message: tripwire?.reason,
-      },
-    };
-  }
+  if (tripwire || finishReason === 'tripwire') return tripwireTermination(tripwire);
   if (finishReason === 'suspended') {
     const suspension = input.suspension;
-    return {
-      outcome: 'suspend',
-      stopReason: suspension?.approvalRequired ? 'approval_required' : null,
-      stopReasonContext: suspension?.approvalRequired
-        ? { reason: 'approval_required', toolCallId: suspension.toolCallId, toolName: suspension.toolName }
-        : null,
-    };
+    if (suspension?.approvalRequired)
+      return {
+        outcome: 'suspend',
+        stopReason: 'approval_required',
+        stopReasonContext: { toolCallId: suspension.toolCallId, toolName: suspension.toolName },
+      };
+    return { outcome: 'suspend', stopReason: null, stopReasonContext: null };
   }
   if (finishReason === 'length') return { outcome: 'limit', stopReason: 'max_tokens' };
   if (finishReason === 'content-filter') return { outcome: 'blocked', stopReason: 'content_filter' };
@@ -62,7 +35,7 @@ export function agentLoopTermination(input: {
   if (finishReason === 'error') return { outcome: 'error', stopReason: 'runtime_error' };
   switch (stopCause) {
     case 'max_steps':
-      return { outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { reason: 'max_steps', maxSteps } };
+      return { outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps } };
     case 'stop_condition':
       return { outcome: 'abort', stopReason: 'stop_condition' };
     case 'iteration_hook':
@@ -71,7 +44,6 @@ export function agentLoopTermination(input: {
         outcome: 'abort',
         stopReason: 'iteration_hook',
         stopReasonContext: {
-          reason: 'iteration_hook',
           feedbackCompleted: stopCause === 'feedback_complete',
         },
       };

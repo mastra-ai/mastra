@@ -77,7 +77,6 @@ describeForAllEngines('signal interruption outcomes (OBS-724)', engine => {
       ).toMatchObject({
         stopReason: 'signal_received',
         stopReasonContext: {
-          reason: 'signal_received',
           signals: [
             expect.objectContaining({
               id: expect.any(String),

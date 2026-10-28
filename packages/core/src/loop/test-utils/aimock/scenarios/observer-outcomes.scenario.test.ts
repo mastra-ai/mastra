@@ -12,7 +12,10 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
 
   it.each(
     (['abort', 'continue'] as const).flatMap(failurePolicy =>
-      (['context_length_exceeded', 'content_filter'] as const).map(code => ({ failurePolicy, code })),
+      (['context_length_exceeded', 'content_filter', 'provider_failure'] as const).map(code => ({
+        failurePolicy,
+        code,
+      })),
     ),
   )('preserves observer $code with failurePolicy=$failurePolicy', async ({ failurePolicy, code }) => {
     const cause =
@@ -20,13 +23,19 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
         ? {
             outcome: 'limit',
             stopReason: 'context_window_exceeded',
-            stopReasonContext: { reason: 'context_window_exceeded', errorCode: code },
+            stopReasonContext: { errorCode: code },
           }
-        : {
-            outcome: 'blocked',
-            stopReason: 'content_filter',
-            stopReasonContext: { reason: 'content_filter', message: 'Provider rejected observer input' },
-          };
+        : code === 'content_filter'
+          ? {
+              outcome: 'blocked',
+              stopReason: 'content_filter',
+              stopReasonContext: { message: 'Provider rejected observer input' },
+            }
+          : {
+              outcome: 'error',
+              stopReason: 'model_error',
+              stopReasonContext: { message: 'Provider rejected observer input' },
+            };
     const llm = getMock();
     const events: TracingEvent[] = [];
     const observability = new Observability({
@@ -86,14 +95,15 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
       .map(event => event.exportedSpan);
     expect(ended.find(span => span.entityId === 'observational-memory-observer')).toMatchObject(cause);
     const primary = ended.findLast(span => span.entityId !== 'observational-memory-observer');
+    if (primary?.stopReasonContext) expect(primary.stopReasonContext).not.toHaveProperty('reason');
     expect(JSON.parse(JSON.stringify(primary))).toMatchObject(
       failurePolicy === 'abort'
         ? {
             outcome: 'interrupted',
             stopReason: 'observer_failed',
             stopReasonContext: {
-              reason: 'observer_failed',
               cause,
+              tripwire: { reason: expect.any(String), metadata: { observerFailure: { cause } } },
             },
           }
         : { outcome: 'success', stopReason: null },

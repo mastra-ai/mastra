@@ -1,4 +1,6 @@
-import type { SpanTermination } from './types/outcome';
+import { boundedStringify } from '../utils/safe-stringify';
+import { spanTerminationSchema } from './outcome-schema';
+import type { SpanTermination, SpanTripwireContext } from './types/outcome';
 
 /** Read a provider's structured code without inferring a cause from diagnostic text. */
 function providerFailureCode(value: Record<string | symbol, unknown>): string | undefined {
@@ -41,7 +43,6 @@ export function executionFailureTermination(
         outcome: 'limit',
         stopReason: 'timeout',
         stopReasonContext: {
-          reason: 'timeout',
           timeoutMs: value.timeoutMs,
           ...(value.timeoutType === 'step' || value.timeoutType === 'total' || value.timeoutType === 'firstChunk'
             ? { timeoutType: value.timeoutType }
@@ -62,7 +63,6 @@ export function executionFailureTermination(
         outcome: 'blocked',
         stopReason: reason,
         stopReasonContext: {
-          reason,
           message: typeof value.message === 'string' ? value.message : undefined,
           errorCode: String(value.statusCode),
         },
@@ -75,7 +75,6 @@ export function executionFailureTermination(
           outcome: 'blocked',
           stopReason: 'content_filter',
           stopReasonContext: {
-            reason: 'content_filter',
             message: typeof value.message === 'string' ? value.message : undefined,
           },
         };
@@ -84,7 +83,7 @@ export function executionFailureTermination(
         return {
           outcome: 'limit',
           stopReason: 'context_window_exceeded',
-          stopReasonContext: { reason: 'context_window_exceeded', errorCode },
+          stopReasonContext: { errorCode },
         };
       }
     }
@@ -95,11 +94,42 @@ export function executionFailureTermination(
     outcome: 'error',
     stopReason: reason,
     stopReasonContext: {
-      reason,
       message: typeof failure?.message === 'string' ? failure.message : typeof error === 'string' ? error : undefined,
       errorCode:
         typeof failure?.code === 'string' ? failure.code : typeof failure?.id === 'string' ? failure.id : undefined,
       retryable: typeof failure?.isRetryable === 'boolean' ? failure.isRetryable : undefined,
     },
   };
+}
+
+/** Preserve the mechanism while keeping an observer's failure separate from the execution it interrupts. */
+export function tripwireTermination(tripwire?: SpanTripwireContext): SpanTermination {
+  const serialized = boundedStringify(tripwire?.metadata);
+  const detail: SpanTripwireContext | undefined = tripwire && {
+    processorId: tripwire.processorId,
+    reason: tripwire.reason,
+    retry: tripwire.retry,
+    ...(serialized === undefined ? {} : { metadata: JSON.parse(serialized) }),
+  };
+  const metadata = detail?.metadata;
+  const observer =
+    metadata && typeof metadata === 'object' && 'observerFailure' in metadata ? metadata.observerFailure : undefined;
+  if (observer && typeof observer === 'object' && 'cause' in observer) {
+    const cause = spanTerminationSchema.safeParse(observer.cause);
+    if (cause.success && !['success', 'suspend'].includes(cause.data.outcome)) {
+      return {
+        outcome: 'interrupted',
+        stopReason: 'observer_failed',
+        stopReasonContext: {
+          observerSpanId:
+            'observerSpanId' in observer && typeof observer.observerSpanId === 'string'
+              ? observer.observerSpanId
+              : undefined,
+          cause: cause.data,
+          tripwire: detail,
+        },
+      };
+    }
+  }
+  return { outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { tripwire: detail } };
 }

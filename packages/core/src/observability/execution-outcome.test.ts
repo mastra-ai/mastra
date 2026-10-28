@@ -28,7 +28,7 @@ describe('execution failure cause precedence', () => {
     ).toMatchObject({
       outcome: 'limit',
       stopReason: 'context_window_exceeded',
-      stopReasonContext: { reason: 'context_window_exceeded', errorCode: 'context_length_exceeded' },
+      stopReasonContext: { errorCode: 'context_length_exceeded' },
     });
   });
 
@@ -62,7 +62,6 @@ describe('execution failure cause precedence', () => {
       outcome: 'error',
       stopReason: 'model_error',
       stopReasonContext: {
-        reason: 'model_error',
         message: 'Provider unavailable',
         errorCode: 'provider_unavailable',
         retryable: true,
@@ -76,7 +75,7 @@ describe('execution failure cause precedence', () => {
     expect(executionFailureTermination(new Error('Cyclic failure', { cause: envelope }))).toMatchObject({
       outcome: 'error',
       stopReason: 'runtime_error',
-      stopReasonContext: { reason: 'runtime_error', message: 'Cyclic failure' },
+      stopReasonContext: { message: 'Cyclic failure' },
     });
   });
 

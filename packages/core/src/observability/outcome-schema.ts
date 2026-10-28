@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import type { AgentSignalDataPart } from '../agent/signals';
-import { SPAN_OUTCOMES, SPAN_STOP_REASONS } from './types/outcome';
+import { SPAN_OUTCOMES } from './types/outcome';
 import type { SpanStopReason, SpanStopReasonContext, SpanTermination } from './types/outcome';
 
 const failure = {
@@ -40,71 +40,96 @@ const signalData: z.ZodType<AgentSignalDataPart['data']> = z.looseObject({
   providerOptions,
   transient: z.boolean().optional(),
 });
-const supplemental = { signals: z.array(signalData).optional() };
+const supplemental = {
+  signals: z.array(signalData).optional(),
+  tripwire: z
+    .object({
+      processorId: z.string().optional(),
+      reason: z.string().optional(),
+      retry: z.boolean().optional(),
+      metadata: z.json().optional(),
+    })
+    .optional(),
+};
+
+// Select cause-specific context using the envelope's stopReason, without a second discriminator.
+const contexts = {
+  max_steps: z.strictObject({
+    maxSteps: z.number().optional(),
+    completedSteps: z.number().optional(),
+    ...supplemental,
+  }),
+  max_tokens: z.strictObject({ maxTokens: z.number().optional(), ...supplemental }),
+  timeout: z.strictObject({
+    timeoutMs: z.number().optional(),
+    timeoutType: z.enum(['step', 'total', 'firstChunk']).optional(),
+    ...supplemental,
+  }),
+  runtime_error: z.strictObject({ ...failure, ...supplemental }),
+  model_error: z.strictObject({ ...failure, ...supplemental }),
+  caller_cancelled: z.strictObject({ message: z.string().optional(), ...supplemental }),
+  observer_failed: z.strictObject({
+    observerSpanId: z.string().optional(),
+    cause: z.lazy(() => spanTerminationSchema),
+    ...supplemental,
+  }),
+  context_window_exceeded: z.strictObject({
+    ...failure,
+    model: z.string().optional(),
+    contextWindow: z.number().optional(),
+    ...supplemental,
+  }),
+  guardrail: z.strictObject({ ...supplemental }),
+  content_filter: z.strictObject({ provider: z.string().optional(), message: z.string().optional(), ...supplemental }),
+  approval_required: z.strictObject({
+    toolCallId: z.string().optional(),
+    toolName: z.string().optional(),
+    ...supplemental,
+  }),
+  signal_received: z.strictObject({ ...supplemental }),
+  stop_condition: z.strictObject({ ...supplemental }),
+  iteration_hook: z.strictObject({ feedbackCompleted: z.boolean().optional(), ...supplemental }),
+  delegation_bail: z.strictObject({ ...supplemental }),
+  authentication: z.strictObject({ ...failure, ...supplemental }),
+  authorization: z.strictObject({ ...failure, ...supplemental }),
+} satisfies { [Reason in SpanStopReason]: z.ZodType<SpanStopReasonContext<Reason>> };
+
+function termination<Reason extends SpanStopReason>(stopReason: Reason) {
+  return z.object({
+    outcome: z.enum(SPAN_OUTCOMES),
+    stopReason: z.literal(stopReason),
+    stopReasonContext: (contexts[stopReason] as z.ZodType<SpanStopReasonContext<Reason>>).nullish(),
+  });
+}
 
 export const spanTerminationSchema: z.ZodType<SpanTermination> = z.lazy(() =>
-  z.object({
-    outcome: z.enum(SPAN_OUTCOMES),
-    stopReason: z.enum(Object.keys(SPAN_STOP_REASONS) as [SpanStopReason, ...SpanStopReason[]]).nullish(),
-    stopReasonContext: spanStopReasonContextSchema.nullish(),
-  }),
+  z.union([
+    termination('max_steps'),
+    termination('max_tokens'),
+    termination('timeout'),
+    termination('runtime_error'),
+    termination('model_error'),
+    termination('caller_cancelled'),
+    termination('observer_failed'),
+    termination('context_window_exceeded'),
+    termination('guardrail'),
+    termination('content_filter'),
+    termination('approval_required'),
+    termination('signal_received'),
+    termination('stop_condition'),
+    termination('iteration_hook'),
+    termination('delegation_bail'),
+    termination('authentication'),
+    termination('authorization'),
+    z.object({
+      outcome: z.enum(SPAN_OUTCOMES),
+      stopReason: z.null().optional(),
+      stopReasonContext: z.null().optional(),
+    }),
+  ]),
 );
 
-/** Shared schema for the strongly typed supplemental context, including nested observer causes. */
+/** Structural context schema for exporter records; terminal producers use the correlated envelope above. */
 export const spanStopReasonContextSchema: z.ZodType<SpanStopReasonContext> = z.lazy(() =>
-  z.discriminatedUnion('reason', [
-    z.object({
-      reason: z.literal('max_steps'),
-      maxSteps: z.number().optional(),
-      completedSteps: z.number().optional(),
-      ...supplemental,
-    }),
-    z.object({ reason: z.literal('max_tokens'), maxTokens: z.number().optional(), ...supplemental }),
-    z.object({
-      reason: z.literal('timeout'),
-      timeoutMs: z.number().optional(),
-      timeoutType: z.enum(['step', 'total', 'firstChunk']).optional(),
-      ...supplemental,
-    }),
-    z.object({ reason: z.literal('runtime_error'), ...failure, ...supplemental }),
-    z.object({ reason: z.literal('model_error'), ...failure, ...supplemental }),
-    z.object({ reason: z.literal('caller_cancelled'), message: z.string().optional(), ...supplemental }),
-    z.object({
-      reason: z.literal('observer_failed'),
-      observerSpanId: z.string().optional(),
-      cause: spanTerminationSchema,
-      ...supplemental,
-    }),
-    z.object({
-      reason: z.literal('context_window_exceeded'),
-      ...failure,
-      model: z.string().optional(),
-      contextWindow: z.number().optional(),
-      ...supplemental,
-    }),
-    z.object({
-      reason: z.literal('guardrail'),
-      processorId: z.string().optional(),
-      message: z.string().optional(),
-      ...supplemental,
-    }),
-    z.object({
-      reason: z.literal('content_filter'),
-      provider: z.string().optional(),
-      message: z.string().optional(),
-      ...supplemental,
-    }),
-    z.object({
-      reason: z.literal('approval_required'),
-      toolCallId: z.string().optional(),
-      toolName: z.string().optional(),
-      ...supplemental,
-    }),
-    z.object({ reason: z.literal('signal_received'), ...supplemental }),
-    z.object({ reason: z.literal('stop_condition'), ...supplemental }),
-    z.object({ reason: z.literal('iteration_hook'), feedbackCompleted: z.boolean().optional(), ...supplemental }),
-    z.object({ reason: z.literal('delegation_bail'), ...supplemental }),
-    z.object({ reason: z.literal('authentication'), ...failure, ...supplemental }),
-    z.object({ reason: z.literal('authorization'), ...failure, ...supplemental }),
-  ]),
+  z.union(Object.values(contexts)),
 );

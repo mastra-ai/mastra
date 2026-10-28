@@ -9,7 +9,7 @@ packages:
 
 Tracing is the observability signal that records how a request moves through agents, workflows, tools, and model calls. Mastra represents each operation as a span and groups related spans into a trace so you can inspect the full execution path.
 
-This page focuses on trace-specific concepts: span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
+This page focuses on trace-specific concepts: execution outcomes, span hierarchy, sampling, metadata, filtering, trace IDs, and third-party trace context.
 
 <Inject>
   **For AI agents:** Run `npx mastra api trace list '{"page":0,"perPage":20}'` to inspect recent traces directly instead of opening Studio or writing a temporary script. The command requires a running Mastra server with observability configured; start the local server with `npx mastra dev`, or pass the reachable server's base URL with `--url`. Run `npx mastra api trace list --schema` before constructing different filters. Install Mastra's skill with `npx skills add mastra-ai/skills --skill mastra` for complete API CLI discovery, targeting, schema, authentication, and error-handling guidance.
@@ -28,6 +28,39 @@ To get started with tracing, configure observability in your Mastra instance and
 
 - [Configuration](/docs/observability/overview#configuration): Base observability config and multiple configs, plus serverless flushing
 - [Storage](/docs/observability/overview#storage): Storage routing for traces, logs, and metrics
+
+## Execution outcomes
+
+Spans report the meaning of an individual execution through three native fields:
+
+- `outcome`: The execution result, such as `success`, `error`, `abort`, `interrupted`, `suspend`, `limit`, `blocked`, or `unknown`.
+- `stopReason`: An optional machine-readable cause, such as `max_steps`, `guardrail`, or `observer_failed`.
+- `stopReasonContext`: Optional structured details about that cause, including provider errors, tripwires, signals, or an observer's result.
+
+Instrumented executions report `outcome: null` while ongoing. An absent outcome means the producer hasn't supplied one. Completing on the last allowed step is `success`. Needing another step after exhausting the allowance is `limit / max_steps`.
+
+A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire reports `blocked / guardrail`. The tripwire's details describe how it happened:
+
+```json
+{
+  "outcome": "blocked",
+  "stopReason": "guardrail",
+  "stopReasonContext": {
+    "tripwire": {
+      "processorId": "moderation",
+      "reason": "Content violates policy",
+      "retry": false,
+      "metadata": { "rule": "policy" }
+    }
+  }
+}
+```
+
+The context doesn't repeat the machine stop reason. `tripwire.reason` is the existing human-readable explanation. Available tripwire details can accompany other causes, including observer failures.
+
+When an observer fails and stops the main execution, the observer span records its own result and the main span reports `interrupted / observer_failed`. Its context retains the observer's result in `cause`. For example, context-window exhaustion remains `limit / context_window_exceeded` on the observer. If the configured failure policy lets the main execution continue, it can still succeed. A guardrail retry that recovers also preserves the successful final outcome and the rejected attempt's separate result.
+
+`MastraStorageExporter` and `MastraPlatformExporter` carry these fields in exported span records. Persisting them requires a storage implementation that supports the fields.
 
 ## Sampling strategies
 

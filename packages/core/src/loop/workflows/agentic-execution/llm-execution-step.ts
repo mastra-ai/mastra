@@ -1324,7 +1324,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           interruptionOutcome = {
             outcome: 'interrupted',
             stopReason: 'signal_received',
-            stopReasonContext: { reason: 'signal_received', signals: snapshotSignalOutcome(signals) },
+            stopReasonContext: { signals: snapshotSignalOutcome(signals) },
           };
           interruption.abort(new Error('Interrupted by a queued signal'));
         }

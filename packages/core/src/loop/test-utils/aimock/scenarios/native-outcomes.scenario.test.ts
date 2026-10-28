@@ -45,7 +45,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended().at(-1)).toMatchObject({
       outcome: 'limit',
       stopReason: 'timeout',
-      stopReasonContext: { reason: 'timeout', timeoutMs: 2000, timeoutType: 'total' },
+      stopReasonContext: { timeoutMs: 2000, timeoutType: 'total' },
     });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
     for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
@@ -97,7 +97,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           ? {
               outcome: 'blocked',
               stopReason: 'content_filter',
-              stopReasonContext: { reason: 'content_filter', message: 'content_filter diagnostic text' },
+              stopReasonContext: { message: 'content_filter diagnostic text' },
             }
           : { outcome: 'error', stopReason: 'model_error' };
       for (const type of [
@@ -137,7 +137,8 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           id: 'step-policy',
           processInputStep: ({ abort }) =>
             abort('Step denied', {
-              metadata: { observerFailure: { cause: { outcome: 'invalid' } } },
+              retry: false,
+              metadata: { rule: 'policy', observerFailure: { cause: { outcome: 'invalid' } } },
             }),
         },
       ],
@@ -149,7 +150,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({
       outcome: 'blocked',
       stopReason: 'guardrail',
-      stopReasonContext: { reason: 'guardrail', processorId: 'step-policy', message: 'Step denied' },
+      stopReasonContext: {
+        tripwire: { processorId: 'step-policy', reason: 'Step denied', retry: false, metadata: { rule: 'policy' } },
+      },
     });
     expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);
   });
@@ -180,7 +183,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       expect(ended(type).at(-1)).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { reason: 'guardrail', processorId: 'exchange-policy', message: 'Exchange denied' },
+        stopReasonContext: { tripwire: { processorId: 'exchange-policy', reason: 'Exchange denied' } },
       });
     }
     if (stage === 'request') expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);

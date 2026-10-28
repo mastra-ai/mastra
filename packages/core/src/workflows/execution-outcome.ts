@@ -1,5 +1,5 @@
 import type { AnySpan, EndSpanOptions, ErrorSpanOptions, SpanType } from '../observability';
-import { executionFailureTermination } from '../observability/execution-outcome';
+import { executionFailureTermination, tripwireTermination } from '../observability/execution-outcome';
 import type { SpanTermination } from '../observability/types';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { StepTripwireInfo, WorkflowRunStatus } from './types';
@@ -25,15 +25,7 @@ export function workflowTermination(
       // Generic suspension does not establish that human approval was requested.
       return { outcome: 'suspend', stopReason: null, stopReasonContext: null };
     case 'tripwire':
-      return {
-        outcome: 'blocked',
-        stopReason: 'guardrail',
-        stopReasonContext: {
-          reason: 'guardrail',
-          message: result.tripwire?.reason,
-          processorId: result.tripwire?.processorId,
-        },
-      };
+      return tripwireTermination(result.tripwire);
     case 'failed':
       return executionFailureTermination(result.error);
     default:

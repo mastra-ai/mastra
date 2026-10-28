@@ -81,12 +81,12 @@ describe.each(['realtime', 'batch-with-updates', 'insert-only'] as const)('expor
         outcome: 'interrupted' as const,
         stopReason: 'observer_failed' as const,
         stopReasonContext: {
-          reason: 'observer_failed',
           observerSpanId: 'observer',
+          tripwire: { processorId: 'observer', reason: 'Observer failed', retry: false, metadata: { policy: 'abort' } },
           cause: {
             outcome: 'limit',
             stopReason: 'context_window_exceeded',
-            stopReasonContext: { reason: 'context_window_exceeded', errorCode: 'context_length_exceeded' },
+            stopReasonContext: { errorCode: 'context_length_exceeded' },
           },
           signals: [
             { id: 'signal', type: 'reactive', contents: 'Observer stopped', createdAt: '2026-10-27T12:00:00Z' },

@@ -110,7 +110,7 @@ describeForAllEngines('Output processors release held parts when the stream ends
       expect(ended(type).at(-1)).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { reason: 'guardrail', message: 'Buffered reply rejected', processorId: 'buffer-policy' },
+        stopReasonContext: { tripwire: { reason: 'Buffered reply rejected', processorId: 'buffer-policy' } },
       });
     }
     expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success', stopReason: null }]);

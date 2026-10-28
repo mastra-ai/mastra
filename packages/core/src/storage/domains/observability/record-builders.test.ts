@@ -53,12 +53,11 @@ describe('record-builders', () => {
         outcome: 'interrupted',
         stopReason: 'observer_failed',
         stopReasonContext: {
-          reason: 'observer_failed',
           observerSpanId: 'observer',
           cause: {
             outcome: 'limit',
             stopReason: 'context_window_exceeded',
-            stopReasonContext: { reason: 'context_window_exceeded', errorCode: 'context_length_exceeded' },
+            stopReasonContext: { errorCode: 'context_length_exceeded' },
           },
           signals: [
             { id: 'signal', type: 'reactive', contents: 'Observer stopped', createdAt: '2026-10-27T12:00:00Z' },

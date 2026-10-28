@@ -52,7 +52,6 @@ describe('native execution outcomes (OBS-724)', () => {
     const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(primary.snapshot())));
     expect(rebuilt.exportSpan()).toMatchObject({ outcome: null });
     const stopReasonContext = {
-      reason: 'observer_failed',
       cause: { outcome: 'limit', stopReason: 'context_window_exceeded' },
       observerSpanId: observer.id,
       signals: [
@@ -93,12 +92,12 @@ describe('native execution outcomes (OBS-724)', () => {
       error: new Error('unavailable'),
       outcome: 'error',
       stopReason: 'model_error',
-      stopReasonContext: { reason: 'model_error', retryable: true, message: 'unavailable' },
+      stopReasonContext: { retryable: true, message: 'unavailable' },
     });
     expect(events.find(e => e.type === TracingEventType.SPAN_ENDED)?.exportedSpan).toMatchObject({
       outcome: 'error',
       stopReason: 'model_error',
-      stopReasonContext: { reason: 'model_error', retryable: true },
+      stopReasonContext: { retryable: true },
     });
   });
 
@@ -148,15 +147,14 @@ describe.each(['batch-with-updates', 'realtime', 'insert-only'] as const)(
           type: SpanType.AGENT_RUN,
           outcome: null,
           stopReason: 'model_error',
-          stopReasonContext: { reason: 'model_error', retryable: true },
+          stopReasonContext: { retryable: true },
         });
         await tracing.flush();
         const context: SpanStopReasonContext = {
-          reason: 'observer_failed',
           cause: {
             outcome: 'limit',
             stopReason: 'context_window_exceeded',
-            stopReasonContext: { reason: 'context_window_exceeded', errorCode: 'context_length_exceeded' },
+            stopReasonContext: { errorCode: 'context_length_exceeded' },
           },
           signals: [
             {

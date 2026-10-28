@@ -36,7 +36,7 @@ export interface SpanStopReasonContextMap {
     cause: SpanTermination;
   };
   context_window_exceeded: SpanFailureContext & { model?: string; contextWindow?: number };
-  guardrail: { processorId?: string; message?: string };
+  guardrail: {};
   content_filter: { provider?: string; message?: string };
   approval_required: { toolCallId?: string; toolName?: string };
   stop_condition: {};
@@ -69,21 +69,35 @@ export const SPAN_STOP_REASONS = {
   authorization: true,
 } as const satisfies Record<SpanStopReason, true>;
 
-/** Discriminated, serializable supplemental detail; not a filtering dimension. */
-export type SpanStopReasonContext = {
-  [Reason in SpanStopReason]: SpanStopReasonContextMap[Reason] & {
-    reason: Reason;
-    /** Only signals that affected this execution's outcome, in their transport representation. */
-    signals?: AgentSignalDataPart['data'][];
-  };
-}[SpanStopReason];
-
-/** A terminal cause that can also be retained inside another execution's context. */
-export interface SpanTermination {
-  outcome: SpanOutcome;
-  stopReason?: SpanStopReason | null;
-  stopReasonContext?: SpanStopReasonContext | null;
+/** The tripwire mechanism, separate from the semantic cause of termination. */
+export interface SpanTripwireContext {
+  processorId?: string;
+  /** Existing human-readable tripwire explanation, not a machine stop reason. */
+  reason?: string;
+  retry?: boolean;
+  metadata?: unknown;
 }
+
+/** Supplemental details shared by all stop reasons. */
+export interface SpanStopSupplementalContext {
+  tripwire?: SpanTripwireContext;
+  /** Only signals that affected this execution, in their transport representation. */
+  signals?: AgentSignalDataPart['data'][];
+}
+
+export type SpanStopReasonContext<Reason extends SpanStopReason = SpanStopReason> = SpanStopReasonContextMap[Reason] &
+  SpanStopSupplementalContext;
+
+/** Narrow this envelope by stopReason to access its cause-specific context. */
+export type SpanTermination = { outcome: SpanOutcome } & (
+  | {
+      [Reason in SpanStopReason]: {
+        stopReason: Reason;
+        stopReasonContext?: SpanStopReasonContext<Reason> | null;
+      };
+    }[SpanStopReason]
+  | { stopReason?: null; stopReasonContext?: null }
+);
 
 /** Native fields shared by live spans, snapshots, exports and lifecycle options. */
 export interface SpanOutcomeFields {

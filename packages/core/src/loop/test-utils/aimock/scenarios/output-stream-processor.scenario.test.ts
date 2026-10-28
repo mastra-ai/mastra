@@ -369,7 +369,7 @@ describeForAllEngines('Support agent output stream processors', engine => {
       expect(ended(type).at(-1)).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { reason: 'guardrail', processorId: 'result-policy', message: 'Private result blocked' },
+        stopReasonContext: { tripwire: { processorId: 'result-policy', reason: 'Private result blocked' } },
       });
     }
     expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success', stopReason: null }]);

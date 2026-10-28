@@ -458,9 +458,7 @@ export function createDurableToolCallStep() {
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
-                info.reason === 'approval'
-                  ? { reason: 'approval_required', toolCallId: info.toolCallId, toolName: info.toolName }
-                  : null,
+                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
             });
           }
           if (modelSpanData) {
@@ -470,9 +468,7 @@ export function createDurableToolCallStep() {
               outcome: 'suspend',
               stopReason: info.reason === 'approval' ? 'approval_required' : null,
               stopReasonContext:
-                info.reason === 'approval'
-                  ? { reason: 'approval_required', toolCallId: info.toolCallId, toolName: info.toolName }
-                  : null,
+                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
             });
           }
           if (agentSpanData) {
@@ -484,7 +480,6 @@ export function createDurableToolCallStep() {
               stopReasonContext:
                 info.reason === 'approval'
                   ? {
-                      reason: 'approval_required',
                       toolCallId: info.toolCallId,
                       toolName: info.toolName,
                     }
