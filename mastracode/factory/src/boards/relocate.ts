@@ -1,5 +1,6 @@
 import { WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
 import type { WorkItemRow, WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { holdsLegacyPlanner } from './legacy-plan-role.js';
 import type { BoardRegistry } from './registry.js';
 
 /** Rows that predate persisted boards used source-type routing. */
@@ -53,7 +54,7 @@ export async function moveCardToBoard({
   const movable = item.stages.every(currentStage => {
     if (current.phases[currentStage]?.kind === 'terminal') return false;
     const role = current.roleForPhase(currentStage);
-    if (currentBoard === 'work' && currentStage === 'planning' && item.sessions.plan !== undefined) return false;
+    if (holdsLegacyPlanner(currentBoard, currentStage, item.sessions)) return false;
     return role === undefined || item.sessions[role] === undefined;
   });
   if (!movable) return 'skipped';

@@ -289,8 +289,14 @@ describe('defineBoard', () => {
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
       const board = role === 'review' ? reviewBoard : workBoard;
       expect(board.isWorking(stage), `lane for ${role}`).toBe(true);
-      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role === 'plan' ? 'work' : role);
     }
+    expect(['triage', 'planning', 'execute', 'review'].map(stage => workBoard.roleForPhase(stage))).toEqual([
+      'triage',
+      'work',
+      'work',
+      'work',
+    ]);
+    expect(reviewBoard.roleForPhase('review')).toBe('review');
     for (const stage of Object.keys(reviewBoard.phases)) {
       expect(reviewBoard.isTerminal(stage)).toBe(isTerminalFactoryRuleStage([stage]));
       expect(reviewBoard.isWorking(stage)).toBe(isWorkingFactoryRuleStage(stage));

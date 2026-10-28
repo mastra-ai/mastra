@@ -8,6 +8,7 @@ import type { FactorySandbox } from '@mastra/core/workspace';
 
 import { boardForWorkItem } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { legacyPlanRoleFor, workLaneForRole } from '../boards/legacy-plan-role.js';
 import type { FactoryIntegration, IntegrationContext, IntegrationHooks } from '../integrations/base.js';
 import { getGithubFeatureDiagnostics } from '../integrations/github/config.js';
 import type { GithubIntegration } from '../integrations/github/integration.js';
@@ -16,7 +17,6 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
-import { factoryLaneForRole } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -238,8 +238,9 @@ async function legacyPlanSession(
   branch: string,
   projectRepositoryId: string,
 ): Promise<EnsuredFactorySourceSession | undefined> {
-  if (boardId !== 'work' || input.role !== 'work') return undefined;
-  const session = await reuseBoundSession(sourceControl, input, 'plan');
+  const legacyRole = legacyPlanRoleFor(boardId, input.role);
+  if (!legacyRole) return undefined;
+  const session = await reuseBoundSession(sourceControl, input, legacyRole);
   if (
     session &&
     (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
@@ -260,7 +261,7 @@ function restingExitLane(
   board: { phaseForRole(role: string): string | undefined } | undefined,
   role: string,
 ): string | undefined {
-  return (boardId === 'work' ? factoryLaneForRole(role) : undefined) ?? board?.phaseForRole(role);
+  return workLaneForRole(boardId, role) ?? board?.phaseForRole(role);
 }
 
 /**
