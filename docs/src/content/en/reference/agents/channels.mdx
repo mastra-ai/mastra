@@ -321,7 +321,7 @@ in both streaming and static modes; return a non-blank `{ kind: 'post', message 
 to replace the built-in card with your own message (for example, a localized
 one). Returning `undefined`, a blank message, or `{ kind: 'stream' }` falls back
 to the built-in card so the user can still approve or deny the request. Keep the
-button ids in the format the default action handler expects — see [Custom
+button ids in the format the default action handler expects. See [Custom
 approval cards](#custom-approval-cards).
 
 ```typescript title="src/mastra/agents/streaming.ts"
@@ -348,15 +348,15 @@ const agent = new Agent({
 ### Custom approval cards
 
 A custom approval message replaces the built-in card, but Mastra's default
-`onAction` handler still handles the click. It only resumes the suspended run
+`onAction` handler still handles the button action. It only resumes the suspended run
 when the button ids are exactly:
 
 - Approve: `tool_approve:<toolCallId>`
 - Deny: `tool_deny:<toolCallId>`
 
 `<toolCallId>` is `event.toolCallId` from the `approval` event. Any other id,
-including one with extra whitespace, doesn't match a pending approval, so the
-run stays suspended. The default handler must also stay enabled: don't set
+including one with extra whitespace, doesn't match a pending approval. The run
+stays suspended. The default handler must also stay enabled: don't set
 `handlers.onAction: false`, and if you provide your own `onAction`, call
 `defaultHandler()` so approval clicks are processed.
 

@@ -149,7 +149,7 @@ export const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
 
-To replace that card with your own message, for example to localize the buttons, return a card from a `toolDisplay` function. A custom function replaces rendering for every tool event, not just approvals. Mastra's default action handler only resumes the run when the buttons keep the ids it expects. See [Custom approval cards](/reference/agents/channels#custom-approval-cards).
+To replace that card with your own message, for example to localize the buttons, return a card from a `toolDisplay` function. A custom function replaces rendering for every tool event, not only approvals. Mastra's default action handler only resumes the run when the buttons keep the ids it expects. See [Custom approval cards](/reference/agents/channels#custom-approval-cards).
 
 By default, only the user who requested a tool call can approve or deny it. For a shared channel where another member should be able to respond, set `toolApprovers: 'anyone'` on that adapter:
 
