@@ -15,9 +15,8 @@
  *                            create a missing day partition inside that same
  *                            window on demand when a write hits it.
  *
- * This module deliberately does not implement retention deletes / drops.
- * The goal here is to leave the schema in a shape that a follow-up
- * `mastra retention` command can act on without further migrations.
+ * This module only creates partitions. Retention, which drops partitions or
+ * chunks older than a cutoff, lives in `./retention.ts` behind `prune()`.
  */
 
 import type { DbClient } from '../../../client';
@@ -142,6 +141,14 @@ export function withinPartitionWindow(days: Date[], options: PartitioningOptions
   return days.filter(d => allowed.has(dayBounds(d).suffix));
 }
 
+/**
+ * Creates and attaches a partition of `schema.table` for each UTC day in
+ * `days` that has none. Each day is a `CREATE TABLE (LIKE parent)` followed by
+ * `ATTACH PARTITION`, in one transaction, so a failed attach leaves no
+ * detached child behind. When either step fails, the catalog is read again: a
+ * day that a concurrent caller attached meanwhile counts as done, and any
+ * other failure is rethrown.
+ */
 export async function ensureDayPartitions(
   client: DbClient,
   schema: string,
