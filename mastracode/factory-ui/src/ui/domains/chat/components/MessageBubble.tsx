@@ -89,16 +89,6 @@ export function MessageBubble({
   });
   const revealed = new Map(parts.map((part, index) => [activityPartKey(entry.id, part, index), part] as const));
   const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
-  const stretchLine = (key: string | undefined) => {
-    const stretch = key === undefined ? undefined : activity?.hosts.get(key);
-    return (
-      stretch && (
-        <Arriving>
-          <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />
-        </Arriving>
-      )
-    );
-  };
 
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
@@ -203,15 +193,15 @@ export function MessageBubble({
     },
     Reasoning: (part: ReasoningPart) => {
       const key = keyOfPart.get(part);
-      const line = stretchLine(key);
-      if (line) return line;
+      const stretch = key === undefined ? undefined : activity?.hosts.get(key);
+      if (stretch) return <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
       if (key !== undefined && activity?.hidden.has(key)) return null;
       return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
     },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const line = stretchLine(toolCallId);
-      if (line) return line;
+      const stretch = activity?.hosts.get(toolCallId);
+      if (stretch) return <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
       if (activity?.hidden.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];

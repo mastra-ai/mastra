@@ -1,3 +1,4 @@
+import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 
@@ -59,15 +60,17 @@ export function ActivityStretchLine({
   }
 
   return (
-    <ActivityFold
-      slot="activity-stretch"
-      header={stretchHeader(visible, stretch.live, stretch.elapsedMs)}
-      view={view}
-      foldable={shown.length > 1 || shown.some(memberHasBody)}
-      prominent
-      onOpenChange={rememberOpen}
-    >
-      <StretchContent segments={stretchSegments(shown)} view={view} live={stretch.live} />
-    </ActivityFold>
+    <Arriving>
+      <ActivityFold
+        slot="activity-stretch"
+        header={stretchHeader(visible, stretch.live, stretch.elapsedMs)}
+        view={view}
+        foldable={shown.length > 1 || shown.some(memberHasBody)}
+        prominent
+        onOpenChange={rememberOpen}
+      >
+        <StretchContent segments={stretchSegments(shown)} view={view} live={stretch.live} />
+      </ActivityFold>
+    </Arriving>
   );
 }

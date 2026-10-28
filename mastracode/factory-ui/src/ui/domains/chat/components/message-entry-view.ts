@@ -56,15 +56,24 @@ export type MessageEntryView =
   | { kind: 'status'; status: StatusMetadata }
   | { kind: 'parts' };
 
+function skillActivation(entry: MessageEntry, parts: readonly MessagePart[]): SkillActivation | undefined {
+  if (entry.message.role !== 'user') return skillSignalActivation(entry);
+  const [onlyPart] = parts;
+  if (parts.length !== 1 || onlyPart?.type !== 'text') return undefined;
+  return parseSkillActivation(onlyPart.text);
+}
+
+function signalView(row: SignalRowView): MessageEntryView {
+  if (row.kind === 'state' && SUPPRESSED_STATE_SIGNAL_IDS.has(row.stateId)) return { kind: 'hidden' };
+  if (row.kind !== 'reactive') return { kind: 'signal', row };
+  const { tagName } = row;
+  if (!tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName)) return { kind: 'hidden' };
+  return { kind: 'signal', row: { ...row, tagName } };
+}
+
 /** How an entry draws, before its parts: a dedicated row, nothing, or its parts. */
 export function messageEntryView(entry: MessageEntry, parts: readonly MessagePart[]): MessageEntryView {
-  const onlyPart = parts.length === 1 ? parts[0] : undefined;
-  const activation =
-    entry.message.role === 'user'
-      ? onlyPart?.type === 'text'
-        ? parseSkillActivation(onlyPart.text)
-        : undefined
-      : skillSignalActivation(entry);
+  const activation = skillActivation(entry, parts);
   if (activation) return { kind: 'skill', activation };
   if (isSkillNotificationSignal(entry)) return { kind: 'hidden' };
 
@@ -72,14 +81,7 @@ export function messageEntryView(entry: MessageEntry, parts: readonly MessagePar
   if (notifications.length > 0) return { kind: 'notifications', notifications };
 
   const row = signalRowView(entry);
-  if (row) {
-    if (row.kind === 'state')
-      return SUPPRESSED_STATE_SIGNAL_IDS.has(row.stateId) ? { kind: 'hidden' } : { kind: 'signal', row };
-    if (row.kind !== 'reactive') return { kind: 'signal', row };
-    const { tagName } = row;
-    if (!tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(tagName)) return { kind: 'hidden' };
-    return { kind: 'signal', row: { ...row, tagName } };
-  }
+  if (row) return signalView(row);
 
   const status = statusMetadata(entry);
   if (status?.text.trim()) return { kind: 'status', status };

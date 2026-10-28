@@ -22,9 +22,6 @@ export function StretchContent({
   view: ActivityView;
   live: boolean;
 }) {
-  const [only] = segments;
-  if (!only) return null;
-
   if (segments.length > 1) {
     return (
       <ActivityContent flush>
@@ -34,6 +31,9 @@ export function StretchContent({
       </ActivityContent>
     );
   }
+
+  const [only] = segments;
+  if (!only) return null;
 
   if (only.kind === 'calls') {
     return (
