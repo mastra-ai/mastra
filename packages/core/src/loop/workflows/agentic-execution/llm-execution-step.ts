@@ -51,6 +51,7 @@ import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/exe
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
 import { MastraModelOutput } from '../../../stream/base/output';
+import { isStructuredOutputError } from '../../../stream/base/output-format-handlers';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
@@ -745,6 +746,11 @@ async function processOutputStream<OUTPUT = undefined>({
     });
   };
 
+  // The structured-output transformer emits its error before the model's `finish` chunk. After
+  // such an error we read on, without handling chunks, only until `finish` so the output records
+  // that chunk's usage.
+  let awaitingFinishAfterStructuredOutputError = false;
+
   for await (let chunk of outputStream._getBaseStream()) {
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
@@ -757,6 +763,12 @@ async function processOutputStream<OUTPUT = undefined>({
     if (!chunk) {
       continue;
     }
+
+    if (awaitingFinishAfterStructuredOutputError) {
+      if (chunk.type === 'finish') break;
+      continue;
+    }
+
     if (openReasoningIds) trackOpenReasoning(chunk, openReasoningIds);
 
     if (!transportSet && transportRef && transportResolver) {
@@ -1152,6 +1164,10 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     if (runState.state.hasErrored) {
+      if (chunk.type === 'error' && isStructuredOutputError(chunk.payload.error)) {
+        awaitingFinishAfterStructuredOutputError = true;
+        continue;
+      }
       break;
     }
   }
