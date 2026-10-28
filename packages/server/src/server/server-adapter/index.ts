@@ -834,6 +834,10 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
       customRouteAuthConfig?: Map<string, boolean>;
     },
   ): Promise<{ status: number; error: string; headers?: Record<string, string> } | null> {
+    if (route.authTransport === 'bearer') {
+      return this.checkBearerRouteAuth(route, context);
+    }
+
     // Determine which auth config to use based on request type
     const effectiveAuth = this.getEffectiveAuthConfig(context.getHeader);
 
@@ -896,6 +900,35 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // Translate AuthResult error to the {status, error} format adapters expect
     const errorBody = result.body as { error?: string } | undefined;
     return { status: result.status, error: errorBody?.error ?? 'Access denied', headers: result.headers };
+  }
+
+  /**
+   * Auth for routes with `authTransport: 'bearer'` (the built-in MCP server): only the
+   * `Authorization` header counts, always against `server.auth`. Studio client-type routing,
+   * cookies, and the `apiKey` query parameter are ignored, so a browser session can't be used.
+   */
+  private checkBearerRouteAuth(
+    route: ServerRoute,
+    context: Parameters<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']>[1],
+  ): ReturnType<MastraServer<TApp, TRequest, TResponse>['checkRouteAuth']> {
+    context.requestContext.set(MASTRA_IS_STUDIO_KEY, false);
+    const authorization = context.getHeader('authorization');
+    const getHeader = (name: string) => {
+      const lower = name.toLowerCase();
+      return lower === 'cookie' || lower === MASTRA_CLIENT_TYPE_HEADER ? undefined : context.getHeader(name);
+    };
+    return this.checkRouteAuth(
+      { ...route, authTransport: undefined },
+      {
+        ...context,
+        getHeader,
+        getQuery: name => (name === 'apiKey' ? undefined : context.getQuery(name)),
+        request: new Request(context.request?.url ?? `http://localhost${context.path}`, {
+          method: context.method,
+          headers: authorization ? { authorization } : {},
+        }),
+      },
+    );
   }
 
   /**

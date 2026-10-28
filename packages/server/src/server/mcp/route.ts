@@ -10,6 +10,7 @@ import {
   isBuiltinMCPEnabled,
   resolveBuiltinMCPConfig,
   resolveBuiltinMCPPath,
+  warnOnReservedMCPServerId,
 } from './config';
 
 // Signs `input_required` continuation state; per process, like MCPServer's own default, without its per-instance warning.
@@ -22,6 +23,13 @@ const requestStateKey = globalThis.crypto.getRandomValues(new Uint8Array(32));
 async function loadBuiltinMCP() {
   const [{ MCPServer }, { buildBuiltinMCPTools }] = await Promise.all([import('@mastra/mcp'), import('./catalogue')]);
   return { MCPServer, buildBuiltinMCPTools };
+}
+
+/** Dispatched routes see only the bearer credential, never cookies or the Studio client-type header. */
+function bearerOnly(request: Request | undefined): Request | undefined {
+  if (!request) return undefined;
+  const authorization = request.headers.get('authorization');
+  return new Request(request.url, { method: 'GET', headers: authorization ? { authorization } : {} });
 }
 
 /**
@@ -52,6 +60,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     if (!isBuiltinMCPEnabled(mastra)) {
       throw new HTTPException(404, { message: 'Not Found' });
     }
+    warnOnReservedMCPServerId(mastra);
     const config = resolveBuiltinMCPConfig(mastra, request);
     const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP();
     const tools = await buildBuiltinMCPTools(
@@ -62,6 +71,7 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
         taskStore,
         routePrefix,
         abortSignal,
+        request: bearerOnly(request),
         mcpRoute: BUILTIN_MCP_HTTP_ROUTE,
       },
       config,

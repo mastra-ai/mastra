@@ -22,6 +22,7 @@ export interface ResolvedBuiltinMCPConfig {
 }
 
 const warnedOpen = new WeakSet<Mastra>();
+const warnedReservedId = new WeakSet<Mastra>();
 const warnedPath = new WeakSet<Mastra>();
 
 function isDev(): boolean {
@@ -54,6 +55,19 @@ export function isBuiltinMCPEnabled(mastra: Mastra): boolean {
     return true;
   }
   return isDev() || hasAuth;
+}
+
+/** Warns once when a user-registered MCP server uses the id reserved for the built-in one. */
+export function warnOnReservedMCPServerId(mastra: Mastra): void {
+  if (warnedReservedId.has(mastra)) return;
+  warnedReservedId.add(mastra);
+  if (mastra.getMCPServerById?.(BUILTIN_MCP_SERVER_ID)) {
+    mastra
+      .getLogger()
+      ?.warn(
+        `An MCP server is registered with the id "${BUILTIN_MCP_SERVER_ID}", which is reserved for the built-in Mastra MCP server. Give it another id.`,
+      );
+  }
 }
 
 /**

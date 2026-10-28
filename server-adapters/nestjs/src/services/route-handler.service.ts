@@ -1,7 +1,13 @@
 import type { Mastra } from '@mastra/core/mastra';
 import type { RequestContext } from '@mastra/core/request-context';
 import { formatZodError } from '@mastra/server/handlers/error';
-import { checkRouteFGA, checkRouteRBAC, isZodError, SERVER_ROUTES } from '@mastra/server/server-adapter';
+import {
+  checkRouteFGA,
+  checkRouteRBAC,
+  isZodError,
+  resolveServerRoute,
+  SERVER_ROUTES,
+} from '@mastra/server/server-adapter';
 import type { ServerRoute, ServerContext, ZodErrorLike } from '@mastra/server/server-adapter';
 import { BadRequestException, ForbiddenException, HttpException, Inject, Injectable, Logger } from '@nestjs/common';
 
@@ -103,7 +109,7 @@ export class RouteHandlerService {
     // Build a map of path+method to route for fast lookup
     this.routeMap = new Map();
     for (const route of SERVER_ROUTES) {
-      this.registerRoute(route);
+      this.registerRoute(resolveServerRoute(route, mastra));
     }
   }
 

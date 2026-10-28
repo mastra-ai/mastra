@@ -34,6 +34,8 @@ export interface BuiltinMCPContext {
   taskStore?: ServerContext['taskStore'];
   routePrefix?: string;
   abortSignal: AbortSignal;
+  /** The `/mcp` request reduced to its `Authorization` header, seen by dispatched routes' auth rules. */
+  request?: Request;
   /** The built-in MCP route, used to check `mcp:execute` with the same RBAC provider. */
   mcpRoute: ServerRoute;
 }
@@ -145,6 +147,7 @@ export async function buildBuiltinMCPTools(
     taskStore: ctx.taskStore,
     routePrefix: ctx.routePrefix,
     abortSignal: ctx.abortSignal,
+    request: ctx.request,
   };
   const mcpExecuteRoute: ServerRoute = { ...ctx.mcpRoute, requiresPermission: 'mcp:execute' };
 
