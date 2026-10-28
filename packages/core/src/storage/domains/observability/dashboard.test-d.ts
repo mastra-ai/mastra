@@ -1,5 +1,12 @@
 import { describe, expectTypeOf, it } from 'vitest';
-import type { DashboardDefinition, DashboardQuery, NormalizedDashboardQuery } from './dashboard';
+import type {
+  DashboardDefinition,
+  DashboardDefinitionEnvelope,
+  DashboardQuery,
+  DashboardWidget,
+  migrateDashboardDefinition,
+  NormalizedDashboardQuery,
+} from './dashboard';
 import type { DashboardFilterNode } from './dashboard-filters';
 import type { TraceAggregateMeasure } from './trace-aggregate';
 
@@ -32,6 +39,10 @@ describe('DashboardQuery type', () => {
     expectTypeOf<NormalizedTrace['limit']>().toEqualTypeOf<number>();
   });
 
+  it('discriminates on a closed set of sources', () => {
+    expectTypeOf<DashboardQuery['source']>().toEqualTypeOf<'traceAggregate' | 'spanAggregate' | 'metrics' | 'scores'>();
+  });
+
   it('has no timeRange or comparePeriod on stored queries', () => {
     type Keys = DashboardQuery extends infer Q ? (Q extends unknown ? keyof Q : never) : never;
     expectTypeOf<'timeRange' extends Keys ? true : false>().toEqualTypeOf<false>();
@@ -44,5 +55,16 @@ describe('DashboardDefinition type', () => {
     expectTypeOf<NonNullable<NonNullable<DashboardDefinition['defaults']>['filters']>>().toEqualTypeOf<
       DashboardFilterNode[]
     >();
+  });
+
+  it('accepts any string kind', () => {
+    expectTypeOf<DashboardWidget['kind']>().toEqualTypeOf<string>();
+  });
+});
+
+describe('migrateDashboardDefinition type', () => {
+  it('takes and returns envelope-parsed definitions', () => {
+    expectTypeOf<typeof migrateDashboardDefinition>().parameters.toEqualTypeOf<[DashboardDefinitionEnvelope]>();
+    expectTypeOf<typeof migrateDashboardDefinition>().returns.toEqualTypeOf<DashboardDefinitionEnvelope>();
   });
 });
