@@ -7,7 +7,7 @@ description: "Browse LowRouter model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/lowrouter.svg" alt="LowRouter logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LowRouter
 
-Access 31 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
+Access 32 LowRouter models through Mastra's model router. Authentication is handled automatically using the `LOWROUTER_API_KEY` environment variable.
 
 Learn more in the [LowRouter documentation](https://lowrouter.ai/docs/models/available).
 
@@ -358,6 +358,18 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 10
   },
   {
+    "model": "lowrouter/auto/openai/gpt-6.1-terra",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1050000,
+    "maxOutput": 128000,
+    "inputCost": 1,
+    "outputCost": 5
+  },
+  {
     "model": "lowrouter/auto/openai/gpt-oss-120b",
     "imageInput": false,
     "audioInput": false,
@@ -427,6 +439,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -444,6 +458,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

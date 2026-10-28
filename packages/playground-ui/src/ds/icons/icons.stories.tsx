@@ -51,6 +51,7 @@ import {
   ToolsIcon,
   TraceIcon,
   TsIcon,
+  TypesafeIcon,
   VariablesIcon,
   WorkflowCoinIcon,
   WorkflowIcon,
@@ -274,6 +275,7 @@ const brandIcons = [
   { name: 'Meta', component: MetaIcon },
   { name: 'Moonshot', component: MoonshotIcon },
   { name: 'xAI', component: XaiIcon },
+  { name: 'Typesafe', component: TypesafeIcon },
 ];
 
 export const BrandIcons: Story = {

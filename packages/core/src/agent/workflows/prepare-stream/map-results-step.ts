@@ -375,6 +375,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'suspended') {
+            capabilities.onRunSuspended?.();
             agentSpan?.end({
               endTree: true,
               output: {
@@ -499,6 +500,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
       processorStates: runScope.get(PROCESSOR_STATES_KEY),
+      agent: capabilities.agent,
     };
 
     // Park the assembled (class-instance- and closure-laden) options on the

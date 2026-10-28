@@ -1,11 +1,14 @@
 import { describe, expect, it, vi } from 'vitest';
 
+import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { InMemoryThreadStateStorage } from '../../storage/domains/thread-state/inmemory';
+import { InMemoryStore } from '../../storage/mock';
 
 import {
   assignTaskIds,
   TASK_STATE_TYPE,
+  TASKS_REQUEST_CONTEXT_KEY,
   taskCheckTool,
   taskCompleteTool,
   taskUpdateTool,
@@ -323,5 +326,121 @@ describe('cross-turn task continuity via the TaskStore', () => {
       { id: 'alpha', content: 'Alpha', status: 'in_progress', activeForm: 'Doing Alpha' },
       { id: 'beta', content: 'Beta', status: 'pending', activeForm: 'Doing Beta' },
     ]);
+  });
+});
+
+// Real storage with a controllable database round trip, rather than timing sleeps.
+class PausedTaskStorage extends InMemoryThreadStateStorage {
+  readonly entered = Promise.withResolvers<void>();
+  readonly release = Promise.withResolvers<void>();
+  pauseNextWrite = false;
+  failNextWrite = false;
+
+  override async setState<T>(args: { threadId: string; type: string; value: T }): Promise<void> {
+    if (this.pauseNextWrite && args.threadId === THREAD_ID) {
+      this.pauseNextWrite = false;
+      this.entered.resolve();
+      await this.release.promise;
+      if (this.failNextWrite) {
+        this.failNextWrite = false;
+        throw new Error('Database write failed');
+      }
+    }
+    await super.setState(args);
+  }
+}
+
+const concurrentTasks: TaskItemSnapshot[] = [
+  { id: 'a', content: 'Task A', activeForm: 'Doing A', status: 'in_progress' },
+  { id: 'b', content: 'Task B', activeForm: 'Doing B', status: 'pending' },
+];
+
+async function concurrentContext(store: PausedTaskStorage) {
+  const storage = new InMemoryStore();
+  storage.stores.threadState = store;
+  const mastra = new Mastra({ storage, logger: false });
+  const events: TaskItemSnapshot[][] = [];
+  const requestContext = new RequestContext();
+  requestContext.set('controller', {
+    emitEvent: (event: { tasks: TaskItemSnapshot[] }) => events.push(event.tasks),
+  });
+  const context = (threadId = THREAD_ID) => ({
+    mastra,
+    requestContext,
+    agent: {
+      threadId,
+      resourceId: 'resource-1',
+      agentId: 'test',
+      toolCallId: 'test',
+      messages: [],
+      suspend: async () => {},
+    },
+  });
+  await store.setState({ threadId: THREAD_ID, type: TASK_STATE_TYPE, value: concurrentTasks });
+  return { context, requestContext, events };
+}
+
+describe('concurrent task mutations (#28268)', () => {
+  it.each(['write', 'update', 'complete'] as const)(
+    'preserves %s followed by an update across separate contexts',
+    async kind => {
+      const store = new PausedTaskStorage();
+      const { context, requestContext, events } = await concurrentContext(store);
+      store.pauseNextWrite = true;
+      const firstContext = context();
+      const secondContext = context();
+      const first =
+        kind === 'write'
+          ? taskWriteTool.execute!(
+              { tasks: concurrentTasks.map(t => (t.id === 'a' ? { ...t, status: 'completed' } : t)) },
+              firstContext,
+            )
+          : kind === 'update'
+            ? taskUpdateTool.execute!({ id: 'a', status: 'completed' }, firstContext)
+            : taskCompleteTool.execute!({ id: 'a' }, firstContext);
+      await store.entered.promise;
+      const second = taskUpdateTool.execute!({ id: 'b', status: 'in_progress' }, secondContext);
+      try {
+        // This must finish while the first thread's database write is blocked.
+        const independent = await taskWriteTool.execute!({ tasks: concurrentTasks }, context('other-thread'));
+        expect(independent.isError).toBe(false);
+        // A different store with the same thread id must also make progress.
+        const otherStore = new PausedTaskStorage();
+        const other = await concurrentContext(otherStore);
+        expect((await taskCompleteTool.execute!({ id: 'a' }, other.context())).isError).toBe(false);
+      } finally {
+        store.release.resolve();
+      }
+      const results = await Promise.all([first, second]);
+      expect(results.map(result => result.isError)).toEqual([false, false]);
+      const persisted = await store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE });
+      expect(persisted?.map(t => [t.id, t.status])).toEqual([
+        ['a', 'completed'],
+        ['b', 'in_progress'],
+      ]);
+      expect(requestContext.get(TASKS_REQUEST_CONTEXT_KEY)).toEqual(persisted);
+      expect(events.at(-1)).toEqual(persisted);
+    },
+  );
+
+  it('runs queued mutations after a failed database write', async () => {
+    const store = new PausedTaskStorage();
+    const { context } = await concurrentContext(store);
+    store.pauseNextWrite = true;
+    store.failNextWrite = true;
+    const failed = taskCompleteTool.execute!({ id: 'a' }, context());
+    // Attach the rejection handler before releasing the failed operation.
+    const rejected = expect(failed).rejects.toThrow('Database write failed');
+    await store.entered.promise;
+    const next = taskUpdateTool.execute!({ id: 'b', content: 'Updated B' }, context());
+    store.release.resolve();
+    await rejected;
+    expect((await next).isError).toBe(false);
+    const tasks = await store.getState<TaskItemSnapshot[]>({ threadId: THREAD_ID, type: TASK_STATE_TYPE });
+    expect(tasks?.map(t => [t.id, t.content, t.status])).toEqual([
+      ['a', 'Task A', 'in_progress'],
+      ['b', 'Updated B', 'pending'],
+    ]);
+    expect((await taskCompleteTool.execute!({ id: 'a' }, context())).isError).toBe(false);
   });
 });

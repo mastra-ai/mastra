@@ -1,6 +1,6 @@
 {
   "name": "@mastra/clickhouse",
-  "version": "1.27.0-alpha.0",
+  "version": "1.27.0-alpha.2",
   "description": "Clickhouse provider for Mastra - includes db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -33,14 +33,14 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@clickhouse/client": "^1.23.1"
+    "@clickhouse/client": "^1.24.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tsdown": "0.23.1",
@@ -50,7 +50,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.60.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "files": [

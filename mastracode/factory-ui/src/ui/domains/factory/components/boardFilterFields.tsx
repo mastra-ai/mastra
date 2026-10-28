@@ -19,6 +19,7 @@ import type { BoardParticipant } from '../boardPeople';
 import type { BoardKind } from '../boardStages';
 import { BOARD_SOURCE_OPTIONS } from '../boardSourceFilters';
 import type { LinearProject } from '../services/linear';
+import { BoardSourceIcon } from './BoardSourceIcon';
 
 export const BOARD_FILTER_OPERATORS: FilterBarOperator[] = [{ id: 'in', label: 'is any of', arity: 'many' }];
 
@@ -78,14 +79,18 @@ export function boardFilterFields({
     // Keep already-picked sources so saved views still label and edit them after a provider disconnects.
     source: BOARD_SOURCE_OPTIONS.filter(
       option => option.value === 'manual' || connectedSources?.has(option.value) || filters.source.has(option.value),
-    ),
-    linearProject: linearProjects.map(project => ({ value: project.id, label: project.name })),
+    ).map(option => ({ ...option, start: <BoardSourceIcon source={option.value} /> })),
+    linearProject: linearProjects.map(project => ({
+      value: project.id,
+      label: project.name,
+      start: <FolderKanban aria-hidden />,
+    })),
     teammate: people,
     author: people,
     assignee: people,
     reviewer: people,
     worked: people,
-    label: availableLabels.map(label => ({ value: label })),
+    label: availableLabels.map(label => ({ value: label, start: <Tag aria-hidden /> })),
   };
   const linearProjectOffered = filters.source.has('linear') || filters.linearProject.size > 0;
 
@@ -102,7 +107,10 @@ export function boardFilterFields({
 /** The field's options, plus any picked value no longer offered (a disconnected source, a person off the board). */
 export function boardFilterOptions(field: BoardFilterField, selected: readonly string[]): BoardFilterOption[] {
   const offered = new Set(field.suggestions.map(option => option.value));
-  const orphaned = selected.filter(value => !offered.has(value)).map((value): BoardFilterOption => ({ value }));
+  const Icon = field.icon;
+  const orphaned = selected
+    .filter(value => !offered.has(value))
+    .map((value): BoardFilterOption => ({ value, start: Icon ? <Icon aria-hidden /> : undefined }));
   return [...field.suggestions, ...orphaned];
 }
 
