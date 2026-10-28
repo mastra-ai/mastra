@@ -121,8 +121,9 @@ export function compileClickHouseThreadRowsQuery(
   const scope: string[] = [];
   if (plan.scope) {
     scope.push(`organizationId = ${parameters.add(plan.scope.organizationId, 'String')}`);
-    if (plan.scope.resourceId !== undefined)
+    if (plan.scope.resourceId !== undefined) {
       scope.push(`resourceId = ${parameters.add(plan.scope.resourceId, 'String')}`);
+    }
   }
   if (strategy === 'historyBudget') {
     return {
@@ -282,11 +283,12 @@ export async function queryThreadRows(
     startedAt: row[`${which}StartedAt`],
     endedAt: row[`${which}EndedAt`],
   });
-  for (const row of page)
+  for (const row of page) {
     for (const which of ['first', 'last'] as const) {
       const root = representative(row, which);
       roots.set(rootKey(root), root);
     }
+  }
   const keys = (batch: Root[]) =>
     batch.map(
       root =>
@@ -304,7 +306,7 @@ export async function queryThreadRows(
   const rootWhere = `tuple(isNull(organizationId), ifNull(organizationId, ''), isNull(resourceId), ifNull(resourceId, ''),
     traceId, spanId, startedAt, endedAt) IN {roots:Array(Tuple(UInt8, String, UInt8, String, String, String, DateTime64(3, 'UTC'), DateTime64(3, 'UTC')))}`;
   const stored: Array<Root & Record<string, unknown>> = [];
-  for (const batch of batches([...roots.values()]))
+  for (const batch of batches([...roots.values()])) {
     stored.push(
       ...(await run<Root & Record<string, unknown>>({
         query: `SELECT organizationId, traceId, spanId, startedAt, endedAt,
@@ -315,6 +317,7 @@ export async function queryThreadRows(
         query_params: { roots: keys(batch) },
       })),
     );
+  }
   const byRoot = new Map(stored.map(row => [rootKey(row), row]));
   const missing = stored.filter(needsPreviewPayloads);
   // Bound legacy payload memory independently of the page size, as in querySpans.

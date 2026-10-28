@@ -123,9 +123,9 @@ export class VoyageTextEmbeddingModelV2 {
         input: batch,
         model: this.modelId,
         inputType: toSdkInputType(inputType),
-        outputDimension: outputDimension,
-        outputDtype: outputDtype,
-        truncation: truncation,
+        outputDimension,
+        outputDtype,
+        truncation,
       });
 
       const embeddings =

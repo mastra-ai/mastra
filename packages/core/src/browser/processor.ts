@@ -328,8 +328,9 @@ function getChangedBrowserState(previous: BrowserState | undefined, current: Bro
     if (current.activeUrlChangeSource) changed.activeUrlChangeSource = current.activeUrlChangeSource;
     if (current.pageTitle) changed.pageTitle = current.pageTitle;
     if (typeof current.tabCount === 'number') changed.tabCount = current.tabCount;
-    if (current.pageMetadata && Object.keys(current.pageMetadata).length > 0)
+    if (current.pageMetadata && Object.keys(current.pageMetadata).length > 0) {
       changed.pageMetadata = current.pageMetadata;
+    }
   }
 
   return changed;
@@ -339,8 +340,9 @@ function formatBrowserStateSnapshot(state: BrowserState): string {
   const parts = [formatOpenClosedStatus(state)];
   if (state.activeUrl) parts.push(`Active tab URL: ${state.activeUrl}.`);
   if (state.pageTitle) parts.push(`Page title: ${state.pageTitle}.`);
-  if (typeof state.tabCount === 'number')
+  if (typeof state.tabCount === 'number') {
     parts.push(`${state.tabCount} open ${state.tabCount === 1 ? 'tab' : 'tabs'}.`);
+  }
   if (state.pageMetadata && Object.keys(state.pageMetadata).length > 0) {
     parts.push(`Page metadata: ${JSON.stringify(state.pageMetadata)}.`);
   }

@@ -93,8 +93,9 @@ export function detectPackageManager(startDirectory = process.cwd()): 'pnpm' | '
   while (true) {
     if (existsSync(join(directory, 'pnpm-lock.yaml'))) return 'pnpm';
     if (existsSync(join(directory, 'yarn.lock'))) return 'yarn';
-    if (existsSync(join(directory, 'package-lock.json')) || existsSync(join(directory, 'npm-shrinkwrap.json')))
+    if (existsSync(join(directory, 'package-lock.json')) || existsSync(join(directory, 'npm-shrinkwrap.json'))) {
       return 'npm';
+    }
 
     const parent = dirname(directory);
     if (parent === directory) return 'npm';

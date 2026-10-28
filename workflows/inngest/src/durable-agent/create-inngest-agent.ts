@@ -1731,11 +1731,12 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             refresh(existingRegistryEntry.tools ?? {}),
             resumeRequestContext,
           );
-          if (existingRegistryEntry.baseTools)
+          if (existingRegistryEntry.baseTools) {
             existingRegistryEntry.baseTools = rebindProcessorTools(
               refresh(existingRegistryEntry.baseTools),
               resumeRequestContext,
             );
+          }
           // Tools this rebuild did not produce still hold their earlier build, so
           // keep that as their baseline; otherwise a later resume can never refresh them.
           existingRegistryEntry.requestTools = { ...previous, ...requestTools };

@@ -2820,8 +2820,9 @@ export class WorkItemsStorage extends FactoryStorageDomain {
       status: 'active',
     });
     const projectCount = new Set(rows.map(row => row.factory_project_id)).size;
-    if (projectCount > 1 && input.rejectAmbiguous)
+    if (projectCount > 1 && input.rejectAmbiguous) {
       throw new Error('Factory session has ambiguous active run bindings.');
+    }
     if (projectCount !== 1) return null;
     const row = rows.sort((left, right) => right.created_at.getTime() - left.created_at.getTime())[0];
     return row ? toBinding(row) : null;
@@ -3119,7 +3120,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
           });
           item = toRow(row!);
         } else {
-          if (create.parentWorkItemId)
+          if (create.parentWorkItemId) {
             validateParentRelation(
               (
                 await ops.findMany<WorkItemDbRow>('work_items', {
@@ -3130,6 +3131,7 @@ export class WorkItemsStorage extends FactoryStorageDomain {
               undefined,
               create.parentWorkItemId,
             );
+          }
           row = await ops.insertOne<WorkItemDbRow>('work_items', {
             org_id: input.orgId,
             created_by: input.userId,

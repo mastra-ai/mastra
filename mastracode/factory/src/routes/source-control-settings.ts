@@ -82,10 +82,12 @@ export function buildSourceControlSettingsRoutes(options: SourceControlSettingsR
           const value = body[key];
           if (value === undefined) continue;
           if (value !== null && typeof value !== 'string') return c.json({ error: `Invalid ${key}` }, 400);
-          if (typeof value === 'string' && value.length > 2000)
+          if (typeof value === 'string' && value.length > 2000) {
             return c.json({ error: `${key} too long (max 2000 characters)` }, 400);
-          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value))
+          }
+          if (typeof value === 'string' && /[\0-\x08\x0b\x0c\x0e-\x1f\x7f]/.test(value)) {
             return c.json({ error: `${key} contains control characters` }, 400);
+          }
         }
 
         const setupCommand = commandFromBody(body, 'setupCommand');

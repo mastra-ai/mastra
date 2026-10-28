@@ -539,7 +539,7 @@ export class StepExecutor extends MastraBase {
           inputData,
           state,
           retryCount,
-          resumeData: resumeData,
+          resumeData,
           getInitData: () => stepResults?.input as any,
           getStepResult: getStepResult.bind(this, stepResults),
           bail: (() => {}) as () => InnerOutput,

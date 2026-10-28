@@ -474,7 +474,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Create the base object with id and vector
         const rowData: Record<string, any> = {
           id,
-          vector: vector,
+          vector,
         };
 
         // Flatten the metadata object and prefix all keys with 'metadata_'
@@ -918,7 +918,7 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
           const dimension = vectorField?.type?.['listSize'] || 0;
 
           return {
-            dimension: dimension,
+            dimension,
             metric: this.lanceMetricToMastra(stats.distanceType),
             count: stats.numIndexedRows,
           };

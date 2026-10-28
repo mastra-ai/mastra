@@ -282,22 +282,23 @@ function ScopeTree({
               onClick={() => {
                 if (expanded) {
                   if (openByDefault) setCollapsedRootIds(current => new Set(current).add(node.id));
-                  else
+                  else {
                     setExpandedIds(current => {
                       const next = new Set(current);
                       next.delete(node.id);
                       return next;
                     });
+                  }
                   return;
                 }
                 if (children.length === 0) void loadPage(node.id, undefined);
-                if (openByDefault)
+                if (openByDefault) {
                   setCollapsedRootIds(current => {
                     const next = new Set(current);
                     next.delete(node.id);
                     return next;
                   });
-                else setExpandedIds(current => new Set(current).add(node.id));
+                } else setExpandedIds(current => new Set(current).add(node.id));
               }}
             >
               <DisclosureChevron direction="right" className="size-3" />
@@ -406,7 +407,7 @@ function ActivityPanel({
       </Txt>
     );
   }
-  if (activity.isPending)
+  if (activity.isPending) {
     return (
       <SkeletonRows label="Loading knowledge activity" rows={6} className="divide-border gap-0 divide-y pr-2">
         <div aria-hidden className="flex items-start justify-between gap-4 py-3">
@@ -418,6 +419,7 @@ function ActivityPanel({
         </div>
       </SkeletonRows>
     );
+  }
   if (activity.isError) {
     const message = activity.error instanceof Error ? activity.error.message : 'Unable to load knowledge activity.';
     return <Notice variant="destructive">{message}</Notice>;

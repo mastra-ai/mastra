@@ -662,8 +662,9 @@ describe('PlatformLinearIntegration', () => {
     const updatedIssue = { ...issue, state: { id: 'state-done', name: 'Done', type: 'completed' } };
     const fetchImpl = vi.fn<typeof fetch>(async input => {
       const url = String(input);
-      if (url.includes('/workflow-states'))
+      if (url.includes('/workflow-states')) {
         return json({ workflowStates, pageInfo: { hasNextPage: false, endCursor: null } });
+      }
       if (url.includes(`/issues/${encodeURIComponent('issue-1')}?include=comments`)) {
         // Two calls: initial locate + refreshed fetch after PATCH.
         return fetchImpl.mock.calls.filter(c => String(c[0]).includes('?include=comments')).length > 1

@@ -63,8 +63,9 @@ export function assertWorkflowStepGuard({
       stored &&
       (stored.status !== 'running' || stored.metadata?.__restartPending === true) &&
       startedBy === startGuard.expectedStartedBy
-    )
+    ) {
       return;
+    }
   }
   throw new WorkflowStepConflictError('stale', stored);
 }

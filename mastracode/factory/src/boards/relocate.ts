@@ -43,8 +43,9 @@ export async function moveCardToBoard({
   if (
     currentBoard === targetBoard &&
     (targetStage === undefined || (item.stages.length === 1 && item.stages[0] === stage))
-  )
+  ) {
     return 'unchanged';
+  }
   const current = boardRegistry.get(currentBoard);
   // Without the board definition we can't tell terminal phases or attached sessions apart, so leave the card alone.
   if (!current) return 'skipped';

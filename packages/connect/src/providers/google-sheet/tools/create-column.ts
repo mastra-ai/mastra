@@ -45,7 +45,7 @@ export function createColumnTool(proxy: PlatformProxy) {
             {
               insertDimension: {
                 range: {
-                  sheetId: sheetId,
+                  sheetId,
                   dimension: 'COLUMNS',
                   startIndex: input.columnIndex,
                   endIndex: input.columnIndex + 1,
@@ -62,7 +62,7 @@ export function createColumnTool(proxy: PlatformProxy) {
 
       return {
         spreadsheetId: input.spreadsheetId,
-        sheetId: sheetId,
+        sheetId,
         columnIndex: input.columnIndex,
         success: true,
       };

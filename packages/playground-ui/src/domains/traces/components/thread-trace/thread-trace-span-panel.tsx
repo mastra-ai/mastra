@@ -53,12 +53,12 @@ interface SelectedSpanPanelProps {
 function SelectedSpanPanel({ traceId, spanId, panelClassName }: SelectedSpanPanelProps) {
   const { selectSpan } = useThreadTrace();
   const { data: spanDetailData, isLoading } = useSpanDetail({
-    traceId: traceId,
-    spanId: spanId,
+    traceId,
+    spanId,
     queryOptions: { enabled: !!traceId && !!spanId },
   });
   // The thread rows read spans passively; this active observer keeps the selected trace fresh on focus/reconnect.
-  useTraceSpans({ traceId: traceId, queryOptions: { enabled: !!traceId } });
+  useTraceSpans({ traceId, queryOptions: { enabled: !!traceId } });
 
   return (
     <SpanDataPanelView

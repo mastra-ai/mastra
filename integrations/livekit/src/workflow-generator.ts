@@ -202,8 +202,9 @@ export function createWorkflowReplyGenerator(options: WorkflowReplyGeneratorOpti
               controller.enqueue(VOICE_TEXT_FLUSH);
               continue;
             }
-            if (event?.type === 'tool-result' && event.payload?.toolCallId)
+            if (event?.type === 'tool-result' && event.payload?.toolCallId) {
               ctx.metrics?.toolEnd(event.payload.toolCallId);
+            }
             const text = unwrapStepText(payload.output);
             if (text) {
               streamedAny = true;

@@ -98,12 +98,15 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     const existing = await collection.findOne<Record<string, any>>({ id: input.id });
 
     if (!existing) {
-      if (!('inputSchema' in input) || input.inputSchema === undefined)
+      if (!('inputSchema' in input) || input.inputSchema === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": inputSchema is required.`);
-      if (!('outputSchema' in input) || input.outputSchema === undefined)
+      }
+      if (!('outputSchema' in input) || input.outputSchema === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": outputSchema is required.`);
-      if (!('graph' in input) || input.graph === undefined)
+      }
+      if (!('graph' in input) || input.graph === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": graph is required.`);
+      }
 
       const doc: Record<string, any> = {
         id: input.id,
@@ -150,8 +153,9 @@ export class MongoDBWorkflowDefinitionsStore extends WorkflowDefinitionsStorage 
     if ('inputSchema' in input && input.inputSchema !== undefined) update.inputSchema = input.inputSchema;
     if ('outputSchema' in input && input.outputSchema !== undefined) update.outputSchema = input.outputSchema;
     if ('stateSchema' in input && input.stateSchema !== undefined) update.stateSchema = input.stateSchema;
-    if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
+    if ('requestContextSchema' in input && input.requestContextSchema !== undefined) {
       update.requestContextSchema = input.requestContextSchema;
+    }
     if ('graph' in input && input.graph !== undefined) update.graph = input.graph;
     if ('schedule' in input && input.schedule !== undefined) update.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) update.status = input.status;

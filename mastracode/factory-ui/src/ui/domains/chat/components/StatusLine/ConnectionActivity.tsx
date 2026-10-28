@@ -16,18 +16,20 @@ export function ConnectionActivity() {
   // The notice above the composer owns connection failures; other activity is stale until recovery.
   if (status === 'reconnecting' || status === 'error') return null;
   // preparing message sets busy; preparation status takes precedence
-  if (preparingThreadId)
+  if (preparingThreadId) {
     return (
       <span className={statusItem} role="status" aria-live="polite">
         <Circle size={10} /> {workspacePending ? 'Preparing workspace…' : 'Connecting…'}
       </span>
     );
+  }
   // Spinning composer ring is the visible cue; this keeps the state announced.
-  if (phase === 'working')
+  if (phase === 'working') {
     return (
       <span className="sr-only" role="status" aria-live="polite">
         Working…
       </span>
     );
+  }
   return null;
 }

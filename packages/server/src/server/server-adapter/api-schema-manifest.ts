@@ -78,8 +78,9 @@ function inferResponseShape(responseSchema: JSONSchema7 | undefined): ApiSchemaR
 export function getApiSchemaPropertyNames(schema: JSONSchema7 | undefined): string[] {
   if (!schema) return [];
   const names = Object.keys(schema.properties ?? {});
-  for (const branch of schema.anyOf ?? schema.oneOf ?? [])
+  for (const branch of schema.anyOf ?? schema.oneOf ?? []) {
     names.push(...getApiSchemaPropertyNames(asJsonSchema(branch)));
+  }
   return [...new Set(names)].sort();
 }
 

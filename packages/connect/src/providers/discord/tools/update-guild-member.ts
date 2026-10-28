@@ -136,7 +136,7 @@ export function updateGuildMemberTool(proxy: PlatformProxy) {
 
         const response = await platformProxy.patch({
           endpoint: `/api/v10/guilds/${input.guild_id}/members/@me`,
-          headers: headers,
+          headers,
           data: currentMemberBody,
           retries: 3,
         });
@@ -163,7 +163,7 @@ export function updateGuildMemberTool(proxy: PlatformProxy) {
       // https://discord.com/developers/docs/resources/guild#modify-guild-member
       const response = await platformProxy.patch({
         endpoint: `/api/v10/guilds/${input.guild_id}/members/${input.user_id}`,
-        headers: headers,
+        headers,
         data: body,
         retries: 3,
       });

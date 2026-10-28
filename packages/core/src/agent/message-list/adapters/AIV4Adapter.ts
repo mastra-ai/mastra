@@ -373,7 +373,7 @@ export class AIV4Adapter {
    * Converts a MastraDBMessage system message directly to AIV4 CoreMessage format
    */
   static systemToV4Core(message: MastraDBMessage): CoreMessageV4 {
-    if (message.role !== `system` || !message.content.content)
+    if (message.role !== `system` || !message.content.content) {
       throw new MastraError({
         id: 'INVALID_SYSTEM_MESSAGE_FORMAT',
         domain: ErrorDomain.AGENT,
@@ -383,6 +383,7 @@ export class AIV4Adapter {
           receivedMessage: JSON.stringify(message, null, 2),
         },
       });
+    }
 
     const coreMessage: CoreMessageV4 = { role: 'system', content: message.content.content };
 

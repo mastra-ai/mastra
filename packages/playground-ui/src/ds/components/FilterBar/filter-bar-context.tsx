@@ -287,8 +287,9 @@ export function FilterBarProvider({
     // when the leaf itself is unmounted (closed popover).
     const rootGroupOf = new Map<string, string>();
     for (const node of rendered.nodes) {
-      if (isFilterBarGroup(node))
+      if (isFilterBarGroup(node)) {
         for (const { item } of flattenItems({ logic: 'and', nodes: [node] })) rootGroupOf.set(item.id, node.id);
+      }
     }
     return { rendered, items: flattenItems(rendered).map(e => e.item), leaving, rootGroupOf };
   }, [expression, lastCommit, leavingIds]);

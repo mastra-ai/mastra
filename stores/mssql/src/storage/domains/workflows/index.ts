@@ -372,7 +372,7 @@ export class WorkflowsMSSQL extends WorkflowsStorage {
           status: 'pending',
           value: {},
           waitingPaths: {},
-          runId: runId,
+          runId,
           requestContext: {},
         } as WorkflowRunState;
       } else {

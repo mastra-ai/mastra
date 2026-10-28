@@ -62,8 +62,9 @@ function parseToolMocks(raw: string): { toolMocks?: DatasetItemToolMock[] } | { 
   const parsed = parseJson(raw);
   if (!parsed.ok) return { message: 'Tool mocks must be valid JSON' };
   if (!Array.isArray(parsed.value)) return { message: 'Tool mocks must be a JSON array' };
-  if (!parsed.value.every(isToolMock))
+  if (!parsed.value.every(isToolMock)) {
     return { message: 'Each tool mock needs a "toolName" string and an "args" object' };
+  }
   return parsed.value.length > 0 ? { toolMocks: parsed.value } : {};
 }
 
@@ -103,8 +104,9 @@ export function buildAddItemPayload(draft: AddItemDraft): { params: AddItemParam
 
   if (draft.requestContextEnabled) {
     const requestContext = parseOptionalObject(draft.requestContext);
-    if (!requestContext.ok)
+    if (!requestContext.ok) {
       return { error: { field: 'requestContext', message: 'Request context must be a JSON object' } };
+    }
     if (requestContext.value) params.requestContext = requestContext.value;
   }
 

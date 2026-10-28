@@ -25,7 +25,7 @@ describe('createTool', () => {
       id: 'test-tool',
       description: 'A test tool',
       inputSchema,
-      outputSchema: outputSchema,
+      outputSchema,
     });
 
     expect(tool.inputSchema).toBe(inputSchema);

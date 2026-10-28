@@ -313,8 +313,9 @@ function evaluateNestedExpectations(
     const scores: Array<{ weight: number; value: number }> = [];
     if (accuracy) scores.push({ weight: weights.accuracy, value: accuracy.score });
     if (efficiency) scores.push({ weight: weights.efficiency, value: efficiency.score });
-    if (toolFailures && toolFailures.patterns.length > 0)
+    if (toolFailures && toolFailures.patterns.length > 0) {
       scores.push({ weight: weights.toolFailures, value: toolFailures.score });
+    }
     if (blacklist) {
       if (blacklist.score === 0) {
         // Hard fail for blacklist violation at this level

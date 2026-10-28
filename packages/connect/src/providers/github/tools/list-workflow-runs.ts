@@ -100,7 +100,7 @@ export function listWorkflowRunsTool(proxy: PlatformProxy) {
 
       const perPage = input.per_page ?? 30;
       const params: Record<string, string | number> = {
-        page: page,
+        page,
         per_page: perPage,
         ...(input.status !== undefined && { status: input.status }),
         ...(input.branch !== undefined && { branch: input.branch }),
@@ -117,8 +117,8 @@ export function listWorkflowRunsTool(proxy: PlatformProxy) {
       // https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-repository
       // https://docs.github.com/en/rest/actions/workflow-runs#list-workflow-runs-for-a-workflow
       const response = await platformProxy.get({
-        endpoint: endpoint,
-        params: params,
+        endpoint,
+        params,
         retries: 3,
       });
 

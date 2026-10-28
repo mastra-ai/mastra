@@ -70,8 +70,9 @@ export function getRunRegistryEntry(runId: string, mastra: Mastra | undefined): 
  */
 export function setRunRegistryEntry(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined): boolean {
   const current = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-  if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra))
+  if (current?.mastra && mastra && unwrapMastraTracingProxy(current.mastra) !== unwrapMastraTracingProxy(mastra)) {
     return false;
+  }
   if (mastra) entry.mastra ??= mastra;
   globalRunRegistry.set(runId, entry);
   return true;

@@ -948,8 +948,9 @@ describe.skipIf(process.platform === 'win32')('cross-project agent signals over 
     let finishedAt = -1;
     while (Date.now() < deadline && finishedAt === -1) {
       const wakeAt = owner.events.findIndex(wakePrompt);
-      if (wakeAt !== -1)
+      if (wakeAt !== -1) {
         finishedAt = owner.events.findIndex((event, i) => i > wakeAt && event.event === 'run-finished');
+      }
       if (finishedAt === -1) await new Promise(resolve => setTimeout(resolve, 25));
     }
     expect(finishedAt).not.toBe(-1);

@@ -25,14 +25,16 @@ export const hostedIssues: LinearIssue[] = [
 }));
 
 export const hostedCards = wireSourceCards.map(item => {
-  if (item.id === 'ENG-301')
+  if (item.id === 'ENG-301') {
     return {
       ...item,
       title: 'Other workspace card',
       metadata: { ...item.metadata, linearProjectId: otherWorkspaceProjectId },
     };
-  if (item.id === 'ENG-103')
+  }
+  if (item.id === 'ENG-103') {
     return { ...item, title: 'DocsWatch: legacy planning card', metadata: { labels: ['feature'] } };
+  }
   if (item.metadata.linearProjectId !== 'project-a') return item;
   return { ...item, metadata: { ...item.metadata, linearProjectId: docsWatchId } };
 });

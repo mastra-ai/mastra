@@ -322,9 +322,9 @@ describe('T65 wf-restart-shapes in a fresh module graph', () => {
                 findRow(await original.checkpoint(), id, runId)?.snapshot,
                 shape.blockStep ?? 'block',
               );
-              if (shape.blockStep === 'item')
+              if (shape.blockStep === 'item') {
                 expect(entry?.output?.[0] != null && entry?.output?.[1] === null).toBe(true);
-              else expect(entry?.status).toBe('running');
+              } else expect(entry?.status).toBe('running');
             },
             { timeout: DEFAULT_TIMEOUT_MS },
           );

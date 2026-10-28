@@ -71,8 +71,8 @@ export function removeWatcherTool(proxy: PlatformProxy) {
         }
 
         await platformProxy.updateMetadata({
-          cloudId: cloudId,
-          baseUrl: baseUrl,
+          cloudId,
+          baseUrl,
         });
       }
 

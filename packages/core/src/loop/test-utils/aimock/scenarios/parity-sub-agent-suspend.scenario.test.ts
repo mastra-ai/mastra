@@ -100,8 +100,9 @@ async function drive(engine: ParityEngine) {
     const delegations: unknown[] = [];
     for await (const chunk of resumed.fullStream) {
       resumedTypes.push(chunk.type);
-      if (chunk.type === 'tool-result' && chunk.payload.toolName === 'agent-worker')
+      if (chunk.type === 'tool-result' && chunk.payload.toolName === 'agent-worker') {
         delegations.push(chunk.payload.result);
+      }
     }
     expect(resumedTypes.filter(type => type === 'finish')).toHaveLength(1);
     expect(resumedTypes.filter(type => ['error', 'abort', 'tripwire'].includes(type))).toEqual([]);

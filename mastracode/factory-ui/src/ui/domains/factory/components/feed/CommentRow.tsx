@@ -112,12 +112,13 @@ function CommentRowEditor({
 }
 
 function CommentRowBody({ comment, ref }: { comment: WorkItemComment; ref: Ref<HTMLElement> }) {
-  if (comment.deletedAt !== undefined)
+  if (comment.deletedAt !== undefined) {
     return (
       <Txt variant="caption" tone="faint" className="m-0 italic">
         Comment deleted
       </Txt>
     );
+  }
 
   return (
     <CommentItemBody ref={ref}>

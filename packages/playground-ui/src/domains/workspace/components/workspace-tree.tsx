@@ -28,7 +28,7 @@ type RequestDelete = (entry: WorkspaceEntryRef) => void;
 
 export function WorkspaceTree() {
   const { workspaceId, activeFilePath, setActiveFilePath } = useWorkspaceContext();
-  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: ROOT_PATH });
+  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId, path: ROOT_PATH });
   const [pendingDelete, setPendingDelete] = useState<WorkspaceEntryRef | null>(null);
 
   if (isLoading) return <TreeSkeleton />;
@@ -107,8 +107,8 @@ function FolderNode({ name, path, mount, onRequestDelete }: NodeProps & { mount?
   const open = openFolders.has(path);
   // Shares the query with FolderChildren; only used to flag the first load next to the name.
   const { isLoading } = useWorkspaceDirectory({
-    workspaceId: workspaceId,
-    path: path,
+    workspaceId,
+    path,
     queryOptions: { enabled: open },
   });
   const [creating, setCreating] = useState(false);
@@ -207,7 +207,7 @@ function FolderChildren({
 }) {
   const { workspaceId, onCreateDirectory } = useWorkspaceContext();
   const queryClient = useQueryClient();
-  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId: workspaceId, path: path });
+  const { data, isLoading, error } = useWorkspaceDirectory({ workspaceId, path });
 
   const create = async (name: string) => {
     try {

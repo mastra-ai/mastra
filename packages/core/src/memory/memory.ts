@@ -828,13 +828,14 @@ https://mastra.ai/en/docs/memory/overview`,
       typeof effectiveConfig.workingMemory === 'object' && effectiveConfig.workingMemory.useStateSignals === true;
 
     if (isWorkingMemoryEnabled && !useStateSignals) {
-      if (!memoryStore)
+      if (!memoryStore) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
           id: 'WORKING_MEMORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory working memory requires a storage adapter but no attached adapter was detected.',
         });
+      }
 
       // Check if user already manually added WorkingMemory
       const hasWorkingMemory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'working-memory');
@@ -874,13 +875,14 @@ https://mastra.ai/en/docs/memory/overview`,
         ? undefined
         : (this.createMemoryTokenCounter() ?? new TokenLimiterProcessor(lastMessages.maxTokens));
     if (lastMessages.enabled) {
-      if (!memoryStore)
+      if (!memoryStore) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
+      }
 
       // Skip MessageHistory input processor if ObservationalMemory handles message loading
       if (!hasMessageHistory && !hasObservationalMemory) {
@@ -903,31 +905,34 @@ https://mastra.ai/en/docs/memory/overview`,
 
     // Add semantic recall input processor if configured
     if (effectiveConfig.semanticRecall) {
-      if (!memoryStore)
+      if (!memoryStore) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
           id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
         });
+      }
 
-      if (!this.vector)
+      if (!this.vector) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
+      }
 
       // A self-embedding store needs no embedder: it takes the text and produces the
       // vectors itself.
-      if (!this.embedder && !this.vector.isSelfEmbedding)
+      if (!this.embedder && !this.vector.isSelfEmbedding) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
           text: 'Using Mastra Memory semantic recall requires an embedder, or a vector store that generates embeddings itself. Neither was detected.',
         });
+      }
 
       // Check if user already manually added SemanticRecall
       const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
@@ -1045,31 +1050,34 @@ https://mastra.ai/en/docs/memory/overview`,
 
     // Add SemanticRecall output processor if configured
     if (effectiveConfig.semanticRecall) {
-      if (!memoryStore)
+      if (!memoryStore) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
           id: 'SEMANTIC_RECALL_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory semantic recall requires a storage adapter but no attached adapter was detected.',
         });
+      }
 
-      if (!this.vector)
+      if (!this.vector) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_VECTOR_ADAPTER',
           text: 'Using Mastra Memory semantic recall requires a vector adapter but no attached adapter was detected.',
         });
+      }
 
       // A self-embedding store needs no embedder: it takes the text and produces the
       // vectors itself.
-      if (!this.embedder && !this.vector.isSelfEmbedding)
+      if (!this.embedder && !this.vector.isSelfEmbedding) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.MASTRA_VECTOR,
           id: 'SEMANTIC_RECALL_MISSING_EMBEDDER',
           text: 'Using Mastra Memory semantic recall requires an embedder, or a vector store that generates embeddings itself. Neither was detected.',
         });
+      }
 
       // Check if user already manually added SemanticRecall
       const hasSemanticRecall = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'semantic-recall');
@@ -1099,13 +1107,14 @@ https://mastra.ai/en/docs/memory/overview`,
 
     const lastMessages = normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory);
     if (lastMessages.enabled) {
-      if (!memoryStore)
+      if (!memoryStore) {
         throw new MastraError({
           category: 'USER',
           domain: ErrorDomain.STORAGE,
           id: 'MESSAGE_HISTORY_MISSING_STORAGE_ADAPTER',
           text: 'Using Mastra Memory message history requires a storage adapter but no attached adapter was detected.',
         });
+      }
 
       // Check if user already manually added MessageHistory
       const hasMessageHistory = configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === 'message-history');

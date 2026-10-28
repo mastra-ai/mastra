@@ -107,10 +107,11 @@ export function listScheduleEntriesTool(proxy: PlatformProxy) {
       const params: Record<string, string> = {};
       if (input['schedule_id'] !== undefined) params['schedule_id'] = String(input['schedule_id']);
       const entryWindowStart = input['after'] ?? input['entry_window_start'];
-      if (entryWindowStart !== undefined)
+      if (entryWindowStart !== undefined) {
         params['entry_window_start'] = Array.isArray(entryWindowStart)
           ? entryWindowStart.join(',')
           : String(entryWindowStart);
+      }
       if (input['entry_window_end'] !== undefined) params['entry_window_end'] = String(input['entry_window_end']);
       const config: PlatformProxyRequest = {
         // https://api.incident.io/v1/openapiV3.json,

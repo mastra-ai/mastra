@@ -54,8 +54,8 @@ export function WorkflowRunProvider({
     isLoading,
     error,
   } = useWorkflow({
-    workflowId: workflowId,
-    requestContext: requestContext,
+    workflowId,
+    requestContext,
     queryOptions: { enabled: Boolean(workflowId) },
   });
   const queryClient = useQueryClient();

@@ -43,10 +43,10 @@ export function getValuesTool(proxy: PlatformProxy) {
       const values = data.values || [];
 
       return {
-        spreadsheetId: spreadsheetId,
-        range: range,
-        majorDimension: majorDimension,
-        values: values,
+        spreadsheetId,
+        range,
+        majorDimension,
+        values,
       };
     },
   });

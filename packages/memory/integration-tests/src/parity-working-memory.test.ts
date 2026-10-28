@@ -35,8 +35,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('working-memory parity [
         toolCallTape('updateWorkingMemory', { memory: PROFILE_1 }, 't41-store-1'),
         textOnlyTape('stored 1'),
       ];
-      if (variant === 'update')
+      if (variant === 'update') {
         tapes.push(toolCallTape('updateWorkingMemory', { memory: PROFILE_2 }, 't41-store-2'), textOnlyTape('stored 2'));
+      }
       tapes.push(textOnlyTape('recalled'));
       const { model, requests } = createRecordingModel({ tapes });
       const agent = new Agent({ id: 't41-agent', name: 'T41', instructions: 'Remember the profile.', model, memory });
@@ -70,8 +71,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('working-memory parity [
         await turn('what do you know?', variant === 'resource' ? 't41-thread-b' : 't41-thread-a');
         const final = variant === 'update' ? PROFILE_2 : PROFILE_1;
         expect(await memory.getWorkingMemory({ threadId: 't41-thread-a', resourceId: 't41-resource' })).toBe(final);
-        if (variant === 'resource')
+        if (variant === 'resource') {
           expect(await memory.getWorkingMemory({ threadId: 't41-thread-b', resourceId: 't41-resource' })).toBe(final);
+        }
         const memoryStore = await storage.getStore('memory');
         const { messages } = await memoryStore!.listMessages({
           threadId: 't41-thread-a',

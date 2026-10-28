@@ -1259,10 +1259,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     const fetchHeaders = new Headers();
     for (const [key, value] of Object.entries(headers)) {
       if (typeof value === 'string') fetchHeaders.set(key, value);
-      else if (Array.isArray(value))
+      else if (Array.isArray(value)) {
         value.forEach(v => {
           fetchHeaders.append(key, v);
         });
+      }
     }
 
     const init: RequestInit = { method, headers: fetchHeaders, signal };

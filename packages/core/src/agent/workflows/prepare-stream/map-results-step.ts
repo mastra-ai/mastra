@@ -202,7 +202,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           tripwire: memoryData.tripwire!,
           runId,
           ...createObservabilityContext({ currentSpan: agentSpan }),
-          options: options,
+          options,
           model: agentModel,
           messageList,
         });
@@ -489,7 +489,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 resourceId,
                 memoryConfig,
                 requestContext,
-                agentSpan: agentSpan,
+                agentSpan,
                 runId,
                 messageList,
                 threadExists: memoryData.threadExists || threadCreatedByStep,

@@ -585,7 +585,7 @@ export async function evaluateGoal(deps: {
   const goalEvaluationPayload = {
     objective: record.objective,
     iteration: runsUsed,
-    maxRuns: maxRuns,
+    maxRuns,
     passed: result.complete,
     status,
     pausedReason,

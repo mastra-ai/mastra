@@ -75,7 +75,7 @@ export function listViewsTool(proxy: PlatformProxy) {
         // https://docs.snowflake.com/en/developer-guide/sql-api/submitting-requests
         endpoint: '/api/v2/statements',
         data: {
-          statement: statement,
+          statement,
           resultSetMetaData: {
             format: 'jsonv2',
           },
@@ -111,12 +111,12 @@ export function listViewsTool(proxy: PlatformProxy) {
 
           return {
             created_on: createdOn,
-            name: name,
+            name,
             database_name: databaseName,
             schema_name: schemaName,
-            ...(owner !== null && owner !== '' && { owner: owner }),
-            ...(comment !== null && comment !== '' && { comment: comment }),
-            ...(text !== null && text !== '' && { text: text }),
+            ...(owner !== null && owner !== '' && { owner }),
+            ...(comment !== null && comment !== '' && { comment }),
+            ...(text !== null && text !== '' && { text }),
             is_secure: isSecure,
             is_materialized: isMaterialized,
             ...(changeTracking !== null && changeTracking !== '' && { change_tracking: changeTracking }),

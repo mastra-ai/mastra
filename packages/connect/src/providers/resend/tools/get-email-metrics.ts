@@ -87,14 +87,18 @@ export function getEmailMetricsTool(proxy: PlatformProxy) {
       if (input['timezone'] !== undefined) params['timezone'] = String(input['timezone']);
       if (input['granularity'] !== undefined) params['granularity'] = String(input['granularity']);
       if (input['metrics'] !== undefined && input['metrics'].length > 0) params['metrics'] = input['metrics'].join(',');
-      if (input['dimensions'] !== undefined && input['dimensions'].length > 0)
+      if (input['dimensions'] !== undefined && input['dimensions'].length > 0) {
         params['dimensions'] = input['dimensions'].join(',');
-      if (input['domain_id'] !== undefined && input['domain_id'].length > 0)
+      }
+      if (input['domain_id'] !== undefined && input['domain_id'].length > 0) {
         params['domain_id'] = input['domain_id'].join(',');
-      if (input['email_id'] !== undefined && input['email_id'].length > 0)
+      }
+      if (input['email_id'] !== undefined && input['email_id'].length > 0) {
         params['email_id'] = input['email_id'].join(',');
-      if (input['broadcast_id'] !== undefined && input['broadcast_id'].length > 0)
+      }
+      if (input['broadcast_id'] !== undefined && input['broadcast_id'].length > 0) {
         params['broadcast_id'] = input['broadcast_id'].join(',');
+      }
       const config: PlatformProxyRequest = {
         // https://raw.githubusercontent.com/resend/resend-openapi/68c1b66c20ad62020962838832e53af10558c2f5/resend.yaml,
         endpoint: `/emails/metrics`,

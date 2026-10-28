@@ -856,8 +856,9 @@ function detectPrWorkEvidence(input: {
   if (url?.[1] && url[2] && url[3]) return { owner: url[1], repo: url[2], number: Number(url[3]) };
 
   const repoRef = /\b([A-Za-z0-9_.-]+)\/([A-Za-z0-9_.-]+)#(\d+)\b/.exec(evidence);
-  if (repoRef?.[1] && repoRef[2] && repoRef[3])
+  if (repoRef?.[1] && repoRef[2] && repoRef[3]) {
     return { owner: repoRef[1], repo: repoRef[2], number: Number(repoRef[3]) };
+  }
 
   const ghCommand = /\bgh\s+(?:pr\s+(?:view|checks|status|comment|diff|checkout)|run\s+(?:rerun|view))\b/i.test(
     evidence,
@@ -874,16 +875,19 @@ function classifyGithubActivityNotification(input: {
   const pr = `${input.subscription.owner}/${input.subscription.repo}#${input.subscription.number}`;
   const label = getPrLabel(input.subscription, input.snapshot);
   if (input.snapshot.state && input.subscription.lastObservedState !== input.snapshot.state) {
-    if (input.snapshot.state === 'merged')
+    if (input.snapshot.state === 'merged') {
       return {
         kind: 'pull-request-merged',
         priority: 'high',
         summary: getMergedNotificationSummary(label),
       };
-    if (input.snapshot.state === 'closed')
+    }
+    if (input.snapshot.state === 'closed') {
       return { kind: 'pull-request-closed', priority: 'high', summary: `${label} was closed` };
-    if (input.subscription.lastObservedState && input.snapshot.state === 'open')
+    }
+    if (input.subscription.lastObservedState && input.snapshot.state === 'open') {
       return { kind: 'pull-request-reopened', priority: 'medium', summary: `${label} was reopened` };
+    }
   }
 
   const failingChecks = getFailingChecks(input.snapshot);
@@ -1803,8 +1807,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
   async #loadThread(input: { threadId?: string; resourceId?: string }) {
     const threadStore = await this.#resolveThreadStore();
     if (!threadStore) throw new Error('GitHub PR subscription requires memory-backed thread storage.');
-    if (!input.threadId || !input.resourceId)
+    if (!input.threadId || !input.resourceId) {
       throw new Error('GitHub PR subscription requires threadId and resourceId.');
+    }
     const loadedThread =
       (await threadStore.getThreadById({ threadId: input.threadId, resourceId: input.resourceId })) ?? undefined;
     if (!loadedThread) throw new Error(`Could not load thread ${input.threadId}.`);
@@ -1907,13 +1912,14 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
           }
         }
         if (!isCurrentGeneration()) return 0;
-        if (snapshot)
+        if (snapshot) {
           snapshot = await this.#filterUnauthorizedLatestComment(
             subscription.owner,
             subscription.repo,
             snapshot,
             isCurrentGeneration,
           );
+        }
         if (!isCurrentGeneration()) return 0;
         const nextSubscription: GithubPRSubscription = {
           ...subscription,
@@ -2508,9 +2514,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       });
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
-      if (subscriptions.length === 0)
+      if (subscriptions.length === 0) {
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
-      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      } else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
       return { owner, repo, number: input.number, mode, terminalState, syncResult };
     }
 
@@ -2563,9 +2569,9 @@ export class GithubSignals extends SignalProvider<'github-signals'> {
         },
       });
       this.#notifySubscriptionsChanged({ threadId: input.threadId!, resourceId: input.resourceId!, subscriptions });
-      if (subscriptions.length === 0)
+      if (subscriptions.length === 0) {
         this.stopPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
-      else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
+      } else await this.startPollingForThread({ threadId: input.threadId!, resourceId: input.resourceId! });
     }
     return { owner, repo, number: input.number, removed, remainingSubscriptions: subscriptions.length };
   }

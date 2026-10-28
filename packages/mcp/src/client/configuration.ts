@@ -240,8 +240,14 @@ To fix this you have three different options:
     const { typegen } = args;
     if (typegen !== undefined) {
       // Runtime guard for untyped callers; the option is typed as `{ outFile: string }`.
-      if (!typegen || typeof typegen.outFile !== 'string' || !typegen.outFile.trim() || typegen.outFile.includes('\0'))
+      if (
+        !typegen ||
+        typeof typegen.outFile !== 'string' ||
+        !typegen.outFile.trim() ||
+        typegen.outFile.includes('\0')
+      ) {
         throw new Error('typegen.outFile must be a nonempty file path');
+      }
       this.typegen = Object.freeze({ outFile: typegen.outFile });
     }
     mcpClientInstances.set(this.id, this);

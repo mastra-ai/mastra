@@ -222,8 +222,9 @@ export async function stopProcessMemoryDiagnosticsWithTimeout(
     }),
   ]);
   if (timeout) clearTimeout(timeout);
-  if (timedOut)
+  if (timedOut) {
     warn(`Process memory diagnostics did not stop within ${timeoutMs}ms; final artifacts may be incomplete.`);
+  }
 }
 
 function defaultInspectorSession(): InspectorSessionAdapter {

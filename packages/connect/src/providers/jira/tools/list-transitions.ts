@@ -124,8 +124,8 @@ export function listTransitionsTool(proxy: PlatformProxy) {
 
         // Cache for subsequent runs
         await platformProxy.updateMetadata({
-          cloudId: cloudId,
-          baseUrl: baseUrl,
+          cloudId,
+          baseUrl,
         });
       }
 

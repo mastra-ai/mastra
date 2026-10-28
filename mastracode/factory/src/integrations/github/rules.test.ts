@@ -2964,8 +2964,9 @@ describe('GithubRules', () => {
       pullRequestOpened: context => {
         // The arrival files the pull request's own card; the item the pull
         // request was authored from is placed in review instead.
-        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null) {
           return defaultGithubRules.pullRequestOpened(context);
+        }
         return {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: `${context.ingress.id}:work-item-review`,
@@ -3051,8 +3052,9 @@ describe('GithubRules', () => {
   it("moves the item that authored a pull request into review when it opens, and still files the pull request's card", async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
       pullRequestOpened: context => {
-        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null) {
           return defaultGithubRules.pullRequestOpened(context);
+        }
         return {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: `${context.ingress.id}:work-item-review`,

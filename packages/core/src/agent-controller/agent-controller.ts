@@ -2562,8 +2562,9 @@ export class AgentController<TState = {}> {
     const readMetadata = async () => {
       if (!threadId || !this.#resolveStorage()) return {};
       const thread = await session.thread.getById({ threadId });
-      if (!thread || thread.resourceId !== resourceId)
+      if (!thread || thread.resourceId !== resourceId) {
         throw new Error('Source thread is missing or belongs to another resource');
+      }
       return thread.metadata ?? {};
     };
     const persistSetting = async ({ key, value }: { key: string; value: unknown }) => {

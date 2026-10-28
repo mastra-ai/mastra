@@ -45,20 +45,24 @@ function backgroundPlaceholderScenario(enabled: boolean): McE2eScenario {
       await runtime.waitForScreenText(/Resource ID:/i, terminal);
       terminal.submit('Run the foreground placeholder collision probe.');
       await runtime.waitForOutputText(/FOREGROUND_COLLISION_COMPLETE/, terminal);
-      if (!state || state.options.backgroundToolsEnabled !== enabled)
+      if (!state || state.options.backgroundToolsEnabled !== enabled) {
         throw new Error('Unexpected background tools setting');
+      }
       const check = () => {
         const output = state!.chatContainer
           .render(140)
           .join('\n')
           .replace(/\x1b\[[0-9;]*m/g, '');
-        if (output.includes('background · visible-demo-123'))
+        if (output.includes('background · visible-demo-123')) {
           throw new Error('Foreground result has a background badge');
+        }
         if (state!.pendingTools.has('call_collision')) throw new Error('Completed foreground tool remains pending');
-        if ([...state!.backgroundActivities.values()].some(activity => activity.toolCallId === 'call_collision'))
+        if ([...state!.backgroundActivities.values()].some(activity => activity.toolCallId === 'call_collision')) {
           throw new Error('Foreground output created background activity');
-        if (!output.includes('Background task started. Task ID: visible-demo-123'))
+        }
+        if (!output.includes('Background task started. Task ID: visible-demo-123')) {
           throw new Error('Foreground output missing');
+        }
       };
       check();
       await renderExistingMessages(state);

@@ -34,8 +34,9 @@ function credentialLine(requestContext: RequestContext | undefined, failedModel:
   const sessionModelId = controller?.session?.modelId;
   if (!sessionModelId) return undefined;
   const slash = sessionModelId.indexOf('/');
-  if (slash <= 0 || (sessionModelId !== failedModel && sessionModelId.slice(slash + 1) !== failedModel))
+  if (slash <= 0 || (sessionModelId !== failedModel && sessionModelId.slice(slash + 1) !== failedModel)) {
     return undefined;
+  }
   const credential = runCredential(requestContext, sessionModelId.slice(0, slash));
   if (!credential) return undefined;
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;

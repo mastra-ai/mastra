@@ -1028,8 +1028,9 @@ export class KnowledgePG extends KnowledgeStorage {
       clauses.push('kind = ?');
       args.push(input.kind);
     }
-    if (input.hasContent !== undefined)
+    if (input.hasContent !== undefined) {
       clauses.push(input.hasContent ? "content IS NOT NULL AND content <> ''" : "(content IS NULL OR content = '')");
+    }
     if (input.cursor) {
       const cursor = parseKnowledgeNodeCursor(input.cursor, {
         namePrefix: input.namePrefix,
@@ -1146,7 +1147,7 @@ export class KnowledgePG extends KnowledgeStorage {
         sql: `UPDATE "${TABLE_KNOWLEDGE_MENTIONS}" SET recordId=? WHERE recordId=?`,
         args: [target.id, source.id],
       });
-      for (const row of movedFacts.rows)
+      for (const row of movedFacts.rows) {
         await this.#outbox(
           tx,
           'record',
@@ -1155,7 +1156,8 @@ export class KnowledgePG extends KnowledgeStorage {
           createKnowledgeUlid(),
           parseJson(row.scopeJson),
         );
-      for (const row of affected.rows)
+      }
+      for (const row of affected.rows) {
         await this.#outbox(
           tx,
           String(row.sourceType) as 'record' | 'node',
@@ -1164,6 +1166,7 @@ export class KnowledgePG extends KnowledgeStorage {
           createKnowledgeUlid(),
           parseJson<KnowledgeScope>(row.scopeJson),
         );
+      }
       // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
       // clear and wins) adopts the source's; otherwise the target's state is preserved.
       let mergedTarget = target;
@@ -1316,8 +1319,9 @@ export class KnowledgePG extends KnowledgeStorage {
       });
       await this.#replaceRecordScopes(tx, input.id, scope, updatedAt);
       await this.#activity(tx, 'record-rescoped', 'record', input.id, scope, record.sourceThreadId);
-      if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope))
+      if (knowledgeScopeKey(record.scope) !== knowledgeScopeKey(scope)) {
         await this.#outbox(tx, 'record', input.id, 'delete', createKnowledgeUlid(), record.scope);
+      }
       if (!record.deletedAt) await this.#outbox(tx, 'record', input.id, 'upsert', createKnowledgeUlid(), scope);
       return { ...record, scope };
     });
@@ -1453,11 +1457,12 @@ export class KnowledgePG extends KnowledgeStorage {
         args,
       });
       const ids = selected.rows.map(row => String(row.id));
-      for (const id of ids)
+      for (const id of ids) {
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='processing',attempts=attempts+1,claimedAt=?,claimedBy=? WHERE id=?`,
           args: [now.toISOString(), input.workerId, id],
         });
+      }
       if (!ids.length) return [];
       const result = await tx.execute({
         sql: `SELECT *,scope AS "scopeJson" FROM "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" WHERE id IN (${ids.map(() => '?').join(',')}) ORDER BY createdAt ASC,id ASC`,
@@ -1471,21 +1476,23 @@ export class KnowledgePG extends KnowledgeStorage {
     if (!input.ids.length) return;
     const now = new Date().toISOString();
     await this.#transaction(async tx => {
-      for (const id of input.ids)
+      for (const id of input.ids) {
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='completed',completedAt=? WHERE id=? AND status='processing' AND claimedBy=?`,
           args: [now, id, input.workerId],
         });
+      }
     });
   }
   async releaseSemanticOutbox(input: { ids: string[]; workerId: string; retryAt?: Date }): Promise<void> {
     if (!input.ids.length) return;
     await this.#transaction(async tx => {
-      for (const id of input.ids)
+      for (const id of input.ids) {
         await tx.execute({
           sql: `UPDATE "${TABLE_KNOWLEDGE_SEMANTIC_OUTBOX}" SET status='pending',availableAt=?,claimedAt=NULL,claimedBy=NULL WHERE id=? AND status='processing' AND claimedBy=?`,
           args: [(input.retryAt ?? new Date()).toISOString(), id, input.workerId],
         });
+      }
     });
   }
 

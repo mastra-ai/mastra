@@ -107,8 +107,9 @@ export async function recordFactoryPullRequestProvenance(
       !Number.isInteger(installationId) ||
       !Number.isInteger(pullRequestNumber) ||
       pullRequestNumber < 1
-    )
+    ) {
       return;
+    }
     const targetKey = `factory-pr-provenance:${repositoryId}:${pullRequestNumber}`;
     // Dedupe within the authoring project only: a sibling project's row must
     // not block this project from recording its own provenance.

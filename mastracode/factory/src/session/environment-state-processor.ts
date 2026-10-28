@@ -133,8 +133,9 @@ export class FactoryEnvironmentStateProcessor implements Processor<'factory-envi
     if (!state) return;
     const cacheKey = environmentCacheKey(state);
     const hasBase = Boolean(args.lastSnapshot) && args.contextWindow.hasSnapshot;
-    if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
+    if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey) {
       return;
+    }
     const lines = state.repositories.map(
       (repo, index) =>
         `${index + 1}. ${escapeText(repo.slug)} at ${escapeText(repo.dir)} on ${escapeText(repo.branch ?? '(detached)')} (default ${escapeText(repo.defaultBranch)}, setup ${repo.setupStatus})` +

@@ -1425,8 +1425,9 @@ export class FactoryDecisionDispatcher {
       return;
     }
     const materializedByDecision = result.item.metadata?.[FACTORY_RULE_MATERIALIZATION_KEY] === record.idempotencyKey;
-    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase)))
+    if (!materializedByDecision && (decision.stage === initialPhase || !result.item.stages.includes(initialPhase))) {
       return;
+    }
 
     const board = decision.board;
     let expectedRevision = result.item.revision;
@@ -1445,8 +1446,9 @@ export class FactoryDecisionDispatcher {
         initialEntry: true,
       });
       if (initial.status === 'rejected') {
-        if (result.created)
+        if (result.created) {
           await this.#storage.delete({ orgId: record.orgId, id: result.item.id, purgeRuleState: false });
+        }
         throw new Error(`${initial.code}: ${initial.reason}`);
       }
       expectedRevision = initial.revision;

@@ -219,7 +219,7 @@ export function updateCourseStateOnServerLocally(deviceId: string, state: Course
       }
       const data = JSON.stringify({
         id: creds.deviceId,
-        state: state,
+        state,
       });
       const options = {
         hostname: 'localhost',
@@ -275,7 +275,7 @@ async function updateCourseStateOnServer(deviceId: string, state: CourseState): 
     },
     body: JSON.stringify({
       id: creds.deviceId,
-      state: state,
+      state,
     }),
   });
 

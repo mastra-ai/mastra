@@ -148,12 +148,13 @@ describe('custom API routes with FGA', () => {
         permission: 'fund:write',
       }),
     );
-    if (useResolver)
+    if (useResolver) {
       expect(resolveRouteFGA).toHaveBeenCalledWith(
         expect.objectContaining({
           params: expect.objectContaining({ id: 'body-id' }),
         }),
       );
+    }
     if (allowed) {
       expect(handler).toHaveBeenCalledOnce();
       expect(await response.json()).toEqual({ id: 'body-id', file: 'upload contents' });

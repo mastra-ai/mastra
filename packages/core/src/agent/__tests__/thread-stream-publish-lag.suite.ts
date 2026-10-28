@@ -167,10 +167,11 @@ async function join(agent: Agent<any, any, any, any>, until: Promise<unknown> = 
   })();
   await until;
   await nextTicks(20);
-  if (lastType)
+  if (lastType) {
     await vi.waitFor(() =>
       expect(chunks.filter(chunk => chunk.type !== 'thread-run-status').at(-1)?.type).toBe(lastType),
     );
+  }
   subscription.unsubscribe();
   await consumed;
   return chunks;

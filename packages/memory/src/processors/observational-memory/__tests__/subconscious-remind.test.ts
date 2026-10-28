@@ -139,12 +139,12 @@ describe('Subconscious remind', () => {
     const node = await store.createNode({
       name: 'Project Atlas',
       kind: 'project',
-      scope: scope,
+      scope,
     });
     const record = await store.appendKnowledge({
       node,
       text: 'Project Atlas launches January 15.',
-      scope: scope,
+      scope,
       sourceThreadId: 'beta',
       resolutionScope: ['org:acme', 'resource:user-42', 'thread:beta'],
       defaultScope: scope,

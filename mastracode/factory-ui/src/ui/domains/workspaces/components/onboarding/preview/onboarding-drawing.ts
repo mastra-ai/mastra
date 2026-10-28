@@ -38,8 +38,9 @@ export const contour = (points: readonly Point[]) => {
 export const segments = (points: readonly Point[]) => {
   let path = '';
   for (let i = 0; i + 1 < points.length; i += 2) {
-    if (Math.hypot(points[i][0] - points[i + 1][0], points[i][1] - points[i + 1][1]) > 0.01)
+    if (Math.hypot(points[i][0] - points[i + 1][0], points[i][1] - points[i + 1][1]) > 0.01) {
       path += `M${points[i].join(',')}L${points[i + 1].join(',')}`;
+    }
   }
   return path;
 };
@@ -108,8 +109,9 @@ function surface(vertices: readonly Point[], marks: Point[] = [], radius = 1.5):
   const outline = Array.from({ length: 64 }, (_, i): Point => {
     let remaining = (perimeter * i) / 64;
     for (let edge = 0; edge < lengths.length; edge++) {
-      if (remaining <= lengths[edge])
+      if (remaining <= lengths[edge]) {
         return pointBetween(points[edge], points[(edge + 1) % points.length], remaining / (lengths[edge] || 1));
+      }
       remaining -= lengths[edge];
     }
     return points[0];
@@ -180,9 +182,11 @@ function box(
 function slab(x: number, y: number, width: number, depth: number, z: number, height: number, marked = true): Surface {
   const { silhouette, creases } = box(x, y, width, depth, z, height);
   const top = z + height;
-  if (marked)
-    for (const offset of [8, 14])
+  if (marked) {
+    for (const offset of [8, 14]) {
       creases.push(...worldLine([x + 6, y + offset, top], [x + width - 8, y + offset, top]));
+    }
+  }
   return surface(silhouette, creases);
 }
 function transformed(shape: Surface, scale: number, x: number, y: number): Surface {
@@ -254,7 +258,7 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
     y: miniY,
     foundation: 1,
   };
-  if (scene === 'factory')
+  if (scene === 'factory') {
     return {
       ...base,
       building: 1,
@@ -264,7 +268,8 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
       foundation: 0,
       surfaces: withFoldedSurfaces([...roofs, conveyorTicket(0, smooth(0.18)), conveyorTicket(1, smooth(0.53))]),
     };
-  if (scene === 'codebase')
+  }
+  if (scene === 'codebase') {
     return {
       ...base,
       building: 1,
@@ -275,7 +280,8 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
         ...brackets,
       ]),
     };
-  if (scene === 'intake')
+  }
+  if (scene === 'intake') {
     return {
       ...base,
       links: [
@@ -290,6 +296,7 @@ export function drawingPose(scene: DrawingScene, mode: AccountsMode): DrawingPos
       ],
       surfaces: withFoldedSurfaces([panel(28, 48, 148, 64), panel(28, 186, 104, 48), panel(148, 186, 104, 48)]),
     };
+  }
   const links = [80, 200, 320].map((x, index): Point[] => {
     const origin = mode === 'shared' ? 200 : x;
     return [

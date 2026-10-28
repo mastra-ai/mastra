@@ -471,7 +471,7 @@ describe('BatchPartsProcessor', () => {
         from: ChunkFrom.AGENT,
       };
       await processor.processOutputStream({
-        part: part,
+        part,
         streamParts: [part],
         state: {},
         abort: () => {
@@ -691,7 +691,7 @@ describe('BatchPartsProcessor', () => {
         from: ChunkFrom.AGENT,
       };
       const result = await processor.processOutputStream({
-        part: part,
+        part,
         streamParts: [part],
         state: {},
         abort: () => {

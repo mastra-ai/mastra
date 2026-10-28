@@ -104,7 +104,7 @@ export class VoyageRelevanceScorer implements RelevanceScoreProvider {
       query,
       documents,
       model: this.modelId,
-      topK: topK,
+      topK,
       truncation: this.config.truncation ?? true,
     });
 

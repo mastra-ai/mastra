@@ -141,8 +141,9 @@ export async function createDriver(opts: {
     for (;;) {
       const value = probe();
       if (value !== undefined) return value;
-      if (Date.now() - start > timeoutMs)
+      if (Date.now() - start > timeoutMs) {
         throw new Error(`timeout waiting for ${label}\n--- transcript ---\n${text()}`);
+      }
       await sleep(25);
     }
   };

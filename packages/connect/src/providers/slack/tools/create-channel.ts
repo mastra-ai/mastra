@@ -49,7 +49,7 @@ export function createChannelTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'api_error',
           message: `Failed to create conversation: ${error}`,
-          error: error,
+          error,
         });
       }
 

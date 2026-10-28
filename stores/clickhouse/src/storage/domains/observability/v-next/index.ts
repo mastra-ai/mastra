@@ -1160,8 +1160,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryCursorError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_SPANS', 'FAILED'),
@@ -1182,8 +1183,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryCursorError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_TRACES', 'FAILED'),
@@ -1203,8 +1205,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_TRACES', 'FAILED'),
@@ -1223,8 +1226,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'AGGREGATE_SPANS', 'FAILED'),
@@ -1246,8 +1250,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_OBSERVED_FIELDS', 'FAILED'),
@@ -1267,8 +1272,9 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'GET_TRACE_QUERY_VALUES', 'FAILED'),
@@ -1289,16 +1295,18 @@ export class ObservabilityStorageClickhouseVNext extends ObservabilityStorage {
     plan: TrustedThreadQueryPlan | coreStorage.TrustedThreadRowsQueryPlan,
   ): Promise<QueryThreadsResult | coreStorage.ThreadQueryResponse> {
     try {
-      if (plan.result === 'threadRows')
+      if (plan.result === 'threadRows') {
         return await threadQueryOps.queryThreadRows(this.#client, plan, this.#traceQueryTimeoutMs);
+      }
       return await traceQueryOps.queryThreads(this.#client, plan, this.#traceQueryTimeoutMs);
     } catch (error) {
       if (
         error instanceof MastraError ||
         error instanceof coreStorage.TraceQueryExecutionError ||
         error instanceof coreStorage.TraceQueryResourceLimitError
-      )
+      ) {
         throw error;
+      }
       throw new MastraError(
         {
           id: createStorageErrorId('CLICKHOUSE', 'QUERY_THREADS', 'FAILED'),

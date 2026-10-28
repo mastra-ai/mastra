@@ -90,7 +90,7 @@ async function validateAndPrepareContext(versionBumps: VersionBumps, spinner: an
 
   return {
     coreBump,
-    versionBumps: versionBumps,
+    versionBumps,
     nextCoreVersion,
     nextMajorVersion,
     packages,

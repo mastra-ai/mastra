@@ -916,7 +916,7 @@ export class MongoDBVector extends MastraVector<MongoDBVectorFilter> {
         searchField = {
           type: 'vector',
           path: embeddingField,
-          numDimensions: numDimensions,
+          numDimensions,
           similarity: mongoMetric,
         };
       }

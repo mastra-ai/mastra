@@ -84,7 +84,7 @@ export function listPermissionsTool(proxy: PlatformProxy) {
       const permissions = z.array(PermissionSchema).parse(response.data.value);
 
       return {
-        permissions: permissions,
+        permissions,
       };
     },
   });

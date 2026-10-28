@@ -97,7 +97,7 @@ describe('step-finish token usage extraction', () => {
       model: new MockLanguageModelV2({
         doStream: async () => {
           calls++;
-          if (calls === 2)
+          if (calls === 2) {
             return {
               warnings: [],
               stream: convertArrayToReadableStream([
@@ -106,6 +106,7 @@ describe('step-finish token usage extraction', () => {
                 { type: 'finish', finishReason: 'stop', usage },
               ]),
             };
+          }
           return {
             warnings: [],
             stream: convertArrayToReadableStream([
@@ -695,8 +696,9 @@ describe('step-finish token usage extraction', () => {
       const save = memory.saveThread.bind(memory);
       let failures = 0;
       const saveSpy = vi.spyOn(memory, 'saveThread').mockImplementation(async input => {
-        if (failWrite && input.thread.metadata?.tokenUsage && failures++ === 0)
+        if (failWrite && input.thread.metadata?.tokenUsage && failures++ === 0) {
           throw new Error('Injected execution save failure');
+        }
         return save(input);
       });
       const sending = first.sendMessage({ content: 'Start' });

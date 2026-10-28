@@ -158,7 +158,7 @@ export function listUpcomingEventsTool(proxy: PlatformProxy) {
         // https://developers.google.com/workspace/calendar/api/v3/reference/events/list
         endpoint: `/calendar/v3/calendars/${encodeURIComponent(calendarId)}/events`,
         params: {
-          timeMin: timeMin,
+          timeMin,
           orderBy: 'startTime',
           singleEvents: 'true',
           ...((input.maxResults ?? input.limit) !== undefined && {

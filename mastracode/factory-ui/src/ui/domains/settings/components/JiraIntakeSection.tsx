@@ -33,14 +33,16 @@ export function JiraIntakeSection({
   function connectionDescription() {
     if (statusQuery.isError) return "Couldn't load Jira status.";
     if (reauthRequired) return 'A connected Jira account needs to be reconnected.';
-    if (authError)
+    if (authError) {
       return platformManaged
         ? 'Jira rejected a connected account. Reconnect it to resume syncing.'
         : 'Jira rejected the configured credentials. Ask the operator to check the Jira API token.';
-    if (!configured)
+    }
+    if (!configured) {
       return platformManaged
         ? 'Connect a Jira account to sync issues from this organization.'
         : 'Jira is not configured on this server. Set JIRA_BASE_URL, JIRA_EMAIL, and JIRA_API_TOKEN to enable it.';
+    }
     return undefined;
   }
   return (

@@ -1136,8 +1136,9 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           const outside = existing.skills && rescannedOutsideResolver.get(existing.skills);
           if (!outside) return false;
           await outside;
-          if (rescannedOutsideResolver.get(existing.skills!) === outside)
+          if (rescannedOutsideResolver.get(existing.skills!) === outside) {
             rescannedOutsideResolver.delete(existing.skills!);
+          }
           skillCacheReviewState.delete(workspaceId);
           return true;
         };

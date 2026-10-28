@@ -1870,7 +1870,7 @@ export async function createMastraCodeAgentController(config?: MastraCodeConfig)
   // Cases 1 & 2 use `mountAgentControllerOnMastra` (register-before-init, no eager
   // session). Case 3 uses `bootLocalAgentController` (init + one wired session).
   return {
-    controller: controller,
+    controller,
     storage,
     storageMaintenance,
     createKnowledgeInspector: (session: Session<MastraCodeState>, knowledgeKey?: string) =>

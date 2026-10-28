@@ -115,7 +115,7 @@ export function listIssueLabelsTool(proxy: PlatformProxy) {
                         }
                     }
                 }`,
-          variables: variables,
+          variables,
         },
         retries: 3,
       });
@@ -142,7 +142,7 @@ export function listIssueLabelsTool(proxy: PlatformProxy) {
 
       return {
         nodes: nodes.map(node => IssueLabelSchema.parse(node)),
-        pageInfo: pageInfo,
+        pageInfo,
       };
     },
   });

@@ -4055,11 +4055,13 @@ describe('factory environment sandbox context', () => {
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
       mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
-        if (command === 'pnpm docs')
+        if (command === 'pnpm docs') {
           throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+        }
         // A failed workspace command makes the next start boot again, like a reconnect.
-        if (command === 'touch .workspace-ready')
+        if (command === 'touch .workspace-ready') {
           throw new SetupCommandError('Setup command failed (exit 1)', 'setup-failed');
+        }
       });
       const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
       const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
@@ -4091,8 +4093,9 @@ describe('factory environment sandbox context', () => {
       addProject({ setupCommand: 'pnpm i' });
       addSession({ id: 'session-a', factoryProjectId: 'factory-1' });
       mocks.runSetupCommand.mockImplementation(async (_sandbox: unknown, _dir: string, command: string) => {
-        if (command === 'pnpm i')
+        if (command === 'pnpm i') {
           throw new SetupCommandError('Setup command failed (exit 1): no lockfile', 'setup-failed');
+        }
       });
       const setBuildStatus = (github.sourceControlStorage.projectRepositories as any).setBuildStatus;
 

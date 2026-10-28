@@ -95,8 +95,9 @@ function readDraft(): CreateFactoryDraft {
   // Rewinding to `name` is a legitimate step (via Back), so keep the picks
   // intact — a follow-up patchDraft merges against them. Only strip picks
   // when the stored value is unknown or its resume gate fails.
-  if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks))))
+  if (isKnownStep(step) && (step === 'name' || (isResumableStep(step) && canResume(step, picks)))) {
     return { ...picks, step };
+  }
   return { step: 'name', name: picks.name, hostFactoryId: picks.hostFactoryId };
 }
 
@@ -135,8 +136,9 @@ function clearDraft(): void {
     FACTORY_KEY,
     LINKED_KEY,
     HOST_KEY,
-  ])
+  ]) {
     sessionStorage.removeItem(key);
+  }
 }
 
 /**

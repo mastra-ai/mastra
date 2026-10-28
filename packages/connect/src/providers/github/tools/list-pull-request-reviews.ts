@@ -63,7 +63,7 @@ export function listPullRequestReviewsTool(proxy: PlatformProxy) {
       const reviews = z.array(ReviewSchema).parse(response.data);
 
       return {
-        reviews: reviews,
+        reviews,
         total_count: reviews.length,
       };
     },

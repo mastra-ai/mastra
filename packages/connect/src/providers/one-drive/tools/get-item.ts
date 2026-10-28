@@ -115,7 +115,7 @@ export function getItemTool(proxy: PlatformProxy) {
 
       const response = await platformProxy.get({
         // https://learn.microsoft.com/graph/api/driveitem-get
-        endpoint: endpoint,
+        endpoint,
         retries: 3,
       });
 

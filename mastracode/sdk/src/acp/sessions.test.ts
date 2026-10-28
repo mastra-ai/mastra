@@ -68,11 +68,12 @@ describe('ACP session isolation', () => {
         entered.resolve();
         await startup.promise;
       };
-      if (phase === 'model discovery')
+      if (phase === 'model discovery') {
         state.controller.listAvailableModels = async () => {
           await block();
           return [];
         };
+      }
       const agent = new MastraCodeAcpAgent(connection(), async () => {
         if (phase === 'factory') await block();
         return state;
@@ -133,11 +134,12 @@ describe('ACP session isolation', () => {
         entered.resolve();
         await startup.promise;
       };
-      if (phase === 'model discovery')
+      if (phase === 'model discovery') {
         state.controller.listAvailableModels = async () => {
           await block();
           return [];
         };
+      }
       const agent = new MastraCodeAcpAgent(connection(), async () => {
         if (phase === 'factory') await block();
         return state;

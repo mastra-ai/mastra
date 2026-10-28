@@ -54,7 +54,7 @@ export function listUserReactionsTool(proxy: PlatformProxy) {
       const paging = response.data.paging || {};
 
       return {
-        items: items,
+        items,
         next_cursor: nextCursor,
         total: paging.total,
         count: paging.count,

@@ -746,7 +746,7 @@ describe('Named Vectors Support', () => {
       // Create collection with multiple named vector spaces
       await qdrant.createIndex({
         indexName: namedVectorCollectionName,
-        dimension: dimension, // fallback dimension
+        dimension, // fallback dimension
         namedVectors: {
           text: { size: dimension, distance: 'cosine' },
           image: { size: dimension, distance: 'euclidean' },

@@ -300,8 +300,9 @@ export async function createXprocEnv({ workers = true }: XprocEnvOptions = {}): 
         );
       }
       for (const error of errors) lines.push(`--- ${handle.config.role} (pid ${handle.pid}) child error ---\n${error}`);
-      if (handle.stderr.trim())
+      if (handle.stderr.trim()) {
         lines.push(`--- ${handle.config.role} (pid ${handle.pid}) stderr ---\n${handle.stderr}`);
+      }
     }
     return lines.join('\n');
   };

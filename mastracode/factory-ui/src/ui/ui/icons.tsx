@@ -307,7 +307,7 @@ export const LayersIcon = ({ size = 15, className }: IconProps) =>
 // Tool icons keyed by tool name family. Falls back to a generic gear.
 export function ToolIcon({ name, size = 14, className }: { name: string } & IconProps) {
   const n = name.toLowerCase();
-  if (n.includes('view') || n.includes('read') || n.includes('cat'))
+  if (n.includes('view') || n.includes('read') || n.includes('cat')) {
     return svg(
       <>
         <path d="M2 12s3.5-7 10-7 10 7 10 7-3.5 7-10 7-10-7-10-7z" />
@@ -316,7 +316,8 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
-  if (n.includes('write') || n.includes('edit') || n.includes('replace') || n.includes('str_replace'))
+  }
+  if (n.includes('write') || n.includes('edit') || n.includes('replace') || n.includes('str_replace')) {
     return svg(
       <>
         <path d="M12 20h9" />
@@ -325,7 +326,8 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
-  if (n.includes('exec') || n.includes('command') || n.includes('shell') || n.includes('bash') || n.includes('run'))
+  }
+  if (n.includes('exec') || n.includes('command') || n.includes('shell') || n.includes('bash') || n.includes('run')) {
     return svg(
       <>
         <path d="M4 17l6-5-6-5" />
@@ -334,7 +336,8 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
-  if (n.includes('search') || n.includes('grep') || n.includes('find') || n.includes('glob'))
+  }
+  if (n.includes('search') || n.includes('grep') || n.includes('find') || n.includes('glob')) {
     return svg(
       <>
         <circle cx="11" cy="11" r="7" />
@@ -343,7 +346,8 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
-  if (n.includes('task') || n.includes('todo'))
+  }
+  if (n.includes('task') || n.includes('todo')) {
     return svg(
       <>
         <path d="M9 11l3 3L22 4" />
@@ -352,7 +356,8 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
-  if (n.includes('browser') || n.includes('web') || n.includes('fetch') || n.includes('http'))
+  }
+  if (n.includes('browser') || n.includes('web') || n.includes('fetch') || n.includes('http')) {
     return svg(
       <>
         <circle cx="12" cy="12" r="9" />
@@ -362,6 +367,7 @@ export function ToolIcon({ name, size = 14, className }: { name: string } & Icon
       size,
       className,
     );
+  }
   // generic tool: wrench
   return svg(
     <path d="M14.7 6.3a4 4 0 0 0-5.4 5.4L3 18l3 3 6.3-6.3a4 4 0 0 0 5.4-5.4l-2.5 2.5-2.1-2.1z" />,

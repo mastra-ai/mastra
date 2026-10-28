@@ -62,8 +62,9 @@ function isIconElement(node, iconImports) {
 
 function isIconExpression(node, iconImports) {
   if (node.type === 'JSXElement') return isIconElement(node, iconImports);
-  if (node.type === 'ConditionalExpression')
+  if (node.type === 'ConditionalExpression') {
     return isIconExpression(node.consequent, iconImports) && isIconExpression(node.alternate, iconImports);
+  }
   if (node.type === 'LogicalExpression' && node.operator === '&&') return isIconExpression(node.right, iconImports);
   return false;
 }

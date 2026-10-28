@@ -686,8 +686,9 @@ describe('syncEnvironmentRepository', () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return OK; // detached template pin
       if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' }; // no local branch yet
-      if (script.includes('ls-remote'))
+      if (script.includes('ls-remote')) {
         return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      }
       return OK;
     });
 
@@ -710,8 +711,9 @@ describe('syncEnvironmentRepository', () => {
   it('switches to an existing local session branch instead of resetting it onto the remote tip', async () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'main\n', stderr: '' };
-      if (script.includes('ls-remote'))
+      if (script.includes('ls-remote')) {
         return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      }
       return OK; // rev-parse --verify succeeds: the branch exists locally
     });
 
@@ -801,8 +803,9 @@ describe('syncEnvironmentRepository', () => {
     const sandbox = new FakeSandbox(script => {
       if (script.includes('branch --show-current')) return { exitCode: 0, stdout: 'scratch\n', stderr: '' };
       if (script.includes('rev-parse --verify')) return { exitCode: 1, stdout: '', stderr: '' };
-      if (script.includes('ls-remote'))
+      if (script.includes('ls-remote')) {
         return { exitCode: 0, stdout: 'abc123\trefs/heads/factory/issue-7\n', stderr: '' };
+      }
       if (script.includes('checkout -B')) {
         return {
           exitCode: 1,

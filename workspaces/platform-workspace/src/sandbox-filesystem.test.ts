@@ -73,8 +73,9 @@ class FakeFiles implements E2BFiles {
   async write(path: string, data: string | ArrayBuffer): Promise<unknown> {
     this.calls.push(`write ${path}`);
     const target = this.host(path);
-    if ((await stat(target).catch(() => undefined))?.isDirectory())
+    if ((await stat(target).catch(() => undefined))?.isDirectory()) {
       throw new InvalidArgumentError('path is a directory');
+    }
     try {
       await mkdir(dirname(target), { recursive: true });
     } catch {

@@ -421,8 +421,9 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const factoryProjectId = c.req.query('factoryProjectId')?.trim();
           const page = positiveId(c.req.query('page') ?? '1');
           if (!factoryProjectId || !page) return c.json({ error: 'invalid_request' }, 400);
-          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId)
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
             return c.json({ error: 'factory_project_not_found' }, 404);
+          }
           const linked = await gitlab.getLinkedRepository({
             orgId: resolved.tenant.orgId,
             factoryProjectId,
@@ -478,8 +479,9 @@ export function buildGitLabRoutes(options: BuildGitLabRoutesOptions): ApiRoute[]
           const factoryProjectId = c.req.query('factoryProjectId')?.trim();
           const number = positiveId(c.req.param('number'));
           if (!factoryProjectId || !number) return c.json({ error: 'invalid_request' }, 400);
-          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId)
+          if ((await gitlab.resolveOrgId(factoryProjectId)) !== resolved.tenant.orgId) {
             return c.json({ error: 'factory_project_not_found' }, 404);
+          }
           const linked = await gitlab.getLinkedRepository({
             orgId: resolved.tenant.orgId,
             factoryProjectId,

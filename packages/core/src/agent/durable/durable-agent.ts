@@ -2987,8 +2987,9 @@ export class DurableAgent<
     if (totalTimeout.timeoutPromise) {
       void totalTimeout.timeoutPromise
         .catch(async error => {
-          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error)
+          if (!isMastraTimeoutError(error) || error.timeoutType !== 'total' || totalTimeout.signal?.reason !== error) {
             return;
+          }
           await this.settleExecution(executionFence.runId, executionFence, { status: 'failed', error });
         })
         .catch(error => {
@@ -3759,8 +3760,9 @@ export class DurableAgent<
         for (const reg of new Set([entry, getRunRegistryEntry(runId, this.#mastra)])) {
           if (!reg) continue;
           reg.tools = rebindProcessorTools(refresh(reg.tools ?? {}, reg.requestTools), resumeRequestContext);
-          if (reg.baseTools)
+          if (reg.baseTools) {
             reg.baseTools = rebindProcessorTools(refresh(reg.baseTools, reg.requestTools), resumeRequestContext);
+          }
           // Tools this rebuild did not produce still hold their earlier build, so
           // keep that as their baseline; otherwise a later resume can never refresh them.
           reg.requestTools = { ...reg.requestTools, ...requestTools };
@@ -5252,8 +5254,9 @@ export class DurableAgent<
                 errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
                 errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
                 errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
-              )
+              ) {
                 return;
+              }
               const skipped = recoverySkip(error);
               if (skipped) {
                 if (skipped.reason === 'transient-error') {

@@ -752,8 +752,9 @@ describe('SandboxFilesystem.grep', () => {
       it('keeps ERE when git lacks PCRE', async () => {
         const { fs, sandbox } = makeFs(script => {
           if (isContainmentCheck(script)) return realpathResult(WORKDIR);
-          if (script.startsWith('command -v rg'))
+          if (script.startsWith('command -v rg')) {
             return { exitCode: 0, stdout: 'gnu-grep\ngrep-pcre\ngit\n', stderr: '' };
+          }
           return { exitCode: 0, stdout: '', stderr: '' };
         });
 

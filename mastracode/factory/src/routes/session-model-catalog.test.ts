@@ -145,7 +145,7 @@ describe('session-owner model catalog', () => {
     async status => {
       const { app, seed, project, bind } = await setup();
       await bind();
-      if (status === 'revoked')
+      if (status === 'revoked') {
         await seed.workItems.revokeRunBindingsForWorkItem({
           orgId: 'org-1',
           factoryProjectId: project.id,
@@ -157,6 +157,7 @@ describe('session-owner model catalog', () => {
           }))!.workItemId,
           revokedAt: new Date(),
         });
+      }
       const response = await app.request('/web/config/models?resourceId=session-1&threadId=run-thread&scope=user');
       expect(response.status).toBe(200);
       const body = await response.json();

@@ -102,7 +102,7 @@ function throwExternalDependencyError({
     category: ErrorCategory.USER,
     details: {
       importFile: moduleName,
-      packageName: packageName,
+      packageName,
     },
     text: `${messagePrefix} \`${packageName}\` to your externals.
 

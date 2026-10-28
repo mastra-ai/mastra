@@ -43,7 +43,7 @@ app.get('/service-mastra', async c => {
   const agent = mastra.getAgent('test-agent');
   const response = await agent.generate('Hello, how are you?');
   const message = 'service-mastra response: "' + response.text + '"';
-  return c.json({ message: message, traceId: response.traceId });
+  return c.json({ message, traceId: response.traceId });
 });
 
 // Add Swagger UI

@@ -1045,13 +1045,14 @@ export class DatasetsPG extends DatasetsStorage {
           `SELECT "version", "organizationId", "projectId" FROM ${datasetsTable} WHERE "id" = $1 FOR UPDATE`,
           [input.datasetId],
         );
-        if (!dataset)
+        if (!dataset) {
           throw new MastraError({
             id: createStorageErrorId('PG', 'BULK_ADD_ITEMS', 'DATASET_NOT_FOUND'),
             domain: ErrorDomain.STORAGE,
             category: ErrorCategory.USER,
             details: { datasetId: input.datasetId },
           });
+        }
 
         const externalIds = [...new Set(input.items.flatMap(item => (item.externalId ? [item.externalId] : [])))];
         const historyRows = externalIds.length

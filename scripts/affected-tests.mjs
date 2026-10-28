@@ -435,10 +435,12 @@ function parseFile(root, file) {
         if (typeOnly || element.isTypeOnly) typeNames.push(name);
         else valueNames.push(name);
       }
-      if (valueNames.length > 0)
+      if (valueNames.length > 0) {
         moduleEdges.push({ moduleName, kind: 'reexport-named', names: valueNames, typeOnly: false });
-      if (typeNames.length > 0)
+      }
+      if (typeNames.length > 0) {
         moduleEdges.push({ moduleName, kind: 'reexport-named', names: typeNames, typeOnly: true });
+      }
       continue;
     }
 
@@ -852,7 +854,7 @@ const affectedSorted = [...selectedResult.affected].sort();
 
 if (flags.json) {
   const output = {
-    changedFiles: changedFiles,
+    changedFiles,
     affectedTests: affectedSorted,
     count: affectedSorted.length,
     elapsed: `${elapsed}ms`,

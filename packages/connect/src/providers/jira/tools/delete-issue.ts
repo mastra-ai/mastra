@@ -117,7 +117,7 @@ export function deleteIssueTool(proxy: PlatformProxy) {
       // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issues/#api-rest-api-3-issue-issueidorkey-delete
       await platformProxy.delete({
         endpoint: `/ex/jira/${cloudId}/rest/api/3/issue/${input.issueIdOrKey}`,
-        params: params,
+        params,
         headers: {
           'X-Atlassian-Token': 'no-check',
         },

@@ -31,7 +31,7 @@ function ControlledMenu() {
 describe('ContextMenu', () => {
   it.each(['controlled', 'uncontrolled'])('allows the next right-click to open the native menu (%s)', async mode => {
     if (mode === 'controlled') render(<ControlledMenu />);
-    else
+    else {
       render(
         <ContextMenu>
           <ContextMenu.Trigger render={<a href="/session" />}>Session</ContextMenu.Trigger>
@@ -40,6 +40,7 @@ describe('ContextMenu', () => {
           </ContextMenu.Content>
         </ContextMenu>,
       );
+    }
     const trigger = screen.getByRole('link', { name: 'Session' });
     expect(fireEvent.contextMenu(trigger)).toBe(false);
     await screen.findByRole('menuitem', { name: 'Pin session' });

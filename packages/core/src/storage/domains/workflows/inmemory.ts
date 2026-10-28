@@ -316,7 +316,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
 
     this.db.workflows.set(key, {
       ...run,
-      snapshot: snapshot,
+      snapshot,
     });
 
     return cloneRunData(context);
@@ -365,7 +365,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
-      snapshot: snapshot,
+      snapshot,
     });
 
     return snapshot;

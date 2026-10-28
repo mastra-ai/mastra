@@ -633,8 +633,9 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null && !isBlankToolMessage(result.message))
+          if (result.message != null && !isBlankToolMessage(result.message)) {
             await editOrPost(messageId, result.message);
+          }
           continue;
         }
         const message = renderBuiltInToolEvent(
@@ -705,8 +706,9 @@ export async function runStreamingDriver({
             pushToolDisplayResult(result);
             continue;
           }
-          if (result.message != null && !isBlankToolMessage(result.message))
+          if (result.message != null && !isBlankToolMessage(result.message)) {
             await editOrPost(messageId, result.message);
+          }
           continue;
         }
         const message = renderBuiltInToolEvent(

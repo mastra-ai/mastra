@@ -47,7 +47,7 @@ export function listLabelsTool(proxy: PlatformProxy) {
       const labels = z.array(LabelSchema).parse(response.data);
 
       return {
-        labels: labels,
+        labels,
         ...(input.per_page !== undefined &&
           input.page !== undefined &&
           labels.length === input.per_page && { next_page: input.page + 1 }),

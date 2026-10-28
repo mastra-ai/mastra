@@ -97,7 +97,7 @@ export function getAskfredThreadTool(proxy: PlatformProxy) {
         // https://docs.fireflies.ai/graphql-api/query/askfred-thread
         endpoint: '/graphql',
         data: {
-          query: query,
+          query,
           variables: {
             id: input.id,
           },

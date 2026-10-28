@@ -167,8 +167,9 @@ async function verifyPullRequest(pullRequest: PullRequestTarget, github: GithubI
   if (!owner || !repo) throw new Error('GitHub repository is invalid.');
   const octokit = github.getInstallationOctokit(Number(pullRequest.installation.externalId));
   const { data } = await octokit.pulls.get({ owner, repo, pull_number: pullRequest.number });
-  if (String(data.base.repo.id) !== pullRequest.repository.externalId)
+  if (String(data.base.repo.id) !== pullRequest.repository.externalId) {
     throw new Error('Pull request repository does not match the active project repository.');
+  }
   return data.head.ref;
 }
 

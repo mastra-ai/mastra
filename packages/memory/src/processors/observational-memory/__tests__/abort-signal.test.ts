@@ -495,10 +495,11 @@ describe('Background work outlives its run (#27792)', () => {
 
         const record = await engine.getRecord(threadId, resourceId);
         if (isReflection) expect(record?.bufferedReflection).toContain('Kept reflection');
-        else
+        else {
           expect(record?.bufferedObservationChunks?.map(chunk => chunk.observations).join('\n')).toContain(
             'Kept observation',
           );
+        }
         expect(provider.calls).toBe(1);
       } finally {
         controller.abort();
@@ -737,7 +738,7 @@ describe('Cancellation in the commit queue (#27792)', () => {
         content: { format: 2, parts: [{ type: 'text', text: 'Keep this request.' }] },
       };
       await engine.persistMessages([message], threadId, resourceId);
-      if (mode === 'activation')
+      if (mode === 'activation') {
         await storage.updateBufferedObservations({
           id: record.id,
           chunk: {
@@ -749,12 +750,14 @@ describe('Cancellation in the commit queue (#27792)', () => {
             lastObservedAt: new Date(0),
           },
         });
-      if (mode === 'reflection')
+      }
+      if (mode === 'reflection') {
         await storage.updateActiveObservations({
           id: record.id,
           observations: '- Existing observation.\n'.repeat(30),
           tokenCount: 1000,
         });
+      }
       const controller = new AbortController();
       const turn = engine.beginTurn({
         threadId,
@@ -915,7 +918,7 @@ it.each(['shared buffer', 'queued activation'] as const)('cancels context-overfl
   };
   await engine.persistMessages([message], threadId, resourceId);
   const record = await engine.getOrCreateRecord(threadId, resourceId);
-  if (mode === 'queued activation')
+  if (mode === 'queued activation') {
     await storage.updateBufferedObservations({
       id: record.id,
       chunk: {
@@ -928,6 +931,7 @@ it.each(['shared buffer', 'queued activation'] as const)('cancels context-overfl
         threadTitle: 'Late title',
       },
     });
+  }
   const release = Promise.withResolvers<void>();
   const entered = Promise.withResolvers<void>();
   const background =

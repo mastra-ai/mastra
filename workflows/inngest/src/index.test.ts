@@ -4366,7 +4366,7 @@ describe('MastraInngestWorkflow', () => {
       })
         .map(async ({ inputData }) => {
           return inputData.elements.map(element => {
-            return { element: element };
+            return { element };
           });
         })
         .foreach(dynamicWorkflowPhasesStep)
@@ -10932,7 +10932,7 @@ describe('MastraInngestWorkflow', () => {
       resumerequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
-        step: step,
+        step,
         resumeData: {
           human: true,
         },

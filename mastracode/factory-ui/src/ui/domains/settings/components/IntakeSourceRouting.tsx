@@ -49,10 +49,12 @@ export function RoutedSourcePicker({
         itemDescription={sourceId => {
           if (!bindings) return undefined;
           const binding = bindingBySource.get(sourceId);
-          if (!factories.some(factory => factory.id === binding?.factoryProjectId))
+          if (!factories.some(factory => factory.id === binding?.factoryProjectId)) {
             return "Not routed — this source's issues won't be picked up.";
-          if (binding?.board == null)
+          }
+          if (binding?.board == null) {
             return "Choose a board — this source's issues won't be picked up until one is set.";
+          }
           return undefined;
         }}
         itemActions={item =>

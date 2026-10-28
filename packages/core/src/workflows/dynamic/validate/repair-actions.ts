@@ -70,8 +70,14 @@ function precedingSourceIds(def: WorkflowValidationInput, targetIndex: number): 
     // result keyed by their own id — only their executed children do. Advertising
     // the container id here previously sent authors toward mappings that pass
     // draft validation and then fail at run time.
-    if (entry.type === 'parallel' || entry.type === 'conditional' || entry.type === 'foreach' || entry.type === 'loop')
+    if (
+      entry.type === 'parallel' ||
+      entry.type === 'conditional' ||
+      entry.type === 'foreach' ||
+      entry.type === 'loop'
+    ) {
       return;
+    }
     const id = 'id' in entry && entry.id ? entry.id : entry.type === 'step' ? entry.step.id : undefined;
     if (id) ids.push(id);
   });

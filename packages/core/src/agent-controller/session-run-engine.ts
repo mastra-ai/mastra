@@ -930,8 +930,9 @@ export class SessionRunEngine {
         if (
           binding.runId &&
           this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId)
-        )
+        ) {
           break;
+        }
 
         // A retained approval prompt can be replayed after this run has already
         // advanced to a generic tool suspension. Ignore that obsolete prompt and
@@ -983,8 +984,9 @@ export class SessionRunEngine {
         if (
           this.#session.approval.isArmed({ toolCallId, threadId: binding.threadId, runId: binding.runId }) ||
           (binding.runId && this.#machinery.getRunScope(binding.runId)?.get(SOURCE_APPROVAL_CALLS_KEY)?.has(toolCallId))
-        )
+        ) {
           break;
+        }
 
         if (policy === 'allow') {
           await this.#session.approveToolCall({ toolCallId, requestContext, ...binding });
@@ -1237,8 +1239,9 @@ export class SessionRunEngine {
             this.#session.run.bindingGeneration() !== bindingGeneration ||
             this.#session.thread.getId() !== state.threadId ||
             this.#session.identity.getResourceId() !== state.resourceId
-          )
+          ) {
             break;
+          }
           if (savedUsage) this.#session.setTokenUsage({ ...createEmptyTokenUsage(), ...savedUsage });
           else this.#session.addUsage(stepUsage);
           this.#session.emit({ type: 'usage_update', usage: stepUsage });

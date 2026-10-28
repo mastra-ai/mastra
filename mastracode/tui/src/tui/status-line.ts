@@ -340,10 +340,11 @@ export function updateStatusLine(state: TUIState): void {
         text = { plain: value, styled: theme.fg(branch ? 'dim' : 'muted', value) };
       }
     }
-    if (!text)
+    if (!text) {
       return prefix && visibleWidth(prefix.plain) - 1 <= maxWidth
         ? { plain: githubPrLabel!.plain, styled: githubPrLabel!.styled }
         : null;
+    }
     return prefix ? { plain: prefix.plain + text.plain, styled: prefix.styled + text.styled } : text;
   };
 

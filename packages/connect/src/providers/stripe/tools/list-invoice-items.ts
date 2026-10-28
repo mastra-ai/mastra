@@ -92,7 +92,7 @@ export function listInvoiceItemsTool(proxy: PlatformProxy) {
       const lastItem = items.length > 0 ? items[items.length - 1] : undefined;
 
       return {
-        items: items,
+        items,
         has_more: list.has_more,
         ...(list.has_more && lastItem !== undefined && { next_cursor: lastItem.id }),
       };

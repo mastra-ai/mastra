@@ -878,8 +878,9 @@ describe('PluginManager', () => {
       if (args[0] === 'rev-parse') return { stdout: 'origin/main' };
       if (args[0] === 'rev-list') return { stdout: '0\t1' };
       if (args[0] === 'status') return { stdout: '' };
-      if (args[0] === 'reset' && args[2] === 'origin/main')
+      if (args[0] === 'reset' && args[2] === 'origin/main') {
         writePlugin(checkoutDir, 'acme.github', 'github_tool', 'second');
+      }
       if (args[0] === 'reset' && args[2] === 'old') writePlugin(checkoutDir, 'acme.github', 'github_tool', 'first');
       return { stdout: '' };
     });

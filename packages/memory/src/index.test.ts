@@ -3020,8 +3020,9 @@ describe('Memory', () => {
             memory: { thread: target.threadId, resource: target.resourceId },
           });
           await output.consumeStream();
-          for (let i = 0; i < 6; i++)
+          for (let i = 0; i < 6; i++) {
             expect(JSON.stringify(model.doStreamCalls.at(-1)?.prompt)).toContain(`context-${i}`);
+          }
         }
         expect(model.doStreamCalls).toHaveLength(4);
         for (const call of model.doStreamCalls.slice(1)) expect(call.prompt).toEqual(model.doStreamCalls[0]?.prompt);

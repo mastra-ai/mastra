@@ -211,7 +211,7 @@ describe('ClickHouse Domain with URL/credentials config', () => {
         values: [
           {
             id: threadId,
-            resourceId: resourceId,
+            resourceId,
             title: 'Test Thread with Empty Metadata',
             metadata: '', // Empty string - the problematic case
             createdAt: new Date().toISOString(),
@@ -235,8 +235,8 @@ describe('ClickHouse Domain with URL/credentials config', () => {
       // Test 2: saveMessages should work even if thread has empty metadata
       const message = {
         id: `msg-${Date.now()}`,
-        threadId: threadId,
-        resourceId: resourceId,
+        threadId,
+        resourceId,
         content: 'Test message',
         role: 'user' as const,
         type: 'v2' as const,
@@ -270,7 +270,7 @@ describe('ClickHouse Domain with URL/credentials config', () => {
         values: [
           {
             id: threadId,
-            resourceId: resourceId,
+            resourceId,
             title: 'Test Thread with Null Metadata',
             metadata: null, // Null metadata
             createdAt: new Date().toISOString(),
@@ -314,7 +314,7 @@ describe('ClickHouse Domain with URL/credentials config', () => {
         values: [
           {
             id: threadId,
-            resourceId: resourceId,
+            resourceId,
             title: 'Test Thread with Malformed JSON',
             metadata: '{invalid json', // Malformed JSON
             createdAt: new Date().toISOString(),
@@ -411,7 +411,7 @@ describe('ClickHouse Domain with URL/credentials config', () => {
         values: [
           {
             id: threadId,
-            resourceId: resourceId,
+            resourceId,
             title: 'Test Thread in Old Table',
             metadata: '', // Empty string - would have caused crash before parseMetadata()
             createdAt: new Date().toISOString(),
@@ -434,8 +434,8 @@ describe('ClickHouse Domain with URL/credentials config', () => {
       // saveMessages should also work
       const message = {
         id: `msg-${Date.now()}`,
-        threadId: threadId,
-        resourceId: resourceId,
+        threadId,
+        resourceId,
         content: 'Test message',
         role: 'user' as const,
         type: 'v2' as const,
@@ -471,7 +471,7 @@ describe('ClickHouse Domain with URL/credentials config', () => {
       // Use saveThread which calls serializeMetadata(), but let's verify DB level
       const thread = {
         id: threadId,
-        resourceId: resourceId,
+        resourceId,
         title: 'Test Thread',
         metadata: {}, // Empty object
         createdAt: new Date(),

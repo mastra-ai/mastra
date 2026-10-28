@@ -247,8 +247,9 @@ export class InMemoryNotificationsStorage extends NotificationsStorage {
         record.source !== input.source ||
         record.kind !== input.kind ||
         record.status !== 'pending'
-      )
+      ) {
         return false;
+      }
       if (record.agentId !== input.agentId || record.resourceId !== input.resourceId) return false;
       return Boolean(
         (input.dedupeKey && record.dedupeKey === input.dedupeKey) ||

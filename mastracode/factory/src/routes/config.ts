@@ -1329,8 +1329,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                     row.originSessionId ||
                     workerSessions.has(row.sessionId) ||
                     seen.has(row.sessionId)
-                  )
+                  ) {
                     continue;
+                  }
                   seen.add(row.sessionId);
                   if (!personal) {
                     skipped.push({ sessionId: row.sessionId, reason: 'factory-scope' });

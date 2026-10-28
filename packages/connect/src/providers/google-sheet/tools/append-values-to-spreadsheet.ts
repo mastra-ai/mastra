@@ -59,13 +59,13 @@ export function appendValuesToSpreadsheetTool(proxy: PlatformProxy) {
         // https://developers.google.com/sheets/api/reference/rest/v4/spreadsheets.values/append
         endpoint: `/v4/spreadsheets/${input.spreadsheetId}/values/${encodeURIComponent(input.range)}:append`,
         params: {
-          valueInputOption: valueInputOption,
-          insertDataOption: insertDataOption,
+          valueInputOption,
+          insertDataOption,
           includeValuesInResponse: 'true',
         },
         data: {
           values: input.values,
-          majorDimension: majorDimension,
+          majorDimension,
         },
         retries: 3,
       });

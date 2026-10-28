@@ -264,8 +264,9 @@ export function createOnboardingMotion(svg: SVGSVGElement, stage: HTMLElement) {
       media.removeEventListener('change', motionChanged);
       document.removeEventListener('visibilitychange', wake);
       svg.removeAttribute('data-ready');
-      for (const i of [1, 2])
+      for (const i of [1, 2]) {
         for (const axis of ['x', 'y', 'opacity']) stage.style.removeProperty(`--intake-${i}-${axis}`);
+      }
     },
   };
 }

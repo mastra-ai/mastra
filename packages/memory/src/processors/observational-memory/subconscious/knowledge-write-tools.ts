@@ -565,8 +565,9 @@ export function createKnowledgeWriteTools(
         const existing =
           resolvedNode && knowledgeScopeKey(resolvedNode.scope) === knowledgeScopeKey(scope) ? resolvedNode : null;
         if (!existing) {
-          if (value.expectedVersion !== undefined)
+          if (value.expectedVersion !== undefined) {
             throw new Error('expectedVersion is only valid for an existing node.');
+          }
           const node = await store.createNode({
             name,
             kind: value.kind ?? 'document',

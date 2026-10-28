@@ -644,8 +644,9 @@ describe('issue reconcilers', () => {
       const decision = defaultGithubRules.issueOpened(context);
       if (!decision || !context.issue) return decision;
       const moved = context.item !== undefined && !context.item.stages.includes(decision.stage);
-      if ((context.issue.labels ?? []).includes(AUTO_TRIAGED_LABEL))
+      if ((context.issue.labels ?? []).includes(AUTO_TRIAGED_LABEL)) {
         return { ...decision, stage: 'planning' as const, skipRules: true };
+      }
       return moved
         ? { ...decision, stage: 'triage' as const, skipRules: true }
         : { ...decision, stage: 'triage' as const };

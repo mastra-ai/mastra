@@ -660,7 +660,7 @@ export class NovaSonicVoice extends MastraVoice<
         sampleRateHertz: 24000,
         sampleSizeBits: 16,
         channelCount: 1,
-        voiceId: voiceId,
+        voiceId,
         encoding: 'base64',
         audioType: 'SPEECH',
       },

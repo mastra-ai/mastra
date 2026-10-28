@@ -354,8 +354,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         const records = await (await this.#knowledge()).find({ node: input.id }, sessionOptions(session)).toArray();
         for (const record of records) {
           await this.#outbox('record', record.id, 'delete', createKnowledgeUlid(), record.scope, session);
-          if (!record.deletedAt)
+          if (!record.deletedAt) {
             await this.#outbox('record', record.id, 'upsert', createKnowledgeUlid(), record.scope, session);
+          }
         }
       }
       await this.#activity('node-updated', 'node', input.id, scope, undefined, session);
@@ -398,8 +399,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
         else await mentions.updateOne({ _id: mention._id }, { $set: { recordId: target.id } }, sessionOptions(session));
       }
       for (const record of movedFacts) {
-        if (!record.deletedAt)
+        if (!record.deletedAt) {
           await this.#outbox('record', record.id, 'upsert', createKnowledgeUlid(), record.scope, session);
+        }
       }
       for (const mention of affected) {
         const scope =
@@ -407,8 +409,9 @@ export class KnowledgeMongoDB extends KnowledgeStorage {
             ? (await (await this.#knowledge()).findOne({ id: mention.sourceId }, sessionOptions(session)))?.scope
             : (await (await this.#nodes()).findOne({ id: mention.sourceId, type: 'node' }, sessionOptions(session)))
                 ?.scope;
-        if (scope)
+        if (scope) {
           await this.#outbox(mention.sourceType, mention.sourceId, 'upsert', createKnowledgeUlid(), scope, session);
+        }
       }
       // Merge matrix: a target that NEVER had a description (undefined — '' is an explicit curator
       // clear and wins) adopts the source's; otherwise the target's state is preserved.

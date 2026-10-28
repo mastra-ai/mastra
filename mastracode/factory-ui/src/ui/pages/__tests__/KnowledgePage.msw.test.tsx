@@ -121,8 +121,9 @@ function stubKnowledgeRoute(
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/scopes`, ({ request }) => {
       const url = new URL(request.url);
       const threadId = url.searchParams.get('threadId');
-      if (threadId === 'gone-thread')
+      if (threadId === 'gone-thread') {
         return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
+      }
       if (url.searchParams.get('parentId') === '22222222-2222-4222-8222-222222222222') {
         return HttpResponse.json({
           roots: [],
@@ -264,12 +265,14 @@ function stubKnowledgeRoute(
       });
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/subgraph`, ({ request }) => {
-      if ('status' in graph)
+      if ('status' in graph) {
         return HttpResponse.json({ error: 'error', message: graph.message }, { status: graph.status });
+      }
       const threadId = new URL(request.url).searchParams.get('threadId');
-      if (threadId === 'gone-thread')
+      if (threadId === 'gone-thread') {
         return HttpResponse.json({ error: 'not_found', message: 'unknown thread' }, { status: 404 });
-      if (threadId)
+      }
+      if (threadId) {
         return HttpResponse.json({
           ...graph,
           view: 'thread',
@@ -300,6 +303,7 @@ function stubKnowledgeRoute(
             { id: 'record-thread', nodeIds: ['ent-1', 'ent-thread'], pinned: false, text: 'Session note.' },
           ],
         });
+      }
       return HttpResponse.json(graph);
     }),
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/knowledge/nodes/:nodeId`, () =>

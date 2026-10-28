@@ -18,10 +18,12 @@ export function parseJsonDraft(text: string): JsonDraftValue {
 /** Why a JSON value can't be shown in the Form view of `schema`, if it can't. */
 export function getFormShapeError(schema: ZodSchema, value: unknown) {
   const fieldType = inferFieldType(getBaseSchema(schema));
-  if (fieldType === 'object' && !isPlainObject(value))
+  if (fieldType === 'object' && !isPlainObject(value)) {
     return 'Form input requires a JSON object. Correct the JSON first.';
-  if (fieldType === 'array' && !Array.isArray(value))
+  }
+  if (fieldType === 'array' && !Array.isArray(value)) {
     return 'Form input requires a JSON array. Correct the JSON first.';
+  }
   return undefined;
 }
 

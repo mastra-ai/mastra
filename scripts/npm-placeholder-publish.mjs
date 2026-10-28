@@ -222,8 +222,9 @@ if (options.dryRun || options.skipTrust) {
     run('npx', [...trustArgs, '--registry', options.registry]);
     // Read it back: publishing only works if it names this repo and workflow.
     const after = readTrust(options);
-    if (!after)
+    if (!after) {
       fail(`Configured trusted publishing, but could not read it back with \`npm trust list ${options.name}\`.`);
+    }
     if (!after.some(isUsablePublishWorkflowTrust)) {
       fail(
         `npm reports no trusted publisher for ${TRUST_REPO} ${TRUST_FILE} on ${options.name} after configuring it (found: ${describeTrust(after)}).`,

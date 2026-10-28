@@ -1048,8 +1048,9 @@ export class SourceControlStorage extends FactoryStorageDomain {
 
     const requireInstallation = async (args: { orgId: string; id: string }): Promise<SourceControlInstallation> => {
       const installation = await getInstallation(args);
-      if (!installation)
+      if (!installation) {
         throw new Error('Source-control installation not found for this organization and integration.');
+      }
       return installation;
     };
 

@@ -297,8 +297,9 @@ export class MCPServer extends MCPServerBase {
         this.logger.warn('Tool has no execute function, skipping', { tool: name });
         continue;
       }
-      if ('resumeSchema' in tool && tool.resumeSchema)
+      if ('resumeSchema' in tool && tool.resumeSchema) {
         this.assertFormRepresentable(`tool '${name}'`, tool.resumeSchema);
+      }
       convert(name, tool);
     }
 

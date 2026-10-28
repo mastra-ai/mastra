@@ -441,19 +441,24 @@ export class DatasetsMySQL extends DatasetsStorage {
       if (args.name !== undefined) data.name = args.name;
       if (args.description !== undefined) data.description = args.description;
       if (args.metadata !== undefined) data.metadata = JSON.stringify(args.metadata);
-      if (args.inputSchema !== undefined)
+      if (args.inputSchema !== undefined) {
         data.inputSchema = args.inputSchema === null ? null : JSON.stringify(args.inputSchema);
-      if (args.groundTruthSchema !== undefined)
+      }
+      if (args.groundTruthSchema !== undefined) {
         data.groundTruthSchema = args.groundTruthSchema === null ? null : JSON.stringify(args.groundTruthSchema);
-      if (args.requestContextSchema !== undefined)
+      }
+      if (args.requestContextSchema !== undefined) {
         data.requestContextSchema =
           args.requestContextSchema === null ? null : JSON.stringify(args.requestContextSchema);
+      }
       if (args.tags !== undefined) data.tags = args.tags === null ? null : JSON.stringify(args.tags);
       if (args.targetType !== undefined) data.targetType = args.targetType;
-      if (args.targetIds !== undefined)
+      if (args.targetIds !== undefined) {
         data.targetIds = args.targetIds === null ? null : JSON.stringify(args.targetIds);
-      if (args.scorerIds !== undefined)
+      }
+      if (args.scorerIds !== undefined) {
         data.scorerIds = args.scorerIds === null ? null : JSON.stringify(args.scorerIds);
+      }
 
       await this.operations.update({
         tableName: TABLE_DATASETS,

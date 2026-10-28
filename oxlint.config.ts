@@ -41,6 +41,9 @@ export default defineConfig({
     'ee/**',
   ],
   rules: {
+    curly: ['error', 'multi-line'],
+    // Preserve function-valued properties' call and constructor behavior.
+    'object-shorthand': ['error', 'properties'],
     'no-dupe-keys': 'error',
     'no-useless-return': 'error',
     'no-else-return': 'error',

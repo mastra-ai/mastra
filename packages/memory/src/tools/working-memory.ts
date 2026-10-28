@@ -452,7 +452,7 @@ export const __experimental_updateWorkingMemoryToolVNext = (config: MemoryConfig
       const result = await memory!.__experimental_updateWorkingMemoryVNext({
         threadId,
         resourceId,
-        workingMemory: workingMemory,
+        workingMemory,
         searchString: workingMemoryInput.searchString,
         memoryConfig: config,
       });

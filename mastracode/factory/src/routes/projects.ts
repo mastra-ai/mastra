@@ -109,8 +109,9 @@ function parseRepositoryLinkInput(value: unknown): {
     typeof sandboxWorkdir !== 'string' ||
     setupCommand === false ||
     teardownCommand === false
-  )
+  ) {
     return null;
+  }
   return {
     ...(repositoryId ? { repositoryId } : {}),
     ...(repository ? { repository } : {}),
@@ -145,8 +146,9 @@ function parseRepositoryUpdateInput(value: unknown): UpdateProjectRepositoryInpu
     sandboxWorkdir === null ||
     setupCommand === false ||
     teardownCommand === false
-  )
+  ) {
     return null;
+  }
   if (branch !== undefined) patch.branch = branch;
   if (sandboxProvider !== undefined) patch.sandboxProvider = sandboxProvider;
   if (sandboxWorkdir !== undefined) patch.sandboxWorkdir = sandboxWorkdir;
@@ -725,8 +727,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
-          if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId)))
+          if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId))) {
             return context.json({ error: 'Project not found' }, 404);
+          }
           const connections = [];
           for (const handle of await this.#handles()) {
             for (const connection of await handle.connections.list({
@@ -764,15 +767,18 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           const tenant = await this.#resolveTenant(context);
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
-          if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId)))
+          if (!projectId || !UUID_RE.test(projectId) || !(await this.#project(tenant.orgId, projectId))) {
             return context.json({ error: 'Project not found' }, 404);
+          }
           const input = parseConnectionInput(await readJson(context));
           if (!input) return context.json({ error: 'invalid_source_control_connection' }, 400);
-          if (!this.#versionControlIntegrationIds.has(input.integrationId))
+          if (!this.#versionControlIntegrationIds.has(input.integrationId)) {
             return context.json({ error: 'Source-control integration not found' }, 404);
+          }
           const handle = (await this.#sourceControl()).forIntegration(input.integrationId);
-          if (!(await handle.installations.get({ orgId: tenant.orgId, id: input.installationId })))
+          if (!(await handle.installations.get({ orgId: tenant.orgId, id: input.installationId }))) {
             return context.json({ error: 'Source-control installation not found' }, 404);
+          }
           const connection = await handle.connections.create({
             orgId: tenant.orgId,
             factoryProjectId: projectId,
@@ -791,8 +797,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
           const connectionId = context.req.param('connectionId');
-          if (!projectId || !UUID_RE.test(projectId) || !connectionId || !UUID_RE.test(connectionId))
+          if (!projectId || !UUID_RE.test(projectId) || !connectionId || !UUID_RE.test(connectionId)) {
             return context.json({ error: 'Source-control connection not found' }, 404);
+          }
           const found = await this.#findConnection({ orgId: tenant.orgId, projectId, id: connectionId });
           if (!found) return context.json({ error: 'Source-control connection not found' }, 404);
           for (const projectRepository of await found.handle.projectRepositories.list({
@@ -816,8 +823,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
           const connectionId = context.req.param('connectionId');
-          if (!projectId || !UUID_RE.test(projectId) || !connectionId || !UUID_RE.test(connectionId))
+          if (!projectId || !UUID_RE.test(projectId) || !connectionId || !UUID_RE.test(connectionId)) {
             return context.json({ error: 'Source-control connection not found' }, 404);
+          }
           const found = await this.#findConnection({ orgId: tenant.orgId, projectId, id: connectionId });
           if (!found) return context.json({ error: 'Source-control connection not found' }, 404);
           const input = parseRepositoryLinkInput(await readJson(context));
@@ -833,8 +841,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                   ...input.repository,
                 })
               : null;
-          if (!repository || repository.installationId !== found.connection.installationId)
+          if (!repository || repository.installationId !== found.connection.installationId) {
             return context.json({ error: 'Source-control repository not found' }, 404);
+          }
           const { repositoryId: _repositoryId, repository: _repository, ...linkInput } = input;
           const projectRepository = await found.handle.projectRepositories.link({
             orgId: tenant.orgId,
@@ -903,7 +912,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                 const stored = await readSchedule(runner.schedules()!, project.id);
                 const nextCron = cron ?? stored.cron;
                 // Disabling a schedule that never existed needs no cron: it is a no-op.
-                if (!nextCron && buildTriggers.schedule.enabled)
+                if (!nextCron && buildTriggers.schedule.enabled) {
                   return context.json(
                     {
                       error: 'invalid_environment',
@@ -911,6 +920,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                     },
                     400,
                   );
+                }
                 const nextTimezone = timezone ?? stored.timezone ?? undefined;
                 const message = nextCron ? invalidCronMessage(nextCron, nextTimezone) : undefined;
                 if (message) {
@@ -985,7 +995,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
             const stored = await readSchedule(runner.schedules()!, project.id);
             const cron = buildTriggers.schedule.cron ?? stored.cron;
             // Without a cron the request disables a schedule that never existed: nothing to write.
-            if (cron)
+            if (cron) {
               await ensureSchedule(runner.schedules()!, project.id, {
                 enabled: buildTriggers.schedule.enabled,
                 cron,
@@ -993,6 +1003,7 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
                   ? { timezone: (buildTriggers.schedule.timezone ?? stored.timezone)! }
                   : {}),
               });
+            }
           }
           // Saving never builds: the next Build now, schedule or push run
           // picks the changed template up.
@@ -1008,8 +1019,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
           const projectRepositoryId = context.req.param('projectRepositoryId');
-          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId))
+          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId)) {
             return context.json({ error: 'Project repository not found' }, 404);
+          }
           const found = await this.#findProjectRepository({ orgId: tenant.orgId, projectId, id: projectRepositoryId });
           if (!found) return context.json({ error: 'Project repository not found' }, 404);
           const input = parseRepositoryUpdateInput(await readJson(context));
@@ -1033,8 +1045,9 @@ export class ProjectRoutes extends Route<ProjectRoutesDeps> {
           if ('response' in tenant) return tenant.response;
           const projectId = context.req.param('id');
           const projectRepositoryId = context.req.param('projectRepositoryId');
-          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId))
+          if (!projectId || !UUID_RE.test(projectId) || !projectRepositoryId || !UUID_RE.test(projectRepositoryId)) {
             return context.json({ error: 'Project repository not found' }, 404);
+          }
           const found = await this.#findProjectRepository({ orgId: tenant.orgId, projectId, id: projectRepositoryId });
           if (!found) return context.json({ error: 'Project repository not found' }, 404);
           if (!(await this.#retireProjectRepositorySessions(found.handle, tenant.orgId, projectRepositoryId))) {

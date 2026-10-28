@@ -471,25 +471,29 @@ function KnowledgeGraphInner({
   // Selection: the flyout's open record lights its marker and edge(s) up.
   const displayNodes = useMemo(() => {
     let mapped = nodes;
-    if (arrivals && arrivals.nodes.size > 0)
+    if (arrivals && arrivals.nodes.size > 0) {
       mapped = mapped.map(node => (arrivals.nodes.has(node.id) ? { ...node, className: 'knowledge-arrive' } : node));
-    if (focusedRecordId)
+    }
+    if (focusedRecordId) {
       mapped = mapped.map(node => {
         if (isRecordNode(node) && node.data.record.id === focusedRecordId) {
           return { ...node, data: { ...node.data, focused: true } };
         }
         return node;
       });
+    }
     return mapped;
   }, [nodes, arrivals, focusedRecordId]);
   const displayEdges = useMemo(() => {
     let mapped = edges;
-    if (arrivals && arrivals.edges.size > 0)
+    if (arrivals && arrivals.edges.size > 0) {
       mapped = mapped.map(edge => (arrivals.edges.has(edge.id) ? { ...edge, className: 'knowledge-arrive' } : edge));
-    if (focusedRecordId)
+    }
+    if (focusedRecordId) {
       mapped = mapped.map(edge =>
         edge.data?.recordId === focusedRecordId ? { ...edge, data: { ...edge.data, focused: true } } : edge,
       );
+    }
     return mapped;
   }, [edges, arrivals, focusedRecordId]);
 

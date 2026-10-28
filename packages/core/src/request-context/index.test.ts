@@ -138,7 +138,7 @@ describe('RequestContext', () => {
 
       expect(json).toEqual({
         defined: 'value',
-        undefined: undefined,
+        undefined,
       });
     });
 

@@ -300,8 +300,9 @@ async function recordSelfReviewVerdict(input: {
     throw new Error('The Work card changed while recording the verdict; call again to record it on the current card.');
   }
   if (!updated) throw new Error('Bound Factory work item not found.');
-  if (verdict === 'approve')
+  if (verdict === 'approve') {
     return { status: 'recorded', verdict, reviewedHeadSha, reviewedAt, selfReviewRounds: rounds };
+  }
   const transition = await input.transitionService.transition({
     orgId: binding.orgId,
     factoryProjectId: binding.factoryProjectId,

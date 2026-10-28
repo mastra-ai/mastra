@@ -355,8 +355,9 @@ describe('execution-time recall search context', () => {
       if (kind === 'quoted') current.content.parts = [{ type: 'text', text: previous.results }];
       if (part.type === 'tool-invocation') {
         if (kind === 'other-tool') part.toolInvocation.toolName = 'other';
-        if (kind === 'custom-output')
+        if (kind === 'custom-output') {
           part.providerMetadata = { mastra: { modelOutput: { type: 'text', value: 'hidden' } } };
+        }
       }
       expect((await search([current])).results).toBe(previous.results);
     },

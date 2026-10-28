@@ -29,7 +29,7 @@ const mockGetIndexFn = vi.hoisted(() =>
                 fields: [
                   {
                     dims: dimension,
-                    similarity: similarity,
+                    similarity,
                   },
                 ],
               },

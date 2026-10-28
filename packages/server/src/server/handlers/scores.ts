@@ -145,7 +145,7 @@ async function listScorersFromSystem({
       scorersMap.get(scorerId)!.isRegistered = true;
     } else {
       scorersMap.set(scorerId, {
-        scorer: scorer,
+        scorer,
         agentIds: [],
         agentNames: [],
         workflowIds: [],

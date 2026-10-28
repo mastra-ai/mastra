@@ -251,8 +251,9 @@ function prepare(raw: unknown, position: string, warnings: string[]): Schema {
     } catch {
       fail('Local reference is not a valid URI fragment', position);
     }
-    if (!locations.has(target) || /~(?![01])/u.test(target))
+    if (!locations.has(target) || /~(?![01])/u.test(target)) {
       fail(`Unresolved local reference ${JSON.stringify(ref)}`, position);
+    }
   }
   // Reference/combinator-only cycles emit illegal aliases such as type X = X.
   // Properties and array items guard recursion and may refer back to their container.
@@ -357,10 +358,11 @@ export async function generateToolTypes(
   for (const server of Object.keys(catalog).sort()) {
     const serverName = identifier(server);
     const collision = serverNames.get(serverName);
-    if (collision !== undefined)
+    if (collision !== undefined) {
       throw new TypegenError(
         `Server interface name collision between ${JSON.stringify(collision)} and ${JSON.stringify(server)}`,
       );
+    }
     serverNames.set(serverName, server);
     const tools: string[] = [];
     for (const tool of Object.keys(catalog[server]!).sort()) {

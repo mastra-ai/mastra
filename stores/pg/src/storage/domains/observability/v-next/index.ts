@@ -186,8 +186,9 @@ function wrapError(op: string, error: unknown, details?: Record<string, unknown>
     error instanceof coreStorage.TraceQueryCursorError ||
     error instanceof coreStorage.TraceQueryExecutionError ||
     error instanceof coreStorage.TraceQueryResourceLimitError
-  )
+  ) {
     throw error;
+  }
   throw new MastraError(
     {
       id: createStorageErrorId('PG', op, 'FAILED'),

@@ -33,10 +33,11 @@ function fakeWorkflow(chunks: FakeChunk[], opts: { result?: unknown; park?: bool
     fullStream: (async function* () {
       for (const chunk of chunks) yield chunk;
       if (opts.throwError) throw opts.throwError;
-      if (opts.park)
+      if (opts.park) {
         await new Promise<void>(resolve => {
           releasePark = resolve;
         });
+      }
     })(),
     result: Promise.resolve(opts.result),
   }));

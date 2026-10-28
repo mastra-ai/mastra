@@ -108,8 +108,9 @@ function collect(value: unknown, facts: CollectedFacts, depth: number): void {
   const saved = readField(value, 'codes');
   const savedCodes = Array.isArray(saved) ? saved : [];
   for (const candidate of [code, readField(value, 'type'), ...savedCodes]) {
-    if (typeof candidate === 'string' && candidate.trim() && !ENVELOPE_TYPES.has(candidate))
+    if (typeof candidate === 'string' && candidate.trim() && !ENVELOPE_TYPES.has(candidate)) {
       facts.codes.push(candidate);
+    }
   }
   const name = readField(value, 'name');
   if (typeof name === 'string') facts.texts.push(name);

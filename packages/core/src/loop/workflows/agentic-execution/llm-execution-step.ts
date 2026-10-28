@@ -1335,8 +1335,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const interruption = new AbortController();
       let interruptible = false;
       const stopListening = subscribePendingSignals?.(runId, () => {
-        if (interruptible && !options?.abortSignal?.aborted)
+        if (interruptible && !options?.abortSignal?.aborted) {
           interruption.abort(new Error('Interrupted by a queued signal'));
+        }
       });
       const throwIfInterrupted = () => {
         if (interruption.signal.aborted) throw interruption.signal.reason;
@@ -1925,7 +1926,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageList,
                 messageId: currentStep.messageId,
                 stepTools: tools,
-                _internal: _internal,
+                _internal,
               });
             }
             logger?.error('Error in processInputStep processors:', error);
@@ -1953,7 +1954,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         }
 
         const runState = new AgenticRunState({
-          _internal: _internal,
+          _internal,
           model: currentStep.model,
         });
 
@@ -2050,7 +2051,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                 messageList,
                 messageId: currentStep.messageId,
                 stepTools: currentStep.tools,
-                _internal: _internal,
+                _internal,
               });
             }
             logger?.error('Error in processLLMRequest processors:', error);
@@ -2589,7 +2590,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
                   messageList,
                   messageId: currentStep.messageId,
                   stepTools: currentStep.tools,
-                  _internal: _internal,
+                  _internal,
                 });
               }
               logger?.error('Error in processLLMResponse processors:', responseProcessorError);
@@ -3414,7 +3415,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           finishReason: runState.state.stepResult?.reason,
           content: currentIterationContent,
           response: { ...responseMetadata, ...rawResponse, messages: messageList.get.response.aiV5.model() },
-          request: request,
+          request,
           usage: outputStream._getImmediateUsage() as LanguageModelV2Usage,
           tripwire: stepTripwireData,
         }),

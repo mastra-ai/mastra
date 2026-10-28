@@ -32,14 +32,16 @@ export function GitLabIntakeSection({
   function connectionDescription() {
     if (statusUnavailable) return "Couldn't load GitLab status.";
     if (reauthRequired) return 'A GitLab account needs to be reconnected in Mastra Platform.';
-    if (authError)
+    if (authError) {
       return platformManaged
         ? 'GitLab rejected a connected account. Reconnect it in Mastra Platform.'
         : 'GitLab rejected the configured access token. Ask the operator to check it.';
-    if (!configured)
+    }
+    if (!configured) {
       return platformManaged
         ? 'Connect GitLab in Mastra Platform to sync issues from this organization.'
         : 'GitLab is not configured on this server. Configure a GitLab access token to enable it.';
+    }
     return undefined;
   }
   return (

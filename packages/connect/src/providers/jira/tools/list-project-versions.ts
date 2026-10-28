@@ -152,7 +152,7 @@ export function listProjectVersionsTool(proxy: PlatformProxy) {
       // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-project-versions/#api-rest-api-3-project-projectidorkey-version-get
       const response = await platformProxy.get({
         endpoint: `/ex/jira/${cloudId}/rest/api/3/project/${input.projectIdOrKey}/version`,
-        params: params,
+        params,
         headers: {
           'X-Atlassian-Token': 'no-check',
         },

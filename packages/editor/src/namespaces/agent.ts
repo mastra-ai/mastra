@@ -1463,8 +1463,9 @@ export class EditorAgentNamespace extends CrudEditorNamespace<
           // The UI may store tools under their bare name (e.g., "searchKnowledgeBase") while
           // MCPClient returns them namespaced (e.g., "support_searchKnowledgeBase"), so check both.
           const hasAgentFilter = agentAllowedTools && Object.keys(agentAllowedTools).length > 0;
-          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools) && !(bareToolName in agentAllowedTools))
+          if (hasAgentFilter && !(namespacedToolName in agentAllowedTools) && !(bareToolName in agentAllowedTools)) {
             continue;
+          }
 
           // Description override: agent-level (namespaced or bare key) takes precedence over client-level (bare key)
           const serverToolConfig = serverName ? clientServers?.[serverName]?.tools?.[bareToolName] : undefined;

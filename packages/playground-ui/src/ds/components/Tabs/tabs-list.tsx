@@ -65,8 +65,9 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         existing.disabled === tab.disabled &&
         existing.onClick === tab.onClick &&
         existing.onClose === tab.onClose
-      )
+      ) {
         return previous;
+      }
       const next = existing ? previous.map(item => (item.value === tab.value ? tab : item)) : [...previous, tab];
       return next.sort((a, b) => {
         if (a.element === b.element) return 0;

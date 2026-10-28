@@ -108,10 +108,11 @@ describe('thread row contract', () => {
       { timeRange: { traces: { ...range, to: '2026-10-03T00:00:00Z' } } },
       { ...request, orderBy: [{ field: 'startedAt', direction: 'asc' }] },
       { ...request, where: { op: 'exists', path: 'userId' } },
-    ])
+    ]) {
       expect(() =>
         planThreadRowsQuery({ ...changed, page: { after } }, { scope, authorizationBinding: 'grant' }),
       ).toThrow();
+    }
     expect(() =>
       planThreadRowsQuery({ ...request, page: { after } }, { scope, authorizationBinding: 'different' }),
     ).toThrow();

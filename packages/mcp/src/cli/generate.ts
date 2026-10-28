@@ -140,11 +140,12 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
   const cleanup = new Map<MCPClient, Promise<void>>();
   const disconnect = () => {
     for (const client of clients) {
-      if (!cleanup.has(client))
+      if (!cleanup.has(client)) {
         cleanup.set(
           client,
           Promise.resolve().then(() => client.disconnect()),
         );
+      }
     }
     return Promise.allSettled(cleanup.values());
   };
@@ -210,8 +211,9 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
       prepared.push({ output, source: converted.source });
     }
     // Disconnect before replacement so cleanup failures preserve previous output too.
-    if ((await disconnect()).some(result => result.status === 'rejected'))
+    if ((await disconnect()).some(result => result.status === 'rejected')) {
       throw new GenerationError('MCP cleanup failed');
+    }
     for (const { output, source } of prepared) {
       abort.signal.throwIfAborted();
       await mkdir(dirname(output), { recursive: true });
@@ -227,8 +229,9 @@ export async function generate(files: string[], cwd = process.cwd()): Promise<vo
     if (warnings.length) {
       console.warn(`${warnings.length} schema portion(s) widened to unknown:`);
       for (const warning of warnings.slice(0, MAX_REPORTED_WARNINGS)) console.warn(`  ${warning}`);
-      if (warnings.length > MAX_REPORTED_WARNINGS)
+      if (warnings.length > MAX_REPORTED_WARNINGS) {
         console.warn(`  ...and ${warnings.length - MAX_REPORTED_WARNINGS} more.`);
+      }
     }
   } catch (error) {
     failure =

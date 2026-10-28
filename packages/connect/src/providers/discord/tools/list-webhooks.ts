@@ -69,7 +69,7 @@ export function listWebhooksTool(proxy: PlatformProxy) {
       const webhooks = z.array(WebhookSchema).parse(response.data);
 
       return {
-        webhooks: webhooks,
+        webhooks,
       };
     },
   });

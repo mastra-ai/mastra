@@ -261,8 +261,9 @@ function reportOutOfOrder(context, imported) {
         order,
         fix,
       )
-    )
+    ) {
       fix = null;
+    }
   }
 }
 
@@ -300,14 +301,16 @@ function importOrder(context) {
       while (
         (n.parent?.type === 'MemberExpression' && n.parent.object === n) ||
         (n.parent?.type === 'CallExpression' && n.parent.callee === n)
-      )
+      ) {
         n = n.parent;
+      }
       if (
         n.parent?.type !== 'VariableDeclarator' ||
         n.parent.parent.type !== 'VariableDeclaration' ||
         n.parent.parent.parent.type !== 'Program'
-      )
+      ) {
         return;
+      }
       register(n.parent.parent.parent, { node, value: arg.value, displayName: arg.value, type: 'require' });
     },
     'Program:exit'() {
@@ -419,8 +422,9 @@ function textRuns(node, runs = ['']) {
 
 // The values a JSX expression can render: `a ? b : c` and `a && b` render their branches.
 function branches(expression) {
-  if (expression.type === 'ConditionalExpression')
+  if (expression.type === 'ConditionalExpression') {
     return [...branches(expression.consequent), ...branches(expression.alternate)];
+  }
   if (expression.type === 'LogicalExpression') return branches(expression.right);
   return [expression];
 }

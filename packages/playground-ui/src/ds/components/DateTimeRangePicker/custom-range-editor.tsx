@@ -65,8 +65,9 @@ export function CustomRangeEditor({
   let error: string | undefined;
   if (applyAttempted && rangeReversed) error = 'Start date/time must be before end date/time';
   else if (applyAttempted && rangeTooWide) error = `Range cannot be longer than ${formatDays(maxRangeMs ?? 0)}`;
-  else if (applyAttempted && firstDay && rangeTooEarly)
+  else if (applyAttempted && firstDay && rangeTooEarly) {
     error = `Range cannot start before ${format(firstDay, 'MMM d, yyyy')}`;
+  }
 
   const apply = () => {
     if (rangeInvalid) {

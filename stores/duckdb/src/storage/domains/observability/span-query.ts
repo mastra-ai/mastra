@@ -173,8 +173,9 @@ export async function querySpans(db: DuckDBConnection, plan: TrustedSpanQueryPla
       return await db.query<T>(sql, values, remaining);
     } catch (error) {
       if (error instanceof DuckDBQueryTimeoutError) throw new coreStorage.TraceQueryExecutionError();
-      if (error instanceof Error && /out of memory/i.test(error.message))
+      if (error instanceof Error && /out of memory/i.test(error.message)) {
         throw new coreStorage.TraceQueryResourceLimitError();
+      }
       throw error;
     }
   };

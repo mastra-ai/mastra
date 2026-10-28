@@ -514,8 +514,9 @@ describe('T1 tool-roundtrip / durable-recover / amount', () => {
         model: createScriptModel(p => {
           const rs = toolResults(p);
           if (rs.length === 0) return { tools: [{ name: 'writeRecord', args: { name: 'comparison', [field]: 42 } }] };
-          if (rs.length === 1)
+          if (rs.length === 1) {
             return { tools: [{ name: 'readRecord', args: { receipt: out(rs[0])?.receipt ?? 'missing-receipt' } }] };
+          }
           const v = out(rs.at(-1));
           return {
             text: v?.verified ? `verified ${v.name} value ${v[field]}` : `could not verify: ${JSON.stringify(v)}`,

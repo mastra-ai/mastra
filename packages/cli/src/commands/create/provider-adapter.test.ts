@@ -284,8 +284,9 @@ describe('adaptDefaultTemplate', () => {
     const result = await adaptFixture({ projectPath, provider, versionTag: 'latest' });
 
     expect(result.adaptationFailed).toBe(true);
-    if (_label !== 'README')
+    if (_label !== 'README') {
       expect((await fs.readFile(path.join(projectPath, 'README.md'), 'utf8')).startsWith('# my-agent\n')).toBe(true);
+    }
   });
 
   it('preserves unmatched README wording and records the skipped adjustment', async () => {

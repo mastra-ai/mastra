@@ -117,8 +117,8 @@ export class VoyageContextualizedEmbeddingModel {
       inputs: values,
       model: this.modelId,
       inputType: toSdkInputType(inputType),
-      outputDimension: outputDimension,
-      outputDtype: outputDtype,
+      outputDimension,
+      outputDtype,
     });
 
     // The SDK returns data grouped by input document
@@ -167,8 +167,8 @@ export class VoyageContextualizedEmbeddingModel {
       inputs: values,
       model: this.modelId,
       inputType: toSdkInputType(inputType),
-      outputDimension: outputDimension,
-      outputDtype: outputDtype,
+      outputDimension,
+      outputDtype,
     });
 
     // Sort by index and extract grouped embeddings

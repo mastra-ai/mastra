@@ -22,8 +22,9 @@ class DiscoveryPubSub extends EventEmitterPubSub {
       !this.ownerAnswersDiscovery &&
       topic.startsWith('agent.thread-owner-discovery') &&
       event.data?.type === 'thread-owner-response'
-    )
+    ) {
       return;
+    }
     await super.publish(...args);
   }
 }

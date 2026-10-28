@@ -73,11 +73,13 @@ export function createContactImportTool(proxy: PlatformProxy) {
         `Content-Disposition: form-data; name="file"; filename="${filename}"\r\n` +
         `Content-Type: text/csv\r\n\r\n` +
         `${input.body.file}\r\n`;
-      if (input.body.column_map !== undefined)
+      if (input.body.column_map !== undefined) {
         body += formField(boundary, 'column_map', JSON.stringify(input.body.column_map));
+      }
       if (input.body.on_conflict !== undefined) body += formField(boundary, 'on_conflict', input.body.on_conflict);
-      if (input.body.segments !== undefined)
+      if (input.body.segments !== undefined) {
         body += formField(boundary, 'segments', JSON.stringify(input.body.segments));
+      }
       if (input.body.topics !== undefined) body += formField(boundary, 'topics', JSON.stringify(input.body.topics));
       body += `--${boundary}--\r\n`;
 

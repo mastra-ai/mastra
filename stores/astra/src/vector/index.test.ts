@@ -1209,7 +1209,7 @@ describe.skip('AstraVector Integration Tests', () => {
       await vectorDB.deleteVector({ indexName, id: idToBeDeleted });
 
       const results = await vectorDB.query({
-        indexName: indexName,
+        indexName,
         queryVector: [1, 0, 0, 0],
         topK: 2,
       });

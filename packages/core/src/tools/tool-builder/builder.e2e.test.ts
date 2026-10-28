@@ -163,7 +163,7 @@ async function runStructuredOutputSchemaTest(
       id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions,
-      model: model,
+      model,
     });
 
     // Use the following to test AI SDK v4 and V5
@@ -186,10 +186,11 @@ async function runStructuredOutputSchemaTest(
     // });
 
     const prompt = inputSchema?.description || allSchemas[schemaName].description;
-    if (!prompt)
+    if (!prompt) {
       throw new Error(
         `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
       );
+    }
     // Check if model is V1 or V2/V3 and use appropriate method
     const response = isSupportedLanguageModel(model)
       ? await agent.generate(prompt, generateOptions)
@@ -244,7 +245,7 @@ async function runSingleToolSchemaTest(
       id: `test-agent-${model.modelId}`,
       name: `test-agent-${model.modelId}`,
       instructions: `You are a test agent. Your task is to call the tool named '${toolName}' with any valid arguments. This is very important as it's your primary purpose`,
-      model: model,
+      model,
       tools: { [toolName]: testTool },
     });
 
@@ -293,7 +294,7 @@ async function runSingleToolSchemaTest(
       testName: toolName,
       modelProvider: model.provider,
       status: 'failure',
-      error: error,
+      error,
       receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
       testId,
     };

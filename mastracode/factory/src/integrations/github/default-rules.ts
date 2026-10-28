@@ -411,19 +411,19 @@ function reReviewUpdatedPullRequest(context: FactoryGithubRuleContext) {
 }
 
 export const defaultGithubRules = Object.freeze({
-  issueOpened: issueOpened,
+  issueOpened,
   issueEdited: retriageGithubIssue,
-  issueClosed: issueClosed,
+  issueClosed,
   issueCommentCreated: retriageGithubIssue,
   issueCommentEdited: retriageGithubIssue,
   issueCommentDeleted: retriageGithubIssue,
-  pullRequestOpened: pullRequestOpened,
+  pullRequestOpened,
   pullRequestUpdated: reReviewUpdatedPullRequest,
   pullRequestCommentCreated: addressPullRequestComment,
   pullRequestReviewRequested: reReviewRequestedPullRequest,
-  pullRequestReviewSubmitted: pullRequestReviewSubmitted,
-  pullRequestMerged: pullRequestMerged,
-  pullRequestClosed: pullRequestClosed,
+  pullRequestReviewSubmitted,
+  pullRequestMerged,
+  pullRequestClosed,
 } satisfies GithubEventRules);
 
 export function resolveGithubRules(overrides?: GithubRuleOverrides): GithubEventRules {

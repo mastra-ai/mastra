@@ -258,7 +258,7 @@ describe('git-ref instruction readers', () => {
         const toolRoot = projectSpelling === 'alias' ? canonical : alias;
         const knownPath = join(projectPath, 'AGENTS.md');
         const messageList = new MessageList();
-        if (coverage !== 'static')
+        if (coverage !== 'static') {
           messageList.add(
             {
               id: 'prior',
@@ -280,6 +280,7 @@ describe('git-ref instruction readers', () => {
             },
             'memory',
           );
+        }
         addListing(messageList, toolRoot);
         const reader = createGitRefReminderReader(projectPath, 'main');
         const injector = new AgentsMDInjector({

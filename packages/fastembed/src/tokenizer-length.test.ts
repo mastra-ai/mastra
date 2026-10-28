@@ -39,8 +39,9 @@ beforeEach(() => {
     'tokenizer.json': tokenizer,
     'config.json': { pad_token_id: 0 },
     'special_tokens_map.json': { pad_token: '[PAD]', unk_token: '[UNK]' },
-  }))
+  })) {
     fs.writeFileSync(path.join(modelDir, file), JSON.stringify(content));
+  }
 });
 afterEach(() => fs.rmSync(modelDir, { recursive: true, force: true }));
 

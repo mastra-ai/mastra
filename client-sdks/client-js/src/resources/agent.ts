@@ -1368,7 +1368,7 @@ export class Agent extends BaseResource {
     // Handle both new signature (messages, options) and old signature (single param object)
     const params = {
       ...options,
-      messages: messages,
+      messages,
     } as StreamParams<OUTPUT>;
     const resolvedClientTools = params.clientToolsResolver?.() ?? params.clientTools;
     // `abortSignal` is forwarded to fetch and must never be serialized into the request body

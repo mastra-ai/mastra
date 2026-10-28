@@ -35,8 +35,9 @@ function parseShardNumber(name: string, defaultValue: number): number {
 
 function applyShard(names: ScenarioName[], shardIndex: number, shardTotal: number): ScenarioName[] {
   if (shardTotal < 1) throw new Error('MC_E2E_VITEST_SHARD_TOTAL must be greater than zero');
-  if (shardIndex >= shardTotal)
+  if (shardIndex >= shardTotal) {
     throw new Error('MC_E2E_VITEST_SHARD_INDEX must be less than MC_E2E_VITEST_SHARD_TOTAL');
+  }
   if (shardTotal === 1) return names;
   return names.filter((_, index) => index % shardTotal === shardIndex);
 }

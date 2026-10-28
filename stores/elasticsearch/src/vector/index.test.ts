@@ -109,7 +109,7 @@ describe('ElasticSearchVector', () => {
         });
         new ElasticSearchVector({
           id: 'elasticsearch-shared-test',
-          client: client,
+          client,
         });
       }).not.toThrowError();
     });

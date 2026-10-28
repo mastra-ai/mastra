@@ -132,8 +132,9 @@ function callbackToolResults(records: unknown[], runId: string): ToolResultChunk
       result.resultHidden ||
       result.approval?.approved === false ||
       result.result === undefined
-    )
+    ) {
       return [];
+    }
     return [
       {
         type: 'tool-result' as const,

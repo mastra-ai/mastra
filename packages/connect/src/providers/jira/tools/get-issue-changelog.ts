@@ -87,7 +87,7 @@ export function getIssueChangelogTool(proxy: PlatformProxy) {
       // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-issue-changelog/#api-rest-api-3-issue-issueidorkey-changelog-get
       const response = await platformProxy.get({
         endpoint: `/ex/jira/${cloudId}/rest/api/3/issue/${input.issueIdOrKey}/changelog`,
-        params: params,
+        params,
         retries: 3,
       });
 

@@ -38,8 +38,9 @@ function settingsIncludeUpdates(settings: AgentControllerSessionSettings, update
     updates.thinkingLevel !== undefined &&
     updates.thinkingLevel !== null &&
     settings.thinkingLevel !== updates.thinkingLevel
-  )
+  ) {
     return false;
+  }
   if (updates.notifications !== undefined && settings.notifications !== updates.notifications) return false;
   if (updates.smartEditing !== undefined && settings.smartEditing !== updates.smartEditing) return false;
   return true;

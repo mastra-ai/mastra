@@ -8,8 +8,9 @@ const AVATAR_MAX_BYTES = 512 * 1024; // 512 KB
  * No-ops when metadata is absent or doesn't contain avatarUrl.
  */
 export function validateMetadataAvatarUrl(metadata: Record<string, unknown> | undefined): void {
-  if (!metadata || !('avatarUrl' in metadata) || metadata.avatarUrl === null || metadata.avatarUrl === undefined)
+  if (!metadata || !('avatarUrl' in metadata) || metadata.avatarUrl === null || metadata.avatarUrl === undefined) {
     return;
+  }
   if (typeof metadata.avatarUrl !== 'string') {
     throw new HTTPException(400, { message: 'metadata.avatarUrl must be a string' });
   }

@@ -267,7 +267,7 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       await this.operations.update({ tableName: TABLE_SCORER_DEFINITIONS, keys: { id }, data: updateData });
 
       const updated = await this.getById(id);
-      if (!updated)
+      if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_SCORER_DEFINITION', 'NOT_FOUND_AFTER_UPDATE'),
           domain: ErrorDomain.STORAGE,
@@ -275,6 +275,7 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
           text: `Scorer definition ${id} not found after update`,
           details: { id },
         });
+      }
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -325,7 +326,7 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
       }
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
             throw new MastraError({
               id: createStorageErrorId('MYSQL', 'LIST_SCORER_DEFINITIONS', 'INVALID_METADATA_KEY'),
               domain: ErrorDomain.STORAGE,
@@ -333,6 +334,7 @@ export class ScorerDefinitionsMySQL extends ScorerDefinitionsStorage {
               text: `Invalid metadata key: ${key}`,
               details: { key },
             });
+          }
           if (typeof value === 'string') {
             conditions.push(
               `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,

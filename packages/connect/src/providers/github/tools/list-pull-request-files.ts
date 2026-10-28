@@ -63,7 +63,7 @@ export function listPullRequestFilesTool(proxy: PlatformProxy) {
       const response = await platformProxy.get({
         // https://docs.github.com/en/rest/pulls/pulls?apiVersion=2022-11-28#list-pull-requests-files
         endpoint: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/pulls/${input.pull_number}/files`,
-        params: params,
+        params,
         retries: 3,
       });
 

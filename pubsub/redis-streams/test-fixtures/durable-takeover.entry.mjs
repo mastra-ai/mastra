@@ -37,8 +37,9 @@ const model = {
             { type: 'text-delta', id: 'answer', delta: 'Recovered successfully' },
             { type: 'text-end', id: 'answer' },
             { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
-          ])
+          ]) {
             controller.enqueue(chunk);
+          }
           controller.close();
         },
       }),

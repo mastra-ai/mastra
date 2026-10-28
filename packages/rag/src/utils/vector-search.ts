@@ -70,7 +70,7 @@ export const vectorQuerySearch = async ({
       embeddingResult = await embedV4({ model, value: queryText, maxRetries, providerOptions });
     } else if (model.specificationVersion === 'v3') {
       embeddingResult = await embedV3({
-        model: model,
+        model,
         value: queryText,
         maxRetries,
         // Type assertion needed: providerOptions type is a union, but embedV3 expects specific version
@@ -80,7 +80,7 @@ export const vectorQuerySearch = async ({
       });
     } else if (model.specificationVersion === 'v2') {
       embeddingResult = await embedV2({
-        model: model,
+        model,
         value: queryText,
         maxRetries,
         // Type assertion needed: providerOptions type is a union, but embedV2 expects specific version
@@ -91,7 +91,7 @@ export const vectorQuerySearch = async ({
     } else {
       embeddingResult = await embedV1({
         value: queryText,
-        model: model,
+        model,
         maxRetries,
       });
     }

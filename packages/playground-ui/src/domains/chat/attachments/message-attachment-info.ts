@@ -23,8 +23,9 @@ export function attachmentInfo(name: string, contentType?: string) {
   ) {
     return { Icon: FileSpreadsheet, label: extension || 'Spreadsheet' };
   }
-  if (mime?.startsWith('image/'))
+  if (mime?.startsWith('image/')) {
     return { Icon: FileImage, label: extension || mime.slice(6).split('+')[0]?.toUpperCase() || 'Image' };
+  }
   if (mime === 'application/pdf' || extension === 'PDF') return { Icon: FileText, label: 'PDF' };
   if (mime?.startsWith('audio/')) return { Icon: FileAudio, label: extension || 'Audio' };
   if (mime?.startsWith('video/')) return { Icon: FileVideo, label: extension || 'Video' };

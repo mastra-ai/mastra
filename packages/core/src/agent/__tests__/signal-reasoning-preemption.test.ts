@@ -68,12 +68,13 @@ describe('queued signals preempt default-loop reasoning', () => {
                   id: 'discarded-block',
                   delta: 'STALE_REASONING_FINGERPRINT',
                 });
-                if (phase === 'signed-reasoning')
+                if (phase === 'signed-reasoning') {
                   controller.enqueue({
                     type: 'reasoning-end',
                     id: 'discarded-block',
                     providerMetadata: { anthropic: { signature: 'STALE_SIGNATURE' } },
                   });
+                }
                 abortSignal.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
                 started.resolve();
               },
@@ -109,8 +110,9 @@ describe('queued signals preempt default-loop reasoning', () => {
         agent.sendSignal({ type: 'user-message', contents: 'SYNTHETIC_SIGNAL_MARKER_A' }, scope),
         agent.sendSignal({ type: 'user-message', contents: 'SYNTHETIC_SIGNAL_MARKER_B' }, scope),
       ]);
-      for (const signal of delivered)
+      for (const signal of delivered) {
         await expect(signal.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+      }
       await aborted.promise;
       await consumption;
       await stream._waitUntilFinished();
@@ -241,7 +243,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       const onIterationComplete = vi.fn();
       const doStream = vi.fn(async ({ abortSignal }: { abortSignal?: AbortSignal }) => {
         modelCalls++;
-        if (prior && modelCalls === 1)
+        if (prior && modelCalls === 1) {
           return {
             warnings: [],
             stream: convertArrayToReadableStream<LanguageModelV2StreamPart>([
@@ -249,6 +251,7 @@ describe('queued signals preempt default-loop reasoning', () => {
               { type: 'finish', finishReason: 'tool-calls', usage: acceptedUsage },
             ]),
           };
+        }
         return {
           warnings: [],
           stream: new ReadableStream<LanguageModelV2StreamPart>({
@@ -584,7 +587,7 @@ describe('queued signals preempt default-loop reasoning', () => {
       doStream: async ({ prompt, abortSignal }) => {
         prompts.push(prompt);
         const index = prompts.length;
-        if (index === 2)
+        if (index === 2) {
           return {
             warnings: [],
             stream: new ReadableStream<LanguageModelV2StreamPart>({
@@ -595,6 +598,7 @@ describe('queued signals preempt default-loop reasoning', () => {
               },
             }),
           };
+        }
         if (index === 4) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
         const signed: LanguageModelV2StreamPart[] =
           index === 1
@@ -647,8 +651,9 @@ describe('queued signals preempt default-loop reasoning', () => {
       onIterationComplete,
       stopWhen,
       onChunk: chunk => {
-        if (chunk.type === 'reasoning-delta' && chunk.payload.text === 'STALE_REASONING_FINGERPRINT')
+        if (chunk.type === 'reasoning-delta' && chunk.payload.text === 'STALE_REASONING_FINGERPRINT') {
           reasoning.resolve();
+        }
       },
     });
     const consumption = stream.consumeStream();
@@ -780,8 +785,9 @@ describe('queued signals preempt default-loop reasoning', () => {
       isFinal: true,
       text: 'replacement answer',
     });
-    for (let index = 0; index < ready.length; index++)
+    for (let index = 0; index < ready.length; index++) {
       expect(JSON.stringify(prompts[index + 1])).toContain(`QUEUED_SIGNAL_${index + 1}`);
+    }
     expect(JSON.stringify(prompts)).not.toContain('STALE_ATTEMPT_');
     const recalled = await memory.recall(scope);
     expect(JSON.stringify(recalled.messages)).toContain('QUEUED_SIGNAL_5');

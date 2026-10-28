@@ -40,8 +40,9 @@ export function IncidentioIntakeSection({
   function connectionDescription() {
     if (!directConfigured && connectionsQuery.isError) return "Couldn't load incident.io connections.";
     if (statusQuery.isError && !active.length) return "Couldn't load incident.io status.";
-    if (!directConfigured && connections.some(connection => connection.status === 'needs_reauth'))
+    if (!directConfigured && connections.some(connection => connection.status === 'needs_reauth')) {
       return 'An incident.io account needs to be reconnected to keep syncing follow-ups.';
+    }
     if (!credentialActive) return 'Connect incident.io to sync follow-ups.';
     return undefined;
   }

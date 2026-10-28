@@ -282,8 +282,9 @@ export function createFactorySessionTools(
         ? null
         : await sessionModel(messaging.controller, deps.sessions, deps.workItems, scope.sessionId);
       const requestedModel = model ?? (inherited && catalog.usable.includes(inherited) ? inherited : undefined);
-      if (requestedModel && !catalog.usable.includes(requestedModel))
+      if (requestedModel && !catalog.usable.includes(requestedModel)) {
         throw unrunnableModelError(requestedModel, catalog);
+      }
 
       const sessionId = globalThis.crypto.randomUUID();
       const ensured = await ensureFactorySourceSession({

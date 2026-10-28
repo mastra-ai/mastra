@@ -68,7 +68,7 @@ describe('trajectory expectation boundaries', () => {
   });
 
   test.each([1, 2, 3, 4])('propagates forbidden tool and sequence failures at depth %i', async depth => {
-    for (const forbidden of [false, true])
+    for (const forbidden of [false, true]) {
       for (const sequence of [false, true]) {
         let steps: Trajectory['steps'] = [{ stepType: 'tool_call', name: forbidden ? 'forbidden' : 'allowed' }];
         let config: TrajectoryExpectation = sequence
@@ -85,6 +85,7 @@ describe('trajectory expectation boundaries', () => {
         if (forbidden) expect(result.reason).toContain('Nested blacklist violation');
         else expect(result.reason).not.toContain('blacklist violation');
       }
+    }
   });
 });
 

@@ -134,7 +134,7 @@ export const PickMultiPanelSingle: Story = {
           tokens={tokens}
           onChange={(fieldId, value) => {
             if (value === undefined) setTokens(prev => prev.filter(t => t.fieldId !== fieldId));
-            else
+            else {
               setTokens(prev => {
                 const existing = prev.findIndex(t => t.fieldId === fieldId);
                 if (existing === -1) return [...prev, { fieldId, value }];
@@ -142,6 +142,7 @@ export const PickMultiPanelSingle: Story = {
                 next[existing] = { fieldId, value };
                 return next;
               });
+            }
           }}
         />
       </div>

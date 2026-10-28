@@ -128,7 +128,7 @@ export function createIssueTool(proxy: PlatformProxy) {
         id: createdIssue.id,
         key: createdIssue.key,
         self: createdIssue.self,
-        url: url,
+        url,
         ...(createdIssue.transition !== undefined && { transition: createdIssue.transition }),
       };
     },

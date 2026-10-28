@@ -48,8 +48,9 @@ const RETIRED_SETTINGS_SECTIONS = new Map<string, SettingsTarget>([
 ]);
 
 export function retiredSettingsTarget(section: string | undefined, hash: string): SettingsTarget | undefined {
-  if (section === 'models' && hash === '#model-packs')
+  if (section === 'models' && hash === '#model-packs') {
     return { section: 'models', anchor: MODEL_DEFAULTS_ANCHORS.personal };
+  }
   if (!section) return undefined;
   return RETIRED_SETTINGS_SECTIONS.get(section);
 }

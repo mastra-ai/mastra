@@ -26,8 +26,9 @@ export function useOpenCardState(linkedComment: LinkedComment | undefined): Boar
     openKey: openKeyOf(choice, linkedComment),
     setCardOpen: (key, open) => {
       if (open) setChoice({ linkedComment, key });
-      else
+      else {
         setChoice(current => (openKeyOf(current, linkedComment) === key ? { linkedComment, key: undefined } : current));
+      }
     },
   };
 }

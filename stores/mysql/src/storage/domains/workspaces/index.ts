@@ -248,7 +248,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing)
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -256,6 +256,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
           text: `Workspace ${id} not found`,
           details: { workspaceId: id },
         });
+      }
 
       const { authorId, activeVersionId, metadata, status, ...configFields } = updates;
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
@@ -317,7 +318,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       });
 
       const updated = await this.getById(id);
-      if (!updated)
+      if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_WORKSPACE', 'NOT_FOUND_AFTER_UPDATE'),
           domain: ErrorDomain.STORAGE,
@@ -325,6 +326,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
           text: `Workspace ${id} not found after update`,
           details: { id },
         });
+      }
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;
@@ -371,7 +373,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
       }
       if (metadata && Object.keys(metadata).length > 0) {
         for (const [key, value] of Object.entries(metadata)) {
-          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key))
+          if (!/^[a-zA-Z_][a-zA-Z0-9_]*$/.test(key)) {
             throw new MastraError({
               id: createStorageErrorId('MYSQL', 'LIST_WORKSPACES', 'INVALID_METADATA_KEY'),
               domain: ErrorDomain.STORAGE,
@@ -379,6 +381,7 @@ export class WorkspacesMySQL extends WorkspacesStorage {
               text: `Invalid metadata key: ${key}`,
               details: { key },
             });
+          }
           if (typeof value === 'string') {
             conditions.push(
               `JSON_UNQUOTE(JSON_EXTRACT(${quoteIdentifier('metadata', 'column name')}, '$.${key}')) = ?`,

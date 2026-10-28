@@ -36,8 +36,9 @@ export function CreateFactoryModelRows({
   if (catalog.isPending) {
     return <PaletteRowsSkeleton label="Loading models" rows={3} />;
   }
-  if (catalog.catalogError)
+  if (catalog.catalogError) {
     return <CreateFactoryPaletteAlert>{catalog.catalogError.message}</CreateFactoryPaletteAlert>;
+  }
 
   const normalizedQuery = query.trim().toLowerCase();
   const models = catalog.models

@@ -195,8 +195,9 @@ function messages(value: unknown, preferUser: boolean, label = false): string | 
       !preferUser ||
       role === 'user' ||
       (role === 'signal' && (signalType === 'user' || signalType === 'user-message'))
-    )
+    ) {
       return preview;
+    }
   }
   // A recognized but empty message list should not fall back to serializing its wrappers/binary data.
   return latest ?? '';
@@ -290,8 +291,9 @@ const writers: Partial<Record<SpanType, PreviewWriter>> = {
     const data = record(span.output);
     if (!data) return undefined;
     if (text(data.text) ?? text(data.delta)) return text(data.text) ?? text(data.delta);
-    if (text(data.toolName))
+    if (text(data.toolName)) {
       return `${data.toolName}: ${generic(data.toolInput ?? data.args ?? data.input ?? data.result)}`;
+    }
     if (record(span.attributes)?.chunkType === 'file') return '[file]';
     return undefined;
   },
@@ -322,8 +324,9 @@ const writers: Partial<Record<SpanType, PreviewWriter>> = {
   [SpanType.RAG_VECTOR_OPERATION]: returnedWriter,
   [SpanType.RAG_ACTION]: (span, direction) => {
     const data = record(span[direction]);
-    if (direction === 'input' && record(span.attributes)?.action === 'rerank' && data?.query != null)
+    if (direction === 'input' && record(span.attributes)?.action === 'rerank' && data?.query != null) {
       return generic(data.query);
+    }
     return returnedWriter(span, direction);
   },
   [SpanType.GRAPH_ACTION]: returnedWriter,
@@ -355,8 +358,9 @@ function errorPreview(value: unknown): string {
   };
   const message = field('message');
   const name = field('name');
-  if (message)
+  if (message) {
     return limit(name && name !== 'Error' && !message.startsWith(`${name}:`) ? `${name}: ${message}` : message);
+  }
   return limit(name ?? field('id') ?? field('domain') ?? field('category') ?? '');
 }
 

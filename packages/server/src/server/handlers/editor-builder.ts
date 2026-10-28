@@ -263,8 +263,9 @@ export const GET_INFRASTRUCTURE_STATUS_ROUTE = createRoute({
 
       const getProviderName = (value: unknown): string | null => {
         if (!value) return null;
-        if (typeof value === 'object' && 'provider' in value && typeof value.provider === 'string')
+        if (typeof value === 'object' && 'provider' in value && typeof value.provider === 'string') {
           return value.provider;
+        }
         if (typeof value === 'object' && 'constructor' in value) {
           const name = (value as { constructor?: { name?: string } }).constructor?.name;
           return name && name !== 'Object' ? name : 'configured';

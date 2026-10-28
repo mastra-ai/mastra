@@ -55,7 +55,7 @@ export function deleteWorksheetTool(proxy: PlatformProxy) {
           requests: [
             {
               deleteSheet: {
-                sheetId: sheetId,
+                sheetId,
               },
             },
           ],

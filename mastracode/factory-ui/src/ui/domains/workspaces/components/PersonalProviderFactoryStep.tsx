@@ -37,8 +37,9 @@ export function PersonalProviderFactoryStep({
             onPreviewModel?.(undefined);
           }}
           onContinue={modelId => {
-            if (connection.method)
+            if (connection.method) {
               onContinue({ providerId: connectedProvider.provider, method: connection.method, modelId });
+            }
           }}
         />
       ) : (

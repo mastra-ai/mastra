@@ -488,8 +488,9 @@ function validateQuestions(questions: ClassifierQuestions, model: MastraDecision
         if (choice.length === 0) {
           throw new TypeError(`Choice question '${questionId}' option names must be non-empty.`);
         }
-        if (description !== null)
+        if (description !== null) {
           validateJsonValue(description, `Choice question '${questionId}' criterion '${choice}'`);
+        }
       }
     } else if (question.type === 'score') {
       if (!Array.isArray(question.criteria) || question.criteria.length < 2) {

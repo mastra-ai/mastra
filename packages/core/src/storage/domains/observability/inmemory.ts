@@ -1077,13 +1077,15 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.parentEntityType !== undefined && span.parentEntityType !== filters.parentEntityType) return false;
     if (filters.parentEntityId !== undefined && span.parentEntityId !== filters.parentEntityId) return false;
     if (filters.parentEntityName !== undefined && span.parentEntityName !== filters.parentEntityName) return false;
-    if (filters.parentEntityVersionId !== undefined && span.parentEntityVersionId !== filters.parentEntityVersionId)
+    if (filters.parentEntityVersionId !== undefined && span.parentEntityVersionId !== filters.parentEntityVersionId) {
       return false;
+    }
     if (filters.rootEntityType !== undefined && span.rootEntityType !== filters.rootEntityType) return false;
     if (filters.rootEntityId !== undefined && span.rootEntityId !== filters.rootEntityId) return false;
     if (filters.rootEntityName !== undefined && span.rootEntityName !== filters.rootEntityName) return false;
-    if (filters.rootEntityVersionId !== undefined && span.rootEntityVersionId !== filters.rootEntityVersionId)
+    if (filters.rootEntityVersionId !== undefined && span.rootEntityVersionId !== filters.rootEntityVersionId) {
       return false;
+    }
 
     if (filters.experimentId !== undefined && span.experimentId !== filters.experimentId) return false;
     if (filters.userId !== undefined && span.userId !== filters.userId) return false;
@@ -1322,10 +1324,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityType !== undefined && m.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && m.entityName !== filters.entityName) return false;
     if (filters.entityVersionId !== undefined && m.entityVersionId !== filters.entityVersionId) return false;
-    if (filters.parentEntityVersionId !== undefined && m.parentEntityVersionId !== filters.parentEntityVersionId)
+    if (filters.parentEntityVersionId !== undefined && m.parentEntityVersionId !== filters.parentEntityVersionId) {
       return false;
-    if (filters.rootEntityVersionId !== undefined && m.rootEntityVersionId !== filters.rootEntityVersionId)
+    }
+    if (filters.rootEntityVersionId !== undefined && m.rootEntityVersionId !== filters.rootEntityVersionId) {
       return false;
+    }
     if (filters.userId !== undefined && m.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && m.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && m.resourceId !== filters.resourceId) return false;
@@ -1891,10 +1895,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityType !== undefined && log.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && log.entityName !== filters.entityName) return false;
     if (filters.entityVersionId !== undefined && log.entityVersionId !== filters.entityVersionId) return false;
-    if (filters.parentEntityVersionId !== undefined && log.parentEntityVersionId !== filters.parentEntityVersionId)
+    if (filters.parentEntityVersionId !== undefined && log.parentEntityVersionId !== filters.parentEntityVersionId) {
       return false;
-    if (filters.rootEntityVersionId !== undefined && log.rootEntityVersionId !== filters.rootEntityVersionId)
+    }
+    if (filters.rootEntityVersionId !== undefined && log.rootEntityVersionId !== filters.rootEntityVersionId) {
       return false;
+    }
     if (filters.userId !== undefined && log.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && log.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && log.resourceId !== filters.resourceId) return false;
@@ -2018,10 +2024,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityType !== undefined && score.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && score.entityName !== filters.entityName) return false;
     if (filters.entityVersionId !== undefined && score.entityVersionId !== filters.entityVersionId) return false;
-    if (filters.parentEntityVersionId !== undefined && score.parentEntityVersionId !== filters.parentEntityVersionId)
+    if (filters.parentEntityVersionId !== undefined && score.parentEntityVersionId !== filters.parentEntityVersionId) {
       return false;
-    if (filters.rootEntityVersionId !== undefined && score.rootEntityVersionId !== filters.rootEntityVersionId)
+    }
+    if (filters.rootEntityVersionId !== undefined && score.rootEntityVersionId !== filters.rootEntityVersionId) {
       return false;
+    }
     if (filters.userId !== undefined && score.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && score.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && score.resourceId !== filters.resourceId) return false;
@@ -2610,10 +2618,12 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.entityType !== undefined && fb.entityType !== filters.entityType) return false;
     if (filters.entityName !== undefined && fb.entityName !== filters.entityName) return false;
     if (filters.entityVersionId !== undefined && fb.entityVersionId !== filters.entityVersionId) return false;
-    if (filters.parentEntityVersionId !== undefined && fb.parentEntityVersionId !== filters.parentEntityVersionId)
+    if (filters.parentEntityVersionId !== undefined && fb.parentEntityVersionId !== filters.parentEntityVersionId) {
       return false;
-    if (filters.rootEntityVersionId !== undefined && fb.rootEntityVersionId !== filters.rootEntityVersionId)
+    }
+    if (filters.rootEntityVersionId !== undefined && fb.rootEntityVersionId !== filters.rootEntityVersionId) {
       return false;
+    }
     if (filters.userId !== undefined && fb.userId !== filters.userId) return false;
     if (filters.organizationId !== undefined && fb.organizationId !== filters.organizationId) return false;
     if (filters.resourceId !== undefined && fb.resourceId !== filters.resourceId) return false;
@@ -2637,8 +2647,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.source !== undefined && feedbackSource !== filters.source) return false;
     if (filters.experimentId !== undefined && fb.experimentId !== filters.experimentId) return false;
     if (filters.feedbackUserId !== undefined && fb.feedbackUserId !== filters.feedbackUserId) return false;
-    if (filters.reviewStatus !== undefined && (fb.reviewStatus ?? 'needs-review') !== filters.reviewStatus)
+    if (filters.reviewStatus !== undefined && (fb.reviewStatus ?? 'needs-review') !== filters.reviewStatus) {
       return false;
+    }
     if (filters.tags != null && filters.tags.length > 0) {
       if (fb.tags == null) return false;
       for (const tag of filters.tags) {

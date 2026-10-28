@@ -334,7 +334,7 @@ export class MastraCodeAcpAgent implements Agent {
     const modelId = entry.session.model.get() ?? '';
     const options: SessionConfigOption[] = [];
     const models = includeCurrentModel(entry.models, modelId);
-    if (models.length)
+    if (models.length) {
       options.push({
         id: 'model',
         name: 'Model',
@@ -343,6 +343,7 @@ export class MastraCodeAcpAgent implements Agent {
         currentValue: modelId,
         options: models.map(model => ({ value: model.modelId, name: model.name })),
       });
+    }
     options.push({
       id: 'mode',
       name: 'Mode',
@@ -351,7 +352,7 @@ export class MastraCodeAcpAgent implements Agent {
       currentValue: entry.session.mode.get(),
       options: entry.modes.map(mode => ({ value: mode.id, name: mode.name ?? mode.id })),
     });
-    if (entry.getThinkingLevel)
+    if (entry.getThinkingLevel) {
       options.push({
         id: 'thought_level',
         name: 'Reasoning effort',
@@ -364,6 +365,7 @@ export class MastraCodeAcpAgent implements Agent {
           name: value[0]!.toUpperCase() + value.slice(1),
         })),
       });
+    }
     return options;
   }
 
@@ -484,8 +486,9 @@ export class MastraCodeAcpAgent implements Agent {
 
   async setSessionMode(params: { sessionId: string; modeId: string }): Promise<void> {
     const entry = this.getSession(params.sessionId);
-    if (!entry.modes.some(mode => mode.id === params.modeId))
+    if (!entry.modes.some(mode => mode.id === params.modeId)) {
       throw RequestError.invalidParams(undefined, 'Unknown mode');
+    }
     await this.enqueue(entry, async () => {
       if (this.disposed) return;
       await entry.session.mode.switch({ modeId: params.modeId });
@@ -527,8 +530,9 @@ export function extractTextFromContentBlocks(blocks: ContentBlock[]): string {
       parts.push(`[resource: ${block.uri}]`);
     } else if (block.type === 'resource') {
       parts.push(`[resource: ${block.resource.uri}]`);
-      if (!('text' in block.resource))
+      if (!('text' in block.resource)) {
         throw RequestError.invalidParams(undefined, 'Binary prompt resources are not supported');
+      }
       parts.push(block.resource.text);
     } else {
       throw RequestError.invalidParams(undefined, `Unsupported prompt content: ${block.type}`);

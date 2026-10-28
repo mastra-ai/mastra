@@ -23,9 +23,10 @@ async function setup(options: { reject?: 'exit' | 'enter'; advance?: boolean } =
       ) {
         return { type: 'reject', code: 'forbidden', reason: 'Release blocked' };
       }
-      if (event === 'queued:exit')
+      if (event === 'queued:exit') {
         return { type: 'transition', idempotencyKey: 'finish-release', board: 'release', stage: 'shipped' };
-      if (event === 'preparing:enter' && options.advance)
+      }
+      if (event === 'preparing:enter' && options.advance) {
         return {
           type: 'upsertLinkedWorkItem',
           idempotencyKey: 'distribution',
@@ -36,6 +37,7 @@ async function setup(options: { reject?: 'exit' | 'enter'; advance?: boolean } =
           title: 'Distribute release',
           url: 'https://github.com/mastra-ai/mastra/issues/42',
         };
+      }
     };
   const wrongSource = vi.fn();
   const wrongBoard = vi.fn();

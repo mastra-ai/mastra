@@ -155,10 +155,11 @@ describe('T4 durable-recover checkpoint availability (COR-1493)', () => {
           .flatMap(message => message.content.parts ?? [])
           .filter(part => part.type === 'tool-invocation' && part.toolInvocation.toolName === 'fetchRecord');
         expect(invocations).toHaveLength(1);
-        for (const part of invocations)
+        for (const part of invocations) {
           expect(part).toMatchObject({
             toolInvocation: { state: 'result', result: { name: 'comparison', amount: AMOUNT } },
           });
+        }
         const userMessages = persisted.filter(message => message.role === 'user');
         expect(userMessages).toHaveLength(1);
         expect(userMessages[0]!.content.parts).toMatchObject([

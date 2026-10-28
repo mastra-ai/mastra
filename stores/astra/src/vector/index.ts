@@ -222,7 +222,7 @@ export class AstraVector extends MastraVector<AstraVectorFilter> {
       return {
         dimension: options.vector?.dimension!,
         metric,
-        count: count,
+        count,
       };
     } catch (error: any) {
       if (error instanceof MastraError) throw error;

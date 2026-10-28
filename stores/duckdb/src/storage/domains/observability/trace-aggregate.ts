@@ -411,8 +411,9 @@ function compileUsageCtes(
   const scope = (alias: string) => {
     if (!plan.scope) return '';
     let sql = `\n        AND ${alias}organizationId = ${param(plan.scope.organizationId)}`;
-    if (plan.scope.resourceId !== undefined)
+    if (plan.scope.resourceId !== undefined) {
       sql += `\n        AND ${alias}resourceId = ${param(plan.scope.resourceId)}`;
+    }
     return sql;
   };
   const costNames = coreStorage.TRACE_AGGREGATE_COST_METRIC_NAMES;

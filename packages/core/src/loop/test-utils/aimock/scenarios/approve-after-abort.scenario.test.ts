@@ -84,8 +84,9 @@ describeForAllEngines('A stopped approval cannot restart a run (#27617)', engine
             if (chunk.type !== 'tool-call-approval') continue;
             approvalSeen = true;
             expect(executed).toEqual([]);
-            if (resumeAfter === 'abort' || resumeAfter === 'abort during snapshot load with snapshot cleanup pending')
+            if (resumeAfter === 'abort' || resumeAfter === 'abort during snapshot load with snapshot cleanup pending') {
               break;
+            }
             // Keep reading until the aborted segment closes, so its cleanup has run before the user responds.
             aborted = agent.abortRunStream(output.runId);
             // Durable/evented streams stay open after aborting an approval-suspended run.

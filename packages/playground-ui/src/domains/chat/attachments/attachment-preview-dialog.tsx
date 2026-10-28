@@ -92,8 +92,9 @@ interface FileChipEntryProps {
 const iconForContentType = (contentType?: string) => {
   if (contentType?.startsWith('video/')) return { Icon: FileVideo, label: 'Video file' };
   if (contentType?.startsWith('audio/')) return { Icon: FileAudio, label: 'Audio file' };
-  if (contentType?.startsWith('text/') || contentType === 'application/pdf')
+  if (contentType?.startsWith('text/') || contentType === 'application/pdf') {
     return { Icon: FileText, label: 'Document file' };
+  }
   return { Icon: FileIcon, label: 'File' };
 };
 export const FileChipEntry = ({ name, url, contentType }: FileChipEntryProps) => {

@@ -348,8 +348,9 @@ function completedCheckpoint(checkpoints: Checkpoint[], id: string, runId: strin
   const checkpoint = checkpoints.find(cp => {
     const snapshot = findRow(cp, id, runId)?.snapshot;
     if (!snapshot || snapshot.status !== 'running') return false;
-    if (snapshot.activePaths[0] !== spec.index && !(spec.allowEmptyPath && snapshot.activePaths.length === 0))
+    if (snapshot.activePaths[0] !== spec.index && !(spec.allowEmptyPath && snapshot.activePaths.length === 0)) {
       return false;
+    }
     if (spec.next && context(snapshot)[spec.next.step] && !spec.ready) return false;
     return spec.ready?.(snapshot) ?? spec.finished.every(step => context(snapshot)[step]?.status === 'success');
   });
@@ -572,8 +573,9 @@ describe('evented restart after a saved completed entry (COR-1354)', () => {
       expect(recovered.result).toMatchObject({ status: 'success', result: { n: shape === 'foreach' ? 9 : 4 } });
       expect(effects.filter(effect => effect.generation === 2 && effect.step === 'after')).toHaveLength(1);
       expect(effects.filter(effect => effect.generation === 2 && effect.step === 'body').length).toBeGreaterThan(0);
-      if (shape === 'parallel')
+      if (shape === 'parallel') {
         expect(effects.filter(effect => effect.generation === 2 && effect.step === 'done')).toEqual([]);
+      }
       gate.release();
     }, 60_000);
   }

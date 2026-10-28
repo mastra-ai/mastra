@@ -427,7 +427,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           start(controller) {
             controller.enqueue({
               type: 'error',
-              error: error,
+              error,
             } as LanguageModelV2StreamPart);
             controller.close();
           },
@@ -472,7 +472,7 @@ export class ModelRouterLanguageModel implements MastraLanguageModelV2 {
           start(controller) {
             controller.enqueue({
               type: 'error',
-              error: error,
+              error,
             } as LanguageModelV2StreamPart);
             controller.close();
           },

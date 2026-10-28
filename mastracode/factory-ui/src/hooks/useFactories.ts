@@ -102,12 +102,14 @@ export function useLinkRepositoryMutation() {
         const config = await fetchIntakeConfig(baseUrl);
         if (gitlab) {
           const gitlabSelection = selectIntakeSource(config.gitlab, repo.id);
-          if (gitlabSelection !== config.gitlab)
+          if (gitlabSelection !== config.gitlab) {
             await saveIntakeConfig.mutateAsync({ ...config, gitlab: gitlabSelection });
+          }
         } else {
           const githubSelection = selectIntakeSource(config.github, repo.fullName);
-          if (githubSelection !== config.github)
+          if (githubSelection !== config.github) {
             await saveIntakeConfig.mutateAsync({ ...config, github: githubSelection });
+          }
         }
       } finally {
         await invalidateFactoryRepositories(queryClient, factoryProjectId);

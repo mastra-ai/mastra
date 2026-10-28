@@ -82,7 +82,7 @@ export function createChatTool(proxy: PlatformProxy) {
         members: unknown[];
       } = {
         chatType: input.chatType,
-        members: members,
+        members,
       };
 
       if (input.chatType === 'group' && input.topic !== undefined) {

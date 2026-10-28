@@ -108,12 +108,12 @@ async function resolveCloudId(platformProxy: PlatformProxy): Promise<{ cloudId: 
 
   // @allowTryCatch - Metadata update is best-effort caching to skip future calls; failures should not block the action
   try {
-    await platformProxy.updateMetadata({ cloudId: cloudId, baseUrl: baseUrl });
+    await platformProxy.updateMetadata({ cloudId, baseUrl });
   } catch {
     // Continue even if metadata update fails
   }
 
-  return { cloudId: cloudId, baseUrl: baseUrl };
+  return { cloudId, baseUrl };
 }
 
 const MetadataSchema = z.object({
@@ -150,7 +150,7 @@ export function listUsersTool(proxy: PlatformProxy) {
       // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-user-search/#api-rest-api-3-user-search-get
       const response = await platformProxy.get({
         endpoint: `/ex/jira/${cloudId}/rest/api/3/user/search`,
-        params: params,
+        params,
         headers: {
           'X-Atlassian-Token': 'no-check',
         },
@@ -166,8 +166,8 @@ export function listUsersTool(proxy: PlatformProxy) {
       }
 
       return {
-        users: users,
-        ...(nextStartAt !== undefined && { nextStartAt: nextStartAt }),
+        users,
+        ...(nextStartAt !== undefined && { nextStartAt }),
       };
     },
   });

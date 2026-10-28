@@ -17,21 +17,24 @@ function mapToolKind(
   toolName: string,
 ): 'read' | 'edit' | 'delete' | 'move' | 'search' | 'execute' | 'think' | 'fetch' | 'other' {
   const name = toolName.toLowerCase();
-  if (name.includes('edit') || name.includes('write') || name.includes('replace') || name.includes('patch'))
+  if (name.includes('edit') || name.includes('write') || name.includes('replace') || name.includes('patch')) {
     return 'edit';
+  }
   if (name.includes('read') || name.includes('view') || name.includes('list') || name.includes('find')) return 'read';
   if (name.includes('delete') || name.includes('remove')) return 'delete';
   if (name.includes('search') || name.includes('grep') || name.includes('query')) return 'search';
-  if (name.includes('execute') || name.includes('run') || name.includes('command') || name.includes('shell'))
+  if (name.includes('execute') || name.includes('run') || name.includes('command') || name.includes('shell')) {
     return 'execute';
+  }
   if (
     name.includes('fetch') ||
     name.includes('curl') ||
     name.includes('http') ||
     name.includes('browse') ||
     name.includes('navigate')
-  )
+  ) {
     return 'fetch';
+  }
   if (name.includes('think') || name.includes('reason')) return 'think';
   return 'other';
 }

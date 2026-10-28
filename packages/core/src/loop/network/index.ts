@@ -183,14 +183,14 @@ export async function getRoutingAgent({
   memoryConfig?: any;
   model?: MultiPrimitiveExecutionOptions['model'];
 }) {
-  const instructionsToUse = await agent.getInstructions({ requestContext: requestContext });
-  const agentsToUse = await agent.listAgents({ requestContext: requestContext });
-  const workflowsToUse = await agent.listWorkflows({ requestContext: requestContext });
-  const toolsToUse = await agent.listTools({ requestContext: requestContext });
+  const instructionsToUse = await agent.getInstructions({ requestContext });
+  const agentsToUse = await agent.listAgents({ requestContext });
+  const workflowsToUse = await agent.listWorkflows({ requestContext });
+  const toolsToUse = await agent.listTools({ requestContext });
   const resolvedModel = await agent.getModel({ requestContext, modelConfig: model });
-  const memoryToUse = await agent.getMemory({ requestContext: requestContext });
+  const memoryToUse = await agent.getMemory({ requestContext });
   assertNetworkSupportsMemory(memoryToUse, memoryConfig);
-  const clientToolsToUse = (await agent.getDefaultOptions({ requestContext: requestContext }))?.clientTools;
+  const clientToolsToUse = (await agent.getDefaultOptions({ requestContext }))?.clientTools;
 
   // Get only user-configured processors (not memory processors) for the routing agent.
   // Memory processors (semantic recall, working memory) can interfere with routing decisions,
@@ -730,7 +730,7 @@ export async function createNetworkLoop({
             selectionReason: z.string().describe('The reason you picked the primitive'),
           }),
         },
-        requestContext: requestContext,
+        requestContext,
         maxSteps: 1,
         memory: {
           thread: initData?.threadId ?? runId,
@@ -932,7 +932,7 @@ export async function createNetworkLoop({
       // threadId/resourceId so working memory tools function correctly.
       const result = await (resumeData
         ? agentForStep.resumeStream(resumeData, {
-            requestContext: requestContext,
+            requestContext,
             runId,
             memory: {
               thread: threadId,
@@ -947,7 +947,7 @@ export async function createNetworkLoop({
             onAbort,
           })
         : agentForStep.stream(messagesForSubAgent, {
-            requestContext: requestContext,
+            requestContext,
             runId,
             memory: {
               thread: threadId,
@@ -1035,7 +1035,7 @@ export async function createNetworkLoop({
         }
       }
 
-      const memory = await agent.getMemory({ requestContext: requestContext });
+      const memory = await agent.getMemory({ requestContext });
 
       const messages = result.messageList.get.all.v1();
 
@@ -1203,7 +1203,7 @@ export async function createNetworkLoop({
         });
       }
 
-      const workflowsMap = await agent.listWorkflows({ requestContext: requestContext });
+      const workflowsMap = await agent.listWorkflows({ requestContext });
       const workflowId = inputData.primitiveId;
       const wf = workflowsMap[workflowId];
 
@@ -1285,11 +1285,11 @@ export async function createNetworkLoop({
       const stream = resumeData
         ? run.resumeStream({
             resumeData,
-            requestContext: requestContext,
+            requestContext,
           })
         : run.stream({
             inputData: input,
-            requestContext: requestContext,
+            requestContext,
           });
 
       // const wflowAbortCb = () => {
@@ -1371,7 +1371,7 @@ export async function createNetworkLoop({
         },
       });
 
-      const memory = await agent.getMemory({ requestContext: requestContext });
+      const memory = await agent.getMemory({ requestContext });
       const initData = await getInitData<{ threadId: string; threadResourceId: string }>();
 
       // When the workflow was cancelled due to abort, skip saving results to memory
@@ -1999,7 +1999,7 @@ export async function createNetworkLoop({
         result: endResult,
         isComplete: !!inputData.isComplete,
         iteration: inputData.iteration,
-        runId: runId,
+        runId,
       };
 
       await writer?.write({
@@ -2213,7 +2213,7 @@ export async function networkLoop<OUTPUT = undefined>({
     const threadExists = await memory?.getThreadById({ threadId });
     if (threadExists) {
       const recallResult = await memory?.recall({
-        threadId: threadId,
+        threadId,
         resourceId: resourceId || networkName,
       });
 
@@ -2720,7 +2720,7 @@ export async function networkLoop<OUTPUT = undefined>({
   });
 
   const { thread } = await prepareMemoryStep({
-    requestContext: requestContext,
+    requestContext,
     threadId: threadId || run.runId,
     resourceId: resourceId || networkName,
     messages,
