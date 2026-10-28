@@ -581,7 +581,14 @@ async function setUpGateway({
     spinner.stop(`Created a Gateway key in ${org.orgName}.`);
     spinning = false;
 
-    const openedDashboard = credits ? await offerGatewayCredits({ orgId: org.orgId, credits, signal }) : false;
+    let openedDashboard = false;
+    if (credits) {
+      try {
+        openedDashboard = await offerGatewayCredits({ orgId: org.orgId, credits, signal });
+      } catch (error) {
+        if (signal.aborted) throw error;
+      }
+    }
     return {
       status: 'ready',
       apiKey,

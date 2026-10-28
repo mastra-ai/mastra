@@ -614,6 +614,25 @@ describe('managed Gateway', () => {
     expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Model calls fail until you add credits'));
   });
 
+  it('keeps the new key when the credits offer fails', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayCredits = await import('../gateway/credits.js');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayCredits.offerGatewayCredits).mockRejectedValueOnce(new Error('No TTY'));
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining(
+        'Model calls fail until you add Gateway credits: https://projects.test/orgs/org-id/settings/credits',
+      ),
+    );
+  });
+
   it("doesn't claim a balance it couldn't read", async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
