@@ -444,6 +444,168 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
         await expectParity(read('member2-token'), 403);
       });
     });
+
+    describe('path params', () => {
+      // Over HTTP, adapters let body keys override path params (pre-existing); dispatchRoute targets
+      // the resource named in the path for both FGA and the handler.
+      it('authorizes and runs the agent named in the path, not a same-named body field', async () => {
+        const denied = await viaDispatch(
+          generate('member-token', 'locked-agent', {
+            messages: 'hi',
+            agentId: 'test-agent',
+            memory: { thread: `generate-thread-${++threadCounter}` },
+          }),
+        );
+        expect(denied.status).toBe(403);
+        expect(denied.body.message).toContain('agent:locked-agent');
+
+        const allowed = await viaDispatch({
+          ...generate('owner-token', 'test-agent', {
+            messages: 'hi',
+            agentId: 'locked-agent',
+            memory: { thread: `generate-thread-${++threadCounter}` },
+          }),
+          query: { agentId: 'locked-agent' },
+        });
+        expect(allowed.status).toBe(200);
+        expect(allowed.body.text).toBe('hello from test-agent');
+      });
+    });
+  });
+
+  describe(`${suiteName} with path-scoped authorization`, () => {
+    type AuthVariant = { name: string; auth: () => any; generate: number; tool: number };
+    const authenticateToken = async (token: string) => USERS[token] ?? null;
+    const requestPath = (request: any) => new URL(request?.raw?.url ?? request?.url ?? 'http://x/').pathname;
+
+    const variants: AuthVariant[] = [
+      {
+        name: 'server.auth.rules',
+        // Only the probe and agent routes are allowed; everything else falls through to deny.
+        auth: () => ({ authenticateToken, rules: [{ path: ['/__dispatch', '/api/agents/*'], allow: true }] }),
+        generate: 200,
+        tool: 403,
+      },
+      {
+        name: 'server.auth.authorize(path)',
+        auth: () => ({
+          authenticateToken,
+          authorize: async (path: string) => !/^\/api\/agents\/[^/]+\/generate$/.test(path),
+        }),
+        generate: 403,
+        tool: 200,
+      },
+      {
+        name: 'authorizeUser(user, request)',
+        auth: () =>
+          new SimpleAuth<TestUser>({
+            tokens: USERS,
+            authorizeUser: (_user, request) => !requestPath(request).endsWith('/generate'),
+          }),
+        generate: 403,
+        tool: 200,
+      },
+    ];
+
+    for (const variant of variants) {
+      describe(variant.name, () => {
+        const probeCases = new Map<string, { route: ServerRoute; input: DispatchRouteInput }>();
+        let server: Awaited<ReturnType<RouteDispatchParityTestSuiteConfig['startServer']>>;
+
+        beforeAll(async () => {
+          const probe = createRoute({
+            method: 'ALL',
+            path: '/__dispatch',
+            responseType: 'json',
+            queryParamSchema: z.object({ case: z.string() }),
+            handler: async ({ case: caseId, mastra, requestContext, abortSignal, request }) => {
+              const probeCase = probeCases.get(caseId)!;
+              return dispatchRoute(probeCase.route, probeCase.input, { mastra, requestContext, abortSignal, request });
+            },
+          });
+          const mastra = new Mastra({
+            logger: false,
+            agents: {
+              'test-agent': new Agent({
+                id: 'test-agent',
+                name: 'test-agent',
+                instructions: 'You are a test agent',
+                model: createMockModel({ mockText: 'hello from test-agent' }),
+              }),
+            },
+            tools: {
+              'test-tool': createTool({
+                id: 'test-tool',
+                description: 'Echoes its input',
+                inputSchema: z.object({ text: z.string() }),
+                execute: async ({ text }) => ({ echoed: text }),
+              }),
+            },
+            server: { auth: variant.auth(), apiRoutes: [probe as any] },
+          });
+          server = await startServer(mastra);
+        });
+
+        afterAll(async () => {
+          await server?.close?.();
+        });
+
+        const both = async (method: string, path: string, filledPath: string, input: DispatchRouteInput) => {
+          const headers = { authorization: 'Bearer member-token', 'content-type': 'application/json' };
+          const httpResponse = await server.request(`/api${filledPath}`, {
+            method,
+            headers,
+            ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {}),
+          });
+          const httpText = await httpResponse.text();
+          const caseId = String(probeCases.size);
+          probeCases.set(caseId, { route: findRoute(method, path), input });
+          const probeResponse = await server.request(`/__dispatch?case=${caseId}`, { headers });
+          expect(probeResponse.status).toBe(200);
+          const outcome = (await probeResponse.json()) as
+            | { ok: true; result: any }
+            | { ok: false; status: number; body: unknown };
+          return {
+            http: { status: httpResponse.status, body: httpText ? JSON.parse(httpText) : undefined },
+            dispatched: outcome.ok
+              ? { status: 200, body: outcome.result }
+              : { status: outcome.status, body: outcome.body },
+          };
+        };
+
+        const expectAgree = (result: Awaited<ReturnType<typeof both>>, expectedStatus: number) => {
+          expect(result.http.status, `http ${JSON.stringify(result.http.body).slice(0, 120)}`).toBe(expectedStatus);
+          expect(result.dispatched.status, `dispatch ${JSON.stringify(result.dispatched.body).slice(0, 120)}`).toBe(
+            expectedStatus,
+          );
+          if (expectedStatus >= 400) expect(result.dispatched.body).toEqual(result.http.body);
+        };
+
+        it(`agent generate → ${variant.generate} both ways`, async () => {
+          expectAgree(
+            await both('POST', '/agents/:agentId/generate', '/agents/test-agent/generate', {
+              pathParams: { agentId: 'test-agent' },
+              body: { messages: 'hi' },
+            }),
+            variant.generate,
+          );
+        });
+
+        it(`tool execute → ${variant.tool} both ways`, async () => {
+          expectAgree(
+            await both('POST', '/tools/:toolId/execute', '/tools/test-tool/execute', {
+              pathParams: { toolId: 'test-tool' },
+              body: { data: { text: 'ping' } },
+            }),
+            variant.tool,
+          );
+        });
+
+        it('a requiresAuth:false route stays public both ways', async () => {
+          expectAgree(await both('GET', '/auth/capabilities', '/auth/capabilities', {}), 200);
+        });
+      });
+    }
   });
 
   describe(`${suiteName} without auth`, () => {

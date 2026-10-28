@@ -24,6 +24,7 @@ import {
   authorizeAuthenticatedUser,
   coreAuthMiddleware,
   findMatchingCustomRoute,
+  isAuthBypassed,
   isCustomRoutePublic,
   isProtectedCustomRoute,
   pathMatchesPattern,
@@ -628,6 +629,11 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     this.bodyLimitOptions = bodyLimitOptions;
     this.tools = tools;
     this.prefix = normalizeRoutePath(prefix);
+    dispatchAdapterInfo.set(mastra, {
+      prefix: this.prefix,
+      getCustomRouteAuthConfig: () => this.customRouteAuthConfig,
+      getCustomApiRoutes: () => this.customApiRoutes ?? this.mastra.getServer()?.apiRoutes ?? [],
+    });
     this.openapiPath = openapiPath;
     this.taskStore = taskStore;
     this.customRouteAuthConfig = customRouteAuthConfig;
@@ -765,23 +771,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
   protected getEffectiveAuthConfig(
     getHeader: (name: string) => string | undefined,
   ): { authConfig: unknown; authMode: MastraAuthMode } | null {
-    const isStudioRequest = isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER));
-    const studioAuth = this.mastra.getStudio?.()?.auth;
-    const serverAuth = this.mastra.getServer()?.auth;
-
-    // Dual auth is opt-in: if studio.auth is configured, Studio requests use it exclusively
-    if (isStudioRequest && studioAuth) {
-      return { authConfig: studioAuth, authMode: 'studio' };
-    }
-
-    // Otherwise (non-studio request, OR studio request without studio.auth configured),
-    // fall back to server.auth for backward compatibility
-    if (serverAuth) {
-      return { authConfig: serverAuth, authMode: 'server' };
-    }
-
-    // No auth configured
-    return null;
+    return resolveEffectiveAuthConfig(this.mastra, getHeader);
   }
 
   /**
@@ -1766,21 +1756,152 @@ export interface DispatchRouteInput {
 
 export type DispatchRouteResult = { ok: true; result: unknown } | { ok: false; status: number; body: unknown };
 
+/** What `dispatchRoute` needs from the adapter serving a Mastra instance to rebuild a route's request path. */
+const dispatchAdapterInfo = new WeakMap<
+  Mastra,
+  {
+    prefix?: string;
+    getCustomRouteAuthConfig: () => Map<string, boolean> | undefined;
+    getCustomApiRoutes: () => ApiRoute[];
+  }
+>();
+
+/** Studio auth for Studio requests when `studio.auth` is configured, otherwise `server.auth`. */
+function resolveEffectiveAuthConfig(
+  mastra: Mastra,
+  getHeader: (name: string) => string | undefined,
+): { authConfig: unknown; authMode: MastraAuthMode } | null {
+  const isStudioRequest = isStudioClientTypeHeader(getHeader(MASTRA_CLIENT_TYPE_HEADER));
+  const studioAuth = mastra.getStudio?.()?.auth;
+  const serverAuth = mastra.getServer()?.auth;
+
+  // Dual auth is opt-in: if studio.auth is configured, Studio requests use it exclusively
+  if (isStudioRequest && studioAuth) {
+    return { authConfig: studioAuth, authMode: 'studio' };
+  }
+
+  // Otherwise (non-studio request, OR studio request without studio.auth configured),
+  // fall back to server.auth for backward compatibility
+  if (serverAuth) {
+    return { authConfig: serverAuth, authMode: 'server' };
+  }
+
+  // No auth configured
+  return null;
+}
+
+/** Fill `:param` / `:param?` segments of a route path the way a client would put them in a URL. */
+function fillRoutePath(path: string, pathParams: Record<string, unknown>): string {
+  return path.replace(/\/:([A-Za-z0-9_]+)(\?)?/g, (_segment, name: string) => {
+    const value = pathParams[name];
+    return value === undefined || value === null || value === '' ? '' : `/${encodeURIComponent(String(value))}`;
+  });
+}
+
+/** Where the in-process pipeline deliberately differs between `dispatchRoute` and `invokeRoute`. */
+interface RoutePipelinePolicy {
+  /**
+   * Skip auth for paths an HTTP request reaches without it (public or unprotected paths,
+   * the dev playground). When false, every route that requires auth needs an authenticated user.
+   */
+  honorPublicPaths: boolean;
+  /** Path params override same-named query/body fields, instead of the adapters' path < query < body. */
+  pathParamsWin: boolean;
+}
+
 /**
- * Invoke a schema route in-process with the same pipeline adapters run after
- * authentication: schema validation (query, body, path) → RBAC → FGA → handler.
- *
- * Authentication is not repeated: `context.requestContext` must already be populated
- * by the caller's own authenticated request. Validation and authorization failures,
- * and handler errors, resolve to the status and JSON body an adapter would send.
- * Successful calls return the raw handler result (streams are not converted).
+ * The path-scoped half of `checkRouteAuth` for a route run in-process: `requiresAuth: false`,
+ * protected/public path handling, then `authorizeUser` / `authorize` / `rules` / the RBAC
+ * default rules, all evaluated against the route's own request path and method.
+ * Uses the user Mastra server auth already put in the request context; never re-authenticates.
  */
-export async function dispatchRoute(
+async function checkDispatchedRouteAuth(
+  route: ServerRoute,
+  pathParams: Record<string, unknown>,
+  context: ServerContext,
+  policy: RoutePipelinePolicy,
+): Promise<{ status: number; body: Record<string, unknown> } | null> {
+  if (route.requiresAuth === false) {
+    return null;
+  }
+
+  const { mastra, requestContext } = context;
+  const outerHeaders = context.request?.headers;
+  const getHeader = (name: string) => outerHeaders?.get(name) ?? undefined;
+  const studioAuth = mastra.getStudio?.()?.auth;
+  const serverAuth = mastra.getServer()?.auth;
+
+  // Only the user Mastra server auth resolved counts; the legacy `user` key can be
+  // written by code outside it (such as an MCP server's own auth mapper).
+  const user = requestContext.get(MASTRA_USER_KEY);
+  if (!policy.honorPublicPaths && (studioAuth || serverAuth) && !user) {
+    return { status: 401, body: { error: 'Authentication required' } };
+  }
+
+  // Use the auth config the caller was authenticated with (recorded by checkRouteAuth);
+  // only fall back to the request's client-type header when no mode was recorded.
+  const authMode = requestContext.get(MASTRA_AUTH_MODE_KEY) as MastraAuthMode | undefined;
+  const recordedAuth = authMode === 'studio' ? studioAuth : authMode === 'server' ? serverAuth : undefined;
+  const authConfig = (recordedAuth ?? resolveEffectiveAuthConfig(mastra, getHeader)?.authConfig) as
+    | MastraAuthConfig
+    | undefined;
+  if (!authConfig) {
+    return null;
+  }
+
+  // Server auth's authorization hooks see the route's own HTTP path, not the
+  // path of whatever request (such as an MCP call) is running it.
+  const adapter = dispatchAdapterInfo.get(mastra);
+  const isCustomRoute = (adapter?.getCustomApiRoutes() ?? mastra.getServer()?.apiRoutes ?? []).includes(
+    route as unknown as ApiRoute,
+  );
+  const prefix = isCustomRoute ? '' : (adapter?.prefix ?? normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api'));
+  const path = `${prefix}${fillRoutePath(route.path, pathParams)}` || '/';
+  const method = route.method;
+  const customRouteAuthConfig = adapter?.getCustomRouteAuthConfig();
+
+  if (
+    policy.honorPublicPaths &&
+    isAuthBypassed({ path, method, getHeader, authConfig, customRouteAuthConfig, requiresAuth: route.requiresAuth })
+  ) {
+    return null;
+  }
+
+  if (!user) {
+    return { status: 401, body: { error: 'Invalid or expired token' } };
+  }
+
+  // Hooks get the caller's own headers when the request is forwarded, otherwise the token it authenticated with.
+  const token = requestContext.get(MASTRA_AUTH_TOKEN_KEY);
+  const headers =
+    outerHeaders ?? (typeof token === 'string' && token ? { authorization: `Bearer ${token}` } : undefined);
+
+  return authorizeAuthenticatedUser({
+    path,
+    method,
+    user,
+    mastra,
+    authConfig,
+    customRouteAuthConfig,
+    requestContext,
+    rawRequest: new Request(`http://localhost${path}`, { method, headers }),
+    buildAuthorizeContext: () => null,
+  });
+}
+
+/** The one in-process pipeline behind `dispatchRoute` and `invokeRoute`: path-scoped auth → validate → RBAC → FGA → handler. */
+async function runRoutePipeline(
   route: ServerRoute,
   input: DispatchRouteInput,
   context: ServerContext,
+  policy: RoutePipelinePolicy,
 ): Promise<DispatchRouteResult> {
   const { mastra, requestContext } = context;
+
+  const pathAuthError = await checkDispatchedRouteAuth(route, input.pathParams ?? {}, context, policy);
+  if (pathAuthError) {
+    return { ok: false, ...pathAuthError };
+  }
 
   const validate = async <T>(
     kind: ValidationErrorContext,
@@ -1823,9 +1944,10 @@ export async function dispatchRoute(
   if ('error' in pathParams) return pathParams.error;
 
   const params = {
-    ...pathParams.value,
+    ...(policy.pathParamsWin ? {} : pathParams.value),
     ...query.value,
     ...(typeof body === 'object' ? body : {}),
+    ...(policy.pathParamsWin ? pathParams.value : {}),
   };
 
   const authError = await authorizeRoute(mastra, route, params, requestContext);
@@ -1850,6 +1972,39 @@ export async function dispatchRoute(
     const { status, body: errorBody } = getHTTPErrorResponse(error);
     return { ok: false, status, body: errorBody };
   }
+}
+
+/**
+ * Invoke a route in-process, enforcing what an adapter enforces for an HTTP request to it:
+ *
+ * 1. Path-scoped authorization from `checkRouteAuth`, evaluated against the route's own
+ *    path (adapter prefix + filled path params) and method: `requiresAuth: false`,
+ *    protected/public paths, and `authorizeUser` / `authorize` / `rules` / the RBAC default
+ *    rules. Authentication is not repeated: the user (`MASTRA_USER_KEY`), permissions, and
+ *    auth mode must already be in `context.requestContext` from the caller's authenticated
+ *    request, and the auth config used is the one recorded there (`studio.auth` or
+ *    `server.auth`), falling back to the request's client-type header only when none was
+ *    recorded. `authorizeUser` receives the same `{ raw, headers, header() }` shape as over
+ *    HTTP, wrapping a synthetic `Request` for the route's path/method with the caller's
+ *    headers (no body).
+ * 2. Schema validation: query, then body, then path params.
+ * 3. RBAC (`checkRouteRBAC`), then FGA (`checkRouteFGA`) on the parsed params.
+ * 4. `route.handler` with the parsed params and `context`.
+ *
+ * Path params always win over same-named query or body fields, so authorization and the
+ * handler both act on the resource named in the path. Failures resolve to the status and
+ * JSON body an adapter would send; successful calls return the raw handler result (streams
+ * are not converted).
+ *
+ * `invokeRoute` runs the same pipeline for JSON routes with a stricter contract: it never
+ * skips auth for public paths and answers with `{ status, body }`.
+ */
+export async function dispatchRoute(
+  route: ServerRoute,
+  input: DispatchRouteInput,
+  context: ServerContext,
+): Promise<DispatchRouteResult> {
+  return runRoutePipeline(route, input, context, { honorPublicPaths: true, pathParamsWin: true });
 }
 
 export interface InvokeRouteOptions {
@@ -1887,6 +2042,9 @@ export interface InvokeRouteResult {
  * the parsed params, `mastra`, `requestContext` and `abortSignal`, but not the
  * HTTP-only `request`, `registeredTools`, `taskStore` or `routePrefix`, so
  * routes that read those are not suitable.
+ *
+ * Shares its pipeline with `dispatchRoute`, which also honors public paths,
+ * passes a full `ServerContext` and returns raw handler results.
  */
 export async function invokeRoute(route: ServerRoute, options: InvokeRouteOptions): Promise<InvokeRouteResult> {
   if (route.responseType !== 'json') {
@@ -1895,47 +2053,15 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
     );
   }
 
-  const { mastra, requestContext } = options;
-
-  const studioAuth = mastra.getStudio?.()?.auth;
-  const serverAuth = mastra.getServer()?.auth;
-  const authConfigured = Boolean(studioAuth || serverAuth);
-  if (authConfigured && route.requiresAuth !== false) {
-    const user = requestContext.get(MASTRA_USER_KEY);
-    if (!user) {
-      return { status: 401, body: { error: 'Authentication required' } };
-    }
-
-    const authConfig = requestContext.get(MASTRA_AUTH_MODE_KEY) === 'studio' && studioAuth ? studioAuth : serverAuth;
-    if (authConfig) {
-      // Server auth's authorization hooks see the route's own HTTP path, not the
-      // path of whatever request (such as an MCP call) is invoking it.
-      const prefix = normalizeRoutePath(mastra.getServer()?.apiPrefix ?? '/api');
-      const path = `${prefix}${route.path.replace(/:(\w+)/g, (_, name: string) =>
-        encodeURIComponent(options.pathParams?.[name] ?? ''),
-      )}`;
-      const token = requestContext.get(MASTRA_AUTH_TOKEN_KEY);
-      const authorizationError = await authorizeAuthenticatedUser({
-        path,
-        method: route.method,
-        user,
-        mastra,
-        authConfig: authConfig as MastraAuthConfig,
-        requestContext,
-        rawRequest: new Request(`http://localhost${path}`, {
-          method: route.method,
-          headers: typeof token === 'string' && token ? { authorization: `Bearer ${token}` } : undefined,
-        }),
-        buildAuthorizeContext: () => null,
-      });
-      if (authorizationError) return authorizationError;
-    }
-  }
-
-  const result = await dispatchRoute(
+  const result = await runRoutePipeline(
     route,
     { pathParams: options.pathParams, query: options.query, body: options.body },
-    { mastra, requestContext, abortSignal: options.abortSignal ?? new AbortController().signal },
+    {
+      mastra: options.mastra,
+      requestContext: options.requestContext,
+      abortSignal: options.abortSignal ?? new AbortController().signal,
+    },
+    { honorPublicPaths: false, pathParamsWin: false },
   );
   return result.ok ? { status: 200, body: result.result } : { status: result.status, body: result.body };
 }

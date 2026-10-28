@@ -381,44 +381,52 @@ export function supportsSessionRefresh(
 }
 
 /**
- * Single auth middleware: authenticate → authorize.
- * Skip checks (dev playground, unprotected path, public path) are evaluated once.
+ * Whether auth is bypassed for this path/method: the dev playground (only when no auth
+ * provider is configured), paths that are not protected, and public paths (unless the
+ * route forces auth with `requiresAuth: true`).
  */
-export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
-  const {
-    path,
-    method,
-    getHeader,
-    mastra,
-    authConfig,
-    customRouteAuthConfig,
-    requestContext,
-    rawRequest,
-    token,
-    requiresAuth,
-  } = ctx;
-
-  // ── Skip checks (evaluated once) ──
-
+export const isAuthBypassed = ({
+  path,
+  method,
+  getHeader,
+  authConfig,
+  customRouteAuthConfig,
+  requiresAuth,
+}: Pick<
+  AuthMiddlewareContext,
+  'path' | 'method' | 'getHeader' | 'authConfig' | 'customRouteAuthConfig' | 'requiresAuth'
+>): boolean => {
   // Only bypass auth for dev playground when no real auth provider is configured.
   // When auth IS configured (has authenticateToken), we need the full auth flow
   // so user/roles/permissions are set in requestContext.
   const hasAuthProvider = typeof authConfig.authenticateToken === 'function';
   if (!hasAuthProvider && isDevPlaygroundRequest(path, method, getHeader, authConfig, customRouteAuthConfig)) {
-    return pass;
+    return true;
   }
 
   if (!isProtectedPath(path, method, authConfig, customRouteAuthConfig)) {
-    return pass;
+    return true;
   }
 
   // When a route explicitly requires auth (requiresAuth: true), skip the
   // public-path bypass so the user is still authenticated and permissions
   // are injected into the request context.
-  if (
+  return (
     !requiresAuth &&
     (canAccessPublicly(path, method, authConfig) || isCustomRoutePublic(path, method, customRouteAuthConfig))
-  ) {
+  );
+};
+
+/**
+ * Single auth middleware: authenticate → authorize.
+ * Skip checks (dev playground, unprotected path, public path) are evaluated once.
+ */
+export const coreAuthMiddleware = async (ctx: AuthMiddlewareContext): Promise<AuthResult> => {
+  const { path, method, mastra, authConfig, customRouteAuthConfig, requestContext, rawRequest, token } = ctx;
+
+  // ── Skip checks (evaluated once) ──
+
+  if (isAuthBypassed(ctx)) {
     return pass;
   }
 
