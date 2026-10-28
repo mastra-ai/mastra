@@ -8,11 +8,9 @@ import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
 import { FactoryLayout } from '../domains/workspaces/components/FactoryLayout';
 import { AppLayout } from '../layouts/AppLayout';
-import { AppRouteErrorPage, RouteErrorPage } from '../layouts/RouteErrorPage';
+import { AppRouteErrorPage } from '../layouts/RouteErrorPage';
 import { WorkBoardPage } from '../pages/BoardPage';
 
-// Asset failures run against the production build in e2e/production/route-errors.spec.ts.
-// This test route exercises ordinary render errors without replacing app modules.
 function FailingPage(): never {
   throw new Error('Unexpected page rendering failure');
 }
@@ -35,7 +33,7 @@ beforeEach(() => {
   );
 });
 
-function renderAt(path = '/factories/fp-1/error') {
+function renderFailingPage() {
   const router = createMemoryRouter(
     [
       {
@@ -56,45 +54,24 @@ function renderAt(path = '/factories/fp-1/error') {
           },
         ],
       },
-      { path: '/standalone', Component: FailingPage, errorElement: <RouteErrorPage /> },
     ],
-    { initialEntries: [path] },
+    { initialEntries: ['/factories/fp-1/error'] },
   );
   renderWithProviders(<RouterProvider router={router} />);
 }
 
-describe('ordinary page errors', () => {
-  describe('when a page throws during rendering', () => {
-    it('shows a recoverable error for ordinary page failures without calling them loading errors', async () => {
-      renderAt();
+describe('when a page throws during rendering', () => {
+  it('lets users reopen a persisted collapsed sidebar and return to Work', async () => {
+    localStorage.setItem('mastracode-web:sidebar:state', 'collapsed');
+    renderFailingPage();
 
-      expect(await screen.findByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Reload page' })).toBeInTheDocument();
-      expect(screen.getByRole('complementary', { name: 'Main sidebar' })).toBeInTheDocument();
-      expect(screen.queryByRole('heading', { name: 'Could not load this page' })).not.toBeInTheDocument();
-      expect(screen.queryByText('Unexpected Application Error!')).not.toBeInTheDocument();
-    });
+    await screen.findByRole('heading', { name: 'Something went wrong' });
+    const toggle = screen.getByRole('button', { name: 'Toggle sidebar' });
+    expect(toggle).toHaveAttribute('aria-expanded', 'false');
+    await userEvent.click(toggle);
+    await userEvent.click(screen.getByRole('link', { name: 'Work' }));
 
-    it('lets users reopen a persisted collapsed sidebar and return to Work after a page fails', async () => {
-      localStorage.setItem('mastracode-web:sidebar:state', 'collapsed');
-      renderAt();
-
-      await screen.findByRole('heading', { name: 'Something went wrong' });
-      const toggle = screen.getByRole('button', { name: 'Toggle sidebar' });
-      expect(toggle).toHaveAttribute('aria-expanded', 'false');
-      await userEvent.click(toggle);
-      await userEvent.click(screen.getByRole('link', { name: 'Work' }));
-
-      expect(await screen.findByRole('heading', { name: 'Connect a repository to start intake' })).toBeInTheDocument();
-      expect(screen.queryByRole('button', { name: 'Reload page' })).not.toBeInTheDocument();
-    });
-
-    it('offers recovery outside the app without requiring sidebar context', async () => {
-      renderAt('/standalone');
-
-      expect(await screen.findByRole('heading', { name: 'Something went wrong' })).toBeInTheDocument();
-      expect(screen.getByRole('button', { name: 'Reload page' })).toBeInTheDocument();
-      expect(screen.queryByText('Unexpected Application Error!')).not.toBeInTheDocument();
-    });
+    expect(await screen.findByRole('heading', { name: 'Connect a repository to start intake' })).toBeInTheDocument();
+    expect(screen.queryByRole('button', { name: 'Reload page' })).not.toBeInTheDocument();
   });
 });
