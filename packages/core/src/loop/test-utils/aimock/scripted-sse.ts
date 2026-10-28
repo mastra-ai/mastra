@@ -19,6 +19,7 @@ export class ScriptedSSE implements Mountable {
   responses: unknown[][] = [];
   generated: unknown[] = [];
   requests: any[] = [];
+  requestHeaders: IncomingMessage['headers'][] = [];
 
   /**
    * `generatePathSuffix` is for providers that use a separate path for
@@ -36,6 +37,7 @@ export class ScriptedSSE implements Mountable {
     for await (const chunk of req) body += chunk;
     const parsed = JSON.parse(body);
     this.requests.push(parsed);
+    this.requestHeaders.push(req.headers);
     if (onGeneratePath || (!this.generatePathSuffix && parsed.stream !== true)) {
       const json = this.generated.shift();
       if (!json) throw new Error(`No scripted generate response left for request ${this.requests.length}`);
@@ -70,6 +72,7 @@ export function useScriptedProviders() {
       endpoint.responses = [];
       endpoint.generated = [];
       endpoint.requests = [];
+      endpoint.requestHeaders = [];
     }
   });
   afterAll(async () => {

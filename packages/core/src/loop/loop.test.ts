@@ -19,7 +19,6 @@ vi.mock('../logger', async importOriginal => {
 
 import { loop } from './loop';
 import { optionsTests } from './test-utils/options';
-import { streamObjectTests } from './test-utils/streamObject';
 import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
 
 // The agentic loop now runs on the evented engine, which requires a Mastra
@@ -66,12 +65,6 @@ describe('Loop Tests', () => {
     });
 
     optionsTests({ loopFn, runId: 'test-run-id' });
-
-    streamObjectTests({ loopFn, runId: 'test-run-id' });
-  });
-
-  describe('AISDK v6 (V3 models)', () => {
-    setupEventedMastra();
   });
 
   // optionsTestsV5({ executeFn: execute, runId });
