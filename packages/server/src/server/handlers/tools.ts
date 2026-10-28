@@ -120,6 +120,11 @@ export const LIST_TOOLS_ROUTE = createRoute({
   summary: 'List all tools',
   description: 'Returns a list of all available tools in the system',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'list_tools',
+    description: 'List the tools you can call, with their ids and descriptions.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, requestContext }) => {
     try {
@@ -185,6 +190,11 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   summary: 'Get tool by ID',
   description: 'Returns details for a specific tool including its schema and configuration',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'get_tool',
+    description: 'Get details for one tool, including its input schema.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
@@ -229,6 +239,11 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
   summary: 'Execute tool',
   description: 'Executes a specific tool with the provided input data',
   tags: ['Tools'],
+  mcp: {
+    toolset: 'tools',
+    name: 'call_tool',
+    description: 'Call a tool with input data that matches its input schema (see get_tool).',
+  },
   requiresAuth: true,
   handler: async ({ mastra, runId, toolId, registeredTools, requestContext, ...bodyParams }) => {
     try {

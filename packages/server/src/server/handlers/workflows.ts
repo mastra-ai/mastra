@@ -179,6 +179,11 @@ export const LIST_WORKFLOWS_ROUTE = createRoute({
   summary: 'List all workflows',
   description: 'Returns a list of all available workflows in the system',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'list_workflows',
+    description: 'List the workflows you can run, with their ids, names, and descriptions.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, partial, requestContext }: any) => {
     try {
@@ -330,6 +335,11 @@ export const GET_WORKFLOW_BY_ID_ROUTE = createRoute({
   summary: 'Get workflow by ID',
   description: 'Returns details for a specific workflow',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow',
+    description: 'Get details for one workflow, including its input schema and steps.',
+  },
   requiresAuth: true,
   handler: (async ({ mastra, workflowId }: any) => {
     try {
@@ -458,6 +468,11 @@ export const GET_WORKFLOW_RUN_BY_ID_ROUTE = createRoute({
   description:
     'Returns a workflow run with metadata and processed execution state. Use the fields query parameter to reduce payload size by requesting only specific fields (e.g., ?fields=result,steps). Available fields: result, error, payload, steps, activeStepsPath, serializedStepGraph. Metadata fields (runId, workflowName, resourceId, createdAt, updatedAt) and status are always included.',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'get_workflow_run',
+    description: 'Get the status and result of a workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, fields, withNestedWorkflows, requestContext }) => {
     try {
@@ -718,6 +733,12 @@ export const START_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Start workflow asynchronously',
   description: 'Starts a workflow execution asynchronously without streaming results',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'start_workflow',
+    description:
+      'Run a workflow and wait for it to finish or suspend. Returns the run id and the result, or the suspend payload.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, resourceId, requestContext, ...params }) => {
     try {
@@ -879,6 +900,11 @@ export const RESUME_ASYNC_WORKFLOW_ROUTE = createRoute({
   summary: 'Resume workflow asynchronously',
   description: 'Resumes a suspended workflow execution asynchronously without streaming',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'resume_workflow_run',
+    description: 'Resume a suspended workflow run with resume data and wait for it to finish or suspend again.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext, ...params }) => {
     try {
@@ -1369,6 +1395,11 @@ export const CANCEL_WORKFLOW_RUN_ROUTE = createRoute({
   summary: 'Cancel workflow run',
   description: 'Cancels an in-progress workflow execution',
   tags: ['Workflows'],
+  mcp: {
+    toolset: 'workflows',
+    name: 'cancel_workflow_run',
+    description: 'Cancel an in-progress workflow run.',
+  },
   requiresAuth: true,
   handler: async ({ mastra, workflowId, runId, requestContext }) => {
     try {

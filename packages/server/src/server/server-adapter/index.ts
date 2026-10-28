@@ -43,6 +43,7 @@ import type { MastraAuthMode } from '../constants';
 import { formatZodError, isZodError } from '../handlers/error';
 import { HTTPException } from '../http-exception';
 export { isZodError, type ZodErrorLike } from '../handlers/error';
+import { resolveServerRoute } from '../mcp/route';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
@@ -54,6 +55,7 @@ export * from './routes';
 export { applyMcpRequestAuth, buildMcpAuthInfoFromRequestContext } from './mcp-auth';
 export type { McpAuthInfo, SetMcpRequestAuth } from './mcp-auth';
 export { propagateRequestAbort } from './mcp-disconnect';
+export { BUILTIN_MCP_HTTP_ROUTE, resolveServerRoute } from '../mcp/route';
 export { convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
 export { redactStreamChunk } from './redact';
 export { serializeStreamChunk, type SerializedStreamChunk } from './serialize';
@@ -1570,7 +1572,7 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // more specific routes (e.g., /versions/compare) must be registered before
     // parameterized routes (e.g., /versions/:versionId)
     for (const route of SERVER_ROUTES) {
-      await this.registerRoute(this.app, route, { prefix: this.prefix });
+      await this.registerRoute(this.app, resolveServerRoute(route, this.mastra), { prefix: this.prefix });
     }
 
     if (this.openapiPath) {
