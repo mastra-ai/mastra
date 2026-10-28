@@ -14,8 +14,12 @@ const page = (traces: Page['traces'], next: string | null): Page => ({ traces, p
 const ids = (data: InfiniteData<Page>) => data.pages.map(p => p.traces.map(trace => trace.traceId));
 
 const at = (minute: number) => `2026-06-10T10:0${minute}:00.000Z`;
-const ttfc = (traceId: string, timeToFirstChunkMs: number | null) =>
-  queriedTrace(traceId, at(0), { timeToFirstChunkMs });
+const timed = (field: 'timeToFirstChunkMs' | 'timeToFirstTokenMs', traceId: string, value: number | null) =>
+  queriedTrace(
+    traceId,
+    at(0),
+    field === 'timeToFirstChunkMs' ? { timeToFirstChunkMs: value } : { timeToFirstTokenMs: value },
+  );
 
 describe('mergeTraceQueryDelta', () => {
   describe('when the batch brings nothing new', () => {
@@ -68,13 +72,22 @@ describe('mergeTraceQueryDelta', () => {
     });
   });
 
-  describe('when sorting by time to first chunk', () => {
-    it.each(['asc', 'desc'] as const)('sorts traces without a first chunk last when %s', direction => {
-      const listed = [ttfc('trace-fast', 100), ttfc('trace-slow', 900)];
+  describe('when sorting by a timing field', () => {
+    it.each([
+      ['timeToFirstChunkMs', 'asc'],
+      ['timeToFirstChunkMs', 'desc'],
+      ['timeToFirstTokenMs', 'asc'],
+      ['timeToFirstTokenMs', 'desc'],
+    ] as const)('sorts traces without %s last when %s', (field, direction) => {
+      const listed = [timed(field, 'trace-fast', 100), timed(field, 'trace-slow', 900)];
       const data = pagesOf(page(direction === 'asc' ? listed : listed.reverse(), null));
-      const orderBy = [{ field: 'timeToFirstChunkMs' as const, direction }];
+      const orderBy = [{ field, direction }];
 
-      const merged = mergeTraceQueryDelta(data, [ttfc('trace-no-chunk', null), ttfc('trace-medium', 500)], orderBy);
+      const merged = mergeTraceQueryDelta(
+        data,
+        [timed(field, 'trace-no-chunk', null), timed(field, 'trace-medium', 500)],
+        orderBy,
+      );
 
       expect(ids(merged)[0]).toEqual(
         direction === 'asc'

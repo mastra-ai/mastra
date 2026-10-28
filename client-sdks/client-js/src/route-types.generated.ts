@@ -3709,6 +3709,7 @@ type Shared_Type_64 = {
   environment: string | null;
   status: 'success' | 'error';
   timeToFirstChunkMs?: (number | null) | undefined;
+  timeToFirstTokenMs?: (number | null) | undefined;
 };
 
 type Shared_Type_65 = {
@@ -3806,6 +3807,10 @@ type Shared_Type_67 = {
   traceQueryRootEntityId: boolean;
   /** Sorting trace and span queries by `timeToFirstChunkMs` */
   traceQueryTimeToFirstChunkSort: boolean;
+  /** `timeToFirstTokenMs` in trace, thread and span query results, and predicates on it in trace, thread and span queries */
+  traceQueryTimeToFirstToken: boolean;
+  /** Sorting trace and span queries by `timeToFirstTokenMs` */
+  traceQueryTimeToFirstTokenSort: boolean;
   /** Trace query field discovery (POST /observability/traces/query/fields and /values) */
   traceQueryDiscovery: boolean;
   /** Trusted tenant scoping of trace and thread queries */
@@ -10637,7 +10642,7 @@ export type PostObservabilityTracesQuery_Body = {
     | undefined;
   orderBy?:
     | {
-        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
+        field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
         direction: 'asc' | 'desc';
       }[]
     | undefined;
@@ -10905,6 +10910,7 @@ export type PostObservabilityThreadsQuery_Response =
         startedAt: string;
         endedAt: string;
         timeToFirstChunkMs: number | null;
+        timeToFirstTokenMs?: (number | null) | undefined;
         inputPreview: string | null;
         outputPreview: string | null;
         errorPreview: string | null;
@@ -10952,7 +10958,7 @@ export type PostObservabilitySpansQuery_Body = {
   };
   where?: InputShared_Auxiliary_231 | undefined;
   orderBy?: {
-    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs';
+    field: 'startedAt' | 'endedAt' | 'timeToFirstChunkMs' | 'timeToFirstTokenMs';
     direction: 'asc' | 'desc';
   }[];
   page?: {
@@ -11001,6 +11007,7 @@ export type PostObservabilitySpansQuery_Response = {
     outputPreview: string | null;
     errorPreview: string | null;
     timeToFirstChunkMs?: (number | null) | undefined;
+    timeToFirstTokenMs?: (number | null) | undefined;
   }[];
   page: {
     next: string | null;
