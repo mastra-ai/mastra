@@ -13,6 +13,7 @@ import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
 import { shapeTimeseries } from '../../lib/timeseries';
 import type { TimeseriesOptions } from '../../lib/timeseries';
+import { answersById } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
@@ -41,8 +42,8 @@ function TimeseriesView({
   const { options } = view;
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const totals = new Set(options.totals ?? []);
-  const requests = view.queries.map((q, i) =>
-    buildRequest(q, page, { interval: totals.has(i) ? undefined : interval }),
+  const requests = view.queries.map(q =>
+    buildRequest(q, page, { interval: q.id !== undefined && totals.has(q.id) ? undefined : interval }),
   );
   const results = useDashboardRequests(requests).filter(r => r !== undefined);
   const hasTraceQueries = view.queries.some(q => q.source === 'traceAggregate' || q.source === 'spanAggregate');
@@ -51,7 +52,10 @@ function TimeseriesView({
   const isLoading = results.some(r => r.isLoading);
   const shaped = shapeTimeseries({
     options,
-    responses: results.map(r => r.data),
+    responses: answersById(
+      view.queries,
+      results.map(r => r.data),
+    ),
     window: page.window,
     hasTraceQueries,
   });

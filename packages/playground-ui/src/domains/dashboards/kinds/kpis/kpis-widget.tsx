@@ -7,7 +7,7 @@ import type { DashboardQueryResult } from '../../hooks/use-dashboard-requests';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import { buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
-import { exprRefs } from '../../lib/values';
+import { answersById, exprRefs } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { kpiFigures } from './options';
 import type { Aggregate, KpisOptions } from './options';
@@ -30,16 +30,15 @@ export function KpisWidget({ views }: WidgetKindProps<KpisOptions>) {
 function KpisView({ view, page }: { view: ResolvedView<KpisOptions>; page: DashboardPageContext }) {
   const { comparisonLabel } = useMetrics();
   const results = useDashboardRequests(view.queries.map(q => buildRequest(q, page, {})));
+  const byId = answersById(view.queries, results);
+  const answers = new Map([...byId].map(([id, r]) => [id, r?.data as Aggregate | undefined]));
   return (
     <MetricsCardGroup>
       {view.options.items.map((item, i) => {
         const used = [...new Set(exprRefs(item.value).map(r => r.query))]
-          .map(q => results[q])
+          .map(id => byId.get(id))
           .filter((r): r is DashboardQueryResult => r !== undefined);
-        const figures = kpiFigures(
-          item.value,
-          results.map(r => r?.data as Aggregate | undefined),
-        );
+        const figures = kpiFigures(item.value, answers);
         const format = FORMAT[item.format];
         return (
           <KpiCard

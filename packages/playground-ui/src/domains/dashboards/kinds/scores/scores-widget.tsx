@@ -83,9 +83,9 @@ function ScoresView({
   const { interval } = bucketPlan(page.window.start, page.window.end);
   const stepHours = intervalHours(interval);
   const { recent, scorers } = useScorers(view, page);
-  // `issues` has checked both indexes name scores queries.
-  const average = view.queries[options.average] as DashboardQuery;
-  const series = view.queries[options.series] as DashboardQuery;
+  // `issues` has checked both ids name scores queries.
+  const average = view.queries.find(q => q.id === options.average) as DashboardQuery;
+  const series = view.queries.find(q => q.id === options.series) as DashboardQuery;
   const results = useDashboardRequests(
     scorers.flatMap(({ scorerId }) => [
       buildRequest(withScorer(average, scorerId), page, {}),

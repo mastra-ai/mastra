@@ -3,6 +3,7 @@ import { z } from 'zod/v4';
 import type { DrilldownScope } from '../../metrics/drilldown';
 import type { BreakdownRow, PreviousFigures } from '../../metrics/lib/breakdown';
 import { withDropped } from '../../metrics/lib/breakdown';
+import { queryRefSchema } from './values';
 
 /**
  * The `breakdown` kind: one row per group, joined across the view's queries on `groupBy`. Columns come
@@ -13,8 +14,8 @@ export const BREAKDOWN_COLUMN_IDS = ['project', 'resource', 'errorRate', 'p95', 
 export type BreakdownColumnId = (typeof BREAKDOWN_COLUMN_IDS)[number];
 
 const columnOptionsSchema = z.strictObject({
-  /** Index into the view's `queries`; unset for `project`, which reads the row's own key. */
-  query: z.number().int().min(0).optional(),
+  /** Id of the query the column reads; unset for `project`, which reads the row's own key. */
+  query: queryRefSchema.optional(),
   /** A trace or span aggregate measure, e.g. `countDistinct.traceId`. */
   measure: z.string().min(1).optional(),
   /** A metrics breakdown group's `value` or `estimatedCost`. */
@@ -78,7 +79,7 @@ export function parseColumns(columns: DashboardColumn[] | undefined): { columns:
   return { columns: parsed, issues };
 }
 
-/** What the schema can't say: a count column, query indexes in range, and Errors with P95. */
+/** What the schema can't say: a count column, query ids the view has, and Errors with P95. */
 export function breakdownIssues(columns: DashboardColumn[] | undefined, queries: DashboardQuery[]): string[] {
   const parsed = parseColumns(columns);
   const issues = [...parsed.issues];
@@ -89,8 +90,8 @@ export function breakdownIssues(columns: DashboardColumn[] | undefined, queries:
   for (const column of parsed.columns) {
     const { query } = column.options;
     if (column.id !== 'project' && query === undefined) issues.push(`columns: '${column.id}' needs a query`);
-    if (query !== undefined && !queries[query])
-      issues.push(`columns: '${column.id}' reads query ${query}, which the view doesn't have`);
+    if (query !== undefined && !queries.some(q => q.id === query))
+      issues.push(`columns: '${column.id}' reads query '${query}', which the view doesn't have`);
   }
   return issues;
 }
@@ -138,7 +139,7 @@ type Figure = (typeof FIGURES)[number];
 const figureColumns = (columns: BreakdownColumn[]) =>
   FIGURES.flatMap(id => columns.filter(c => c.id === id)) as (BreakdownColumn & { id: Figure })[];
 
-/** The queries the figures come from; the table waits on these, and not on lookups. */
+/** Ids of the queries the figures come from; the table waits on these, and not on lookups. */
 export const figureQueries = (columns: BreakdownColumn[]) => [
   ...new Set(figureColumns(columns).flatMap(c => (c.options.query === undefined ? [] : [c.options.query]))),
 ];
@@ -150,7 +151,7 @@ export const figureQueries = (columns: BreakdownColumn[]) => [
 export function buildTableRows(
   options: BreakdownOptions,
   columns: BreakdownColumn[],
-  responses: (BreakdownResponse | undefined)[],
+  responses: ReadonlyMap<string, BreakdownResponse | undefined>,
 ): BreakdownRow[] {
   const { groupBy } = options;
   const rows = new Map<string, BreakdownRow>();
@@ -174,14 +175,14 @@ export function buildTableRows(
 
   // A query feeds several columns (count, errors and P95 come from one aggregate): visit each once,
   // in the order of its first column, so rows are created in the card's order.
-  const byQuery = new Map<number, (BreakdownColumn & { id: Figure })[]>();
+  const byQuery = new Map<string, (BreakdownColumn & { id: Figure })[]>();
   for (const column of figureColumns(columns)) {
     const query = column.options.query;
     if (query === undefined) continue;
     byQuery.set(query, [...(byQuery.get(query) ?? []), column]);
   }
   for (const [query, feeds] of byQuery) {
-    for (const entry of entries(responses[query], groupBy)) {
+    for (const entry of entries(responses.get(query), groupBy)) {
       const row = rowFor(entry.key);
       for (const column of feeds) {
         const value = entry.read(column.options);
@@ -197,7 +198,7 @@ export function buildTableRows(
   const lookup = columns.find(c => c.id === 'resource');
   if (lookup?.options.query !== undefined && lookup.options.dimension && lookup.options.joinOn) {
     const named = new Map<string, string>();
-    for (const entry of entries(responses[lookup.options.query], groupBy)) {
+    for (const entry of entries(responses.get(lookup.options.query), groupBy)) {
       const value = text(entry.dimensions[lookup.options.dimension]);
       if (value) named.set(text(entry.dimensions[lookup.options.joinOn]), value);
     }
@@ -213,13 +214,13 @@ export function buildTableRows(
 export function previousTableFigures(
   options: BreakdownOptions,
   columns: BreakdownColumn[],
-  responses: (BreakdownResponse | undefined)[],
+  responses: ReadonlyMap<string, BreakdownResponse | undefined>,
 ): Map<string, PreviousFigures> {
   const figures = new Map<string, PreviousFigures>();
   for (const column of figureColumns(columns)) {
     const query = column.options.query;
     if (query === undefined) continue;
-    for (const entry of entries(responses[query], options.groupBy)) {
+    for (const entry of entries(responses.get(query), options.groupBy)) {
       let f = figures.get(entry.key);
       if (!f) figures.set(entry.key, (f = {}));
       const value = entry.read(column.options);

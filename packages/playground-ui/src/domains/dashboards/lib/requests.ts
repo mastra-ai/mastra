@@ -86,7 +86,7 @@ export function buildRequest(
   priority?: AggregatePriority,
 ): DashboardRequest {
   if (query.source === 'traceAggregate' || query.source === 'spanAggregate') {
-    const { source, compare: _compare, where, interval: own, ...rest } = query;
+    const { source, id: _id, compare: _compare, where, interval: own, ...rest } = query;
     const bucket = own ?? interval;
     const shared = { timeRange: toTraceAggregateTimeRange(window), ...rest, ...(bucket ? { interval: bucket } : {}) };
     if (source === 'traceAggregate') {
@@ -105,7 +105,7 @@ export function buildRequest(
     };
   }
 
-  const { source, request, compare, filters, ...rest } = query;
+  const { source, id: _id, request, compare, filters, ...rest } = query;
   const own = 'interval' in rest ? rest.interval : undefined;
   const bucket = own ?? (BUCKETED_REQUESTS.has(request) ? interval : undefined);
   // An aggregate compares in the same request; anything else sends a second one over `window`.

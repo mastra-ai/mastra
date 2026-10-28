@@ -10,7 +10,8 @@ const OUTPUT = 'mastra_model_total_output_tokens';
 const CACHE_READ = 'mastra_model_input_cache_read_tokens';
 const AGENT_DURATION = 'mastra_agent_duration_ms';
 
-const sumSeries = (name: string): DashboardQuery => ({
+const sumSeries = (id: string, name: string): DashboardQuery => ({
+  id,
   source: 'metrics',
   request: 'timeSeries',
   name: [name],
@@ -18,6 +19,7 @@ const sumSeries = (name: string): DashboardQuery => ({
 });
 
 const agentRunsByStatus: DashboardQuery = {
+  id: 'runs',
   source: 'metrics',
   request: 'timeSeries',
   name: [AGENT_DURATION],
@@ -27,8 +29,8 @@ const agentRunsByStatus: DashboardQuery = {
 
 // Runs report status `ok` or `error` (observability/mastra auto-extract); the card also counts `failed`.
 const FAILED = ['error', 'failed'];
-const completedRuns = { query: 0, notGroups: FAILED };
-const failedRuns = { query: 0, groups: FAILED };
+const completedRuns = { query: 'runs', notGroups: FAILED };
+const failedRuns = { query: 'runs', groups: FAILED };
 const agentRunsTraces = { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: 'agent' }] } as const;
 
 export const kpisWidget: DashboardWidget = {
@@ -39,6 +41,7 @@ export const kpisWidget: DashboardWidget = {
     {
       queries: [
         {
+          id: 'runs',
           source: 'metrics',
           request: 'aggregate',
           name: [AGENT_DURATION],
@@ -46,15 +49,31 @@ export const kpisWidget: DashboardWidget = {
           compare: 'previousWindow',
         },
         {
+          id: 'cost',
           source: 'metrics',
           request: 'aggregate',
           name: [INPUT, OUTPUT],
           aggregation: 'sum',
           compare: 'previousWindow',
         },
-        { source: 'metrics', request: 'aggregate', name: [INPUT], aggregation: 'sum', compare: 'previousWindow' },
-        { source: 'metrics', request: 'aggregate', name: [OUTPUT], aggregation: 'sum', compare: 'previousWindow' },
         {
+          id: 'input',
+          source: 'metrics',
+          request: 'aggregate',
+          name: [INPUT],
+          aggregation: 'sum',
+          compare: 'previousWindow',
+        },
+        {
+          id: 'output',
+          source: 'metrics',
+          request: 'aggregate',
+          name: [OUTPUT],
+          aggregation: 'sum',
+          compare: 'previousWindow',
+        },
+        {
+          id: 'threads',
           source: 'metrics',
           request: 'aggregate',
           name: [AGENT_DURATION],
@@ -65,12 +84,12 @@ export const kpisWidget: DashboardWidget = {
       ],
       options: {
         items: [
-          { label: 'Agent runs', icon: 'bot', format: 'count', value: { query: 0 }, detail: 'in this range' },
+          { label: 'Agent runs', icon: 'bot', format: 'count', value: { query: 'runs' }, detail: 'in this range' },
           {
             label: 'Model cost',
             icon: 'coins',
             format: 'usd',
-            value: { query: 1, field: 'estimatedCost' },
+            value: { query: 'cost', field: 'estimatedCost' },
             detail: 'estimated',
             lowerIsBetter: true,
           },
@@ -78,10 +97,16 @@ export const kpisWidget: DashboardWidget = {
             label: 'Tokens',
             icon: 'hash',
             format: 'count',
-            value: { sum: [{ query: 2 }, { query: 3 }] },
+            value: { sum: [{ query: 'input' }, { query: 'output' }] },
             detail: 'input and output',
           },
-          { label: 'Threads', icon: 'threads', format: 'count', value: { query: 4 }, detail: 'with agent runs' },
+          {
+            label: 'Threads',
+            icon: 'threads',
+            format: 'count',
+            value: { query: 'threads' },
+            detail: 'with agent runs',
+          },
         ],
       },
     },
@@ -98,7 +123,7 @@ export const tokenUsageWidget: DashboardWidget = {
     {
       label: 'Tokens',
       description: 'Input, cache reads and output.',
-      queries: [sumSeries(INPUT), sumSeries(OUTPUT), sumSeries(CACHE_READ)],
+      queries: [sumSeries('input', INPUT), sumSeries('output', OUTPUT), sumSeries('cacheRead', CACHE_READ)],
       options: {
         chart: 'stackedBar',
         format: 'count',
@@ -107,10 +132,10 @@ export const tokenUsageWidget: DashboardWidget = {
             dataKey: 'input',
             label: 'Input',
             color: 'green',
-            value: { max: [{ minus: [{ query: 0 }, { query: 2 }] }, { const: 0 }] },
+            value: { max: [{ minus: [{ query: 'input' }, { query: 'cacheRead' }] }, { const: 0 }] },
           },
-          { dataKey: 'cacheRead', label: 'Cache read', color: 'violet', value: { query: 2 } },
-          { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 1 } },
+          { dataKey: 'cacheRead', label: 'Cache read', color: 'violet', value: { query: 'cacheRead' } },
+          { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 'output' } },
         ],
         summary: { label: 'tokens', value: 'total' },
         emptyMessage: 'No model calls in this range.',
@@ -119,7 +144,7 @@ export const tokenUsageWidget: DashboardWidget = {
     {
       label: 'Cost',
       description: 'Estimated model spend.',
-      queries: [sumSeries(INPUT), sumSeries(OUTPUT)],
+      queries: [sumSeries('input', INPUT), sumSeries('output', OUTPUT)],
       options: {
         chart: 'stackedBar',
         format: 'usd',
@@ -130,8 +155,8 @@ export const tokenUsageWidget: DashboardWidget = {
             color: 'green',
             value: {
               sum: [
-                { query: 0, field: 'estimatedCost' },
-                { query: 1, field: 'estimatedCost' },
+                { query: 'input', field: 'estimatedCost' },
+                { query: 'output', field: 'estimatedCost' },
               ],
             },
           },
@@ -226,6 +251,7 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
   label,
   queries: [
     {
+      id: 'latency',
       source: 'metrics',
       request: 'percentiles',
       name: metric,
@@ -239,16 +265,16 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
     buckets: 'api',
     xLabels: 'edges',
     series: [
-      { dataKey: 'p50', label: 'P50', color: 'sky', value: { query: 0, percentile: 0.5 }, round: true },
+      { dataKey: 'p50', label: 'P50', color: 'sky', value: { query: 'latency', percentile: 0.5 }, round: true },
       {
         dataKey: 'p95',
         label: 'P95',
         color: 'green',
         emphasis: true,
-        value: { query: 0, percentile: 0.95 },
+        value: { query: 'latency', percentile: 0.95 },
         round: true,
       },
-      { dataKey: 'p99', label: 'P99', color: 'violet', value: { query: 0, percentile: 0.99 }, round: true },
+      { dataKey: 'p99', label: 'P99', color: 'violet', value: { query: 'latency', percentile: 0.99 }, round: true },
     ],
     summary: { label: 'peak P95', value: { peak: 'p95' } },
     emptyMessage: `No ${noun} in this range.`,
@@ -287,22 +313,22 @@ export const distinctIdsWidget: DashboardWidget = {
   views: [
     {
       queries: [
-        { source: 'traceAggregate', measures: distinctMeasures, limit: 10 },
-        { source: 'traceAggregate', measures: distinctMeasures },
+        { id: 'buckets', source: 'traceAggregate', measures: distinctMeasures, limit: 10 },
+        { id: 'totals', source: 'traceAggregate', measures: distinctMeasures },
       ],
       options: {
         chart: 'line',
         format: 'count',
         xLabels: 'edges',
-        totals: [1],
+        totals: ['totals'],
         hideEmpty: true,
         emphasizeFirst: true,
         series: DISTINCT_IDS.map(([measure, dataKey, label, color]) => ({
           dataKey,
           label,
           color,
-          value: { query: 0, measure },
-          legendValue: { query: 1, measure },
+          value: { query: 'buckets', measure },
+          legendValue: { query: 'totals', measure },
         })),
         emptyMessage: 'No traces in this range set a resource, thread, user or session id.',
       },
@@ -319,10 +345,10 @@ export const scoresWidget: DashboardWidget = {
   views: [
     {
       queries: [
-        { source: 'scores', request: 'aggregate', aggregation: 'avg' },
-        { source: 'scores', request: 'timeSeries', aggregation: 'avg' },
+        { id: 'average', source: 'scores', request: 'aggregate', aggregation: 'avg' },
+        { id: 'series', source: 'scores', request: 'timeSeries', aggregation: 'avg' },
       ],
-      options: { average: 0, series: 1, emptyMessage: 'No scores in this range.' },
+      options: { average: 'average', series: 'series', emptyMessage: 'No scores in this range.' },
     },
   ],
 };
@@ -334,6 +360,7 @@ const ERRORS = ['count', 'errorRate', 'duration.p95'] as const;
 const hasThread = { op: 'exists', path: 'threadId' } as const;
 
 const usageTotals = (groupBy: string[], filters?: Record<string, string>): DashboardQuery => ({
+  id: 'usage',
   source: 'metrics',
   request: 'breakdown',
   name: USAGE,
@@ -345,17 +372,17 @@ const usageTotals = (groupBy: string[], filters?: Record<string, string>): Dashb
   compare: 'previousWindow',
 });
 
-/** Count, errors and P95 from query 0; tokens and cost from query 1. */
+/** Count, errors and P95 from the `figures` query; tokens and cost from `usage`. */
 const figureColumns = (count: { label: string; measure: string; unit: 'traces' | 'spans' }, usage: boolean) => [
-  { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
-  { id: 'p95', options: { query: 0, measure: 'duration.p95' } },
+  { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
+  { id: 'p95', options: { query: 'figures', measure: 'duration.p95' } },
   ...(usage
     ? [
-        { id: 'tokens', options: { query: 1, field: 'value' } },
-        { id: 'cost', options: { query: 1, field: 'estimatedCost' } },
+        { id: 'tokens', options: { query: 'usage', field: 'value' } },
+        { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
       ]
     : []),
-  { id: 'count', label: count.label, options: { query: 0, measure: count.measure, unit: count.unit } },
+  { id: 'count', label: count.label, options: { query: 'figures', measure: count.measure, unit: count.unit } },
 ];
 
 const project = { id: 'project', scope: 'org' } as const;
@@ -379,6 +406,7 @@ const entityView = (
     description,
     queries: [
       {
+        id: 'figures',
         source: 'spanAggregate',
         where:
           spanTypes.length === 1
@@ -416,7 +444,14 @@ const environmentsView = (scope: 'org' | 'project') => {
     scope,
     description: 'Traces, errors, latency and spend per environment.',
     queries: [
-      { source: 'traceAggregate', groupBy, measures: ERRORS, limit: TRACE_LIMIT, compare: 'previousWindow' },
+      {
+        id: 'figures',
+        source: 'traceAggregate',
+        groupBy,
+        measures: ERRORS,
+        limit: TRACE_LIMIT,
+        compare: 'previousWindow',
+      },
       usageTotals(groupBy),
     ],
     columns: traceColumns(scope),
@@ -432,6 +467,7 @@ const environmentsView = (scope: 'org' | 'project') => {
 const threadsView = (scope: 'org' | 'project') => {
   const groupBy = scoped(scope, 'threadId');
   const threads = {
+    id: 'figures',
     source: 'traceAggregate',
     where: hasThread,
     groupBy: scope === 'org' ? ['projectId', 'threadId'] : ['resourceId', 'threadId'],
@@ -441,6 +477,7 @@ const threadsView = (scope: 'org' | 'project') => {
   };
   // Org-wide the second dimension is the project, so a third request names each thread's resource.
   const resources = {
+    id: 'resources',
     source: 'traceAggregate',
     where: hasThread,
     groupBy: ['resourceId', 'threadId'],
@@ -456,7 +493,7 @@ const threadsView = (scope: 'org' | 'project') => {
       ...traceColumns(scope),
       {
         id: 'resource',
-        options: { query: scope === 'org' ? 2 : 0, dimension: 'resourceId', joinOn: 'threadId' },
+        options: { query: scope === 'org' ? 'resources' : 'figures', dimension: 'resourceId', joinOn: 'threadId' },
       },
     ],
     options: {
@@ -478,6 +515,7 @@ const modelsView = (scope: 'org' | 'project') => {
     queries: [
       usageTotals(groupBy),
       {
+        id: 'calls',
         source: 'metrics',
         request: 'breakdown',
         name: [INPUT],
@@ -490,9 +528,9 @@ const modelsView = (scope: 'org' | 'project') => {
     ],
     columns: [
       ...(scope === 'org' ? [project] : []),
-      { id: 'tokens', options: { query: 0, field: 'value' } },
-      { id: 'cost', options: { query: 0, field: 'estimatedCost' } },
-      { id: 'count', label: 'Spans', options: { query: 1, field: 'value', unit: 'spans' } },
+      { id: 'tokens', options: { query: 'usage', field: 'value' } },
+      { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
+      { id: 'count', label: 'Spans', options: { query: 'calls', field: 'value', unit: 'spans' } },
     ],
     options: {
       groupBy,
@@ -543,6 +581,7 @@ export const breakdownWidget = {
       description: 'Traces, errors, latency and spend per project.',
       queries: [
         {
+          id: 'figures',
           source: 'traceAggregate',
           groupBy: ['projectId'],
           measures: [...ERRORS, 'countDistinct.resourceId', 'countDistinct.threadId'],

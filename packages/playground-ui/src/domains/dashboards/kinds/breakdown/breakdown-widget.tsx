@@ -24,6 +24,7 @@ import type { BreakdownColumn, BreakdownOptions, BreakdownResponse } from '../..
 import { unsupportedMessage, viewHeading } from '../../lib/chrome';
 import { aggregateSource, buildPreviousRequest, buildRequest } from '../../lib/requests';
 import type { DashboardPageContext } from '../../lib/requests';
+import { answersById, queryIndex } from '../../lib/values';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 
@@ -86,7 +87,7 @@ function BreakdownTabs({ traceGate, spanGate, ...props }: Props & { traceGate: T
   const opener = props.views[openerIndex];
   const openerCount =
     opener && !unsupported(opener) ? parseColumns(opener.columns).columns.find(c => c.id === 'count') : undefined;
-  const openerQuery = openerCount?.options.query === undefined ? undefined : opener?.queries[openerCount.options.query];
+  const openerQuery = opener?.queries.find(q => q.id !== undefined && q.id === openerCount?.options.query);
   const [openerResult] = useDashboardRequests([openerQuery ? buildRequest(openerQuery, page, {}) : undefined]);
   const withData = countRows(openerResult, openerCount);
   const opening =
@@ -141,17 +142,22 @@ function BreakdownView(
   const { onClick } = useDrilldown(widget, view, onDrilldown);
   const { columns } = parseColumns(view.columns);
   const waitedOn = new Set(figureQueries(columns));
+  const waits = (i: number) => {
+    const id = queries[i]?.id;
+    return id !== undefined && waitedOn.has(id);
+  };
 
   const current = useDashboardRequests(queries.map(q => buildRequest(q, page, {})));
   // The previous window never holds the table up: until it answers, or if it fails, Change shows a dash.
   const previous = useDashboardRequests(queries.map(q => buildPreviousRequest(q, page, {})));
 
-  const waited = current.filter((r, i): r is DashboardQueryResult => r !== undefined && waitedOn.has(i));
+  const waited = current.filter((r, i): r is DashboardQueryResult => r !== undefined && waits(i));
   const has = (id: BreakdownColumn['id']) => columns.some(c => c.id === id);
   const count = columns.find(c => c.id === 'count');
-  const countQuery = count?.options.query;
-  const countResult = countQuery === undefined ? undefined : current[countQuery];
-  const countIsAggregate = isAggregate(countQuery === undefined ? undefined : queries[countQuery]);
+  const countAt = queryIndex(queries, count?.options.query);
+  const countQuery = countAt === undefined ? undefined : queries[countAt];
+  const countResult = countAt === undefined ? undefined : current[countAt];
+  const countIsAggregate = isAggregate(countQuery);
 
   if (waited.some(r => r.isError)) {
     return (
@@ -162,24 +168,27 @@ function BreakdownView(
   }
 
   const isLoading = waited.some(r => r.isLoading);
-  const responses = current.map(r => r?.data as BreakdownResponse | undefined);
-  const truncated =
-    countIsAggregate && (responses[countQuery ?? -1] as { truncated?: boolean } | undefined)?.truncated === true;
+  const responses = answersById(
+    queries,
+    current.map(r => r?.data as BreakdownResponse | undefined),
+  );
+  const truncated = countIsAggregate && (countResult?.data as { truncated?: boolean } | undefined)?.truncated === true;
   const built = isLoading ? [] : buildTableRows(options, columns, responses);
-  const previousWaited = previous.filter((r, i) => r !== undefined && waitedOn.has(i));
+  const previousWaited = previous.filter((r, i) => r !== undefined && waits(i));
   const previousSettled = previousWaited.every(r => !r?.isLoading && !r?.isError);
   const previousFigures =
     previousSettled && !isLoading
       ? previousTableFigures(
           options,
           columns,
-          previous.map(r => r?.data as BreakdownResponse | undefined),
+          answersById(
+            queries,
+            previous.map(r => r?.data as BreakdownResponse | undefined),
+          ),
         )
       : undefined;
   const usage = has('tokens');
-  const countLimit = countIsAggregate
-    ? (queries[countQuery ?? -1] as { limit?: number } | undefined)?.limit
-    : undefined;
+  const countLimit = countIsAggregate ? (countQuery as { limit?: number } | undefined)?.limit : undefined;
   const label = (id: BreakdownColumn['id']) => columns.find(c => c.id === id)?.label;
 
   return (
