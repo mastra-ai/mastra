@@ -105,13 +105,18 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(stored).toEqual({
           header,
           lastSeq: 4,
+          startStateSeq: 4,
           state: value,
           statePatchBytes: 0,
           steps: context,
           summarizedStepIds: [],
         });
         expect(Object.keys(stored!.steps)).toEqual(['input', 'a', 'b']);
-        expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual({ header, lastSeq: 4 });
+        expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual({
+          header,
+          lastSeq: 4,
+          startStateSeq: 4,
+        });
         expect(await load(id)).toEqual(snapshot);
         expect(parsed((await store.getWorkflowRunById({ workflowName, runId: id }))!)).toEqual(snapshot);
       });
@@ -202,12 +207,62 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await loadRun(id)).toEqual({
           header: makeHeader(id),
           lastSeq: 1,
+          startStateSeq: 0,
           state: {},
           statePatchBytes: 0,
           steps: { a: ok(1) },
           summarizedStepIds: [],
         });
         expect((await store.getWorkflowRunById({ workflowName, runId: id }))!.resourceId).toBe('res');
+      });
+
+      it('returns the last seq of each write', async () => {
+        const id = runId();
+        const header = makeHeader(id);
+        expect(
+          await store.writeWorkflowRunCheckpoint({ workflowName, runId: id, header, steps: { a: ok(1) }, state: {} }),
+        ).toEqual({ lastSeq: 2 });
+        expect(
+          await store.appendWorkflowRunEntries({
+            workflowName,
+            runId: id,
+            header,
+            steps: { b: ok(2) },
+            state: { n: 1 },
+          }),
+        ).toEqual({ lastSeq: 4 });
+        expect(await store.appendWorkflowRunEntries({ workflowName, runId: id, header, steps: {} })).toEqual({
+          lastSeq: 4,
+        });
+      });
+
+      it("records the drive's start state seq, and loads the state as of a seq", async () => {
+        const id = runId();
+        const run = { workflowName, runId: id };
+        const header = makeHeader(id);
+        await store.writeWorkflowRunCheckpoint({ ...run, header, steps: { a: ok(1) }, state: { n: 1 } });
+        await store.appendWorkflowRunEntries({ ...run, header, steps: {}, state: { n: 2 } });
+        // Plain appends keep the checkpoint's start state.
+        expect((await store.loadWorkflowRunHeader(run))!.startStateSeq).toBe(2);
+        // A resumed drive's first append moves it to the version the resume started from.
+        await store.appendWorkflowRunEntries({
+          ...run,
+          header,
+          steps: {},
+          statePatch: [{ op: 'set', path: ['n'], value: 4 }],
+          startStateSeq: 3,
+        });
+        expect((await store.loadWorkflowRunHeader(run))!.startStateSeq).toBe(3);
+        expect((await loadRun(id))!.startStateSeq).toBe(3);
+
+        expect(await store.loadWorkflowRunState({ ...run, seq: 2 })).toEqual({ n: 1 });
+        expect(await store.loadWorkflowRunState({ ...run, seq: 3 })).toEqual({ n: 2 });
+        expect(await store.loadWorkflowRunState({ ...run, seq: 4 })).toEqual({ n: 4 });
+        expect(await store.loadWorkflowRunState({ workflowName, runId: 'nope', seq: 1 })).toBeNull();
+
+        // A later checkpoint starts a new drive.
+        await store.writeWorkflowRunCheckpoint({ ...run, header, steps: {}, state: { n: 5 } });
+        expect((await store.loadWorkflowRunHeader(run))!.startStateSeq).toBe(5);
       });
 
       it('keeps every concurrent append to one run, each under its own seq', async () => {
@@ -363,6 +418,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual({
           header: makeHeader(id),
           lastSeq: 2,
+          startStateSeq: 2,
         });
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: 'v1' })).toBeNull();
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: 'nope' })).toBeNull();
@@ -382,6 +438,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         const childOf = (name: string) =>
           makeHeader(id, { parentWorkflow: { workflowId: `${workflowName}-${name}`, runId: id, stepId: 'nested' } });
         return {
+          run,
           parent: run('parent'),
           child: run('child'),
           grandchild: run('grandchild'),
@@ -426,33 +483,56 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect((await statesOf(parent)).state).toEqual({ n: 2, list: ['x', 'y'] });
       });
 
-      it('stores a checkpoint patch instead of a full state', async () => {
+      it('stores a checkpoint as a version of another run plus a patch', async () => {
         const { parent, child, header, childOf } = family();
-        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, statePatch: [set(['n'], 1)] });
-        expect((await statesOf(parent)).state).toEqual({ n: 1 });
-
-        // A checkpoint patch replaces every earlier entry, and leaves a nested run inheriting.
-        await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: {}, state: { own: 1 } });
+        const { lastSeq } = await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { p: 1 } });
         await store.writeWorkflowRunCheckpoint({
           ...child,
           header: childOf('parent'),
           steps: {},
-          statePatch: [set(['c'], 1)],
+          stateBase: { ...parent, seq: lastSeq },
+          statePatch: [set(['n'], 1)],
         });
-        expect((await statesOf(child)).state).toEqual({ n: 1, c: 1 });
+        const loaded = await statesOf(child);
+        expect(loaded.state).toEqual({ p: 1, n: 1 });
+        // Only the run's own patches count.
+        expect(loaded.statePatchBytes).toBe(bytes([set(['n'], 1)]));
+
+        // Without a base, a checkpoint patch applies to an empty state.
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, statePatch: [set(['o'], 1)] });
+        expect((await statesOf(parent)).state).toEqual({ o: 1 });
       });
 
-      it("starts a run without a full state from its parent's state, recursively", async () => {
+      it("starts a run from another run's state version, recursively", async () => {
         const { parent, child, grandchild, header, childOf } = family();
         await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { p: 1, list: [1] } });
-        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, statePatch: [set(['p'], 2)] });
-        // The child inherits: its checkpoint stores no state.
-        await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: { input: {} as any } });
+        const { lastSeq: parentSeq } = await store.appendWorkflowRunEntries({
+          ...parent,
+          header,
+          steps: {},
+          statePatch: [set(['p'], 2)],
+        });
+        await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('parent'),
+          steps: { input: {} as any },
+          stateBase: { ...parent, seq: parentSeq },
+        });
         expect((await statesOf(child)).state).toEqual({ p: 2, list: [1] });
 
         const c1 = [set(['list', 1], 2)];
-        await store.appendWorkflowRunEntries({ ...child, header: childOf('parent'), steps: {}, statePatch: c1 });
-        await store.writeWorkflowRunCheckpoint({ ...grandchild, header: childOf('child'), steps: {} });
+        const { lastSeq: childSeq } = await store.appendWorkflowRunEntries({
+          ...child,
+          header: childOf('parent'),
+          steps: {},
+          statePatch: c1,
+        });
+        await store.writeWorkflowRunCheckpoint({
+          ...grandchild,
+          header: childOf('child'),
+          steps: {},
+          stateBase: { ...child, seq: childSeq },
+        });
         const g1 = [set(['g'], true)];
         await store.appendWorkflowRunEntries({ ...grandchild, header: childOf('child'), steps: {}, statePatch: g1 });
 
@@ -469,28 +549,55 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(updated!.value).toEqual({ p: 2, list: [1, 2], g: true });
       });
 
-      it("follows the parent's later state, and stops inheriting once the run stores a full state", async () => {
+      it("keeps reading the version it was built on after the other run's state moves on or starts over", async () => {
         const { parent, child, header, childOf } = family();
-        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { p: 1 } });
-        await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('parent'), steps: {} });
+        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: { a: ok(1) },
+          state: { list: ['a', 'b', 'c'] },
+        });
+        await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('parent'),
+          steps: {},
+          stateBase: { ...parent, seq: lastSeq },
+        });
         await store.appendWorkflowRunEntries({
           ...child,
           header: childOf('parent'),
           steps: {},
-          statePatch: [set(['c'], 1)],
+          statePatch: [set(['list', 3], 'd')],
         });
 
-        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, state: { p: 2 } });
-        expect((await statesOf(child)).state).toEqual({ p: 2, c: 1 });
+        // The parent shrinks its list, then a checkpoint (time travel) starts its state over.
+        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, state: { list: ['x'] } });
+        expect((await statesOf(child)).state).toEqual({ list: ['a', 'b', 'c', 'd'] });
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: { b: ok(2) }, state: { other: 1 } });
+        expect((await statesOf(child)).state).toEqual({ list: ['a', 'b', 'c', 'd'] });
+        // The checkpoint still replaces the parent's own steps and state.
+        expect(await store.loadWorkflowRun({ ...parent, successfulSteps: 'full' })).toMatchObject({
+          steps: { b: ok(2) },
+          state: { other: 1 },
+          statePatchBytes: 0,
+        });
+        expect(Object.keys((await store.loadWorkflowRun({ ...parent, successfulSteps: 'full' }))!.steps)).toEqual([
+          'b',
+        ]);
 
+        // A full state replaces the base.
         await store.appendWorkflowRunEntries({ ...child, header: childOf('parent'), steps: {}, state: { own: true } });
-        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, state: { p: 3 } });
         expect((await statesOf(child)).state).toEqual({ own: true });
       });
 
-      it('starts from an empty state when the parent is not stored, or the run has no parent', async () => {
+      it('starts from an empty state when the base run is not stored, or the checkpoint has no state', async () => {
         const { parent, child, header, childOf } = family();
-        await store.writeWorkflowRunCheckpoint({ ...child, header: childOf('missing'), steps: {} });
+        await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('missing'),
+          steps: {},
+          stateBase: { workflowName: `${workflowName}-missing`, runId: child.runId, seq: 3 },
+        });
         await store.appendWorkflowRunEntries({
           ...child,
           header: childOf('missing'),
@@ -499,8 +606,119 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         });
         expect((await statesOf(child)).state).toEqual({ c: 1 });
 
-        await store.appendWorkflowRunEntries({ ...parent, header, steps: {} });
+        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, state: { p: 1 } });
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {} });
         expect((await statesOf(parent)).state).toEqual({});
+      });
+
+      it("serves a run's drafts to runs built on them, and leaves them out of the run's own state", async () => {
+        const { run, parent, header, childOf } = family();
+        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { list: ['a'] },
+        });
+        const d1 = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { seq: lastSeq },
+          ops: [set(['list', 1], 'b')],
+        });
+        const d2 = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { ...d1, draft: true },
+          ops: [set(['list', 2], 'c')],
+        });
+        const full = await store.appendWorkflowRunStateDraft({ ...parent, state: { list: ['z'] } });
+        const d3 = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { ...full, draft: true },
+          ops: [set(['n'], 1)],
+        });
+        expect([d1.seq, d2.seq, full.seq, d3.seq]).toEqual([lastSeq + 1, lastSeq + 2, lastSeq + 3, lastSeq + 4]);
+
+        const children = { c1: d1.seq, c2: d2.seq, c3: d3.seq };
+        for (const [name, seq] of Object.entries(children)) {
+          await store.writeWorkflowRunCheckpoint({
+            ...run(name),
+            header: childOf('parent'),
+            steps: {},
+            stateBase: { ...parent, seq, draft: true },
+          });
+        }
+        const expected = { c1: { list: ['a', 'b'] }, c2: { list: ['a', 'b', 'c'] }, c3: { list: ['z'], n: 1 } };
+        for (const [name, state] of Object.entries(expected)) {
+          expect((await statesOf(run(name))).state).toEqual(state);
+        }
+
+        // Drafts never change the run's own state, so a restart reads the stored one.
+        const loaded = await statesOf(parent);
+        expect(loaded.state).toEqual({ list: ['a'] });
+        expect(loaded.statePatchBytes).toBe(0);
+        expect(loaded.lastSeq).toBe(d3.seq);
+        // A later state patch applies to the stored state, not to a draft.
+        await store.appendWorkflowRunEntries({ ...parent, header, steps: {}, statePatch: [set(['m'], 1)] });
+        expect((await statesOf(parent)).state).toEqual({ list: ['a'], m: 1 });
+
+        // A checkpoint keeps the drafts the runs built on them read.
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { fresh: true } });
+        expect((await statesOf(parent)).state).toEqual({ fresh: true });
+        for (const [name, state] of Object.entries(expected)) {
+          expect((await statesOf(run(name))).state).toEqual(state);
+        }
+      });
+
+      it('fails a draft of a run that is not stored', async () => {
+        const { parent } = family();
+        await expect(store.appendWorkflowRunStateDraft({ ...parent, state: {} })).rejects.toThrow();
+      });
+
+      it('keeps the state of the runs built on a deleted run', async () => {
+        const { run, parent, child, grandchild, header, childOf } = family();
+        const sibling = run('sibling');
+        const { lastSeq } = await store.writeWorkflowRunCheckpoint({
+          ...parent,
+          header,
+          steps: {},
+          state: { list: ['a'] },
+        });
+        const draft = await store.appendWorkflowRunStateDraft({
+          ...parent,
+          on: { seq: lastSeq },
+          ops: [set(['list', 1], 'b')],
+        });
+        const c1 = [set(['c'], 1)];
+        await store.writeWorkflowRunCheckpoint({
+          ...child,
+          header: childOf('parent'),
+          steps: {},
+          stateBase: { ...parent, seq: lastSeq },
+          statePatch: c1,
+        });
+        const { lastSeq: siblingSeq } = await store.writeWorkflowRunCheckpoint({
+          ...sibling,
+          header: childOf('parent'),
+          steps: {},
+          stateBase: { ...parent, seq: draft.seq, draft: true },
+        });
+        await store.writeWorkflowRunCheckpoint({
+          ...grandchild,
+          header: childOf('sibling'),
+          steps: {},
+          stateBase: { ...sibling, seq: siblingSeq },
+        });
+
+        await store.deleteWorkflowRunById(parent);
+        expect(await store.loadWorkflowRun({ ...parent, successfulSteps: 'full' })).toBeNull();
+        const loadedChild = await statesOf(child);
+        expect(loadedChild.state).toEqual({ list: ['a'], c: 1 });
+        expect(loadedChild.statePatchBytes).toBe(bytes(c1));
+        expect((await statesOf(sibling)).state).toEqual({ list: ['a', 'b'] });
+        expect((await statesOf(grandchild)).state).toEqual({ list: ['a', 'b'] });
+        // A run recreated under the deleted key starts its seq over without changing them.
+        await store.writeWorkflowRunCheckpoint({ ...parent, header, steps: {}, state: { other: 1 } });
+        expect((await statesOf(child)).state).toEqual({ list: ['a'], c: 1 });
+        expect((await statesOf(sibling)).state).toEqual({ list: ['a', 'b'] });
       });
     });
 
@@ -527,6 +745,7 @@ export function createRunJournalTests({ getStore }: { getStore: () => WorkflowsS
         expect(updated).toEqual({
           header: makeHeader(id, { status: 'canceled', suspendedPaths: { a: [0] } }),
           lastSeq: 2,
+          startStateSeq: 2,
         });
         expect(await store.loadWorkflowRunHeader({ workflowName, runId: id })).toEqual(updated);
         expect((await loadRun(id))!.steps).toEqual({ a: ok(1) });
