@@ -80,12 +80,31 @@ describe('browser_screenshot', () => {
     expect(output.value).toContainEqual({ type: 'text', text: 'Saved to page.png' });
   });
 
-  it('still returns the screenshot when there is no workspace to save into', async () => {
+  it('still shows the model the screenshot when there is no workspace to save into', async () => {
+    const tool = createScreenshotTool(browser);
     const result = await screenshot({ path: 'page.png' }, {});
 
-    expect(result.base64).toBe(PNG.toString('base64'));
     expect(result.path).toBeUndefined();
-    expect(result.saveError).toMatch(/no workspace filesystem/);
+    const output = tool.toModelOutput!(result as never) as { value: Array<Record<string, unknown>> };
+    expect(output.value).toEqual([
+      { type: 'media', mediaType: 'image/png', data: PNG.toString('base64') },
+      {
+        type: 'text',
+        text: "Couldn't save the screenshot: There is no workspace filesystem to save the screenshot into.",
+      },
+    ]);
+  });
+
+  it('still shows the model the screenshot when saving it fails', async () => {
+    vi.spyOn(workspace.filesystem!, 'writeFile').mockRejectedValueOnce(new Error('disk full'));
+    const tool = createScreenshotTool(browser);
+    const result = await screenshot({ path: 'page.png' }, { workspace });
+
+    const output = tool.toModelOutput!(result as never) as { value: Array<Record<string, unknown>> };
+    expect(output.value).toEqual([
+      { type: 'media', mediaType: 'image/png', data: PNG.toString('base64') },
+      { type: 'text', text: "Couldn't save the screenshot: disk full" },
+    ]);
   });
 
   it('writes nothing without a path', async () => {
