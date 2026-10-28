@@ -4,7 +4,7 @@ import type { ActivityCall, ActivityMember } from './model/activity-members';
 import { activitySegments } from './model/activity-segments';
 import type { ActivitySegment } from './model/activity-segments';
 import type { ActivityDisclosureStore } from './model/disclosure-store';
-import { useDisclosureStore, useIsOpen } from './use-activity-disclosure';
+import { ActivityDisclosureContext, useDisclosureStore, useIsOpen } from './use-activity-disclosure';
 import { hasReasoningText } from '@/ds/components/ai/activity';
 
 export interface ActivityStretchLineProps {
@@ -35,12 +35,13 @@ function keepListedOpen(store: ActivityDisclosureStore, segments: readonly Activ
     store.setOpen('row', [only.key], true);
     store.setOpen('group', [only.key], true);
   }
-  if (only.kind === 'calls')
+  if (only.kind === 'calls') {
     store.setOpen(
       'group',
       only.calls.map(call => call.key),
       true,
     );
+  }
 }
 
 /** One collapsed line for a stretch of tool work and thinking, opening onto what it did. */
@@ -59,17 +60,19 @@ export function ActivityStretchLine({ members, live, elapsedMs }: ActivityStretc
   }
 
   return (
-    <ActivityFold
-      slot="activity-stretch"
-      calls={members.filter(isCall)}
-      live={live}
-      elapsedMs={elapsedMs}
-      open={open}
-      onOpenChange={toggle}
-      foldable={listed.length > 1 || listed.some(opensOnItsOwn)}
-      prominent
-    >
-      <StretchContent segments={segments} live={live} />
-    </ActivityFold>
+    <ActivityDisclosureContext value={store}>
+      <ActivityFold
+        slot="activity-stretch"
+        calls={members.filter(isCall)}
+        live={live}
+        elapsedMs={elapsedMs}
+        open={open}
+        onOpenChange={toggle}
+        foldable={listed.length > 1 || listed.some(opensOnItsOwn)}
+        prominent
+      >
+        <StretchContent segments={segments} live={live} />
+      </ActivityFold>
+    </ActivityDisclosureContext>
   );
 }
