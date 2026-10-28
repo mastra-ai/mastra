@@ -10,6 +10,7 @@ import {
   JIRA_STATUS_URL,
   JIRA_PROJECTS_URL,
   FACTORY_A,
+  jiraProjects,
   baseConfig,
   useIntakeHandlers,
   useJiraHandlers,
@@ -132,6 +133,29 @@ describe('IntakeSection jira', () => {
     }
     await waitFor(() => expect(add).toHaveFocus());
     expect(screen.queryByRole('button', { name: 'Remove ENG · Engineering' })).not.toBeInTheDocument();
+  });
+
+  it('waits for Jira projects before listing saved sources, so rows never show raw project IDs', async () => {
+    seedFactories();
+    useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } } });
+    const projectsPending = Promise.withResolvers<void>();
+    server.use(
+      http.get(JIRA_PROJECTS_URL, async () => {
+        await projectsPending.promise;
+        return HttpResponse.json({ projects: jiraProjects });
+      }),
+    );
+
+    renderIntakeSection();
+
+    const section = await screen.findByRole('region', { name: 'Jira' });
+    expect(await within(section).findByText('Loading Jira projects…')).toBeInTheDocument();
+    expect(within(section).queryByText('10001')).not.toBeInTheDocument();
+    expect(within(section).queryByLabelText('Factory for 10001')).not.toBeInTheDocument();
+
+    projectsPending.resolve();
+
+    expect(await within(section).findByLabelText('Factory for ENG · Engineering')).toBeInTheDocument();
   });
 
   it('routes a selected Jira project to a Factory through the generic bindings', async () => {

@@ -77,7 +77,7 @@ export function JiraIntakeSection({
           addLabel="Add project"
           itemIcon={<SettingsIntegrationIcon provider="jira" />}
           groups={groupJiraProjectsBySite(projects)}
-          selectedIds={config.jira.sourceIds}
+          selectedIds={projectsQuery.isPending ? [] : config.jira.sourceIds}
           pending={busy}
           loading={projectsQuery.isPending}
           error={projectsQuery.isError ? "Couldn't load Jira projects." : undefined}
