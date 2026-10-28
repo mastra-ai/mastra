@@ -610,6 +610,17 @@ describe('Span', () => {
         expect(bare.exportSpan()).not.toHaveProperty(key);
       }
     });
+
+    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+      const instance = tracing();
+      const context = { error: new Error('limit hit'), steps: 10n };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
+      const exported = span.exportSpan();
+
+      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
+      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
+      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
+    });
   });
 
   describe('getExternalParentId', () => {
