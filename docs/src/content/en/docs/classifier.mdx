@@ -84,7 +84,7 @@ Call `decide()` directly when your application controls the decision point. Mast
 
 - **Workflow routing.** A [`.classifier()`](/docs/workflows/control-flow#route-with-a-classifier) step classifies the workflow input before `.branch()` routes on the answer.
 - **Guardrails and moderation.** [`ClassifierProcessor`](/reference/processors/classifier-processor) runs a classifier over agent input, output, or stream chunks and passes the answers to `onResult`, where you can abort or filter the content. See [Guardrails](/docs/agents/guardrails).
-- **Model selection.** [`ModelSelectionProcessor`](/reference/processors/model-selection-processor) classifies the incoming request and downgrades the agent to a cheaper model when a decision model is confident the cheaper model can handle it.
+- **Model selection.** [`ModelSelectionProcessor`](/reference/processors/model-selection-processor) classifies the incoming request and can downgrade the agent to a cheaper model. By default it routes on the selected choice. Set `minProbability` to require a confident answer before switching.
 - **Scorers.** `createClassifierScorer()` turns one classifier question into a scorer for the eval pipeline.
 
 You can also register classifiers on the `Mastra` instance, which shares them across your application and lets workflows reference them by ID. See [Registering classifiers](/reference/classifier/classifier#registering-classifiers).
