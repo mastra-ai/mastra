@@ -33,7 +33,8 @@
     "resolve.exports": "^2.0.4",
     "tinyglobby": "^0.2.17",
     "ts-morph": "^27.0.2",
-    "typescript": "catalog:ts6"
+    "typescript": "catalog:",
+    "typescript-classic": "npm:typescript@^6.0.3"
   },
   "devDependencies": {
     "@vitest/coverage-v8": "catalog:",
