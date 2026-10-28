@@ -37,6 +37,7 @@ function renderSettings(section: string, { hash = '', search = '' } = {}) {
 }
 
 beforeEach(() => {
+  window.history.replaceState(null, '', '/');
   server.use(
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
@@ -97,16 +98,28 @@ describe('Settings ownership', () => {
     await waitFor(() => expect(keyBody).toEqual({ key: 'sk-personal', scope: 'user' }));
   });
 
-  it('saves personal memory for the caller and Factory memory for the Factory', async () => {
+  it('addresses personal memory by the active chat thread and Factory memory by the Factory', async () => {
+    const reads: Array<Record<string, string>> = [];
     const bodies: unknown[] = [];
     server.use(
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1`, () =>
+        HttpResponse.json({ ...settingsSession, sessionId: 'thread-1', resourceId: 'thread-1', threadId: 'thread-1' }),
+      ),
+      http.get(`${TEST_BASE_URL}/api/agent-controller/code/sessions/thread-1/permissions`, () =>
+        HttpResponse.json({ categories: {}, tools: {} }),
+      ),
+      http.get(OM_URL, ({ request }) => {
+        reads.push(Object.fromEntries(new global.URL(request.url).searchParams));
+        return HttpResponse.json({ config: settingsMemory });
+      }),
       http.put(`${OM_URL}/thresholds`, async ({ request }) => {
         bodies.push(await request.json());
         return HttpResponse.json({ ok: true, config: settingsMemory });
       }),
     );
+    window.history.replaceState(null, '', '/?sessionId=thread-1');
     const user = userEvent.setup();
-    renderSettings('memory');
+    renderSettings('memory', { search: '?sessionId=thread-1' });
 
     for (const [memory, threshold] of [
       ['Personal memory', '3000'],
@@ -119,12 +132,19 @@ describe('Settings ownership', () => {
       await user.tab();
     }
 
-    await waitFor(() =>
+    await waitFor(() => {
+      expect(reads).toEqual(
+        expect.arrayContaining([
+          { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1' },
+          { factoryId: 'fp-1' },
+        ]),
+      );
+      expect(reads.filter(read => read.sessionId).every(read => read.threadId === 'thread-1')).toBe(true);
       expect(bodies).toEqual([
-        { sessionId: 'fp-1', observationThreshold: 3000 },
+        { sessionId: 'thread-1', threadId: 'thread-1', resourceId: 'thread-1', observationThreshold: 3000 },
         { factoryId: 'fp-1', observationThreshold: 4000 },
-      ]),
-    );
+      ]);
+    });
   });
 
   it.each([
