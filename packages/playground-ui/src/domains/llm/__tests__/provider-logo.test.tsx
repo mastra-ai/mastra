@@ -40,15 +40,17 @@ describe('ProviderLogo', () => {
     expect(fills).toEqual(['#D97757']);
   });
 
-  it.each(['openai', 'openrouter', 'z-ai', 'moonshotai', 'x-ai', 'typesafe'])(
-    'draws the %s mark in the text color',
-    providerId => {
-      render(<ProviderLogo providerId={providerId} />);
-      const markup = screen.getByRole('img').outerHTML;
-      expect(markup).toContain('currentColor');
-      expect(markup).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-    },
-  );
+  it.each(['openai', 'openrouter', 'z-ai', 'moonshotai', 'x-ai'])('draws the %s mark in the text color', providerId => {
+    render(<ProviderLogo providerId={providerId} />);
+    const markup = screen.getByRole('img').outerHTML;
+    expect(markup).toContain('currentColor');
+    expect(markup).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+  });
+
+  it('draws the Typesafe mark in its brand magenta', () => {
+    render(<ProviderLogo providerId="typesafe" />);
+    expect(screen.getByRole('img').getAttribute('fill')).toBe('#E551BA');
+  });
 
   it.each(['google', 'qwen', 'minimax', 'meta'])('gives each %s mark its own gradient ids', providerId => {
     render(
