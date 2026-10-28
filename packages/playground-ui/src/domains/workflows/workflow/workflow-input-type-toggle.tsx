@@ -1,7 +1,7 @@
 import { Braces, FormInput } from 'lucide-react';
 import { Txt } from '@/ds/components/Txt';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
 
@@ -59,7 +59,6 @@ export function WorkflowInputTypeToggle({
             onClick={() => onChange(option.value)}
             className={cn(
               'flex items-center justify-center rounded-md',
-              controlStateColorTransition,
               compact ? 'gap-0.5 px-1 py-0' : 'gap-2 px-3 py-1.5',
               focusRing,
               isActive ? 'bg-fill-hover text-foreground' : quietTextHover,

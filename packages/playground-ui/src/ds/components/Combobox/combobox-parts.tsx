@@ -10,7 +10,6 @@ import { isIconButtonSize } from '@/ds/components/Button/Button';
 import type { ButtonSize, TextButtonSize } from '@/ds/components/Button/Button';
 import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { menuLabelClass, menuSeparatorClass } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
 import { usePopupAnchor } from '@/ds/primitives/popup-anchor';
@@ -289,30 +288,19 @@ function ComboboxContent({
 
 /** The scrolling list. Children: a render function per item (or per group), like Base UI's List. */
 function ComboboxList({ className, ...props }: BaseCombobox.List.Props) {
-  const menu = useFluidMenu();
   return (
     <ScrollArea maxHeight="var(--spacing-dropdown)">
       <ScrollAreaViewport className="scroll-py-8">
-        <div className={menu.containerClassName} {...menu.getContainerProps({})}>
-          <FluidMenuItems menu={menu}>
-            <BaseCombobox.List data-slot="combobox-list" className={cn(comboboxStyles.list, className)} {...props} />
-          </FluidMenuItems>
-        </div>
+        <BaseCombobox.List data-slot="combobox-list" className={cn(comboboxStyles.list, className)} {...props} />
       </ScrollAreaViewport>
     </ScrollArea>
   );
 }
 
-/** One option. A check shows on the right while it's selected; the hover highlight slides between items. */
+/** One option. A check shows on the right while it's selected. */
 function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.Props) {
   return (
-    <BaseCombobox.Item
-      // Registers the item with the list's sliding highlight (FluidMenuItems).
-      ref={useFluidMenuItemRef(ref)}
-      data-slot="combobox-item"
-      className={cn(comboboxItemClass({}), className)}
-      {...props}
-    >
+    <BaseCombobox.Item ref={ref} data-slot="combobox-item" className={cn(comboboxItemClass({}), className)} {...props}>
       <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>

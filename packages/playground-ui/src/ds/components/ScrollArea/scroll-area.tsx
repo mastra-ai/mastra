@@ -2,7 +2,7 @@ import { ScrollArea as ScrollAreaPrimitive } from '@base-ui/react/scroll-area';
 import { ChevronLeftIcon, ChevronRightIcon } from 'lucide-react';
 import * as React from 'react';
 
-import { controlStateColorTransition, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { useAutoscroll } from '@/hooks/use-autoscroll';
 import { mergeRefs } from '@/lib/merge-refs';
@@ -141,7 +141,6 @@ const ScrollButton = ({ direction, label, onStartScrolling, onStopScrolling, onK
       className={cn(
         'absolute inset-y-1 z-10 hidden w-8 cursor-pointer items-center justify-center rounded-md border-0 bg-transparent hover:bg-fill-subtle active:bg-fill',
         quietTextHover,
-        controlStateColorTransition,
         focusRing,
         direction === 'left'
           ? 'left-1 group-data-[overflow-x-start]/scroll-area:flex'

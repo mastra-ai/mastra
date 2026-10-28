@@ -3,7 +3,6 @@ import type { ReactNode } from 'react';
 
 import { Button } from '@/ds/components/Button';
 import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type DisabledFeatureButtonProps = {
@@ -37,10 +36,7 @@ export function DisabledFeatureButton({ icon, label, tooltipContent, docsHref }:
             href={docsHref}
             target="_blank"
             rel="noopener noreferrer"
-            className={cn(
-              'inline-flex items-center gap-1 text-inherit underline hover:text-foreground',
-              controlStateColorTransition,
-            )}
+            className={cn('inline-flex items-center gap-1 text-inherit underline hover:text-foreground')}
           >
             Learn more
             <ExternalLink className="size-3" />

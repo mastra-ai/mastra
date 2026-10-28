@@ -227,12 +227,12 @@ CommentItemBody.displayName = 'CommentItemBody';
 
 const commentItemActionsLayout: Record<CommentVariant, string> = {
   default:
-    'flex items-center gap-1 opacity-0 group-focus-within/comment-item:opacity-100 group-hover/comment-item:opacity-100 motion-safe:transition-opacity',
+    'flex items-center gap-1 opacity-0 group-focus-within/comment-item:opacity-100 group-hover/comment-item:opacity-100',
   embed: '',
   // Inline at the end of the header row, revealed on hover/focus.
   // `pointer-fine` only: a touch screen has no hover to reveal it with.
   thread:
-    'ml-auto flex shrink-0 items-center gap-0.5 self-center transition-opacity duration-200 ease-out motion-reduce:transition-none pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
+    'ml-auto flex shrink-0 items-center gap-0.5 self-center pointer-fine:opacity-0 pointer-fine:group-focus-within/comment-item:opacity-100 pointer-fine:group-hover/comment-item:opacity-100',
 };
 
 export type CommentItemActionsProps = ComponentPropsWithoutRef<'div'>;

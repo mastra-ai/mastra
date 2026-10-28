@@ -8,7 +8,7 @@ import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { passwordManagerOptOutProps } from '@mastra/playground-ui/primitives/password-manager-autofill';
-import { controlStateColorTransition, focusRing } from '@mastra/playground-ui/primitives/transitions';
+import { focusRing } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import type { RuleGroup } from '@mastra/playground-ui/utils/rule-engine';
@@ -186,7 +186,7 @@ export function ToolsPage() {
           <button
             type="button"
             onClick={() => handleValueChange(tool.value)}
-            className={cn('rounded-sm', focusRing, quietTextHover, controlStateColorTransition)}
+            className={cn('rounded-sm', focusRing, quietTextHover)}
             aria-label={`Remove ${tool.label}`}
           >
             <Icon size="xs">

@@ -21,7 +21,6 @@ import { Field, FieldLabel } from '@/ds/components/Field';
 import { Select, SelectTrigger, SelectValue, SelectContent, SelectItem } from '@/ds/components/Select';
 import { Spinner } from '@/ds/components/Spinner';
 import { Txt } from '@/ds/components/Txt';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/utils/cn';
 import { toast } from '@/utils/toast';
@@ -254,11 +253,7 @@ function SaveFullConversationInner({ ctx }: { ctx: DatasetSaveContextValue }) {
         type="button"
         onClick={handleClick}
         disabled={isFetching}
-        className={cn(
-          quietTextHover,
-          controlStateColorTransition,
-          'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50',
-        )}
+        className={cn(quietTextHover, 'mx-auto flex cursor-pointer items-center gap-1.5 py-3 disabled:opacity-50')}
       >
         {isFetching ? <Spinner className="size-3.5" /> : <DatabaseIcon className="size-3.5" />}
         <Txt as="span" variant="meta" className="block">

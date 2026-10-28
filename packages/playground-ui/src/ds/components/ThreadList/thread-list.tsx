@@ -107,7 +107,7 @@ export const ThreadListItem = ({
         <Button
           variant="ghost"
           size="icon-sm"
-          className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100"
+          className="absolute top-1/2 right-1 -translate-y-1/2 opacity-0 group-focus-within:opacity-100 group-hover:opacity-100"
           onClick={onDelete}
           aria-label={deleteLabel}
         >
@@ -116,7 +116,7 @@ export const ThreadListItem = ({
       )}
 
       {actions && (
-        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 transition-opacity group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
+        <div className="absolute top-1/2 right-px flex -translate-y-1/2 items-center opacity-0 group-focus-within:opacity-100 group-hover:opacity-100 has-data-popup-open:opacity-100">
           {actions}
         </div>
       )}

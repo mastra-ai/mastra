@@ -1,6 +1,5 @@
 import { buttonVariants } from '@/ds/components/Button/Button';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 // Shared recipe for items rendered inside floating menus (DropdownMenu, ContextMenu,
@@ -16,17 +15,19 @@ const MENU_ITEM_OVERRIDES = cn(
   // Leading icons and trailing chevrons share a tone that follows pointer,
   // keyboard, and held-open submenu states together with the label.
   '[--menu-icon-color:var(--placeholder)] [&>svg]:text-(color:--menu-icon-color)',
-  '[&>svg]:transition-[color] [&>svg]:duration-fast [&>svg]:ease-out-custom motion-reduce:[&>svg]:transition-none',
   // An item may carry a second line (a name over its description). The Button
   // height becomes the floor so single-line rows keep the control rhythm and a
   // taller item grows instead of overflowing into its neighbour.
   'h-auto min-h-control-md py-1',
   // Button brightens its border on focus-visible; inside a menu the highlight is the focus cue.
   'focus-visible:border-transparent',
-  // No row background: the popup's FluidMenuItems highlight travels between rows;
-  // the row only lifts its text color. Same modifiers as Button's ghost fills so
-  // tailwind-merge drops them; any other spelling leaves both surfaces painted.
+  // The library's highlight (`data-highlighted`, which follows both the pointer and the
+  // arrow keys) paints the row, not `:hover`: a hovered row and a keyboard-highlighted
+  // one would otherwise both light up. Same modifiers as Button's ghost fills so
+  // tailwind-merge drops them. The fill switches instantly, like every hover.
   'not-disabled:hover:bg-transparent not-disabled:active:bg-transparent',
+  // `not-disabled:` matches the override's specificity, so the highlight wins over it.
+  'not-disabled:data-highlighted:bg-fill not-disabled:data-[popup-open]:bg-fill',
   'not-disabled:hover:text-foreground/80 data-highlighted:text-foreground/80 data-selected:text-foreground/80 data-[popup-open]:text-foreground/80',
   'not-disabled:hover:[--menu-icon-color:var(--muted-foreground)] data-highlighted:[--menu-icon-color:var(--muted-foreground)]',
   'data-selected:[--menu-icon-color:var(--muted-foreground)] data-[popup-open]:[--menu-icon-color:var(--muted-foreground)]',
@@ -44,13 +45,17 @@ export const menuItemDestructiveClass = cn(
   MENU_ITEM_OVERRIDES,
   'text-destructive-foreground not-disabled:hover:text-destructive-foreground [&>svg]:text-destructive-foreground',
   'data-highlighted:text-destructive-foreground data-selected:text-destructive-foreground data-[popup-open]:text-destructive-foreground',
+  'not-disabled:data-highlighted:bg-destructive-subtle',
 );
+
+// For rows that are plain buttons moved through with roving focus (no library
+// highlight): the row lights up on hover and on focus.
+export const menuItemButtonClass = cn(menuItemClass, 'not-disabled:hover:bg-fill focus:bg-fill focus:text-foreground');
 
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
 // svg itself, so the Button recipe's `[&>svg]` adornment padding never treats it as a leading icon.
 export const menuItemTrailingIconClass = cn(
   'ml-auto flex size-icon-sm shrink-0 items-center justify-center text-(color:--menu-icon-color) [&>svg]:size-full',
-  controlStateColorTransition,
 );
 
 export const menuItemCheckClass = cn(menuItemTrailingIconClass, 'text-muted-foreground');
@@ -73,8 +78,6 @@ export const menuPopupClass = cn(
   'origin-[var(--transform-origin)] overflow-x-hidden overflow-y-auto',
   // `scrollbar-inset-xl` keeps a ScrollArea's scrollbar ends clear of the `rounded-xl` corners.
   cn('rounded-xl p-1 font-body text-menu text-muted-foreground outline-none scrollbar-inset-xl', overlaySurfaceStyle),
-  // A destructive row tints the travelling highlight instead of painting its own.
-  '[&:has([data-variant=destructive][data-fluid-hover-active])_[data-slot=fluid-hover-highlight]]:bg-destructive-subtle',
   'data-[closed]:animate-out data-[closed]:fade-out-0 data-[closed]:zoom-out-95 data-[open]:animate-in data-[open]:fade-in-0 data-[open]:zoom-in-95',
   'data-[side=bottom]:slide-in-from-top-1 data-[side=left]:slide-in-from-right-1 data-[side=right]:slide-in-from-left-1 data-[side=top]:slide-in-from-bottom-1',
 );

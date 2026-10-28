@@ -1,7 +1,7 @@
 /**
  * A quiet control that resolves to ink when pointed at — the two-tone rule
- * every row, nav item and icon button follows. Colour is the only thing a
- * hover animates (see `controlStateColorTransition`).
+ * every row, nav item and icon button follows. The switch is instant (see
+ * the motion policy in `transitions.ts`).
  *
  * Size and weight are not here: they arrive as one `text-<role>` class from
  * the roles in theme/typography.css, so a component never assembles a text style.

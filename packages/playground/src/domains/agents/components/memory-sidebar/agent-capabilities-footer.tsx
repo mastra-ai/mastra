@@ -4,7 +4,7 @@ import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureCh
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
-import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
@@ -106,13 +106,11 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
         'hover:bg-fill-subtle',
         focusRing,
         quietTextHover,
-        controlStateColorTransition,
       )}
     >
       <span
         className={cn(
           'mt-0.5 size-3.5 shrink-0 text-muted-foreground [&>svg]:size-3.5',
-          controlStateColorTransition,
           enabled ? toneIcon : 'group-hover/capability-row:text-foreground',
         )}
       >
@@ -132,10 +130,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
         </Txt>
       </span>
       <ExternalLink
-        className={cn(
-          'mt-0.5 size-3 shrink-0 text-muted-foreground group-hover/capability-row:text-foreground',
-          controlStateColorTransition,
-        )}
+        className={cn('mt-0.5 size-3 shrink-0 text-muted-foreground group-hover/capability-row:text-foreground')}
       />
     </a>
   );
@@ -354,7 +349,6 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
               'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
               focusRingInset,
               quietTextHover,
-              controlStateColorTransition,
             )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">

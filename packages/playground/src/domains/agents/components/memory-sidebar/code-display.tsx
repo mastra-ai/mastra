@@ -58,7 +58,7 @@ export function CodeDisplay({
               as="span"
               variant="meta"
               tone="muted"
-              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-muted px-1.5 py-0.5 opacity-0 transition-opacity group-hover:opacity-100"
+              className="pointer-events-none absolute top-2 right-2 z-20 rounded-full bg-muted px-1.5 py-0.5 opacity-0 group-hover:opacity-100"
             >
               Click to copy
             </Txt>

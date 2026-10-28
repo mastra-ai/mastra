@@ -1,6 +1,6 @@
 import { Collapsible as CollapsiblePrimitive } from '@base-ui/react/collapsible';
 import React from 'react';
-import { transitions, focusRing } from '@/ds/primitives/transitions';
+import { focusRing } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const Collapsible = CollapsiblePrimitive.Root;
@@ -19,7 +19,7 @@ const CollapsibleTrigger = React.forwardRef<HTMLButtonElement, CollapsibleTrigge
       <CollapsiblePrimitive.Trigger
         ref={ref}
         data-slot="collapsible-trigger"
-        className={cn('-outline-offset-2', transitions.colors, focusRing, 'hover:text-foreground', className)}
+        className={cn('-outline-offset-2', focusRing, 'hover:text-foreground', className)}
         {...renderProps}
         {...props}
       >

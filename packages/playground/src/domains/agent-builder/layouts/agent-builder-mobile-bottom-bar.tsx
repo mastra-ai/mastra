@@ -1,7 +1,6 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { AgentIcon } from '@mastra/playground-ui/icons/AgentIcon';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Blocks, LibraryIcon, ServerCogIcon, StarIcon } from 'lucide-react';
 import { useMemo } from 'react';
@@ -77,7 +76,6 @@ export function AgentBuilderMobileBottomBar() {
                 className={cn(
                   isActive ? 'text-foreground' : 'text-muted-foreground',
                   'relative flex flex-col items-center justify-center gap-1 py-2',
-                  controlStateColorTransition,
                   isActive
                     ? 'before:absolute before:inset-x-0 before:-top-px before:h-0.5 before:bg-current'
                     : 'hover:text-foreground',

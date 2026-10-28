@@ -210,8 +210,6 @@ export const Row = forwardRef<HTMLTableRowElement, RowProps>(
       <tr
         className={cn(
           variant === 'default' && 'border-b border-border',
-          // Smooth hover transition
-          variant === 'default' && 'transition-colors duration-normal ease-out-custom',
           variant === 'default' && 'hover:bg-fill-subtle',
           variant === 'default' && 'focus:bg-fill-subtle',
           variant === 'default' && focusRingInset,

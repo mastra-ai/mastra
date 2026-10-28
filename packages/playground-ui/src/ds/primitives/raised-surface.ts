@@ -67,4 +67,4 @@ export const surfaceStateLayerStyle = 'state-layer';
  * utility's, and `inset-px` likewise keeps the inset rim visible.
  */
 export const surfaceGroupStateLayerStyle =
-  'relative isolate before:pointer-events-none before:absolute before:-z-1 before:inset-px before:rounded-[inherit] before:transition-colors before:duration-fast motion-reduce:before:transition-none group-hover:before:bg-fill-subtle group-focus-visible:before:bg-fill-subtle';
+  'relative isolate before:pointer-events-none before:absolute before:-z-1 before:inset-px before:rounded-[inherit] group-hover:before:bg-fill-subtle group-focus-visible:before:bg-fill-subtle';

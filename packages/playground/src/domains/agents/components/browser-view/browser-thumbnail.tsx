@@ -3,7 +3,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useBrowserToolCalls } from '@mastra/playground-ui/domains/agents/context/browser-tool-calls-context';
 import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { focusRingInset } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Monitor, ChevronUp, ChevronDown, Maximize2, X } from 'lucide-react';
@@ -92,12 +92,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
   const isLive = status === 'streaming';
 
   return (
-    <div
-      className={cn(
-        'overflow-hidden rounded-3xl border border-border bg-background transition-all duration-200',
-        'hover:border-border-strong',
-      )}
-    >
+    <div className={cn('overflow-hidden rounded-3xl border border-border bg-background', 'hover:border-border-strong')}>
       {/* Collapsed header - always visible */}
       <button
         type="button"
@@ -133,7 +128,7 @@ export function BrowserThumbnail({ agentName = 'Agent' }: BrowserThumbnailProps)
         </div>
 
         {/* Expand/collapse indicator */}
-        <div className={cn('shrink-0', quietTextHoverInGroup, controlStateColorTransition)}>
+        <div className={cn('shrink-0', quietTextHoverInGroup)}>
           {isExpanded ? <ChevronDown className="h-5 w-5" /> : <ChevronUp className="h-5 w-5" />}
         </div>
       </button>

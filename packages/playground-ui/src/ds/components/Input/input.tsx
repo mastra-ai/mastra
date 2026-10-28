@@ -15,7 +15,6 @@ import {
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
 import { textFieldAutofillProps } from '@/ds/primitives/password-manager-autofill';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const inputVariants = cva(
@@ -23,7 +22,6 @@ const inputVariants = cva(
     // A text field is a block control: it fills its field. Content-sized controls (a
     // Select or Combobox trigger, a Button) do the opposite and let the call site grow them.
     'flex w-full text-ellipsis text-foreground',
-    controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // Native number spinners clip the pill; WebKit and Firefox need different selectors.

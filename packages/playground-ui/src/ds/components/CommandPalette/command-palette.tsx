@@ -6,7 +6,6 @@ import { ScrollArea, ScrollAreaViewport } from '@/ds/components/ScrollArea';
 import { Txt } from '@/ds/components/Txt';
 import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -118,7 +117,7 @@ function CommandPaletteScope({
         quietTextHover,
         'flex h-9 w-full cursor-pointer items-center gap-2 rounded-lg border border-transparent px-2.5 text-left text-body-sm hover:border-border hover:bg-fill-subtle data-[active=true]:border-border data-[active=true]:bg-fill-hover data-[active=true]:text-foreground',
         // eslint-disable-next-line tailwindcss/no-unnecessary-arbitrary-value -- v4 emits nothing for `scale-0.99`
-        'transition-[color,transform] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
+        'transition-[scale] duration-fast ease-out-custom active:scale-[0.99] motion-reduce:transition-none',
       )}
       data-active={active}
       aria-pressed={active}
@@ -159,7 +158,6 @@ function CommandPaletteResults({ children, footer, ...props }: CommandPaletteRes
         scrollAreaClassName="min-h-0 flex-1 rounded-none"
         scrollAreaViewportClassName="command-palette-scroll-viewport"
         className="command-palette-list max-h-none rounded-none border-none bg-transparent shadow-none"
-        highlightClassName="rounded-lg"
       >
         {children}
       </CommandList>
@@ -198,7 +196,6 @@ function CommandPaletteItem({
       <span
         className={cn(
           'mt-0.5 flex size-4 max-w-4 min-w-4 shrink-0 basis-4 items-center justify-center text-muted-foreground group-data-[selected=true]:text-foreground [&>svg]:!size-4 [&>svg]:shrink-0',
-          controlStateColorTransition,
         )}
       >
         {icon}

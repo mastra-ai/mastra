@@ -8,7 +8,7 @@ import type { LinkComponent } from '@/ds/types/link-component';
 import { cn } from '@/lib/utils';
 
 const cardVariants = cva(
-  cn(raisedSurfaceStyle, 'rounded-xl transition-all duration-normal ease-out-custom motion-reduce:transition-none'),
+  cn(raisedSurfaceStyle, 'rounded-xl transition-[scale] duration-normal ease-out-custom motion-reduce:transition-none'),
   {
     variants: {
       elevation: {

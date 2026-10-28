@@ -13,7 +13,8 @@ import { focusRingOffset, transitions } from './transitions';
 export const selectionControlStyle = [
   'flex size-4 shrink-0 cursor-pointer items-center justify-center',
   'border border-border bg-fill-hover text-background',
-  transitions.all,
+  // Only the press animates; hover and the checked fill switch instantly.
+  'transition-[scale] duration-normal ease-out-custom motion-reduce:transition-none',
   'hover:border-border-strong hover:bg-fill-active',
   'active:scale-95 active:border-border-hover active:bg-fill-strong',
   focusRingOffset,

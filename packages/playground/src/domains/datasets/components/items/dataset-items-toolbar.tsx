@@ -5,7 +5,6 @@ import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Upload, FileJson, Download, FolderPlus, FolderOutput, Trash2, ChevronDown } from 'lucide-react';
@@ -66,7 +65,7 @@ export function DatasetItemsToolbar({
         <button
           type="button"
           onClick={onReturnToLatestVersion}
-          className={cn(quietTextHover, controlStateColorTransition, 'shrink-0 underline underline-offset-2')}
+          className={cn(quietTextHover, 'shrink-0 underline underline-offset-2')}
         >
           <Txt as="span" variant="caption" className="block">
             Return to latest

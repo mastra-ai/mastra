@@ -13,17 +13,10 @@ afterEach(() => {
 });
 
 describe('Button', () => {
-  it('transitions color alone, not every property', () => {
+  it('switches hover state instantly, with no transition', () => {
     const baseClasses = buttonVariants().split(' ');
-    expect(baseClasses).toEqual(
-      expect.arrayContaining([
-        'transition-[color]',
-        'duration-fast',
-        'motion-reduce:transition-none',
-        'aria-disabled:pointer-events-none',
-      ]),
-    );
-    expect(baseClasses).not.toContain('transition-all');
+    expect(baseClasses).toContain('aria-disabled:pointer-events-none');
+    expect(baseClasses.filter(c => c.startsWith('transition') || c.startsWith('duration-'))).toEqual([]);
   });
 
   // A filled variant covers what is behind it — card text, a list row, the pill it is

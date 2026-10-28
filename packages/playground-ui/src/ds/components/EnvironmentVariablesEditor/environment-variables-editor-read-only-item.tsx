@@ -92,7 +92,7 @@ export function EnvironmentVariablesEditorReadOnlyItem({
                   size="icon-sm"
                   aria-label={isCopied ? 'Copied value' : copyLabel}
                   tooltip={isCopied ? 'Copied' : copyLabel}
-                  className="absolute right-0 opacity-0 transition-opacity group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100"
+                  className="absolute right-0 opacity-0 group-hover:opacity-100 focus:opacity-100 focus-visible:opacity-100"
                   onClick={handleCopyValue}
                 >
                   {isCopied ? <CheckIcon aria-hidden /> : <CopyIcon aria-hidden />}

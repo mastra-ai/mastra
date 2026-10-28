@@ -5,7 +5,6 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '.
 import { TabList } from '../Tabs/tabs-list';
 import { Tabs } from '../Tabs/tabs-root';
 import { Tab } from '../Tabs/tabs-tab';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type CodeBlockSelector = 'select' | 'tabs';
@@ -124,7 +123,6 @@ export function CodeBlock({
           tooltip={copyTooltip}
           className={cn(
             'absolute top-2 right-2 opacity-100 group-focus-within:opacity-100 group-hover:opacity-100 pointer-fine:opacity-0',
-            transitions.opacity,
           )}
         />
       </div>

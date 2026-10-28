@@ -12,13 +12,11 @@ import {
 } from '@/ds/primitives/form-element';
 import type { DeprecatedFilledVariant } from '@/ds/primitives/form-element';
 import { TextareaControl } from '@/ds/primitives/textarea-control';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 const textareaVariants = cva(
   cn(
     'flex w-full text-foreground',
-    controlStateColorTransition,
     'placeholder:text-muted-foreground placeholder:transition-opacity placeholder:duration-normal',
     'focus:placeholder:opacity-70 motion-reduce:placeholder:transition-none',
     // Textarea specific

@@ -6,7 +6,6 @@ import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria'
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { controlHeight } from '@/ds/primitives/control-size';
 import { raisedSurfaceStyle } from '@/ds/primitives/raised-surface';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { mergeRefs } from '@/lib/merge-refs';
 import { cn } from '@/lib/utils';
 
@@ -181,7 +180,6 @@ export function SegmentedControlItem({
         'text-muted-foreground hover:text-foreground data-[checked]:text-foreground',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus',
         'data-[disabled]:cursor-not-allowed data-[disabled]:hover:text-muted-foreground',
-        controlStateColorTransition,
         className,
       )}
     >

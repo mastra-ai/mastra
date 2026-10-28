@@ -32,12 +32,7 @@ export function ShareListRow({
   LinkComponent,
 }: ShareListRowProps) {
   const hasLeft = columns.some(c => c.align === 'left');
-  const className = cn(
-    ROW,
-    'transition-[background-color,opacity] duration-150',
-    highlighted && 'bg-fill-subtle',
-    (row.href || row.onClick) && 'hover:bg-fill-subtle',
-  );
+  const className = cn(ROW, highlighted && 'bg-fill-subtle', (row.href || row.onClick) && 'hover:bg-fill-subtle');
   return (
     <li>
       <RowShell

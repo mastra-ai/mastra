@@ -9,7 +9,6 @@ import type { RuleBuilderProps, RuleGroupViewProps } from './types';
 import { Button } from '@/ds/components/Button';
 import { Txt } from '@/ds/components/Txt';
 import { Icon } from '@/ds/icons';
-import { controlStateColorTransition } from '@/ds/primitives/transitions';
 import { quietTextHover } from '@/ds/primitives/typography';
 import { cn } from '@/lib/utils';
 
@@ -158,7 +157,6 @@ export const RuleBuilder: React.FC<RuleBuilderProps> = ({
         onClick={handleAddFirstRule}
         className={cn(
           quietTextHover,
-          controlStateColorTransition,
           'flex w-full items-center justify-center gap-2 rounded-md border border-dashed border-border p-2',
         )}
       >

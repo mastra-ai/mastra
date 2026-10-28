@@ -1,7 +1,6 @@
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useLinkComponent } from '@mastra/playground-ui/lib/framework';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Check } from 'lucide-react';
@@ -103,7 +102,6 @@ const SidebarLink = ({
         className={cn(
           active ? 'text-foreground' : '',
           'flex items-center gap-2.5 border-r-2 border-transparent px-3 py-2',
-          controlStateColorTransition,
           active ? 'border-border-strong bg-fill-hover' : `hover:bg-fill-subtle ${quietTextHover}`,
         )}
       >

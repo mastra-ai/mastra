@@ -12,7 +12,6 @@ import {
   DrawerViewport,
 } from '@/ds/components/Drawer';
 import { PortalContainerProvider } from '@/ds/primitives/portal-container';
-import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type SideDialogRootProps = {
@@ -80,7 +79,6 @@ export function SideDialogRoot({
                     type="button"
                     className={cn(
                       'absolute top-0 -left-14 flex size-14 appearance-none items-center justify-center rounded-bl-lg border-b border-l border-border-strong bg-background text-muted-foreground',
-                      transitions.all,
                       'hover:bg-fill-subtle hover:text-foreground',
                     )}
                     aria-label="Close"

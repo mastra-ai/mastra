@@ -312,11 +312,7 @@ function ComparisonRowView({ row, isLoading, showUsage, onOpen, onShowTrace }: C
         event.preventDefault();
         onOpen();
       }}
-      className={cn(
-        gridRow,
-        'cursor-pointer border-b transition-colors duration-normal ease-out-custom hover:bg-fill-subtle',
-        focusRingInset,
-      )}
+      className={cn(gridRow, 'cursor-pointer border-b hover:bg-fill-subtle', focusRingInset)}
     >
       <div role="cell" className={cn(cell, sectionStackClass)}>
         <ComparisonItemPayload label="Input" value={row.input} {...expandedProps('input')} />

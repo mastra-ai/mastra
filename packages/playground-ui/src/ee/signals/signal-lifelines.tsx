@@ -39,7 +39,7 @@ export function SignalLifelines({
               <button
                 aria-expanded={!isCollapsed}
                 aria-label={label}
-                className="flex items-center gap-1.5 transition-opacity hover:opacity-80"
+                className="flex items-center gap-1.5 hover:opacity-80"
                 onClick={() => setIsCollapsed(previous => !previous)}
                 type="button"
               />

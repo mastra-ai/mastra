@@ -49,7 +49,7 @@ export function SidebarNavHeader({
             {href ? (
               <Link
                 href={href}
-                className={cn('block min-w-0 truncate transition-colors duration-normal', {
+                className={cn('block min-w-0 truncate', {
                   'hover:text-foreground': !isActive,
                   'text-foreground': isActive,
                 })}

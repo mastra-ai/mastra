@@ -79,7 +79,7 @@ export function ProposalTag({
           setEditValue(tag);
           setIsEditing(true);
         }}
-        className={cn(quietTextHover, 'p-0.5 opacity-0 transition-opacity group-hover:opacity-100')}
+        className={cn(quietTextHover, 'p-0.5 opacity-0 group-hover:opacity-100')}
         title="Edit tag"
       >
         <Pencil className="h-3 w-3" />
@@ -87,7 +87,7 @@ export function ProposalTag({
       <button
         type="button"
         onClick={onRemove}
-        className="p-0.5 text-placeholder opacity-0 transition-opacity group-hover:opacity-100 hover:text-destructive-foreground"
+        className="p-0.5 text-placeholder opacity-0 group-hover:opacity-100 hover:text-destructive-foreground"
         title="Remove tag"
       >
         <X className="h-3 w-3" />

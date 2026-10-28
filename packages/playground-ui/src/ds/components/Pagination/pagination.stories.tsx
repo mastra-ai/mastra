@@ -19,7 +19,7 @@ const meta: Meta<typeof Pagination> = {
     docs: {
       description: {
         component:
-          'Page navigation built from parts: Previous, page numbers, ellipses, and Next. The current page wears a raised pill that slides between pages, and a fluid highlight follows the pointer. The caller owns the page. Import from `@mastra/playground-ui/components/Pagination`.',
+          'Page navigation built from parts: Previous, page numbers, ellipses, and Next. The current page wears a raised pill. The caller owns the page. Import from `@mastra/playground-ui/components/Pagination`.',
       },
     },
   },

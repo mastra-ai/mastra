@@ -78,7 +78,6 @@ function LinkCell({
       href={href}
       className={cn(
         'flex w-full items-center justify-center gap-4 rounded-lg px-3 py-2 text-left hover:bg-fill-subtle',
-        transitions.colors,
         focusRing,
         className,
       )}

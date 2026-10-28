@@ -4,7 +4,6 @@ import { ScrollArea, ScrollAreaViewport } from '@mastra/playground-ui/components
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { useToolkits } from '@mastra/react/hooks/tool-providers';
@@ -236,7 +235,7 @@ export const ToolkitFilterPane = ({
           onClick={onSelectAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-select-all`}
-          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
+          className={cn(quietTextHover, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           <Txt as="span" variant="meta" className="block">
             Select all
@@ -250,7 +249,7 @@ export const ToolkitFilterPane = ({
           onClick={onClearAll}
           disabled={disabled}
           data-testid={`${TEST_ID_PREFIX}-filter-clear-all`}
-          className={cn(quietTextHover, controlStateColorTransition, 'disabled:cursor-not-allowed disabled:opacity-60')}
+          className={cn(quietTextHover, 'disabled:cursor-not-allowed disabled:opacity-60')}
         >
           <Txt as="span" variant="meta" className="block">
             Clear all

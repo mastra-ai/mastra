@@ -2,7 +2,7 @@ import { ArrowDown, ArrowUp, ArrowUpDown } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 import type { ComponentProps } from 'react';
 import { Icon } from '@/ds/icons/Icon';
-import { controlStateColorTransition, focusRingOffset } from '@/ds/primitives/transitions';
+import { focusRingOffset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
 export type TableSortDirection = 'ascending' | 'descending' | 'none';
@@ -29,7 +29,6 @@ export function TableSortButton({ direction = 'none', className, children, ...pr
         'group/sort inline-flex cursor-pointer items-center gap-1 rounded-sm align-middle',
         'group-data-[align=end]/head:flex-row-reverse',
         'hover:text-foreground data-sorted:text-foreground',
-        controlStateColorTransition,
         focusRingOffset,
         className,
       )}

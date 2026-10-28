@@ -1,7 +1,6 @@
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Popover, PopoverTrigger, PopoverContent } from '@mastra/playground-ui/components/Popover';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { X, Plus } from 'lucide-react';
@@ -60,11 +59,7 @@ export function TagPicker({
         <PopoverTrigger asChild>
           <button
             type="button"
-            className={cn(
-              quietTextHover,
-              controlStateColorTransition,
-              'inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-fill-subtle',
-            )}
+            className={cn(quietTextHover, 'inline-flex items-center gap-0.5 rounded px-1 py-0.5 hover:bg-fill-subtle')}
           >
             <Plus className="h-3 w-3" />
             <Txt as="span" variant="meta" className="block">

@@ -2,7 +2,6 @@ import { forwardRef } from 'react';
 import type { ComponentPropsWithoutRef, KeyboardEvent, MouseEvent } from 'react';
 import { DataListRowWrapperContext } from './data-list-row-wrapper-context';
 import { dataListRowOuterStyles, dataListRowStateStyles } from './shared';
-import { useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
 
@@ -32,9 +31,6 @@ export type DataListRowWrapperProps = ComponentPropsWithoutRef<'div'> & {
 export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperProps>(
   ({ children, className, onSelectRow, onClick, onKeyDown, tabIndex, ...rest }, ref) => {
     const isSelectable = onSelectRow !== undefined;
-    // The wrapper is the `.data-list-row` element, so it (not the nested
-    // RowButton/RowLink) registers with the root's fluid hover.
-    const rowRef = useFluidMenuItemRef(ref);
 
     const handleClick = (event: MouseEvent<HTMLDivElement>) => {
       onClick?.(event);
@@ -57,7 +53,7 @@ export const DataListRowWrapper = forwardRef<HTMLDivElement, DataListRowWrapperP
     return (
       <DataListRowWrapperContext.Provider value>
         <div
-          ref={rowRef}
+          ref={ref}
           tabIndex={tabIndex ?? (isSelectable ? 0 : undefined)}
           className={cn(
             'grid grid-cols-subgrid gap-0',

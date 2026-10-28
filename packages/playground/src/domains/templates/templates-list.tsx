@@ -4,7 +4,6 @@ import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { McpServerIcon } from '@mastra/playground-ui/icons/McpServerIcon';
 import { ToolsIcon } from '@mastra/playground-ui/icons/ToolsIcon';
 import { raisedSurfaceStyle, surfaceGroupStateLayerStyle } from '@mastra/playground-ui/primitives/raised-surface';
-import { controlStateColorTransition } from '@mastra/playground-ui/primitives/transitions';
 import { quietTextHoverInGroup } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { NetworkIcon, WorkflowIcon } from 'lucide-react';
@@ -84,7 +83,7 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                 <Txt as="h2" tone="ink">
                   {template.title}
                 </Txt>
-                <Txt className={cn(quietTextHoverInGroup, controlStateColorTransition)}>{template.description}</Txt>
+                <Txt className={quietTextHoverInGroup}>{template.description}</Txt>
                 <div className="mt-3 hidden flex-wrap items-center gap-4 text-muted-foreground 2xl:flex">
                   {hasMetaInfo && (
                     <ul
@@ -160,7 +159,6 @@ export function TemplatesList({ templates, linkComponent, className, isLoading }
                     'flex items-center gap-2 rounded bg-sidebar px-2 py-1',
                     surfaceGroupStateLayerStyle,
                     quietTextHoverInGroup,
-                    controlStateColorTransition,
                   )}
                 >
                   <GithubIcon /> {getRepoName(template.githubUrl)}

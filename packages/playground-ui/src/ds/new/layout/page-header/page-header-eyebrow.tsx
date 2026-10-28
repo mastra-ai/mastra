@@ -12,7 +12,7 @@ export function PageHeaderEyebrow({ className, ...props }: PageHeaderEyebrowProp
       className={cn(
         'text-caption text-muted-foreground',
         'flex min-w-0 items-center',
-        '*:inline-flex *:items-center *:gap-1 *:rounded-sm *:transition-colors *:hover:text-foreground',
+        '*:inline-flex *:items-center *:gap-1 *:rounded-sm *:hover:text-foreground',
         className,
       )}
     />
