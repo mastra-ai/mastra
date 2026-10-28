@@ -138,10 +138,11 @@ describe('IntakeSection jira', () => {
   it('waits for Jira projects before listing saved sources, so rows never show raw project IDs', async () => {
     seedFactories();
     useJiraHandlers({ config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } } });
-    const projectsPending = Promise.withResolvers<void>();
+    let releaseProjects!: () => void;
+    const projectsPending = new Promise<void>(resolve => (releaseProjects = resolve));
     server.use(
       http.get(JIRA_PROJECTS_URL, async () => {
-        await projectsPending.promise;
+        await projectsPending;
         return HttpResponse.json({ projects: jiraProjects });
       }),
     );
@@ -153,7 +154,7 @@ describe('IntakeSection jira', () => {
     expect(within(section).queryByText('10001')).not.toBeInTheDocument();
     expect(within(section).queryByLabelText('Factory for 10001')).not.toBeInTheDocument();
 
-    projectsPending.resolve();
+    releaseProjects();
 
     expect(await within(section).findByLabelText('Factory for ENG · Engineering')).toBeInTheDocument();
   });
