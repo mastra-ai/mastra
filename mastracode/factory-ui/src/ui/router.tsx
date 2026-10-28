@@ -22,29 +22,28 @@ import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPa
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
-import { AppLayout, sessionLoadingBoundary } from './layouts/AppLayout';
+import { AppLayout } from './layouts/AppLayout';
+import { lazyPage, SessionLayout } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Only the boards ship in the startup bundle. Every other page loads on first
-// visit, suspending inside the app shell (see `RoutedPage`) or behind the
-// full-screen loader outside it.
+// visit behind its own loader (see `lazyPage`), session pages behind the one
+// they share (`SessionLayout`), onboarding and sign-in behind the full-screen one.
 const NewPage = lazy(() => import('./pages/NewPage').then(module => ({ default: module.NewPage })));
 const ThreadPage = lazy(() => import('./pages/ThreadPage').then(module => ({ default: module.ThreadPage })));
-const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })));
-const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
-const SlackConnectionPage = lazy(() =>
-  import('./pages/SlackConnectionPage').then(module => ({ default: module.SlackConnectionPage })),
+const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
+const SlackConnectionPage = lazyPage(() =>
+  import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
 );
-const CreateFactoryPage = lazy(() =>
-  import('./pages/CreateFactoryPage').then(module => ({ default: module.CreateFactoryPage })),
-);
+const CreateFactoryPage = lazyPage(() => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage));
 const OnboardingPage = lazy(() =>
   import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
 );
-const RulesPage = lazy(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
+const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage));
 const SignInPage = lazy(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
 
 function RootLanding() {
@@ -160,15 +159,16 @@ export function createAppRoutes(): RouteObject[] {
                   errorElement: <AppRouteErrorPage />,
                   children: [
                     { index: true, element: <FactoryHomeRedirect /> },
-                    { path: 'workspaces/:sessionId', element: <NewPage />, handle: sessionLoadingBoundary },
                     {
-                      path: 'workspaces/:sessionId/threads/:threadId',
-                      element: <ThreadPage />,
-                      handle: sessionLoadingBoundary,
+                      element: <SessionLayout />,
+                      children: [
+                        { path: 'workspaces/:sessionId', element: <NewPage /> },
+                        { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
+                        { path: 'user/new/:draftSessionId', element: <NewPage /> },
+                        { path: 'user/threads/:threadId', element: <ThreadPage /> },
+                        { path: 'new', element: <NewPage /> },
+                      ],
                     },
-                    { path: 'user/new/:draftSessionId', element: <NewPage />, handle: sessionLoadingBoundary },
-                    { path: 'user/threads/:threadId', element: <ThreadPage />, handle: sessionLoadingBoundary },
-                    { path: 'new', element: <NewPage />, handle: sessionLoadingBoundary },
                     { path: 'new-factory', element: <CreateFactoryPage /> },
                     { path: 'work', element: <WorkBoardPage /> },
                     { path: 'review', element: <ReviewBoardPage /> },
