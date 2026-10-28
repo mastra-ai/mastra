@@ -12,6 +12,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
@@ -109,16 +110,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     const saveInputAfterTotalTimeout = async () => {
       if (!memory || !memoryData.thread?.id) return;
-      // Mirror the finish path: only the MessageHistory output processor saves the turn, and
-      // it is skipped when history is disabled or observational memory owns the writes.
+      // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
+      // configured one always runs; memory adds one only when history is enabled and observational
+      // memory does not own the writes (see Memory.getOutputProcessors).
       const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
-      if (
-        effectiveConfig.readOnly ||
-        !normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled ||
-        isObservationalMemoryEnabled(effectiveConfig.observationalMemory)
-      ) {
-        return;
-      }
+      if (effectiveConfig.readOnly) return;
+      const configuredProcessors =
+        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
+      const hasConfiguredProcessor = (id: string) =>
+        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+      const memoryAddsMessageHistory =
+        normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
+        !hasConfiguredProcessor('observational-memory') &&
+        !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+      if (!hasConfiguredProcessor('message-history') && !memoryAddsMessageHistory) return;
       const input = filterMessagesForPersistence(messageList.get.input.db());
       if (input.length === 0) return;
 

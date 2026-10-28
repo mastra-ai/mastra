@@ -23,6 +23,7 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { MessageHistory } from '../../../../processors/memory';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import {
@@ -194,11 +195,13 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     { savePerStep: false, readOnly: false },
     { savePerStep: true, readOnly: false },
     { savePerStep: false, readOnly: true },
+    // History disabled in config, but the agent saves through an explicitly configured MessageHistory.
+    { savePerStep: false, readOnly: false, explicitHistory: true },
   ])(
-    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly)',
-    async ({ savePerStep, readOnly }) => {
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory)',
+    async ({ savePerStep, readOnly, explicitHistory }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}`;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -213,6 +216,10 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         maxSteps: 3,
         savePerStep,
         ...(readOnly && { memoryOptions: { readOnly } }),
+        ...(explicitHistory && {
+          memoryOptions: { lastMessages: false },
+          outputProcessors: [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
+        }),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
