@@ -143,8 +143,6 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.createBrowserFromSettings).toHaveBeenCalledWith(enabledSettings, {
       chatModelId: 'anthropic/claude-sonnet-4-5',
     });
-    expect(ctx.controller.listModes).toHaveBeenCalledOnce();
-    expect(ctx.state.session.state.get).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     expect(dynamicAgent.setBrowser).toHaveBeenCalledWith(browserInstance);
     const dynamicMode = (ctx.controller.listModes as ReturnType<typeof vi.fn>).mock.results[0]?.value[1];
@@ -181,9 +179,39 @@ describe('handleBrowserCommand', () => {
     });
     await handleBrowserCommand(ctx, ['on']);
 
-    // The old browser releases the profile before agents can launch the replacement on it.
-    expect(order).toEqual(['close old', 'attach replacement']);
+    // Agents drop the old browser before it closes, so they can't relaunch it while it closes,
+    // and the old browser releases the profile before agents can launch the replacement on it.
+    expect(order).toEqual(['attach undefined', 'close old', 'attach replacement']);
     expect(replacement.close).not.toHaveBeenCalled();
+  });
+
+  it('does not attach or save a browser that a later /browser command replaced while the old one closed', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const first = { id: 'first', close: vi.fn(async () => {}) };
+    const second = { id: 'second', close: vi.fn(async () => {}) };
+    browserMocks.createBrowserFromSettings
+      .mockResolvedValueOnce(browserInstance)
+      .mockResolvedValueOnce(first)
+      .mockResolvedValueOnce(second);
+
+    await handleBrowserCommand(ctx, ['on']);
+    browserMocks.saveSettings.mockClear();
+
+    let finishOldClose!: () => void;
+    browserInstance.close.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
+    const losing = handleBrowserCommand(ctx, ['on']);
+    await vi.waitFor(() => expect(finishOldClose).toBeDefined());
+    await handleBrowserCommand(ctx, ['on']);
+    finishOldClose();
+    await losing;
+
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(first);
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
+    expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
+    expect(ctx.showInfo).toHaveBeenCalledWith('Another /browser command replaced this browser.');
   });
 
   it('closes the running browser when the browser is turned off', async () => {

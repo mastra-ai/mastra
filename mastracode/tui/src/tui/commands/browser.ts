@@ -308,17 +308,14 @@ async function applyBrowserToAgents(
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
   chatModelId?: string,
-): Promise<void> {
-  // The old browser must release its profile before the new one can launch on it.
+): Promise<boolean> {
+  // Detach the old browser before closing it, so an agent can't relaunch it
+  // while it closes. The old browser must release its profile before the new
+  // one can launch on it.
+  setAgentsBrowser(ctx, undefined);
   // If a later /browser call replaced this browser meanwhile, that call owns the agents.
-  if (!(await replaceActiveBrowser(browser))) return;
-  const modes = ctx.controller.listModes();
-  let agentControllerState: unknown;
-  for (const mode of modes) {
-    const agent = resolveModeAgent(mode, (agentControllerState ??= ctx.state.session.state.get()));
-    agent?.setBrowser?.(browser);
-  }
-  ctx.state.local?.controller.setBrowser(browser);
+  if (!(await replaceActiveBrowser(browser))) return false;
+  setAgentsBrowser(ctx, browser);
   // Track the active browser settings in controller state, plus the model the
   // browser was actually created with (credentials/chat model may change afterwards).
   void ctx.state.session.state.set({
@@ -327,6 +324,16 @@ async function applyBrowserToAgents(
       ? resolveStagehandModel(browserSettings, { chatModelId })
       : undefined,
   } as any);
+  return true;
+}
+
+function setAgentsBrowser(ctx: SlashCommandContext, browser: MastraBrowser | undefined): void {
+  let agentControllerState: unknown;
+  for (const mode of ctx.controller.listModes()) {
+    const agent = resolveModeAgent(mode, (agentControllerState ??= ctx.state.session.state.get()));
+    agent?.setBrowser?.(browser);
+  }
+  ctx.state.local?.controller.setBrowser(browser);
 }
 
 /**
@@ -644,7 +651,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     try {
       const chatModelId = launchChatModelId(ctx);
       const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
-      await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
+      if (!(await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId))) {
+        ctx.showInfo('Another /browser command replaced this browser.');
+        return;
+      }
       if (nextBrowser.profile && nextBrowser.provider) {
         setProfileProvider(nextBrowser.profile, nextBrowser.provider);
       }
@@ -761,7 +771,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     if (!browserInstance && browser.enabled) {
       const chatModelId = launchChatModelId(ctx);
       browserInstance = await createBrowserFromSettings(browser, { chatModelId });
-      await applyBrowserToAgents(ctx, browserInstance, browser, chatModelId);
+      if (!(await applyBrowserToAgents(ctx, browserInstance, browser, chatModelId))) {
+        ctx.showError('Another /browser command replaced the browser. Run the export again.');
+        return;
+      }
     }
 
     if (!browserInstance) {
@@ -993,7 +1006,10 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   const chatModelId = launchChatModelId(ctx);
   try {
     const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
-    await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
+    if (!(await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId))) {
+      ctx.showInfo('Another /browser command replaced this browser.');
+      return;
+    }
     if (nextBrowser.profile && nextBrowser.provider) {
       setProfileProvider(nextBrowser.profile, nextBrowser.provider);
     }
