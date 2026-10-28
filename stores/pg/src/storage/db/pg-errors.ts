@@ -8,6 +8,38 @@
  * look" so every other error surfaces normally.
  */
 
+export class IndexBuildError extends Error {
+  constructor(indexName: string, schemaName: string, state: string, cause?: unknown) {
+    super(`Could not create index ${schemaName}.${indexName}: ${state}`, { cause });
+    this.name = 'IndexBuildError';
+  }
+}
+
+function* causes(error: unknown): Generator<object> {
+  const seen = new Set<object>();
+  while (typeof error === 'object' && error !== null && !seen.has(error)) {
+    seen.add(error);
+    yield error;
+    error = 'cause' in error ? error.cause : undefined;
+  }
+}
+
+/** Index recovery owns its retry budget, even through an outer MastraError. */
+export function isRetryableDeadlock(error: unknown): boolean {
+  for (const cause of causes(error)) {
+    if (cause instanceof IndexBuildError) return false;
+  }
+  for (const cause of causes(error)) {
+    if ('code' in cause && cause.code === '40P01') return true;
+  }
+  return false;
+}
+
+export async function backoffAfterDeadlock(attempt: number): Promise<void> {
+  const base = 50 * 2 ** (attempt - 1);
+  await new Promise(resolve => setTimeout(resolve, base + Math.random() * base * 2));
+}
+
 interface PgErrorLike {
   code?: string;
   constraint?: string;
