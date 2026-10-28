@@ -80,6 +80,7 @@ export function valueYAxis({
   const tickCount = chartYTickCount(size.height);
   // Recharts rounds its step up to fit the tick count, so a $4.40 peak got an $8 axis.
   const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount, integer);
+  const labels = (ticks ?? domain)?.map(formatter);
   return (
     <YAxis
       yAxisId={id}
@@ -88,7 +89,7 @@ export function valueYAxis({
       tick={CHART_TICK}
       tickLine={false}
       axisLine={false}
-      width="auto"
+      width={yAxisWidth(show, labels)}
       tickMargin={4}
       tickFormatter={formatter}
       domain={ticks ? [0, ticks.at(-1) ?? 0] : domain}
@@ -96,6 +97,37 @@ export function valueYAxis({
       tickCount={tickCount}
     />
   );
+}
+
+/**
+ * The y-axis width for its tick labels, from canvas text metrics. Recharts' `width="auto"` reads
+ * each label's box from the DOM on every redraw, which forces a page layout per chart. A hidden
+ * axis takes no room; with no known labels, Recharts measures.
+ */
+function yAxisWidth(show: boolean, labels: string[] | undefined) {
+  if (!show) return 0;
+  if (!labels) return 'auto';
+  const widest = Math.max(0, ...labels.map(textWidth));
+  // Plus the tick margin (4) and Recharts' default tick size (6), which it counts with hidden tick lines.
+  return Math.ceil(widest + 4 + 6);
+}
+
+let measureContext: CanvasRenderingContext2D | undefined;
+let measureContextTried = false;
+
+function textWidth(text: string) {
+  if (!measureContextTried) {
+    measureContextTried = true;
+    measureContext = createMeasureContext();
+  }
+  return measureContext ? measureContext.measureText(text).width : text.length * CHART_AXIS_FONT_SIZE * 0.6;
+}
+
+function createMeasureContext() {
+  if (typeof document === 'undefined') return undefined;
+  const context = document.createElement('canvas').getContext('2d') ?? undefined;
+  if (context) context.font = `${CHART_AXIS_FONT_SIZE}px ${getComputedStyle(document.body).fontFamily}`;
+  return context;
 }
 
 /** The largest number under `keys` in any row; with `stacked`, the largest row total. */
