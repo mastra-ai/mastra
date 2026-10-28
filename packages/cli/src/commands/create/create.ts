@@ -98,7 +98,8 @@ export interface CreateOptions {
 
 /** The Gateway key and credits, set up during the shared Mastra sign-in. */
 type GatewaySetupResult =
-  | { status: 'ready'; apiKey: string; orgName: string; remaining: number; added?: number }
+  /** `remaining` is undefined when the balance couldn't be read. */
+  | { status: 'ready'; apiKey: string; orgName: string; remaining?: number; added?: number }
   | { status: 'failed'; error: unknown };
 
 type PlatformSetupResult =
@@ -560,7 +561,7 @@ async function setUpGateway({
     const apiKey = await createGatewayApiKey(token, org.orgId, projectName);
     signal.throwIfAborted();
     // Credits are optional: a failed balance read or checkout still keeps the new key.
-    let outcome: { remaining: number; added?: number } = { remaining: 0 };
+    let outcome: { remaining?: number; added?: number } = {};
     try {
       const credits = await getGatewayCredits(token, org.orgId);
       outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
@@ -611,12 +612,15 @@ async function finishGatewaySetup({
     outcome: 'completed',
     credits_added: gateway.added ?? 0,
   });
+  const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.`;
+  const creditsCommand = color.cyan('npx mastra gateway credits');
+  if (gateway.remaining === undefined) {
+    return `${written}\nModel calls are paid per token from Gateway credits. Check your balance with ${creditsCommand}`;
+  }
   const balance = `Balance: ${formatCredits(gateway.remaining)} in ${gateway.orgName}. Model calls are paid per token from these credits.`;
   const topUp =
-    gateway.remaining > 0
-      ? ''
-      : `\n${color.yellow('Model calls fail until you add credits:')} ${color.cyan('npx mastra gateway credits')}`;
-  return `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.\n${balance}${topUp}`;
+    gateway.remaining > 0 ? '' : `\n${color.yellow('Model calls fail until you add credits:')} ${creditsCommand}`;
+  return `${written}\n${balance}${topUp}`;
 }
 
 interface PostCreateSetupResult {

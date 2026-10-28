@@ -596,8 +596,9 @@ describe('managed Gateway', () => {
     expect(prompts.log.warn).toHaveBeenCalledWith('Could not add credits: Requires role: admin');
     expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
     expect(prompts.note).toHaveBeenCalledWith(
-      expect.stringContaining('Model calls fail until you add credits: npx mastra gateway credits'),
+      expect.stringContaining('Check your balance with npx mastra gateway credits'),
     );
+    expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Balance: $0.00'));
   });
 
   it('explains how to add a key when sign-in is skipped', async () => {
