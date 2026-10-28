@@ -7,7 +7,11 @@ import type {
 import type { DbClient } from '../../../client';
 import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
 import { missingPreviewSql, readPreview } from './preview-compat';
-import { compileThreadQueryPredicate, runWithPostgresTraceQueryTimeout } from './trace-query';
+import {
+  compileThreadQueryPredicate,
+  runWithPostgresTraceQueryTimeout,
+  timeToFirstTokenSupported,
+} from './trace-query';
 
 const contextFields = [
   'resourceId',
@@ -120,7 +124,7 @@ export function compilePostgresThreadRowsQuery(
       ? 's."inWindow"'
       : `s."${plan.timeRange.field}" >= $1 AND s."${plan.timeRange.field}" < $2`;
   const filtered = predicateFields(plan.where);
-  const firstContext = [...contextFields, 'timeToFirstChunkMs'].filter(
+  const firstContext = [...contextFields, 'timeToFirstChunkMs', 'timeToFirstTokenMs'].filter(
     field => field === 'resourceId' || filtered.has(field),
   );
   const lastFields = [
@@ -135,7 +139,7 @@ export function compilePostgresThreadRowsQuery(
   const text = `WITH ${scopedRoots}, ${strategy === 'candidates' ? `${candidates}, ` : ''}current_roots AS (
     SELECT DISTINCT ON ("organizationId", "traceId")
       "organizationId", "threadId", "traceId", "spanId", "cursorId", "startedAt", "endedAt", "isPending",
-      ${firstContext.map(field => (field === 'timeToFirstChunkMs' ? `CASE WHEN "spanType" = 'agent_run' THEN "timeToFirstChunkMs" END AS "timeToFirstChunkMs"` : `"${field}"`)).join(', ')}
+      ${firstContext.map(field => (field === 'timeToFirstChunkMs' || field === 'timeToFirstTokenMs' ? `CASE WHEN "spanType" = 'agent_run' THEN "${field}" END AS "${field}"` : `"${field}"`)).join(', ')}
       ${filtered.has('status') ? ", CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status" : ''}
     FROM scoped_roots ${strategy === 'candidates' ? `WHERE (${identity('traceId')}) IN (SELECT ${identity('traceId')} FROM candidate_traces)` : ''}
     ORDER BY "organizationId", "traceId", "startedAt" ASC, "spanId" COLLATE "C", "cursorId" DESC
@@ -223,6 +227,7 @@ export async function queryThreadRows(
   const payloads = await run<Record<string, unknown>>(
     `SELECT "organizationId", "traceId", "cursorId", ${contextFields.map(field => `"${field}"`).join(', ')},
     CASE WHEN "spanType" = 'agent_run' THEN "timeToFirstChunkMs" END AS "timeToFirstChunkMs",
+    CASE WHEN "spanType" = 'agent_run' THEN "timeToFirstTokenMs" END AS "timeToFirstTokenMs",
     CASE WHEN error IS NULL THEN 'success' ELSE 'error' END AS status,
     ${(['input', 'output', 'error'] as const).map(field => `"${field}Preview", CASE WHEN ${missingPreviewSql(`"${field}Preview"`)} THEN "${field}" END AS "${field}"`).join(', ')}
     FROM ${table} WHERE ${keys.join(' OR ')}`,
@@ -246,6 +251,7 @@ export async function queryThreadRows(
         endedAt: row.endedAt.toISOString(),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
+        ...(timeToFirstTokenSupported && { timeToFirstTokenMs: first.timeToFirstTokenMs }),
         inputPreview: readPreview(first.inputPreview, first.input),
         outputPreview: readPreview(last.outputPreview, last.output),
         errorPreview: readPreview(last.errorPreview, last.error),

@@ -48,9 +48,15 @@ export const timeToFirstChunkSupported = 'timeToFirstChunkMs' in coreStorage.TRA
 /** Core before the sort rejects `orderBy` on the field, so the sort is only declared when core plans it. */
 const timeToFirstChunkSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstChunkMs') === true;
 
-export const timeToFirstChunkFeatures = [
+/** Same rule for time to first token: returned and sorted only when core knows the field. */
+export const timeToFirstTokenSupported = 'timeToFirstTokenMs' in coreStorage.TRACE_QUERY_FIELD_REGISTRY.trace;
+const timeToFirstTokenSortSupported = coreStorage.TRACE_QUERY_ORDER_FIELDS?.includes('timeToFirstTokenMs') === true;
+
+export const timingFeatures = [
   ...(timeToFirstChunkSupported ? (['trace-query-time-to-first-chunk'] as const) : []),
   ...(timeToFirstChunkSortSupported ? (['trace-query-time-to-first-chunk-sort'] as const) : []),
+  ...(timeToFirstTokenSupported ? (['trace-query-time-to-first-token'] as const) : []),
+  ...(timeToFirstTokenSortSupported ? (['trace-query-time-to-first-token-sort'] as const) : []),
 ];
 
 /**
@@ -89,6 +95,7 @@ const TRACE_FIELDS = {
   endedAt: 'r."endedAt"',
   durationMs: durationMsSql('r."startedAt"', 'r."endedAt"'),
   timeToFirstChunkMs: 'r."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 'r."timeToFirstTokenMs"',
   entityId: 'r."entityId"',
   entityName: 'r."entityName"',
   entityType: 'r."entityType"',
@@ -108,6 +115,7 @@ const SPAN_FIELDS = {
   endedAt: 's."endedAt"',
   durationMs: 's."durationMs"',
   timeToFirstChunkMs: 's."timeToFirstChunkMs"',
+  timeToFirstTokenMs: 's."timeToFirstTokenMs"',
   status: 's."status"',
   error: 's."error"',
   entityType: 's."entityType"',
@@ -183,6 +191,7 @@ const TRACE_SELECT = `
   r."startedAt" AS "startedAt",
   r."endedAt" AS "endedAt",
   r."timeToFirstChunkMs" AS "timeToFirstChunkMs",
+  r."timeToFirstTokenMs" AS "timeToFirstTokenMs",
   r."entityName" AS "entityName",
   r."entityType" AS "entityType",
   r."environment" AS "environment",
@@ -633,6 +642,7 @@ function compilePostgresTraceScope(
         ELSE ${durationMsSql('s."startedAt"', 's."endedAt"')}
       END AS "durationMs",
       s."timeToFirstChunkMs",
+      s."timeToFirstTokenMs",
       CASE WHEN s."error" IS NOT NULL THEN 'error' ELSE 'success' END AS "status",
       s."error",
       s."entityType",
@@ -1107,6 +1117,9 @@ function traceRowToResult(row: Record<string, unknown>) {
     endedAt: asIsoTimestamp(row.endedAt),
     ...(timeToFirstChunkSupported && {
       timeToFirstChunkMs: row.timeToFirstChunkMs == null ? null : Number(row.timeToFirstChunkMs),
+    }),
+    ...(timeToFirstTokenSupported && {
+      timeToFirstTokenMs: row.timeToFirstTokenMs == null ? null : Number(row.timeToFirstTokenMs),
     }),
     entityName: row.entityName == null ? null : String(row.entityName),
     entityType: row.entityType == null ? null : String(row.entityType),

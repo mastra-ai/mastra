@@ -13,6 +13,7 @@ import {
   compileSpanQueryPredicate,
   keysetSortBounds,
   timeToFirstChunkSupported,
+  timeToFirstTokenSupported,
   runWithPostgresTraceQueryTimeout,
 } from './trace-query';
 
@@ -44,6 +45,7 @@ const fields = [
   'environment',
   'executionSource',
   'timeToFirstChunkMs',
+  'timeToFirstTokenMs',
 ];
 const identities = identityFields.map(field => `"${field}"`).join(', ');
 const identityOrder = identityFields.map(field => `"${field}" COLLATE "C" ASC NULLS LAST`).join(', ');
@@ -203,12 +205,15 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
     async tx => {
       const query = compilePostgresSpanQuery(schema, plan);
       const rows = await tx.any<Selected>(query.text, query.values);
-      const selected = rows.map(({ version: _version, startedAt, endedAt, timeToFirstChunkMs, ...row }) => ({
-        ...row,
-        ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
-        startedAt: startedAt.toISOString(),
-        endedAt: endedAt.toISOString(),
-      }));
+      const selected = rows.map(
+        ({ version: _version, startedAt, endedAt, timeToFirstChunkMs, timeToFirstTokenMs, ...row }) => ({
+          ...row,
+          ...(timeToFirstChunkSupported && { timeToFirstChunkMs }),
+          ...(timeToFirstTokenSupported && { timeToFirstTokenMs }),
+          startedAt: startedAt.toISOString(),
+          endedAt: endedAt.toISOString(),
+        }),
+      );
       const page = rows.slice(0, plan.limit);
       if (!page.length) return buildSpanQueryResponse(plan, [], []);
       const remaining = async () => {
