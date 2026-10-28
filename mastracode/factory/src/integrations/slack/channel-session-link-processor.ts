@@ -109,7 +109,7 @@ function linkSuffix(link: string): string {
   return `\n\n[${SESSION_LINK_LABEL}](${link})`;
 }
 
-function sessionLinkFromRequest(requestContext: RequestContext): string | undefined {
+export function sessionLinkFromRequest(requestContext: RequestContext): string | undefined {
   const controller = requestContext.get('controller') as AgentControllerRequestContext | undefined;
   if (!controller?.threadId) return undefined;
   return sessionLink({

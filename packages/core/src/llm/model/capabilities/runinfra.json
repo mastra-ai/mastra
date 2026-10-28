@@ -43,15 +43,15 @@
         "values": ["none", "low", "medium", "xhigh"]
       }
     ],
-    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
-      }
-    ],
     "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
       {
         "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -60,10 +60,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "Inferact/Qwen3.8-2.4T-A95B-NVFP4": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

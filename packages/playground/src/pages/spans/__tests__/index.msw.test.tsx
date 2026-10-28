@@ -1,5 +1,5 @@
 import type { GetObservabilityCapabilitiesResponse, QuerySpansInput, QuerySpansResult } from '@mastra/client-js';
-import { TRACES_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/traces/hooks/use-traces-list-source';
+import { OBSERVABILITY_LIST_REFETCH_INTERVAL_MS } from '@mastra/playground-ui/domains/observability/list-polling';
 import type { CollapsiblePanelHandle } from '@mastra/playground-ui/resize/collapsible-panel';
 import { focusManager } from '@tanstack/react-query';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
@@ -126,7 +126,7 @@ function setSpansHandlers(
 describe('Spans page', () => {
   // jsdom has no layout, so the list virtualizer sees a zero-height scroll container and
   // renders no rows. Report a fixed viewport so rows materialize.
-  let layoutStubs: { rect: ReturnType<typeof vi.spyOn>; resizeObserver: typeof ResizeObserver };
+  let layoutStubs: { rects: ReturnType<typeof vi.spyOn>[]; resizeObserver: typeof ResizeObserver };
   beforeEach(() => {
     const originalResizeObserver = globalThis.ResizeObserver;
     class LayoutResizeObserver {
@@ -153,12 +153,17 @@ describe('Spans page', () => {
     }
     globalThis.ResizeObserver = LayoutResizeObserver;
     layoutStubs = {
-      rect: vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+      rects: [
+        vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600)),
+        // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+        vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800),
+        vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600),
+      ],
       resizeObserver: originalResizeObserver,
     };
   });
   afterEach(() => {
-    layoutStubs.rect.mockRestore();
+    layoutStubs.rects.forEach(stub => stub.mockRestore());
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
     vi.useRealTimers();
     focusManager.setFocused(undefined);
@@ -521,7 +526,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       serverDown = false;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS));
 
       expect(await screen.findByText('agent run: weather')).toBeTruthy();
     });
@@ -541,7 +546,7 @@ describe('Spans page', () => {
       renderPage();
       await screen.findByText('Failed to load spans');
       const requestsAfterFailure = requests.length;
-      await act(() => vi.advanceTimersByTimeAsync(TRACES_LIST_REFETCH_INTERVAL_MS * 3));
+      await act(() => vi.advanceTimersByTimeAsync(OBSERVABILITY_LIST_REFETCH_INTERVAL_MS * 3));
 
       expect(requests).toHaveLength(requestsAfterFailure);
     });

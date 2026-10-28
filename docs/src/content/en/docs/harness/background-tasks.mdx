@@ -238,6 +238,8 @@ If a subagent isn't listed under the supervisor's `backgroundTasks.tools` but ha
 The background config used for the inherited dispatch (for example `waitTimeoutMs`) is derived from the subagent's own `backgroundTasks` config.
 
 ```typescript title="src/mastra/agents/researcher.ts"
+import { Agent } from '@mastra/core/agent'
+
 const researchAgent = new Agent({
   id: 'research-agent',
   description: 'Gathers factual information.',
@@ -340,6 +342,8 @@ Each layer can register terminal-state callbacks. They don't replace one another
 - Manager-level `onTaskComplete` / `onTaskFailed`: scoped globally. These fire for every task, including tasks from [non-agent owners](#non-agent-owners).
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   storage,
   backgroundTasks: {

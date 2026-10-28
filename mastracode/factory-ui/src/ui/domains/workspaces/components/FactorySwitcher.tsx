@@ -1,6 +1,7 @@
 import { DropdownMenu } from '@mastra/playground-ui/components/DropdownMenu';
 import { useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Check, ChevronDown, Factory as FactoryIcon, Plus } from 'lucide-react';
 import { Link, useLocation, useNavigate, useParams } from 'react-router';
 import { useFactoriesQuery, useFactoryQuery } from '../../../../hooks/useFactories';
@@ -34,9 +35,17 @@ export function FactorySwitcher() {
         className="-ml-[calc(var(--button-px)-2px)] min-w-0 gap-1"
       >
         <FactoryIcon />
-        <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
-          {activeFactory?.name ?? 'Select a factory…'}
-        </Txt>
+        {factoryId && activeFactoryQuery.isPending ? (
+          <Skeleton
+            role="status"
+            aria-label="Loading factory"
+            className="h-3.5 w-24 motion-reduce:before:animate-none"
+          />
+        ) : (
+          <Txt tone="ink" as="span" variant="caption" className="min-w-0 truncate">
+            {activeFactory?.name ?? 'Select a factory…'}
+          </Txt>
+        )}
         <ChevronDown size={14} className="text-muted-foreground shrink-0" />
       </DropdownMenu.Trigger>
       <DropdownMenu.Content align="start" className="w-64">

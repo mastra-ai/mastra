@@ -794,6 +794,7 @@ const agentThreadBodySchema = z.object({
 });
 
 export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withRunStatus: z.boolean().optional().describe('Emit thread-run-status chunks, including retained outcomes'),
   withInitialHistory: z
     .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
     .optional()

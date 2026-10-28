@@ -27,6 +27,7 @@ npm install @mastra/s3vectors@latest
 import { S3Vectors } from '@mastra/s3vectors'
 
 const store = new S3Vectors({
+  id: 's3-vectors',
   vectorBucketName: process.env.S3_VECTORS_BUCKET_NAME!, // e.g. "my-vector-bucket"
   clientConfig: {
     region: process.env.AWS_REGION!, // credentials use the default AWS provider chain
@@ -77,6 +78,11 @@ await store.disconnect()
 
 <PropertiesTable
   content={[
+  {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
   {
     name: 'vectorBucketName',
     type: 'string',

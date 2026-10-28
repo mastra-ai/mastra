@@ -9,6 +9,7 @@ import { InMemoryNotificationsStorage } from '../../notifications/storage';
 import { createNotificationInboxTool } from '../../notifications/tool';
 import { MastraCompositeStore } from '../../storage/base';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable';
 import { createSignal } from '../signals';
 import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import {
@@ -77,6 +78,60 @@ describe('Agent signals: state and notification signals', () => {
         }),
       }),
     );
+  });
+
+  it('sends notifications from a registered durable agent fork', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'fork-notification-storage', domains: { notifications } });
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'fork-notification-agent',
+        name: 'Fork Notification Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+      }),
+    });
+    const mastra = new Mastra({ agents: { forkNotificationAgent: agent }, storage, logger: false });
+    const fork = agent.__fork();
+
+    expect(fork.getMastraInstance()).toBe(mastra);
+    const result = await fork.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', summary: 'CI failed on main' },
+      { resourceId: 'notification-user', threadId: 'notification-thread', ifIdle: { behavior: 'persist' } },
+    );
+
+    expect(result.record).toMatchObject({ agentId: agent.id, status: 'pending' });
+    await expect(
+      notifications.getNotification({ threadId: 'notification-thread', id: result.record.id }),
+    ).resolves.toBeDefined();
+  });
+
+  it('uses the wrapped agent notification policy on durable agents and their forks', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'durable-policy-storage', domains: { notifications } });
+    const deliverAt = new Date('2100-12-01T12:00:00Z');
+    const decide = vi.fn(() => ({ action: 'defer' as const, deliverAt, reason: 'after-hours' }));
+    const agent = createDurableAgent({
+      agent: new Agent({
+        id: 'durable-policy-agent',
+        name: 'Durable Policy Agent',
+        instructions: 'Test',
+        model: createTextStreamModel('unused'),
+        notifications: { deliveryPolicy: { decide } },
+      }),
+    });
+    new Mastra({ agents: { durablePolicyAgent: agent }, storage, logger: false });
+
+    for (const target of [agent, agent.__fork()]) {
+      const result = await target.sendNotificationSignal(
+        { source: 'calendar', kind: 'event-reminder', summary: 'Planning starts tomorrow' },
+        { resourceId: 'notification-user', threadId: 'notification-thread' },
+      );
+      expect(result.decision).toMatchObject({ action: 'defer', reason: 'after-hours' });
+      expect(result.record).toMatchObject({ status: 'pending', deliveryReason: 'after-hours' });
+      expect(result.signal).toBeUndefined();
+    }
+    expect(decide).toHaveBeenCalledTimes(2);
   });
 
   it('delivers medium-priority notification records while idle', async () => {

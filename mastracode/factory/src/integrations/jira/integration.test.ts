@@ -5,6 +5,7 @@ import { JiraApiError } from './api.js';
 import { JiraIntegration } from './integration.js';
 
 const BASE = 'https://acme.atlassian.net';
+const API_BASE = 'https://api.atlassian.com/ex/jira/cloud-123';
 
 function integration(): JiraIntegration {
   return new JiraIntegration({ baseUrl: BASE, email: 'ops@acme.test', apiToken: 'jira-token' });
@@ -106,6 +107,24 @@ describe('JiraIntegration capability surface', () => {
     ]);
   });
 
+  it('uses a scoped-token API URL while preserving Jira site links', async () => {
+    const fetchMock = stubRoutes([
+      ['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()] })],
+    ]);
+    const jira = new JiraIntegration({
+      baseUrl: `${BASE}/`,
+      apiBaseUrl: `${API_BASE}/`,
+      email: 'ops@acme.test',
+      apiToken: 'jira-token',
+    });
+
+    const page = await jira.intake.listIssues({ connection, sourceIds: ['ENG'] });
+
+    expect(fetchMock).toHaveBeenCalledOnce();
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${API_BASE}/rest/api/3/search/jql`);
+    expect(page.issues[0]?.url).toBe(`${BASE}/browse/ENG-42`);
+  });
+
   it('normalizes Jira issues through the shared Intake contract with sanitized JQL and cursor round-trip', async () => {
     const fetchMock = stubRoutes([
       ['POST', '/rest/api/3/search/jql', () => jsonResponse({ issues: [issue()], nextPageToken: 'page-2' })],
@@ -118,6 +137,7 @@ describe('JiraIntegration capability surface', () => {
       cursor: 'page-1',
     });
 
+    expect(String(fetchMock.mock.calls[0]?.[0])).toBe(`${BASE}/rest/api/3/search/jql`);
     const body = JSON.parse(String(fetchMock.mock.calls[0]?.[1]?.body)) as { jql: string; nextPageToken?: string };
     expect(body.jql).toBe(
       'project IN (1, "ENG") AND statusCategory != Done AND labels IN ("bug", "urgent") ORDER BY updated DESC',

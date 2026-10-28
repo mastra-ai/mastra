@@ -174,8 +174,8 @@ const PARSED = { reply: 'hi', number: 7 };
 
 /**
  * The two ways the wrapped engines' structured-output chunks differ from
- * plain's (both COR-1390, both pre-existing): they emit `object-result` after
- * `step-finish` and `finish` rather than before them, and their `step-finish`
+ * plain's (COR-1390): they emit `object-result` after `step-finish` but before
+ * `finish` rather than before both, and their `step-finish`
  * payload does not carry the parsed object. Declaring both as the expectation
  * keeps every parsed value itself compared.
  */
@@ -185,11 +185,12 @@ function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation
     turns: plain.turns.map(turn => {
       const objectIndex = turn.chunkTypes.indexOf('object-result');
       if (objectIndex < 0) return turn;
-      const move = <T>(list: T[]): T[] => [
-        ...list.slice(0, objectIndex),
-        ...list.slice(objectIndex + 1),
-        list[objectIndex]!,
-      ];
+      const move = <T>(list: T[]): T[] => {
+        const copy = [...list];
+        const [object] = copy.splice(objectIndex, 1);
+        copy.splice(turn.chunkTypes.filter(type => type !== 'object-result').indexOf('finish'), 0, object!);
+        return copy;
+      };
       const chunkTypes = move(turn.chunkTypes);
       const chunkPayloads = move(turn.chunkPayloads);
       const stepFinish = chunkTypes.indexOf('step-finish');
@@ -206,11 +207,13 @@ function declareWrappedObjectChunks(plain: EngineObservation): EngineObservation
 
 const DECLARE_OBJECT_CHUNKS = {
   durable: {
-    reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+    reason:
+      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
     expect: declareWrappedObjectChunks,
   },
   evented: {
-    reason: 'COR-1390: wrapped engines emit object-result last and omit the parsed object from step-finish',
+    reason:
+      'COR-1390: wrapped engines emit object-result after step-finish but before finish and omit the parsed object from step-finish',
     expect: declareWrappedObjectChunks,
   },
 };
@@ -490,7 +493,8 @@ describeParity('parity mode', target => {
     // The order difference the declaration above covers is real, on both sides.
     const plainTypes = results.plain!.turns[0]!.chunkTypes;
     expect(plainTypes.indexOf('object-result')).toBeLessThan(plainTypes.indexOf('step-finish'));
-    expect(results[target]!.turns[0]!.chunkTypes.at(-1)).toBe('object-result');
+    const wrappedTypes = results[target]!.turns[0]!.chunkTypes;
+    expect(wrappedTypes.indexOf('object-result')).toBe(wrappedTypes.indexOf('finish') - 1);
   });
 
   it('runs a generate() turn on plain and the target engine and compares it', async () => {
