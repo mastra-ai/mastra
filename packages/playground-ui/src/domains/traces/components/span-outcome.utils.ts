@@ -107,6 +107,8 @@ interface MutationTally {
 function tallyMutations(mutations: ProcessorPipelineDescription['messageListMutations']): MutationTally {
   const tally: MutationTally = { added: 0, addedSystem: 0, removed: 0 };
   for (const mutation of mutations ?? []) {
+    // The log is only checked to be an array: skip an entry we cannot read, the Changes section shows it as JSON.
+    if (typeof mutation !== 'object' || mutation === null) continue;
     const amount = mutation.count ?? mutation.ids?.length ?? 1;
     if (mutation.type === 'add') tally.added += amount;
     else if (mutation.type === 'addSystem') tally.addedSystem += amount;
@@ -309,11 +311,12 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
 
 // --- Model, tool, agent and chunk spans -------------------------------------------------------
 
+// Hidden tools (task list, working memory) stay out of the count, as they do out of the Tool calls list.
 const toolNamesOf = (value: unknown): string[] =>
   Array.isArray(value)
     ? value.flatMap(call => {
         const name = isRecord(call) ? asText(call.toolName) : undefined;
-        return name ? [name] : [];
+        return name && !isHiddenTool(name) ? [name] : [];
       })
     : [];
 

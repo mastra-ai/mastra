@@ -298,6 +298,16 @@ describe('processor spans in the data panel', () => {
     expect(changes.textContent).toContain('Task list state may appear.');
     expect(changes.textContent).not.toContain('You are Michel.');
   });
+
+  it('still opens a processor whose mutation log holds an entry it cannot read', () => {
+    const span = makeSpan({
+      ...processorClearedMessagesSpan,
+      attributes: { processorPhase: 'input', messageListMutations: [null, { type: 'clear', count: 2 }] },
+    });
+    render(<SpanDataPanelView traceId="t" spanId="s" span={span} />);
+    expect(slot('span-outcome')?.textContent).toContain('removed 2 messages from the conversation');
+    expect(slot('span-processor-mutations')?.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+  });
 });
 
 describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) => {

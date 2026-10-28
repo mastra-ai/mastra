@@ -48,8 +48,7 @@ const DB_FIELDS = ['createdAt', 'updatedAt', 'status'];
 const pick = <T>(items: T[]): T => items[Math.floor(Math.random() * items.length)]!;
 const gaussian = () => Math.sqrt(-2 * Math.log(1 - Math.random())) * Math.cos(2 * Math.PI * Math.random());
 
-const freshId = (id: string) =>
-  id.includes('-') ? randomUUID() : randomBytes(id.length / 2).toString('hex');
+const freshId = (id: string) => (id.includes('-') ? randomUUID() : randomBytes(id.length / 2).toString('hex'));
 
 /** Start times: more traffic as the window gets closer to today, less on weekends, peaking mid-afternoon. */
 function startTimes(): number[] {
@@ -60,11 +59,19 @@ function startTimes(): number[] {
     return (0.35 + (0.65 * i) / days) * weekend * (0.8 + Math.random() * 0.4);
   });
   const total = weights.reduce((sum, w) => sum + w, 0);
+  // Largest remainder: floor every day's share, then hand the runs rounding dropped to the days closest to their next run.
+  const shares = weights.map(weight => (weight / total) * runs);
+  const counts = shares.map(Math.floor);
+  const dropped = runs - counts.reduce((sum, count) => sum + count, 0);
+  shares
+    .map((share, i) => ({ i, remainder: share - counts[i]! }))
+    .sort((a, b) => b.remainder - a.remainder)
+    .slice(0, dropped)
+    .forEach(({ i }) => counts[i]!++);
   const times: number[] = [];
-  weights.forEach((weight, i) => {
+  weights.forEach((_, i) => {
     const dayStart = Math.floor((now - (days - i) * DAY) / DAY) * DAY;
-    const count = Math.round((weight / total) * runs);
-    for (let n = 0; n < count; n++) {
+    for (let n = 0; n < counts[i]!; n++) {
       const hour = Math.min(23.9, Math.max(0, 14 + gaussian() * 3.5));
       const time = dayStart + hour * 3_600_000 + Math.random() * 60_000;
       if (time < now - 10 * 60_000) times.push(time);
@@ -92,8 +99,11 @@ function cloneBundle(template: Bundle, start: number): Bundle {
     for (const field of DATE_FIELDS) if (typeof row[field] === 'string') row[field] = new Date(row[field]);
   }
   for (const metric of bundle.metrics) {
-    const scale = metric.name.endsWith('_tokens') ? tokenScale : durationScale;
+    const isTokens = metric.name.endsWith('_tokens');
+    const scale = isTokens ? tokenScale : durationScale;
     metric.value = Math.round(metric.value * scale);
+    // A token count's cost follows the count, so usage and spend keep describing the same work.
+    if (isTokens && typeof metric.estimatedCost === 'number') metric.estimatedCost *= tokenScale;
   }
   for (const score of bundle.scores) {
     if (score.scorerId === 'alternating-scorer') score.score = Math.random() < 0.6 ? 1 : 0;

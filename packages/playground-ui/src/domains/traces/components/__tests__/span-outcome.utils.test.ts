@@ -246,6 +246,7 @@ describe('getSpanOutcome', () => {
       [['weatherInfo', 'search'], 'gpt-5-mini called weatherInfo and search, then wrote the answer'],
       [['weatherInfo', 'weatherInfo', 'search'], 'gpt-5-mini called 3 tools, then wrote the answer'],
       [['a', 'b', 'c', 'd', 'e'], 'gpt-5-mini called 5 tools, then wrote the answer'],
+      [['weatherInfo', 'task_write', 'updateWorkingMemory'], 'gpt-5-mini called weatherInfo, then wrote the answer'],
     ])('summarises the tool calls made across steps: %j', (names, headline) => {
       const span = makeSpan({
         spanType: SpanType.MODEL_GENERATION,
