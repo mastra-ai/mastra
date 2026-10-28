@@ -1,7 +1,7 @@
 /**
  * Tests for browser_screenshot saving into the agent's workspace
  */
-import { mkdtemp, readFile, rm } from 'node:fs/promises';
+import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
@@ -152,6 +152,18 @@ describe('browser_screenshot', () => {
     expect(result.saveError).toMatch(reason);
     expect(result.base64).toBe(PNG.toString('base64'));
     await expect(readFile(join(dir, 'blocked.png'))).rejects.toThrow();
+  });
+
+  it("doesn't overwrite a file when overwriting needs approval", async () => {
+    await writeFile(join(dir, 'existing.png'), 'original');
+    workspace.setToolsConfig({
+      [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { requireApproval: ({ args }) => args.overwrite === true },
+    });
+
+    const result = await screenshot({ path: 'existing.png' }, { workspace });
+
+    expect(result.saveError).toMatch(/needs approval/);
+    expect(await readFile(join(dir, 'existing.png'), 'utf8')).toBe('original');
   });
 
   it("doesn't save into a read-only filesystem", async () => {

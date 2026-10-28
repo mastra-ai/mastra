@@ -31,7 +31,13 @@ export function createScreenshotTool(browser: AgentBrowser) {
         if (!filesystem) {
           return { ...result, saveError: 'There is no workspace filesystem to save the screenshot into.' };
         }
-        const blocked = await writeBlocked(workspace!, filesystem.readOnly, input, requestContext);
+        const blocked = await writeBlocked(
+          workspace!,
+          filesystem.readOnly,
+          // The same arguments the write-file tool's settings see; saving always overwrites.
+          { path: input.path, overwrite: true },
+          requestContext,
+        );
         if (blocked) return { ...result, saveError: blocked };
         await filesystem.writeFile(input.path, Buffer.from(result.base64, 'base64'), {
           recursive: true,
