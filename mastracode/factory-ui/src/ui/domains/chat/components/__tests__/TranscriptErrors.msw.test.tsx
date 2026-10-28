@@ -402,3 +402,66 @@ describe('chat run errors', () => {
     expect(await screen.findByText('New session draft')).toBeVisible();
   });
 });
+
+describe('chat run errors on an account limit', () => {
+  const rateLimited = failedReply(
+    "This request would exceed your account's rate limit. Please try again later.",
+    'AI_APICallError',
+    { statusCode: 429, modelId: 'claude-opus-5-5' },
+  );
+
+  function stubCredential(credentialHolder: 'organization' | 'personal') {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({
+          authenticated: true,
+          user: { userId: 'user-damien', name: 'Damien Schneider', organizationId: 'org-1' },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'anthropic/claude-opus-5-5',
+              provider: 'anthropic',
+              modelName: 'claude-opus-5-5',
+              hasApiKey: true,
+              credentialLabel: 'Claude Pro/Max',
+              credentialHolder,
+            },
+          ],
+          modelScope: credentialHolder === 'organization' ? 'factory' : 'user',
+          defaultModelId: null,
+        }),
+      ),
+    );
+  }
+
+  it('tells a work-item reviewer the limit belongs to the organization’s subscription, not theirs', async () => {
+    stubCredential('organization');
+    renderWithProviders(<ErrorSession messages={[rateLimited]} />);
+
+    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+  });
+
+  it('tells the chat owner the limit belongs to their own subscription', async () => {
+    stubCredential('personal');
+    renderWithProviders(<ErrorSession messages={[rateLimited]} />);
+
+    expect(await screen.findByText('Runs on Claude Pro/Max · Damien Schneider (you)')).toBeVisible();
+  });
+
+  it('does not name a credential on an older failure, which may predate a credential change', async () => {
+    stubCredential('organization');
+    renderWithProviders(<ErrorSession messages={[rateLimited, userMessage('Try again.')]} />);
+
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
+  });
+});
