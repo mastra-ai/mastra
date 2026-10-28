@@ -87,12 +87,14 @@ query({
   query,
   topK = 10,
   randomWalkSteps = 100,
-  restartProb = 0.15
+  restartProb = 0.15,
+  filter
 }: {
   query: number[];
   topK?: number;
   randomWalkSteps?: number;
   restartProb?: number;
+  filter?: Record<string, any>;
 }): RankedNode[]
 ```
 
@@ -126,6 +128,13 @@ query({
     description: 'Probability of restarting walk from query node',
     isOptional: true,
     defaultValue: '0.15',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    description:
+      'Restricts the search to nodes whose metadata matches every given key/value pair. Similarity search and the random walk both stay within matching nodes.',
+    isOptional: true,
   },
 ]}
 />

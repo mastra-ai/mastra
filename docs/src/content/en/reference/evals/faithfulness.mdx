@@ -43,7 +43,8 @@ The `createFaithfulnessScorer()` function accepts a single options object with t
             type: 'number',
             required: false,
             defaultValue: '1',
-            description: 'The maximum score value. The final score will be normalized to this scale.',
+            description:
+              'The maximum score value. The final score will be normalized to this scale. A value of 0 falls back to 1 (the implementation uses `scale || 1`).',
           },
         ],
       },
