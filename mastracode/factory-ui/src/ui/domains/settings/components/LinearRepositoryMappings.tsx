@@ -94,7 +94,7 @@ function RepositorySelect({
 }) {
   return (
     <Select value={value ?? null} disabled={disabled} onValueChange={slug => slug && onChange(slug)}>
-      <SelectTrigger size="sm" aria-label={`Repository for ${projectName}`} className="w-auto">
+      <SelectTrigger size="sm" aria-label={`Repository for ${projectName}`} className="w-auto max-w-full min-w-0">
         <Txt as="span" variant="caption">
           {value ?? 'Choose repository'}
         </Txt>

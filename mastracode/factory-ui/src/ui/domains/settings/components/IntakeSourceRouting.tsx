@@ -103,7 +103,7 @@ function SourceRoute({
           onRoute(next, next === routedFactory?.id ? board : null);
         }}
       >
-        <SelectTrigger size="sm" aria-label={`Factory for ${item.label}`} className="w-auto">
+        <SelectTrigger size="sm" aria-label={`Factory for ${item.label}`} className="w-auto max-w-full min-w-0">
           <Txt as="span" variant="caption">
             {routedFactory?.name ?? 'Not routed'}
           </Txt>
@@ -156,7 +156,7 @@ function BoardPicker({
       disabled={disabled || catalog.isPending || catalog.isError}
       onValueChange={value => onChange(value === NO_BOARD ? null : value)}
     >
-      <SelectTrigger size="sm" aria-label={`Board for ${name}`} className="w-auto">
+      <SelectTrigger size="sm" aria-label={`Board for ${name}`} className="w-auto max-w-full min-w-0">
         <Txt as="span" variant="caption">
           {label}
         </Txt>

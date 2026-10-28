@@ -115,7 +115,7 @@ export function SourcePicker(props: SourcePickerProps) {
                       )}
                     </div>
                   </div>
-                  <div className="ml-auto flex shrink-0 items-center gap-2">
+                  <div className="ml-auto flex max-w-full min-w-0 flex-wrap items-center justify-end gap-2">
                     {itemActions?.(item)}
                     <Button
                       size="sm"
