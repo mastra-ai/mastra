@@ -38,16 +38,6 @@ const SHARED_REGISTRY_SUITES = {
     manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
     extraRoots: ['@mastra/deployer'],
   },
-  softwarefactory: {
-    tag: 'softwarefactory-e2e-test',
-    manifestGlobs: [],
-    // The checked-in factory templates track `latest`; the suite pins their
-    // Mastra dependencies to this tag, so publish exactly those packages.
-    templateManifests: [
-      'templates/template-factory/package.json',
-      'templates/template-factory-self-hosted/package.json',
-    ],
-  },
 };
 
 function readJson(path) {
@@ -124,27 +114,6 @@ async function getFixtureRoots(rootDir, suite) {
   return roots;
 }
 
-/** Collect Mastra packages a checked-in template depends on (`mastra` and `@mastra/*`). */
-function collectMastraDependencies(manifest) {
-  const roots = [];
-  for (const field of DEPENDENCY_FIELDS) {
-    for (const name of Object.keys(manifest[field] || {})) {
-      if (name === 'mastra' || name.startsWith('@mastra/')) {
-        roots.push(name);
-      }
-    }
-  }
-  return roots;
-}
-
-function getTemplateManifestRoots(rootDir, suite) {
-  const roots = [];
-  for (const manifestPath of suite.templateManifests || []) {
-    roots.push(...collectMastraDependencies(readJson(join(rootDir, manifestPath))));
-  }
-  return roots;
-}
-
 function getCreateMastraBuildRoots(rootDir) {
   const turbo = readJson(join(rootDir, 'packages/create-mastra/turbo.json'));
   return (turbo.tasks?.build?.dependsOn || [])
@@ -162,11 +131,7 @@ export async function getSuitePublishRoots(rootDir, suiteName) {
     throw new Error(`Unknown shared E2E registry suite: ${suiteName}`);
   }
 
-  const roots = [
-    ...(suite.extraRoots || []),
-    ...(await getFixtureRoots(rootDir, suite)),
-    ...getTemplateManifestRoots(rootDir, suite),
-  ];
+  const roots = [...(suite.extraRoots || []), ...(await getFixtureRoots(rootDir, suite))];
   if (suite.includeCreateMastraBuildRoots) {
     roots.push(...getCreateMastraBuildRoots(rootDir));
   }
