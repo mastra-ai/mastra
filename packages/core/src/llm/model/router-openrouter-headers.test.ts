@@ -1,328 +1,228 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { createServer } from 'node:http';
+import type { IncomingHttpHeaders, Server } from 'node:http';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { Agent } from '../../agent/index.js';
-import { createMockModel } from '../../test-utils/llm-mock.js';
+import { RequestContext } from '../../request-context';
 
-// Mock the @openrouter/ai-sdk-provider-v6 module BEFORE importing it
-vi.mock('@openrouter/ai-sdk-provider-v6', async () => {
-  return {
-    createOpenRouter: vi.fn(),
-  };
-});
+type ReceivedRequest = {
+  path: string | undefined;
+  headers: IncomingHttpHeaders;
+  body: { model: string; stream?: boolean; messages: Array<{ role: string; content: string }> };
+};
 
-// Now import the mocked module
-const { createOpenRouter } = await import('@openrouter/ai-sdk-provider-v6');
+// Keep the router and native OpenRouter adapter real. Forward only the paid API
+// boundary to a socket server so these assertions cover the serialized request.
+describe.each(['generate', 'stream'] as const)('OpenRouter %s requests', method => {
+  let server: Server;
+  let received: ReceivedRequest[];
+  let destinations: string[];
 
-describe('ModelRouter - OpenRouter Headers Support', () => {
-  beforeEach(() => {
-    // Set up environment variable for OpenRouter
-    process.env.OPENROUTER_API_KEY = 'test-openrouter-key';
-
-    // Setup mock implementation to return a provider with chatModel
-    vi.mocked(createOpenRouter).mockReturnValue(
-      vi.fn((_modelId: string) => {
-        // Return a mock LanguageModelV2 instance
-        return createMockModel({
-          mockText: 'Hello from OpenRouter!',
-        });
-      }) as any,
-    );
+  beforeEach(async () => {
+    received = [];
+    destinations = [];
+    vi.stubEnv('OPENROUTER_API_KEY', 'environment-key');
+    server = createServer(async (request, response) => {
+      const chunks: Buffer[] = [];
+      for await (const chunk of request) chunks.push(Buffer.from(chunk));
+      const body: ReceivedRequest['body'] = JSON.parse(Buffer.concat(chunks).toString());
+      received.push({ path: request.url, headers: request.headers, body });
+      const metadata = { id: 'reply', created: 1, model: body.model };
+      if (body.stream) {
+        response.writeHead(200, { 'content-type': 'text/event-stream' });
+        response.end(
+          [
+            {
+              ...metadata,
+              choices: [
+                { index: 0, delta: { role: 'assistant', content: 'Hello from OpenRouter!' }, finish_reason: null },
+              ],
+            },
+            { ...metadata, choices: [{ index: 0, delta: {}, finish_reason: 'stop' }] },
+          ]
+            .map(chunk => `data: ${JSON.stringify(chunk)}\n\n`)
+            .join('') + 'data: [DONE]\n\n',
+        );
+      } else {
+        response.writeHead(200, { 'content-type': 'application/json' });
+        response.end(
+          JSON.stringify({
+            ...metadata,
+            choices: [
+              { index: 0, message: { role: 'assistant', content: 'Hello from OpenRouter!' }, finish_reason: 'stop' },
+            ],
+            usage: { prompt_tokens: 1, completion_tokens: 1, total_tokens: 2 },
+          }),
+        );
+      }
+    });
+    await new Promise<void>(resolve => server.listen(0, '127.0.0.1', resolve));
+    const address = server.address();
+    if (!address || typeof address === 'string') throw new Error('HTTP fixture did not bind a port');
+    const realFetch = globalThis.fetch;
+    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
+      const request = new Request(input, init);
+      const destination = new URL(request.url);
+      if (destination.origin !== 'https://openrouter.ai') {
+        throw new Error(`Unexpected provider URL: ${destination.origin}`);
+      }
+      destinations.push(request.url);
+      return realFetch(new Request(`http://127.0.0.1:${address.port}${destination.pathname}`, request));
+    });
   });
 
-  afterEach(() => {
-    vi.clearAllMocks();
-    delete process.env.OPENROUTER_API_KEY;
+  afterEach(async () => {
+    vi.restoreAllMocks();
+    vi.unstubAllEnvs();
+    server?.closeAllConnections();
+    if (server)
+      await new Promise<void>((resolve, reject) => server.close(error => (error ? reject(error) : resolve())));
   });
 
-  describe('Headers passing', () => {
-    it('should pass headers to createOpenRouter when using string model id', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: {
-            'HTTP-Referer': 'http://my-service/',
-            'X-Title': 'my-application-name',
-          },
-        },
-      });
+  async function ask(agent: Agent, requestContext?: RequestContext) {
+    const result =
+      method === 'generate'
+        ? await agent.generate('test', { maxSteps: 1, requestContext })
+        : await (await agent.stream('test', { maxSteps: 1, requestContext })).getFullOutput();
+    expect(result.text).toBe('Hello from OpenRouter!');
+    expect(result.finishReason).toBe('stop');
+  }
 
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify createOpenRouter was called with the headers
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
+  const cases = [
+    {
+      name: 'a routed model ID carries attribution and custom headers',
+      model: {
+        id: 'openrouter/anthropic/claude-3-5-sonnet-20241022' as const,
         headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'http://my-service/',
-          'X-Title': 'my-application-name',
-        },
-      });
-
-      // Verify the returned function was called with the model ID
-      const mockProviderFn = vi.mocked(createOpenRouter).mock.results[0].value;
-      expect(mockProviderFn).toHaveBeenCalledWith('anthropic/claude-3-5-sonnet-20241022');
-    });
-
-    it('should pass headers when using providerId/modelId format', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: {
-          providerId: 'openrouter/openai',
-          modelId: 'gpt-4o',
-          headers: {
-            'HTTP-Referer': 'https://myapp.com',
-            'X-Title': 'MyApp',
-          },
-        },
-      });
-
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify createOpenRouter was called with the headers
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'https://myapp.com',
-          'X-Title': 'MyApp',
-        },
-      });
-    });
-
-    it('should work without headers (backward compatibility)', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-      });
-
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify createOpenRouter was called with only the User-Agent header
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-        },
-      });
-    });
-
-    it('should pass custom API key along with headers', async () => {
-      const customApiKey = 'custom-openrouter-key-123';
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: {
-          id: 'openrouter/meta-llama/llama-3.1-8b-instruct',
-          apiKey: customApiKey,
-          headers: {
-            'HTTP-Referer': 'https://example.com',
-            'X-Title': 'Example App',
-          },
-        },
-      });
-
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify createOpenRouter was called with custom API key and headers
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: customApiKey,
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'https://example.com',
-          'X-Title': 'Example App',
-        },
-      });
-    });
-
-    it('should handle multiple header fields', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: {
-          id: 'openrouter/google/gemini-pro',
-          headers: {
-            'HTTP-Referer': 'https://myapp.com',
-            'X-Title': 'My Application',
-            'X-Custom-Header': 'custom-value',
-            'X-User-ID': 'user-123',
-          },
-        },
-      });
-
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify all headers were passed
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'https://myapp.com',
-          'X-Title': 'My Application',
+          'HTTP-Referer': 'https://my-service.example/',
+          'X-Title': 'My application',
           'X-Custom-Header': 'custom-value',
           'X-User-ID': 'user-123',
         },
-      });
+      },
+      expectedModel: 'anthropic/claude-3-5-sonnet-20241022',
+      expectedHeaders: {
+        'http-referer': 'https://my-service.example/',
+        'x-title': 'My application',
+        'x-custom-header': 'custom-value',
+        'x-user-id': 'user-123',
+      },
+    },
+    {
+      name: 'providerId/modelId configuration preserves the provider model name',
+      model: {
+        providerId: 'openrouter/openai',
+        modelId: 'gpt-4o',
+        headers: { 'HTTP-Referer': 'https://myapp.example/', 'X-Title': 'MyApp' },
+      },
+      expectedModel: 'openai/gpt-4o',
+      expectedHeaders: { 'http-referer': 'https://myapp.example/', 'x-title': 'MyApp' },
+    },
+    {
+      name: 'a model string works without application headers',
+      model: 'openrouter/anthropic/claude-3-5-sonnet-20241022' as const,
+      expectedModel: 'anthropic/claude-3-5-sonnet-20241022',
+      expectedHeaders: {},
+    },
+    {
+      name: 'an explicit API key overrides the environment key',
+      model: {
+        id: 'openrouter/meta-llama/llama-3.1-8b-instruct' as const,
+        apiKey: 'custom-key',
+        headers: { 'X-Title': 'Custom key app' },
+      },
+      expectedModel: 'meta-llama/llama-3.1-8b-instruct',
+      expectedHeaders: { 'x-title': 'Custom key app', authorization: 'Bearer custom-key' },
+    },
+  ];
+
+  it.each(cases)('$name', async ({ model, expectedModel, expectedHeaders }) => {
+    const agent = new Agent({
+      id: 'openrouter-headers',
+      name: 'OpenRouter headers',
+      instructions: 'Be helpful.',
+      model,
     });
+    await ask(agent);
 
-    it('should support dynamic model config function with headers', async () => {
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: () => ({
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: {
-            'HTTP-Referer': 'https://dynamic.com',
-            'X-Title': 'Dynamic App',
-          },
-        }),
-      });
+    expect(destinations).toEqual(['https://openrouter.ai/api/v1/chat/completions']);
+    expect(received).toHaveLength(1);
+    expect(received[0]).toMatchObject({
+      path: '/api/v1/chat/completions',
+      headers: {
+        authorization: 'Bearer environment-key',
+        'user-agent': expect.stringMatching(/^mastra/),
+        ...expectedHeaders,
+      },
+      body: { model: expectedModel, messages: expect.arrayContaining([{ role: 'user', content: 'test' }]) },
+    });
+    if (typeof model === 'string') {
+      expect(received[0]!.headers).not.toHaveProperty('http-referer');
+      expect(received[0]!.headers).not.toHaveProperty('x-title');
+    }
+  });
 
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify headers were passed from dynamic config
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'https://dynamic.com',
-          'X-Title': 'Dynamic App',
-        },
-      });
+  it('uses an explicit key with attribution when no environment key is set', async () => {
+    vi.stubEnv('OPENROUTER_API_KEY', '');
+    const agent = new Agent({
+      id: 'custom-key-only',
+      name: 'Custom key only',
+      instructions: 'Be helpful.',
+      model: {
+        id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
+        apiKey: 'no-env-key',
+        headers: { 'HTTP-Referer': 'https://custom.example/', 'X-Title': 'Custom application' },
+      },
+    });
+    await ask(agent);
+    expect(received).toHaveLength(1);
+    expect(received[0]!.headers).toMatchObject({
+      authorization: 'Bearer no-env-key',
+      'http-referer': 'https://custom.example/',
+      'x-title': 'Custom application',
     });
   });
 
-  describe('Model caching with headers', () => {
-    it('should create different model instances for different headers', async () => {
-      const agent1 = new Agent({
-        id: 'agent-1',
-        name: 'agent-1',
-        instructions: 'Agent 1',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: {
-            'X-Title': 'App1',
-          },
-        },
+  it('keeps caller credentials and headers separate across repeated cached requests', async () => {
+    const createAgent = (id: string, apiKey: string, title: string) =>
+      new Agent({
+        id,
+        name: id,
+        instructions: 'Be helpful.',
+        model: { id: 'openrouter/anthropic/claude-3-5-sonnet-20241022', apiKey, headers: { 'X-Title': title } },
       });
-
-      const agent2 = new Agent({
-        id: 'agent-2',
-        name: 'agent-2',
-        instructions: 'Agent 2',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: {
-            'X-Title': 'App2',
-          },
-        },
-      });
-
-      await agent1.generate('test', { maxSteps: 1 });
-      await agent2.generate('test', { maxSteps: 1 });
-
-      // Both should have been called with different headers
-      expect(createOpenRouter).toHaveBeenCalledTimes(2);
-      expect(createOpenRouter).toHaveBeenNthCalledWith(1, {
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'X-Title': 'App1',
-        },
-      });
-      expect(createOpenRouter).toHaveBeenNthCalledWith(2, {
-        apiKey: 'test-openrouter-key',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'X-Title': 'App2',
-        },
-      });
-    });
-
-    it('should reuse model instance for same headers', async () => {
-      const sharedHeaders = {
-        'HTTP-Referer': 'https://shared.com',
-        'X-Title': 'Shared App',
-      };
-
-      const agent1 = new Agent({
-        id: 'agent-1',
-        name: 'agent-1',
-        instructions: 'Agent 1',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: sharedHeaders,
-        },
-      });
-
-      const agent2 = new Agent({
-        id: 'agent-2',
-        name: 'agent-2',
-        instructions: 'Agent 2',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          headers: sharedHeaders,
-        },
-      });
-
-      await agent1.generate('test', { maxSteps: 1 });
-      await agent2.generate('test', { maxSteps: 1 });
-
-      // Should only be called once since headers are the same
-      expect(createOpenRouter).toHaveBeenCalledTimes(1);
-    });
+    const first = createAgent('first', 'first-key', 'First application');
+    const same = createAgent('same-configuration', 'first-key', 'First application');
+    const otherHeaders = createAgent('other-headers', 'first-key', 'Second application');
+    const otherKey = createAgent('other-key', 'second-key', 'First application');
+    for (const agent of [first, same, otherHeaders, otherKey, first]) await ask(agent);
+    expect(received.map(({ headers }) => [headers.authorization, headers['x-title']])).toEqual([
+      ['Bearer first-key', 'First application'],
+      ['Bearer first-key', 'First application'],
+      ['Bearer first-key', 'Second application'],
+      ['Bearer second-key', 'First application'],
+      ['Bearer first-key', 'First application'],
+    ]);
   });
 
-  describe('Error handling', () => {
-    it('should pass headers even when using custom API key (no env var needed)', async () => {
-      delete process.env.OPENROUTER_API_KEY;
-
-      const agent = new Agent({
-        id: 'test-agent',
-        name: 'test-agent',
-        instructions: 'You are a helpful assistant.',
-        model: {
-          id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
-          apiKey: 'custom-key-no-env',
-          headers: {
-            'HTTP-Referer': 'http://my-service/',
-            'X-Title': 'my-application-name',
-          },
-        },
-      });
-
-      // Should not throw during agent creation
-      expect(agent).toBeDefined();
-
-      // Should work with custom API key
-      await agent.generate('test', { maxSteps: 1 });
-
-      // Verify headers were passed even without env var
-      expect(createOpenRouter).toHaveBeenCalledWith({
-        apiKey: 'custom-key-no-env',
-        baseURL: 'https://openrouter.ai/api/v1',
-        headers: {
-          'User-Agent': expect.stringMatching(/^mastra/),
-          'HTTP-Referer': 'http://my-service/',
-          'X-Title': 'my-application-name',
-        },
-      });
+  it('resolves dynamic headers for each caller rather than reusing another caller’s configuration', async () => {
+    const agent = new Agent({
+      id: 'dynamic-headers',
+      name: 'Dynamic headers',
+      instructions: 'Be helpful.',
+      model: ({ requestContext }) => ({
+        id: 'openrouter/anthropic/claude-3-5-sonnet-20241022',
+        headers: { 'X-Title': String(requestContext.get('application')) },
+      }),
     });
+    for (const application of ['First application', 'Second application', 'First application']) {
+      const requestContext = new RequestContext();
+      requestContext.set('application', application);
+      await ask(agent, requestContext);
+    }
+    expect(received.map(({ headers }) => headers['x-title'])).toEqual([
+      'First application',
+      'Second application',
+      'First application',
+    ]);
   });
 });
