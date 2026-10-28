@@ -27,52 +27,35 @@ describe('PageLayout', () => {
     });
   });
 
-  describe('when an action row is provided', () => {
-    it('scrolls it with the body, above the content', () => {
+  describe('when the body holds a toolbar and a list', () => {
+    it('scrolls them together, in order', () => {
       render(
-        <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
-          <p>Body</p>
+        <PageLayout breadcrumbs={<span>Crumbs</span>}>
+          <input aria-label="Filter" />
+          <PageLayout.Fill>
+            <p>Body</p>
+          </PageLayout.Fill>
         </PageLayout>,
       );
 
-      const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
-      expect(row).not.toBeNull();
-      if (!row) return;
-      expect(row.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
-      expect(row.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const filter = screen.getByLabelText('Filter');
+      expect(filter.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
+      expect(filter.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
-    it.each(['fit', 'narrow'] as const)('keeps it above the scrollable body (%s)', variant => {
+    it('gives the list the height left under the toolbar', () => {
       render(
-        <PageLayout variant={variant} breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
-      const main = screen.getByRole('main');
-      expect(row).not.toBeNull();
-      if (!row) return;
-      expect(main.contains(row)).toBe(false);
-      expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-      expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
-    });
-
-    it('keeps the body mounted when the row appears', () => {
-      const { rerender } = render(
         <PageLayout>
-          <input aria-label="Draft" />
-        </PageLayout>,
-      );
-      const draft = screen.getByLabelText('Draft');
-
-      rerender(
-        <PageLayout actionRow={<input aria-label="Filter" />}>
-          <input aria-label="Draft" />
+          <PageLayout.Fill>
+            <p>Body</p>
+          </PageLayout.Fill>
         </PageLayout>,
       );
 
-      expect(screen.getByLabelText('Draft')).toBe(draft);
+      const fill = screen.getByText('Body').closest('[data-slot="page-layout-fill"]');
+      expect(fill?.className).toMatch(/\bgrow\b/);
+      expect(fill?.className).toContain('basis-0');
+      expect(fill?.className).toContain('min-h-0');
     });
   });
 
@@ -135,37 +118,33 @@ describe('PageLayout', () => {
       expect(viewportOf('Body')?.className).not.toContain('p-4');
     });
 
-    it.each([undefined, <h1 key="title">Title</h1>])('constrains the "fit" column to the page width', header => {
+    it('constrains the "fit" column to the page width', () => {
       render(
-        <PageLayout variant="fit" header={header}>
+        <PageLayout variant="fit">
           <p>Body</p>
         </PageLayout>,
       );
       expect(contentOf('Body')?.className).toContain('grid-cols-1');
     });
-  });
 
-  describe('when a header is provided', () => {
-    it.each(['container', 'narrow', 'fit'] as const)('renders it inside main before the body (%s)', variant => {
+    it.each(['container', 'narrow'] as const)('stacks the "%s" body with a gap', variant => {
       render(
-        <PageLayout variant={variant} header={<h1>Title</h1>}>
+        <PageLayout variant={variant}>
+          <h1>Title</h1>
           <p>Body</p>
         </PageLayout>,
       );
-
-      const main = screen.getByRole('main');
-      const heading = screen.getByRole('heading', { name: 'Title' });
-      const body = screen.getByText('Body');
-      expect(main.contains(heading)).toBe(true);
-      expect(main.contains(body)).toBe(true);
-      expect(heading.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const stack = screen.getByText('Body').parentElement?.className ?? '';
+      expect(stack).toContain('flex-col');
+      expect(stack).toContain('gap-4');
     });
   });
 
   describe('narrow variant', () => {
-    it('centers the header and body in a max-width padded container', () => {
+    it('centers the body in a max-width padded container', () => {
       render(
-        <PageLayout variant="narrow" header={<h1>Title</h1>}>
+        <PageLayout variant="narrow">
+          <h1>Title</h1>
           <p>Body</p>
         </PageLayout>,
       );
@@ -177,18 +156,6 @@ describe('PageLayout', () => {
       expect(container.className).toContain('max-w-5xl');
       expect(container.className).toContain('p-4');
       expect(container.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
-      expect(contentOf('Body')?.className).not.toContain('p-4');
-    });
-
-    it('leaves spacing between header and body to the call site', () => {
-      render(
-        <PageLayout variant="narrow" header={<h1>Title</h1>}>
-          <p>Body</p>
-        </PageLayout>,
-      );
-
-      const container = screen.getByText('Body').closest('[data-slot="page-layout-container"]');
-      expect(container?.className).not.toMatch(/\b(flex|gap-6)\b/);
     });
   });
 

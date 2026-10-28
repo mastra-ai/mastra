@@ -71,35 +71,32 @@ function Agents() {
   const visibleAgents = sortAgents(filteredAgents, sort);
 
   let agentsView = (
-    <AgentsList
-      agents={visibleAgents}
-      isLoading={isLoading}
-      hasSearch={Boolean(search)}
-      sort={sort}
-      onSortChange={setSort}
-    />
+    <PageLayout.Fill>
+      <AgentsList
+        agents={visibleAgents}
+        isLoading={isLoading}
+        hasSearch={Boolean(search)}
+        sort={sort}
+        onSortChange={setSort}
+      />
+    </PageLayout.Fill>
   );
   if (view === 'compact') {
     agentsView = <AgentsCompactGrid agents={visibleAgents} isLoading={isLoading} hasSearch={Boolean(search)} />;
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      headerActions={<AgentHeaderCreateAction />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
-            </div>
-          </ActionRow.Start>
-          <ActionRow.End>
-            <AgentsViewToggle view={view} onViewChange={setView} />
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<AgentHeaderCreateAction />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter agents" placeholder="Filter by name or instructions" />
+          </div>
+        </ActionRow.Start>
+        <ActionRow.End>
+          <AgentsViewToggle view={view} onViewChange={setView} />
+        </ActionRow.End>
+      </ActionRow>
       <h1 className="sr-only">Agents</h1>
       {agentsView}
     </PageLayout>

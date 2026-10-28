@@ -62,26 +62,24 @@ const MCPs = () => {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <div className="max-w-120 flex-1">
-              <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
-            </div>
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <div className="max-w-120 flex-1">
+            <ListSearch onSearch={setSearch} label="Filter MCP servers" placeholder="Filter by name" />
+          </div>
+        </ActionRow.Start>
+      </ActionRow>
       <h1 className="sr-only">MCP Servers</h1>
-      <McpServersList
-        mcpServers={mcpServers}
-        isLoading={isLoading}
-        search={search}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
-      />
+      <PageLayout.Fill>
+        <McpServersList
+          mcpServers={mcpServers}
+          isLoading={isLoading}
+          search={search}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </PageLayout.Fill>
     </PageLayout>
   );
 };

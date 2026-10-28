@@ -86,7 +86,7 @@ export const MCPDetail = ({ isLoading, server }: MCPDetailProps) => {
   ];
 
   return (
-    <div className="flex flex-col gap-6 pt-4">
+    <div className="flex flex-col gap-6">
       <Card>
         <Tabs defaultTab="http">
           <CardHeader className="flex-row items-center justify-between gap-3 space-y-0 border-b border-border">

@@ -63,17 +63,14 @@ export const AgentBuilderInfrastructure = () => {
   const { data, isLoading, error } = useInfrastructureStatus({ enabled: canViewInfrastructure });
 
   return (
-    <PageLayout
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <PageHeader>
-              <PageHeader.Title>Infrastructure</PageHeader.Title>
-            </PageHeader>
-          </ActionRow.Start>
-        </ActionRow>
-      }
-    >
+    <PageLayout>
+      <ActionRow>
+        <ActionRow.Start>
+          <PageHeader>
+            <PageHeader.Title>Infrastructure</PageHeader.Title>
+          </PageHeader>
+        </ActionRow.Start>
+      </ActionRow>
       <div className="mt-6 flex flex-col gap-5">
         <SectionCard
           title="Agent Builder Infrastructure"

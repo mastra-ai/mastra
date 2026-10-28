@@ -64,7 +64,7 @@ export function EmptyState({
 
   if (variant === 'fill') {
     return (
-      <div data-slot="empty-state-fill" className="flex h-full items-center-safe justify-center-safe">
+      <div data-slot="empty-state-fill" className="flex h-full flex-1 items-center-safe justify-center-safe">
         {content}
       </div>
     );

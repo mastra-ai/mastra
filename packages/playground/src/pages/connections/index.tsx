@@ -129,22 +129,17 @@ export default function ConnectionsPage() {
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      variant="narrow"
-      header={
-        <PageHeader>
-          <PageHeader.Title>Connections</PageHeader.Title>
-          {surface.data?.status === 'ready' ? (
-            <PageHeader.Action>
-              <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
-                <PlusIcon aria-hidden /> Add connection
-              </Button>
-            </PageHeader.Action>
-          ) : null}
-        </PageHeader>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} variant="narrow">
+      <PageHeader>
+        <PageHeader.Title>Connections</PageHeader.Title>
+        {surface.data?.status === 'ready' ? (
+          <PageHeader.Action>
+            <Button variant="primary" size="sm" onClick={() => setAddOpen(true)}>
+              <PlusIcon aria-hidden /> Add connection
+            </Button>
+          </PageHeader.Action>
+        ) : null}
+      </PageHeader>
       {content}
     </PageLayout>
   );

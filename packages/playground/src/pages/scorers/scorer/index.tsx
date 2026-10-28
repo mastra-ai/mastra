@@ -218,18 +218,14 @@ export default function Scorer() {
     const hasError = isUnauthorized || isForbidden || hasOtherError;
 
     return (
-      <PageLayout
-        breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-        actionRow={
-          !hasError && scorerActionsMenu ? (
-            <ActionRow>
-              <ActionRow.End>{scorerActionsMenu}</ActionRow.End>
-            </ActionRow>
-          ) : undefined
-        }
-      >
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+        {!hasError && scorerActionsMenu ? (
+          <ActionRow>
+            <ActionRow.End>{scorerActionsMenu}</ActionRow.End>
+          </ActionRow>
+        ) : undefined}
         <h1 className="sr-only">{scorerId}</h1>
-        <div className="flex h-full items-center justify-center">
+        <PageLayout.Fill className="items-center justify-center">
           {isUnauthorized ? (
             <SessionExpired />
           ) : isForbidden ? (
@@ -239,56 +235,54 @@ export default function Scorer() {
           ) : (
             <NoScoresInfo onRunExperiment={() => setRunDialogOpen(true)} />
           )}
-        </div>
+        </PageLayout.Fill>
         {runDialog}
       </PageLayout>
     );
   }
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.Start>
-            <ScoresTools
-              selectedEntity={selectedEntityOption}
-              entityOptions={entityOptions}
-              onEntityChange={handleSelectedEntityChange}
-              onReset={() => {
-                setSearchParams(prev => {
-                  const next = new URLSearchParams(prev);
-                  next.set('entity', 'all');
-                  return next;
-                });
-              }}
-              isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
-            />
-          </ActionRow.Start>
-          <ActionRow.End>
-            <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
-            <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Plus />}>
-              New experiment
-            </Button>
-            {scorerActionsMenu}
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.Start>
+          <ScoresTools
+            selectedEntity={selectedEntityOption}
+            entityOptions={entityOptions}
+            onEntityChange={handleSelectedEntityChange}
+            onReset={() => {
+              setSearchParams(prev => {
+                const next = new URLSearchParams(prev);
+                next.set('entity', 'all');
+                return next;
+              });
+            }}
+            isLoading={isLoadingScores || isLoadingAgents || isLoadingWorkflows}
+          />
+        </ActionRow.Start>
+        <ActionRow.End>
+          <ScoresColumnsMenu visibleColumns={columnsState.visibleColumns} toggleColumn={columnsState.toggleColumn} />
+          <Button variant="primary" onClick={() => setRunDialogOpen(true)} icon={<Plus />}>
+            New experiment
+          </Button>
+          {scorerActionsMenu}
+        </ActionRow.End>
+      </ActionRow>
       <h1 className="sr-only">{scorerId}</h1>
-      <ScoresList
-        scores={scores}
-        isLoading={isLoadingScores}
-        selectedScoreId={selectedScoreId}
-        isFetchingNextPage={isFetchingNextPage}
-        hasNextPage={hasNextPage}
-        setEndOfListElement={setEndOfListElement}
-        onScoreClick={handleScoreClick}
-        errorMsg={scoresError?.message}
-        columnsState={columnsState}
-        sort={sort}
-        onSortChange={onSortChange}
-      />
+      <PageLayout.Fill>
+        <ScoresList
+          scores={scores}
+          isLoading={isLoadingScores}
+          selectedScoreId={selectedScoreId}
+          isFetchingNextPage={isFetchingNextPage}
+          hasNextPage={hasNextPage}
+          setEndOfListElement={setEndOfListElement}
+          onScoreClick={handleScoreClick}
+          errorMsg={scoresError?.message}
+          columnsState={columnsState}
+          sort={sort}
+          onSortChange={onSortChange}
+        />
+      </PageLayout.Fill>
       {runDialog}
     </PageLayout>
   );

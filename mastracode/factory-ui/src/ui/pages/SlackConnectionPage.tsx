@@ -111,7 +111,7 @@ export function SlackConnectionSettings() {
   };
 
   return (
-    <div className="mt-6 flex flex-col gap-8 pb-5">
+    <div className="mt-2 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
         <Txt tone="muted" as="p" variant="caption" role="status">
           Loading Slack connection…

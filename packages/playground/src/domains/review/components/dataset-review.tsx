@@ -532,7 +532,8 @@ export function DatasetReview({
 
   if (isLoadingReview) {
     return (
-      <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+      <PageLayout breadcrumbs={breadcrumbs}>
+        {toolbar}
         <h1 className="sr-only">Review Queue</h1>
         <Spinner fill />
       </PageLayout>
@@ -559,7 +560,8 @@ export function DatasetReview({
   );
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={toolbar}>
+    <PageLayout breadcrumbs={breadcrumbs}>
+      {toolbar}
       <h1 className="sr-only">Review Queue</h1>
       <Dialog open={showAnalyzeDialog} onOpenChange={setShowAnalyzeDialog}>
         <DialogContent>
@@ -674,7 +676,7 @@ export function DatasetReview({
         </DialogContent>
       </Dialog>
 
-      <div className="grid h-full min-h-0 w-full grid-cols-1 gap-4 overflow-hidden">
+      <PageLayout.Fill className="grid w-full grid-cols-1 gap-4 overflow-hidden">
         <div className="min-h-0 w-full overflow-hidden">
           {isLoadingDisplay ? (
             <Spinner fill />
@@ -703,7 +705,7 @@ export function DatasetReview({
         </div>
 
         {detailPanel}
-      </div>
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

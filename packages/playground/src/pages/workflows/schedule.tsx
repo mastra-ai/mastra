@@ -84,106 +84,104 @@ export default function SchedulePage() {
   const agentId = schedule?.agentId;
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      actionRow={
-        <ActionRow>
-          <ActionRow.End>
-            <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
-              Back to schedules
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}>
+      <ActionRow>
+        <ActionRow.End>
+          <Button render={<Link to={paths.schedulesLink()} />} variant="ghost" icon={<ArrowLeftIcon />}>
+            Back to schedules
+          </Button>
+          {workflowId ? (
+            <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
+              Open workflow
             </Button>
-            {workflowId ? (
-              <Button icon={<WorkflowIcon />} render={<Link to={paths.workflowLink(workflowId)} />} variant="ghost">
-                Open workflow
-              </Button>
-            ) : null}
-            {schedule ? (
-              <Button
-                onClick={() => {
-                  const action = schedule.status === 'active' ? 'pause' : 'resume';
-                  toggle.mutate(action, {
-                    onSuccess: () => toast.success(action === 'pause' ? 'Schedule paused' : 'Schedule resumed'),
-                    onError: error => toast.error(error.message),
-                  });
-                }}
-                disabled={toggle.isPending}
-                data-testid="schedule-toggle-button"
-              >
-                {schedule.status === 'active' ? (
-                  <>
-                    <PauseIcon />
-                    Pause
-                  </>
-                ) : (
-                  <>
-                    <PlayIcon />
-                    Resume
-                  </>
-                )}
-              </Button>
-            ) : null}
-          </ActionRow.End>
-        </ActionRow>
-      }
-    >
-      <h1 className="sr-only">{scheduleId}</h1>
-      {schedule ? (
-        <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
-          <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
-            <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
-              {workflowId ? (
-                <Link to={paths.workflowLink(workflowId)} className="text-foreground hover:underline">
-                  {workflowId}
-                </Link>
-              ) : agentId ? (
-                <Link to={paths.agentLink(agentId)} className="text-foreground hover:underline">
-                  {agentId}
-                </Link>
+          ) : null}
+          {schedule ? (
+            <Button
+              onClick={() => {
+                const action = schedule.status === 'active' ? 'pause' : 'resume';
+                toggle.mutate(action, {
+                  onSuccess: () => toast.success(action === 'pause' ? 'Schedule paused' : 'Schedule resumed'),
+                  onError: error => toast.error(error.message),
+                });
+              }}
+              disabled={toggle.isPending}
+              data-testid="schedule-toggle-button"
+            >
+              {schedule.status === 'active' ? (
+                <>
+                  <PauseIcon />
+                  Pause
+                </>
               ) : (
-                '—'
+                <>
+                  <PlayIcon />
+                  Resume
+                </>
               )}
-            </MetaItem>
-            <MetaItem label="Cron">
-              <Txt as="span" variant="body" font="mono">
-                {schedule.cron}
-              </Txt>
-              {schedule.timezone ? (
-                <Txt as="span" variant="caption" tone="muted" className="ml-2">
-                  {schedule.timezone}
+            </Button>
+          ) : null}
+        </ActionRow.End>
+      </ActionRow>
+      <h1 className="sr-only">{scheduleId}</h1>
+      <PageLayout.Fill>
+        {schedule ? (
+          <div className="grid h-full grid-cols-[minmax(0,20rem)_1fr] gap-4 overflow-hidden">
+            <div className="flex h-fit flex-col gap-4 rounded-md border border-border p-4">
+              <MetaItem label={agentId ? 'Agent' : 'Workflow'}>
+                {workflowId ? (
+                  <Link to={paths.workflowLink(workflowId)} className="text-foreground hover:underline">
+                    {workflowId}
+                  </Link>
+                ) : agentId ? (
+                  <Link to={paths.agentLink(agentId)} className="text-foreground hover:underline">
+                    {agentId}
+                  </Link>
+                ) : (
+                  '—'
+                )}
+              </MetaItem>
+              <MetaItem label="Cron">
+                <Txt as="span" variant="body" font="mono">
+                  {schedule.cron}
                 </Txt>
-              ) : null}
-            </MetaItem>
-            <MetaItem label="Status">
-              <ScheduleStatusText status={schedule.status} />
-            </MetaItem>
-            <MetaItem label="Next fire">
-              {schedule.nextFireAt ? <RelativeTimestamp value={schedule.nextFireAt} /> : '—'}
-            </MetaItem>
-          </div>
+                {schedule.timezone ? (
+                  <Txt as="span" variant="caption" tone="muted" className="ml-2">
+                    {schedule.timezone}
+                  </Txt>
+                ) : null}
+              </MetaItem>
+              <MetaItem label="Status">
+                <ScheduleStatusText status={schedule.status} />
+              </MetaItem>
+              <MetaItem label="Next fire">
+                {schedule.nextFireAt ? <RelativeTimestamp value={schedule.nextFireAt} /> : '—'}
+              </MetaItem>
+            </div>
 
-          <div className="overflow-y-auto" data-testid="schedule-triggers-panel">
-            <Txt variant="body" className="mb-3">
-              Trigger history
-            </Txt>
-            {triggersError ? (
-              <EmptyState
-                tone="error"
-                titleSlot="Failed to load trigger history"
-                descriptionSlot={triggersError.message}
-              />
-            ) : (
-              <ScheduleTriggersList
-                triggers={triggers ?? []}
-                isLoading={triggersLoading}
-                workflowId={workflowId}
-                hasNextPage={triggersHasNextPage}
-                isFetchingNextPage={triggersIsFetchingNextPage}
-                setEndOfListElement={triggersSetEndOfListElement}
-              />
-            )}
+            <div className="overflow-y-auto" data-testid="schedule-triggers-panel">
+              <Txt variant="body" className="mb-3">
+                Trigger history
+              </Txt>
+              {triggersError ? (
+                <EmptyState
+                  tone="error"
+                  titleSlot="Failed to load trigger history"
+                  descriptionSlot={triggersError.message}
+                />
+              ) : (
+                <ScheduleTriggersList
+                  triggers={triggers ?? []}
+                  isLoading={triggersLoading}
+                  workflowId={workflowId}
+                  hasNextPage={triggersHasNextPage}
+                  isFetchingNextPage={triggersIsFetchingNextPage}
+                  setEndOfListElement={triggersSetEndOfListElement}
+                />
+              )}
+            </div>
           </div>
-        </div>
-      ) : null}
+        ) : null}
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

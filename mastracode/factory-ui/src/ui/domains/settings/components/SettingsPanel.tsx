@@ -53,7 +53,7 @@ export function SettingsPanel() {
   };
 
   return (
-    <section aria-label="Settings" className="mt-6 grid grid-cols-[minmax(0,1fr)] pb-5">
+    <section aria-label="Settings" className="mt-2 grid grid-cols-[minmax(0,1fr)] pb-5">
       {section === 'account' && <AccountSettingsSection />}
       {section === 'preferences' && <GeneralSettings />}
       {section === 'factory' && <FactoryManagementSection />}

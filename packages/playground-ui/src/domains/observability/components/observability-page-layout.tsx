@@ -33,13 +33,14 @@ export function ObservabilityPageLayout({
   const { views, isLoading, showSwitch } = useObservabilityViews({ current, features });
 
   // While loading, hold the switch's place so it does not push the page down when it lands.
-  let actionRow: ReactNode;
-  if (isLoading) actionRow = <TracesSpansSwitchSkeleton />;
-  else if (showSwitch) actionRow = <TracesSpansSwitch current={current} views={views} onViewChange={onViewChange} />;
+  let viewSwitch: ReactNode;
+  if (isLoading) viewSwitch = <TracesSpansSwitchSkeleton />;
+  else if (showSwitch) viewSwitch = <TracesSpansSwitch current={current} views={views} onViewChange={onViewChange} />;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })} actionRow={actionRow}>
-      {children}
+    <PageLayout breadcrumbs={breadcrumbs({ current, isLoading, showSwitch })}>
+      {viewSwitch}
+      <PageLayout.Fill>{children}</PageLayout.Fill>
     </PageLayout>
   );
 }

@@ -27,19 +27,22 @@ export function TracesExplorerLayout({
 
   // Like the toolbar, the action row waits for the body's loading skeleton to clear; the tabs do not.
   const visibleActionRow = isBodyLoading ? undefined : actionRow;
-  const pinned =
+  const controls =
     tabs || visibleActionRow ? (
-      <>
+      <div className="flex flex-col gap-2">
         {tabs}
         {visibleActionRow}
-      </>
+      </div>
     ) : undefined;
 
   return (
-    <PageLayout breadcrumbs={breadcrumbs} actionRow={pinned}>
-      <TracesExplorerBody toolbar={toolbar} renderError={renderError}>
-        {children}
-      </TracesExplorerBody>
+    <PageLayout breadcrumbs={breadcrumbs}>
+      {controls}
+      <PageLayout.Fill>
+        <TracesExplorerBody toolbar={toolbar} renderError={renderError}>
+          {children}
+        </TracesExplorerBody>
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

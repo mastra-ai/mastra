@@ -64,29 +64,26 @@ export default function Scorers() {
   };
 
   return (
-    <PageLayout
-      breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />}
-      headerActions={<ScorersHeaderCreateAction />}
-      actionRow={
-        <ScorersToolbar
-          search={search}
-          onSearchChange={setSearch}
-          sourceFilter={sourceFilter}
-          onSourceFilterChange={setSourceFilter}
-          onReset={resetFilters}
-          hasActiveFilters={hasFilters}
-        />
-      }
-    >
-      <h1 className="sr-only">Scorers</h1>
-      <ScorersList
-        scorers={scorers}
-        isLoading={isLoading}
+    <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={crumbs} />} headerActions={<ScorersHeaderCreateAction />}>
+      <ScorersToolbar
         search={search}
+        onSearchChange={setSearch}
         sourceFilter={sourceFilter}
-        sort={sort}
-        onSortChange={(direction, key) => setSort({ key, direction })}
+        onSourceFilterChange={setSourceFilter}
+        onReset={resetFilters}
+        hasActiveFilters={hasFilters}
       />
+      <h1 className="sr-only">Scorers</h1>
+      <PageLayout.Fill>
+        <ScorersList
+          scorers={scorers}
+          isLoading={isLoading}
+          search={search}
+          sourceFilter={sourceFilter}
+          sort={sort}
+          onSortChange={(direction, key) => setSort({ key, direction })}
+        />
+      </PageLayout.Fill>
     </PageLayout>
   );
 }

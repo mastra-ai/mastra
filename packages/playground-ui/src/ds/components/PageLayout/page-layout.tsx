@@ -5,18 +5,15 @@ import type { ScrollAreaMask } from '../ScrollArea';
 import { cn } from '@/lib/utils';
 
 export interface PageLayoutProps {
+  /**
+   * The page body. Everything in it scrolls together, toolbars included. In `container` and `narrow`
+   * children stack with a gap; wrap a list that scrolls on its own in `PageLayout.Fill`.
+   */
   children: ReactNode;
   /** Left side of the page header row. */
   breadcrumbs?: ReactNode;
   /** Right side of the page header row. */
   headerActions?: ReactNode;
-  /**
-   * Controls between the header and the body (search, filters, toggles…). With the default `container`
-   * variant they scroll away with the body; `fit` and `narrow` keep them above it.
-   */
-  actionRow?: ReactNode;
-  /** Page-level header (e.g. `PageHeader`) rendered inside the body container, above children. */
-  header?: ReactNode;
   /**
    * `container` pads the body (default); `narrow` centers the body in a max-width column;
    * `fit` lets the body fill the page edge to edge.
@@ -30,32 +27,13 @@ export interface PageLayoutProps {
   mask?: ScrollAreaMask;
 }
 
-export function PageLayout({
+export function PageLayoutRoot({
   children,
   breadcrumbs,
   headerActions,
-  actionRow,
-  header,
   variant = 'container',
   mask = false,
 }: PageLayoutProps) {
-  const headerSlot = header ? (
-    <div data-slot="page-layout-header" className={cn(variant === 'fit' && 'p-4')}>
-      {header}
-    </div>
-  ) : null;
-
-  // In `container` the row scrolls away with the body; `fit` and `narrow` keep it above the body.
-  const scrollingActionRow = Boolean(actionRow) && variant === 'container';
-  const actionRowSlot = actionRow ? (
-    <div
-      data-slot="page-layout-action-row"
-      className={cn('flex shrink-0 flex-col gap-2', scrollingActionRow ? 'pb-4' : 'px-4 pt-4')}
-    >
-      {actionRow}
-    </div>
-  ) : null;
-
   return (
     <div data-slot="page-layout" className="flex h-full min-h-0 flex-col">
       {(breadcrumbs || headerActions) && (
@@ -66,53 +44,49 @@ export function PageLayout({
           )}
         </Header>
       )}
-      {!scrollingActionRow && actionRowSlot}
       <main className="flex min-h-0 flex-1 flex-col">
         <ScrollArea mask={mask} className="min-h-0 flex-1">
           <ScrollAreaViewport
             className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
-              variant === 'container' && 'flex h-full min-h-min flex-col',
-              variant === 'narrow' && 'grid min-h-full grid-cols-1',
-              // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
-              variant === 'fit' &&
-                (header
-                  ? 'grid h-full grid-cols-1 grid-rows-[auto_minmax(0,1fr)]'
-                  : 'grid h-full grid-cols-1 grid-rows-1'),
+              // At least the page's height so `h-full` children and `PageLayout.Fill` have room to fill;
+              // taller content grows it and the page scrolls.
+              variant === 'container' && 'flex h-full min-h-min flex-col gap-4',
+              variant === 'narrow' && 'flex h-full min-h-min flex-col',
+              // `fit` hands the whole body to its child (panels, graphs, tables that own their scroll).
+              variant === 'fit' && 'grid h-full grid-cols-1 grid-rows-1',
             )}
           >
-            {scrollingActionRow && actionRowSlot}
             {variant === 'narrow' ? (
-              // Horizontal gutter is the variant's contract; keep px/py explicit rather than the `p-4` shorthand.
-              // eslint-disable-next-line tailwindcss/enforces-shorthand
               <div
                 data-slot="page-layout-container"
-                className={cn(
-                  'mx-auto grid min-h-full w-full max-w-5xl grid-cols-1 p-4',
-                  header ? 'grid-rows-[auto_1fr]' : 'grid-rows-[1fr]',
-                )}
+                className="mx-auto flex w-full max-w-5xl flex-1 flex-col gap-4 p-4"
               >
-                {headerSlot}
-                {children}
-              </div>
-            ) : variant === 'container' ? (
-              // The body gets the height left under the row, so `h-full` children (lists that own their
-              // scroll) still fit the page. Taller bodies overflow it, and scroll overflow skips the
-              // viewport's bottom padding, so a zero-height spacer puts that padding back. Rendered with
-              // or without a row, so the children keep their state when the row comes and goes.
-              <div data-slot="page-layout-body" className="min-h-0 flex-1 after:-mb-4 after:block after:h-4">
-                {headerSlot}
                 {children}
               </div>
             ) : (
-              <>
-                {headerSlot}
-                {children}
-              </>
+              children
             )}
           </ScrollAreaViewport>
         </ScrollArea>
       </main>
+    </div>
+  );
+}
+
+export interface PageLayoutFillProps {
+  children: ReactNode;
+  className?: string;
+}
+
+/**
+ * Takes the body height left under the content above it, for a list or panel that scrolls on its own
+ * (e.g. `DataList`): the toolbar above it stays in view while its rows scroll.
+ */
+export function PageLayoutFill({ children, className }: PageLayoutFillProps) {
+  return (
+    <div data-slot="page-layout-fill" className={cn('flex min-h-0 grow basis-0 flex-col', className)}>
+      {children}
     </div>
   );
 }
