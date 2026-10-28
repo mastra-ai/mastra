@@ -76,6 +76,8 @@ if (answers.unsafe.type === 'refusal') {
 
 A decision model can refuse a question, for example when a safety policy prevents it from answering. A refused question returns `{ type: 'refusal' }` with no `choice`, `score`, or `probability`, while the other questions in the same call keep their answers. Check `type` before reading an answer field.
 
+If the provider call fails or an answer doesn't validate, `decide()` rejects instead of returning partial answers. [Validation and errors](/reference/classifier/classifier#validation-and-errors) covers the checks and the retry behavior.
+
 ## Where classifiers run
 
 Call `decide()` directly when your application controls the decision point. Mastra also runs classifiers in several places:
@@ -95,21 +97,10 @@ If provider output needs normalization before the classifier validates it, wrap 
 
 The classifier forwards the state you pass to the provider along with each question's `instructions`. Send only the data the decision needs. If the state contains sensitive fields, redact them before the call or use a provider that meets your data-handling requirements.
 
-## Reliability
-
-`decide()` makes two retry attempts after retryable AI SDK `APICallError` failures by default. Set `maxRetries` to change the count. Other errors reject immediately, and an `abortSignal` cancels the active request and any wait between retries.
-
-Before returning, the classifier validates provider output. It requires exactly one answer per question, checks that each answer matches its question type, and rejects incomplete probability distributions, out-of-range scores, non-finite token counts, and invalid response timestamps. Invalid output rejects instead of returning partial answers. See [Validation and errors](/reference/classifier/classifier#validation-and-errors) for the full list.
-
-## Observability
-
-Inside an active Mastra trace, each `decide()` call creates a `CLASSIFIER_EVALUATION` child span. The span records the state, questions, and answers, along with the classifier and model identifiers, provider, attempts, duration, and token usage. Token usage also feeds [automatic token metrics](/reference/observability/metrics/automatic-metrics#token-usage-metrics). Registered classifiers start a root span when evaluated outside a trace.
-
-Classifier traces appear under the classifier entity in [Studio](/docs/studio/overview), where you can filter and group them like agents and workflows. Workflow classifier steps render as classifier nodes in the flow graph. To keep state and answers out of exported traces, set `hideInput` and `hideOutput` on the run that calls the classifier. See [hiding sensitive input/output](/docs/observability/tracing/overview#hiding-sensitive-inputoutput).
-
 ## Next steps
 
 - [Classifier reference](/reference/classifier/classifier): constructor options, per-call questions, return values, validation, and custom provider responses
+- [Observability](/reference/classifier/classifier#observability): span attributes, token metrics, and hiding state and answers from traces
 - [Route with a classifier](/docs/workflows/control-flow#route-with-a-classifier): use answers to drive workflow branches
 - [ClassifierProcessor](/reference/processors/classifier-processor): enforce a policy on agent input and output
 - [Conditional approval with a function](/docs/agents/human-in-the-loop#conditional-approval-with-a-function): combine a classifier with tool approval
