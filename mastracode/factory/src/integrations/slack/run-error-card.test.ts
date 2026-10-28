@@ -2,6 +2,7 @@ import { prepareCredentialTenant, setCredentialStoreProvider } from '@mastra/cod
 import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { ProviderAuthRequiredError } from '@mastra/code-sdk/auth/provider-auth-error';
 import type { AuthCredential } from '@mastra/code-sdk/auth/types';
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import { RequestContext } from '@mastra/core/request-context';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -11,20 +12,28 @@ const PUBLIC_URL = 'https://factory.example.com';
 const SLACK_SESSION = 'channel:slack:C-1:1700.42';
 const SLACK_SESSION_URL = `${PUBLIC_URL}/factories/factory-1/workspaces/channel/threads/thread-1?sessionId=${encodeURIComponent(SLACK_SESSION)}`;
 
-function slackRun(currentModelId?: string) {
+type SlackControllerContext = Pick<
+  AgentControllerRequestContext,
+  'sessionId' | 'resourceId' | 'threadId' | 'getState'
+> & {
+  session: Pick<AgentControllerRequestContext['session'], 'modelId'>;
+};
+
+function slackRun(sessionModelId?: string) {
   const requestContext = new RequestContext();
   requestContext.set('controller', {
     sessionId: SLACK_SESSION,
     resourceId: SLACK_SESSION,
     threadId: 'thread-1',
-    getState: () => ({ factoryProjectId: 'factory-1', currentModelId }),
-  });
+    getState: () => ({ factoryProjectId: 'factory-1' }),
+    session: { modelId: sessionModelId },
+  } satisfies SlackControllerContext);
   return { requestContext };
 }
 
 const claudeSubscription: AuthCredential = { type: 'oauth', access: 'a', refresh: 'r', expires: Date.now() + 60_000 };
 
-async function slackRunOn(currentModelId: string, credentialScope: CredentialTenant['credentialScope']) {
+async function slackRunOn(sessionModelId: string, credentialScope: CredentialTenant['credentialScope']) {
   setCredentialStoreProvider(
     () => ({
       allowEnvironmentFallback: false,
@@ -35,7 +44,7 @@ async function slackRunOn(currentModelId: string, credentialScope: CredentialTen
     }),
     async () => ({ orgId: 'org-1', userId: 'user-1', credentialScope }),
   );
-  const run = slackRun(currentModelId);
+  const run = slackRun(sessionModelId);
   await prepareCredentialTenant(run.requestContext);
   return run;
 }

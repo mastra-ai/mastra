@@ -1,3 +1,4 @@
+import type { AgentControllerRequestContext } from '@mastra/core/agent-controller';
 import type { ChannelErrorContext } from '@mastra/core/channels';
 import { providerRequestId } from '@mastra/core/error';
 import type { RequestContext } from '@mastra/core/request-context';
@@ -29,13 +30,13 @@ export function slackRunErrorCard(error: Error, { requestContext }: ChannelError
 
 /** Only while the session's model is the one that failed: its provider is what names the credential. */
 function credentialLine(requestContext: RequestContext | undefined, failedModel: string): string | undefined {
-  const controller = requestContext?.get('controller') as { getState?: () => { currentModelId?: unknown } } | undefined;
-  const currentModelId = controller?.getState?.().currentModelId;
-  if (typeof currentModelId !== 'string') return undefined;
-  const slash = currentModelId.indexOf('/');
-  if (slash <= 0 || (currentModelId !== failedModel && currentModelId.slice(slash + 1) !== failedModel))
+  const controller = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+  const sessionModelId = controller?.session?.modelId;
+  if (!sessionModelId) return undefined;
+  const slash = sessionModelId.indexOf('/');
+  if (slash <= 0 || (sessionModelId !== failedModel && sessionModelId.slice(slash + 1) !== failedModel))
     return undefined;
-  const credential = runCredential(requestContext, currentModelId.slice(0, slash));
+  const credential = runCredential(requestContext, sessionModelId.slice(0, slash));
   if (!credential) return undefined;
   return `Runs on ${credential.label} · ${credential.ownerId ? 'Personal credential' : 'Shared by the organization'}`;
 }
