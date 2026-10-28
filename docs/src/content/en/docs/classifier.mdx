@@ -9,11 +9,11 @@ packages:
 
 **Added in:** `@mastra/core@1.69.0`
 
-A language model writes text for people to read. When your application needs the judgment inside that text, you ask for prose and then parse a decision back out of it. A classifier avoids the parsing entirely. You send a decision model your state, which can be any JSON-compatible data, together with a fixed set of typed questions, and it returns one typed answer per question. The model generates no text.
+A language model writes text for people to read. When your application needs the judgment inside that text, you ask for prose and then parse a decision back out of it. A classifier avoids the parsing entirely. You send a decision model your state, which can be any JSON-compatible data, together with a fixed set of typed questions, and it returns one typed answer per question.
 
-An answer is a named choice from a list, a position on an ordered scale, or the probability that a statement is true. Choice and score answers can also carry a probability for every option, so your code can set a threshold, compare options, or weigh one answer against another. The model supplies the judgment and your code supplies the policy. An answer changes nothing until your application acts on it.
+A decision model is a model built to answer typed questions. Create it with a provider's `decisionModel()` factory, such as the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). It isn't the agent's language model, and the constructor doesn't accept a `'provider/model'` string. See [Choosing a decision model](#choosing-a-decision-model).
 
-Classifiers run on a decision model: a model built to answer this kind of question. Create it with a provider's `decisionModel()` factory, such as the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). It isn't the agent's language model, and the constructor doesn't accept a `'provider/model'` string. See [Choosing a decision model](#choosing-a-decision-model).
+An answer is a named choice from a list, a position on an ordered scale, or the probability that a statement is true. Choice and score answers can also carry a probability for each option or level, so your code can set a threshold, compare options, or weigh one answer against another. The model supplies the judgment and your code supplies the policy. An answer changes nothing until your application acts on it.
 
 ## When to use a classifier
 
