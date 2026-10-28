@@ -17,15 +17,27 @@ npx create-mastra@latest
 
 ### Default starter
 
-The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select OpenAI, Anthropic, Gemini, or xAI as your model provider.
+The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select the Mastra Gateway, OpenAI, Anthropic, Gemini, or xAI as your model provider.
 
-Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `openai`, `google`, or `xai`:
+Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `mastra`, `openai`, `google`, or `xai`:
 
 ```bash npm2yarn
 npx create-mastra@latest my-mastra-project --llm anthropic
 ```
 
 Omit `--llm` to select the provider and optionally enter its API key interactively. The interactive setup also offers to connect your project to the Mastra platform. If enabled, the command opens the browser authentication flow and creates a platform project with the same name as the local project. It then writes `MASTRA_PLATFORM_ACCESS_TOKEN` and `MASTRA_PROJECT_ID` to `.env`.
+
+### Mastra Gateway
+
+Select **Mastra Gateway** to call every model with one key. The command opens the browser to sign in to Mastra, creates a Gateway API key, and writes it to `.env` as `MASTRA_GATEWAY_API_KEY`. The agent's models use the `mastra/` prefix, for example `mastra/openai/gpt-6.1-sol`.
+
+Model calls are paid per token from your Gateway credits. If your balance is $0, the command offers to add $25 in credits through checkout in your browser. Skip it and add credits later with [`mastra gateway credits`](/reference/cli/mastra#mastra-gateway-credits).
+
+To use an existing Gateway key without signing in, pass it with `--llm-api-key`:
+
+```bash npm2yarn
+npx create-mastra@latest my-mastra-project --llm mastra --llm-api-key <your-gateway-key>
+```
 
 ### Template
 
@@ -91,7 +103,7 @@ Invalid flags, project names, and GitHub URLs are rejected before any project fi
   {
     name: '-l, --llm <provider>',
     type: 'string',
-    description: 'Managed agent-harness provider: openai, anthropic, google, or xai.',
+    description: 'Managed agent-harness provider: mastra, openai, anthropic, google, or xai.',
     isOptional: true,
   },
   {

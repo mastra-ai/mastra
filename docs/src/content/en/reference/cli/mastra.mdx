@@ -933,6 +933,18 @@ Revokes an API token.
 mastra auth tokens revoke <token-id>
 ```
 
+## `mastra gateway`
+
+Manages your [Mastra Gateway](/models/gateways/mastra) account. Uses the same login as [`mastra auth`](#mastra-auth).
+
+### `mastra gateway credits`
+
+Shows the Gateway balance of your current organization and offers to add $25 in credits. Checkout opens in your browser, and the command waits until the new balance shows up. Only organization admins can buy credits.
+
+```bash
+mastra gateway credits
+```
+
 ## `mastra connect`
 
 Manages provider connections for the linked platform project, so agents using `@mastra/connect` pick up provider toolsets without leaving the terminal.
