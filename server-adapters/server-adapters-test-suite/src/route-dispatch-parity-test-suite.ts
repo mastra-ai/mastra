@@ -474,15 +474,27 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
   });
 
   describe(`${suiteName} with path-scoped authorization`, () => {
-    type AuthVariant = { name: string; auth: () => any; generate: number; tool: number };
+    type AuthVariant = {
+      name: string;
+      auth: () => any;
+      studioAuth?: () => any;
+      /** Send the Studio client-type header. */
+      studio?: boolean;
+      /** Pass the outer request to dispatchRoute (default true). */
+      forwardRequest?: boolean;
+      generate: number;
+      tool: number;
+      /** Expected statuses for custom routes on a public path: `open` (no flag) and `secure` (`requiresAuth: true`). */
+      custom?: { open: number; secure: number };
+    };
     const authenticateToken = async (token: string) => USERS[token] ?? null;
-    const requestPath = (request: any) => new URL(request?.raw?.url ?? request?.url ?? 'http://x/').pathname;
+    const agentRules = [{ path: ['/__dispatch', '/api/agents/*'], allow: true }];
 
     const variants: AuthVariant[] = [
       {
         name: 'server.auth.rules',
         // Only the probe and agent routes are allowed; everything else falls through to deny.
-        auth: () => ({ authenticateToken, rules: [{ path: ['/__dispatch', '/api/agents/*'], allow: true }] }),
+        auth: () => ({ authenticateToken, rules: agentRules }),
         generate: 200,
         tool: 403,
       },
@@ -497,13 +509,33 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       },
       {
         name: 'authorizeUser(user, request)',
+        // Uses only the request shape authorizeUser receives over HTTP: { raw, headers, header() }.
         auth: () =>
           new SimpleAuth<TestUser>({
             tokens: USERS,
-            authorizeUser: (_user, request) => !requestPath(request).endsWith('/generate'),
+            authorizeUser: (_user, request: any) =>
+              Boolean(request.header('authorization')) && !new URL(request.raw.url).pathname.endsWith('/generate'),
           }),
         generate: 403,
         tool: 200,
+      },
+      {
+        name: 'server.auth.public paths and requiresAuth:true',
+        // Built-in routes set requiresAuth: true, so a public tools path still goes through rules (403).
+        auth: () => ({ authenticateToken, public: ['/api/tools/*', '/custom/*'], rules: agentRules }),
+        generate: 200,
+        tool: 403,
+        custom: { open: 200, secure: 403 },
+      },
+      {
+        name: 'studio.auth rules for a Studio request dispatched without the outer request',
+        // server.auth lets any authenticated user through; studio.auth only allows agents.
+        auth: () => ({ authenticateToken }),
+        studioAuth: () => ({ authenticateToken, rules: agentRules }),
+        studio: true,
+        forwardRequest: false,
+        generate: 200,
+        tool: 403,
       },
     ];
 
@@ -511,6 +543,19 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
       describe(variant.name, () => {
         const probeCases = new Map<string, { route: ServerRoute; input: DispatchRouteInput }>();
         let server: Awaited<ReturnType<RouteDispatchParityTestSuiteConfig['startServer']>>;
+        const openRoute = createRoute({
+          method: 'GET',
+          path: '/custom/open',
+          responseType: 'json',
+          handler: async () => ({ open: true }),
+        });
+        const secureRoute = createRoute({
+          method: 'GET',
+          path: '/custom/secure',
+          responseType: 'json',
+          requiresAuth: true,
+          handler: async () => ({ secret: true }),
+        });
 
         beforeAll(async () => {
           const probe = createRoute({
@@ -520,7 +565,12 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
             queryParamSchema: z.object({ case: z.string() }),
             handler: async ({ case: caseId, mastra, requestContext, abortSignal, request }) => {
               const probeCase = probeCases.get(caseId)!;
-              return dispatchRoute(probeCase.route, probeCase.input, { mastra, requestContext, abortSignal, request });
+              return dispatchRoute(probeCase.route, probeCase.input, {
+                mastra,
+                requestContext,
+                abortSignal,
+                ...(variant.forwardRequest === false ? {} : { request }),
+              });
             },
           });
           const mastra = new Mastra({
@@ -541,7 +591,8 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
                 execute: async ({ text }) => ({ echoed: text }),
               }),
             },
-            server: { auth: variant.auth(), apiRoutes: [probe as any] },
+            server: { auth: variant.auth(), apiRoutes: [probe as any, openRoute as any, secureRoute as any] },
+            ...(variant.studioAuth ? { studio: { auth: variant.studioAuth() } } : {}),
           });
           server = await startServer(mastra);
         });
@@ -550,16 +601,20 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
           await server?.close?.();
         });
 
-        const both = async (method: string, path: string, filledPath: string, input: DispatchRouteInput) => {
-          const headers = { authorization: 'Bearer member-token', 'content-type': 'application/json' };
-          const httpResponse = await server.request(`/api${filledPath}`, {
+        const both = async (method: string, route: ServerRoute, httpPath: string, input: DispatchRouteInput) => {
+          const headers = {
+            authorization: 'Bearer member-token',
+            'content-type': 'application/json',
+            ...(variant.studio ? { 'x-mastra-client-type': 'studio' } : {}),
+          };
+          const httpResponse = await server.request(httpPath, {
             method,
             headers,
             ...(input.body !== undefined ? { body: JSON.stringify(input.body) } : {}),
           });
           const httpText = await httpResponse.text();
           const caseId = String(probeCases.size);
-          probeCases.set(caseId, { route: findRoute(method, path), input });
+          probeCases.set(caseId, { route, input });
           const probeResponse = await server.request(`/__dispatch?case=${caseId}`, { headers });
           expect(probeResponse.status).toBe(200);
           const outcome = (await probeResponse.json()) as
@@ -583,7 +638,7 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
 
         it(`agent generate → ${variant.generate} both ways`, async () => {
           expectAgree(
-            await both('POST', '/agents/:agentId/generate', '/agents/test-agent/generate', {
+            await both('POST', findRoute('POST', '/agents/:agentId/generate'), '/api/agents/test-agent/generate', {
               pathParams: { agentId: 'test-agent' },
               body: { messages: 'hi' },
             }),
@@ -593,7 +648,7 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
 
         it(`tool execute → ${variant.tool} both ways`, async () => {
           expectAgree(
-            await both('POST', '/tools/:toolId/execute', '/tools/test-tool/execute', {
+            await both('POST', findRoute('POST', '/tools/:toolId/execute'), '/api/tools/test-tool/execute', {
               pathParams: { toolId: 'test-tool' },
               body: { data: { text: 'ping' } },
             }),
@@ -601,9 +656,22 @@ export function createRouteDispatchParityTestSuite(config: RouteDispatchParityTe
           );
         });
 
-        it('a requiresAuth:false route stays public both ways', async () => {
-          expectAgree(await both('GET', '/auth/capabilities', '/auth/capabilities', {}), 200);
-        });
+        // /auth/capabilities reads the request, so it needs the forwarded request.
+        if (variant.forwardRequest !== false) {
+          it('a requiresAuth:false route stays public both ways', async () => {
+            expectAgree(await both('GET', findRoute('GET', '/auth/capabilities'), '/api/auth/capabilities', {}), 200);
+          });
+        }
+
+        if (variant.custom) {
+          const { open, secure } = variant.custom;
+          it(`a custom route on a public path → ${open} both ways`, async () => {
+            expectAgree(await both('GET', openRoute as unknown as ServerRoute, '/custom/open', {}), open);
+          });
+          it(`a requiresAuth:true custom route on a public path → ${secure} both ways`, async () => {
+            expectAgree(await both('GET', secureRoute as unknown as ServerRoute, '/custom/secure', {}), secure);
+          });
+        }
       });
     }
   });
