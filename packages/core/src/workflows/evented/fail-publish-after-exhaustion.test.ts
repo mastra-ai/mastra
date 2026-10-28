@@ -6,7 +6,7 @@ import { z } from 'zod/v4';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
-import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
+import { PublisherQueueLimitError, UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { MockStore } from '../../storage/mock';
 import { createFlakyPublishPubSub } from './test-utils/flaky-publish-pubsub';
@@ -93,12 +93,16 @@ describe('workflow finish publication failure', () => {
 
   it('does not advance the parent twice when a finish frame hits the publisher cap', async () => {
     const pubsub = new EventEmitterPubSub();
-    let rejected = false;
+    let rejectedRunId: string | undefined;
+    const publishFailedEvents: Array<Omit<Event, 'id' | 'createdAt'>> = [];
     const publish = pubsub.publish.bind(pubsub);
     pubsub.publish = async (topic, event, options) => {
-      if (topic === 'workflows-finish' && event.type === 'workflow.end' && !rejected) {
-        rejected = true;
-        throw new Error('UnixSocketPubSub publisher queue limit exceeded');
+      if (topic === 'workflows-finish' && event.type === 'workflow.end' && !rejectedRunId) {
+        rejectedRunId = event.runId;
+        throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded');
+      }
+      if (topic === 'workflows-finish' && event.type === 'workflow.publish-failed') {
+        publishFailedEvents.push(event);
       }
       return publish(topic, event, options);
     };
@@ -148,7 +152,14 @@ describe('workflow finish publication failure', () => {
         run.start({ inputData: {} }),
         new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
       ]);
-      expect(rejected).toBe(true);
+      expect(rejectedRunId).toBeDefined();
+      expect(publishFailedEvents).toEqual([
+        {
+          type: 'workflow.publish-failed',
+          runId: rejectedRunId,
+          data: { message: 'UnixSocketPubSub publisher queue limit exceeded' },
+        },
+      ]);
       expect(result).not.toBe('HANG');
       expect(result).toMatchObject({ status: 'success', result: { ok: true } });
       expect(parentAdvances).toBe(1);
