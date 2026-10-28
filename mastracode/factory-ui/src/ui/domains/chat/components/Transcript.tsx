@@ -18,8 +18,11 @@ import {
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
+import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
-import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { planTurnActivity, sameEntryActivity } from './activity/activity-plan';
+import type { EntryActivity } from './activity/activity-plan';
+import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -128,7 +131,7 @@ export function TranscriptEntries({
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
 
   return (
-    <>
+    <ActivityDisclosureProvider>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
         const runningTurn = isLiveTurn && running;
@@ -149,6 +152,7 @@ export function TranscriptEntries({
               .map(step => messageText(renderableParts(step)))
               .filter(Boolean)
               .join('\n\n');
+        const activityByEntry = planTurnActivity(group.entries, suspensions, runningTurn);
 
         return (
           <ChatShell.Turn
@@ -163,6 +167,7 @@ export function TranscriptEntries({
                   entry={entry}
                   suspensions={suspensions}
                   reply={entry === replyEnd ? reply : undefined}
+                  activity={activityByEntry.get(entry.id)}
                   redundantSuspension={
                     entry.kind === 'suspension' &&
                     entry.toolName !== 'request_access' &&
@@ -181,7 +186,33 @@ export function TranscriptEntries({
         );
       })}
       {turnGroups.length === 0 && tail}
-    </>
+    </ActivityDisclosureProvider>
+  );
+}
+
+interface TranscriptEntryContentProps {
+  entry: TimelineEntry;
+  suspensions: ReadonlyMap<string, SuspensionPrompt>;
+  reply?: string;
+  redundantSuspension: boolean;
+  isSubmitting: boolean;
+  viewerId?: string;
+  owner?: ThreadOwner;
+  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
+  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
+  activity?: EntryActivity;
+}
+
+/** The turn's plan is rebuilt every token: compare `activity` by what it draws, the rest by identity. */
+function sameEntryContentProps(
+  { activity: prevActivity, ...prev }: TranscriptEntryContentProps,
+  { activity: nextActivity, ...next }: TranscriptEntryContentProps,
+): boolean {
+  if (!sameEntryActivity(prevActivity, nextActivity)) return false;
+  const nextProps = new Map(Object.entries(next));
+  const prevProps = Object.entries(prev);
+  return (
+    prevProps.length === nextProps.size && prevProps.every(([name, value]) => Object.is(value, nextProps.get(name)))
   );
 }
 
@@ -204,17 +235,8 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
   owner,
   onApprove,
   onRespond,
-}: {
-  entry: TimelineEntry;
-  suspensions: ReadonlyMap<string, SuspensionPrompt>;
-  reply?: string;
-  redundantSuspension: boolean;
-  isSubmitting: boolean;
-  viewerId?: string;
-  owner?: ThreadOwner;
-  onApprove: (toolCallId: string, approved: boolean, promptId: string) => void;
-  onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
-}) {
+  activity,
+}: TranscriptEntryContentProps) {
   switch (entry.kind) {
     case 'message':
       return (
@@ -226,6 +248,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
           viewerId={viewerId}
           owner={owner}
           onRespond={onRespond}
+          activity={activity}
         />
       );
     case 'notice':
@@ -245,7 +268,7 @@ const TranscriptEntryContent = memo(function TranscriptEntryContent({
     default:
       return null;
   }
-});
+}, sameEntryContentProps);
 
 function TranscriptItem({
   entry,
@@ -263,7 +286,7 @@ function TranscriptItem({
       messageId={entry.id}
       scrollAnchor={scrollAnchor}
       // Prepend anchoring needs real item heights, not off-screen estimates.
-      className={cn('[content-visibility:visible]', arriving)}
+      className={cn('[content-visibility:visible] empty:hidden', arriving)}
     >
       <ArrivalScope>{children}</ArrivalScope>
     </MessageScrollerItem>
@@ -271,12 +294,9 @@ function TranscriptItem({
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  if (entry.error) return <RunErrorNotice error={entry.error} entryId={entry.id} />;
   return (
-    <Notice
-      className="my-2"
-      variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
-    >
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );

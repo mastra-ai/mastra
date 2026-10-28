@@ -2,6 +2,7 @@ import { Readable } from 'node:stream';
 import type { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
+import { getCustomRouteHTTPExceptionResponse } from '@mastra/server/server-adapter';
 import { Inject, Injectable } from '@nestjs/common';
 import type { Request, Response as ExpressResponse } from 'express';
 import { Hono } from 'hono';
@@ -138,6 +139,8 @@ export class CustomRouteService {
       if (serverOnError) {
         return serverOnError(err, c as unknown as Parameters<typeof serverOnError>[1]);
       }
+      const httpExceptionResponse = getCustomRouteHTTPExceptionResponse(err);
+      if (httpExceptionResponse) return httpExceptionResponse;
       mastra.getLogger()?.error(`Custom route handler failed: ${c.req.method} ${c.req.path}`, {
         error: err instanceof Error ? (err.stack ?? err.message) : String(err),
       });

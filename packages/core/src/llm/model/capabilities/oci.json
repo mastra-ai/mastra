@@ -27,6 +27,12 @@
     "xai.grok-4.6"
   ],
   "reasoning": {
+    "xai.grok-4.3": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
     "xai.grok-4.6": [
       {
         "type": "effort",
@@ -37,12 +43,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "xai.grok-4.3": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
       }
     ],
     "openai.gpt-oss-120b": [

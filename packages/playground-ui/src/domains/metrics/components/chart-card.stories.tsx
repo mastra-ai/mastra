@@ -3,6 +3,7 @@ import { useState } from 'react';
 import { bucketLabels } from '../lib/bucket-labels';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
 import { CHART_COLORS } from '../lib/chart-colors';
+import { formatAxisUsd } from '../lib/chart-format';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
@@ -11,7 +12,6 @@ import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 const DAY = 24 * 3_600_000;
 const start = new Date(2026, 9, 15).getTime();
 const usd = (v: number) => `$${v.toFixed(2)}`;
-const axisUsd = (v: number) => `$${v.toFixed(v < 10 ? 1 : 0)}`;
 const tokens = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
 // A week of gateway spend: the top model peaks at $4.40 on the busiest day.
@@ -75,7 +75,7 @@ export const Default: Story = {
             xLabels="edges"
             showLegend={false}
             valueFormatter={usd}
-            axisFormatter={axisUsd}
+            axisFormatter={formatAxisUsd}
             {...EDGE_BUCKET_AXIS}
           />
         </ChartArea>
@@ -112,7 +112,7 @@ function SpendCard() {
           lineStyle="thin"
           dots="hover"
           valueFormatter={usd}
-          axisFormatter={axisUsd}
+          axisFormatter={formatAxisUsd}
           {...EDGE_BUCKET_AXIS}
         />
       </ChartArea>
@@ -132,6 +132,36 @@ export const Compact: Story = {
       <ChartCard
         variant="compact"
         title="Tokens"
+        total="1.6M"
+        toolbar={<MetricsLineChartLegend series={tokenSeries} />}
+      >
+        <ChartArea>
+          <MetricsLineChart
+            data={data}
+            series={tokenSeries}
+            height="fill"
+            xLabels="edges"
+            showLegend={false}
+            lineStyle="thin"
+            dots="hover"
+            valueFormatter={tokens.format}
+            axisFormatter={tokens.format}
+            {...EDGE_BUCKET_AXIS}
+          />
+        </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
+/** `href`: the title links to a fuller view of the chart (e.g. an explorer), marked by an expand icon. */
+export const TitleLink: Story = {
+  render: () => (
+    <div className="w-[min(32rem,calc(100vw-3rem))]">
+      <ChartCard
+        variant="compact"
+        title="Tokens"
+        href="#query"
         total="1.6M"
         toolbar={<MetricsLineChartLegend series={tokenSeries} />}
       >

@@ -36,7 +36,7 @@ function createToolCallingModel(toolName: string) {
               toolCallType: 'function',
               toolCallId: 'tc-1',
               toolName,
-              args: JSON.stringify({}),
+              input: JSON.stringify({}),
             },
             { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1, totalTokens: 2 } },
           ]),

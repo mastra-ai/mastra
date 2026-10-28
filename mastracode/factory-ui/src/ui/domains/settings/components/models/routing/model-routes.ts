@@ -1,7 +1,7 @@
 import { Building2, CircleUserRound, MessagesSquare, SquareKanban } from 'lucide-react';
 import type { LucideIcon } from 'lucide-react';
 
-import type { FactoryModelScope } from '../../../../workspaces/services/github';
+import type { FactoryModelScope, FactoryProjectPayload } from '../../../../workspaces/services/github';
 
 export type ModelLane = 'chats' | 'runs';
 export type ModelDefaults = 'personal' | 'factory';
@@ -19,10 +19,7 @@ export const MODEL_DEFAULTS_LABELS: Record<ModelDefaults, string> = {
   factory: 'Factory defaults',
 };
 
-export const MODEL_DEFAULTS_UNUSED_NOTES: Record<ModelDefaults, string> = {
-  personal: 'Not used in this scope',
-  factory: 'Used only when someone has no personal default',
-};
+export const MODEL_DEFAULTS_UNUSED_NOTE = 'Not used in this scope';
 
 export const MODEL_DEFAULTS_ICONS: Record<ModelDefaults, LucideIcon> = {
   personal: CircleUserRound,
@@ -44,8 +41,16 @@ export const MODEL_LANE_ICONS: Record<ModelLane, LucideIcon> = {
   runs: SquareKanban,
 };
 
+export function savedModelScope(project: Pick<FactoryProjectPayload, 'modelScope'>): FactoryModelScope {
+  return project.modelScope ?? 'hybrid';
+}
+
+export function lanesUsing(scope: FactoryModelScope, defaults: ModelDefaults): ModelLane[] {
+  return MODEL_LANES.filter(lane => MODEL_ROUTES[scope][lane] === defaults);
+}
+
 export function defaultsInUse(scope: FactoryModelScope, defaults: ModelDefaults): boolean {
-  return MODEL_LANES.some(lane => MODEL_ROUTES[scope][lane] === defaults);
+  return lanesUsing(scope, defaults).length > 0;
 }
 
 export function connectorPath(fromX: number, fromY: number, toX: number, toY: number): string {

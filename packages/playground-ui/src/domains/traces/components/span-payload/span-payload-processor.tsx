@@ -14,6 +14,7 @@ import {
   SpanPayloadToolCalls,
 } from './span-payload-primitives';
 import { hasItems } from './span-payload-registry';
+import { SpanToolNameValue } from './span-payload-tool';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
 
 type Scalar = string | number | boolean;
@@ -75,6 +76,8 @@ const withCount = (label: string, value: unknown) => (Array.isArray(value) ? `${
 
 export interface SpanPayloadProcessorProps {
   value: ProcessorSpanPayload<ProcessorRunInputByPhase> | ProcessorSpanPayload<ProcessorRunOutputByPhase>;
+  /** Keys another section already shows; left out of the preview but kept in the raw JSON. */
+  hidden?: readonly string[];
 }
 
 /**
@@ -82,8 +85,10 @@ export interface SpanPayloadProcessorProps {
  * phases share most keys, and each payload carries only the ones its phase
  * records. The phase itself is shown once, in the Attributes preview.
  */
-export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
-  const data: Record<string, unknown> = { ...value.data };
+export function SpanPayloadProcessor({ value, hidden = [] }: SpanPayloadProcessorProps) {
+  const data: Record<string, unknown> = Object.fromEntries(
+    Object.entries(value.data).filter(([key]) => !hidden.includes(key)),
+  );
   const messages = [...listOf(data.systemMessages), ...listOf(data.messages)];
   const texts = [data.text, data.accumulatedText].filter(isText);
   const scalars = SCALAR_FIELDS.filter(({ key }) => isScalar(data[key]));
@@ -125,7 +130,9 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
             return (
               <Fragment key={field.key}>
                 <DataKeysAndValues.Key>{field.label}</DataKeysAndValues.Key>
-                {'copy' in field ? (
+                {field.key === 'toolName' ? (
+                  <SpanToolNameValue toolName={String(scalar)} />
+                ) : 'copy' in field ? (
                   <DataKeysAndValues.ValueWithCopyBtn copyValue={String(scalar)}>
                     {formatScalar(scalar)}
                   </DataKeysAndValues.ValueWithCopyBtn>
@@ -149,4 +156,10 @@ export function SpanPayloadProcessor({ value }: SpanPayloadProcessorProps) {
       )}
     </div>
   );
+}
+
+/** A processor span's input, without the tools and tool choice the Tools section shows. */
+export function SpanPayloadProcessorInput({ value }: { value: ProcessorSpanPayload<ProcessorRunInputByPhase> }) {
+  const toolKeys = 'tools' in value.data && hasItems(value.data.tools) ? ['tools', 'toolChoice'] : [];
+  return <SpanPayloadProcessor value={value} hidden={toolKeys} />;
 }

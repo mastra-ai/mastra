@@ -31,23 +31,26 @@ afterEach(() => {
 });
 
 describe('parallel tool calls landing at once', () => {
-  it('cascades the rows in one beat at a time, then folds them once the third lands', () => {
+  it('opens one busy line on the first call and keeps it as the rest land', () => {
     vi.useFakeTimers();
     renderWithProviders(
       <MemoryRouter>
-        <TranscriptEntries entries={[burst]} onApprove={() => {}} onRespond={() => {}} />
+        <TranscriptEntries entries={[burst]} running onApprove={() => {}} onRespond={() => {}} />
       </MemoryRouter>,
     );
 
-    expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
+    expect(document.querySelector('[data-slot="activity-stretch"]')).toBeNull();
 
     act(() => void vi.advanceTimersByTime(600));
 
-    expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(1);
+    const line = screen.getByRole('group', { name: 'Reading src/call-1.ts' });
+    expect(line).toHaveAttribute('aria-busy', 'true');
+    expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
 
     act(() => void vi.advanceTimersByTime(4000));
 
-    expect(screen.getByRole('group', { name: 'Tool group: 3 steps' })).toHaveAttribute('aria-busy', 'true');
+    expect(screen.getByRole('group', { name: 'Reading src/call-3.ts' })).toBe(line);
+    expect(line).toHaveAttribute('aria-busy', 'true');
     expect(screen.queryAllByRole('group', { name: 'Tool: view' })).toHaveLength(0);
   });
 });

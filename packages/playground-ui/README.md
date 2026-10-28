@@ -29,6 +29,28 @@ With a Tailwind build of your own, compile one sheet instead of `style.css`: imp
 @import '@mastra/playground-ui/sources.css';
 ```
 
+### Data sizes
+
+Import `formatBytes` from the number utility:
+
+```ts
+import { formatBytes } from '@mastra/playground-ui/utils/number';
+
+formatBytes(1536);
+formatBytes(0.5, { unit: 'GB' });
+formatBytes(2048, { unit: 'GB', autoScale: false });
+formatBytes(0.5, { unit: 'GB', autoScale: true });
+formatBytes(2048, { unit: 'GB', autoScale: true });
+```
+
+These calls return `1.5 KB`, `0.5 GB`, `2048 GB`, `512 MB`, and `2 TB`, respectively.
+
+With no options, `formatBytes(bytes)` keeps its existing automatic byte formatting and rounding. With a source `unit`, the formatter keeps the supplied value and unit unchanged unless `autoScale: true`. The supported units are `B`, `KB`, `MB`, `GB`, `TB`, and `PB`, also exported as the `ByteUnit` type.
+
+Conversions use the helper's existing binary convention: each unit is 1024 of the previous unit, despite the legacy `KB` through `PB` labels. These are not decimal SI conversions, where each step is 1000. Convert decimal measurements to this convention before passing them in.
+
+Automatic scaling stops at B and PB. It rounds bytes and values of 10 or more to whole numbers, and smaller values in larger units to one decimal place. When rounding reaches 1024, the opt-in mode promotes to the next unit, except at PB. Zero becomes `0 B` in automatic mode and keeps its source unit otherwise. Negative, non-finite, null, and undefined measurements return `undefined` in every mode.
+
 ### Subtle buttons
 
 Use `variant="subtle"` for a persistent neutral fill, such as a selected view. It keeps the same dimensions as `default`, so switching between the two does not move surrounding controls. Set `aria-pressed` on toggle buttons to expose selection to assistive technology.
@@ -479,6 +501,30 @@ The optional `label` slot accepts text or React content above the bar. Long labe
 The caption reads “$4.37 paid from credits” only when usage exceeds the allowance and the charged amount is positive. It is linked to the meter’s accessible description, alongside any caller description and `Meter.Source` key. The meter does not calculate charges from usage. `Meter.Source` children still reveal the source breakdown on hover or keyboard focus.
 
 See DataDisplay/Meter in Storybook for the billing states. Feedback/Dialog’s Resize while open story covers a full-size dialog and a form dialog crossing the 640px drawer breakpoint in either direction. Keep form drafts in caller-owned state when they must survive the popup remount.
+
+### Lint rules
+
+The package ships its design-system lint rules as an [oxlint](https://oxc.rs/docs/guide/usage/linter) JS plugin that apps on the design system can enable. Load the plugin and spread the recommended rules into your `oxlint.config.ts`:
+
+```ts
+import { recommended as playgroundUiRules } from '@mastra/playground-ui/oxlint';
+import { defineConfig } from 'oxlint';
+
+export default defineConfig({
+  jsPlugins: ['@mastra/playground-ui/oxlint'],
+  rules: { ...playgroundUiRules },
+});
+```
+
+| Rule                              | Flags                                                                                            |
+| --------------------------------- | ------------------------------------------------------------------------------------------------ |
+| `playground-ui/icon-button-size`  | A `<Button>` holding only an icon without an `icon-*` size                                       |
+| `playground-ui/text-role`         | Tailwind text sizes (`text-sm`, `text-[13px]`) instead of a text role                            |
+| `playground-ui/txt-tone`          | A `text-foreground` / `text-muted-foreground` / `text-placeholder` class on `<Txt>`              |
+| `playground-ui/font-mono`         | `font-mono` on `<Txt>`; `{ anywhere: true, allowIn: ['Input'] }` checks every class string       |
+| `playground-ui/no-barrel-imports` | Imports, re-exports and `vi.mock()` of the package root or a `components`/`hooks`/`utils` barrel |
+
+Turn rules off per glob in `overrides`, for example for tests and stories.
 
 ## Documentation
 

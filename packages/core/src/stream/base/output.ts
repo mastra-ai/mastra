@@ -33,7 +33,11 @@ import type {
 } from '../types';
 import { isDataChunk } from '../types';
 import { safeClose, safeEnqueue } from './input';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import {
+  createJsonTextStreamTransformer,
+  createObjectStreamTransformer,
+  isStructuredOutputError,
+} from './output-format-handlers';
 import { isChunkOutputProcessed } from './output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
@@ -668,6 +672,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
   #finishUsageIsTotal = false;
   #tripwire: StepTripwireData | undefined = undefined;
   #wasSuspended = false;
+  #resumedPriorText = '';
   #transportRef: MastraModelOutputOptions<OUTPUT>['transportRef'] | undefined;
   #transportClosed = false;
 
@@ -737,7 +742,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     messageId,
     initialState,
     initialToolCalls,
+    resumedText,
     finishUsageIsTotal,
+    onFinishComplete,
   }: {
     model: {
       modelId: string | undefined;
@@ -750,7 +757,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     messageId: string;
     initialState?: any;
     initialToolCalls?: ToolCallChunk[];
+    /**
+     * Text a resumed stream segment inherits from before its suspension: the run's text so far
+     * and the suspended step's part of it. Used when no serialized `initialState` is available.
+     */
+    resumedText?: { priorText: string; stepText: string };
     finishUsageIsTotal?: boolean;
+    /** @internal Successful loop cleanup, after the agent's awaited final memory save. */
+    onFinishComplete?: () => Promise<void>;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
@@ -784,6 +798,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         outputProcessors: options.outputProcessors,
         logger: this.logger,
         agentName: 'MastraModelOutput',
+        agent: options.agent,
         processorStates: options.processorStates,
       });
     }
@@ -837,7 +852,6 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               isChunkOutputProcessed(chunk)
             ) {
               controller.enqueue(chunk);
-              return;
             } else {
               /**
                * Add/update base stream controller to structured output processor state
@@ -1059,6 +1073,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       }
     };
 
+    let structuredOutputErrored = false;
+
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
@@ -1066,7 +1082,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           // still records the call built from the streamed args. Calls with no streamed args
           // stay pending: the error may be retried, and the retry delivers the real tool-call.
           if (chunk.type === 'error') {
-            flushPendingToolCalls(controller, { onlyStreamed: true });
+            // A structured-output error fails the step: its pending calls, streamed or not, must
+            // not be recorded (a half-streamed input would otherwise run as `{}`/partial args).
+            if (isStructuredOutputError(chunk.payload.error)) {
+              structuredOutputErrored = true;
+              self.#pendingToolCalls = Object.create(null);
+            } else {
+              flushPendingToolCalls(controller, { onlyStreamed: true });
+            }
           }
           // A call's outcome must not precede the call itself.
           if (chunk.type === 'tool-result' || chunk.type === 'tool-error') {
@@ -1360,7 +1383,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 // A retried attempt was rolled back, so the last response content belongs to an earlier step.
                 content: isRetriedStep
                   ? []
-                  : ((chunk.payload as any)?._durableStepContent ?? messageList.get.response.aiV5.modelContent(-1)),
+                  : ((chunk.payload as any)?._durableStepContent ??
+                    messageList.get.response.aiV5.modelContent(
+                      -1,
+                      self.#bufferedByStep.toolCalls.map(call => call.payload.toolCallId),
+                    )),
                 text: stepText,
                 // Include tripwire data if present
                 tripwire: stepTripwire,
@@ -1530,7 +1557,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'finish':
               // A tripwire/abort bail ends the run without the final tool-call; don't record a
               // placeholder no-args call for it.
-              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+              // The same holds after a structured-output error: that step is failing, and a
+              // pending call whose input never arrived would run with empty args.
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire' || structuredOutputErrored) {
                 self.#pendingToolCalls = Object.create(null);
               } else {
                 flushPendingToolCalls(controller);
@@ -1664,6 +1693,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               };
 
               let outputResultTripwire: StepTripwireData | undefined;
+              let outputResultError: Error | undefined;
               try {
                 if (self.processorRunner && !self.#options.isLLMExecutionStep) {
                   // Run output processors when NOT in LLM execution step context
@@ -1864,6 +1894,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   self.#error = getErrorFromUnknown(error, {
                     fallbackMessage: 'Unknown error in stream',
                   });
+                  outputResultError = self.#error;
                   self.resolvePromises({
                     finishReason: 'error',
                     text: '',
@@ -1914,17 +1945,20 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   providerMetadata: baseFinishStep.providerMetadata ?? finalProviderMetadata,
                   text: self.#bufferedText.join(''),
                   warnings: baseFinishStep.warnings ?? [],
-                  finishReason: chunk.payload.stepResult.reason,
+                  finishReason:
+                    outputResultError || self.#status === 'failed' ? 'error' : chunk.payload.stepResult.reason,
                   content: messageList.get.response.aiV5.stepContent(),
-                  request: await self.request,
+                  // A preceding error may have rejected result promises already accessed by callers.
+                  // Finish bookkeeping uses the final buffers, independently of those promises.
+                  request: self.#request || {},
                   error: self.error,
-                  reasoning: await self.reasoning,
-                  reasoningText: await self.reasoningText,
-                  sources: await self.sources,
-                  files: await self.files,
+                  reasoning: Object.values(self.#bufferedReasoningDetails || {}),
+                  reasoningText,
+                  sources: self.#bufferedSources,
+                  files: self.#bufferedFiles,
                   steps: self.#bufferedSteps,
                   response: {
-                    ...(await self.response),
+                    ...response,
                     ...baseFinishStep.response,
                     messages: messageList.get.response.aiV5.model(),
                     dbMessages: self.messageList.get.response.db(),
@@ -1932,16 +1966,12 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                   usage: chunk.payload.output.usage,
                   totalUsage: self.#getTotalUsage(),
                   ...(self.#generationReportedUsage && { generationReportedUsage: self.#generationReportedUsage }),
-                  toolCalls: await self.toolCalls,
-                  toolResults: await self.toolResults,
-                  staticToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === false),
-                  staticToolResults: (await self.toolResults).filter(
-                    toolResult => toolResult?.payload?.dynamic === false,
-                  ),
-                  dynamicToolCalls: (await self.toolCalls).filter(toolCall => toolCall?.payload?.dynamic === true),
-                  dynamicToolResults: (await self.toolResults).filter(
-                    toolResult => toolResult?.payload?.dynamic === true,
-                  ),
+                  toolCalls: self.#toolCalls,
+                  toolResults: self.#toolResults,
+                  staticToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === false),
+                  staticToolResults: self.#toolResults.filter(toolResult => toolResult?.payload?.dynamic === false),
+                  dynamicToolCalls: self.#toolCalls.filter(toolCall => toolCall?.payload?.dynamic === true),
+                  dynamicToolResults: self.#toolResults.filter(toolResult => toolResult?.payload?.dynamic === true),
                   // Custom properties (not part of standard callback)
                   ...(self.#model.modelId && self.#model.provider && self.#model.version ? { model: self.#model } : {}),
                   usedFallbackValue: self.#usedFallbackValue,
@@ -1972,6 +2002,10 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 }
               }
 
+              // Output processors may perform the final memory write. A rejected write
+              // must not turn into a clean finish or trigger successful snapshot cleanup.
+              if (outputResultError) throw outputResultError;
+              await onFinishComplete?.();
               self.#closeTransportIfNeeded();
 
               // A `processOutputResult` tripwire rejects the run: end the stream with a
@@ -2064,32 +2098,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           // If stream ends in suspended state (e.g., tool-call-approval), resolve promises with partial results
           // This allows consumers to access data that was produced before the suspension
           if (self.#status === 'suspended') {
-            const reasoningText =
-              self.#bufferedReasoning.length > 0
-                ? self.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
-                : undefined;
-
-            self.resolvePromises({
-              toolResults: self.#toolResults,
-              toolCalls: self.#toolCalls,
-              text: self.#bufferedText.join(''),
-              reasoning: Object.values(self.#bufferedReasoningDetails || {}),
-              reasoningText,
-              sources: self.#bufferedSources,
-              files: self.#bufferedFiles,
-              steps: self.#bufferedSteps,
-              usage: self.#getUsageCountWithSuspendedStep(),
-              totalUsage: self.#getTotalUsage(self.#getUsageCountWithSuspendedStep()),
-              warnings: self.#warnings,
-              finishReason: 'suspended',
-              content: self.messageList.get.response.aiV5.stepContent(),
-              object: undefined,
-              request: self.#request,
-              response: {
-                dbMessages: self.messageList.get.response.db(),
-              },
-              providerMetadata: undefined,
-            });
+            self.#resolveSuspendedPromises();
           }
 
           // If stream ends without proper finish/error chunks, reject unresolved promises
@@ -2113,8 +2122,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     if (initialState) {
       this.deserializeState(initialState);
-    } else if (initialToolCalls) {
-      this.#toolCalls = initialToolCalls;
+    } else {
+      if (initialToolCalls) this.#toolCalls = initialToolCalls;
+      if (resumedText) {
+        const { priorText, stepText } = resumedText;
+        this.#resumedPriorText = priorText;
+        this.#bufferedText = [priorText, stepText].filter(Boolean);
+        this.#bufferedTextAtStepStart = priorText ? 1 : 0;
+        this.#bufferedByStep.text = stepText;
+        this.#wasSuspended = true;
+      }
     }
   }
 
@@ -2420,12 +2437,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
 
     // Calculate text from steps, which respects tripwire (rejected steps return empty text)
     // This ensures rejected responses are excluded from the final text output
-    const textFromSteps = steps.map((step: any) => step.text || '').join('');
+    // A run that suspends mid-step (e.g. awaiting tool approval) has streamed text the step results
+    // don't hold yet. The per-step buffer is reset on every step-finish, so this text is never in `steps`.
+    const textFromSteps =
+      steps.map((step: any) => step.text || '').join('') +
+      (this.#status === 'suspended' ? this.#bufferedByStep.text : '');
 
     const fullOutput: FullOutput<OUTPUT> = {
       // After a tripwire, `text` already holds the resolved output (and a processOutputStream
       // tripwire can end the run before any step completes), so reuse it to stay in sync.
-      text: this.tripwire || steps.length === 0 ? await this.text : textFromSteps,
+      text: this.tripwire || steps.length === 0 ? await this.text : this.#resumedPriorText + textFromSteps,
       usage: await this.usage,
       steps,
       finishReason: await this.finishReason,
@@ -2769,6 +2790,36 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     };
   }
 
+  /** Resolves the result promises with what the run produced before it suspended. */
+  #resolveSuspendedPromises() {
+    const reasoningText =
+      this.#bufferedReasoning.length > 0
+        ? this.#bufferedReasoning.map(reasoningPart => reasoningPart.payload.text).join('')
+        : undefined;
+
+    this.resolvePromises({
+      toolResults: this.#toolResults,
+      toolCalls: this.#toolCalls,
+      text: this.#bufferedText.join(''),
+      reasoning: Object.values(this.#bufferedReasoningDetails || {}),
+      reasoningText,
+      sources: this.#bufferedSources,
+      files: this.#bufferedFiles,
+      steps: this.#bufferedSteps,
+      usage: this.#getUsageCountWithSuspendedStep(),
+      totalUsage: this.#getTotalUsage(this.#getUsageCountWithSuspendedStep()),
+      warnings: this.#warnings,
+      finishReason: 'suspended',
+      content: this.messageList.get.response.aiV5.stepContent(),
+      object: undefined,
+      request: this.#request,
+      response: {
+        dbMessages: this.messageList.get.response.db(),
+      },
+      providerMetadata: undefined,
+    });
+  }
+
   #emitChunk(chunk: ChunkType<OUTPUT>) {
     if (getChunkProducedAt(chunk) === undefined) stampChunkProducedAt(chunk, Date.now());
     // Carry the traceId on every chunk Mastra produces so stream consumers can link chunks to their
@@ -2810,6 +2861,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     this.#bufferedChunks.length = 0;
     this.#bufferedSteps.length = 0;
     this.#bufferedText.length = 0;
+    this.#resumedPriorText = '';
     this.#bufferedTextAtStepStart = 0;
     this.#bufferedTextChunks = {};
     this.#bufferedSources.length = 0;
@@ -2835,6 +2887,16 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     // removeAllListeners() here would silently kill every other subscriber
     // (see #19743).
     let detach: (() => void) | undefined;
+    // Erroring a ReadableStream discards the chunks still queued for its reader, so a failure that
+    // arrives while this subscriber is behind waits in `pendingError` until `pull` sees the queue empty.
+    let pendingError: { error: unknown } | undefined;
+    const fail = (controller: ReadableStreamDefaultController<ChunkType<OUTPUT>>, error: unknown) => {
+      if ((controller.desiredSize ?? 0) > 0) {
+        controller.error(error);
+      } else {
+        pendingError = { error };
+      }
+    };
 
     return new ReadableStream<ChunkType<OUTPUT>>({
       start(controller) {
@@ -2846,7 +2908,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         // If stream already finished, close immediately
         if (self.#streamFinished) {
           if (self.#consumeStreamErrored) {
-            controller.error(self.#consumeStreamError);
+            fail(controller, self.#consumeStreamError);
           } else {
             controller.close();
           }
@@ -2869,7 +2931,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         };
         const errorHandler = (error: unknown) => {
           detachListeners();
-          controller.error(error);
+          fail(controller, error);
         };
 
         self.#emitter.on('chunk', chunkHandler);
@@ -2879,7 +2941,11 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
         detach = detachListeners;
       },
 
-      pull(_controller) {
+      pull(controller) {
+        if (pendingError) {
+          controller.error(pendingError.error);
+          return;
+        }
         // Only start consumption when someone is actively reading the stream
         if (!self.#consumptionStarted) {
           self.consumeStream().catch(error => {

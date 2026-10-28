@@ -118,7 +118,7 @@ function DatasetCompareVersionsPage() {
             </MainHeader.Column>
             <MainHeader.Column>
               <Button render={<Link to={`/datasets/${datasetId}`} />} icon={<ArrowLeft />}>
-                Back to Dataset
+                Back to dataset
               </Button>
             </MainHeader.Column>
           </MainHeader>

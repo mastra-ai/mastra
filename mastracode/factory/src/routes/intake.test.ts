@@ -697,6 +697,37 @@ describe('intake configuration', () => {
     expect(invalid.status).toBe(400);
   });
 
+  it('keeps a stored custom integration selection when a save omits it', async () => {
+    const app = buildApp(orgUser, [...integrations, { id: 'custom-tracker', intake: linear }]);
+    const put = (body: unknown) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const custom = { enabled: false, sourceIds: ['src-1'] };
+
+    expect((await put({ 'custom-tracker': custom })).status).toBe(200);
+    const response = await put({
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
+    });
+
+    const expected = {
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
+      'custom-tracker': custom,
+    };
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ config: expected });
+    expect(await (await app.request('/web/intake/config')).json()).toEqual({ config: expected });
+
+    await put({ github: { enabled: false, sourceIds: null } });
+    expect(await (await app.request('/web/intake/config')).json()).toEqual({
+      config: { ...expected, github: { enabled: false, sourceIds: null } },
+    });
+  });
+
   it('drops disabled empty entries for unregistered integrations', async () => {
     const response = await buildApp(orgUser, [{ id: 'github', intake: github }]).request('/web/intake/config', {
       method: 'PUT',

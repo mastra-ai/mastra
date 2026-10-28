@@ -1,8 +1,9 @@
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useState } from 'react';
 
-import { useAvailableModelsQuery } from '../../../../../../hooks/useAvailableModels';
+import { useAvailableModelsQuery, useFallbackModelQuery } from '../../../../../../hooks/useAvailableModels';
 import {
   useApplyFactoryDefaultModelMutation,
   useFactoryProjectQuery,
@@ -11,11 +12,13 @@ import {
 import { ModelCombobox } from '../../ModelCombobox';
 import { SharedCredentialNotice } from '../../SharedCredentialNotice';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
+import { FactoryThinkingControl } from './FactoryThinkingControl';
 import { SwitchRunningSessionsDialog } from './SwitchRunningSessionsDialog';
 
 export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
-  const modelsQuery = useAvailableModelsQuery({ factoryProjectId: factoryId });
+  const modelsQuery = useAvailableModelsQuery({ scope: 'org' });
+  const fallbackModelQuery = useFallbackModelQuery({ scope: 'org' });
   const setDefaultModel = useSetFactoryDefaultModelMutation(factoryId);
   const applyToSessions = useApplyFactoryDefaultModelMutation(factoryId);
   const [confirmModelId, setConfirmModelId] = useState<string>();
@@ -37,16 +40,20 @@ export function FactoryDefaultModel({ factoryId }: { factoryId: string }) {
     <>
       <div className="flex min-w-0 flex-col gap-2">
         <div className="flex items-center gap-2">
-          <ModelCombobox
-            models={modelsQuery.data ?? []}
-            value={defaultModelId}
-            onValueChange={saveDefaultModel}
-            placeholder="Select a model"
-            aria-label="Factory default model"
-            size="sm"
-            className="min-w-0 flex-1"
-            disabled={projectQuery.isPending || setDefaultModel.isPending}
-          />
+          <ButtonsGroup size="sm" aria-label="Factory default model and thinking" className="min-w-0 flex-1">
+            <ModelCombobox
+              models={modelsQuery.data ?? []}
+              value={defaultModelId}
+              onValueChange={saveDefaultModel}
+              fallbackModelId={fallbackModelQuery.data}
+              placeholder="Select a model"
+              aria-label="Factory default model"
+              size="sm"
+              className="min-w-0 flex-1"
+              disabled={projectQuery.isPending || setDefaultModel.isPending}
+            />
+            <FactoryThinkingControl factoryId={factoryId} />
+          </ButtonsGroup>
           {setDefaultModel.isPending && (
             <Spinner size="sm" aria-label="Saving default model" className="text-muted-foreground shrink-0" />
           )}

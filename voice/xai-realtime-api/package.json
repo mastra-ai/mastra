@@ -1,6 +1,6 @@
 {
   "name": "@mastra/voice-xai-realtime",
-  "version": "0.2.16",
+  "version": "0.2.17",
   "description": "Mastra xAI Grok Voice Agent API integration",
   "type": "module",
   "main": "dist/index.js",
@@ -32,14 +32,14 @@
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
-    "ws": "^8.21.3"
+    "ws": "^8.22.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/voice": "workspace:*",
-    "@types/node": "22.20.5",
-    "@types/ws": "^8.18.1",
+    "@types/node": "22.19.15",
+    "@types/ws": "^8.18.2",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tsdown": "0.23.1",

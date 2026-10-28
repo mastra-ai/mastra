@@ -10,7 +10,7 @@ import { z as z3 } from 'zod/v3';
 import { createRouteTestSuite } from './route-test-suite';
 import { expectValidSchema } from './route-test-utils';
 import { buildRouteRequest, createDefaultTestContext, parseDatesInResponse } from './test-helpers';
-import type { AdapterTestContext, AdapterTestSuiteConfig, HttpRequest } from './test-helpers';
+import type { AdapterTestContext, AdapterTestSuiteConfig, HttpRequest, HttpResponse } from './test-helpers';
 
 /**
  * Creates a standardized integration test suite for server adapters (Express/Hono)
@@ -463,6 +463,9 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
       // Recover requires both a durable agent and a persisted workflow run.
       // Its stateful behavior is covered by packages/server/src/server/handlers/agents.test.ts.
       '/agents/:agentId/recover',
+      // Run-scoped abort returns 501 for the suite's non-durable agent by design.
+      // Durable behavior is covered by packages/server/src/server/handlers/agents.test.ts.
+      '/agents/:agentId/runs/:runId/abort',
       // Reading a submitted plan requires an agent exposing the core submit_plan tool
       // and a workspace filesystem containing the plan. The generic agent has neither;
       // capability, path, and filesystem behavior are covered by plans.test.ts.
@@ -1223,6 +1226,191 @@ export function createRouteAdapterTestSuite(config: AdapterTestSuiteConfig) {
         expect(Array.isArray(failingItems)).toBe(true);
         expect(failingItems).toHaveLength(1);
         expect(failingItems[0]).toMatchObject({ index: 0, field: 'input' });
+      });
+    });
+
+    describe('HTTPException thrown from a registerApiRoute custom route', () => {
+      // Shaped like `hono/http-exception`'s HTTPException but not an instance of
+      // Mastra's class, as when the user's app resolves its own copy of hono.
+      class ForeignHTTPException extends Error {
+        constructor(
+          readonly status: number,
+          options: { message: string },
+        ) {
+          super(options.message);
+        }
+        res = undefined;
+        getResponse() {
+          return new Response(this.message, { status: this.status });
+        }
+      }
+
+      async function setupCustomRouteErrors() {
+        const ctx = await createDefaultTestContext();
+        const originalGetServer = ctx.mastra.getServer.bind(ctx.mastra);
+        const routes = [
+          registerApiRoute('/custom-errors/not-found', {
+            method: 'GET',
+            handler: async () => {
+              throw new HTTPException(404, { message: 'Widget not found' });
+            },
+          }),
+          registerApiRoute('/custom-errors/conflict', {
+            method: 'POST',
+            handler: async () => {
+              throw new ForeignHTTPException(409, { message: 'Widget already exists' });
+            },
+          }),
+          registerApiRoute('/custom-errors/custom-response', {
+            method: 'GET',
+            handler: async () => {
+              throw new HTTPException(429, {
+                res: new Response(JSON.stringify({ error: 'Slow down' }), {
+                  status: 429,
+                  headers: { 'Content-Type': 'application/json', 'Retry-After': '5' },
+                }),
+              });
+            },
+          }),
+          registerApiRoute('/custom-errors/unexpected', {
+            method: 'GET',
+            handler: async () => {
+              throw new Error('db password=do-not-leak');
+            },
+          }),
+          registerApiRoute('/custom-errors/invalid-status', {
+            method: 'GET',
+            handler: async () => {
+              throw new ForeignHTTPException(Number.NaN, { message: 'bad status do-not-leak' });
+            },
+          }),
+        ];
+        ctx.mastra.getServer = () => ({ ...originalGetServer(), apiRoutes: routes }) as any;
+        return (await setupAdapter(ctx)).app;
+      }
+
+      // Custom-route responses may arrive chunked, which some harnesses expose as a stream.
+      async function bodyText(response: HttpResponse): Promise<string> {
+        if (!response.stream) return typeof response.data === 'string' ? response.data : JSON.stringify(response.data);
+        const decoder = new TextDecoder();
+        let text = '';
+        for await (const chunk of response.stream as AsyncIterable<unknown>) {
+          text += typeof chunk === 'string' ? chunk : decoder.decode(chunk as Uint8Array, { stream: true });
+        }
+        return text + decoder.decode();
+      }
+
+      it('keeps the status and message of a Mastra HTTPException', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/not-found' });
+        expect(response.status).toBe(404);
+        expect(JSON.parse(await bodyText(response))).toEqual({ error: 'Widget not found' });
+      });
+
+      it('keeps the status and message of an HTTPException from another hono install', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, {
+          method: 'POST',
+          path: '/custom-errors/conflict',
+          body: {},
+        });
+        expect(response.status).toBe(409);
+        expect(JSON.parse(await bodyText(response))).toEqual({ error: 'Widget already exists' });
+      });
+
+      it('returns the HTTPException custom response with its headers', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, {
+          method: 'GET',
+          path: '/custom-errors/custom-response',
+        });
+        expect(response.status).toBe(429);
+        expect(response.headers['retry-after']).toBe('5');
+        expect(JSON.parse(await bodyText(response))).toEqual({ error: 'Slow down' });
+      });
+
+      it('still hides unexpected errors behind a generic 500', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/unexpected' });
+        expect(response.status).toBe(500);
+        const text = await bodyText(response);
+        expect(text).toContain('Internal Server Error');
+        expect(text).not.toContain('do-not-leak');
+      });
+
+      it('treats an HTTPException with a non-integer status as unexpected', async () => {
+        const customApp = await setupCustomRouteErrors();
+        const response = await executeHttpRequest(customApp, { method: 'GET', path: '/custom-errors/invalid-status' });
+        expect(response.status).toBe(500);
+        const text = await bodyText(response);
+        expect(text).toContain('Internal Server Error');
+        expect(text).not.toContain('do-not-leak');
+      });
+    });
+
+    describe('Dataset item rejected by the input schema', () => {
+      it('returns the failing field paths and messages without the submitted values', async () => {
+        const context = await createDefaultTestContext();
+        const dataset = await context.mastra.datasets.create({
+          name: 'item-schema-parity',
+          inputSchema: {
+            type: 'object',
+            properties: { question: { type: 'string' } },
+            required: ['question'],
+          },
+        });
+        const setup = await setupAdapter(context);
+
+        const response = await executeHttpRequest(setup.app, {
+          method: 'POST',
+          path: `/api/datasets/${dataset.id}/items`,
+          body: { input: { question: { marker: 'rejected-secret-value' }, note: 'submitted-secret-value' } },
+        });
+
+        expect(response.status).toBe(400);
+        const cause = (response.data as any)?.cause;
+        expect(cause?.field).toBe('input');
+        expect(cause?.errors).toEqual([{ path: '/question', message: expect.any(String) }]);
+        expect(JSON.stringify(response.data)).not.toContain('submitted-secret-value');
+        expect(JSON.stringify(response.data)).not.toContain('rejected-secret-value');
+      });
+
+      it('strips anything but path and message from validation errors', async () => {
+        const route: ServerRoute<any, any, any> = {
+          method: 'GET',
+          path: '/custom/http-error-validation-cause',
+          responseType: 'json',
+          handler: async () => {
+            throw new HTTPException(400, {
+              message: 'Validation failed for input',
+              cause: {
+                field: 'input',
+                errors: [{ path: '/question', code: 'invalid_type', message: 'Expected string', received: 'leak-me' }],
+                rawInput: 'leak-me-too',
+              },
+            });
+          },
+        };
+        const mutableServerRoutes = SERVER_ROUTES as ServerRoute[];
+        const originalLength = mutableServerRoutes.length;
+        mutableServerRoutes.push(route);
+        let app: any;
+        try {
+          app = (await setupAdapter(await createDefaultTestContext())).app;
+        } finally {
+          mutableServerRoutes.splice(originalLength);
+        }
+
+        const response = await executeHttpRequest(app, {
+          method: 'GET',
+          path: '/api/custom/http-error-validation-cause',
+        });
+
+        expect(response.status).toBe(400);
+        expect(response.data).toEqual({
+          error: 'Validation failed for input',
+          cause: { field: 'input', errors: [{ path: '/question', message: 'Expected string' }] },
+        });
       });
     });
 

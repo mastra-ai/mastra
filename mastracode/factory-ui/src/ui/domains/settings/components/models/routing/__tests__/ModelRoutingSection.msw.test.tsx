@@ -16,7 +16,9 @@ function stubFactory(modelScope: FactoryModelScope, patchStatus = 200) {
   const patchedBodies: unknown[] = [];
   let saved = modelScope;
   server.use(
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: null })),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
+    ),
     http.get(FACTORY_URL, () => HttpResponse.json({ project: { id: 'fp-1', name: 'Mastra', modelScope: saved } })),
     http.get(`${TEST_BASE_URL}/web/config/models`, () =>
       HttpResponse.json({
@@ -66,9 +68,7 @@ describe('ModelRoutingSection', () => {
     const { client } = renderRoutingSection();
 
     await waitFor(() => expect(routing('Personal')).toBeChecked());
-    expect(
-      within(region('Factory defaults')).getByText('Used only when someone has no personal default'),
-    ).toBeInTheDocument();
+    expect(within(region('Factory defaults')).getByText('Not used in this scope')).toBeInTheDocument();
     expect(screen.queryByRole('combobox', { name: 'Factory default model' })).not.toBeInTheDocument();
 
     await user.click(routing('Factory'));

@@ -4,6 +4,7 @@ import { EventEmitterPubSub } from '../events/event-emitter';
 import { isLeaseProvider, NoopLeaseProvider } from '../events/pubsub';
 import type { LeaseProvider, PubSub } from '../events/pubsub';
 import type { EventCallback } from '../events/types';
+import { AGENTIC_LOOP_WORKFLOW_ID } from '../loop/loop-builder';
 import { parseMemoryRequestContext } from '../memory/types';
 import { MASTRA_RESOURCE_ID_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from '../request-context';
 import type { MastraModelOutput } from '../stream/base/output';
@@ -11,14 +12,22 @@ import { getChunkProducedAt } from '../stream/base/produced-at';
 import { isSignalChunkExcluded } from '../stream/signal-exclusions';
 import { stripModelSnapshots } from '../stream/strip-model-snapshots';
 import { ChunkFrom } from '../stream/types';
-import type { ChunkType, ThreadHistoryChunk } from '../stream/types';
+import type {
+  ChunkType,
+  ThreadHistoryChunk,
+  ThreadRunStatusChunk,
+  UserMessagePendingChunk,
+  UserMessageCancelledChunk,
+} from '../stream/types';
 import { readPositiveIntEnv } from '../utils';
+import type { WorkflowRunStatus } from '../workflows/types';
 import type { Agent } from './agent';
 import type { AgentExecutionOptions } from './agent.types';
+import { DurableStepIds } from './durable/constants';
 import type { MessageListInput } from './message-list';
 import { createRecentRequests } from './recent-requests';
-import { clearRunLeaseFence, setRunLeaseFence } from './run-lease-fence';
-import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
+import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSettle } from './run-lease-fence';
+import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
 import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
@@ -36,6 +45,7 @@ import type {
   AgentThreadSubscription,
   AgentUpdateThreadPeerOptions,
   DiscoverAgentThreadPeersOptions,
+  DurableAgentLike,
   CancelQueuedAgentMessagesOptions,
   CancelQueuedAgentMessagesResult,
   AgentThreadEventListener,
@@ -65,7 +75,25 @@ function toModelOutput<OUTPUT>(result: unknown): MastraModelOutput<OUTPUT> {
   return result as MastraModelOutput<OUTPUT>;
 }
 
+function userMessageSignalId(part: unknown): string | undefined {
+  if (!part || typeof part !== 'object' || !('type' in part) || part.type !== 'data-user-message') return;
+  if (!('data' in part) || !part.data || typeof part.data !== 'object') return;
+  return 'id' in part.data && typeof part.data.id === 'string' ? part.data.id : undefined;
+}
+
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
+const TERMINAL_STORED_RUN_STATUSES = new Set<WorkflowRunStatus>([
+  'success',
+  'failed',
+  'canceled',
+  'bailed',
+  'tripwire',
+]);
+
+/** Keys {@link AgentThreadRuntimeState.claimedQueuedMessages} by thread and signal id. */
+function claimedQueuedMessageKey(key: string, signalId: string): string {
+  return JSON.stringify([key, signalId]);
+}
 
 /**
  * Formats a thread key for use in error messages.
@@ -116,6 +144,12 @@ const AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS = 5_000;
 const FAILED_RUN_TRIM_DELAY_MS = 30_000;
 const AGENT_THREAD_PEER_DISCOVERY_TOPIC = 'agent.thread-peer-discovery';
 const AGENT_THREAD_PEER_DISCOVERY_TIMEOUT_MS = 100;
+const RETAKE_LEASE_MARKER = '\u0000retake\u0000';
+
+function isRetakeLeaseOwner(owner: string | undefined): boolean {
+  return owner?.includes(RETAKE_LEASE_MARKER) ?? false;
+}
+
 // How much longer than its window a discovery may wait for a caller whose event loop was busy.
 const AGENT_THREAD_PEER_DISCOVERY_MAX_EXTRA_MS = 1_000;
 
@@ -194,6 +228,9 @@ export class AgentThreadLeaseConflictError extends Error {
     this.name = 'AgentThreadLeaseConflictError';
   }
 }
+
+/** The `reason` an `abort` chunk carries when its run stopped because another run holds its thread lease. */
+export const THREAD_LEASE_LOST_ABORT_REASON = 'thread-lease-lost';
 
 export class AgentThreadLeaseLostError extends Error {
   constructor(runId: string) {
@@ -352,10 +389,18 @@ type AgentThreadRunRecord<OUTPUT = unknown> = {
   supersedes?: boolean;
   /** See {@link AgentThreadRunClaim.ownershipLost}. */
   ownershipLost?: () => boolean;
+  /** See {@link AgentThreadRunClaim.stepOwner}. */
+  stepOwner?: () => object | undefined;
   /** This process read the record's own `run-registered` back from the thread topic. */
   registrationSeen?: boolean;
   /** Another process registered the run after this record did, so it executes the run now. */
   registeredElsewhere?: boolean;
+  /**
+   * This record's retake gave up while its handoff was still in flight, so that handoff may yet install the run id
+   * on a lease nothing here renews. Ending must leave such a lease to expire rather than release a successor's.
+   * Kept on the record, not on the run id: a later execution reusing the id owns its own lease again.
+   */
+  lateRetakeHandoff?: boolean;
   lifecycle: AgentThreadRunLifecycle;
   suspensions?: Map<string | undefined, AgentThreadRunSuspension>;
   /** When the record was parked as suspended (ms epoch); drives the TTL sweep. */
@@ -486,6 +531,28 @@ type AcceptedIdleMessage = {
   admission?: Promise<AcceptedIdleMessage>;
 };
 
+type ThreadAdmissionOutcome = {
+  action: 'local' | 'remote' | 'blocked';
+  runId: string;
+};
+
+type PendingThreadAdmission = {
+  runId: string;
+  /** The agent whose run holds the reservation. */
+  agentId: string;
+  outcome: Promise<ThreadAdmissionOutcome>;
+};
+
+/** A claimed-owner message queued for a run in flight, tracked so cancelling it ends the logical message. */
+type ClaimedQueuedMessage = {
+  identity?: string;
+  /** The run the logical message was settled on, once it is. */
+  runId?: string;
+  cancelled?: boolean;
+};
+
+const CANCELLED_BEFORE_RUN = 'The accepted message was cancelled before it ran';
+
 type AgentThreadRuntimeState = {
   threadRunsById: Map<string, AgentThreadRunRecord<any>>;
   threadRunsByStreamId: Map<string, AgentThreadRunRecord<any>>;
@@ -529,6 +596,8 @@ type AgentThreadRuntimeState = {
   drainingPendingSignalsByThread: Map<string, { signal: CreatedAgentSignal; cancelled: boolean; handedOff: boolean }>;
   pendingContinuationsByThread: Map<string, PendingContinuation<any>[]>;
   claimedThreadOwnerDiscoveries: Map<string, Promise<string | undefined>>;
+  /** Idle-start reservations whose execution lease has not resolved yet. */
+  pendingThreadAdmissions: Map<string, PendingThreadAdmission>;
   /**
    * Idle signals this process has already acted on, keyed by request id, with the
    * reply it sent. Backends deliver at least once, so a redelivery of a signal
@@ -543,6 +612,11 @@ type AgentThreadRuntimeState = {
    * preserves when it retries a message whose acknowledgement never landed.
    */
   acceptedIdleMessagesByIdentity: ReturnType<typeof createRecentRequests<AcceptedIdleMessage>>;
+  /**
+   * Claimed-owner messages queued for a run in flight, keyed by {@link claimedQueuedMessageKey}: the thread and the
+   * signal id, since callers may choose signal ids and two threads can queue the same one.
+   */
+  claimedQueuedMessages: ReturnType<typeof createRecentRequests<ClaimedQueuedMessage>>;
   claimedThreadOwners: Map<string, ClaimedThreadOwner<any>>;
   advertisedThreadPeers: Map<string, AdvertisedThreadPeer>;
   watchedThreadStreamIds: Set<string>;
@@ -565,6 +639,10 @@ type AgentThreadRuntimeState = {
    */
   leaseDeadlines: Map<string, { timer: ReturnType<typeof setTimeout>; confirmedSentAt: number }>;
   leaseFences: Map<string, () => Promise<void>>;
+  /** A run's in-flight attempt to take back a lease that lapsed, so the renewal, deadline and fence share one. */
+  leaseRetakes: Map<string, Promise<boolean>>;
+  /** Runs this runtime stopped because another run holds their thread lease, until their abort is broadcast. */
+  leaseLostRunIds: Set<string>;
   threadEventListeners: Set<ThreadEventListenerRegistration>;
   threadControlSubscriptions: Map<string, ThreadControlSubscription>;
   /**
@@ -597,6 +675,11 @@ type AgentThreadRunClaim = {
    * and leaves the follow-ups queued for it to the run's next execution.
    */
   ownershipLost?: () => boolean;
+  /**
+   * The object a durable run's steps mark themselves running under (its registry entry). A run that loses its
+   * thread lease lets those steps finish before it stops; a run this runtime prepared uses its own abort signal.
+   */
+  stepOwner?: () => object | undefined;
 };
 
 export type AgentThreadStrictRegistrationOptions = AgentThreadRunClaim & {
@@ -668,12 +751,16 @@ type AgentThreadStreamRuntimeEvent =
       persisted?: boolean;
       /** The run's final status; `success` means storage holds all of it and nothing is left to act on. */
       status?: string;
+      /** Remains non-authoritative even if retention evicts the recovery registration. */
+      superseded?: boolean;
     }
   | { type: 'run-suspended'; runId: string; streamId?: string }
   | { type: 'run-discarded'; runId: string; streamId: string }
   | { type: 'run-abort-requested'; runId: string; streamId: string; clearPendingSignals?: boolean }
   | { type: 'signals-cancelled'; signalIds: string[] }
-  | { type: 'run-aborted'; runId: string; streamId?: string }
+  | { type: 'user-message-presentation'; chunk: UserMessagePendingChunk | UserMessageCancelledChunk }
+  | { type: 'user-message-delivered'; signalId: string }
+  | { type: 'run-aborted'; runId: string; streamId?: string; superseded?: boolean }
   | { type: 'run-failed'; runId: string; streamId?: string; error: string }
   | { type: 'signal-enqueued'; runId: string; signal: SerializableAgentSignal; sourceId: string; preRun?: boolean }
   | {
@@ -692,6 +779,16 @@ type AgentThreadStreamRuntimeEvent =
       expiresAt?: number;
       /** Legacy relative window from pre-`expiresAt` senders. */
       timeoutMs?: number;
+      /**
+       * The sender asks for this to join a run in flight at the owner. Absent (queued input, and every
+       * sender from before this field) keeps it waiting until the thread is idle.
+       */
+      joinActiveRun?: boolean;
+      /**
+       * The same signal with the sender's `ifActive` attributes, for an owner that hands it to a run in flight. The
+       * sender can't see that run, so `signal` carries its `ifIdle` attributes.
+       */
+      joinSignal?: SerializableAgentSignal;
     };
 
 type AgentThreadIdleSignalAcceptanceEvent =
@@ -761,8 +858,10 @@ function createRuntimeState(): AgentThreadRuntimeState {
     drainingPendingSignalsByThread: new Map(),
     pendingContinuationsByThread: new Map(),
     claimedThreadOwnerDiscoveries: new Map(),
+    pendingThreadAdmissions: new Map(),
     handledIdleSignals: createRecentRequests<HandledIdleSignal>(),
     acceptedIdleMessagesByIdentity: createRecentRequests<AcceptedIdleMessage>(),
+    claimedQueuedMessages: createRecentRequests<ClaimedQueuedMessage>(),
     claimedThreadOwners: new Map(),
     advertisedThreadPeers: new Map(),
     watchedThreadStreamIds: new Set(),
@@ -774,6 +873,8 @@ function createRuntimeState(): AgentThreadRuntimeState {
     leaseRenewalTimers: new Map(),
     leaseDeadlines: new Map(),
     leaseFences: new Map(),
+    leaseRetakes: new Map(),
+    leaseLostRunIds: new Set(),
     threadEventListeners: new Set(),
     threadControlSubscriptions: new Map(),
     runStreamReaders: new Map(),
@@ -920,12 +1021,21 @@ export class AgentThreadStreamRuntime {
             // A renewal that settles after the run ended or re-registered speaks for no live run, and must not
             // leave a rejecting fence behind for a later run with this id.
             if (state.leaseRenewalTimers.get(runId) !== timer) return;
-            // Another process may already own the thread, so stop this run instead of letting it keep
-            // calling the model and tools beside its successor.
-            this.#stopLeaseRenewal(pubsub, runId, timer);
-            this.#abortLeaseLostRun(state, runId);
+            // Answered after the lease had already run out by this process's own clock, the renewal may have found the
+            // lease lapsed only because this process was late (a stall under load, even one that began after the
+            // renewal went out); it can take it back if nobody else did. Answered while the lease should still have
+            // been live, it means the backend lost or gave away a live lease, and another process may already own the
+            // thread: stop this run instead of letting it keep calling the model and tools beside its successor.
+            const confirmed = state.leaseDeadlines.get(runId)?.confirmedSentAt;
+            const lapsedHere = confirmed === undefined || Date.now() >= confirmed + AGENT_THREAD_LEASE_TTL_MS;
+            const retaken = lapsedHere ? this.#retakeLease(pubsub, key, runId, timer) : Promise.resolve(false);
+            void retaken.then(kept => {
+              if (kept || state.leaseRenewalTimers.get(runId) !== timer) return;
+              this.#stopLeaseRenewal(pubsub, runId, timer);
+              this.#abortLeaseLostRun(state, runId);
+            });
           } else {
-            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, runId, sentAt);
+            if (state.leaseRenewalTimers.get(runId) === timer) this.#armLeaseDeadline(pubsub, key, runId, sentAt);
             if (state.sweptLeasedRunIds.has(runId)) {
               // A renewal in flight when the sweep stopped this timer still extended the lease.
               state.sweptLeasedRunIds.set(runId, Date.now());
@@ -947,7 +1057,7 @@ export class AgentThreadStreamRuntime {
     }
     state.leaseRenewalTimers.set(runId, timer);
     // The lease was acquired or transferred just before this call.
-    this.#armLeaseDeadline(pubsub, runId, Date.now());
+    this.#armLeaseDeadline(pubsub, key, runId, Date.now());
     // A pubsub that can't lease has no owner to check, so every tool call would look like a takeover.
     if (!this.#resolveLeaseProvider(pubsub).isFallback) {
       const fence = this.#leaseFence(pubsub, key, runId, timer);
@@ -960,6 +1070,7 @@ export class AgentThreadStreamRuntime {
    * Checked before each tool call. Renewals run every TTL/3, so a lease that was
    * taken over is otherwise only noticed after the run may have called tools beside
    * its successor. A backend that can't answer leaves the decision to the deadline.
+   * A lease that lapsed past the run's deadline with no other owner is taken back rather than stopping the run.
    */
   #leaseFence(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): () => Promise<void> {
     const state = this.#getState(pubsub);
@@ -974,15 +1085,37 @@ export class AgentThreadStreamRuntime {
         Math.max(0, deadline.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
       );
       const unreachable = Symbol('unreachable');
-      const owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => unreachable), expiredAt]).finally(
+      let owner = await Promise.race([leaseProvider.getLeaseOwner(key).catch(() => unreachable), expiredAt]).finally(
         () => clearTimeout(expired),
       );
       if (owner === runId) return;
+      // This run's own retake holds the lease under a temporary token until it hands it to the run id, which a
+      // queued tool call can still catch in flight. Nobody else took the thread, so the run keeps it.
+      if (typeof owner === 'string' && owner.startsWith(`${runId}${RETAKE_LEASE_MARKER}`)) {
+        const retake = state.leaseRetakes.get(runId);
+        if (await (retake ?? Promise.resolve(false))) return;
+        // That check may have settled it, so read the owner once more. Bound that read by one renewal interval:
+        // a backend that answered the token and then stalls must not leave this fence pending. A silent read is
+        // reported as unreachable, and every answer falls through to the policy below exactly like the first read.
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        owner = await Promise.race([
+          leaseProvider.getLeaseOwner(key).catch(() => unreachable),
+          new Promise<typeof unreachable>(
+            resolve => (giveUp = setTimeout(() => resolve(unreachable), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+          ),
+        ]).finally(() => clearTimeout(giveUp));
+        if (owner === runId) return;
+      }
       // A backend error only passes while the last confirmed renewal still covers this call.
       if (owner === unreachable) {
-        const current = state.leaseDeadlines.get(runId);
-        if (current && Date.now() < current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
+        const covering = state.leaseDeadlines.get(runId);
+        if (covering && Date.now() < covering.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS) return;
       }
+      // Past the deadline with no owner, or no answer: the lease lapsed while this process was late, and is this
+      // run's again if nobody took it. No owner before the deadline means the backend lost a live lease.
+      const current = state.leaseDeadlines.get(runId);
+      const pastDeadline = !current || Date.now() >= current.confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS;
+      if (typeof owner !== 'string' && pastDeadline && (await this.#retakeLease(pubsub, key, runId, timer))) return;
       // Only the registration that owns this fence may stop the run.
       if (state.leaseRenewalTimers.get(runId) === timer) {
         this.#stopLeaseRenewal(pubsub, runId, timer);
@@ -992,7 +1125,7 @@ export class AgentThreadStreamRuntime {
     };
   }
 
-  #armLeaseDeadline(pubsub: PubSub, runId: string, confirmedSentAt: number): void {
+  #armLeaseDeadline(pubsub: PubSub, key: string, runId: string, confirmedSentAt: number): void {
     const state = this.#getState(pubsub);
     const previous = state.leaseDeadlines.get(runId);
     // A slow renewal that settles after a newer one must not pull the deadline back.
@@ -1001,8 +1134,14 @@ export class AgentThreadStreamRuntime {
     const timer = setTimeout(
       () => {
         if (state.leaseDeadlines.get(runId)?.timer !== timer) return;
-        this.#stopLeaseRenewal(pubsub, runId);
-        this.#abortLeaseLostRun(state, runId);
+        // The lease may have lapsed, say while this process stalled past the TTL. The run keeps going only
+        // if it gets the lease back, which it can't when another run took the thread.
+        const renewal = state.leaseRenewalTimers.get(runId);
+        void (renewal ? this.#retakeLease(pubsub, key, runId, renewal) : Promise.resolve(false)).then(kept => {
+          if (kept || (renewal && state.leaseRenewalTimers.get(runId) !== renewal)) return;
+          this.#stopLeaseRenewal(pubsub, runId);
+          this.#abortLeaseLostRun(state, runId);
+        });
       },
       Math.max(0, confirmedSentAt + AGENT_THREAD_LEASE_TTL_MS - Date.now()),
     );
@@ -1012,7 +1151,179 @@ export class AgentThreadStreamRuntime {
     state.leaseDeadlines.set(runId, { timer, confirmedSentAt });
   }
 
+  /**
+   * Takes back a lease that lapsed while its run was still going because this process was late:
+   * it stalled past the TTL, so a renewal went out after the lease had run out, or not at all
+   * before the deadline. A free lease is acquired under a token unique to this attempt and then
+   * handed to the run id; a lease still held under the run id is taken again under it. A run another process
+   * took over under a different id is still stopped. A retake granted after this run gave up
+   * releases only a grant made under its own token: a lease under the run id may be a successor's
+   * (a durable recover takes the run under the same id), so it is left to expire.
+   * The run keeps calling the model while this waits, so a backend that doesn't answer within one
+   * renewal interval counts as a lost lease: a process that only stalled answers at once when it runs again.
+   */
+  #retakeLease(pubsub: PubSub, key: string, runId: string, timer: ReturnType<typeof setInterval>): Promise<boolean> {
+    const state = this.#getState(pubsub);
+    const inFlight = state.leaseRetakes.get(runId);
+    if (inFlight) return inFlight;
+    // The record this attempt belongs to. A later run can register under the same id while this attempt is in
+    // flight, so the marking below must use this reference and never a fresh lookup that could land on it.
+    const record = state.threadRunsById.get(runId);
+    const sentAt = Date.now();
+    const leaseProvider = this.#getLeaseProvider(pubsub);
+    const newToken = () => `${runId}${RETAKE_LEASE_MARKER}${globalThis.crypto.randomUUID()}`;
+    let token = newToken();
+    // Tokens this retake gave back. A release can land after the next acquire, which then names one as the owner.
+    const released = new Set<string>();
+    const releaseToken = (held = token) => {
+      released.add(held);
+      void leaseProvider.releaseLease(key, held).catch(() => {});
+    };
+    /**
+     * `token` when it acquired a free lease under the token, `run` when the lease was still under the run id,
+     * `refused` when another owner holds it, and `unanswered` when the backend failed to answer.
+     */
+    const take = async (asked: string): Promise<'token' | 'run' | 'refused' | 'unanswered'> => {
+      // A token this retake already gave back, whose release hasn't landed yet: the thread is still this run's.
+      const heldByReleasedToken = (owner: string | undefined) => owner !== undefined && released.has(owner);
+      try {
+        let lease = await leaseProvider.acquireLease(key, asked, AGENT_THREAD_LEASE_TTL_MS);
+        if (!lease.acquired && asked === token && heldByReleasedToken(lease.owner)) {
+          await leaseProvider.releaseLease(key, lease.owner!);
+          lease = await leaseProvider.acquireLease(key, asked, AGENT_THREAD_LEASE_TTL_MS);
+        }
+        if (lease.acquired) return 'token';
+        if (heldByReleasedToken(lease.owner)) return 'unanswered';
+        if (lease.owner !== runId) return 'refused';
+        return (await leaseProvider.acquireLease(key, runId, AGENT_THREAD_LEASE_TTL_MS)).acquired ? 'run' : 'refused';
+      } catch {
+        return 'unanswered';
+      }
+    };
+    /**
+     * While the run has a step running, a backend that doesn't answer is no reason to stop it: only another owner
+     * is. The retake keeps asking, one renewal interval at a time, until it gets an answer or the run is idle, but
+     * no longer than the grace period after the lease ran out: a backend silent that long is treated as lost too.
+     */
+    const lapsedAt = (state.leaseDeadlines.get(runId)?.confirmedSentAt ?? sentAt) + AGENT_THREAD_LEASE_TTL_MS;
+    const stepRunning = () =>
+      state.leaseRenewalTimers.get(runId) === timer &&
+      Date.now() < lapsedAt + AGENT_LEASE_LOST_TOOL_GRACE_MS &&
+      isRunStepActive(
+        state.preparedRunsById.get(runId)?.abortController.signal ?? record?.stepOwner?.(),
+        AGENT_THREAD_LEASE_RENEW_INTERVAL_MS,
+      );
+    const retake = (async () => {
+      // One renewal interval bounds each attempt, handoff included: a thread this process can't take back within
+      // it counts as lost unless a step is running, so the deadline, renewal and fence paths never wait on a silent
+      // backend for an idle run.
+      let giveUpAt = sentAt + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+      const gaveUp = Symbol('gave-up');
+      const remaining = <T>(work: Promise<T>) => {
+        const left = giveUpAt - Date.now();
+        if (left <= 0) return Promise.resolve<T | typeof gaveUp>(gaveUp);
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        return Promise.race([
+          work,
+          new Promise<typeof gaveUp>(resolve => (giveUp = setTimeout(() => resolve(gaveUp), left))),
+        ]).finally(() => clearTimeout(giveUp)) as Promise<T | typeof gaveUp>;
+      };
+      // Every attempt of a round asks under the same token, and acquiring a lease its owner already holds succeeds,
+      // so a late grant of an earlier attempt never reads as another owner. The first answer wins; attempts that
+      // answer after the round settled give back what they took.
+      let taken: 'token' | 'run';
+      let takenSentAt: number;
+      let handoverRetryDelay = 5;
+      for (;;) {
+        const asked = token;
+        let settled = false;
+        let answer!: (result: { taken: 'token' | 'run' | 'refused'; sentAt: number }) => void;
+        const answered = new Promise<{ taken: 'token' | 'run' | 'refused'; sentAt: number }>(
+          resolve => (answer = resolve),
+        );
+        const attempt = () => {
+          const attemptSentAt = Date.now();
+          void take(asked).then(result => {
+            if (result === 'unanswered') return;
+            if (settled) {
+              if (result === 'token') releaseToken(asked);
+              return;
+            }
+            answer({ taken: result, sentAt: attemptSentAt });
+          });
+        };
+        attempt();
+        let first = await remaining(answered);
+        while (first === gaveUp && stepRunning()) {
+          giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+          attempt();
+          first = await remaining(answered);
+        }
+        settled = true;
+        // The run stops now, but the backend may still grant an attempt; that grant is released above.
+        if (first === gaveUp) return false;
+        if (first.taken === 'refused') return false;
+        taken = first.taken;
+        takenSentAt = first.sentAt;
+        if (taken !== 'token') break;
+        // The run ended meanwhile: don't hold its thread for a TTL.
+        if (state.leaseRenewalTimers.get(runId) !== timer) {
+          releaseToken(asked);
+          return false;
+        }
+        const transferring = leaseProvider
+          .transferLease(key, asked, runId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => false);
+        let handedOver = await remaining(transferring);
+        while (handedOver === gaveUp && stepRunning()) {
+          // Keep the token alive while a slow handover runs, so it can still land.
+          void leaseProvider.renewLease(key, asked, AGENT_THREAD_LEASE_TTL_MS).catch(() => false);
+          giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+          handedOver = await remaining(transferring);
+        }
+        if (handedOver === gaveUp) {
+          // The run stops now. A handoff that lands after this installs the run id on a lease this execution no
+          // longer renews, so this record's end must leave that lease to expire instead of releasing it. The flag
+          // sits on this record, captured when the attempt began: a run that registered under the same id since
+          // then owns its own lease and must not inherit the exemption.
+          if (record) record.lateRetakeHandoff = true;
+          releaseToken(asked);
+          void transferring.then(late => {
+            // Only the attempt that set the flag clears it, and only while that same record still holds the id.
+            if (!late && record && state.threadRunsById.get(runId) === record) record.lateRetakeHandoff = false;
+          });
+          return false;
+        }
+        if (handedOver) break;
+        releaseToken(asked);
+        // The handoff failed, for instance because the token's lease ran out while it was slow. Nobody else is
+        // known to hold the thread, so a run with a step running takes it again under a new token. A backend that
+        // rejects every handoff at once would otherwise be asked in a tight loop, so wait a little longer each
+        // round, never more than a quarter of the renewal interval so a retake can still land within one.
+        if (!stepRunning()) return false;
+        handoverRetryDelay = Math.min(handoverRetryDelay * 2, AGENT_THREAD_LEASE_RENEW_INTERVAL_MS / 4);
+        await new Promise(resolve => setTimeout(resolve, handoverRetryDelay));
+        if (!stepRunning()) return false;
+        token = newToken();
+        giveUpAt = Date.now() + AGENT_THREAD_LEASE_RENEW_INTERVAL_MS;
+      }
+      if (state.leaseRenewalTimers.get(runId) !== timer) {
+        // The run ended meanwhile. A lease this attempt handed over is its own, so free it unless a later
+        // registration of the run now renews it. One it found under the run id may be a successor's: leave it.
+        if (taken === 'token' && !state.leaseRenewalTimers.has(runId)) {
+          void leaseProvider.releaseLease(key, runId).catch(() => {});
+        }
+        return false;
+      }
+      this.#armLeaseDeadline(pubsub, key, runId, takenSentAt);
+      return true;
+    })().finally(() => state.leaseRetakes.delete(runId));
+    state.leaseRetakes.set(runId, retake);
+    return retake;
+  }
+
   #abortLeaseLostRun(state: AgentThreadRuntimeState, runId: string): void {
+    state.leaseLostRunIds.add(runId);
     // Tool calls the step already queued check the fence after this, so they must keep failing until the
     // run ends, not find no fence and run beside the successor.
     const lost = async () => {
@@ -1021,9 +1332,33 @@ export class AgentThreadStreamRuntime {
     state.leaseFences.set(runId, lost);
     setRunLeaseFence(runId, lost);
     const preparedRun = state.preparedRunsById.get(runId);
-    if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
-    // Durable runs own their controller outside the thread runtime.
-    else state.threadRunsById.get(runId)?.agent.abortRunStream(runId);
+    const record = state.threadRunsById.get(runId);
+    // A step already running (a model request or a tool call) finishes, fails or is aborted first: stopping it
+    // mid-way would lose its work, and the fence above already keeps the run from starting a tool. The run stops as
+    // soon as the step settles, before another can start. One that never ends is stopped after a grace period, so it
+    // can't keep working beside the thread's new owner for long.
+    let stopped = false;
+    let grace: ReturnType<typeof setTimeout> | undefined;
+    const stop = () => {
+      if (stopped) return;
+      stopped = true;
+      clearTimeout(grace);
+      if (preparedRun) preparedRun.abortController.abort(new AgentThreadLeaseLostError(runId));
+      // Durable runs own their controller outside the thread runtime.
+      else this.#abortAgentRunStream(state, runId);
+    };
+    grace = setTimeout(stop, AGENT_LEASE_LOST_TOOL_GRACE_MS);
+    if (typeof grace === 'object' && grace && typeof (grace as any).unref === 'function') (grace as any).unref();
+    whenRunStepsSettle(preparedRun?.abortController.signal ?? record?.stepOwner?.(), stop);
+  }
+
+  /** Guard the detached lease-loss callback; awaited control events must reject so the backend can retry. */
+  #abortAgentRunStream(state: AgentThreadRuntimeState, runId: string): void {
+    try {
+      state.threadRunsById.get(runId)?.agent.abortRunStream?.(runId);
+    } catch {
+      // Nothing to recover: the caller has already fenced the run or released its queue.
+    }
   }
 
   /**
@@ -1080,6 +1415,60 @@ export class AgentThreadStreamRuntime {
     return held;
   }
 
+  async #waitForRetakeOwner(
+    provider: LeaseProvider,
+    key: string,
+    lease: { acquired: boolean; owner?: string },
+  ): Promise<{ acquired: boolean; owner?: string }> {
+    if (lease.acquired || !isRetakeLeaseOwner(lease.owner)) return lease;
+    // The token is not a run. Wait briefly for its handover, without acquiring a
+    // new lease that could arrive after this caller has already given up.
+    let stopped = false;
+    let timeout: ReturnType<typeof setTimeout> | undefined;
+    try {
+      return await Promise.race([
+        (async () => {
+          while (!stopped) {
+            await new Promise(resolve => setTimeout(resolve, 10));
+            if (stopped) break;
+            const owner = await provider.getLeaseOwner(key);
+            if (!stopped && owner && !isRetakeLeaseOwner(owner)) return { acquired: false, owner };
+          }
+          return lease;
+        })().catch(() => lease),
+        new Promise<typeof lease>(resolve => {
+          timeout = setTimeout(() => resolve(lease), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS);
+        }),
+      ]);
+    } finally {
+      stopped = true;
+      clearTimeout(timeout);
+    }
+  }
+
+  #trackPendingThreadAdmission(
+    state: AgentThreadRuntimeState,
+    key: string,
+    runId: string,
+    agentId: string,
+    outcome: Promise<ThreadAdmissionOutcome>,
+  ): void {
+    const pendingAdmission: PendingThreadAdmission = { runId, agentId, outcome };
+    state.pendingThreadAdmissions.set(key, pendingAdmission);
+    const clearPendingAdmission = () => {
+      if (state.pendingThreadAdmissions.get(key) === pendingAdmission) {
+        state.pendingThreadAdmissions.delete(key);
+      }
+    };
+    void outcome.then(clearPendingAdmission, clearPendingAdmission);
+  }
+
+  #threadAdmissionOutcome(runId: string, lease: { acquired: boolean; owner?: string }): ThreadAdmissionOutcome {
+    if (lease.acquired) return { action: 'local', runId };
+    if (lease.owner && !isRetakeLeaseOwner(lease.owner)) return { action: 'remote', runId: lease.owner };
+    return { action: 'blocked', runId: lease.owner?.split(RETAKE_LEASE_MARKER)[0] ?? runId };
+  }
+
   /**
    * Ensure this process owns the cross-process lease for `toRunId` before it
    * starts a run, regardless of whether it already held the lease.
@@ -1114,7 +1503,7 @@ export class AgentThreadStreamRuntime {
       this.#startLeaseRenewal(resolved, key, toRunId);
       return { acquired: true, owner: toRunId };
     }
-    return { acquired: false, owner: result.owner };
+    return this.#waitForRetakeOwner(leaseProvider, key, result);
   }
 
   /**
@@ -1170,14 +1559,16 @@ export class AgentThreadStreamRuntime {
         )
           return;
         const queue = queues.get(key) ?? [];
-        queue.push(createSignal(data.signal));
+        const signal = createSignal(data.signal);
+        queue.push(signal);
         queues.set(key, queue);
         subscription.admittedSignalIds.add(data.signal.id);
+        this.#publishPendingUserMessage(pubsub, key, data.runId, signal, 'pending');
         this.#notifyPendingSignals(state, key);
       } else if (data?.type === 'signals-cancelled') {
         // A backend retry can deliver the original enqueue after its cancellation.
         for (const id of data.signalIds) subscription.admittedSignalIds.add(id);
-        this.#cancelPendingSignals(state, key, new Set(data.signalIds));
+        this.#cancelPendingSignals(state, key, new Set(data.signalIds), pubsub);
         this.#notifyThreadEvents(state);
       } else if (data?.type === 'run-abort-requested') {
         const ownsRun = () =>
@@ -1192,14 +1583,14 @@ export class AgentThreadStreamRuntime {
         const clearPendingSignals =
           ownsRun() && data.clearPendingSignals && (await this.#hasLiveThreadLease(resolvedPubSub, key, data.runId));
         if (ownsRun()) {
-          if (clearPendingSignals) this.#cancelPendingSignals(state, key);
+          if (clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
           if (state.preparedRunsById.has(data.runId) || this.#isParkedRun(state, data.runId)) {
             // A parked (suspended) run has no prepared run left, but abortRun's
             // parked branch releases it so the thread stops blocking on it.
             this.abortRun(data.runId, resolvedPubSub);
           } else {
             // Durable runs own their controller outside the thread runtime.
-            state.threadRunsById.get(data.runId)?.agent.abortRunStream(data.runId);
+            state.threadRunsById.get(data.runId)?.agent.abortRunStream?.(data.runId);
           }
           if (clearPendingSignals) this.#notifyThreadEvents(state);
         }
@@ -1393,13 +1784,13 @@ export class AgentThreadStreamRuntime {
    */
   #markIdleMessageCancelled(state: AgentThreadRuntimeState, key: string, pending: PendingIdleSignal<any>): void {
     const identity = this.#idleMessageIdentity(pending.agent.id, key, pending.signal);
-    if (!identity) return;
+    if (identity) this.#markAcceptedMessageCancelled(state, identity, pending.runId);
+  }
+
+  #markAcceptedMessageCancelled(state: AgentThreadRuntimeState, identity: string, runId: string): void {
     const acceptedMessage = state.acceptedIdleMessagesByIdentity.get(identity);
-    if (!acceptedMessage || acceptedMessage.runId !== pending.runId) return;
-    state.acceptedIdleMessagesByIdentity.set(identity, {
-      runId: acceptedMessage.runId,
-      terminalReason: 'The accepted message was cancelled before it ran',
-    });
+    if (!acceptedMessage || acceptedMessage.runId !== runId) return;
+    state.acceptedIdleMessagesByIdentity.set(identity, { runId, terminalReason: CANCELLED_BEFORE_RUN });
   }
 
   #isApprovalSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
@@ -1408,6 +1799,36 @@ export class AgentThreadStreamRuntime {
 
   #isSuspendedRun(state: AgentThreadRuntimeState, runId: string) {
     return state.suspendedRunIds.has(runId) || this.#isApprovalSuspendedRun(state, runId);
+  }
+
+  /**
+   * Reads the persisted state of an agent run from the regular or durable agent
+   * loop row, including the namespaced loop name a durable engine advertises
+   * (e.g. Inngest). Returns 'missing' when storage was read but holds no row for the
+   * run (both loops delete the row once a run finishes), and undefined when the
+   * agent has no storage or the read fails, so callers keep the event-derived view.
+   */
+  async #readStoredRunStatus(
+    agent: Agent<any, any, any, any>,
+    runId: string,
+  ): Promise<WorkflowRunStatus | 'missing' | undefined> {
+    try {
+      const workflowsStore = await agent.getMastraInstance?.()?.getStorage?.()?.getStore('workflows');
+      if (!workflowsStore) return undefined;
+      const workflowNames = new Set([AGENTIC_LOOP_WORKFLOW_ID, DurableStepIds.AGENTIC_LOOP]);
+      const advertisedLoopWorkflowName = (agent as Partial<Pick<DurableAgentLike, 'durableLoopWorkflowName'>>)
+        .durableLoopWorkflowName;
+      if (typeof advertisedLoopWorkflowName === 'string') workflowNames.add(advertisedLoopWorkflowName);
+      for (const workflowName of workflowNames) {
+        const run = await workflowsStore.getWorkflowRunById({ runId, workflowName });
+        if (!run) continue;
+        const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+        return typeof snapshot?.status === 'string' ? (snapshot.status as WorkflowRunStatus) : undefined;
+      }
+      return 'missing';
+    } catch {
+      return undefined;
+    }
   }
 
   #isThreadBlockingRun(state: AgentThreadRuntimeState, record: AgentThreadRunRecord<any>) {
@@ -1666,6 +2087,11 @@ export class AgentThreadStreamRuntime {
             Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           ),
           () => active && state.claimedThreadOwners.get(key)?.unsubscribe === unsubscribe,
+          undefined,
+          data.joinActiveRun !== true,
+          data.joinActiveRun === true && data.joinSignal?.id === data.signal.id
+            ? createSignal(data.joinSignal)
+            : undefined,
         );
         if (!active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
         if (!accepted) {
@@ -1974,6 +2400,8 @@ export class AgentThreadStreamRuntime {
     expiresAt: number,
     isOwnerActive: () => boolean,
     incomingStreamOptions?: AgentExecutionOptions<any>,
+    waitForIdle = false,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<{ runId: string; error?: string; blocked?: boolean; output?: MastraModelOutput<OUTPUT> } | undefined> {
     const messageIdentity = this.#idleMessageIdentity(owner.agent.id, key, signal);
     let admissionSettled = false;
@@ -2043,57 +2471,127 @@ export class AgentThreadStreamRuntime {
       releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
       return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
     }
-    // Resolving the owner's stream options can reject. A later retry of the same
-    // logical message must be free to route instead of being told this message was
-    // already accepted, so release the reservation before propagating.
-    let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
-    try {
-      ownerStreamOptions =
-        typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
-    } catch (error) {
-      releaseMessageIdentity(getErrorFromUnknown(error));
-      throw error;
-    }
-    // The run executes inside the claiming owner's session, so the owner's
-    // options stay authoritative for everything that shapes the run — memory,
-    // toolsets, provider options. Only `requestContext` crosses over: it
-    // identifies the caller this wake acts for rather than the shape of the run.
-    // A dispatcher waking a session on behalf of an authenticated caller needs
-    // that identity visible downstream, or the run starts anonymously and a
-    // workspace resolver that requires a caller rejects it.
-    //
-    // Deliberately narrower than the no-owner path below, which spreads the whole
-    // incoming `streamOptions` because there is no owner configuration to keep.
-    //
-    // Scopes cross over with the request context for the same reason: they say
-    // what the caller acts as. They are unioned with any owner scopes.
-    let streamOptions: AgentExecutionOptions<any> | undefined =
-      incomingStreamOptions?.requestContext === undefined
-        ? ownerStreamOptions
-        : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
-    if (incomingStreamOptions?.scopes?.length) {
-      streamOptions = {
-        ...streamOptions,
-        scopes: unionScopes(ownerStreamOptions?.scopes, incomingStreamOptions.scopes),
-      };
-    }
+    // Only a wake or a queued run uses the owner's stream options, so they are resolved after the joins below,
+    // which never read them: a slow or failing options factory must not hold up input joining a run.
+    // Resolving them can reject. A later retry of the same logical message must be free to route instead of
+    // being told this message was already accepted, so release the reservation before propagating.
+    let streamOptions: AgentExecutionOptions<any> | undefined;
+    let streamOptionsResolved = false;
+    const resolveStreamOptions = async () => {
+      let ownerStreamOptions: AgentExecutionOptions<any> | undefined;
+      try {
+        ownerStreamOptions =
+          typeof owner.streamOptions === 'function' ? await owner.streamOptions() : owner.streamOptions;
+      } catch (error) {
+        releaseMessageIdentity(getErrorFromUnknown(error));
+        throw error;
+      }
+      // The run executes inside the claiming owner's session, so the owner's
+      // options stay authoritative for everything that shapes the run — memory,
+      // toolsets, provider options. Only `requestContext` crosses over: it
+      // identifies the caller this wake acts for rather than the shape of the run.
+      // A dispatcher waking a session on behalf of an authenticated caller needs
+      // that identity visible downstream, or the run starts anonymously and a
+      // workspace resolver that requires a caller rejects it.
+      //
+      // Deliberately narrower than the no-owner path below, which spreads the whole
+      // incoming `streamOptions` because there is no owner configuration to keep.
+      //
+      // Scopes cross over with the request context for the same reason: they say
+      // what the caller acts as. They are unioned with any owner scopes.
+      streamOptions =
+        incomingStreamOptions?.requestContext === undefined
+          ? ownerStreamOptions
+          : { ...ownerStreamOptions, requestContext: incomingStreamOptions.requestContext };
+      if (incomingStreamOptions?.scopes?.length) {
+        streamOptions = {
+          ...streamOptions,
+          scopes: unionScopes(ownerStreamOptions?.scopes, incomingStreamOptions.scopes),
+        };
+      }
+      streamOptionsResolved = true;
+    };
     let control: ThreadControlSubscription | undefined;
     try {
-      const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
-      control = subscription;
-      subscription.references++;
-      await subscription.ready;
-      if (!isOwnerActive()) {
-        releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
-        return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
+      let activeRunId: string | undefined;
+      let activeRecord: AgentThreadRunRecord<any> | undefined;
+      for (;;) {
+        activeRunId = state.activeThreadRunIds.get(key);
+        activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+        // Queued input waits for the thread to go idle; only a send joins a run in flight.
+        const pendingAdmission =
+          activeRunId && !activeRecord && !waitForIdle ? state.pendingThreadAdmissions.get(key) : undefined;
+        if (pendingAdmission && pendingAdmission.runId === activeRunId && pendingAdmission.agentId === owner.agent.id) {
+          // The owner has reserved the thread for a run that has not started yet. Hand
+          // it the input for its first model request, as a local send does.
+          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          queue.push(joinSignal ?? signal);
+          state.preRunSignalsByThread.set(key, queue);
+          const queued: ClaimedQueuedMessage = { identity: messageIdentity };
+          state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
+          const admission = await pendingAdmission.outcome.catch(() => undefined);
+          if (queued.cancelled) {
+            // Cancelled while waiting. It was admitted like queued input on an idle owner, so
+            // this attempt is accepted; the message is ended so a retry learns it was cancelled.
+            const cancelledRunId = admission?.action === 'local' ? admission.runId : runId;
+            settleMessageIdentity?.({ runId: cancelledRunId, terminalReason: CANCELLED_BEFORE_RUN });
+            return { runId: cancelledRunId };
+          }
+          if (admission?.action === 'local') {
+            queued.runId = admission.runId;
+            settleMessageIdentity?.({ runId: admission.runId });
+            return { runId: admission.runId };
+          }
+          // That run never started here, so it will not take the input; route it again.
+          state.claimedQueuedMessages.delete(claimedQueuedMessageKey(key, signal.id));
+          this.#discardQueuedPreRunSignal(state, key, signal.id);
+          if (!isOwnerActive()) {
+            releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+            return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
+          }
+          activeRunId = state.activeThreadRunIds.get(key);
+          activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
+        }
+        if (
+          !waitForIdle &&
+          activeRecord &&
+          activeRecord.agent.id === owner.agent.id &&
+          this.#isThreadBlockingRun(state, activeRecord)
+        ) {
+          // The sender asked for an idle wake only because it cannot see this run from
+          // its process. Hand the input to the run in flight, the way a local send does,
+          // so it reaches the next model request instead of waiting for the run to end.
+          // Tracked before it is queued: queuing can cut the run's request short at once, and
+          // whatever cancels the input from there must find it.
+          const queued: ClaimedQueuedMessage = { identity: messageIdentity, runId: activeRecord.runId };
+          state.claimedQueuedMessages.set(claimedQueuedMessageKey(key, signal.id), queued);
+          this.#queueForActiveRun(state, pubsub, key, activeRecord, joinSignal ?? signal);
+          settleMessageIdentity?.(
+            queued.cancelled
+              ? { runId: activeRecord.runId, terminalReason: CANCELLED_BEFORE_RUN }
+              : { runId: activeRecord.runId },
+          );
+          return { runId: activeRecord.runId };
+        }
+        if (streamOptionsResolved) break;
+        // No join applies: this wakes or queues a run, which needs the owner's options and the thread's
+        // control subscription. The thread may change while they settle, so look at it again after.
+        await resolveStreamOptions();
+        const subscription = this.#ensureThreadControlSubscription(state, pubsub, key);
+        control = subscription;
+        subscription.references++;
+        await subscription.ready;
+        if (!isOwnerActive()) {
+          releaseMessageIdentity(`Claimed thread owner was released for ${describeThreadKey(key)}`);
+          return { runId, error: `Claimed thread owner was released for ${describeThreadKey(key)}` };
+        }
+        if (Date.now() >= expiresAt) {
+          releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
+          return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
+        }
       }
-      if (Date.now() >= expiresAt) {
-        releaseMessageIdentity(`Claimed thread owner acceptance expired for ${describeThreadKey(key)}`);
-        return { runId, error: `Claimed thread owner acceptance expired for ${describeThreadKey(key)}` };
-      }
-
-      const activeRunId = state.activeThreadRunIds.get(key);
-      const activeRecord = activeRunId ? state.threadRunsById.get(activeRunId) : undefined;
       if (activeRunId && (!activeRecord || this.#isThreadBlockingRun(state, activeRecord))) {
         const idleQueue = state.pendingIdleSignalsByThread.get(key) ?? [];
         idleQueue.push({
@@ -2105,12 +2603,14 @@ export class AgentThreadStreamRuntime {
           streamOptions,
         });
         state.pendingIdleSignalsByThread.set(key, idleQueue);
+        this.#publishPendingUserMessage(pubsub, key, activeRunId, signal, 'queued');
         if (activeRecord) {
           this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
         }
-        // No run starts here — the signal joins the in-flight run and is drained
-        // later. Returning without `output` is what tells the caller this queued
-        // instead of running, so it reports `deliver` rather than `wake`. Queueing
+        // No run starts here. The thread is held by another agent's run, or by a
+        // reservation this process is not admitting, so the signal waits and starts
+        // its own run once the thread clears. Returning without `output` is what tells the caller this
+        // queued instead of running, so it reports `deliver` rather than `wake`. Queueing
         // is an admission, so a duplicate waiting on this reservation is told the
         // same thing rather than left to start a second run.
         settleMessageIdentity?.({ runId });
@@ -2126,14 +2626,28 @@ export class AgentThreadStreamRuntime {
       }
       state.activeThreadRunIds.set(key, runId);
       state.threadKeysByRunId.set(runId, key);
+      let settleThreadAdmission!: (outcome: ThreadAdmissionOutcome) => void;
+      let failThreadAdmission!: (error: unknown) => void;
+      const threadAdmission = new Promise<ThreadAdmissionOutcome>((resolve, reject) => {
+        settleThreadAdmission = resolve;
+        failThreadAdmission = reject;
+      });
+      this.#trackPendingThreadAdmission(state, key, runId, owner.agent.id, threadAdmission);
       let lease: { acquired: boolean; owner?: string };
       try {
         lease = await this.#acquireOrTransferThreadLease(pubsub, key, runId);
       } catch (error) {
+        failThreadAdmission(error);
         // No run and no lease exist for this attempt yet, so unwind the run
         // bookkeeping it just claimed and let a retry of the logical message route.
         releaseMessageIdentity(getErrorFromUnknown(error));
-        state.activeThreadRunIds.delete(key);
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
+          // Concurrent senders queued pre-run copies behind this reservation;
+          // dropping them keeps a later local run from replaying input this
+          // attempt never delivered.
+          state.preRunSignalsByThread.delete(key);
+        }
         state.threadKeysByRunId.delete(runId);
         throw error;
       }
@@ -2142,10 +2656,18 @@ export class AgentThreadStreamRuntime {
       if (!lease.acquired || !ownerActive || expired) {
         // This attempt admitted no run of its own — the owner went away, the
         // deadline passed, or the wake was handed to another live lease owner — so
-        // a later retry of the same logical message must be free to route.
-        state.activeThreadRunIds.delete(key);
+        // a later retry of the same logical message must be free to route. Give up
+        // the reservation identity-first: a newer reservation may own the thread
+        // slot, and only this attempt's provisional pre-run copies (queued behind
+        // its own admission and forwarded by their senders on a remote outcome)
+        // may be discarded — otherwise a later local run replays them.
+        if (state.activeThreadRunIds.get(key) === runId) {
+          state.activeThreadRunIds.delete(key);
+          state.preRunSignalsByThread.delete(key);
+        }
         state.threadKeysByRunId.delete(runId);
         if (!ownerActive || expired) {
+          settleThreadAdmission({ action: 'blocked', runId });
           const error = !ownerActive
             ? `Claimed thread owner was released for ${describeThreadKey(key)}`
             : `Claimed thread owner acceptance expired for ${describeThreadKey(key)}`;
@@ -2154,14 +2676,23 @@ export class AgentThreadStreamRuntime {
           if (lease.acquired && !drained) this.#releaseThreadLease(pubsub, key, runId);
           return { runId, error };
         }
+        if (lease.owner && isRetakeLeaseOwner(lease.owner)) {
+          const ownerRunId = lease.owner.split(RETAKE_LEASE_MARKER)[0]!;
+          settleThreadAdmission({ action: 'blocked', runId: ownerRunId });
+          const error = `Thread ${describeThreadKey(key)} is waiting for its lease owner to finish starting`;
+          releaseMessageIdentity(error);
+          return { runId: ownerRunId, error, blocked: true };
+        }
         if (lease.owner && this.#isSweptLeaseOwner(state, lease.owner)) {
           // The lease still belongs to a suspended run the TTL sweep evicted, so a
           // signal forwarded to it is never consumed. Fail the admission instead.
+          settleThreadAdmission({ action: 'blocked', runId: lease.owner });
           const error = `Thread ${describeThreadKey(key)} is still leased to a suspended run that was released from memory; retry once its lease expires`;
           releaseMessageIdentity(error);
           return { runId: lease.owner, error, blocked: true };
         }
         if (lease.owner) {
+          settleThreadAdmission({ action: 'remote', runId: lease.owner });
           this.#publish(pubsub, key, {
             type: 'signal-enqueued',
             runId: lease.owner,
@@ -2174,6 +2705,7 @@ export class AgentThreadStreamRuntime {
           settleMessageIdentity?.({ runId: lease.owner }, false);
           return { runId: lease.owner };
         }
+        settleThreadAdmission({ action: 'blocked', runId });
         releaseMessageIdentity(
           new Error(`Claimed thread owner could not acquire the execution lease for ${describeThreadKey(key)}`),
         );
@@ -2181,6 +2713,7 @@ export class AgentThreadStreamRuntime {
         return undefined;
       }
 
+      settleThreadAdmission({ action: 'local', runId });
       try {
         const output = toModelOutput<OUTPUT>(
           await owner.agent.stream(signal, {
@@ -2241,6 +2774,21 @@ export class AgentThreadStreamRuntime {
     state.locallyQueuedSignalIdsByThread.set(key, ids);
   }
 
+  /**
+   * Remove exactly one caller's queued pre-run copy. A reservation's losing
+   * rollback can only clear the whole queue while it still owns the thread
+   * slot; once a newer reservation replaced it, each sender discards its own
+   * acknowledged-or-rejected copy here so a later run cannot replay it.
+   */
+  #discardQueuedPreRunSignal(state: AgentThreadRuntimeState, key: string, signalId: string) {
+    const queue = state.preRunSignalsByThread.get(key);
+    if (!queue) return;
+    const index = queue.findIndex(signal => signal.id === signalId);
+    if (index === -1) return;
+    queue.splice(index, 1);
+    if (queue.length === 0) state.preRunSignalsByThread.delete(key);
+  }
+
   #isLocalSignalEcho(state: AgentThreadRuntimeState, key: string, signalId: string, runId: string) {
     const ids = state.locallyQueuedSignalIdsByThread.get(key);
     return !!ids?.has(signalId) && ids.get(signalId) !== runId;
@@ -2267,6 +2815,8 @@ export class AgentThreadStreamRuntime {
     runId: string,
     signal: CreatedAgentSignal,
     targetSourceId: string,
+    waitForIdle: boolean,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<string> {
     const requestId = globalThis.crypto.randomUUID();
     const replyTopic = `${this.#threadTopic(key)}.idle-acceptance.${requestId}`;
@@ -2329,6 +2879,8 @@ export class AgentThreadStreamRuntime {
             replyTopic,
             targetSourceId,
             expiresAt,
+            ...(waitForIdle ? {} : { joinActiveRun: true }),
+            ...(!waitForIdle && joinSignal ? { joinSignal: this.#serializeSignal(joinSignal) } : {}),
           });
         })
         .catch(error => finish({ error: getErrorFromUnknown(error) }));
@@ -2341,6 +2893,8 @@ export class AgentThreadStreamRuntime {
     runId: string,
     signal: CreatedAgentSignal,
     discovery: Promise<string | undefined>,
+    waitForIdle = false,
+    joinSignal?: CreatedAgentSignal,
   ): Promise<SendAgentSignalAccepted<OUTPUT>> {
     const claimedOwnerSourceId = await discovery;
     if (!claimedOwnerSourceId) {
@@ -2348,7 +2902,15 @@ export class AgentThreadStreamRuntime {
         `No claimed thread owner responded for ${describeThreadKey(key)} within ${AGENT_THREAD_WAKE_OWNER_DISCOVERY_DEADLINE_MS}ms`,
       );
     }
-    const acceptedRunId = await this.#deliverToClaimedThreadOwner(pubsub, key, runId, signal, claimedOwnerSourceId);
+    const acceptedRunId = await this.#deliverToClaimedThreadOwner(
+      pubsub,
+      key,
+      runId,
+      signal,
+      claimedOwnerSourceId,
+      waitForIdle,
+      joinSignal,
+    );
     return { action: 'deliver', runId: acceptedRunId };
   }
 
@@ -2507,12 +3069,24 @@ export class AgentThreadStreamRuntime {
           });
         }
       }
-      const part = sanitizeBroadcastPart(rawPart);
+      let part = sanitizeBroadcastPart(rawPart);
       const producedAt = getChunkProducedAt(rawPart) ?? Date.now();
+      // Say why a run stopped when it lost its thread lease, so a subscriber can show more than "aborted".
+      if ((part as { type?: string } | null)?.type === 'abort') {
+        const runState = runtime.#getState(pubsub);
+        if (runState.leaseLostRunIds.delete(output.runId)) {
+          const abortPart = part as { payload?: Record<string, unknown> };
+          part = { ...abortPart, payload: { ...abortPart.payload, reason: THREAD_LEASE_LOST_ABORT_REASON } };
+        }
+      }
       stampPartProducedAt(part, producedAt);
       parts.push(part);
       if ((part as { type?: string } | null | undefined)?.type === 'start') startPart = part;
       const partType = (part as { type?: string } | null | undefined)?.type;
+      const deliveredSignalId = userMessageSignalId(part);
+      if (deliveredSignalId) {
+        await runtime.#publishAndWait(pubsub, key, { type: 'user-message-delivered', signalId: deliveredSignalId });
+      }
       await runtime.#publishAndWait(pubsub, key, {
         type: 'stream-part',
         runId: output.runId,
@@ -2863,8 +3437,14 @@ export class AgentThreadStreamRuntime {
     const key = state.threadKeysByRunId.get(runId);
     if (key) {
       const streamId = state.activeThreadRunIds.get(key) === runId ? state.activeThreadStreamIds.get(key) : undefined;
+      const record = streamId ? state.threadRunsByStreamId.get(streamId) : undefined;
       this.#releaseThreadLease(pubsub, key, runId);
-      this.#publish(pubsub, key, { type: 'run-aborted', runId, streamId });
+      this.#publish(pubsub, key, {
+        type: 'run-aborted',
+        runId,
+        streamId,
+        superseded: record?.ownershipLost?.() || record?.lateRetakeHandoff,
+      });
     }
 
     return true;
@@ -2907,7 +3487,12 @@ export class AgentThreadStreamRuntime {
     if (state.activeThreadRunIds.get(key) !== runId) return true;
     state.activeThreadRunIds.delete(key);
     if (state.activeThreadStreamIds.get(key) === record.streamId) state.activeThreadStreamIds.delete(key);
-    this.#publish(pubsub, key, { type: 'run-aborted', runId, streamId: record.streamId });
+    this.#publish(pubsub, key, {
+      type: 'run-aborted',
+      runId,
+      streamId: record.streamId,
+      superseded: record.ownershipLost?.() || record.lateRetakeHandoff,
+    });
     if (this.#hasPendingThreadWork(state, key)) {
       void this.#drainPendingSignals(state, pubsub, key, record);
     } else {
@@ -3115,7 +3700,7 @@ export class AgentThreadStreamRuntime {
     // A stale request conditioned on a run that is no longer active must not
     // stop the successor run or clear input queued for it.
     if (options.expectedRunId !== undefined && options.expectedRunId !== runId) return false;
-    if (options.clearPendingSignals) this.#cancelPendingSignals(state, key);
+    if (options.clearPendingSignals) this.#cancelPendingSignals(state, key, undefined, pubsub);
     try {
       if (!runId) return false;
       if (options.localOnly && this.#isParkedRun(state, runId) && !state.preparedRunsById.has(runId)) {
@@ -3192,11 +3777,15 @@ export class AgentThreadStreamRuntime {
     state.pendingIdleSignalsByThread.clear();
     state.sweptLeasedRunIds.clear();
     state.pendingLeaseRenewals.clear();
+    state.leaseRetakes.clear();
+    state.leaseLostRunIds.clear();
     state.drainingPendingSignalsByThread.clear();
     state.pendingContinuationsByThread.clear();
     state.claimedThreadOwnerDiscoveries.clear();
+    state.pendingThreadAdmissions.clear();
     state.handledIdleSignals.clear();
     state.acceptedIdleMessagesByIdentity.clear();
+    state.claimedQueuedMessages.clear();
     for (const claim of [...state.claimedThreadOwners.values()]) {
       claim.unsubscribe();
     }
@@ -3240,6 +3829,69 @@ export class AgentThreadStreamRuntime {
         },
         () => {},
       );
+    }
+  }
+
+  #pendingUserMessageChunk(
+    runId: string,
+    signal: CreatedAgentSignal,
+    status: 'pending' | 'queued',
+  ): UserMessagePendingChunk | undefined {
+    if (signal.type !== 'user' || signal.transient) return;
+    const { data } = signal.toDataPart();
+    return {
+      type: 'data-user-message-pending',
+      runId,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { ...data, metadata: { ...data.metadata, status } },
+    };
+  }
+
+  /**
+   * Queues a signal for in-loop draining by a same-agent run that is already in
+   * flight here, so it becomes that run's next model input instead of waiting for
+   * the run to finish.
+   */
+  #queueForActiveRun(
+    state: AgentThreadRuntimeState,
+    pubsub: PubSub | undefined,
+    key: string,
+    record: AgentThreadRunRecord<any>,
+    signal: CreatedAgentSignal,
+  ) {
+    const queue = state.pendingSignalsByThread.get(key) ?? [];
+    queue.push(signal);
+    state.pendingSignalsByThread.set(key, queue);
+    this.#recordLocallyQueuedSignal(state, key, signal.id);
+    this.#publishPendingUserMessage(pubsub, key, record.runId, signal, 'pending');
+    this.#notifyPendingSignals(state, key);
+    this.#publish(pubsub, key, {
+      type: 'signal-enqueued',
+      runId: record.runId,
+      signal: this.#serializeSignal(signal),
+      sourceId: this.#getSourceId(),
+    });
+    this.#watchThreadRunCompletion(state, pubsub, key, record);
+  }
+
+  #publishPendingUserMessage(
+    pubsub: PubSub | undefined,
+    key: string,
+    runId: string,
+    signal: CreatedAgentSignal,
+    status: 'pending' | 'queued',
+  ) {
+    const chunk = this.#pendingUserMessageChunk(runId, signal, status);
+    if (chunk) this.#publish(pubsub, key, { type: 'user-message-presentation', chunk });
+  }
+
+  #publishCancelledUserMessages(pubsub: PubSub | undefined, key: string, signalIds: string[]) {
+    for (const id of signalIds) {
+      this.#publish(pubsub, key, {
+        type: 'user-message-presentation',
+        chunk: { type: 'data-user-message-cancelled', runId: '', from: ChunkFrom.AGENT, transient: true, data: { id } },
+      });
     }
   }
 
@@ -3370,7 +4022,7 @@ export class AgentThreadStreamRuntime {
           persisted: true,
           status: 'success',
         })
-          .then(() => this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId }))
+          .then(() => this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId, retainTerminalEvents: true }))
           .catch(() => {});
       }, 0);
     });
@@ -3482,6 +4134,7 @@ export class AgentThreadStreamRuntime {
     existing.currentSegmentOutput = output;
     if (claim?.generation !== undefined) existing.generation = claim.generation;
     if (claim?.ownershipLost) existing.ownershipLost = claim.ownershipLost;
+    if (claim?.stepOwner) existing.stepOwner = claim.stepOwner;
     // Resume callers may only send an approval and never read this segment.
     // Drain its native output so completion and subsequent approvals advance.
     void output.consumeStream();
@@ -3575,6 +4228,7 @@ export class AgentThreadStreamRuntime {
       streamSeq,
       generation: registrationOptions?.generation,
       ownershipLost: registrationOptions?.ownershipLost,
+      stepOwner: registrationOptions?.stepOwner,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -3709,6 +4363,7 @@ export class AgentThreadStreamRuntime {
       generation: registrationOptions.generation,
       supersedes: registrationOptions.generation !== undefined,
       ownershipLost: registrationOptions.ownershipLost,
+      stepOwner: registrationOptions.stepOwner,
       lifecycle: 'running',
       threadId,
       resourceId,
@@ -3926,6 +4581,7 @@ export class AgentThreadStreamRuntime {
           // persisted message and safe to replay to fresh subscribers.
           persisted,
           status: record.output.status,
+          superseded: record.ownershipLost?.() || record.lateRetakeHandoff,
         })
           .then(() =>
             record.output.status === 'success'
@@ -3946,6 +4602,22 @@ export class AgentThreadStreamRuntime {
               this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
             } else if (this.#hasPendingThreadWork(state, key)) {
               // It has not registered yet; its registration takes the queues.
+              state.lostRunsByThread.set(key, record);
+            }
+            this.#releaseUnusedThreadControlSubscription(state, key);
+          }
+        } else if (record.lateRetakeHandoff) {
+          // This record may no longer own the lease it holds the run id under: a handoff that landed after the
+          // retake gave up installed that id on a lease nothing here renews, and a successor can hold it. Neither
+          // release it nor drain through it — a drain transfers the lease from the run id to its own run. Mirror
+          // the ownership-lost sibling and leave the lease to expire.
+          if (!state.threadRunsById.has(record.runId)) {
+            this.#stopLeaseRenewal(this.#getPubSub(pubsub), record.runId);
+            if (record.registeredElsewhere) {
+              this.#handOffQueuedSignals(state, pubsub, key, record.runId, record.streamId);
+            } else if (this.#hasPendingThreadWork(state, key)) {
+              // Nothing has taken the run yet; its registration takes the queues. Handing off now would publish
+              // to a run id no execution holds and drop the local copies with it.
               state.lostRunsByThread.set(key, record);
             }
             this.#releaseUnusedThreadControlSubscription(state, key);
@@ -3992,10 +4664,10 @@ export class AgentThreadStreamRuntime {
   }
 
   /**
-   * Once a run saved successfully and the agent has storage, delete every topic
-   * entry published with its runId. Matching by runId (not tracked entry IDs)
-   * also removes entries published before a restart, e.g. the suspended half of
-   * a resumed run. Other runs' entries are never touched.
+   * Once a run saved successfully and the agent has storage, delete its output
+   * while retaining outcomes and execution authority. Matching by runId also
+   * removes output published before a restart, including a resumed run's
+   * suspended half. Other runs' entries are never touched.
    */
   async #trimSavedRun(
     pubsub: PubSub | undefined,
@@ -4005,14 +4677,17 @@ export class AgentThreadStreamRuntime {
     // Without storage the topic is the only copy, so it stays.
     const memory = await record.agent.getMemory?.({ requestContext: record.streamOptions.requestContext });
     if (!memory) return;
-    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), { runId: record.runId });
+    await this.#getPubSub(pubsub).trimTopic(this.#threadTopic(key), {
+      runId: record.runId,
+      retainTerminalEvents: true,
+    });
   }
 
   /**
-   * A run that failed, was canceled, or was aborted saved nothing that its
-   * topic entries could be replayed against, so reconnecting subscribers ignore
-   * them. They only matter to subscribers already reading the run live, so
-   * delete them once those have had time to read the outcome.
+   * Delay trimming failed, canceled, or aborted output so live subscribers can
+   * finish reading it. Keep compact terminal events and execution authority
+   * metadata so opted-in reconnecting subscribers can recover the outcome
+   * without replaying unsaved output.
    */
   #trimFailedRun(
     pubsub: PubSub | undefined,
@@ -4061,11 +4736,20 @@ export class AgentThreadStreamRuntime {
         // and another process took over), forward the signal to the new winner
         // instead of starting a competing run here.
         nextRunId = globalThis.crypto.randomUUID();
-        state.activeThreadRunIds.set(key, nextRunId);
-        state.threadKeysByRunId.set(nextRunId, key);
+        const reservedRunId = nextRunId;
+        state.activeThreadRunIds.set(key, reservedRunId);
+        state.threadKeysByRunId.set(reservedRunId, key);
         draining = { signal, cancelled: false, handedOff: false };
         state.drainingPendingSignalsByThread.set(key, draining);
-        const owns = await this.#acquireOrTransferThreadLease(pubsub, key, nextRunId, previousRun.runId);
+        const ownership = this.#acquireOrTransferThreadLease(pubsub, key, reservedRunId, previousRun.runId);
+        this.#trackPendingThreadAdmission(
+          state,
+          key,
+          reservedRunId,
+          previousRun.agent.id,
+          ownership.then(lease => this.#threadAdmissionOutcome(reservedRunId, lease)),
+        );
+        const owns = await ownership;
         if (draining.cancelled) {
           if (state.activeThreadRunIds.get(key) === nextRunId) state.activeThreadRunIds.delete(key);
           state.threadKeysByRunId.delete(nextRunId);
@@ -4086,7 +4770,7 @@ export class AgentThreadStreamRuntime {
           // Early follow-ups were already published as retained signal-enqueued
           // events, so only discard this runtime's local pre-run copies.
           state.preRunSignalsByThread.delete(key);
-          if (owns.owner) {
+          if (owns.owner && !isRetakeLeaseOwner(owns.owner)) {
             // Forwarding is a handoff: the signal is no longer locally cancellable.
             // Echoes of the original enqueue stay suppressed, but the forwarded event must be
             // queued if this runtime later takes over the owner run.
@@ -4240,7 +4924,15 @@ export class AgentThreadStreamRuntime {
     if (fromRunId) {
       state.activeThreadRunIds.set(key, pending.runId);
       state.threadKeysByRunId.set(pending.runId, key);
-      const owns = await this.#acquireOrTransferThreadLease(pubsub, key, pending.runId, fromRunId);
+      const ownership = this.#acquireOrTransferThreadLease(pubsub, key, pending.runId, fromRunId);
+      this.#trackPendingThreadAdmission(
+        state,
+        key,
+        pending.runId,
+        pending.agent.id,
+        ownership.then(lease => this.#threadAdmissionOutcome(pending.runId, lease)),
+      );
+      const owns = await ownership;
       if (!owns.acquired) {
         if (state.activeThreadRunIds.get(key) === pending.runId) {
           state.activeThreadRunIds.delete(key);
@@ -4382,7 +5074,15 @@ export class AgentThreadStreamRuntime {
     // otherwise two processes could each start a competing idle run.
     let owns: { acquired: boolean; owner?: string };
     try {
-      owns = await this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+      const ownership = this.#acquireOrTransferThreadLease(pubsub, key, pendingIdle.runId, fromRunId);
+      this.#trackPendingThreadAdmission(
+        state,
+        key,
+        pendingIdle.runId,
+        pendingIdle.agent.id,
+        ownership.then(lease => this.#threadAdmissionOutcome(pendingIdle.runId, lease)),
+      );
+      owns = await ownership;
     } catch (err) {
       // No run started for this message and it will not be retried from the queue,
       // so the accepted identity must not keep claiming delivery — a sender retry
@@ -4432,6 +5132,13 @@ export class AgentThreadStreamRuntime {
       state.threadKeysByRunId.delete(pendingIdle.runId);
       state.preRunSignalsByThread.delete(key);
       this.#notifyThreadEvents(state);
+      if (isRetakeLeaseOwner(owns.owner)) {
+        // Keep the accepted input for the next natural drain trigger, rather
+        // than forwarding to a token that no run can consume.
+        const queue = state.pendingIdleSignalsByThread.get(key) ?? [];
+        state.pendingIdleSignalsByThread.set(key, [pendingIdle, ...queue]);
+        return true;
+      }
       if (owns.owner) {
         await this.#publishAndWait(pubsub, key, {
           type: 'signal-enqueued',
@@ -4456,9 +5163,17 @@ export class AgentThreadStreamRuntime {
       if (state.activeThreadRunIds.get(key) === pendingIdle.runId) {
         state.activeThreadRunIds.delete(key);
       }
-      this.#releaseThreadLease(pubsub, key, pendingIdle.runId);
       this.#notifyThreadEvents(state);
-      void this.#drainPendingIdleSignals(state, pubsub, key);
+      // Input that joined this reservation was acknowledged as delivered, so it still needs a run. The pending
+      // drain starts one for it (and then the next queued wake) under the lease this reservation holds, or
+      // releases the lease when nothing is left.
+      void this.#drainPendingSignals(state, pubsub, key, {
+        agent: pendingIdle.agent,
+        runId: pendingIdle.runId,
+        resourceId: pendingIdle.resourceId,
+        threadId: pendingIdle.threadId,
+        streamOptions: pendingIdle.streamOptions ?? {},
+      });
       return true;
     }
 
@@ -4861,7 +5576,7 @@ export class AgentThreadStreamRuntime {
     agent: Agent<any, any, any, any>,
     options: AgentSubscribeToThreadOptions,
     pubsub?: PubSub,
-  ): Promise<AgentThreadSubscription<OUTPUT, boolean>> {
+  ): Promise<AgentThreadSubscription<OUTPUT, boolean, boolean>> {
     const resolvedPubSub = this.#getPubSub(pubsub);
     const { provider: leaseProvider, isFallback: hasFallbackLeaseProvider } =
       this.#resolveLeaseProvider(resolvedPubSub);
@@ -4870,6 +5585,12 @@ export class AgentThreadStreamRuntime {
     const topic = this.#threadTopic(key);
     const seenStreamIds = new Set<string>();
     const pendingRuns: AgentThreadRunRecord<any>[] = [];
+    const statuses: Array<{ chunk: ThreadRunStatusChunk; streamId: string }> = [];
+    const settledRunIds = new Map<string, string>();
+    const reportedSuspensions = new Set<string>();
+    const presentations: Array<UserMessagePendingChunk | UserMessageCancelledChunk> = [];
+    const presentedSignalIds = new Set<string>();
+    const settledSignalIds = new Set<string>();
     const waiters: Array<() => void> = [];
     const remoteRuns = new Map<
       string,
@@ -4896,6 +5617,35 @@ export class AgentThreadStreamRuntime {
       // in flight from the subscriber's perspective; treat them as active.
       if (!record) return runId;
       return this.#isThreadBlockingRun(state, record) ? runId : null;
+    };
+
+    const enqueueStatus = (runId: string, streamId: string, status: ThreadRunStatusChunk['payload']['status']) => {
+      if (supersededStreamIds.has(streamId) || isAnsweredHalf(runId, streamId) || settledRunIds.has(runId)) return;
+      if (status === 'suspended') {
+        if (reportedSuspensions.has(streamId)) return;
+        reportedSuspensions.add(streamId);
+      } else {
+        settledRunIds.set(runId, streamId);
+      }
+      if (!options.withRunStatus) return;
+      statuses.push({
+        streamId,
+        chunk: { type: 'thread-run-status', runId, from: ChunkFrom.AGENT, payload: { status } },
+      });
+      wake();
+    };
+
+    const enqueuePresentation = (chunk: UserMessagePendingChunk | UserMessageCancelledChunk) => {
+      const id = chunk.data.id;
+      if (chunk.type === 'data-user-message-cancelled') {
+        if (settledSignalIds.has(id)) return;
+        settledSignalIds.add(id);
+      } else {
+        if (settledSignalIds.has(id) || presentedSignalIds.has(id)) return;
+        presentedSignalIds.add(id);
+      }
+      presentations.push(chunk);
+      wake();
     };
 
     const enqueueRun = (record: AgentThreadRunRecord<any>) => {
@@ -5106,8 +5856,23 @@ export class AgentThreadStreamRuntime {
           return;
         }
 
+        // The lease alone cannot tell a parked run from a dead producer: a run
+        // suspended on approval releases its lease, and the prompt that would
+        // tell us so may never have reached this subscriber. A stored suspended
+        // row settles it; anything else keeps the prompt heuristic, since a
+        // running regular-loop run has no row either.
+        const storedStatus = await this.#readStoredRunStatus(agent, runId);
+        if (
+          done ||
+          remoteRunLeaseWatchTokens.get(streamId) !== watchToken ||
+          remoteRuns.get(streamId) !== remoteRun ||
+          remoteRun.done
+        ) {
+          return;
+        }
         stopRemoteRunLeaseWatch(streamId);
-        const parked = remoteRunSuspensionPrompts.delete(streamId);
+        const promptSeen = remoteRunSuspensionPrompts.delete(streamId);
+        const parked = storedStatus === 'suspended' || storedStatus === 'waiting' || promptSeen;
         if (parked) {
           const deferredRecord = deferredRunsByStreamId.get(streamId);
           if (deferredRecord) {
@@ -5234,7 +5999,24 @@ export class AgentThreadStreamRuntime {
       if (done) return;
       const data = event.data as AgentThreadStreamRuntimeEvent | undefined;
       if (!data) return;
+      if (data.type === 'user-message-presentation') {
+        enqueuePresentation(data.chunk);
+        return;
+      }
+      if (data.type === 'user-message-delivered') {
+        settledSignalIds.add(data.signalId);
+        return;
+      }
       if ('streamId' in data && data.streamId !== undefined && supersededStreamIds.has(data.streamId)) return;
+      if (
+        (data.type === 'run-completed' || data.type === 'run-aborted') &&
+        data.superseded &&
+        data.streamId !== undefined
+      ) {
+        supersededStreamIds.add(data.streamId);
+        discardStream(data.runId, data.streamId);
+        return;
+      }
       if (data.type === 'run-registered') {
         if (isSuperseded(data.runId, data.generation)) return;
         noteGeneration(data.runId, data.streamId, data.generation, data.supersedes);
@@ -5401,6 +6183,7 @@ export class AgentThreadStreamRuntime {
           discardDeferredRun(eventStreamId);
           seenStreamIds.delete(eventStreamId);
           await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
+          enqueueStatus(data.runId, eventStreamId, 'failed');
           wake();
           return;
         }
@@ -5420,6 +6203,7 @@ export class AgentThreadStreamRuntime {
         }
         if (errorRun) enqueueRun(errorRun);
         await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
+        enqueueStatus(data.runId, eventStreamId, 'failed');
         wake();
         return;
       }
@@ -5441,6 +6225,23 @@ export class AgentThreadStreamRuntime {
             storedStreamIds.add(eventStreamId);
           }
         }
+        // A replayed run-suspended can describe a run that has since resumed and
+        // finished. Both loops persist the suspended row before publishing
+        // run-suspended and delete it when the run finishes, so a readable store
+        // without that row (or with a terminal one) means the run is no longer parked.
+        // A missing row only counts for backlog suspensions (deferred, or
+        // published before this subscription): a live suspension whose
+        // persistence policy skips suspended rows is still parked.
+        const storedStatus =
+          data.type === 'run-suspended' ? await this.#readStoredRunStatus(agent, data.runId) : undefined;
+        const suspendedAt = event.createdAt === undefined ? undefined : new Date(event.createdAt).getTime();
+        const historicalSuspension =
+          deferredRecord !== undefined || (suspendedAt !== undefined && suspendedAt < subscribedAt);
+        const suspendedRunEnded =
+          (storedStatus === 'missing' && historicalSuspension) ||
+          (storedStatus !== undefined && storedStatus !== 'missing' && TERMINAL_STORED_RUN_STATUSES.has(storedStatus));
+        // Its prompt was answered; keep the history but drop the stale prompt.
+        if (suspendedRunEnded) answeredStreamIds.add(eventStreamId);
         if (deferredRecord) {
           deferredRunsByStreamId.delete(eventStreamId);
           const bufferedRun = remoteRuns.get(eventStreamId);
@@ -5461,7 +6262,7 @@ export class AgentThreadStreamRuntime {
             discardDeferredRun(eventStreamId);
           }
         }
-        if (data.type === 'run-suspended') {
+        if (data.type === 'run-suspended' && !suspendedRunEnded) {
           suspendedStreamIdsByRunId.set(data.runId, eventStreamId);
           noteRunHalf(data.runId);
           state.suspendedRunIds.add(data.runId);
@@ -5470,7 +6271,7 @@ export class AgentThreadStreamRuntime {
         } else {
           clearActiveIfCurrent(data.runId, data.streamId);
         }
-        if (data.type !== 'run-suspended') {
+        if (data.type !== 'run-suspended' || suspendedRunEnded) {
           this.#clearSuspendedRun(state, data.runId);
         }
         const remoteRun = remoteRuns.get(eventStreamId);
@@ -5513,11 +6314,26 @@ export class AgentThreadStreamRuntime {
         if (data.type === 'run-completed') {
           await this.#drainPendingIdleSignals(state, resolvedPubSub, key, data.runId);
         }
+        if (data.type !== 'run-suspended' || !suspendedRunEnded) {
+          const status =
+            data.type === 'run-aborted'
+              ? 'aborted'
+              : data.type === 'run-suspended' || data.status === 'suspended'
+                ? 'suspended'
+                : data.status === 'canceled'
+                  ? 'aborted'
+                  : data.status === 'success' || (data.status === undefined && data.persisted !== false)
+                    ? 'success'
+                    : 'failed';
+          enqueueStatus(data.runId, eventStreamId, status);
+        }
         wake();
       }
     };
 
     let historyReadAt: number | undefined;
+    /** Events published before this subscription started are backlog. */
+    const subscribedAt = Date.now();
     const storedStreamIds = new Set<string>();
     const suspendedStreamIdsByRunId = new Map<string, string>();
     /** streamSeq of each registered stream, per run. */
@@ -5536,7 +6352,11 @@ export class AgentThreadStreamRuntime {
     // stream answers: a resumed half that suspends again is still pending.
     function noteRunHalf(runId: string, registration?: { streamId: string; streamSeq: number }) {
       const registered = registeredSeqsByRunId.get(runId) ?? new Map<string, number>();
-      if (registration) registered.set(registration.streamId, registration.streamSeq);
+      if (registration) {
+        registered.set(registration.streamId, registration.streamSeq);
+        const settledStreamId = settledRunIds.get(runId);
+        if (settledStreamId && settledStreamId !== registration.streamId) settledRunIds.delete(runId);
+      }
       registeredSeqsByRunId.set(runId, registered);
       const suspendedStreamId = suspendedStreamIdsByRunId.get(runId);
       if (suspendedStreamId === undefined) return;
@@ -5611,13 +6431,27 @@ export class AgentThreadStreamRuntime {
       historyReadAt = Date.now();
       try {
         const history = await this.#loadThreadHistory(agent, options);
+        const readOwner = () =>
+          hasFallbackLeaseProvider ? Promise.resolve(activeRunId()) : leaseProvider.getLeaseOwner(key);
+        let leaseOwner = await readOwner();
+        for (let attempt = 0; attempt < 3; attempt++) {
+          const tail = eventTail;
+          await tail;
+          const nextOwner = await readOwner();
+          const stable = nextOwner === leaseOwner && tail === eventTail;
+          leaseOwner = nextOwner;
+          if (stable) break;
+        }
+        const ownerRunId = leaseOwner?.split(RETAKE_LEASE_MARKER)[0];
+        const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;
         historyChunk = {
           type: 'thread-history',
           runId: '',
           from: ChunkFrom.AGENT,
-          payload: history,
+          payload: { ...history, activeRunId: snapshotRunId },
         };
         historyFilter = createThreadHistoryFilter(history.messages);
+        for (const message of history.messages) settledSignalIds.add(message.id);
       } catch (error) {
         control.references--;
         control.observers--;
@@ -5628,6 +6462,17 @@ export class AgentThreadStreamRuntime {
     }
 
     const currentRunId = activeRunId();
+    // Pending input is not in saved history or a finished-step stream buffer.
+    for (const queue of [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)]) {
+      for (const signal of queue ?? []) {
+        const chunk = this.#pendingUserMessageChunk(currentRunId ?? '', signal, 'pending');
+        if (chunk) enqueuePresentation(chunk);
+      }
+    }
+    for (const pending of state.pendingIdleSignalsByThread.get(key) ?? []) {
+      const chunk = this.#pendingUserMessageChunk(currentRunId ?? pending.runId, pending.signal, 'queued');
+      if (chunk) enqueuePresentation(chunk);
+    }
     // An aborted run stays active until it terminalizes, but its lifecycle already
     // ended for earlier subscribers. Seeding it here would replay that run.
     const currentRecord =
@@ -5664,6 +6509,14 @@ export class AgentThreadStreamRuntime {
       wake();
     };
 
+    function* takePresentations() {
+      while (presentations.length) {
+        const chunk = presentations.shift()!;
+        if (chunk.type === 'data-user-message-pending' && settledSignalIds.has(chunk.data.id)) continue;
+        if (!isSignalChunkExcluded(chunk, options.hideSignals)) yield chunk;
+      }
+    }
+
     return {
       activeRunId,
       __getCurrentRunRequestContext: () => {
@@ -5675,13 +6528,28 @@ export class AgentThreadStreamRuntime {
       stream: (async function* () {
         try {
           if (historyChunk) yield historyChunk;
-          while (!done || pendingRuns.length > 0) {
+          while (!done || pendingRuns.length > 0 || presentations.length > 0 || statuses.length > 0) {
+            for (let i = 0; i < statuses.length;) {
+              const status = statuses[i]!;
+              if (pendingRuns.some(run => run.streamId === status.streamId)) {
+                i++;
+                continue;
+              }
+              statuses.splice(i, 1);
+              if (supersededStreamIds.has(status.streamId)) continue;
+              if (status.chunk.payload.status === 'suspended' && isAnsweredHalf(status.chunk.runId, status.streamId))
+                continue;
+              yield status.chunk;
+            }
+            yield* takePresentations();
             const parkedAbortRunId = parkedAbortRunIds.shift();
             if (parkedAbortRunId !== undefined) {
               yield { type: 'abort', runId: parkedAbortRunId } as any;
               continue;
             }
             if (pendingRuns.length === 0) {
+              // Presentation draining can yield while a terminal event wakes us.
+              if (statuses.length > 0 || presentations.length > 0 || done) continue;
               await new Promise<void>(resolve => waiters.push(resolve));
               continue;
             }
@@ -5722,9 +6590,28 @@ export class AgentThreadStreamRuntime {
             // A `start` covered by stored history is held back and sent before the
             // first live part of this stream, so a mid-run joiner sees the run begin.
             let heldStart: unknown;
+            let pendingRead: ReturnType<typeof reader.read> | undefined;
             try {
               while (true) {
-                const { value: part, done: streamDone } = await reader.read();
+                yield* takePresentations();
+                if (done) break;
+                pendingRead ??= reader.read();
+                let notify!: () => void;
+                const awakened = new Promise<void>(resolve => {
+                  notify = resolve;
+                  waiters.push(notify);
+                });
+                const next = await Promise.race([
+                  pendingRead.then(value => ({ kind: 'part' as const, value })),
+                  awakened.then(() => ({ kind: 'wake' as const })),
+                ]);
+                const waiterIndex = waiters.indexOf(notify);
+                if (waiterIndex !== -1) waiters.splice(waiterIndex, 1);
+                if (next.kind === 'wake') continue;
+                pendingRead = undefined;
+                const { value: part, done: streamDone } = next.value;
+                const deliveredSignalId = userMessageSignalId(part);
+                if (deliveredSignalId) settledSignalIds.add(deliveredSignalId);
                 if (streamDone) {
                   break;
                 }
@@ -5855,7 +6742,7 @@ export class AgentThreadStreamRuntime {
     }
     if (hasSignalIds) {
       const signalIds = new Set(target.signalIds);
-      const result = this.#cancelPendingSignals(state, key, signalIds);
+      const result = this.#cancelPendingSignals(state, key, signalIds, pubsub);
       this.#publish(pubsub, key, { type: 'signals-cancelled', signalIds: [...signalIds] });
       if (result.cancelledSignalIds.length) {
         this.#notifyThreadEvents(state);
@@ -5865,6 +6752,7 @@ export class AgentThreadStreamRuntime {
     const matches = (pending: PendingIdleSignal<any>) =>
       pending.agent === agent && pending.queueOwnerId === target.queueOwnerId;
     const cancelledSignalIds = this.#cancelIdleSignals(state, key, matches);
+    this.#publishCancelledUserMessages(pubsub, key, cancelledSignalIds);
     if (cancelledSignalIds.length > 0) this.#notifyThreadEvents(state);
     return { cancelledSignalIds };
   }
@@ -5900,6 +6788,7 @@ export class AgentThreadStreamRuntime {
     state: AgentThreadRuntimeState,
     key: string,
     signalIds?: ReadonlySet<string>,
+    pubsub?: PubSub,
   ): CancelQueuedAgentMessagesResult {
     const matches = (signal: CreatedAgentSignal) => signalIds === undefined || signalIds.has(signal.id);
     const cancelled = new Set<string>();
@@ -5924,9 +6813,17 @@ export class AgentThreadStreamRuntime {
       draining.cancelled = true;
       if (!draining.handedOff) cancelled.add(draining.signal.id);
     }
+    // A claimed-owner message joined a run in flight: a retry must learn it was cancelled.
+    for (const id of cancelled) {
+      const queued = state.claimedQueuedMessages.get(claimedQueuedMessageKey(key, id));
+      if (!queued) continue;
+      queued.cancelled = true;
+      if (queued.identity && queued.runId) this.#markAcceptedMessageCancelled(state, queued.identity, queued.runId);
+    }
     for (const id of this.#cancelIdleSignals(state, key, pending => matches(pending.signal))) cancelled.add(id);
     const control = state.threadControlSubscriptions.get(key);
     for (const id of cancelled) control?.admittedSignalIds.add(id);
+    this.#publishCancelledUserMessages(pubsub, key, [...cancelled]);
     return { cancelledSignalIds: [...cancelled] };
   }
 
@@ -6018,6 +6915,7 @@ export class AgentThreadStreamRuntime {
       });
       state.pendingIdleSignalsByThread.set(key, idleQueue);
       const control = this.#ensureThreadControlSubscription(state, pubsub, key);
+      this.#publishPendingUserMessage(pubsub, key, runId ?? queuedRunId, queuedSignal, 'queued');
       this.#notifyThreadEvents(state);
       if (activeRecord) {
         this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
@@ -6028,11 +6926,12 @@ export class AgentThreadStreamRuntime {
       };
     }
 
-    return this.sendSignal<OUTPUT>(
+    return this.#sendSignal<OUTPUT>(
       agent,
       signal,
       { ...target, runId, resourceId, threadId, ifIdle: { ...target.ifIdle, behavior: 'wake' } },
       pubsub,
+      true,
     );
   }
 
@@ -6104,6 +7003,17 @@ export class AgentThreadStreamRuntime {
     inputTarget: SendAgentSignalOptions<OUTPUT>,
     pubsub?: PubSub,
   ): SendAgentSignalResult<OUTPUT> {
+    return this.#sendSignal(agent, signalInput, inputTarget, pubsub, false);
+  }
+
+  /** `waitForIdle` keeps queued input out of a run in flight at a claimed owner in another process. */
+  #sendSignal<OUTPUT = unknown>(
+    agent: Agent<any, any, any, any>,
+    signalInput: AgentSignal,
+    inputTarget: SendAgentSignalOptions<OUTPUT>,
+    pubsub: PubSub | undefined,
+    waitForIdle: boolean,
+  ): SendAgentSignalResult<OUTPUT> {
     const target = withThreadTargetScopes(inputTarget, agent.getMastraInstance?.());
     const state = this.#getState(pubsub);
     let key: string | undefined;
@@ -6171,6 +7081,12 @@ export class AgentThreadStreamRuntime {
       acceptedAt: new Date(),
     });
 
+    // A claimed owner in another process may hand idle-routed input to a run this process can't see. It gets
+    // the input as it would arrive at an active run too, and uses that copy if it joins a run.
+    const joinSignal =
+      !isActiveTarget && (target.ifActive?.attributes || target.ifIdle?.attributes)
+        ? resolveDeliveryAttributes(signal, target.ifActive?.attributes)
+        : undefined;
     // Resolve conditional delivery attributes now that we know the delivery path.
     signal = resolveDeliveryAttributes(
       signal,
@@ -6225,20 +7141,7 @@ export class AgentThreadStreamRuntime {
       if (activeRecord && this.#isThreadBlockingRun(state, activeRecord)) {
         key ??= this.#threadKey(activeRecord.resourceId, activeRecord.threadId);
         if (activeRecord.agent.id === agent.id) {
-          // Same-agent active run: queue the signal for in-loop draining so it becomes
-          // the next model input instead of waiting for the run to finish.
-          const queue = state.pendingSignalsByThread.get(key) ?? [];
-          queue.push(signal);
-          state.pendingSignalsByThread.set(key, queue);
-          this.#recordLocallyQueuedSignal(state, key, signal.id);
-          this.#notifyPendingSignals(state, key);
-          this.#publish(pubsub, key, {
-            type: 'signal-enqueued',
-            runId,
-            signal: this.#serializeSignal(signal),
-            sourceId: this.#getSourceId(),
-          });
-          this.#watchThreadRunCompletion(state, pubsub, key, activeRecord);
+          this.#queueForActiveRun(state, pubsub, key, activeRecord, signal);
           return {
             signal,
             accepted: Promise.resolve({ action: 'deliver' as const, runId }),
@@ -6262,6 +7165,44 @@ export class AgentThreadStreamRuntime {
         // by another runtime instance is reached only via PubSub; treat it as a
         // follow-up, since the sender cannot see the owner's request state.
         const isLocalReservedRun = state.threadKeysByRunId.get(runId) === key;
+        const pendingAdmission = isLocalReservedRun ? state.pendingThreadAdmissions.get(key) : undefined;
+        if (pendingAdmission?.runId === runId) {
+          const pendingKey = key;
+          const queue = state.preRunSignalsByThread.get(key) ?? [];
+          queue.push(signal);
+          state.preRunSignalsByThread.set(key, queue);
+          this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#notifyPendingSignals(state, key);
+          const accepted = pendingAdmission.outcome.then(async admission => {
+            if (admission.action === 'local') {
+              // The reserved run owns the lease and takes this signal from the pre-run queue.
+              return { action: 'deliver' as const, runId: admission.runId };
+            }
+            // This attempt never consumed the signal locally, so this caller drops
+            // its own copy before acknowledging: the queue may now belong to a newer
+            // reservation whose slot guard keeps the losing rollback from cleaning
+            // it, and a later run there must not replay acknowledged input.
+            this.#discardQueuedPreRunSignal(state, pendingKey, signal.id);
+            if (admission.action === 'remote') {
+              // The reservation lost its lease; hand this signal to the same real
+              // owner before acknowledging it.
+              await this.#publishAndWait(pubsub, pendingKey, {
+                type: 'signal-enqueued',
+                runId: admission.runId,
+                signal: this.#serializeSignal(signal),
+                sourceId: this.#getSourceId(),
+              }).catch(() => {});
+              return { action: 'deliver' as const, runId: admission.runId };
+            }
+            return { action: 'blocked' as const, reason: 'thread-blocked' as const, runId: admission.runId };
+          });
+          void accepted.catch(() => {
+            // No outcome was produced, so nothing acknowledged this signal; drop
+            // its copy so a later run cannot replay input the caller must retry.
+            this.#discardQueuedPreRunSignal(state, pendingKey, signal.id);
+          });
+          return { signal, accepted };
+        }
         const claimedOwnerDiscovery = isLocalReservedRun ? state.claimedThreadOwnerDiscoveries.get(key) : undefined;
         if (claimedOwnerDiscovery) {
           const accepted = this.#deliverAfterClaimedOwnerDiscovery<OUTPUT>(
@@ -6279,6 +7220,7 @@ export class AgentThreadStreamRuntime {
           queue.push(signal);
           state.preRunSignalsByThread.set(key, queue);
           this.#recordLocallyQueuedSignal(state, key, signal.id);
+          this.#publishPendingUserMessage(pubsub, key, runId, signal, 'pending');
           this.#notifyPendingSignals(state, key);
         }
         this.#publish(pubsub, key, {
@@ -6375,8 +7317,9 @@ export class AgentThreadStreamRuntime {
     // resolve a `wake` accepted result carrying the owned stream. On loss, hand the user
     // signal off to the winning process via signal-enqueued and resolve a `deliver` result
     // (the signal was queued onto the winning run, not run locally).
+    const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
+    const sharePendingAdmission = !localClaimedOwner && !target.ifIdle?.requireClaimedOwner;
     const accepted: Promise<SendAgentSignalAccepted<OUTPUT>> = (async () => {
-      const localClaimedOwner = state.claimedThreadOwners.get(reservedKey);
       if (localClaimedOwner) {
         if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
           state.activeThreadRunIds.delete(reservedKey);
@@ -6392,6 +7335,8 @@ export class AgentThreadStreamRuntime {
           Date.now() + AGENT_THREAD_OWNER_ACCEPTANCE_TIMEOUT_MS,
           () => state.claimedThreadOwners.get(reservedKey)?.unsubscribe === localClaimedOwner.unsubscribe,
           target.ifIdle?.streamOptions,
+          waitForIdle,
+          joinSignal,
         );
         if (!localAcceptance) {
           throw new Error(
@@ -6422,6 +7367,8 @@ export class AgentThreadStreamRuntime {
             reservedRunId,
             signal,
             discovery,
+            waitForIdle,
+            joinSignal,
           );
         } finally {
           if (state.claimedThreadOwnerDiscoveries.get(reservedKey) === discovery) {
@@ -6448,20 +7395,34 @@ export class AgentThreadStreamRuntime {
       // but failing closed would silently drop user messages on any Redis blip which
       // is the worse failure mode. Lease TTL + renewal still bound the duplicate
       // window to a single run, and the next clean acquireLease re-serializes callers.
-      const lease = await leaseProvider
-        .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
-        .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined }));
+      const lease = await this.#waitForRetakeOwner(
+        leaseProvider,
+        reservedKey,
+        await leaseProvider
+          .acquireLease(reservedKey, reservedRunId, AGENT_THREAD_LEASE_TTL_MS)
+          .catch(() => ({ acquired: true as boolean, owner: reservedRunId as string | undefined })),
+      );
 
       if (!lease.acquired) {
         // Lost the wake race to another process. Roll back our optimistic local reservation
         // so we don't trip our own activeThreadRunIds check on a follow-up.
         if (state.activeThreadRunIds.get(reservedKey) === reservedRunId) {
           state.activeThreadRunIds.delete(reservedKey);
+          // Only discard the queue while this reservation still owns the slot —
+          // a newer reservation's queued input must survive, and this attempt's
+          // own senders discard their copies per signal when it settles.
+          state.preRunSignalsByThread.delete(reservedKey);
         }
         state.threadKeysByRunId.delete(reservedRunId);
-        state.preRunSignalsByThread.delete(reservedKey);
 
         const winnerRunId = lease.owner;
+        if (winnerRunId && isRetakeLeaseOwner(winnerRunId)) {
+          return {
+            action: 'blocked' as const,
+            reason: 'thread-blocked' as const,
+            runId: winnerRunId.split(RETAKE_LEASE_MARKER)[0]!,
+          };
+        }
         if (winnerRunId && this.#isSweptLeaseOwner(state, winnerRunId)) {
           // The lease still belongs to a suspended run the TTL sweep evicted. Nothing
           // consumes a signal forwarded to it, so report the thread blocked rather
@@ -6518,6 +7479,20 @@ export class AgentThreadStreamRuntime {
         throw error;
       }
     })();
+    if (sharePendingAdmission) {
+      this.#trackPendingThreadAdmission(
+        state,
+        reservedKey,
+        reservedRunId,
+        agent.id,
+        accepted.then(admission => {
+          if (admission.action === 'wake') return { action: 'local' as const, runId: admission.runId };
+          if (admission.action === 'deliver') return { action: 'remote' as const, runId: admission.runId };
+          if (admission.action === 'blocked') return { action: 'blocked' as const, runId: admission.runId };
+          throw new Error(`Unexpected ${admission.action} result while reserving ${describeThreadKey(reservedKey)}`);
+        }),
+      );
+    }
     // Attach a detached no-op catch so that if stream setup throws (a misconfigured
     // agent: no/unsupported model, FGA denial) and the caller never awaits
     // `result.accepted`, the rejection does not surface as an unhandled rejection.

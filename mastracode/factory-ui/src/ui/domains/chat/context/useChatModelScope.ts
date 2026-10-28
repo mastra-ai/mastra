@@ -4,6 +4,7 @@ import { useParams } from 'react-router';
 import type { AvailableModelsTarget } from '../../../../hooks/useAvailableModels';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import { useSessionModelCatalogQuery } from '../../../../hooks/useSessionModelCatalog';
+import { newChatCatalogTarget } from './chatDefaultModel';
 import { ChatThreadMessagesContext } from './ChatThreadMessagesContext';
 import { useChatSessionContext } from './useChatSessionContext';
 
@@ -33,7 +34,7 @@ export function useChatModelScope() {
     : draftScope;
   const scopeLoading = sessionTarget ? sessionModelsQuery.isPending : Boolean(factoryId && !projectQuery.isSuccess);
   const draftCatalogTarget: AvailableModelsTarget = {
-    ...(draftScope === 'user' ? { scope: 'user' } : { factoryProjectId: factoryId }),
+    ...newChatCatalogTarget(draftScope, factoryId),
     enabled: !scopeLoading,
   };
   const catalogTarget: AvailableModelsTarget = sessionTarget ?? draftCatalogTarget;

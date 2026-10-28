@@ -519,6 +519,47 @@ describe('Agent signal routes', () => {
     });
   });
 
+  it('delivers history and retained outcomes through the subscription SSE parser', async () => {
+    const chunks = [
+      {
+        type: 'thread-history',
+        runId: '',
+        from: 'AGENT',
+        payload: { messages: [], hasMore: false, activeRunId: null },
+      },
+      { type: 'thread-run-status', runId: 'finished-run', from: 'AGENT', payload: { status: 'success' } },
+      { type: 'thread-run-status', runId: 'failed-run', from: 'AGENT', payload: { status: 'failed' } },
+    ];
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    agent['request'] = vi.fn().mockResolvedValue(createSseResponse(chunks));
+    const subscription = await agent.subscribeToThread({
+      threadId: 'thread-123',
+      withInitialHistory: true,
+      withRunStatus: true,
+    });
+    const received: unknown[] = [];
+    await subscription.processDataStream({
+      onChunk: chunk => {
+        received.push(chunk);
+      },
+    });
+    expect(received).toEqual(chunks);
+    subscription.unsubscribe();
+  });
+
+  it.each([undefined, false, true])('forwards run outcomes only when opted in (%s)', async withRunStatus => {
+    const agent = new Agent(mockClientOptions, 'test-agent');
+    const mockRequest = vi.fn().mockResolvedValue(createSseResponse([]));
+    agent['request'] = mockRequest;
+    const subscription = await agent.subscribeToThread({ threadId: 'thread-123', withRunStatus });
+    expect(mockRequest).toHaveBeenCalledWith('/agents/test-agent/threads/subscribe', {
+      method: 'POST',
+      body: { resourceId: undefined, threadId: 'thread-123', ...(withRunStatus ? { withRunStatus: true } : {}) },
+      stream: true,
+    });
+    subscription.unsubscribe();
+  });
+
   it('forwards withInitialHistory when requested', async () => {
     const agent = new Agent(mockClientOptions, 'test-agent');
     const mockRequest = vi.fn().mockResolvedValue(new Response(new ReadableStream()));

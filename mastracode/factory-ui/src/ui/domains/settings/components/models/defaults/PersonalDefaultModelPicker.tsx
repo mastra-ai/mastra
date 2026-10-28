@@ -1,4 +1,6 @@
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { Button } from '@mastra/playground-ui/components/Button';
+import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { formatModelName } from '@mastra/playground-ui/utils/model';
 
@@ -10,13 +12,18 @@ import {
 } from '../../../../../../hooks/use-default-model';
 import { ModelCombobox } from '../../ModelCombobox';
 import { AppliedSessionsSummary } from './AppliedSessionsSummary';
+import { PersonalThinkingControl } from './PersonalThinkingControl';
 
 export function PersonalDefaultModelPicker({
   savedModelId,
+  savedThinkingLevel,
   models,
+  fallbackModelId,
 }: {
   savedModelId: string | undefined;
+  savedThinkingLevel: ThinkingLevelSetting | null;
   models: AvailableModelOption[] | undefined;
+  fallbackModelId: string | undefined;
 }) {
   const setDefaultModel = useSetDefaultModel();
   const clearDefaultModel = useClearDefaultModel();
@@ -40,18 +47,23 @@ export function PersonalDefaultModelPicker({
 
   return (
     <div className="flex min-w-0 flex-col gap-2">
-      <ModelCombobox
-        models={models ?? []}
-        value={savedModelId ?? ''}
-        onValueChange={saveDefaultModel}
-        placeholder="Select a model"
-        aria-label="Personal default model"
-        size="sm"
-        disabled={busy}
-      />
+      <ButtonsGroup size="sm" aria-label="Personal default model and thinking" className="w-full">
+        <ModelCombobox
+          models={models ?? []}
+          value={savedModelId ?? ''}
+          onValueChange={saveDefaultModel}
+          fallbackModelId={fallbackModelId}
+          placeholder="Select a model"
+          aria-label="Personal default model"
+          size="sm"
+          className="min-w-0 flex-1"
+          disabled={busy}
+        />
+        <PersonalThinkingControl savedModelId={savedModelId} savedThinkingLevel={savedThinkingLevel} saving={busy} />
+      </ButtonsGroup>
       <div className="flex flex-wrap items-center gap-2">
         <Button size="sm" disabled={busy || !savedModelId} onClick={() => applyDefaultModel.mutate()}>
-          Apply to running sessions
+          Apply to my running chats
         </Button>
         <Button size="sm" variant="ghost" disabled={busy || !savedModelId} onClick={clearDefault}>
           Clear

@@ -193,7 +193,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
             disabled={executeProcessor.isPending || selectedPhase === 'outputStream' || selectedPhase === 'llmRequest'}
             className="w-full"
           >
-            {executeProcessor.isPending ? 'Running...' : 'Run Processor'}
+            {executeProcessor.isPending ? 'Running...' : 'Run processor'}
           </Button>
 
           {selectedPhase === 'outputStream' && (
@@ -241,7 +241,7 @@ function ProcessorDetailPanel({ processor }: ProcessorDetailPanelProps) {
       <div className="relative h-full overflow-x-auto overflow-y-auto p-5">
         <CodeMirror
           value={errorString || resultCode}
-          editable={true}
+          editable
           theme={theme}
           extensions={[jsonLanguage, codeFoldGutter]}
           basicSetup={{ foldGutter: false }}

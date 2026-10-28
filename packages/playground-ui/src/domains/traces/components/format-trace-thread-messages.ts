@@ -1,11 +1,15 @@
 import type { MastraClient } from '@mastra/client-js';
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
 import { SpanType } from '@mastra/core/observability';
+import { isUserSignalType } from '@/domains/chat/messages/signal-data';
 import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
 import { formatHierarchicalSpans } from '@/domains/traces/components/format-hierarchical-spans';
 import type { UISpan } from '@/domains/traces/types';
+import { getSpanSignal } from '@/domains/traces/utils/span-signal';
 
 type SpanRecord = Awaited<ReturnType<MastraClient['getTrace']>>['spans'][number];
+/** A span as the span panel holds it, without the trace-level `status`. */
+type SpanFields = Omit<SpanRecord, 'status'>;
 
 const TOOL_SPAN_TYPES = new Set<string>([
   SpanType.TOOL_CALL,
@@ -70,9 +74,9 @@ const readString = (value: unknown, key: string): string | undefined => {
   return typeof field === 'string' ? field : undefined;
 };
 
-const toolNameOf = (span: SpanRecord): string => span.entityName ?? span.entityId ?? span.name;
+const toolNameOf = (span: SpanFields): string => span.entityName ?? span.entityId ?? span.name;
 
-const toToolPart = (span: SpanRecord): MastraMessagePart => {
+const toToolPart = (span: SpanFields): MastraMessagePart => {
   const failed = Boolean(span.error);
   const settled = Boolean(span.endedAt);
   const state = failed ? 'output-error' : settled ? 'result' : 'call';
@@ -262,12 +266,41 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   if (!root) return [];
 
   const userParts = getUserParts(root.input);
+  const signal = getSpanSignal(root);
+  // A run started by a non-user signal (a skill, a reminder…) opens with that signal instead of a user turn.
+  const signalParts = signal && !isUserSignalType(signal.type) ? toTextParts(signal.contents) : [];
   const { tools, textSpanIds, resumedOutput } = collectAssistantSpans(hierarchicalRoot, spans);
   const responseText = getResponseText(root.output) || getResponseText(resumedOutput);
   const assistantCreatedAt = new Date(root.endedAt ?? root.startedAt);
   const threadId = root.threadId ?? undefined;
 
   const messages: TraceViewMastraDBMessage[] = [
+    ...(signal && signalParts.length > 0
+      ? [
+          {
+            id: `${root.traceId}:${root.spanId}:signal`,
+            role: 'signal' as const,
+            type: signal.tagName,
+            createdAt: new Date(root.startedAt),
+            threadId,
+            content: {
+              format: 2 as const,
+              parts: signalParts,
+              content: messageContent(signalParts),
+              metadata: {
+                signal: {
+                  id: signal.id,
+                  type: signal.type,
+                  tagName: signal.tagName,
+                  attributes: signal.attributes,
+                  metadata: signal.metadata,
+                },
+              },
+            },
+            traceSpanIds: [root.spanId],
+          },
+        ]
+      : []),
     // A resumed run's input is the resume payload, not a user message: no user bubble then.
     ...(userParts.length > 0
       ? [
@@ -304,4 +337,61 @@ export function formatTraceThreadMessages(spans: SpanRecord[]): TraceViewMastraD
   }
 
   return messages;
+}
+
+interface RequestedToolCall {
+  toolCallId?: string;
+  toolName: string;
+  args: unknown;
+}
+
+/** The tool calls a model span asked for, as recorded in its `output.toolCalls`. */
+export function getRequestedToolCalls(span: SpanFields): RequestedToolCall[] {
+  const toolCalls = isRecord(span.output) ? span.output.toolCalls : undefined;
+  if (!Array.isArray(toolCalls)) return [];
+  return toolCalls.flatMap(call => {
+    const toolName = readString(call, 'toolName');
+    if (!toolName || !isRecord(call)) return [];
+    return [{ toolCallId: readString(call, 'toolCallId'), toolName, args: call.args ?? call.input }];
+  });
+}
+
+/**
+ * One message per tool call a model span asked for, read back from the trace's tool span
+ * (its input and result) when there is one, so the chat's tool rows can draw them.
+ */
+export function formatSpanToolCallMessages(span: SpanFields, spans: SpanFields[]): TraceViewMastraDBMessage[] {
+  const toolSpans = new Map<string, SpanFields>();
+  for (const candidate of spans) {
+    const toolCallId = TOOL_SPAN_TYPES.has(candidate.spanType)
+      ? readString(candidate.attributes, 'toolCallId')
+      : undefined;
+    if (toolCallId) toolSpans.set(toolCallId, candidate);
+  }
+
+  return getRequestedToolCalls(span).flatMap<TraceViewMastraDBMessage>((call, index) => {
+    if (isHiddenTool(call.toolName)) return [];
+    const toolSpan = call.toolCallId ? toolSpans.get(call.toolCallId) : undefined;
+    const part: MastraMessagePart = toolSpan
+      ? toToolPart(toolSpan)
+      : {
+          type: 'tool-invocation',
+          toolInvocation: {
+            toolCallId: call.toolCallId ?? `${span.spanId}:${index}`,
+            toolName: call.toolName,
+            args: call.args ?? {},
+            state: 'call',
+          },
+        };
+    return [
+      {
+        id: `${span.traceId}:${span.spanId}:tool:${index}`,
+        role: 'assistant',
+        createdAt: new Date(span.startedAt),
+        threadId: span.threadId ?? undefined,
+        content: { format: 2, parts: [part], content: '' },
+        traceSpanIds: toolSpan ? [toolSpan.spanId] : [],
+      },
+    ];
+  });
 }

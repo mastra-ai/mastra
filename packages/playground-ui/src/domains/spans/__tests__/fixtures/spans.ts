@@ -1,4 +1,4 @@
-import type { GetObservabilityCapabilitiesResponse, MastraClient } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, MastraClient, QuerySpansResult } from '@mastra/client-js';
 import { SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
 import type { TraceFilterGroup, TraceFilterToken } from '../../../traces/trace-query-filters';
@@ -102,3 +102,101 @@ export const spanDetailById: Record<string, Awaited<ReturnType<MastraClient['get
     },
   },
 };
+
+type SpanRow = QuerySpansResult['spans'][number];
+
+export function makeSpan(overrides: Partial<SpanRow> & Pick<SpanRow, 'traceId' | 'spanId' | 'name'>): SpanRow {
+  return {
+    organizationId: null,
+    resourceId: null,
+    parentSpanId: null,
+    spanType: 'agent_run',
+    status: 'success',
+    startedAt: '2026-10-21T08:00:00.000Z',
+    endedAt: '2026-10-21T08:00:01.000Z',
+    durationMs: 1000,
+    entityType: 'agent',
+    entityId: 'weather-agent',
+    entityName: 'Weather Agent',
+    entityVersionId: null,
+    parentEntityType: null,
+    parentEntityId: null,
+    parentEntityName: null,
+    parentEntityVersionId: null,
+    rootEntityType: null,
+    rootEntityId: null,
+    rootEntityName: null,
+    rootEntityVersionId: null,
+    threadId: null,
+    runId: null,
+    sessionId: null,
+    userId: null,
+    requestId: null,
+    serviceName: null,
+    experimentId: null,
+    environment: null,
+    executionSource: null,
+    model: null,
+    provider: null,
+    inputPreview: null,
+    outputPreview: null,
+    errorPreview: null,
+    ...overrides,
+  };
+}
+
+/** One page of span rows, as `POST /observability/spans/query` returns it. */
+export const spanRowsPage: QuerySpansResult = {
+  spans: [
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-1',
+      name: 'agent run: weather',
+      model: 'gpt-5.6',
+      provider: 'openai',
+    }),
+    makeSpan({
+      traceId: 'trace-1',
+      spanId: 'span-2',
+      parentSpanId: 'span-1',
+      name: 'tool: get-weather',
+      spanType: 'tool_call',
+      entityType: 'tool',
+      entityId: 'get-weather',
+      entityName: 'Get Weather Tool',
+    }),
+  ],
+  page: { next: null },
+};
+
+export const emptySpanRows: QuerySpansResult = { spans: [], page: { next: null } };
+
+/** A span that ended after the list loaded, newer than every listed span. */
+export const endedSpan = makeSpan({
+  traceId: 'trace-9',
+  spanId: 'span-9',
+  name: 'agent run: fresh',
+  startedAt: '2026-10-21T09:00:00.000Z',
+  endedAt: '2026-10-21T09:00:02.000Z',
+});
+
+/** A head poll (`endedAt desc`) that brings the ended span back with a span the list already shows. */
+export const spanHeadPage: QuerySpansResult = { spans: [endedSpan, spanRowsPage.spans[0]], page: { next: null } };
+
+/** A full head page whose spans all ended after `endedAfter`, so spans may be missing between polls. */
+export function fullSpanHeadPage(limit: number, endedAfter: string): QuerySpansResult {
+  const base = Date.parse(endedAfter);
+  return {
+    spans: Array.from({ length: limit }, (_, index) => {
+      const endedAt = new Date(base + (limit - index) * 1000).toISOString();
+      return makeSpan({
+        traceId: `trace-burst-${index}`,
+        spanId: `span-burst-${index}`,
+        name: `burst ${index}`,
+        startedAt: endedAt,
+        endedAt,
+      });
+    }),
+    page: { next: 'burst-cursor' },
+  };
+}

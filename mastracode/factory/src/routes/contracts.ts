@@ -2,12 +2,13 @@ import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
+import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
-const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
+export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
   method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
@@ -586,14 +587,36 @@ export const FACTORY_ROUTE_CONTRACTS = {
       boards: z.array(
         z.object({
           id: z.string(),
+          /** Absent from servers older than the phase fields. */
+          name: z.string().optional(),
+          /** @deprecated Use `name`. */
           title: z.string(),
+          description: z.string().optional(),
           initialPhase: z.string(),
           phases: z.array(
             z.object({
               id: z.string(),
+              name: z.string().optional(),
+              /** @deprecated Use `name`. */
               title: z.string(),
+              description: z.string().optional(),
               kind: z.enum(['resting', 'working', 'terminal']),
+              nextPhases: z.array(z.string()).optional(),
+              /** The session context a working phase runs in. */
+              context: z.string().optional(),
+              /** @deprecated Use `context`. */
               role: z.string().optional(),
+              autoStart: z.boolean().optional(),
+              /** Cards the phase starts on its own for; absent means every card. */
+              autoStartWhen: cardRuleGroupSchema.optional(),
+              exitTool: z
+                .object({
+                  id: z.string(),
+                  autoApprove: z.boolean(),
+                  /** Cards the exit tool is approved for; absent means every card. */
+                  autoApproveWhen: cardRuleGroupSchema.optional(),
+                })
+                .optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

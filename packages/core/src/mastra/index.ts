@@ -46,6 +46,7 @@ import type { NotificationDispatchConfig } from '../notifications/workflow';
 import {
   buildNotificationDispatchSchedule,
   createNotificationDispatchWorkflow,
+  hasPendingDeferredNotifications,
   NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID,
 } from '../notifications/workflow';
 import type {
@@ -964,9 +965,8 @@ export class Mastra<
    */
   #schedulerRequested = false;
   /**
-   * Set once `__ensureNotificationDispatchReady()` has upserted the dispatcher
-   * schedule row and requested the scheduler. Makes repeated deferred
-   * notification creates free after the first one.
+   * Set once `__ensureNotificationDispatchReady()` has requested the
+   * scheduler in this process, so later deferrals only verify the row.
    */
   #notificationDispatchReady = false;
   /**
@@ -1099,8 +1099,8 @@ export class Mastra<
                 // for workflow ids only known to this instance's public registry
                 // (e.g. background scheduler runs like the notification
                 // dispatcher) — they have no cross-instance consumer.
-                const isOwnedHere = (() => {
-                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic)) return true;
+                const isOwnedHere = (guarded = false) => {
+                  if (wfId && rId && self.#isProcessLocalInternalWorkflow(wfId, rId, topic, guarded)) return true;
                   let parent = data?.parentWorkflow as
                     | { workflowId?: string; runId?: string; parentWorkflow?: unknown }
                     | undefined;
@@ -1108,7 +1108,7 @@ export class Mastra<
                   while (parent && depth < 16) {
                     const pwfId = parent.workflowId;
                     const prId = parent.runId;
-                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic)) return true;
+                    if (pwfId && prId && self.#isProcessLocalInternalWorkflow(pwfId, prId, topic, guarded)) return true;
                     parent = parent.parentWorkflow as typeof parent;
                     depth++;
                   }
@@ -1121,8 +1121,13 @@ export class Mastra<
                   if (rId && rId.startsWith('sched_wf_')) return true;
                   if (rId && rId.startsWith(`sched_${NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID}_`)) return true;
                   return false;
-                })();
-                if (isOwnedHere) {
+                };
+                if (isOwnedHere()) {
+                  if (topic === 'workflows' && !isOwnedHere(true)) {
+                    return Promise.resolve(self.getStorage()?.getStore('workflows')).then(store =>
+                      target.publish(topic, event, { localOnly: !store?.supportsWorkflowStepGuards() }),
+                    );
+                  }
                   // A local-only start in a process that consumes no workflow
                   // events (e.g. `MASTRA_WORKERS=false`) is dropped by the
                   // transport. Say so instead of hanging silently.
@@ -1712,16 +1717,15 @@ export class Mastra<
     if (config?.logger === false) {
       logger = noopLogger as unknown as TLogger;
       this.#loggerExplicit = true;
+    } else if (config?.logger) {
+      logger = config.logger;
+      this.#loggerExplicit = true;
     } else {
-      if (config?.logger) {
-        logger = config.logger;
-        this.#loggerExplicit = true;
-      } else {
-        const levelOnEnv =
-          process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
-        logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
-      }
+      const levelOnEnv =
+        process.env.NODE_ENV === 'production' && process.env.MASTRA_DEV !== 'true' ? LogLevel.WARN : LogLevel.INFO;
+      logger = new ConsoleLogger({ name: 'Mastra', level: levelOnEnv }) as unknown as TLogger;
     }
+
     this.#logger = logger;
 
     this.#idGenerator = config?.idGenerator;
@@ -2427,6 +2431,10 @@ export class Mastra<
     }
 
     await this.#registerFsAgentSchedules(schedulesStore, allRows);
+
+    // A running scheduler sleeps until its earliest fire; re-arm it for rows
+    // registered after it started. No-op before it starts.
+    this.#findSchedulerWorker()?.scheduler?.wake();
   }
 
   /**
@@ -3987,16 +3995,16 @@ export class Mastra<
    * Whether this internal workflow event must stay in this process. A
    * run-scoped registration always qualifies; an unscoped one does unless it
    * was registered `distributed`. A distributed workflow's `workflows` events
-   * stay local while this process runs workflow workers (so runs stay pinned
-   * to the process that started them) and only cross processes when it
-   * can't run them itself. Its `workflows-finish` events always cross, since
+   * stay local on stores without atomic occurrence guards. Guarded stores
+   * allow workers to publish reclaimable continuations through the broker.
+   * Its `workflows-finish` events always cross, since
    * the process waiting for the result may not be the one that ran it.
    */
-  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string): boolean {
+  #isProcessLocalInternalWorkflow(id: string, runId: string, topic: string, guarded: boolean): boolean {
     if (!this.__hasInternalWorkflow(id, runId)) return false;
     if (this.#internalMastraWorkflows[`${id}:${runId}`]) return true;
     if (!this.#distributedInternalWorkflowIds.has(id)) return true;
-    return topic === 'workflows' && this.__hasLocalWorkflowExecution();
+    return topic === 'workflows' && !guarded && this.__hasLocalWorkflowExecution();
   }
 
   /**
@@ -6057,7 +6065,7 @@ export class Mastra<
     }
   }
 
-  /** Subscribe until this process's scheduling workers start. Idempotent. */
+  /** Subscribe for cross-process scheduler wakes. Idempotent. */
   async #wireSchedulerWakeSubscription(): Promise<void> {
     if (this.#schedulerWakeSubscription) return;
     const cb: EventCallback = async (event, ack, nack) => {
@@ -6074,6 +6082,9 @@ export class Mastra<
         // here would race that loop and start the scheduler twice.
         if (this.#workersStarted) {
           await this.#ensureSchedulingWorkersStarted();
+          // A running scheduler sleeps until its earliest fire; the new or
+          // changed schedule may be due sooner.
+          this.#findSchedulerWorker()?.scheduler?.wake();
         }
         await ack?.();
       } catch (err) {
@@ -6087,7 +6098,8 @@ export class Mastra<
     try {
       // Wake events are transient hints; the awaited boot probe below is the
       // durable recovery path. Starting from latest avoids replaying retained
-      // wakes and starting the scheduler when no schedule rows remain.
+      // wakes and starting the scheduler when no schedule rows remain. The
+      // subscription stays wired while the scheduler runs, to re-arm it.
       await this.#pubsub.subscribe(SCHEDULER_WAKE_TOPIC, cb, { startFrom: 'latest' });
     } catch (err) {
       // Allow a later startWorkers() call to retry a transient subscribe error.
@@ -6116,10 +6128,16 @@ export class Mastra<
       if (!schedulesStore) return;
 
       const rows = await schedulesStore.listSchedules();
-      // A leftover dispatcher row must not wake the scheduler when dispatch
-      // has since been disabled — nothing would consume it.
-      const dispatchDisabled = this.#notificationDispatchConfig?.enabled === false;
-      const hasWork = rows.some(row => !dispatchDisabled || row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      let hasWork = rows.some(row => row.id !== NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      // A leftover dispatcher row is only work while deferred notifications
+      // are pending. Otherwise its once-a-minute cron would keep the scheduler
+      // polling storage forever, and nothing would consume it when dispatch
+      // has since been disabled.
+      const dispatchEnabled = this.#notificationDispatchConfig?.enabled !== false;
+      if (!hasWork && dispatchEnabled && rows.some(row => row.id === NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID)) {
+        const notifications = await this.#storage.getStore('notifications');
+        hasWork = notifications ? await hasPendingDeferredNotifications(notifications) : false;
+      }
       if (hasWork) this.#schedulerRequested = true;
     } catch (err) {
       this.#logger?.warn?.('Failed to detect persisted scheduler work on boot', err as any);
@@ -6133,13 +6151,17 @@ export class Mastra<
    * scheduler — mirroring `__ensureScheduleRuntimeReady()`. This also supports
    * processes that publish notifications without running workers locally.
    *
+   * The row is read on every call rather than memoized: the dispatcher deletes
+   * it once nothing is pending (`__releaseNotificationDispatchIfIdle()`),
+   * possibly from another process, and the next deferral must re-arm it.
+   *
    * @internal
    */
   async __ensureNotificationDispatchReady(): Promise<void> {
-    if (this.#notificationDispatchReady) return;
     if (this.#notificationDispatchConfig?.enabled === false) return;
     if (!this.#storage) return;
 
+    let created = false;
     try {
       const schedulesStore = await this.#storage.getStore('schedules');
       if (!schedulesStore) return;
@@ -6149,6 +6171,7 @@ export class Mastra<
       if (!existing) {
         try {
           await schedulesStore.createSchedule(desired);
+          created = true;
         } catch (err) {
           // Another instance may have created the row concurrently — only
           // rethrow if it's still missing.
@@ -6168,18 +6191,52 @@ export class Mastra<
         }
       }
     } catch (err) {
-      // Leave #notificationDispatchReady unset so the next deferred
-      // notification retries the upsert.
+      // The next deferred notification retries the upsert.
       this.#logger?.warn?.('Failed to ensure notification dispatch schedule', err as any);
       return;
     }
 
+    // Request the scheduler once per process, and wake schedulers everywhere
+    // whenever the row is (re)created.
+    if (this.#notificationDispatchReady && !created) return;
     this.#notificationDispatchReady = true;
     this.#schedulerRequested = true;
     if (this.#workersStarted) {
       await this.#ensureSchedulingWorkersStarted();
     }
     await this.__publishSchedulerWake(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+  }
+
+  /**
+   * Called by the dispatcher after each pass. When no deferred notification is
+   * pending, deletes the dispatcher schedule row so its cron stops firing and
+   * an idle app stops polling storage. The next deferral re-creates it.
+   *
+   * @internal
+   */
+  async __releaseNotificationDispatchIfIdle(): Promise<void> {
+    if (!this.#storage) return;
+    try {
+      const [schedulesStore, notifications] = await Promise.all([
+        this.#storage.getStore('schedules'),
+        this.#storage.getStore('notifications'),
+      ]);
+      if (!schedulesStore || !notifications) return;
+      if (await hasPendingDeferredNotifications(notifications)) return;
+
+      await schedulesStore.deleteSchedule(NOTIFICATION_DISPATCH_SCHEDULE_ROW_ID);
+      this.#notificationDispatchReady = false;
+
+      // A deferral elsewhere may have written its record and seen the row
+      // just before the delete. It won't re-create the row, so re-check after
+      // deleting and re-arm on its behalf.
+      if (await hasPendingDeferredNotifications(notifications)) {
+        await this.__ensureNotificationDispatchReady();
+      }
+    } catch (err) {
+      // Leaving the row in place only costs extra dispatch passes.
+      this.#logger?.warn?.('Failed to release idle notification dispatch schedule', err as any);
+    }
   }
 
   /**
@@ -6240,9 +6297,6 @@ export class Mastra<
         await agentScheduleWorker.start();
       }
     }
-
-    // Startup is complete; further wake events have nothing to do.
-    await this.#unwireSchedulerWakeSubscription();
   }
 
   private registerStaticWorkflowScorers(workflow: AnyWorkflow): void {
@@ -6960,41 +7014,40 @@ export class Mastra<
         this.#logger?.debug(`MCP server with logical ID '${serverId}' found, but not version '${version}'.`);
       }
       return specificVersionServer as TMCPServers[TMCPServerName] | undefined;
-    } else {
-      // No version specified, find the one with the most recent releaseDate
-      if (matchingLogicalIdServers.length === 1) {
-        return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
-      }
-
-      matchingLogicalIdServers.sort((a, b) => {
-        // Ensure releaseDate exists and is a string before creating a Date object
-        const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
-        const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
-
-        if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
-        if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
-        if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
-
-        return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
-      });
-
-      // After sorting, the first element should be the latest if its date is valid
-      if (matchingLogicalIdServers.length > 0) {
-        const latestServer = matchingLogicalIdServers[0];
-        if (
-          latestServer &&
-          latestServer.releaseDate &&
-          typeof latestServer.releaseDate === 'string' &&
-          !isNaN(new Date(latestServer.releaseDate).getTime())
-        ) {
-          return latestServer as TMCPServers[TMCPServerName];
-        }
-      }
-      this.#logger?.warn(
-        `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
-      );
-      return undefined;
     }
+    // No version specified, find the one with the most recent releaseDate
+    if (matchingLogicalIdServers.length === 1) {
+      return matchingLogicalIdServers[0] as TMCPServers[TMCPServerName];
+    }
+
+    matchingLogicalIdServers.sort((a, b) => {
+      // Ensure releaseDate exists and is a string before creating a Date object
+      const dateAVal = a.releaseDate && typeof a.releaseDate === 'string' ? new Date(a.releaseDate).getTime() : NaN;
+      const dateBVal = b.releaseDate && typeof b.releaseDate === 'string' ? new Date(b.releaseDate).getTime() : NaN;
+
+      if (isNaN(dateAVal) && isNaN(dateBVal)) return 0;
+      if (isNaN(dateAVal)) return 1; // Treat invalid/missing dates as older
+      if (isNaN(dateBVal)) return -1; // Treat invalid/missing dates as older
+
+      return dateBVal - dateAVal; // Sorts in descending order of time (latest first)
+    });
+
+    // After sorting, the first element should be the latest if its date is valid
+    if (matchingLogicalIdServers.length > 0) {
+      const latestServer = matchingLogicalIdServers[0];
+      if (
+        latestServer &&
+        latestServer.releaseDate &&
+        typeof latestServer.releaseDate === 'string' &&
+        !isNaN(new Date(latestServer.releaseDate).getTime())
+      ) {
+        return latestServer as TMCPServers[TMCPServerName];
+      }
+    }
+    this.#logger?.warn(
+      `Could not determine the latest server for logical ID '${serverId}' due to invalid or missing release dates, or no servers left after filtering.`,
+    );
+    return undefined;
   }
 
   /**
@@ -7102,7 +7155,11 @@ export class Mastra<
     // dedicated scheduler processes.
     if (!name && (this.#shouldEnableScheduler() || schedulerForcedByFilter) && this.#storage) {
       if (!this.#findSchedulerWorker()) {
-        const sw = new SchedulerWorker(this.#schedulerConfig);
+        // A filter-selected scheduler is dedicated: keep it polling like an
+        // explicitly enabled one, since it may share no pubsub with producers.
+        const sw = new SchedulerWorker(
+          schedulerForcedByFilter ? { ...this.#schedulerConfig, enabled: true } : this.#schedulerConfig,
+        );
         sw.__registerMastra(this);
         this.#workers.push(sw);
       }
@@ -7201,11 +7258,6 @@ export class Mastra<
     // workers mid-boot would race the start loop above. Honor it now.
     if (!name && this.#schedulerRequested && !this.#findSchedulerWorker()) {
       await this.#ensureSchedulingWorkersStarted();
-    }
-
-    // The wake subscription is only needed while the scheduler is stopped.
-    if (this.#findSchedulerWorker()?.isRunning) {
-      await this.#unwireSchedulerWakeSubscription();
     }
   }
 

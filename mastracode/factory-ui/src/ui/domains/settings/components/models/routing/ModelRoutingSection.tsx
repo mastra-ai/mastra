@@ -1,14 +1,13 @@
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 
 import {
   useFactoryProjectQuery,
   useSetFactoryModelScopeMutation,
 } from '../../../../../../hooks/useFactoryDefaultModel';
-import { SkeletonRows } from '../../../../../ui/SkeletonRows';
+import { ModelRoutingSkeleton } from './ModelRoutingSkeleton';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
-import { FactoryThinkingControl } from '../../FactoryThinkingControl';
 import { SettingsSubsection } from '../../SettingsSubsection';
+import { savedModelScope } from './model-routes';
 import { ModelRoutingMap } from './ModelRoutingMap';
 import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 
@@ -16,7 +15,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
   const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
-  const savedScope = projectQuery.data ? (projectQuery.data.modelScope ?? 'hybrid') : undefined;
+  const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
   const error = setModelScope.error ?? projectQuery.error;
 
@@ -42,16 +41,8 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
             {error.message}
           </Txt>
         )}
-        {projectQuery.isPending && <SkeletonRows label="Loading model routing" rows={2} rowClassName="h-36 w-full" />}
+        {projectQuery.isPending && <ModelRoutingSkeleton />}
         {modelScope && <ModelRoutingMap factoryId={factoryId} modelScope={modelScope} />}
-        <SettingsContainer>
-          <SettingsRow
-            label="Thinking"
-            description="Every chat and work-item run in this Factory starts at this level."
-          >
-            <FactoryThinkingControl factoryId={factoryId} />
-          </SettingsRow>
-        </SettingsContainer>
       </div>
     </SettingsSubsection>
   );

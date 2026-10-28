@@ -57,13 +57,12 @@ const createNumericOperator = (symbol: string) => {
         sql: `CAST(json_extract(metadata, ${jsonPath}) AS NUMERIC) ${symbol} ?`,
         needsValue: true,
       };
-    } else {
-      // For non-numeric strings (like ISO dates), compare as text
-      return {
-        sql: `CAST(json_extract(metadata, ${jsonPath}) AS TEXT) ${symbol} ?`,
-        needsValue: true,
-      };
     }
+    // For non-numeric strings (like ISO dates), compare as text
+    return {
+      sql: `CAST(json_extract(metadata, ${jsonPath}) AS TEXT) ${symbol} ?`,
+      needsValue: true,
+    };
   };
 };
 
@@ -90,14 +89,13 @@ function buildElemMatchConditions(value: any) {
       const jsonPath = parseJsonPathKey(field);
       const elemSql = sql.replace(pattern, `json_extract(elem.value, '$.${jsonPath}')`);
       return { sql: elemSql, values };
-    } else {
-      const jsonPath = parseJsonPathKey(field);
-      // Simple field equality (warehouse: 'A')
-      return {
-        sql: `json_extract(elem.value, '$.${jsonPath}') = ?`,
-        values: [fieldValue],
-      };
     }
+    const jsonPath = parseJsonPathKey(field);
+    // Simple field equality (warehouse: 'A')
+    return {
+      sql: `json_extract(elem.value, '$.${jsonPath}') = ?`,
+      values: [fieldValue],
+    };
   });
 
   return conditions;
@@ -499,7 +497,7 @@ function handleLogicalOperator(
   const joinOperator = key === '$or' || key === '$nor' ? 'OR' : 'AND';
   const conditions = Array.isArray(value)
     ? value.flatMap(f => {
-        const entries = !!f ? Object.entries(f) : [];
+        const entries = f ? Object.entries(f) : [];
         const branch = entries.map(([k, v]) => buildCondition(k, v, key));
         if (branch.length <= 1) return branch;
         // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.

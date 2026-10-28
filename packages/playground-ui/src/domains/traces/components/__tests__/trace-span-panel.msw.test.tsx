@@ -9,7 +9,7 @@ import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 import { TraceSpanPanel } from '../trace-span-panel';
 import type { TraceSpanPanelProps } from '../trace-span-panel';
 import { queryPageFromList } from './fixtures/thread-traces';
-import { TRACE_ID, panelTraceSpans, spanDetailById } from './fixtures/trace-span-panel';
+import { TRACE_ID, panelTraceSpans, skillSignalRootDetail, spanDetailById } from './fixtures/trace-span-panel';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
@@ -301,23 +301,59 @@ describe('TraceSpanPanel', () => {
     expect(onSpanDetailRequest).toHaveBeenCalledWith('child1');
   });
 
-  it('when next/previous is clicked, then the adjacent span in the tree is selected', async () => {
+  it('when a span is open, then it has no next/previous buttons and the tree switches spans', async () => {
     installHandlers();
     const { queryClient } = renderPanel({ initialSpanId: 'child1' });
 
     expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+    expect(screen.queryByLabelText('Go to next span')).toBeNull();
+    expect(screen.queryByLabelText('Go to previous span')).toBeNull();
 
-    fireEvent.click(screen.getByLabelText('Go to next span'));
+    fireEvent.click(screen.getByText('Second tool call'));
     expect(await screen.findByRole('heading', { name: /child2/ })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  });
 
-    fireEvent.click(screen.getByLabelText('Go to previous span'));
-    expect(await screen.findByRole('heading', { name: /child1/ })).not.toBeNull();
+  it('when the selected run was started by a skill signal, then its input shows the skill instead of the raw signal', async () => {
+    installHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId/spans/root01`, () =>
+        HttpResponse.json(skillSignalRootDetail),
+      ),
+    );
+    const { queryClient } = renderPanel({ initialSpanId: 'root01' });
 
-    fireEvent.click(screen.getByLabelText('Go to previous span'));
-    expect(await screen.findByRole('heading', { name: /root01/ })).not.toBeNull();
+    const skill = await screen.findByLabelText('Skill: weather-check');
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(skill.textContent).toContain('weather-check Paris');
+    expect(screen.getByText('Check the forecast before answering.')).not.toBeNull();
+    expect(document.body.textContent).not.toContain('[Function]');
+  });
+
+  it('when a skill signal started the run, then its row in the span tree is badged with the skill', async () => {
+    installHandlers();
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/traces/:traceId`, () =>
+        HttpResponse.json({
+          ...panelTraceSpans,
+          spans: panelTraceSpans.spans.map(span => (span.spanId === 'root01' ? skillSignalRootDetail.span : span)),
+        }),
+      ),
+    );
+    const { queryClient } = renderPanel();
+
+    const badge = await waitFor(() => {
+      const element = document.querySelector('[data-slot="span-signal-badge"]');
+      expect(element).not.toBeNull();
+      return element;
+    });
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+
+    expect(badge?.textContent).toBe('Skill weather-check');
+    expect(badge?.closest('[aria-label="View details for span Root agent run"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="span-signal-badge"]')).toHaveLength(1);
   });
 
   it('when the selected span is clicked again, then onSpanSelect(undefined) clears the selection', async () => {
@@ -353,9 +389,7 @@ describe('TraceSpanPanel', () => {
     expect(await screen.findByRole('heading', { name: `Trace ${TRACE_ID.slice(0, 6)}` })).not.toBeNull();
     await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-    // Entity block: type label + name linking to the agent page. ("Agent" also
-    // appears as the span-type badge in the tree, so allow multiple matches.)
-    expect(screen.getAllByText('Agent').length).toBeGreaterThan(0);
+    // Entity block: name linking to the agent page.
     const entityLink = screen.getByRole('link', { name: /Weather Agent/ });
     expect(entityLink.getAttribute('href')).toBe('/agents/weather-agent');
 

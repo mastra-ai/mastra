@@ -1,6 +1,6 @@
 {
   "name": "@mastra/server",
-  "version": "1.79.0",
+  "version": "1.80.0",
   "description": "",
   "type": "module",
   "files": [
@@ -110,7 +110,7 @@
   "author": "",
   "license": "Apache-2.0",
   "peerDependencies": {
-    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "zod": "^3.25.0 || ^4.0.0"
   },
   "devDependencies": {
@@ -125,7 +125,7 @@
     "@mastra/agent-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@mastra/schema-compat": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "canonicalize": "^1.0.8",
@@ -152,6 +152,6 @@
     "node": ">=22.13.0"
   },
   "dependencies": {
-    "hono": "^4.13.7"
+    "hono": "^4.13.13"
   }
 }
