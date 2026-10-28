@@ -140,6 +140,14 @@ describe('insertRows partition recovery', () => {
     });
   });
 
+  it('passes a DDL failure that is not a privilege error through unchanged', async () => {
+    const { client, none } = clientThatLacksTodaysPartition();
+    const lockTimeout = Object.assign(new Error('canceling statement due to lock timeout'), { code: '55P03' });
+    none.mockRejectedValue(lockTimeout);
+
+    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'native' })).rejects.toBe(lockTimeout);
+  });
+
   it('does not detect again when the store already resolved its mode', async () => {
     const { client, oneOrNone } = clientThatLacksTodaysPartition();
     await insertRows(client, 'obs', 'mastra_span_events', [row], { mode: 'native' });

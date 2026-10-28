@@ -2241,7 +2241,14 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
           expect(partitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(2))}`);
         }
+
+        vi.useFakeTimers({ toFake: ['Date'] });
+        vi.setSystemTime(Date.now() + 30 * 86_400_000);
+        await harness.domain.ensurePartitions();
+        const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(partitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
       } finally {
+        vi.useRealTimers();
         await harness.close();
       }
     });
