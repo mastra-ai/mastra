@@ -631,9 +631,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (arg === 'off' || arg === 'disable') {
     const disabledSettings = { ...settings.browser, enabled: false };
+    if (!(await applyBrowserToAgents(ctx, undefined, disabledSettings))) {
+      ctx.showInfo('Another /browser command replaced this browser.');
+      return;
+    }
     settings.browser = disabledSettings;
     saveSettings(settings);
-    await applyBrowserToAgents(ctx, undefined, disabledSettings);
     ctx.showInfo('Browser disabled.');
     return;
   }
@@ -681,26 +684,33 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         headless: false,
         viewport: { width: 1280, height: 720 },
       };
-      saveSettings(settings);
       // If it was enabled, we need to recreate the browser with new settings
       if (wasEnabled) {
         try {
           const chatModelId = launchChatModelId(ctx);
           const browserInstance = await createBrowserFromSettings(settings.browser, { chatModelId });
-          await applyBrowserToAgents(ctx, browserInstance, settings.browser, chatModelId);
+          if (!(await applyBrowserToAgents(ctx, browserInstance, settings.browser, chatModelId))) {
+            ctx.showInfo('Another /browser command replaced this browser.');
+            return;
+          }
         } catch (err) {
           // If recreation fails, disable and report
+          if (!(await applyBrowserToAgents(ctx, undefined))) {
+            ctx.showInfo('Another /browser command replaced this browser.');
+            return;
+          }
           settings.browser.enabled = false;
           saveSettings(settings);
-          await applyBrowserToAgents(ctx, undefined);
           ctx.showError(
             `Browser settings reset, but failed to restart: ${err instanceof Error ? err.message : String(err)}`,
           );
           return;
         }
-      } else {
-        await applyBrowserToAgents(ctx, undefined);
+      } else if (!(await applyBrowserToAgents(ctx, undefined))) {
+        ctx.showInfo('Another /browser command replaced this browser.');
+        return;
       }
+      saveSettings(settings);
       ctx.showInfo('Browser settings reset to defaults.');
       return;
     }
@@ -832,9 +842,12 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
 
   if (enableChoice === 'No') {
     if (browser.enabled) {
+      if (!(await applyBrowserToAgents(ctx, undefined))) {
+        ctx.showInfo('Another /browser command replaced this browser.');
+        return;
+      }
       settings.browser.enabled = false;
       saveSettings(settings);
-      await applyBrowserToAgents(ctx, undefined);
       ctx.showInfo('Browser automation disabled.');
     } else {
       ctx.showInfo('Browser automation remains disabled.');
