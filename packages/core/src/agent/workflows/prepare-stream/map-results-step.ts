@@ -131,17 +131,21 @@ export function createMapResultsStep<OUTPUT = undefined>({
         !hasConfiguredProcessor('observational-memory') &&
         !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
       if (!configuredHistory && !memoryAddsMessageHistory) return;
+      // A custom processor using the message-history id replaces the built-in one, and the finish path
+      // only saves through it. Without persistMessages there is nothing equivalent to call here.
+      if (configuredHistory && typeof configuredHistory.persistMessages !== 'function') return;
       const input = filterMessagesForPersistence(messageList.get.input.db());
       if (input.length === 0) return;
 
       await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
-      await ensureThreadExists();
       const messages = messageList.transformMessagesForTranscript(input);
-      // A configured MessageHistory may use its own storage; save where the finish path would.
-      if (typeof configuredHistory?.persistMessages === 'function') {
+      // A configured MessageHistory may use its own storage and creates its own thread there; save
+      // where the finish path would.
+      if (configuredHistory?.persistMessages) {
         await configuredHistory.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
         return;
       }
+      await ensureThreadExists();
       await memory.saveMessages({ messages, memoryConfig });
     };
 
