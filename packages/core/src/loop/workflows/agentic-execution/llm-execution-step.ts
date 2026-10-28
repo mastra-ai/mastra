@@ -745,7 +745,15 @@ async function processOutputStream<OUTPUT = undefined>({
     });
   };
 
+  // After a structured-output validation error the model's `finish` chunk is still queued behind
+  // it. The stream is drained (not handled) so the output records that chunk's usage.
+  let drainingAfterStructuredOutputError = false;
+
   for await (let chunk of outputStream._getBaseStream()) {
+    if (drainingAfterStructuredOutputError) {
+      continue;
+    }
+
     // Stop processing chunks if the abort signal has fired.
     // Some LLM providers continue streaming data after abort (e.g. due to buffering),
     // so we must check the signal on each iteration to avoid accumulating the full
@@ -1152,6 +1160,13 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     if (runState.state.hasErrored) {
+      if (
+        chunk.type === 'error' &&
+        (chunk.payload.error as { id?: string } | undefined)?.id === 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED'
+      ) {
+        drainingAfterStructuredOutputError = true;
+        continue;
+      }
       break;
     }
   }
