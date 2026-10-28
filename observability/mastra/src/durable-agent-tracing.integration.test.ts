@@ -147,6 +147,24 @@ function failOnceThenTextModel(text: string, failAfterMs: number) {
   });
 }
 
+/** Fails after `failAfterMs` without streaming, under its own provider and model id. */
+function failingAfterModel(provider: string, modelId: string, failAfterMs: number) {
+  return new MockLanguageModelV2({
+    provider,
+    modelId,
+    doStream: async () => {
+      await new Promise(resolve => setTimeout(resolve, failAfterMs));
+      throw new Error(`${modelId} is unavailable`);
+    },
+  });
+}
+
+/** Streams `text` at once, under its own provider and model id. */
+function namedTextModel(provider: string, modelId: string, text: string) {
+  const answer = textModel(text);
+  return new MockLanguageModelV2({ provider, modelId, doStream: options => answer.doStream(options) });
+}
+
 /** Emits an error chunk so the run fails mid-stream (exercises the error path). */
 function errorModel() {
   return new MockLanguageModelV2({
@@ -470,6 +488,42 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
     expect(agentRun.timeToFirstTokenMs).toBeLessThan(failAfterMs);
   });
+
+  it.each(['plain', 'durable'] as const)(
+    '%s fallback: the model that streamed owns the time to first token and the inference label',
+    async variant => {
+      const failAfterMs = 200;
+      const agent = new Agent({
+        id: 'a',
+        name: 'a',
+        instructions: 'x',
+        model: [
+          { model: failingAfterModel('acme', 'acme-large', failAfterMs) as any, maxRetries: 0 },
+          { model: namedTextModel('globex', 'globex-mini', 'Hello') as any, maxRetries: 0 },
+        ],
+      });
+      const { wrapped } = buildMastra(testExporter, agent, variant);
+      if (variant === 'plain') {
+        await (await wrapped.stream('hi')).consumeStream();
+        await settle(testExporter);
+      } else {
+        await runToCompletion(wrapped, 'hi', testExporter);
+      }
+
+      const inferences = byStart(testExporter.getSpansByType('model_inference' as any)) as any[];
+      expect(inferences.map(span => span.attributes?.model)).toEqual(['acme-large', 'globex-mini']);
+      const [failed, streamed] = inferences;
+      expect(clockOf(failed)).toBeUndefined();
+      expect(failed.timeToFirstTokenMs).toBeUndefined();
+      expect(streamed.timeToFirstTokenMs).toBeTypeOf('number');
+      expect(streamed.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+      for (const type of ['model_generation', 'agent_run']) {
+        const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
+        const ended = events.findLast(e => e.type === 'span_ended')!.exportedSpan as any;
+        expect(ended.timeToFirstTokenMs).toBe(streamed.timeToFirstTokenMs);
+      }
+    },
+  );
 
   it('DurableAgent output processor abort: the ended generation and AGENT_RUN keep both timings', async () => {
     const agent = new Agent({

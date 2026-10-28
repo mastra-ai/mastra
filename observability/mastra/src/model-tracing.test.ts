@@ -2881,6 +2881,63 @@ describe('ModelSpanTracker', () => {
         expect(inference?.timeToFirstTokenMs).toBe(200);
         expect(clockOf(inference)).toBe(now);
       });
+
+      it("keeps the inference's own values when the generation fails after its first chunk", async () => {
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        tracker.startStep();
+        tracker.startInference();
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [
+                { type: 'step-start', payload: {} },
+                { type: 'text-delta', payload: { text: 'a' } },
+              ],
+              100,
+            ),
+          ),
+        );
+        tracker.reportGenerationError({ error: new Error('provider closed the stream') });
+        agentSpan.end();
+
+        const [inference] = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(inference?.errorInfo?.message).toBe('provider closed the stream');
+        expect(inference?.timeToFirstTokenMs).toBe(200);
+        expect(clockOf(inference)).toBe(now);
+        expect(ttftOf(SpanType.MODEL_GENERATION)).toEqual([200]);
+      });
+
+      it('gives a fallback attempt its own inference, model label and value', async () => {
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        tracker.startStep();
+        tracker.startInference({ request: {}, modelId: 'acme-large', provider: 'acme' }); // fails, no chunk
+        advance(500);
+        tracker.startInference({ request: {}, modelId: 'globex-mini', provider: 'globex' }); // +500 takes over
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(
+          inferences.map(span => [span.attributes?.model, span.attributes?.finishReason, span.timeToFirstTokenMs]),
+        ).toEqual([
+          ['acme-large', 'error', undefined],
+          ['globex-mini', 'stop', 200],
+        ]);
+        for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+          expect(ttftOf(type)).toEqual([200]);
+        }
+        expect(testExporter.getSpansByType(SpanType.MODEL_STEP)[0]?.attributes?.model).toBe('globex-mini');
+      });
     });
   });
 });

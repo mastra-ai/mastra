@@ -663,13 +663,17 @@ export class ModelSpanTracker {
    * start time.
    *
    * `payload.modelId` / `payload.provider` name the model the caller is about
-   * to invoke and are recorded on MODEL_STEP, also when a fallback attempt
-   * reuses the step's open inference span. The safety net never records them:
-   * a replayed step-start chunk names the model of the original call.
+   * to invoke and are recorded on MODEL_STEP and the inference. A named call
+   * while an inference is still open is the next attempt of the same step (a
+   * fallback model after a failure): that inference ends as failed and the
+   * attempt gets its own, so its timing and model are its own. The safety net
+   * never records them: a replayed step-start chunk names the model of the
+   * original call.
    */
   startInference(payload?: StepStartPayload): void {
     if (payload?.modelId && payload.provider) {
       this.#currentStepSpan?.update({ attributes: { model: payload.modelId, provider: payload.provider } });
+      this.#endOpenInference('error');
     }
     this.#openInference(payload);
   }
@@ -692,8 +696,8 @@ export class ModelSpanTracker {
       type: SpanType.MODEL_INFERENCE,
       attributes: {
         stepIndex: this.#stepIndex,
-        model: generationAttrs?.model,
-        provider: generationAttrs?.provider,
+        model: payload?.modelId ?? generationAttrs?.model,
+        provider: payload?.provider ?? generationAttrs?.provider,
         streaming: generationAttrs?.streaming,
         ...(ctx?.parameters !== undefined ? { parameters: ctx.parameters } : {}),
         ...(ctx?.providerOptions !== undefined ? { providerOptions: ctx.providerOptions } : {}),
@@ -712,11 +716,14 @@ export class ModelSpanTracker {
    * so a replacement request for the same step gets its own inference span.
    */
   interruptInference(): void {
+    this.#endOpenInference('interrupted');
+  }
+
+  /** End the open inference span, if any, with what it streamed before `finishReason`. */
+  #endOpenInference(finishReason: 'interrupted' | 'error'): void {
     this.#endChunkSpan();
     if (!this.#currentInferenceSpan) return;
-    this.#currentInferenceSpan.end({
-      attributes: { finishReason: 'interrupted', ...this.#inferenceStreamAttributes() },
-    });
+    this.#currentInferenceSpan.end({ attributes: { finishReason, ...this.#inferenceStreamAttributes() } });
     this.#currentInferenceSpan = undefined;
   }
 
