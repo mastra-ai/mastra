@@ -1,12 +1,12 @@
 import { expectTypeOf, test } from 'vitest';
 import type {
-  encodeTraceQueryDeltaCursor,
   TrustedThreadQueryPlan,
   TrustedTraceQueryDeltaTracesPlan,
   TrustedTraceQueryGroupsPlan,
   TrustedTraceQueryKeysetTracesPlan,
   TrustedTraceQueryPaginatedTracesPlan,
 } from './trace-query';
+import type { encodeTraceQueryDeltaCursor } from './trace-query-plan';
 
 test('delta cursors accept only numbered-page and delta trace plans', () => {
   type CursorPlan = Parameters<typeof encodeTraceQueryDeltaCursor>[0];

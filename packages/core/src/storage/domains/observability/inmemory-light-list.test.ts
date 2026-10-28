@@ -1,7 +1,8 @@
 import { describe, expect, it } from 'vitest';
 import { EntityType, SpanType } from '../../../observability/types';
 import { InMemoryStore } from '../../mock';
-import { parseTraceQueryRequest, planTraceQuery } from './trace-query';
+import { parseTraceQueryRequest } from './trace-query';
+import { planTraceQuery } from './trace-query-plan';
 
 function makeRootSpan(traceId: string, startedAt: Date) {
   return {

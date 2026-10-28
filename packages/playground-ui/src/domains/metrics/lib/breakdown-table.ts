@@ -22,10 +22,18 @@ const TRACE_DESCRIPTION = 'A trace is one end-to-end request, with every step it
 const SPAN_DESCRIPTION =
   'A span is one step inside a trace, such as a tool call or a model call. One trace can have many.';
 
-/** The count column's tooltip: explains whichever unit the tab counts. */
-export const countDescription = (tab: BreakdownTab) => (countsSpans(tab) ? SPAN_DESCRIPTION : TRACE_DESCRIPTION);
+/** The count column's tooltip per unit counted. */
+export const COUNT_DESCRIPTION = { traces: TRACE_DESCRIPTION, spans: SPAN_DESCRIPTION } as const;
 
-const METRIC_LABEL: Record<Exclude<ChangeMetric, 'count'>, string> = {
+/** The count column's tooltip: explains whichever unit the tab counts. */
+export const countDescription = (tab: BreakdownTab) => COUNT_DESCRIPTION[countsSpans(tab) ? 'spans' : 'traces'];
+
+/** Column headers; the count column's names the unit it counts (Traces, Spans). */
+export type BreakdownColumnLabels = Record<ChangeMetric, string> & { project: string; resource: string };
+
+export const BREAKDOWN_COLUMN_LABELS: Omit<BreakdownColumnLabels, 'count'> = {
+  project: 'Project',
+  resource: 'Resource',
   errorRate: 'Errors',
   p95: 'P95 latency',
   tokens: 'Tokens',
@@ -57,10 +65,6 @@ export function tableMinWidth(project: boolean, threads: boolean) {
   if (project) return 'min-w-248';
   return threads ? 'min-w-240' : 'min-w-200';
 }
-
-/** The compared column's header, so "Cost change" sits beside Cost. */
-export const comparedLabel = (tab: BreakdownTab, metric: ChangeMetric) =>
-  metric === 'count' ? volumeLabel(tab) : METRIC_LABEL[metric];
 
 /**
  * The rows to list. Traces without a thread aren't a thread, and threads that ended are the norm,

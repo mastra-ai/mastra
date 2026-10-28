@@ -316,13 +316,14 @@ export function withDropped(
   previous: Map<string, PreviousFigures>,
   groupBy: readonly string[],
   usage: boolean,
+  keyValues: (key: string) => string[] = key => key.split('|'),
 ): BreakdownRow[] {
   const listed = new Set(rows.map(r => r.key));
   const projectAt = groupBy.indexOf('projectId');
   const dropped: BreakdownRow[] = [];
   for (const [key, before] of previous) {
     if (listed.has(key) || !((before.count ?? 0) > 0 || (before.tokens ?? 0) > 0)) continue;
-    const values = key.split('|');
+    const values = keyValues(key);
     dropped.push({
       key,
       ...(projectAt >= 0 ? { projectId: values[projectAt] ?? '' } : {}),

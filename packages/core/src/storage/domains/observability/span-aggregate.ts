@@ -147,6 +147,12 @@ const spanAggregateRequestObjectSchema = z
   })
   .strict();
 
+/**
+ * A span aggregate request without its time range, for callers that store a query and supply the
+ * range at run time (dashboard widgets). Apply `findPredicateComplexityIssue` before parsing.
+ */
+export const spanAggregateQueryObjectSchema = spanAggregateRequestObjectSchema.omit({ timeRange: true });
+
 export const spanAggregateRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where'], ['having']]);
   if (issuePath) {
