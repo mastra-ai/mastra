@@ -53,7 +53,7 @@ export function isOmModelExecutionError(error: unknown): error is OmModelExecuti
 }
 
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
-  let observerFailure: ObserverFailureMetadata['observerFailure'];
+  let observerFailure: ObserverFailureMetadata['observerFailure'] | undefined;
   if (typeof coreObservability.executionFailureTermination === 'function') {
     try {
       const modelFailure = isOmModelExecutionError(error);

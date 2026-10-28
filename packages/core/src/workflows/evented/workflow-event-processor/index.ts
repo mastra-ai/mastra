@@ -550,7 +550,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     return undefined;
   }
 
-  private async endRunSpans(args: ProcessorArgs, status: WorkflowRunStatus) {
+  private endRunSpans(args: ProcessorArgs, status: WorkflowRunStatus) {
     const failure = args.prevResult?.status === 'failed' ? args.prevResult : undefined;
     const termination =
       failure && args.workflow?.options?.isOwnershipLostError?.(failure.error)
@@ -565,7 +565,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       completeWorkflowSpan(
         root,
         termination.outcome === 'error'
-          ? { error: { ...termination, error: getErrorFromUnknown(failure?.error) } }
+          ? { error: { ...termination, error: getErrorFromUnknown(failure?.error), endTree: true } }
           : {
               end: {
                 ...termination,
@@ -1227,7 +1227,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       });
     }
 
-    await this.endRunSpans(args, finalStatus);
+    this.endRunSpans(args, finalStatus);
 
     if (perStep) {
       await this.mastra.pubsub.publish(`workflow.events.v2.${runId}`, {
@@ -1307,7 +1307,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
-    await this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
+    this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -1421,7 +1421,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowSuspend(args: ProcessorArgs) {
-    await this.endRunSpans(args, 'suspended');
+    this.endRunSpans(args, 'suspended');
     const {
       workflow,
       executionPath,
@@ -1534,7 +1534,7 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   protected async processWorkflowFail(args: ProcessorArgs) {
-    await this.endRunSpans(args, 'failed');
+    this.endRunSpans(args, 'failed');
     const {
       workflowId,
       runId,
