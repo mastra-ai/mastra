@@ -34,10 +34,13 @@ They mount under your configured API prefix (`/api/knowledge` by default) and ar
 | `GET /knowledge/:knowledgeKey/nodes/:nodeId` | One node with its records and pin state |
 | `GET /knowledge/:knowledgeKey/search` | Name search within a scope |
 | `GET /knowledge/:knowledgeKey/activity` | Recent activity within a scope |
+| `GET /knowledge/:knowledgeKey/scopes` | The scope tag sets stored nodes and records carry, with counts |
 
 ## How scope works
 
 Every read takes the scope tags the viewer holds, and returns only what those tags can see. By default Studio lets the viewer choose the tags.
+
+Studio lists the scopes that hold data beside the graph. Choose one to view the graph through exactly those tags, or type tags into the scope form. When a caller's scope is bound, the list shows only the scopes inside it.
 
 If the viewer's tags exceed what a caller should be allowed to hold, bind them per caller by setting the `MASTRA_KNOWLEDGE_SCOPE_KEY` request-context key (the string `mastra__knowledgeScope`).
 
