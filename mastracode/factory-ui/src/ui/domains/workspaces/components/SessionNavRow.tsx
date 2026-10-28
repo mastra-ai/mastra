@@ -1,6 +1,7 @@
 import { ContextMenu } from '@mastra/playground-ui/components/ContextMenu';
 import { HoverCard, HoverCardTrigger } from '@mastra/playground-ui/components/HoverCard';
 import { Sidebar, useMaybeSidebar } from '@mastra/playground-ui/components/Sidebar';
+import type { SidebarState } from '@mastra/playground-ui/components/Sidebar';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { cn } from '@mastra/playground-ui/utils/cn';
 import { Pin, User } from 'lucide-react';
@@ -52,6 +53,7 @@ export function SessionNavRow({
   visibility,
   onVisibilityChange,
   changingVisibility,
+  state,
 }: {
   name: string;
   /** Hover tooltip, typically the branch name. */
@@ -85,6 +87,8 @@ export function SessionNavRow({
   onVisibilityChange?: (visibility: 'org' | 'private') => void;
   /** Disables the visibility item while a change is in flight, so overlapping requests cannot land out of order. */
   changingVisibility?: boolean;
+  /** Pins the row expanded or collapsed; defaults to the enclosing sidebar's state. Rows outside the sidebar pass `default`. */
+  state?: SidebarState;
 }) {
   const anchor = useRef<HTMLLIElement>(null);
   // Selecting a session navigates away, so the mobile nav drawer must close.
@@ -114,7 +118,7 @@ export function SessionNavRow({
       title={preview ? undefined : title}
     >
       {source ? <SessionSourceIcon source={source} /> : null}
-      <Sidebar.NavLabel>{name}</Sidebar.NavLabel>
+      <Sidebar.NavLabel state={state}>{name}</Sidebar.NavLabel>
       {pinned && !loading ? (
         <Pin aria-label={`${name} pinned`} className="text-muted-foreground/70 size-2 shrink-0 rotate-45" />
       ) : null}
@@ -180,6 +184,7 @@ export function SessionNavRow({
             ref={anchor}
             link={{ name, url }}
             isActive={active}
+            state={state}
             className="group/session"
             // 0ms both ways — each row owns its card, so a close delay leaves the previous one up while the next opens
             render={preview ? <HoverCardTrigger delay={0} closeDelay={0} render={link} /> : link}

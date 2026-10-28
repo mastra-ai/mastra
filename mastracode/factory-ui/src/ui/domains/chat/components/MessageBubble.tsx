@@ -29,6 +29,7 @@ import {
   MessageMetadata,
   MessageTimestamp,
 } from '@mastra/playground-ui/components/Message';
+import { FACTORY_SESSIONS_STATE_ID, FactorySessionsSignal, factorySessionsView } from './FactorySessionsSignal';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
@@ -273,6 +274,8 @@ export function MessageBubble({
   if (signalRow) {
     if (signalRow.kind === 'state') {
       if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
+      const sessions = signalRow.stateId === FACTORY_SESSIONS_STATE_ID ? factorySessionsView(entry) : undefined;
+      if (sessions) return <FactorySessionsSignal view={sessions} mode={signalRow.mode} />;
       return <SignalActivity kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
     }
     if (signalRow.kind === 'divider') return <TranscriptDivider label={signalRow.label} title={signalRow.title} />;
