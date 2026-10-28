@@ -3,8 +3,12 @@ import {
   DASHBOARD_MAX_BYTES,
   DASHBOARD_MAX_QUERIES_PER_VIEW,
   DASHBOARD_MAX_WIDGETS,
+  DASHBOARD_SCHEMA_VERSION,
+  DASHBOARD_SCHEMA_VERSIONS,
+  DASHBOARD_WIDGET_KINDS,
   dashboardDefinitionEnvelopeSchema,
   dashboardDefinitionSchema,
+  migrateDashboardDefinition,
 } from './dashboard';
 import type { DashboardDefinition, DashboardQuery, DashboardWidget } from './dashboard';
 import { TRACE_QUERY_MAX_DEPTH, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE } from './trace-query';
@@ -296,12 +300,36 @@ describe('dashboardDefinitionSchema', () => {
     expect(messages(result)).toEqual([TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE]);
   });
 
-  it('rejects widget kinds, spans, and query internals the renderer does not know', () => {
+  it('accepts any widget kind and leaves options to the kind', () => {
+    // A kind core has never heard of, with options only that kind understands.
+    const options = { cells: { x: 'hour', y: 'weekday' }, palette: ['#000'], threshold: 0.5 };
+    const input = definition([[widget('w', { kind: 'heatmap', views: [{ queries: [countQuery], options }] })]]);
+    const result = dashboardDefinitionSchema.safeParse(input);
+    expect(messages(result)).toEqual([]);
+    expect(result.data?.rows[0]!.widgets[0]).toMatchObject({ kind: 'heatmap', views: [{ options }] });
+    expect(DASHBOARD_WIDGET_KINDS).toEqual(['kpis', 'table', 'timeseries', 'scores']);
+  });
+
+  it('still validates the common widget shape and queries for any kind', () => {
     const cases = [
-      widget('w', { kind: 'heatmap' as DashboardWidget['kind'] }),
-      widget('w', { span: 5 as DashboardWidget['span'] }),
-      widget('w', { views: [{ queries: [{ source: 'traceAggregate', measures: ['nope'] } as DashboardQuery] }] }),
+      widget('w', { kind: '' }),
+      widget('w', { kind: 'heatmap', span: 5 as DashboardWidget['span'] }),
+      widget('w', {
+        kind: 'heatmap',
+        views: [{ queries: [{ source: 'traceAggregate', measures: ['nope'] } as DashboardQuery] }],
+      }),
+      widget('w', { views: [{ queries: [countQuery], options: 'compact' as never }] }),
+    ];
+    for (const input of cases) {
+      expect(dashboardDefinitionSchema.safeParse(definition([[input]])).success).toBe(false);
+    }
+  });
+
+  it('rejects unknown fields on writes', () => {
+    const cases = [
       { ...widget('w'), extra: true } as DashboardWidget,
+      widget('w', { views: [{ queries: [countQuery], extra: true } as never] }),
+      widget('w', { views: [{ queries: [{ ...countQuery, extra: true } as DashboardQuery] }] }),
     ];
     for (const input of cases) {
       expect(dashboardDefinitionSchema.safeParse(definition([[input]])).success).toBe(false);
@@ -341,6 +369,23 @@ describe('dashboardDefinitionEnvelopeSchema', () => {
 
   it('accepts the Metrics-page definition unchanged', () => {
     expect(dashboardDefinitionEnvelopeSchema.parse(metricsDashboard)).toEqual(metricsDashboard);
+  });
+});
+
+describe('migrateDashboardDefinition', () => {
+  it('returns a current-version definition unchanged', () => {
+    const stored = dashboardDefinitionEnvelopeSchema.parse(metricsDashboard);
+    expect(DASHBOARD_SCHEMA_VERSION).toBe(1);
+    expect(migrateDashboardDefinition(stored)).toBe(stored);
+  });
+
+  it('upgrades every version the envelope accepts to one the full schema parses', () => {
+    for (const schemaVersion of DASHBOARD_SCHEMA_VERSIONS) {
+      const stored = dashboardDefinitionEnvelopeSchema.parse({ ...metricsDashboard, schemaVersion });
+      const migrated = migrateDashboardDefinition(stored);
+      expect(migrated.schemaVersion).toBe(DASHBOARD_SCHEMA_VERSION);
+      expect(messages(dashboardDefinitionSchema.safeParse(migrated))).toEqual([]);
+    }
   });
 });
 

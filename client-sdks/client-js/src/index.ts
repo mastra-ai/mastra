@@ -59,7 +59,7 @@ export type {
   DashboardQuery,
   DashboardRow,
   DashboardWidget,
-  DashboardWidgetKind,
+  DashboardBuiltInWidgetKind,
   DashboardWidgetView,
   NormalizedDashboardDefinition,
   NormalizedDashboardQuery,

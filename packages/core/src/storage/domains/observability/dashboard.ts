@@ -25,6 +25,10 @@ import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE 
  * time range always, and `interval` for time series (the renderer derives it from the range).
  * The page's filter bar is ANDed onto every query's own filters.
  *
+ * Core owns the common widget shape and the query sources. A widget's `kind` is any non-empty string
+ * and `options` stay opaque here: each kind validates its own options where it renders, so a new kind
+ * needs no core change or storage deploy. A new query source is one more entry in the `source` union.
+ *
  * Two schemas share the same limits:
  * - `dashboardDefinitionSchema` validates everything; the renderer parses with it.
  * - `dashboardDefinitionEnvelopeSchema` validates only what storage needs (version, limits, unique
@@ -32,12 +36,15 @@ import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE 
  *   require the storing service to upgrade.
  */
 
+/** Every version storage accepts; `migrateDashboardDefinition` upgrades each to the current one. */
 export const DASHBOARD_SCHEMA_VERSIONS = [1] as const;
+export const DASHBOARD_SCHEMA_VERSION = 1 satisfies (typeof DASHBOARD_SCHEMA_VERSIONS)[number];
 export const DASHBOARD_MAX_WIDGETS = 20;
 export const DASHBOARD_MAX_QUERIES_PER_VIEW = 8;
 /** Limit on the UTF-8 size of the JSON-serialized definition. */
 export const DASHBOARD_MAX_BYTES = 64 * 1024;
 export const DASHBOARD_WIDGET_SPANS = [1, 2, 3, 4, 6, 12] as const;
+/** Kinds the built-in renderer ships. Not enforced: `kind` accepts any non-empty string. */
 export const DASHBOARD_WIDGET_KINDS = ['kpis', 'table', 'timeseries', 'scores'] as const;
 export const DASHBOARD_SCOPES = ['org', 'project'] as const;
 export const DASHBOARD_DRILLDOWN_PAGES = ['traces', 'spans', 'logs', 'threads'] as const;
@@ -259,7 +266,7 @@ export const dashboardWidgetViewSchema = z
     queries: queriesArraySchema(dashboardQuerySchema),
     /** Table widgets only. */
     columns: z.array(dashboardColumnSchema).optional(),
-    /** Per-kind presentation options. */
+    /** Validated by the widget's kind, not here. */
     options: z.record(z.string(), z.unknown()).optional(),
     /** Overrides the widget's drilldown. */
     drilldown: dashboardDrilldownSchema.optional(),
@@ -272,7 +279,8 @@ export const dashboardWidgetSchema = z
   .object({
     id: z.string().min(1),
     span: z.literal(DASHBOARD_WIDGET_SPANS),
-    kind: z.enum(DASHBOARD_WIDGET_KINDS),
+    /** See `DASHBOARD_WIDGET_KINDS` for the built-in kinds. */
+    kind: z.string().min(1),
     title: z.string().optional(),
     description: z.string().optional(),
     /** Two or more views render as tabs. */
@@ -294,7 +302,11 @@ export const dashboardDefaultsSchema = z
 
 const dashboardDefinitionObjectSchema = z
   .object({
-    schemaVersion: z.literal(1),
+    /**
+     * Adding an optional field doesn't change the version. A breaking change bumps it, adds the old
+     * version to `DASHBOARD_SCHEMA_VERSIONS`, and adds an upgrade step to `migrateDashboardDefinition`.
+     */
+    schemaVersion: z.literal(DASHBOARD_SCHEMA_VERSION),
     /** Used when the page URL doesn't set the range or filters. */
     defaults: dashboardDefaultsSchema.optional(),
     rows: z.array(dashboardRowSchema),
@@ -327,6 +339,17 @@ const dashboardDefinitionEnvelopeObjectSchema = z
 
 export const dashboardDefinitionEnvelopeSchema = withSizeLimit(dashboardDefinitionEnvelopeObjectSchema);
 
+/**
+ * Upgrades a stored definition of any known version to `DASHBOARD_SCHEMA_VERSION`. Parse the result
+ * with `dashboardDefinitionSchema`. Version 1 is current, so this returns its input unchanged today.
+ */
+export function migrateDashboardDefinition(definition: DashboardDefinitionEnvelope): DashboardDefinitionEnvelope {
+  switch (definition.schemaVersion) {
+    case 1:
+      return definition;
+  }
+}
+
 // ---------------------------------------------------------------------------
 // Types
 // ---------------------------------------------------------------------------
@@ -336,7 +359,7 @@ export type NormalizedDashboardDefinition = z.output<typeof dashboardDefinitionO
 export type DashboardDefinitionEnvelope = z.output<typeof dashboardDefinitionEnvelopeObjectSchema>;
 export type DashboardRow = z.input<typeof dashboardRowSchema>;
 export type DashboardWidget = z.input<typeof dashboardWidgetSchema>;
-export type DashboardWidgetKind = (typeof DASHBOARD_WIDGET_KINDS)[number];
+export type DashboardBuiltInWidgetKind = (typeof DASHBOARD_WIDGET_KINDS)[number];
 export type DashboardWidgetView = z.input<typeof dashboardWidgetViewSchema>;
 export type DashboardQuery = z.input<typeof dashboardQueryUnionSchema>;
 export type NormalizedDashboardQuery = z.output<typeof dashboardQueryUnionSchema>;
