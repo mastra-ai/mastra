@@ -16,4 +16,4 @@ planning: {
 },
 ```
 
-Existing boards keep working unchanged. `title`, `role`, `next` and `outcomes` are deprecated in favor of `name`, `runner.context` and `nextPhases`; defined boards and the board catalog expose both the old and new fields. `defineBoard()` logs a deprecation warning listing the old fields a board still uses.
+Existing board declarations keep working: `defineBoard()` maps the deprecated `title`, `role` and `next` to `name`, `runner.context` and `nextPhases` and logs a warning listing them. The board it returns has only the new fields, so code reading `board.title`, `phase.title` or `phase.role` must read `name` and `runner.context` instead. The board catalog keeps sending `title` and `role` for older clients.

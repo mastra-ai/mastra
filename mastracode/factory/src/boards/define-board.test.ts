@@ -180,8 +180,8 @@ describe('defineBoard', () => {
       expect(board.roleForPhase('shipped')).toBeUndefined();
       expect(board.phaseForRole('release')).toBe('shipping');
       expect(board.phaseForRole('work')).toBeUndefined();
-      expect(board.phases.shipping.role).toBe('release');
-      expect('role' in board.phases.queued).toBe(false);
+      expect(board.phases.shipping.kind === 'working' && board.phases.shipping.runner.context).toBe('release');
+      expect('runner' in board.phases.queued).toBe(false);
     });
 
     it('ignores inherited property names', () => {

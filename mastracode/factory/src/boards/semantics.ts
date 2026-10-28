@@ -134,9 +134,9 @@ export function resolveBoardClosure(
   if (!board?.sourceClosed) return undefined;
   const { completed, canceled } = board.sourceClosed;
   return {
-    boardTitle: board.title,
-    completed: { phase: completed, title: board.phases[completed]!.title },
-    canceled: { phase: canceled, title: board.phases[canceled]!.title },
+    boardTitle: board.name,
+    completed: { phase: completed, title: board.phases[completed]!.name },
+    canceled: { phase: canceled, title: board.phases[canceled]!.name },
     itemTerminal: item.stages.some(stage => board.isTerminal(stage)),
   };
 }

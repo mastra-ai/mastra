@@ -65,11 +65,13 @@ describe('defineBoard phase fields', () => {
     });
 
     for (const board of [legacy, current]) {
-      expect([board.name, board.title]).toEqual(['Release', 'Release']);
+      expect(board.name).toBe('Release');
+      expect(board).not.toHaveProperty('title');
+      expect(board.phases.shipping).not.toHaveProperty('title');
+      expect(board.phases.shipping).not.toHaveProperty('role');
+      expect(board.phases.queued).not.toHaveProperty('next');
       expect(board.phases.shipping).toMatchObject({
         name: 'Shipping',
-        title: 'Shipping',
-        role: 'review',
         runner: { agentId: 'code-agent', context: 'review' },
         nextPhases: ['shipped'],
       });
@@ -81,9 +83,8 @@ describe('defineBoard phase fields', () => {
     expect(current.transitions).toEqual(legacy.transitions);
   });
 
-  it('keeps the built-in Work board readable through both the old and new fields', () => {
-    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', title: 'Planning', role: 'plan' });
-    expect(workBoard.phases.planning.runner?.context).toBe('plan');
+  it('keeps the built-in Work board contexts as the old role names', () => {
+    expect(workBoard.phases.planning).toMatchObject({ name: 'Planning', runner: { context: 'plan' } });
     expect(workBoard.phases.intake.nextPhases).toEqual(workBoard.transitions.intake.map(({ to }) => to));
   });
 

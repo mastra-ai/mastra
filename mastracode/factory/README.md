@@ -354,7 +354,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-**Migration:** Nothing breaks. The old fields keep working and are deprecated: `title` → `name`, `role` → `runner.context`, `next` and `outcomes` → `nextPhases`. `next` and `outcomes` may sit beside `nextPhases`; their targets are added to it, and outcome names keep working. Setting both `title` and `name`, or `role` and `runner.context`, is rejected. `defineBoard()` logs one warning per board that still uses `title`, `next` or `role` without its replacement. A defined board exposes both, so code reading `phase.title` or `phase.role` keeps working, and the board catalog (`GET /web/factory/projects/:id/boards`) returns the new fields beside the old ones. Card session keys do not change: a phase's context is its old role.
+**Migration:** `defineBoard()` still accepts the old field names and maps them to the new ones straight away: `title` → `name`, `role` → `runner.context`, `next` → `nextPhases`. It logs one warning per board that still uses them. Setting both `title` and `name`, or `role` and `runner.context`, to different values is rejected. `outcomes` is not deprecated: its targets are added to `nextPhases` and outcome names keep working. The board `defineBoard()` returns, and the one `new MastraFactory({ boards })` takes, has only the new fields, so code that reads `board.title`, `phase.title`, `phase.role` or `phase.next` must switch to `name`, `runner.context` and `nextPhases`. The board catalog (`GET /web/factory/projects/:id/boards`) still sends `title` and `role` beside the new fields for older clients. Card session keys do not change: a phase's context is its old role.
 
 ### Execute a custom board
 

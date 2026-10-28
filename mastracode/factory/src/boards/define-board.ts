@@ -171,30 +171,23 @@ export type BoardPhaseDefinition<PhaseId extends string> =
 
 type ResolvedPhaseBase<PhaseId extends string> = {
   readonly name: string;
-  /** @deprecated Use `name`. */
-  readonly title: string;
   readonly description?: string;
-  /** Every phase a card may move to from here, including `next` and outcome targets. */
+  /** Every phase a card may move to from here, including outcome targets. */
   readonly nextPhases: readonly PhaseId[];
-  /** @deprecated Use `nextPhases`. */
-  readonly next?: PhaseId;
   readonly outcomes?: Readonly<Record<string, PhaseId>>;
   readonly onEnter?: ReadonlyBoardPhaseHandlers;
   readonly onExit?: ReadonlyBoardPhaseHandlers;
 };
 
 /**
- * A phase as the board resolved it: deprecated fields are mapped to their replacements and
- * kept alongside them, so code reading either keeps working, and a resolved phase can be
- * declared again on another board.
+ * A phase as the board resolved it: deprecated fields are replaced by their new names, so
+ * only the new structure leaves `defineBoard()`, and a resolved phase can be declared again.
  */
 export type BoardPhase<PhaseId extends string> =
   | (ResolvedPhaseBase<PhaseId> & { readonly kind: 'resting' })
   | (ResolvedPhaseBase<PhaseId> & {
       readonly kind: 'working';
       readonly runner: Readonly<BoardPhaseRunner & { agentId: string; context: string }>;
-      /** @deprecated Use `runner.context`. */
-      readonly role: string;
       readonly autoStart?: boolean;
       readonly autoStartWhen?: RuleGroup;
       readonly exitTool?: Readonly<{ id: string; autoApprove: boolean; autoApproveWhen?: RuleGroup }>;
@@ -218,8 +211,6 @@ export type BoardSourceClosed<PhaseId extends string> = Readonly<{ completed: Ph
 export interface BoardDefinition<BoardId extends string, PhaseId extends string> {
   readonly id: BoardId;
   readonly name: string;
-  /** @deprecated Use `name`. */
-  readonly title: string;
   readonly description?: string;
   readonly initialPhase: PhaseId;
   readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
@@ -493,21 +484,14 @@ type DeclaredBoard = {
   readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
 };
 
-/**
- * Old field names a board still relies on. A field set beside its replacement is not
- * counted: a defined board carries both, so declaring its phases again stays quiet.
- */
+/** Deprecated fields a board declaration still uses; `defineBoard()` maps each to its replacement. */
 function deprecatedFields(config: DeclaredBoard): string[] {
   const found: string[] = [];
-  if (config.title !== undefined && config.name === undefined) found.push('title → name');
+  if (config.title !== undefined) found.push('title → name');
   for (const [phaseId, phase] of Object.entries(config.phases)) {
-    if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
-    if (phase.next !== undefined && phase.nextPhases === undefined) {
-      found.push(`phases.${phaseId}.next → nextPhases`);
-    }
-    if (phase.kind === 'working' && phase.role !== undefined && phase.runner?.context === undefined) {
-      found.push(`phases.${phaseId}.role → runner.context`);
-    }
+    if (phase.title !== undefined) found.push(`phases.${phaseId}.title → name`);
+    if (phase.next !== undefined) found.push(`phases.${phaseId}.next → nextPhases`);
+    if (phase.role !== undefined) found.push(`phases.${phaseId}.role → runner.context`);
   }
   return found;
 }
@@ -620,13 +604,11 @@ export function defineBoard<
           phaseId,
           Object.freeze({
             name,
-            title: name,
             ...(description !== undefined ? { description } : {}),
             kind: phase.kind,
             nextPhases,
-            ...(phase.next !== undefined ? { next: phase.next } : {}),
             ...(phase.outcomes ? { outcomes: Object.freeze({ ...phase.outcomes }) } : {}),
-            ...(runner ? { runner, role: runner.context } : {}),
+            ...(runner ? { runner } : {}),
             ...(working?.autoStart ? { autoStart: true } : {}),
             ...(autoStartWhen ? { autoStartWhen } : {}),
             ...(exitTool ? { exitTool } : {}),
@@ -679,7 +661,6 @@ export function defineBoard<
   return Object.freeze({
     id: config.id,
     name: boardName,
-    title: boardName,
     ...(boardDescription !== undefined ? { description: boardDescription } : {}),
     initialPhase: config.initialPhase,
     phases,
