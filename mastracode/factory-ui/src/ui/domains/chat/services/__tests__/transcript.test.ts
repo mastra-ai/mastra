@@ -1906,26 +1906,55 @@ describe('live user-signal events render the same as their persisted copy', () =
     expect(state.entries).toEqual([]);
   });
 
-  it('keeps a plain message whose signal arrived before its send failed', () => {
+  it.each([
+    {
+      path: 'live signal',
+      serverCopy: { type: 'event', event: { type: 'message_start', message: liveComposerSignal() } },
+    },
+    { path: 'history merge', serverCopy: { type: 'mergeWindow', messages: [liveComposerSignal()] } },
+  ] satisfies { path: string; serverCopy: Parameters<typeof transcriptReducer>[1] }[])(
+    'keeps a plain message the server confirmed through a $path before its send failed',
+    ({ serverCopy }) => {
+      let state = createInitialTranscript({ messages: [], threadId: 't1' });
+      state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'hello from the composer' });
+      state = transcriptReducer(state, serverCopy);
+
+      state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
+
+      expect(state.entries).toMatchObject([
+        {
+          id: 'local-1',
+          message: {
+            id: 'sig-web',
+            role: 'user',
+            content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+          },
+        },
+      ]);
+    },
+  );
+
+  it("does not let a first message's cached copy stand in for the server's echo", () => {
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
     state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'hello from the composer' });
+    state = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        {
+          id: 'local-cached',
+          role: 'user',
+          createdAt: new Date('2026-07-27T16:00:00.000Z'),
+          content: { format: 2, parts: [{ type: 'text', text: 'hello from the composer' }] },
+        },
+      ],
+    });
+
     state = transcriptReducer(state, {
       type: 'event',
       event: { type: 'message_start', message: liveComposerSignal() },
     });
 
-    state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
-
-    expect(state.entries).toMatchObject([
-      {
-        id: 'local-1',
-        message: {
-          id: 'sig-web',
-          role: 'user',
-          content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
-        },
-      },
-    ]);
+    expect(state.entries).toMatchObject([{ id: 'local-1', message: { id: 'sig-web' } }]);
   });
 
   it('keeps non-user signals alone', () => {

@@ -190,8 +190,7 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         entries: state.entries.flatMap(entry => {
           if (entry.kind !== 'message' || entry.id !== action.id) return [entry];
           if (entry.deliveryStatus === 'pending') return [{ ...entry, deliveryStatus: 'failed' as const }];
-          const echoed = entry.message.id !== entry.id;
-          return entry.deliveryStatus === undefined && !echoed ? [] : [entry];
+          return entry.deliveryStatus === undefined && isUnclaimedLocalCopy(entry) ? [] : [entry];
         }),
       };
     case 'localNotice':
@@ -639,11 +638,16 @@ function isUnconfirmedSteer(entry: MessageEntry): boolean {
   return entry.deliveryStatus === 'pending' || entry.deliveryStatus === 'failed';
 }
 
+function isUnclaimedLocalCopy(entry: MessageEntry): boolean {
+  return entry.id.startsWith('local-') && entry.message.id === entry.id;
+}
+
 function confirmPendingUserMessages(state: TranscriptState, anchors: Map<MastraDBMessage, number>): TranscriptState {
   const confirmed = new Map<number, MessageEntry>();
   for (const [message, index] of anchors) {
     const current = state.entries[index];
-    if (current?.kind !== 'message' || !isUnconfirmedSteer(current)) continue;
+    if (current?.kind !== 'message' || !isUnclaimedLocalCopy(current) || message.id.startsWith('local-')) continue;
+    if (!isUnconfirmedSteer(current) && indexOfTurnOpener(state.entries, message) !== index) continue;
     const canonical = toMessageEntry(preserveOptimisticUserContent(message, current.message), {
       streaming: current.streaming,
       runtimeTools: current.runtimeTools,
@@ -918,8 +922,7 @@ function isUnclaimedOptimisticCopy(entry: TimelineEntry, texts: Set<string>): bo
   return (
     entry.kind === 'message' &&
     entry.message.role === 'user' &&
-    entry.id.startsWith('local-') &&
-    entry.message.id === entry.id &&
+    isUnclaimedLocalCopy(entry) &&
     drawableTexts(entry.message).some(text => texts.has(text))
   );
 }
