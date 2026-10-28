@@ -321,7 +321,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: 'boolean | MCPClientTasksOptions',
     isOptional: true,
     description:
-      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
+      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. The client waits at least 100 ms between polls, whatever the server suggests. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
   },
   {
     name: 'authProvider',

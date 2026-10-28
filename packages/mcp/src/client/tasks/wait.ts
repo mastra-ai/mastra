@@ -53,6 +53,8 @@ export class TaskWaitError extends Error {
 
 const DEFAULT_MAX_OUTAGE_MS = 5 * 60_000;
 const MAX_OUTAGE_BACKOFF_MS = 30_000;
+/** The shortest wait between polls, whatever interval the server suggests, so a server can't make the client spin. */
+export const MIN_TASK_POLL_INTERVAL_MS = 100;
 
 const defaultSleep = (ms: number, signal?: AbortSignal) =>
   new Promise<void>((resolve, reject) => {
@@ -116,7 +118,7 @@ export async function waitForTask(
       if (expiresAt !== undefined && now() > expiresAt) {
         throw new TaskWaitError('expired', `MCP task ${task.taskId} outlived its ${task.ttlMs}ms TTL`, task);
       }
-      let interval = task.pollIntervalMs ?? options.pollIntervalMs ?? DEFAULT_TASK_POLL_INTERVAL_MS;
+      let interval = pollIntervalOf(task);
       if (deadline !== undefined) {
         const remaining = deadline - now();
         if (remaining <= 0) {
@@ -127,6 +129,13 @@ export async function waitForTask(
       }
       await sleep(interval, options.signal);
       task = await poll();
+    }
+
+    function pollIntervalOf(current: MCPTask): number {
+      const suggested = current.pollIntervalMs ?? options.pollIntervalMs ?? DEFAULT_TASK_POLL_INTERVAL_MS;
+      return Number.isFinite(suggested)
+        ? Math.max(MIN_TASK_POLL_INTERVAL_MS, suggested)
+        : DEFAULT_TASK_POLL_INTERVAL_MS;
     }
 
     // A recoverable failure starts an outage: reconnect, back off, and poll again until the server
@@ -163,8 +172,7 @@ export async function waitForTask(
             // Reconnecting fails the same way while the server is down; anything else ends the wait.
             if (!port.isRecoverable(recoverError)) throw recoverError;
           }
-          const interval = task.pollIntervalMs ?? options.pollIntervalMs ?? DEFAULT_TASK_POLL_INTERVAL_MS;
-          backoff = Math.min(MAX_OUTAGE_BACKOFF_MS, backoff === undefined ? interval : backoff * 2);
+          backoff = Math.min(MAX_OUTAGE_BACKOFF_MS, backoff === undefined ? pollIntervalOf(task) : backoff * 2);
           await sleep(Math.max(0, Math.min(backoff, giveUpAt - at, (deadline ?? Infinity) - at)), options.signal);
         }
       }
