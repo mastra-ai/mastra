@@ -1,15 +1,15 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
+import { isValidElement } from 'react';
 import { createMemoryRouter, RouterProvider } from 'react-router';
+import type { RouteObject } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { FactoryLayout } from '../domains/workspaces/components/FactoryLayout';
-import { AppLayout } from '../layouts/AppLayout';
 import { AppRouteErrorPage } from '../layouts/RouteErrorPage';
-import { WorkBoardPage } from '../pages/BoardPage';
+import { createAppRoutes } from '../router';
 
 function FailingPage(): never {
   throw new Error('Unexpected page rendering failure');
@@ -33,30 +33,18 @@ beforeEach(() => {
   );
 });
 
+function withFailingPage(routes: RouteObject[]): RouteObject[] {
+  return routes.map(route => {
+    if (route.index) return route;
+    if (isValidElement(route.errorElement) && route.errorElement.type === AppRouteErrorPage) {
+      return { ...route, children: [...(route.children ?? []), { path: 'error', Component: FailingPage }] };
+    }
+    return route.children ? { ...route, children: withFailingPage(route.children) } : route;
+  });
+}
+
 function renderFailingPage() {
-  const router = createMemoryRouter(
-    [
-      {
-        path: '/factories/:factoryId',
-        element: <FactoryLayout />,
-        children: [
-          {
-            element: <AppLayout />,
-            children: [
-              {
-                errorElement: <AppRouteErrorPage />,
-                children: [
-                  { path: 'error', Component: FailingPage },
-                  { path: 'work', Component: WorkBoardPage },
-                ],
-              },
-            ],
-          },
-        ],
-      },
-    ],
-    { initialEntries: ['/factories/fp-1/error'] },
-  );
+  const router = createMemoryRouter(withFailingPage(createAppRoutes()), { initialEntries: ['/factories/fp-1/error'] });
   renderWithProviders(<RouterProvider router={router} />);
 }
 
