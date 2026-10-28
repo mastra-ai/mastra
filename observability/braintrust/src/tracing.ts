@@ -758,6 +758,7 @@ export class BraintrustExporter extends TrackingExporter<
         'usage',
         'parameters',
         'completionStartTime',
+        'timeToFirstTokenMs',
       ]);
       payload.metadata = {
         ...payload.metadata,
