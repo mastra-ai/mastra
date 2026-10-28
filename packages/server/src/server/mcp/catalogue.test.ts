@@ -3,6 +3,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ServerMCPConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createMockModel } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { describe, expect, it, vi } from 'vitest';
@@ -45,7 +46,9 @@ function setup({
   workflows = {},
   tools = {},
   mcp = {},
+  editor,
 }: {
+  editor?: any;
   agents?: Record<string, Agent>;
   workflows?: Record<string, ReturnType<typeof workflow>>;
   tools?: Record<string, ReturnType<typeof tool>>;
@@ -58,6 +61,7 @@ function setup({
     storage: new InMemoryStore(),
     logger: false,
     server: { mcp },
+    editor,
   });
   const build = async (request?: Request) =>
     buildBuiltinMCPTools(
@@ -214,5 +218,28 @@ describe('buildBuiltinMCPTools', () => {
     expect(enumOf(await build(), 'call_agent', 'agentId')).toEqual(['a']);
     mastra.addAgent(agent('late', 'Late'), 'late');
     expect(enumOf(await build(), 'call_agent', 'agentId')).toEqual(['a', 'late']);
+  });
+
+  it('lists and calls stored agents through the same routes as HTTP', async () => {
+    const stored = new Agent({
+      id: 'stored-helper',
+      name: 'Stored helper',
+      description: 'Built in the agent builder',
+      instructions: 'test',
+      model: createMockModel({ mockText: 'hello from storage' }),
+    });
+    const editor = {
+      agent: {
+        list: async () => ({ agents: [{ id: 'stored-helper' }] }),
+        getById: async (id: string) => (id === 'stored-helper' ? stored : null),
+        applyStoredOverrides: async (agent: Agent) => agent,
+      },
+    };
+    const { build } = setup({ agents: { a: agent('a', 'A') }, editor });
+    const tools = await build();
+    expect(enumOf(tools, 'call_agent', 'agentId')).toEqual(['a', 'stored-helper']);
+    const result = (await tools.call_agent!.execute!({ agentId: 'stored-helper', message: 'hi' }, {} as any)) as any;
+    expect(result.text).toBe('hello from storage');
+    expect(result.runId).toEqual(expect.any(String));
   });
 });
