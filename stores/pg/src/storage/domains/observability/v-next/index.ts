@@ -147,7 +147,7 @@ import type { DiscoveryConfig } from './discovery';
 import * as feedbackOps from './feedback';
 import * as logsOps from './logs';
 import * as metricsOps from './metrics';
-import { detectPartman, detectTimescale, resolveMode, setupPartitioning } from './partitioning';
+import { detectPartman, detectTimescale, ensureNativePartitions, resolveMode, setupPartitioning } from './partitioning';
 import type { PartitioningOptions, PartitionMode } from './partitioning';
 import { isDuplicateRelationError, isDuplicateSchemaError } from './pg-errors';
 import { deltaPollingFeatureEnabled } from './polling';
@@ -317,6 +317,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   /** Resolved partition mode after init(). Useful for tests and diagnostics. */
   get partitionMode(): PartitionMode | undefined {
     return this.#partitionMode;
+  }
+
+  /**
+   * Create any missing day partitions from yesterday through today +
+   * `futureDays`, without the rest of init(). For apps whose runtime role
+   * cannot run DDL: call it on a schedule with a role that owns the
+   * observability tables. Safe to call repeatedly on one instance. Does
+   * nothing with TimescaleDB or pg_partman, which create their own partitions.
+   */
+  async ensurePartitions(): Promise<void> {
+    return this.#run('VNEXT_ENSURE_PARTITIONS', async () => {
+      const mode = (this.#partitionMode ??= await resolveMode(this.#client, this.#partitioning));
+      if (mode === 'native') await ensureNativePartitions(this.#client, this.#schema, this.#partitioning);
+    });
   }
 
   // -------------------------------------------------------------------------

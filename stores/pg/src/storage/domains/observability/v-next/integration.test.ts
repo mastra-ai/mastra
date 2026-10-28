@@ -706,6 +706,23 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('ensurePartitions() leaves pg_partman-managed partitions alone', async () => {
+      const harness = await createHarness({
+        connection: parseConnectionString(PARTMAN_URL),
+        schemaPrefix: 'obs_vnext_partman_ensure',
+        setupDatabase: ensurePartman,
+        partitioning: { futureDays: 30 },
+      });
+
+      try {
+        const before = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        await harness.domain.ensurePartitions();
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toEqual(before);
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('native mode still creates a missing day when pg_partman is installed but cannot be read by the app role', async () => {
       const partman = parseConnectionString(PARTMAN_URL);
       const schema = schemaName('obs_vnext_partman_unused');
@@ -2181,6 +2198,54 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
+    it('creates the partition for a write after the window init() created has passed', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_partition_slide',
+        partitioning: { mode: 'native', futureDays: 3 },
+      });
+
+      vi.useFakeTimers({ toFake: ['Date'] });
+      try {
+        vi.setSystemTime(Date.now() + 30 * 86_400_000);
+        const partition = `${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`;
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).not.toContain(partition);
+
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'slide-trace', spanId: 'slide-span' })],
+        });
+
+        const trace = await harness.domain.getTrace({ traceId: 'slide-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['slide-span']);
+        expect(await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS)).toContain(partition);
+      } finally {
+        vi.useRealTimers();
+        await harness.close();
+      }
+    });
+
+    it('ensurePartitions() recreates a missing day in the window every time it runs on one store', async () => {
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_ensure_partitions',
+        partitioning: { mode: 'native', futureDays: 3 },
+      });
+
+      try {
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const child = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(2))}`);
+        for (let run = 0; run < 2; run++) {
+          await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${child}`);
+          await harness.baseClient.none(`DROP TABLE ${child}`);
+
+          await harness.domain.ensurePartitions();
+
+          const partitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+          expect(partitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(2))}`);
+        }
+      } finally {
+        await harness.close();
+      }
+    });
+
     it('a store that never ran init() (disableInit deployments) still creates the missing day', async () => {
       const harness = await createHarness({
         schemaPrefix: 'obs_vnext_partition_no_init',
@@ -2266,7 +2331,10 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
           appDomain.batchCreateSpans({
             records: [makeSpan({ traceId: 'owner-trace', spanId: 'owner-span', startedAt: future })],
           });
-        await expect(write()).rejects.toThrow(/must be owner of table/);
+        const day = future.toISOString().slice(0, 10);
+        await expect(write()).rejects.toThrow(
+          new RegExp(`${TABLE_SPAN_EVENTS} partition for ${day} \\(UTC\\): must be owner.*ensurePartitions\\(\\)`),
+        );
         const child = `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(20))}`;
         const leftover = await admin.oneOrNone(
           `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`,
@@ -2274,7 +2342,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         );
         expect(leftover).toBeNull();
 
-        await expect(ownerDomain().init()).resolves.toBeUndefined();
+        await expect(ownerDomain().ensurePartitions()).resolves.toBeUndefined();
         await expect(write()).resolves.toBeUndefined();
         const trace = await appDomain.getTrace({ traceId: 'owner-trace' });
         expect(trace?.spans.map(span => span.spanId)).toEqual(['owner-span']);

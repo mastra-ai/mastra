@@ -642,6 +642,11 @@ export class PostgresStoreVNext extends PostgresStore {
     return { client: new PoolAdapter(pool), pool, owned: true };
   }
 
+  /** See {@link ObservabilityStoragePostgresVNext.ensurePartitions}. */
+  async ensurePartitions(): Promise<void> {
+    await (this.stores.observability as ObservabilityStoragePostgresVNext).ensurePartitions();
+  }
+
   /**
    * Closes both the primary pool (when owned) and the observability pool
    * (when this store created it). Safe to call multiple times.

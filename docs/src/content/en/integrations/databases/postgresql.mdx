@@ -233,7 +233,9 @@ Lower `lookbackSeconds` if refreshes are slow, and raise `ttlSeconds` if they ru
 
 `PostgresStoreVNext` stores observability events in tables partitioned by day. If TimescaleDB or pg_partman is installed, that extension creates partitions for you. Without an extension, `init()` creates the partitions for yesterday, today, and the next `futureDays` days (default 14), and a write that lands on a day inside that window with no partition creates it before it retries, so writes keep working after the pre-created window runs out. Rows dated outside the window are still rejected.
 
-Creating a partition is DDL. If the role your app runs with cannot create tables, or does not own the observability tables, the write fails with a permission error instead, and the exporter drops that batch after its retries. In that setup, either raise `futureDays` and re-run `init()` with a role that can create tables at least that often (for example from a deploy step or a scheduled job; `init()` only runs once per store instance, so the job must create a new `PostgresStoreVNext` each time), or install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, so the database maintains the partitions itself:
+Creating a partition is DDL. If the role your app runs with cannot create tables, or does not own the observability tables, the write fails with an error that names the table and the missing day, and the exporter drops that batch after its retries. In that setup, call `ensurePartitions()` on a schedule, at least once every `futureDays` days, with a role that can create tables and owns the observability tables. It only extends the native day-partition window, and does nothing with TimescaleDB or pg_partman. You can also install TimescaleDB, or pg_partman with its background worker or a scheduled `run_maintenance()` call, so the database maintains the partitions itself.
+
+A larger `futureDays` gives the scheduled job more time between runs:
 
 ```typescript
 import { PostgresStoreVNext } from '@mastra/pg'
@@ -248,6 +250,14 @@ const storage = new PostgresStoreVNext({
     },
   },
 })
+```
+
+Then call `ensurePartitions()` from the scheduled job:
+
+```typescript
+// OBSERVABILITY_DATABASE_URL connects as a role that owns the observability tables
+await storage.ensurePartitions()
+await storage.close()
 ```
 
 ### Initialization
