@@ -730,11 +730,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
         const diff = aVal.getTime() - bVal.getTime();
         return sortDirection === 'DESC' ? -diff : diff;
-      } else {
-        // startedAt is never null (required field)
-        const diff = a.startedAt.getTime() - b.startedAt.getTime();
-        return sortDirection === 'DESC' ? -diff : diff;
       }
+      // startedAt is never null (required field)
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
     });
 
     // Apply pagination
