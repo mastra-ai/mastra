@@ -2720,9 +2720,15 @@ describe('MastraFactory.prepare integrations', () => {
       expect(ctx.auth).toBeDefined();
     });
 
-    it('disconnects an attached channel adapter during shutdown', async () => {
+    it('makes concurrent shutdown callers wait for the same channel disconnect', async () => {
       withController();
-      const disconnect = vi.fn(async () => {});
+      let finishDisconnect: (() => void) | undefined;
+      const disconnect = vi.fn(
+        () =>
+          new Promise<void>(resolve => {
+            finishDisconnect = resolve;
+          }),
+      );
       const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
       const factory = new MastraFactory({
         secretEncryption,
@@ -2731,10 +2737,38 @@ describe('MastraFactory.prepare integrations', () => {
       });
 
       await factory.prepare();
-      await factory.shutdown();
-      await factory.shutdown();
+      const firstShutdown = factory.shutdown();
+      const secondShutdown = factory.shutdown();
+      let secondFinished = false;
+      void secondShutdown.then(() => {
+        secondFinished = true;
+      });
 
+      await new Promise(resolve => setTimeout(resolve, 0));
       expect(disconnect).toHaveBeenCalledOnce();
+      expect(secondFinished).toBe(false);
+
+      finishDisconnect?.();
+      await Promise.all([firstShutdown, secondShutdown]);
+      await factory.shutdown();
+      expect(disconnect).toHaveBeenCalledOnce();
+    });
+
+    it('retries a channel disconnect that failed during shutdown', async () => {
+      withController();
+      const disconnect = vi.fn().mockRejectedValueOnce(new Error('disconnect failed')).mockResolvedValueOnce(undefined);
+      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
+      const factory = new MastraFactory({
+        secretEncryption,
+        storage: fakeStorage(),
+        integrations: [fakeIntegration({ id: 'chat-platform', channels })],
+      });
+
+      await factory.prepare();
+      await expect(factory.shutdown()).rejects.toThrow('disconnect failed');
+      await expect(factory.shutdown()).resolves.toBeUndefined();
+
+      expect(disconnect).toHaveBeenCalledTimes(2);
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {

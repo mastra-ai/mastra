@@ -328,6 +328,9 @@ const storage = databaseUrl
     });
 const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectionString: databaseUrl }) : undefined;
 
+const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
+const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
+
 // Deployment-stable secret for OAuth/link `state` signing. Shared by the
 // factory's integration signer and the channel-account-link deep link so both
 // sign/verify with the same key: webhook secret first, then the WorkOS cookie
@@ -337,16 +340,14 @@ const vector = databaseUrl ? new PgVector({ id: 'mastra-code-vectors', connectio
 const stateSecret =
   process.env.GITHUB_APP_WEBHOOK_SECRET ||
   process.env.WORKOS_COOKIE_PASSWORD ||
-  process.env.SLACK_APP_SIGNING_SECRET ||
-  process.env.SLACK_APP_TOKEN ||
+  slackSigningSecret ||
+  slackAppToken ||
   undefined;
 
 // Slack channels + account linking. Socket Mode is selected when an app-level
 // token is configured; otherwise Slack uses HTTP webhook mode. Repo-backed
 // Slack threads come from the factory's source-control owner (GitHub) — the
 // integration wires itself.
-const slackAppToken = process.env.SLACK_APP_TOKEN?.trim();
-const slackSigningSecret = process.env.SLACK_APP_SIGNING_SECRET?.trim();
 const slack =
   slackAppToken || slackSigningSecret
     ? new SlackIntegration({
