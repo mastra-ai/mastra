@@ -5,12 +5,14 @@ import type { ContinuationStopCause } from './continuation-core';
 export { executionFailureTermination } from '../../observability/execution-outcome';
 
 /**
+ * @internal
  * Classify a settled agent loop using its runtime stop boundary. A provider
  * finish reason refines the result; it cannot establish successful execution
  * without a continuation decision. Call only after finish-time work succeeds.
  */
 export function agentLoopTermination(input: {
   stopCause?: ContinuationStopCause;
+  delegationFailure?: SpanTermination;
   finishReason?: string;
   maxSteps?: number;
   suspension?: { approvalRequired: boolean; toolCallId?: string; toolName?: string };
@@ -48,6 +50,12 @@ export function agentLoopTermination(input: {
         },
       };
     case 'delegation':
+      if (input.delegationFailure)
+        return {
+          outcome: 'interrupted',
+          stopReason: 'delegation_bail',
+          stopReasonContext: { cause: input.delegationFailure },
+        };
       return { outcome: 'success', stopReason: 'delegation_bail' };
     case 'model_finished':
       // Unknown/unrecognized provider endings do not prove normal completion.

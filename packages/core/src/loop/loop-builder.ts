@@ -652,7 +652,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
-        writeScoped(scopeCtx, CONTINUATION_STOP_CAUSE_KEY, 'continuationStopCause', decision.stopCause);
+        rest.tracingScope?.set(CONTINUATION_STOP_CAUSE_KEY, decision.stopCause);
         if (decision.forceContinue) {
           typedInputData.stepResult.isContinued = true;
         }

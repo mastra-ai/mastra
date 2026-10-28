@@ -1,6 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Agent } from '../../../../agent';
+import { SCENARIO_MODEL_ID } from '../types';
 import { SpanType, TracingEventType } from '../../../../observability';
 import { createTool } from '../../../../tools';
 import { describeForAllEngines, runApprovalScenario, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
@@ -8,6 +10,63 @@ import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
+
+  it.each([false, true])('records a supervisor bail after a worker failure=%s', async failed => {
+    const { observability, ended } = capture();
+    const worker = new Agent({
+      id: 'worker',
+      name: 'Worker',
+      description: 'Handles delegated work',
+      instructions: 'Do the delegated task.',
+      model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat(SCENARIO_MODEL_ID),
+      errorProcessorDefaults: false,
+      defaultOptions: { maxRetries: 0 },
+    });
+    await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      agents: { worker },
+      prompt: 'Delegate the task.',
+      maxSteps: 5,
+      errorProcessors: [],
+      maxRetries: 0,
+      delegation: {
+        onDelegationComplete: context => {
+          context.bail();
+        },
+      },
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      fixtures: llm => {
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 0 },
+          {
+            toolCalls: [{ id: 'delegate', name: 'agent-worker', arguments: { prompt: 'Worker request.' } }],
+          },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: false, sequenceIndex: 1 },
+          failed
+            ? { error: { message: 'Worker provider failed', type: 'server_error' }, status: 500 }
+            : { content: 'Work complete.' },
+        );
+        llm.on(
+          { endpoint: 'chat', hasToolResult: true },
+          {
+            content: 'Another step',
+            toolCalls: [{ id: 'unwanted', name: 'agent-worker', arguments: { prompt: 'Must not run.' } }],
+          },
+        );
+      },
+    });
+    expect(ended().filter(span => span.entityId === 'worker')).toMatchObject([{ outcome: failed ? 'error' : 'success' }]);
+    const supervisor = ended().find(span => span.entityId !== 'worker');
+    expect(supervisor).toMatchObject({ outcome: failed ? 'interrupted' : 'success', stopReason: 'delegation_bail' });
+    if (failed)
+      expect(supervisor?.stopReasonContext).toMatchObject({ cause: { outcome: 'error', stopReason: 'model_error' } });
+  });
 
   it('records an output-result guardrail without losing usage or exporting terminal spans twice', async () => {
     const { observability, ended } = capture();
@@ -91,7 +150,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
     for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
-      expect(ended(type).at(-1)).toMatchObject({ outcome: 'limit', stopReason: 'timeout' });
+      expect(ended(type).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'timeout' });
     }
   });
 
@@ -316,12 +375,12 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     expect(requests).toHaveLength(1);
     expect(ended().at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_GENERATION).at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
-    expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+    expect(ended(SpanType.MODEL_STEP).at(-1)).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     expect(ended(SpanType.MODEL_INFERENCE)[0]).toMatchObject({ outcome: 'success', stopReason: null });
     // Normal execution can enter the next attempt before observing cancellation;
     // it must abort that attempt without rewriting the completed provider call.
     for (const inference of ended(SpanType.MODEL_INFERENCE).slice(1)) {
-      expect(inference).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+      expect(inference).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     }
   });
 

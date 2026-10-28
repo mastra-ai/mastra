@@ -83,5 +83,9 @@ export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>
 
 export const TOOL_PAYLOAD_TRANSFORM_KEY = createRunScopeKey<ToolPayloadTransformPolicy>('loop:toolPayloadTransform');
 
-export const CONTINUATION_STOP_CAUSE_KEY =
-  createRunScopeKey<import('./shared/continuation-core').ContinuationStopCause>('loop:continuationStopCause');
+export const CONTINUATION_STOP_CAUSE_KEY = createRunScopeKey<
+  import('./shared/continuation-core').ContinuationStopCause | undefined
+>('loop:continuationStopCause');
+
+export const DELEGATION_FAILURE_KEY =
+  createRunScopeKey<import('../observability/types').SpanTermination>('loop:delegationFailure');

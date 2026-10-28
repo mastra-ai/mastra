@@ -89,7 +89,7 @@ const contexts = {
   signal_received: z.strictObject({ ...supplemental }),
   stop_condition: z.strictObject({ ...supplemental }),
   iteration_hook: z.strictObject({ feedbackCompleted: z.boolean().optional(), ...supplemental }),
-  delegation_bail: z.strictObject({ ...supplemental }),
+  delegation_bail: z.strictObject({ cause: z.lazy(() => spanTerminationSchema).optional(), ...supplemental }),
   authentication: z.strictObject({ ...failure, ...supplemental }),
   authorization: z.strictObject({ ...failure, ...supplemental }),
 } satisfies { [Reason in SpanStopReason]: z.ZodType<SpanStopReasonContext<Reason>> };

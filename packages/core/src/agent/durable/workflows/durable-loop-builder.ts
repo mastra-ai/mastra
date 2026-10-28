@@ -1159,6 +1159,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       ? reg.tracingTermination
                       : agentLoopTermination({
                           stopCause: reg?.tracingStopCause,
+                          delegationFailure: reg?.tracingDelegationFailure,
                           finishReason: finalOutput.stepResult?.reason,
                           tripwire,
                           maxSteps: initData.options?.maxSteps,
@@ -1182,6 +1183,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                       ? reg.tracingTermination
                       : agentLoopTermination({
                           stopCause: reg?.tracingStopCause,
+                          delegationFailure: reg?.tracingDelegationFailure,
                           finishReason: finalOutput.stepResult?.reason,
                           tripwire,
                           maxSteps: initData.options?.maxSteps,

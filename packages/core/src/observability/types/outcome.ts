@@ -41,7 +41,7 @@ export interface SpanStopReasonContextMap {
   approval_required: { toolCallId?: string; toolName?: string };
   stop_condition: {};
   iteration_hook: { feedbackCompleted?: boolean };
-  delegation_bail: {};
+  delegation_bail: { cause?: SpanTermination };
   authentication: SpanFailureContext;
   authorization: SpanFailureContext;
 }

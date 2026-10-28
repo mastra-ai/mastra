@@ -3,9 +3,11 @@ import type { MastraPrimitives } from '../../action';
 import { MastraBase } from '../../base';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../error';
 import { loop } from '../../loop';
+import { DELEGATION_FAILURE_KEY } from '../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { LoopOptions } from '../../loop/types';
 import type { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { SpanType, resolveObservabilityContext } from '../../observability';
 import { calculateObservedUsage, isUsageIncomplete, subtractReportedUsage } from '../../observability/usage';
 import { executeWithContextSync } from '../../observability/utils';
@@ -137,6 +139,7 @@ export class MastraLLMVNext extends MastraBase {
     eagerToolExecution,
     _internal,
     onTracingTripwire,
+    tracingScope = createRunScope(),
     agentId,
     agentVersionId,
     resolvedScopes,
@@ -235,6 +238,7 @@ export class MastraLLMVNext extends MastraBase {
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
+        tracingScope,
         onTracingTripwire: (tripwire, usage, text) => {
           modelSpanTracker?.endGeneration({
             ...agentLoopTermination({ tripwire }),
@@ -242,7 +246,7 @@ export class MastraLLMVNext extends MastraBase {
             output: { text },
             attributes: {},
           });
-          onTracingTripwire?.(tripwire, usage, text);
+          onTracingTripwire?.(tripwire, text);
         },
         resumeContext,
         runId,
@@ -363,6 +367,7 @@ export class MastraLLMVNext extends MastraBase {
                 ? executionFailureTermination(props.error)
                 : agentLoopTermination({
                     stopCause: context?.continuationStopCause,
+                    delegationFailure: tracingScope.get(DELEGATION_FAILURE_KEY),
                     finishReason: props.finishReason,
                     tripwire: context?.outputResultTripwire ?? props.tripwire,
                     maxSteps,

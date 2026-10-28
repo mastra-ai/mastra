@@ -5,6 +5,7 @@ import type { ToolBackgroundConfig } from '../../../../background-tasks/types';
 import type { PubSub } from '../../../../events/pubsub';
 import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { approvalResumeSchema } from '../../../../loop/shared/approval-schema';
+import { takeDelegationFailure } from '../../../../loop/shared/delegation-outcome';
 import { normalizeModelOutput } from '../../../../loop/shared/normalize-model-output';
 import { readToolResultFromMessageList } from '../../../../loop/shared/read-tool-result';
 import { dispatchBackgroundTool } from '../../../../loop/shared/steps/background-dispatch-core';
@@ -1942,6 +1943,8 @@ export function createDurableToolCallStep() {
           if (rc?.get('__mastra_delegationBailed')) {
             bailed = true;
             rc.set('__mastra_delegationBailed', false);
+            const cause = takeDelegationFailure(rc);
+            if (cause && registryEntry) registryEntry.tracingDelegationFailure = cause;
           }
         }
         return bailed;
