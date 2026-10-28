@@ -38,7 +38,12 @@ import type {
 } from '../storage/domains/work-items/base.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
 import { decisionOvertaken } from './decision-applicability.js';
-import { FactoryDispatchError, factoryDispatchFailureCode, factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import {
+  credentialTenantFailureCode,
+  FactoryDispatchError,
+  factoryDispatchFailureCode,
+  factoryDispatchFailureMetadata,
+} from './dispatch-errors.js';
 import type { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision, FactoryRuleActor, FactoryRuleCausalEntry } from './types.js';
 import { externalSourceForWorkItem, externallyAuthoredWorkItem, FACTORY_RULE_STAGES } from './types.js';
@@ -93,11 +98,6 @@ class FactoryDecisionSuperseded extends Error {}
 /** A run that ran and ended in error; the session's own listener reports it to followers. */
 class RunEndedInError extends FactoryDispatchError {}
 
-// The Mastra Code credential resolver's own failure; free text that merely mentions credentials does not count.
-const CREDENTIAL_RESOLUTION_FAILURE = 'tenant model credential policy could not be resolved';
-// The resolver's reason when the request context has no user; it recurs on every retry of the same start.
-const NO_AUTHENTICATED_USER = 'the request has no authenticated user';
-
 function httpStatus(error: unknown): number | undefined {
   if (!error || typeof error !== 'object') return undefined;
   if ('statusCode' in error && typeof error.statusCode === 'number') return error.statusCode;
@@ -114,11 +114,9 @@ function isProviderCallError(error: unknown): boolean {
   return 'statusCode' in error || 'responseBody' in error;
 }
 
-function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
-  const lower = message.toLowerCase();
-  if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
-    return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
-  }
+function runErrorCode(error: unknown): FactoryDispatchFailureCode {
+  const tenantFailure = credentialTenantFailureCode(error);
+  if (tenantFailure) return tenantFailure;
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
   if (status === 401 || status === 403) return 'run_credentials_unavailable';
   const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
@@ -128,7 +126,7 @@ function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCo
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
   const cause = (error instanceof Error ? error.message : String(error ?? '')).trim();
   if (!cause) return new RunEndedInError('run_failed', `${label} ended in error.`);
-  return new RunEndedInError(runErrorCode(error, cause), `${label} ended in error: ${cause}`);
+  return new RunEndedInError(runErrorCode(error), `${label} ended in error: ${cause}`);
 }
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.

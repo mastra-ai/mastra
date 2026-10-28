@@ -36,6 +36,43 @@ export type CredentialStoreProvider = (tenant: CredentialTenant) => CredentialSt
 
 export type CredentialTenantResolver = (requestContext: RequestContext) => Promise<CredentialTenant | undefined>;
 
+export type CredentialTenantFailureReason =
+  | 'missing-user-context'
+  | 'invalid-organization-id'
+  | 'no-policy-for-principal';
+
+const CREDENTIAL_TENANT_FAILURES: Record<CredentialTenantFailureReason, string> = {
+  'missing-user-context':
+    'Tenant model credential policy could not be resolved: the request has no authenticated user.',
+  'invalid-organization-id':
+    "Tenant model credential policy could not be resolved: the authenticated user's organization id is not a string.",
+  'no-policy-for-principal':
+    'Tenant model credential policy could not be resolved: no credential policy applies to this request.',
+};
+
+class CredentialTenantError extends Error {
+  override readonly name = 'CredentialTenantError';
+
+  constructor(readonly reason: CredentialTenantFailureReason) {
+    super(CREDENTIAL_TENANT_FAILURES[reason]);
+  }
+}
+
+function isCredentialTenantFailureReason(value: unknown): value is CredentialTenantFailureReason {
+  return typeof value === 'string' && Object.hasOwn(CREDENTIAL_TENANT_FAILURES, value);
+}
+
+export function credentialTenantFailureReason(error: unknown): CredentialTenantFailureReason | undefined {
+  if (!(error instanceof Error)) return undefined;
+  if (error.name === 'CredentialTenantError' && 'reason' in error && isCredentialTenantFailureReason(error.reason)) {
+    return error.reason;
+  }
+  // A run's error reaches its session through core's run-failed event as the message alone.
+  return Object.keys(CREDENTIAL_TENANT_FAILURES)
+    .filter(isCredentialTenantFailureReason)
+    .find(reason => CREDENTIAL_TENANT_FAILURES[reason] === error.message);
+}
+
 const CREDENTIAL_POLICY_KEY = 'mastracode__credentialPolicy';
 let credentialStoreProvider: CredentialStoreProvider | undefined;
 let credentialTenantResolver: CredentialTenantResolver | undefined;
@@ -99,16 +136,12 @@ export async function prepareCredentialTenant(requestContext?: RequestContext): 
  * (channels post it into the chat); the warning carries non-secret diagnostics
  * and the stack, which is what locates a caller that dropped the request context.
  */
-function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean): Error {
-  const authenticated = resolveAuthenticatedCredentialTenant(sourceContext) !== undefined;
-  const error = new Error(
-    authenticated
-      ? 'Tenant model credential policy could not be resolved: no credential policy applies to this request.'
-      : 'Tenant model credential policy could not be resolved: the request has no authenticated user.',
-  );
+function unresolvedTenantError(sourceContext: RequestContext, inherited: boolean): CredentialTenantError {
+  const principal = readPrincipal(sourceContext);
+  const error = new CredentialTenantError('tenant' in principal ? 'no-policy-for-principal' : principal.failure);
   const controller = sourceContext.get('controller') as { resourceId?: unknown; threadId?: unknown } | undefined;
   logger.error('[MastraCode] Tenant model credential policy could not be resolved', {
-    reason: authenticated ? 'no-policy-for-principal' : 'missing-user-context',
+    reason: error.reason,
     hasUser: sourceContext.get('user') !== undefined,
     inheritedPolicy: inherited,
     hasControllerResource: typeof controller?.resourceId === 'string',
@@ -180,8 +213,15 @@ export function resolveTenantFromRequestContext(requestContext?: RequestContext)
 
 /** Authenticated principal only, for hosts resolving durable session ownership. */
 export function resolveAuthenticatedCredentialTenant(requestContext?: RequestContext): CredentialTenant | undefined {
+  const principal = readPrincipal(requestContext);
+  return 'tenant' in principal ? principal.tenant : undefined;
+}
+
+function readPrincipal(
+  requestContext?: RequestContext,
+): { tenant: CredentialTenant } | { failure: Exclude<CredentialTenantFailureReason, 'no-policy-for-principal'> } {
   const raw = requestContext?.get('user') as (RequestContextUser & RequestContextSession) | undefined;
-  if (!raw || typeof raw !== 'object') return undefined;
+  if (!raw || typeof raw !== 'object') return { failure: 'missing-user-context' };
 
   // Precedence matches `toFactoryAuthUser` in `@mastra/factory`: a wrapper's org
   // comes from the session half only, never from the inner user.
@@ -189,10 +229,10 @@ export function resolveAuthenticatedCredentialTenant(requestContext?: RequestCon
   const user = wrapped ? (raw.user as RequestContextUser) : raw;
   const principalOrgId = wrapped ? raw.session?.activeOrganizationId : user.organizationId;
   const principalUserId = user.workosId ?? user.id;
-  if (typeof principalUserId !== 'string' || !principalUserId) return undefined;
-  if (principalOrgId !== undefined && typeof principalOrgId !== 'string') return undefined;
+  if (typeof principalUserId !== 'string' || !principalUserId) return { failure: 'missing-user-context' };
+  if (principalOrgId !== undefined && typeof principalOrgId !== 'string') return { failure: 'invalid-organization-id' };
 
-  return { orgId: principalOrgId, userId: principalUserId, credentialScope: 'user' };
+  return { tenant: { orgId: principalOrgId, userId: principalUserId, credentialScope: 'user' } };
 }
 
 /**
