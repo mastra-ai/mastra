@@ -1847,10 +1847,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
                           if (chunk.type === 'tripwire') {
-                            const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-                            if (registry)
-                              registry.tracingTermination = agentLoopTermination({ tripwire: chunk.payload });
-                            modelSpanTracker?.endAttempt?.(agentLoopTermination({ tripwire: chunk.payload }));
+                            endTripwireSpans(chunk.payload);
                             outputStreamBlocked = true;
                           }
                           try {
@@ -2131,10 +2128,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         emitChunk: async chunk => {
                           // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
                           if (chunk.type === 'tripwire') {
-                            const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-                            if (registry)
-                              registry.tracingTermination = agentLoopTermination({ tripwire: chunk.payload });
-                            modelSpanTracker?.endAttempt?.(agentLoopTermination({ tripwire: chunk.payload }));
+                            endTripwireSpans(chunk.payload);
                             outputStreamBlocked = true;
                           }
                           trackOpenReasoning(chunk, openReasoningIds);

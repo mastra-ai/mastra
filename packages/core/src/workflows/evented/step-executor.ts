@@ -18,7 +18,6 @@ import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
 import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
-import { getControlFlowIdentityAttributes } from '../handlers/control-flow';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
@@ -460,23 +459,15 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    tracingContext?: TracingContext;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = params.abortController ?? new AbortController();
 
     const results = await Promise.all(
-      step.conditions.map(async (condition, conditionIndex) => {
-        const span = params.tracingContext?.currentSpan?.createChildSpan({
-          type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
-          outcome: null,
-          name: `condition '${conditionIndex}'`,
-          input: params.input,
-          attributes: { conditionIndex, ...getControlFlowIdentityAttributes(step) },
-        });
+      step.conditions.map(async condition => {
         try {
-          const result = await this.evaluateCondition({
+          return await this.evaluateCondition({
             workflowId: params.workflowId,
             condition,
             runId,
@@ -489,17 +480,9 @@ export class StepExecutor extends MastraBase {
             abortController,
             stepResults,
             iterationCount: 0,
-            tracingContext: { currentSpan: span },
           });
-          completeWorkflowSpan(span, {
-            end: { ...workflowTermination({ status: 'success' }), output: result },
-          });
-          return result;
         } catch (e) {
           const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
-          completeWorkflowSpan(span, {
-            error: { ...workflowTermination({ status: 'failed', error: errorInstance }), error: errorInstance },
-          });
           const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
@@ -541,7 +524,6 @@ export class StepExecutor extends MastraBase {
     abortController,
     retryCount = 0,
     iterationCount,
-    tracingContext,
   }: {
     workflowId: string;
     condition: LoopConditionFunction<any, any, any, any, any, any>;
@@ -555,7 +537,6 @@ export class StepExecutor extends MastraBase {
     abortController: AbortController;
     retryCount?: number;
     iterationCount: number;
-    tracingContext?: TracingContext;
   }): Promise<boolean> {
     const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
@@ -591,7 +572,8 @@ export class StepExecutor extends MastraBase {
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
-          ...createObservabilityContext({ currentSpan: tracingContext?.currentSpan }),
+          // TODO
+          ...createObservabilityContext(),
           iterationCount,
         },
         {
@@ -615,7 +597,6 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    tracingContext?: TracingContext;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -673,7 +654,8 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            ...createObservabilityContext({ currentSpan: params.tracingContext?.currentSpan }),
+            // TODO
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',
@@ -700,7 +682,6 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
-    tracingContext?: TracingContext;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -758,7 +739,8 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            ...createObservabilityContext({ currentSpan: params.tracingContext?.currentSpan }),
+            // TODO
+            ...createObservabilityContext(),
           },
           {
             paramName: 'runCount',

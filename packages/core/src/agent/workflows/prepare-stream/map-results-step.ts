@@ -577,7 +577,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
           // Retries have settled by this terminal error path. Finish tracing after persistence.
           const spanError = error instanceof Error ? error : new Error(String(error));
-          agentSpan?.error({ error: spanError, ...executionFailureTermination(spanError), endTree: true });
+          // Classify the original value: serialized errors lose their fields when re-wrapped.
+          agentSpan?.error({ error: spanError, ...executionFailureTermination(error), endTree: true });
           await options.onError?.({ error });
         },
         onAbort: options.onAbort,

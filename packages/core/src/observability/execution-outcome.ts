@@ -24,6 +24,15 @@ export function executionFailureTermination(
   error: unknown,
   layer: 'runtime_error' | 'model_error' = 'runtime_error',
 ): SpanTermination {
+  // Runs on failure paths: a throwing getter or Proxy trap must not replace the original error.
+  try {
+    return classifyExecutionFailure(error, layer);
+  } catch {
+    return { outcome: 'error', stopReason: layer };
+  }
+}
+
+function classifyExecutionFailure(error: unknown, layer: 'runtime_error' | 'model_error'): SpanTermination {
   const seen = new Set<unknown>();
   let current = error;
   let failure: Record<string, unknown> | undefined;

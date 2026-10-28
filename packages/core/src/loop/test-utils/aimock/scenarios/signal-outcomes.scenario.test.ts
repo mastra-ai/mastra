@@ -68,6 +68,16 @@ describeForAllEngines('signal interruption outcomes (OBS-724)', engine => {
       await signal.accepted;
       const result = await running;
       expect(await result.output.text).toBe('updated answer');
+      // Exporters receive span-end events after the stream settles.
+      await vi.waitFor(
+        () =>
+          expect(
+            events.some(
+              event => event.type === TracingEventType.SPAN_ENDED && event.exportedSpan.type === SpanType.AGENT_RUN,
+            ),
+          ).toBe(true),
+        { timeout: 10_000 },
+      );
       const ended = events.filter(event => event.type === TracingEventType.SPAN_ENDED).map(event => event.exportedSpan);
       expect(
         ended.filter(span => span.type === SpanType.MODEL_INFERENCE).some(span => span.outcome === 'interrupted'),
