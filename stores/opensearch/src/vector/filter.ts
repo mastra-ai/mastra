@@ -327,7 +327,7 @@ export class OpenSearchFilterTranslator extends BaseFilterTranslator<OpenSearchV
         wildcardPattern = '*' + wildcardPattern;
       }
       if (!hasEndAnchor) {
-        wildcardPattern = wildcardPattern + '*';
+        wildcardPattern += '*';
       }
 
       return { wildcard: { [field]: wildcardPattern } };

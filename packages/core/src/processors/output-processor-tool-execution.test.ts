@@ -62,25 +62,24 @@ describe('Output Processor Tool Result Chunks', () => {
             rawCall: { rawPrompt: [], rawSettings: {} },
             warnings: [],
           };
-        } else {
-          // Second LLM call - after tool execution
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: 'The tool returned: Echo: hello' },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-              },
-            ]),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-            warnings: [],
-          };
         }
+        // Second LLM call - after tool execution
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The tool returned: Echo: hello' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 
@@ -229,25 +228,24 @@ describe('Output Processor State Persistence Across Tool Execution', () => {
             rawCall: { rawPrompt: [], rawSettings: {} },
             warnings: [],
           };
-        } else {
-          // Second LLM call - after tool execution
-          return {
-            stream: convertArrayToReadableStream([
-              { type: 'stream-start', warnings: [] },
-              { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
-              { type: 'text-start', id: 'text-1' },
-              { type: 'text-delta', id: 'text-1', delta: 'The tool executed successfully!' },
-              { type: 'text-end', id: 'text-1' },
-              {
-                type: 'finish',
-                finishReason: 'stop',
-                usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
-              },
-            ]),
-            rawCall: { rawPrompt: [], rawSettings: {} },
-            warnings: [],
-          };
         }
+        // Second LLM call - after tool execution
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-1', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'The tool executed successfully!' },
+            { type: 'text-end', id: 'text-1' },
+            {
+              type: 'finish',
+              finishReason: 'stop',
+              usage: { inputTokens: 15, outputTokens: 10, totalTokens: 25 },
+            },
+          ]),
+          rawCall: { rawPrompt: [], rawSettings: {} },
+          warnings: [],
+        };
       },
     });
 

@@ -8,8 +8,8 @@
   "dependencies": {
     "@mastra/core": "1.66.0",
     "@mastra/mcp": "1.17.3",
-    "@modelcontextprotocol/sdk": "1.32.1",
-    "zod": "4.5.4"
+    "@modelcontextprotocol/sdk": "1.32.2",
+    "zod": "4.6.7"
   },
   "devDependencies": {
     "@types/node": "22.20.5",

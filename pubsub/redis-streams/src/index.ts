@@ -948,7 +948,11 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
    */
   override async trimTopic(
     topic: string,
-    { runId, producedBefore }: { runId: string; producedBefore?: number },
+    {
+      runId,
+      producedBefore,
+      retainTerminalEvents,
+    }: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
   ): Promise<void> {
     if (this.#closed) return;
     try {
@@ -963,9 +967,15 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
           try {
             const event = JSON.parse(entry.message.event ?? '{}') as {
               runId?: string;
-              data?: { producedAt?: unknown; pinned?: unknown };
+              data?: { type?: string; status?: string; producedAt?: unknown; pinned?: unknown };
             };
             if (event.runId !== runId) continue;
+            if (
+              retainTerminalEvents &&
+              event.data?.status !== 'suspended' &&
+              ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type ?? '')
+            )
+              continue;
             if (producedBefore !== undefined) {
               const producedAt = event.data?.producedAt;
               if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;

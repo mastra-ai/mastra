@@ -34,6 +34,7 @@ export type {
   ChannelConnectOAuth,
   ChannelConnectResult,
   ChannelContext,
+  ChannelErrorContext,
   ChannelHandler,
   ChannelHandlerConfig,
   ChannelHandlerContext,

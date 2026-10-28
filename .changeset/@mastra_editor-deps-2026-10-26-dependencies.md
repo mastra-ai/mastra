@@ -1,0 +1,9 @@
+---
+'@mastra/editor': patch
+---
+dependencies updates:
+  - Updated dependency [`@composio/core@^0.18.1` ↗︎](https://www.npmjs.com/package/@composio/core/v/0.18.1) (from `^0.18.0`, in `dependencies`)
+  - Updated dependency [`@composio/mastra@^0.10.6` ↗︎](https://www.npmjs.com/package/@composio/mastra/v/0.10.6) (from `^0.10.2`, in `dependencies`)
+  - Updated dependency [`@hono/node-server@^2.1.3` ↗︎](https://www.npmjs.com/package/@hono/node-server/v/2.1.3) (from `^2.0.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`hono@^4.13.13` ↗︎](https://www.npmjs.com/package/hono/v/4.13.13) (from `^4.13.7`, in `devDependencies`)

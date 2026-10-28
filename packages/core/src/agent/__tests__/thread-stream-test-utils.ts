@@ -68,11 +68,21 @@ export class LeasePubSub extends PubSub implements LeaseProvider {
   }
   override async trimTopic(
     topic: string,
-    { runId, producedBefore }: { runId: string; producedBefore?: number },
+    {
+      runId,
+      producedBefore,
+      retainTerminalEvents,
+    }: { runId: string; producedBefore?: number; retainTerminalEvents?: boolean },
   ): Promise<void> {
     this.#retained.set(
       topic,
-      (this.#retained.get(topic) ?? []).filter(event => !trimMatches(event, runId, producedBefore)),
+      (this.#retained.get(topic) ?? []).filter(
+        event =>
+          (retainTerminalEvents &&
+            event.data?.status !== 'suspended' &&
+            ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type)) ||
+          !trimMatches(event, runId, producedBefore),
+      ),
     );
   }
   retainedTopics(): string[] {
@@ -182,7 +192,7 @@ export async function collectThread(
 ) {
   const subscription = await runtime.subscribeToThread(
     harness.agent,
-    { threadId: harness.threadId, resourceId: harness.resourceId },
+    { threadId: harness.threadId, resourceId: harness.resourceId, withRunStatus: true },
     pubsub,
   );
   const collected: Array<{ type: string }> = [];

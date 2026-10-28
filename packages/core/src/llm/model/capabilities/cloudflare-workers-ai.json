@@ -75,15 +75,6 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "@cf/nvidia/nemotron-3-120b-a12b": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high"]
-      }
-    ],
     "@cf/google/gemma-4-26b-a4b-it": [
       {
         "type": "toggle"
@@ -98,28 +89,25 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "@cf/openai/gpt-oss-120b": [
+    "@cf/moonshotai/kimi-k2.6": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "high"]
       }
     ],
-    "@cf/openai/gpt-oss-20b": [
+    "@cf/nvidia/nemotron-3-120b-a12b": [
+      {
+        "type": "toggle"
+      },
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["low", "high"]
       }
     ],
     "@cf/zai-org/glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "@cf/zai-org/glm-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "max"]
       }
     ],
     "@cf/zai-org/glm-4.7-flash": [
@@ -133,10 +121,22 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "@cf/moonshotai/kimi-k2.6": [
+    "@cf/zai-org/glm-5.2": [
       {
         "type": "effort",
-        "values": ["none", "high"]
+        "values": ["none", "high", "max"]
+      }
+    ],
+    "@cf/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "@cf/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ]
   }

@@ -160,6 +160,16 @@ describe('InMemorySchedulesStorage', () => {
       const due = await storage.listDueSchedules(10_000, 2);
       expect(due.map(s => s.id)).toEqual(['s1', 's2']);
     });
+
+    it('returns the earliest active schedule first when limited to one row', async () => {
+      await storage.createSchedule(makeSchedule({ id: 's3', nextFireAt: 3_000 }));
+      await storage.createSchedule(makeSchedule({ id: 's1', nextFireAt: 1_000 }));
+      await storage.createSchedule(makeSchedule({ id: 's2', nextFireAt: 2_000 }));
+      await storage.createSchedule(makeSchedule({ id: 'paused', nextFireAt: 500, status: 'paused' }));
+
+      const next = await storage.listDueSchedules(Number.MAX_SAFE_INTEGER, 1);
+      expect(next.map(s => s.id)).toEqual(['s1']);
+    });
   });
 
   describe('updateSchedule', () => {

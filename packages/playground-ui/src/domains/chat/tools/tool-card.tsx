@@ -57,7 +57,7 @@ const stripPrefix = (toolName: string, prefix: string): string =>
 /** Its own workflow run scope, so a streaming workflow result can drive a live graph inside the card. */
 export const ToolCard = (props: ToolCardProps) => {
   return (
-    <PlaygroundWorkflowRunProvider workflowId={''} withoutTimeTravel>
+    <PlaygroundWorkflowRunProvider workflowId="" withoutTimeTravel>
       <ToolCardInner {...props} />
     </PlaygroundWorkflowRunProvider>
   );

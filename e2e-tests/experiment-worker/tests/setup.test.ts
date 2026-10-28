@@ -1,5 +1,6 @@
 import { access } from 'node:fs/promises';
 import { describe, expect, inject, test } from 'vitest';
+import { E2E_TAG } from '../../_local-registry-setup/publish-roots.js';
 import { setupScenarioId } from '../scenarios/index.js';
 
 async function expectDirectory(path: string) {
@@ -11,7 +12,7 @@ describe('experiment worker E2E setup', () => {
     const registry = inject('registry');
     const expectedMode = process.env.MASTRA_E2E_REGISTRY_STORAGE ? 'published' : 'local';
 
-    expect(inject('tag')).toBe(process.env.MASTRA_E2E_REGISTRY_TAG ?? 'experiment-worker-e2e-test');
+    expect(inject('tag')).toBe(E2E_TAG);
     expect(inject('registryMode')).toBe(expectedMode);
     expect(registry).toMatch(/^http:\/\/localhost:\d+$/);
     expect(await fetch(`${registry}/-/ping`).then(response => response.ok)).toBe(true);
