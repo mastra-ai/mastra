@@ -88,7 +88,7 @@ export const getFollowTarget = ({
   viewportElement: HTMLElement;
 }) => {
   const end = getMaxScroll(viewportElement);
-  const lastRow = items.at(-1)?.[1].element;
+  const lastRow = items.findLast(([, item]) => item.element.getClientRects().length > 0)?.[1].element;
   if (!lastRow || !contentElement) return end;
 
   const contentBottom = getRelativeTop(contentElement, viewportElement) + contentElement.getBoundingClientRect().height;

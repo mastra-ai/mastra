@@ -529,6 +529,10 @@ const stubLayout = (tops: Record<string, number>) => {
     const top = this.dataset.messageId ? tops[this.dataset.messageId] : undefined;
     return createRect({ top: top ?? 0 });
   });
+  vi.spyOn(HTMLElement.prototype, 'getClientRects').mockImplementation(function () {
+    const rect = this.getBoundingClientRect();
+    return Object.assign([rect], { item: (index: number) => (index === 0 ? rect : null) });
+  });
 };
 
 const getContent = (): HTMLElement => {
