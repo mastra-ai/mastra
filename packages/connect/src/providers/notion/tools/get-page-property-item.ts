@@ -111,13 +111,12 @@ export function getPagePropertyItemTool(proxy: PlatformProxy) {
           });
         }
         return parsed.data;
-      } else {
-        throw new platformProxy.ActionError({
-          type: 'unexpected_response',
-          message: 'Unexpected response object type from Notion API',
-          object_type: String(objectType),
-        });
       }
+      throw new platformProxy.ActionError({
+        type: 'unexpected_response',
+        message: 'Unexpected response object type from Notion API',
+        object_type: String(objectType),
+      });
     },
   });
 }

@@ -39,7 +39,7 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+    "laguna-s-2.1": [
       {
         "type": "toggle"
       }
@@ -53,25 +53,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "deepseek-v4-flash-0731": [
-      {
-        "type": "toggle"
-      },
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "glm-5.3-flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
-      }
-    ],
-    "muse-glimmer-30b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "mimo-v2.6-pro-rl": [
@@ -84,19 +75,16 @@
         "type": "toggle"
       }
     ],
-    "glm-5.2": [
+    "qwen3.8-27b": [
       {
-        "type": "effort",
-        "values": ["none", "high", "max"]
-      }
-    ],
-    "qwen3.8-flash-next": [
+        "type": "toggle"
+      },
       {
         "type": "effort",
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.x-menthol": [
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
       {
         "type": "toggle"
       }
@@ -107,9 +95,26 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "glm-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "max"]
+      }
+    ],
     "minimax-m3": [
       {
         "type": "toggle"
+      }
+    ],
+    "glm-5.x-menthol": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "qwen3.8-flash-next": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ],
     "mimo-v2.6-flash-rl": [
@@ -117,18 +122,13 @@
         "type": "toggle"
       }
     ],
-    "laguna-s-2.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "qwen3.8-27b": [
+    "deepseek-v4-flash-0731": [
       {
         "type": "toggle"
       },
       {
         "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

@@ -217,16 +217,14 @@ describe('ThreadTrace', () => {
       expect(getRow('trace-a').dataset.active).toBeUndefined();
     });
 
-    it('navigates prev/next within the same trace', async () => {
+    it('has no prev/next buttons, since the span tree already navigates', async () => {
       renderView();
       await screen.findByText('Recipe lookup');
       fireEvent.click(screen.getByText('Chef agent run'));
-      await screen.findByRole('button', { name: 'Go to next span' });
+      await screen.findByRole('button', { name: 'Close span' });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Go to next span' }));
-      await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a-tool;none'));
-      fireEvent.click(screen.getByRole('button', { name: 'Go to previous span' }));
-      await waitFor(() => expect(screen.getByTestId('root-state').textContent).toBe('trace-a/span-a;none'));
+      expect(screen.queryByRole('button', { name: 'Go to next span' })).toBeNull();
+      expect(screen.queryByRole('button', { name: 'Go to previous span' })).toBeNull();
     });
   });
 

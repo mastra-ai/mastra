@@ -152,12 +152,10 @@ export async function processWorkflowLoop(
     } else {
       await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
     }
+  } else if (loopCondition) {
+    await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
   } else {
-    if (loopCondition) {
-      await pubsub.publish('workflows', { type: 'workflow.step.run', runId, data: loopAgainData });
-    } else {
-      await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
-    }
+    await pubsub.publish('workflows', { type: 'workflow.step.end', runId, data: loopEndData });
   }
 }
 

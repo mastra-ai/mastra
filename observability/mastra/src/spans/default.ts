@@ -312,11 +312,10 @@ function getOrCreateTraceId(options: CreateSpanOptions<SpanType>): string {
   if (options.traceId) {
     if (isValidTraceId(options.traceId)) {
       return options.traceId;
-    } else {
-      console.error(
-        `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
-      );
     }
+    console.error(
+      `[Mastra Tracing] Invalid traceId: must be 1-32 hexadecimal characters, got "${options.traceId}". Generating new trace ID.`,
+    );
   }
   return generateTraceId();
 }

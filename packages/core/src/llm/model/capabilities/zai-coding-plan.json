@@ -31,9 +31,10 @@
         "type": "toggle"
       }
     ],
-    "glm-4.7": [
+    "glm-5.3": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ],
     "glm-5.2": [
@@ -45,13 +46,12 @@
         "values": ["high", "max"]
       }
     ],
-    "glm-5.3-highspeed": [
+    "glm-4.7": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "glm-5.3": [
+    "glm-5.3-highspeed": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

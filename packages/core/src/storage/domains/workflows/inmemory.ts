@@ -1,4 +1,4 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../../../workflows';
 import { normalizePerPage } from '../../base';
 import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
 import type {
@@ -190,6 +190,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return true;
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.workflows.clear();
     this.db.runOwners.clear();
@@ -375,6 +379,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     createdAt,
     updatedAt,
     fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -383,11 +388,15 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     createdAt?: Date;
     updatedAt?: Date;
     fence?: RunFence;
-  }): Promise<void> {
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
     this.assertFence(fence, runId, 'persistWorkflowSnapshot');
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
     const existing = this.db.workflows.get(key);
+    if (existing?.snapshot && !matchesExpectedWorkflowStatus(this.snapshotStatus(existing), expectedStatus)) {
+      return false;
+    }
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
@@ -403,6 +412,23 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     this.db.workflows.set(key, data);
+    return true;
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    const run = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
+    return run?.snapshot ? (this.snapshotStatus(run) ?? null) : null;
+  }
+
+  private snapshotStatus(run: StorageWorkflowRun): WorkflowRunStatus | undefined {
+    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    return snapshot?.status;
   }
 
   async loadWorkflowSnapshot({

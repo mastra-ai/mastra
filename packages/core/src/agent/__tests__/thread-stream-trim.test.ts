@@ -85,7 +85,7 @@ describe('thread topic trim', () => {
     expect(entriesFor('trim-run-1').length).toBeGreaterThan(0);
     run.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-1')).toEqual([]);
+    expect(entriesFor('trim-run-1').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 
   it('keeps a failed run for live readers, then deletes it', async () => {
@@ -103,7 +103,7 @@ describe('thread topic trim', () => {
       vi.useRealTimers();
     }
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-failed')).toEqual([]);
+    expect(entriesFor('trim-run-failed').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 
   it('does not trim when the agent has no storage', async () => {
@@ -129,7 +129,7 @@ describe('thread topic trim', () => {
     expect(nextEntries.length).toBeGreaterThan(0);
     release();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-first')).toEqual([]);
+    expect(entriesFor('trim-run-first').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
     expect(entriesFor('trim-run-next')).toEqual(nextEntries);
   });
 
@@ -153,7 +153,10 @@ describe('thread topic trim', () => {
     await restarted.registered;
     restarted.complete();
     await waitFor(() => trim.mock.calls.length === 2);
-    expect(entriesFor('trim-run-after-restart')).toEqual([]);
+    expect(entriesFor('trim-run-after-restart').map(event => event.data.type)).toEqual([
+      'run-registered',
+      'run-completed',
+    ]);
     expect(entriesFor('trim-run-suspended')).toEqual(suspendedEntries);
   });
 
@@ -169,7 +172,11 @@ describe('thread topic trim', () => {
     await resumed.registered;
     resumed.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-resumed')).toEqual([]);
+    expect(entriesFor('trim-run-resumed').map(event => event.data.type)).toEqual([
+      'run-registered',
+      'run-registered',
+      'run-completed',
+    ]);
   });
 
   it('keeps a run held by another runtime on the same pubsub', async () => {
@@ -182,11 +189,11 @@ describe('thread topic trim', () => {
     await done.registered;
     done.complete();
     await waitFor(() => trim.mock.calls.length === 1);
-    expect(entriesFor('trim-run-other')).toEqual([]);
+    expect(entriesFor('trim-run-other').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
     expect(entriesFor('trim-run-held')).toEqual(heldEntries);
 
     held.complete();
     await waitFor(() => trim.mock.calls.length === 2);
-    expect(entriesFor('trim-run-held')).toEqual([]);
+    expect(entriesFor('trim-run-held').map(event => event.data.type)).toEqual(['run-registered', 'run-completed']);
   });
 });

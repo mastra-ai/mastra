@@ -60,6 +60,7 @@ export class MastraGateway extends MastraModelGateway {
         name: 'Gateway',
         gateway: 'mastra',
         models: [...models],
+        modelReleaseDates: openrouterConfig?.modelReleaseDates,
         docUrl: 'https://mastra.ai/docs/gateway',
       },
     };

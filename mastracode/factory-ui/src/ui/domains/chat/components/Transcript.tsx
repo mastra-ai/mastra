@@ -19,7 +19,7 @@ import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
 import { MessageBubble } from './MessageBubble';
-import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -271,12 +271,9 @@ function TranscriptItem({
 }
 
 function NoticeCard({ entry }: { entry: NoticeEntry }) {
+  if (entry.error) return <RunErrorNotice error={entry.error} entryId={entry.id} />;
   return (
-    <Notice
-      className="my-2"
-      variant={entry.level === 'error' ? 'destructive' : 'info'}
-      action={entry.action === 'provider-login' ? <ProviderReconnectAction /> : undefined}
-    >
+    <Notice className="my-2" variant={entry.level === 'error' ? 'destructive' : 'info'}>
       <MarkdownRenderer className="text-current">{entry.text}</MarkdownRenderer>
     </Notice>
   );

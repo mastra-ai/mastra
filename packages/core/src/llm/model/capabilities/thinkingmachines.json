@@ -62,32 +62,7 @@
     "zai-org/GLM-5.3:peft:262144"
   ],
   "reasoning": {
-    "openai/gpt-oss-120b:peft:131072": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "openai/gpt-oss-20b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3-Flash:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/GLM-5.3:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "thinkingmachines/Inkling-Small:peft:262144": [
+    "thinkingmachines/Inkling:peft:262144": [
       {
         "type": "toggle"
       },
@@ -105,7 +80,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "thinkingmachines/Inkling-Small": [
+    "thinkingmachines/Inkling": [
       {
         "type": "toggle"
       },
@@ -114,7 +89,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "thinkingmachines/Inkling": [
+    "thinkingmachines/Inkling-Small:peft:262144": [
       {
         "type": "toggle"
       },
@@ -132,7 +107,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "thinkingmachines/Inkling:peft:262144": [
+    "thinkingmachines/Inkling-Small": [
       {
         "type": "toggle"
       },
@@ -141,47 +116,17 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16": [
+    "deepseek-ai/DeepSeek-V3.1": [
       {
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16:peft:262144": [
+    "deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144": [
       {
         "type": "toggle"
       }
     ],
-    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16:peft:262144": [
+    "deepseek-ai/DeepSeek-V4.1-Flash:peft:262144": [
       {
         "type": "toggle"
       }
@@ -196,47 +141,7 @@
         "type": "toggle"
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash-1017:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-397B-A17B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-397B-A17B:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-4B:peft:262144": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.6-35B-A3B:peft:262144": [
+    "Qwen/Qwen3-8B": [
       {
         "type": "toggle"
       }
@@ -246,12 +151,7 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3.5-4B": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.6-27B": [
+    "Qwen/Qwen3.6-35B-A3B": [
       {
         "type": "toggle"
       }
@@ -261,7 +161,107 @@
         "type": "toggle"
       }
     ],
-    "Qwen/Qwen3-8B": [
+    "Qwen/Qwen3.5-4B:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-35B-A3B:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-397B-A17B:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.6-27B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-4B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Nano-30B-A3B-BF16": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Ultra-550B-A55B-BF16:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Lightning-30B-A3B-BF16:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-BF16:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL-120B-A12B-BF16": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.3-Flash:peft:262144": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b:peft:131072": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "openai/gpt-oss-20b": [
       {
         "type": "toggle"
       }

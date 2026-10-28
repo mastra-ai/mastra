@@ -701,6 +701,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modular',
+          label: 'Modular',
+        },
+        {
+          type: 'doc',
           id: 'providers/moonshotai',
           label: 'Moonshot AI',
         },
@@ -713,6 +718,16 @@ const sidebars = {
           type: 'doc',
           id: 'providers/morph',
           label: 'Morph',
+        },
+        {
+          type: 'doc',
+          id: 'providers/munito',
+          label: 'Munito AI',
+        },
+        {
+          type: 'doc',
+          id: 'providers/munito-eu',
+          label: 'Munito AI (EU)',
         },
         {
           type: 'doc',

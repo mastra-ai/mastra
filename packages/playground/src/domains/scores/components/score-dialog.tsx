@@ -173,7 +173,7 @@ export function ScoreDialog({
                 score?.reason ||
                 (isCodeBased ? 'N/A — code-based scorer does not generate a reason' : 'N/A — step not configured')
               }
-              simplified={true}
+              simplified
             />
 
             <SideDialog.CodeSection
@@ -195,7 +195,7 @@ export function ScoreDialog({
                 score?.preprocessPrompt ||
                 (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
               }
-              simplified={true}
+              simplified
             />
 
             <SideDialog.CodeSection
@@ -205,7 +205,7 @@ export function ScoreDialog({
                 score?.analyzePrompt ||
                 (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
               }
-              simplified={true}
+              simplified
             />
 
             <SideDialog.CodeSection
@@ -215,7 +215,7 @@ export function ScoreDialog({
                 score?.generateScorePrompt ||
                 (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
               }
-              simplified={true}
+              simplified
             />
 
             <SideDialog.CodeSection
@@ -225,7 +225,7 @@ export function ScoreDialog({
                 score?.generateReasonPrompt ||
                 (isCodeBased ? 'N/A — code-based scorer does not use prompts' : 'N/A — step not configured')
               }
-              simplified={true}
+              simplified
             />
           </div>
         </SideDialog.Content>

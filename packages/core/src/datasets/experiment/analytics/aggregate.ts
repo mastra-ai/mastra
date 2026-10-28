@@ -107,9 +107,8 @@ export function isRegression(
     // Regression if score dropped below threshold
     // delta < -threshold means score dropped by more than threshold
     return delta < -threshold;
-  } else {
-    // Regression if score increased above threshold
-    // delta > threshold means score increased by more than threshold
-    return delta > threshold;
   }
+  // Regression if score increased above threshold
+  // delta > threshold means score increased by more than threshold
+  return delta > threshold;
 }

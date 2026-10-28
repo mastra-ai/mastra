@@ -7,8 +7,7 @@ import { hasTraceUsageColumn, isTraceUsageColumn } from '../../trace-list-column
 import type { TraceColumnPreferences } from '../../trace-list-columns';
 import type { SpanTab, TraceDatePreset } from '../../types';
 import type { TraceSpanView } from '../trace-data-panel-view';
-import type { TracesFilters, TracesSelection, TracesSortDirection } from './traces-explorer-actions';
-import type { DataListSort } from '@/ds/components/DataList';
+import type { TracesFilters, TracesSelection, TracesSort } from './traces-explorer-actions';
 
 export type TracesExplorerScope = { entityId: string; entityType?: EntityType };
 
@@ -38,6 +37,10 @@ export type TracesConfigContextValue = {
   /** The thread rows API is on, so the host can offer a threads view next to the traces list. */
   withThreadQuery: boolean;
   withRootDuration: boolean;
+  /** Trace rows carry the root span's time to first chunk, so the TTFC column can be shown. */
+  withTimeToFirstChunk: boolean;
+  /** Trace queries can be ordered by the root span's time to first chunk. */
+  withTimeToFirstChunkSort: boolean;
   /** The server supports delta polling, so auto-refresh merges new traces instead of reloading pages. */
   withDeltaPolling: boolean;
   /** Whether field discovery should run: the server supports it and the trace query API is on. */
@@ -93,8 +96,8 @@ export type TracesListContextValue = Pick<
   | 'refetch'
   | 'autoRefetch'
 > & {
-  sortDirection: TracesSortDirection;
-  onSortChange: (direction: DataListSort) => void;
+  sort: TracesSort;
+  onSortChange: (next: TracesSort) => void;
 };
 
 export type TracesColumnsContextValue = ReturnType<typeof useTraceColumnPreferences>;
@@ -125,11 +128,11 @@ export const useTracesListFetching = () => {
 };
 export const useTracesColumns = () => useRequired(TracesColumnsContext, 'useTracesColumns');
 
-const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
-const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
+export const CHECKING_USAGE_REASON = 'Checking whether this storage supports usage data.';
+export const UNSUPPORTED_USAGE_REASON = 'This observability store does not support token and cost metrics.';
 
 export type TraceUsageColumns = {
-  /** Column preferences with the usage columns removed when the store can't serve them. */
+  /** Column preferences without the columns the store can't serve (usage, time to first chunk). */
   displayedPreferences: TraceColumnPreferences;
   /** Whether usage should be fetched: metrics are supported and a usage column is visible. */
   usageEnabled: boolean;
@@ -138,11 +141,20 @@ export type TraceUsageColumns = {
 
 export const useTraceUsageColumns = (): TraceUsageColumns => {
   const { preferences } = useTracesColumns();
-  const { metricsSupport } = useTracesConfig();
+  const { metricsSupport, withTimeToFirstChunk, isCapabilitiesLoading } = useTracesConfig();
   const unavailable = !metricsSupport.isLoading && !metricsSupport.supported;
-  const displayedPreferences = unavailable
-    ? { ...preferences, visibleColumns: preferences.visibleColumns.filter(column => !isTraceUsageColumn(column)) }
-    : preferences;
+  const timeToFirstChunkUnavailable = !isCapabilitiesLoading && !withTimeToFirstChunk;
+  const displayedPreferences =
+    unavailable || timeToFirstChunkUnavailable
+      ? {
+          ...preferences,
+          visibleColumns: preferences.visibleColumns.filter(
+            column =>
+              !(unavailable && isTraceUsageColumn(column)) &&
+              !(timeToFirstChunkUnavailable && column === 'timeToFirstChunk'),
+          ),
+        }
+      : preferences;
   return {
     displayedPreferences,
     usageEnabled: !unavailable && !metricsSupport.isLoading && hasTraceUsageColumn(displayedPreferences),
