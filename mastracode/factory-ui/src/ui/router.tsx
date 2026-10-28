@@ -22,7 +22,7 @@ import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPa
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
-import { AppLayout, sessionPageHandle } from './layouts/AppLayout';
+import { AppLayout, sessionLoadingBoundary } from './layouts/AppLayout';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
@@ -160,15 +160,15 @@ export function createAppRoutes(): RouteObject[] {
                   errorElement: <AppRouteErrorPage />,
                   children: [
                     { index: true, element: <FactoryHomeRedirect /> },
-                    { path: 'workspaces/:sessionId', element: <NewPage />, handle: sessionPageHandle },
+                    { path: 'workspaces/:sessionId', element: <NewPage />, handle: sessionLoadingBoundary },
                     {
                       path: 'workspaces/:sessionId/threads/:threadId',
                       element: <ThreadPage />,
-                      handle: sessionPageHandle,
+                      handle: sessionLoadingBoundary,
                     },
-                    { path: 'user/new/:draftSessionId', element: <NewPage />, handle: sessionPageHandle },
-                    { path: 'user/threads/:threadId', element: <ThreadPage />, handle: sessionPageHandle },
-                    { path: 'new', element: <NewPage />, handle: sessionPageHandle },
+                    { path: 'user/new/:draftSessionId', element: <NewPage />, handle: sessionLoadingBoundary },
+                    { path: 'user/threads/:threadId', element: <ThreadPage />, handle: sessionLoadingBoundary },
+                    { path: 'new', element: <NewPage />, handle: sessionLoadingBoundary },
                     { path: 'new-factory', element: <CreateFactoryPage /> },
                     { path: 'work', element: <WorkBoardPage /> },
                     { path: 'review', element: <ReviewBoardPage /> },

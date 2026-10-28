@@ -36,8 +36,8 @@ function SidebarShortcuts() {
   return null;
 }
 
-/** Route `handle` for session pages: they share one loading boundary, so moving between them never shows the loader. */
-export const sessionPageHandle = Symbol('session page');
+/** Route `handle` putting session pages in one loading boundary: moving between them keeps the current page until the next one is ready. */
+export const sessionLoadingBoundary = Symbol('session loading boundary');
 
 // Navigations run in a transition, where a boundary already showing a page keeps
 // it instead of the loader, so each page needs its own boundary.
@@ -46,7 +46,7 @@ function RoutedPage() {
 
   return (
     <Suspense
-      key={page?.handle === sessionPageHandle ? 'session' : page?.id}
+      key={page?.handle === sessionLoadingBoundary ? 'session' : page?.id}
       fallback={
         <div className="flex flex-1 items-center justify-center transition-opacity delay-150 starting:opacity-0">
           <BrandLoader size="lg" aria-label="Loading page" />
