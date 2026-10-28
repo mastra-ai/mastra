@@ -90,7 +90,7 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
   });
 
   it('emits the fallback call before a result that arrives without a final tool-call', async () => {
-    const { chunks } = await run([
+    const { chunks, output } = await run([
       [
         ...head,
         { type: 'tool-input-start', id: 'call-x', toolName: 'lookup', providerExecuted: true },
@@ -104,6 +104,15 @@ describeForAllEngines('AIMock loop scenario: streamed tool call fallback', engin
     const types = chunks.filter(c => c.payload?.toolCallId === 'call-x').map(c => c.type);
     expect(types.filter(t => t === 'tool-call' || t === 'tool-result')).toEqual(['tool-call', 'tool-result']);
     expect(chunks.find(c => c.type === 'tool-call')?.payload.args).toEqual({ q: 'x' });
+    // Ported from the AI SDK tools suite (PTC regression): the stream must not stall waiting
+    // for a final call, the provider result passes through, and the local tool never runs.
+    expect(chunks.find(c => c.type === 'tool-result')?.payload).toMatchObject({
+      result: { hit: 1 },
+      providerExecuted: true,
+    });
+    expect(executed).toEqual([]);
+    expect(await output.text).toBe('done');
+    expect(chunks.some(c => c.type === 'finish')).toBe(true);
   });
 
   it('runs only the retried call when a no-args input stream fails and is retried with the same id', async () => {

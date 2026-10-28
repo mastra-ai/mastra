@@ -22,7 +22,6 @@ import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
 import { streamObjectTests } from './test-utils/streamObject';
 import { toolMediaTests } from './test-utils/tool-media';
-import { toolsTests } from './test-utils/tools';
 import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
 
 // The agentic loop now runs on the evented engine, which requires a Mastra
@@ -70,7 +69,6 @@ describe('Loop Tests', () => {
 
     optionsTests({ loopFn, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn, runId: 'test-run-id' });
-    toolsTests({ loopFn, runId: 'test-run-id' });
     toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
 
     streamObjectTests({ loopFn, runId: 'test-run-id' });
@@ -81,8 +79,6 @@ describe('Loop Tests', () => {
 
     toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
   });
-
-  // toolsTestsV5({ executeFn: execute, runId });
 
   // optionsTestsV5({ executeFn: execute, runId });
 
