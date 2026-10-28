@@ -63,9 +63,9 @@ new PlatformFactorySandbox({
 })
 ```
 
-Compare `factoryId`, not `factoryName`: names can be edited and are not unique.
+Compare `factoryId`, not `factoryName`: names can be edited and aren't unique.
 
-Platform and Docker apply `env` only when they provision a sandbox. A sandbox that resumes keeps the env it started with. If you remove a credential from some factories, recreate their running sandboxes so the credential doesn't stay in them.
+Platform and Docker apply `env` only when they provision a sandbox. A sandbox that resumes keeps the environment it started with. If you remove a credential from some factories, recreate their running sandboxes so the credential doesn't stay in them.
 
 ## Default sandbox
 
@@ -206,7 +206,7 @@ Everything Factory knows about the session, passed to `create`, `template` and t
     name: 'factoryName',
     type: 'string',
     description:
-      'Display name of the factory, for logs and readable config. Names can be edited and are not unique, so scope secrets by factoryId.',
+      'Display name of the factory, for logs and readable config. Names can be edited and two factories can share one, so scope secrets by factoryId.',
     isOptional: true,
   },
   { name: 'repoFullName', type: 'string', description: 'owner/name of the session repository.', isOptional: true },
