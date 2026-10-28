@@ -269,10 +269,11 @@ describe('defineBoard', () => {
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
     expect(workBoard.phaseKind('intake')).toBe('resting');
     expect(workBoard.roleForPhase('triage')).toBe('triage');
-    expect(workBoard.roleForPhase('planning')).toBe('plan');
+    expect(workBoard.roleForPhase('planning')).toBe('work');
     expect(workBoard.roleForPhase('execute')).toBe('work');
     expect(workBoard.roleForPhase('review')).toBe('work');
-    expect(workBoard.phaseForRole('work')).toBe('execute');
+    // The first phase of the `work` context; a run started on a resting Work card uses its role's lane instead.
+    expect(workBoard.phaseForRole('work')).toBe('planning');
     expect(workBoard.isTerminal('done')).toBe(true);
     expect(workBoard.isTerminal('canceled')).toBe(true);
   });
@@ -283,10 +284,12 @@ describe('defineBoard', () => {
       expect(workBoard.isTerminal(stage), `${stage} terminal`).toBe(isTerminalFactoryRuleStage([stage]));
       expect(workBoard.isWorking(stage), `${stage} working`).toBe(isWorkingFactoryRuleStage(stage));
     }
+    // Each role's lane is a working phase. Planning runs in the `work` context; `plan` stays
+    // as the old role name for Planning's lane, so its phase reports the `work` context.
     for (const [role, stage] of Object.entries(FACTORY_ROLE_STAGES)) {
       const board = role === 'review' ? reviewBoard : workBoard;
-      expect(board.phaseForRole(role), `lane for ${role}`).toBe(stage);
-      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role);
+      expect(board.isWorking(stage), `lane for ${role}`).toBe(true);
+      expect(board.roleForPhase(stage), `role for ${stage}`).toBe(role === 'plan' ? 'work' : role);
     }
     for (const stage of Object.keys(reviewBoard.phases)) {
       expect(reviewBoard.isTerminal(stage)).toBe(isTerminalFactoryRuleStage([stage]));

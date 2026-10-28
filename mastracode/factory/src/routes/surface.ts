@@ -16,6 +16,7 @@ import { FactoryDispatchError } from '../rules/dispatch-errors.js';
 import type { FactoryBindingPreparationInput } from '../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../rules/start-coordinator.js';
 import { FactoryTransitionService } from '../rules/transition-service.js';
+import { factoryLaneForRole } from '../rules/types.js';
 import {
   createSourceControlSessionLookup,
   ensureFactorySourceSession,
@@ -225,44 +226,41 @@ async function reuseBoundSession(
   };
 }
 
-/** Roles whose sessions a later role may continue in, newest stage first. */
-const INHERITABLE_ROLE_FALLBACK = ['plan', 'triage'];
-
 /**
- * A role running for the first time continues in the card's latest earlier
- * session on the same branch, so a build approved by someone other than the
- * plan's owner keeps the plan's context instead of starting empty. Review is
- * independent by design and never inherits.
+ * Work cards planned before Planning moved into the `work` context hold the
+ * plan's session under `plan`. Building continues in it, on the same branch and
+ * repository a fresh session would use, so those cards keep the plan's context.
  */
-async function inheritEarlierSession(
+async function legacyPlanSession(
   sourceControl: SourceControlStorageHandle,
   input: FactoryBindingPreparationInput,
-  board: { roleForPhase(phase: string): string | undefined } | undefined,
+  boardId: string,
   branch: string,
   projectRepositoryId: string,
 ): Promise<EnsuredFactorySourceSession | undefined> {
-  if (input.role === 'review') return undefined;
-  // The card's linked repository can change after an earlier role ran; only
-  // continue in a session on the repository a fresh session would use.
-  const candidates: string[] = [];
-  for (const entry of [...(input.item.stageHistory ?? [])].reverse()) {
-    const role = board?.roleForPhase(entry.stage);
-    if (role && role !== input.role && role !== 'review' && !candidates.includes(role)) candidates.push(role);
-  }
-  for (const role of INHERITABLE_ROLE_FALLBACK) {
-    if (role !== input.role && !candidates.includes(role)) candidates.push(role);
-  }
-  for (const role of candidates) {
-    const session = await reuseBoundSession(sourceControl, input, role);
-    if (
-      session &&
-      (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
-      session.projectRepositoryId === projectRepositoryId
-    ) {
-      return session;
-    }
+  if (boardId !== 'work' || input.role !== 'work') return undefined;
+  const session = await reuseBoundSession(sourceControl, input, 'plan');
+  if (
+    session &&
+    (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
+    session.projectRepositoryId === projectRepositoryId
+  ) {
+    return session;
   }
   return undefined;
+}
+
+/**
+ * The lane a run started on a resting card moves it to. Work's phases share
+ * contexts, so its roles keep their own lanes: `work` builds and the old `plan`
+ * role plans. Other boards use the first phase that runs in the role's context.
+ */
+function restingExitLane(
+  boardId: string,
+  board: { phaseForRole(role: string): string | undefined } | undefined,
+  role: string,
+): string | undefined {
+  return (boardId === 'work' ? factoryLaneForRole(role) : undefined) ?? board?.phaseForRole(role);
 }
 
 /**
@@ -291,14 +289,15 @@ export async function prepareFactoryRuleBinding(
     // and the Done close-out running in the triage seat must not drag the card back.
     // Both the current phase and the role's lane come from the installed board; an
     // unknown board or phase yields no destination rather than a guessed one.
-    const board = boards.get(boardForWorkItem(input.item));
+    const boardId = boardForWorkItem(input.item);
+    const board = boards.get(boardId);
     const currentStage = input.item.stages.length === 1 ? input.item.stages[0] : undefined;
     const currentKind = currentStage === undefined ? undefined : board?.phaseKind(currentStage);
     const destinationStage =
       currentKind === undefined
         ? undefined
         : currentKind === 'resting'
-          ? board?.phaseForRole(input.role)
+          ? restingExitLane(boardId, board, input.role)
           : currentStage;
     if (!destinationStage) {
       throw new FactoryDispatchError(
@@ -365,7 +364,7 @@ export async function prepareFactoryRuleBinding(
     // subscriptions follow the session's link, and the card names which one.
     const preparedSession =
       boundSession ??
-      (await inheritEarlierSession(sourceControl, input, board, branch, repository.projectRepositoryId)) ??
+      (await legacyPlanSession(sourceControl, input, boardId, branch, repository.projectRepositoryId)) ??
       (await ensureFactorySourceSession({
         sourceControl,
         orgId: input.record.orgId,

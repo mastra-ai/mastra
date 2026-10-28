@@ -296,7 +296,9 @@ const releaseBoard = defineBoard({
 });
 ```
 
-Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `work`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+
+Planning, Building and Review on Work share the `work` session, so the builder keeps the planner's reasoning, branch and sandbox. When the planner moves the card to Building, the build prompt is queued onto its own run. The old `plan` role still names Planning: runs requested or queued for `plan` start Planning in the `work` session, and a card planned before this change keeps using its `plan` session for the build.
 
 Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
@@ -320,7 +322,7 @@ phases: {
 
 Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
 
-- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
+- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
 - `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
 - `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
 

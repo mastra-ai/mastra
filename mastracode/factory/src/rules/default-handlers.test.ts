@@ -732,7 +732,7 @@ describe('built-in board and integration handlers', () => {
     expect(await rule?.(context)).toMatchObject({
       type: 'invokeSkill',
       idempotencyKey: 'delivery-1:factory-plan',
-      role: 'plan',
+      role: 'work',
       skillName: 'factory-plan',
       arguments: 'Work item (https://github.test/acme/repo/issues/42)',
     });

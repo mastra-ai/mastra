@@ -6,6 +6,7 @@ import type {
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
 import { factoryDispatchFailureMetadata } from './dispatch-errors.js';
+import { factoryLaneForRole } from './types.js';
 
 type ApplicabilityRecord = Pick<FactoryDeferredDecisionRecord, 'id' | 'evaluationId' | 'createdAt' | 'decision'>;
 
@@ -51,7 +52,10 @@ export function decisionOvertaken(input: {
   // triage in Intake) is fulfilled, not overtaken, when the card first
   // enters a stage that seat carries — e.g. the Investigate click.
   const board = boardForWorkItem(item);
-  const carriesRole = (stage: string) => resolvePhaseSemantics(boards, board, stage)?.role === role;
+  // Work's roles keep their lanes, so a run decided for the old `plan` role still belongs to Planning.
+  const carriesRole = (stage: string) =>
+    resolvePhaseSemantics(boards, board, stage)?.role === role ||
+    (board === 'work' && factoryLaneForRole(role) === stage);
   const decidedOutsideRole = !item.stageHistory.some(
     entry =>
       new Date(entry.enteredAt).getTime() <= decidedAt &&

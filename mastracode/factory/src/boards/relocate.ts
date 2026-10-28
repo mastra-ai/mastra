@@ -48,10 +48,12 @@ export async function moveCardToBoard({
   const current = boardRegistry.get(currentBoard);
   // Without the board definition we can't tell terminal phases or attached sessions apart, so leave the card alone.
   if (!current) return 'skipped';
-  // Sessions are keyed by the phase's role, not the phase id.
+  // Sessions are keyed by the phase's context, not the phase id. Cards planned before
+  // Planning moved to the `work` context still hold their planner under `plan`.
   const movable = item.stages.every(currentStage => {
     if (current.phases[currentStage]?.kind === 'terminal') return false;
     const role = current.roleForPhase(currentStage);
+    if (currentBoard === 'work' && currentStage === 'planning' && item.sessions.plan !== undefined) return false;
     return role === undefined || item.sessions[role] === undefined;
   });
   if (!movable) return 'skipped';
