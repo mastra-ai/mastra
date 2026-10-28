@@ -34,7 +34,7 @@ export function skillSignalActivation(entry: MessageEntry): SkillActivation | un
 export const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
 export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
-type SignalRowView =
+export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
   | { kind: 'divider'; label: string; title?: string }
   | { kind: 'reminder'; text: string }

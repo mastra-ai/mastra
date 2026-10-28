@@ -107,6 +107,7 @@ describe('resolveBoardToolRule', () => {
     });
     const boards = createBoardRegistry({ boards: [release] });
     expect(resolveBoardToolRule(boards, 'release', 'ship_it')).toBe(onResult);
+    expect(resolveBoardToolRule(boards, 'work', 'factory_record_review_verdict')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'work', 'submit_plan')).toBeTypeOf('function');
     expect(resolveBoardToolRule(boards, 'review', 'submit_plan')).toBeUndefined();
     expect(resolveBoardToolRule(boards, 'release', 'submit_plan')).toBeUndefined();

@@ -56,19 +56,6 @@
     "kimi-k2.5"
   ],
   "reasoning": {
-    "gpt-5-3-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gemini-2.5-pro": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
     "claude-opus-4-7": [
       {
         "type": "effort",
@@ -81,10 +68,14 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gpt-5-4-nano": [
+    "claude-opus-4-6": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
       }
     ],
     "gemini-2.5-flash": [
@@ -106,10 +97,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-haiku-4-5": [
+    "gpt-5-3-codex": [
       {
-        "type": "budget_tokens",
-        "min": 1024
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gemini-3-flash-preview": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-4-nano": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
       }
     ],
     "claude-sonnet-4-6": [
@@ -122,26 +131,17 @@
         "min": 1024
       }
     ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-6": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      },
+    "claude-haiku-4-5": [
       {
         "type": "budget_tokens",
         "min": 1024
       }
     ],
-    "gpt-5-4-mini": [
+    "gemini-2.5-pro": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
       }
     ],
     "gpt-oss-20b": [
@@ -150,7 +150,7 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-3-flash-preview": [
+    "gpt-5-4-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]

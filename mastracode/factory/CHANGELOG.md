@@ -1,5 +1,32 @@
 # @mastra/factory
 
+## 0.26.0-alpha.0
+
+### Minor Changes
+
+- Added custom model provider creation during Factory setup, with immediate provider and model catalog refresh for organization and personal flows. ([#28706](https://github.com/mastra-ai/mastra/pull/28706))
+
+### Patch Changes
+
+- The latest account-related failure card in the Factory web chat now names the credential the session runs on. For example: **Runs on Claude Pro/Max · Shared by the organization**. A rate limit during a work-item review no longer looks like a problem with your own subscription. The line is left out on older failure cards and after the session switches to another model. In both cases, it could name a credential that a retry would not use. ([#28704](https://github.com/mastra-ai/mastra/pull/28704))
+
+  The Slack failure card shows the same line, **Shared by the organization** or **Personal credential**, while the session is still on the model that failed.
+
+  **Provider rate limit reached** now says the provider account hit a rate or usage limit. It no longer suggests a short wait, because providers report a brief burst and a used-up subscription the same way.
+
+  In **Settings → Models**, the personal **Apply to running sessions** button is now **Apply to my running chats**, which is what it switches: work-item runs and teammates' sessions keep their model. When nothing switched, the summary now says **No sessions switched** instead of **No running sessions to switch**.
+
+- More failed-run cards in the Factory web chat now come with a button that fixes them: ([#28695](https://github.com/mastra-ai/mastra/pull/28695))
+
+  - **Request timed out**, **Provider rate limit reached** and **Model provider temporarily unavailable** offer **Continue**, which resumes the run without typing a message. It only appears on the session's latest failure.
+  - **Provider rate limit reached** also offers **Review credentials** and **Change model**, and **Model provider temporarily unavailable** offers **Change model**.
+  - **Model request rejected** and **Model request failed** offer **Change model**.
+  - **Conversation exceeds the model's limit** and **Conversation history rejected** offer **New session**.
+
+  In Slack, every card that offers **Change model** in the web chat now links to the session, and the rate-limit card also links to the credential settings.
+
+  Returning from another thread of a workspace session to its first thread now switches the session back to it, so messages sent there no longer land in the thread you left.
+
 ## 0.25.0
 
 ### Minor Changes
