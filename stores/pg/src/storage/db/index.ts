@@ -1843,8 +1843,9 @@ export class PgDB extends MastraBase {
       const quotedIndexName = `"${parseSqlIdentifier(name, 'index name')}"`;
       const sql = `CREATE ${uniqueStr}INDEX ${concurrentStr}IF NOT EXISTS ${quotedIndexName} ON ${fullTableName} ${methodStr}(${columnsStr})${withStr}${tablespaceStr}${whereStr}`;
 
-      await buildIndex(this.client, schemaName, name, () => this.timedIndexBuild(name, sql));
-      snapshot?.indexes.add(name);
+      if (await buildIndex(this.client, schemaName, name, () => this.timedIndexBuild(name, sql))) {
+        snapshot?.indexes.add(name);
+      }
     } catch (error) {
       throw new MastraError(
         {
@@ -1873,8 +1874,11 @@ export class PgDB extends MastraBase {
   async createIndexFromStatement(indexName: string, sql: string): Promise<void> {
     const snapshot = this.schemaSnapshot;
     if (snapshot?.indexes.has(indexName)) return;
-    await buildIndex(this.client, this.schemaName || 'public', indexName, () => this.timedIndexBuild(indexName, sql));
-    snapshot?.indexes.add(indexName);
+    if (
+      await buildIndex(this.client, this.schemaName || 'public', indexName, () => this.timedIndexBuild(indexName, sql))
+    ) {
+      snapshot?.indexes.add(indexName);
+    }
   }
 
   private async timedIndexBuild(indexName: string, sql: string): Promise<void> {

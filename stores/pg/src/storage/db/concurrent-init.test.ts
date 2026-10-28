@@ -2,6 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { setTimeout as delay } from 'node:timers/promises';
 import { Client, Pool } from 'pg';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
+import type { DbClient } from '../client';
 import { PoolAdapter, RoutingDbClient } from '../client';
 import { WorkflowsPG, workflowSnapshotStatusIndexName, workflowSnapshotThreadIdIndexName } from '../domains/workflows';
 import { PostgresStore } from '../index';
@@ -35,6 +36,29 @@ async function validIndexes(name: string) {
     [name],
   );
   return rows;
+}
+
+function captureIndexStatements(client: DbClient) {
+  const statements: string[] = [];
+  const record = (sql: string) => {
+    if (/^(CREATE|DROP) (UNIQUE )?INDEX/i.test(sql)) statements.push(sql);
+  };
+  const none = client.none.bind(client);
+  client.none = async (...args) => {
+    record(args[0]);
+    return none(...args);
+  };
+  const transaction = client.tx.bind(client);
+  client.tx = callback =>
+    transaction(async tx => {
+      const none = tx.none.bind(tx);
+      tx.none = async (...args) => {
+        record(args[0]);
+        return none(...args);
+      };
+      return callback(tx);
+    });
+  return statements;
 }
 
 beforeAll(() => {
@@ -106,8 +130,77 @@ describe('concurrent first boot (COR-1495)', () => {
     }
   });
 
+  it.each(['statement', 'generated', 'finishes during probe'] as const)(
+    'leaves a pre-existing external %s builder to its owner',
+    async kind => {
+      const name = await schema();
+      await admin.query(`CREATE TABLE "${name}".mastra_favorites ("entityId" text)`);
+      const writer = await admin.connect();
+      const builder = await admin.connect();
+      const pool = new Pool({ connectionString });
+      const client = new RoutingDbClient(new PoolAdapter(pool));
+      const snapshot = await loadSchemaSnapshot(client, name);
+      client.setSchemaSnapshot(snapshot);
+      const db = new PgDB({ client, schemaName: name });
+      let building: Promise<unknown> | undefined;
+      let recovering: Promise<void> | undefined;
+      try {
+        await writer.query('BEGIN');
+        await writer.query(`INSERT INTO "${name}".mastra_favorites VALUES ('held writer')`);
+        building = builder.query(
+          `CREATE INDEX CONCURRENTLY idx_favorites_entity ON "${name}".mastra_favorites ("entityId")`,
+        );
+        void building.catch(() => {});
+        await waitFor(
+          async () =>
+            (
+              await admin.query('SELECT 1 FROM pg_stat_progress_create_index WHERE index_relid = to_regclass($1)', [
+                `"${name}".idx_favorites_entity`,
+              ])
+            ).rows.length > 0,
+        );
+        const statements = captureIndexStatements(client);
+        if (kind === 'finishes during probe') {
+          const oneOrNone = client.oneOrNone.bind(client);
+          client.oneOrNone = async (...args) => {
+            if (args[0].includes('FROM pg_locks')) {
+              await writer.query('COMMIT');
+              await building;
+            }
+            return oneOrNone(...args);
+          };
+        }
+        recovering =
+          kind !== 'generated'
+            ? db.createIndexFromStatement(
+                'idx_favorites_entity',
+                `CREATE INDEX CONCURRENTLY IF NOT EXISTS idx_favorites_entity ON "${name}".mastra_favorites ("entityId")`,
+              )
+            : db.createIndex({ name: 'idx_favorites_entity', table: 'mastra_favorites', columns: ['entityId'] });
+        void recovering.catch(() => {});
+        const result = await Promise.race([recovering.then(() => 'returned'), delay(1000).then(() => 'blocked')]);
+        expect(result).toBe('returned');
+        const finished = kind === 'finishes during probe';
+        expect(snapshot.indexes.has('idx_favorites_entity')).toBe(finished);
+        expect(await validIndexes(name)).toEqual([{ name: 'idx_favorites_entity', valid: finished }]);
+        expect(statements).toEqual([]);
+        await writer.query('COMMIT');
+        await building;
+        expect(await validIndexes(name)).toEqual([{ name: 'idx_favorites_entity', valid: true }]);
+      } finally {
+        await writer.query('ROLLBACK');
+        writer.release();
+        await building?.catch(() => {});
+        await recovering?.catch(() => {});
+        builder.release();
+        await pool.end();
+      }
+    },
+    60000,
+  );
+
   it.each(['finishes', 'is cancelled'] as const)(
-    'waits for an active builder that %s, then leaves a valid index',
+    'skips an active builder that %s and repairs a cancelled build on the next call',
     async outcome => {
       const name = await schema();
       await admin.query(`CREATE TABLE "${name}".items (value text)`);
@@ -136,8 +229,8 @@ describe('concurrent first boot (COR-1495)', () => {
           completed = true;
         });
         void recovery.catch(() => {});
-        await delay(150);
-        expect(completed).toBe(false);
+        await recovery;
+        expect(completed).toBe(true);
         if (outcome === 'is cancelled') {
           await admin.query(`SELECT pg_cancel_backend(pid) FROM pg_stat_activity WHERE application_name = $1`, [
             `${name}_builder`,
@@ -146,7 +239,7 @@ describe('concurrent first boot (COR-1495)', () => {
         }
         await writer.query('COMMIT');
         if (outcome === 'finishes') await building;
-        await recovery;
+        else await db.createIndexFromStatement('item_index', sql);
         expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
       } finally {
         await writer.query('ROLLBACK');
@@ -183,6 +276,217 @@ describe('concurrent first boot (COR-1495)', () => {
       expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
     } finally {
       await Promise.all(pools.map(pool => pool.end()));
+    }
+  }, 60000);
+
+  it('does not drop a peer replacement after observing an abandoned index', async () => {
+    const name = await schema();
+    await admin.query(`CREATE TABLE "${name}".items (value text);
+      CREATE INDEX item_index ON "${name}".items (value)`);
+    await admin.query(`UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)`, [
+      `"${name}".item_index`,
+    ]);
+    const pools = [new Pool({ connectionString }), new Pool({ connectionString })];
+    let release!: () => void;
+    let observed!: () => void;
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const paused = new Promise<void>(resolve => {
+      observed = resolve;
+    });
+    const client = new PoolAdapter(pools[0]!);
+    const statements = captureIndexStatements(client);
+    const transaction = client.tx.bind(client);
+    client.tx = async callback => {
+      observed();
+      await gate;
+      return transaction(callback);
+    };
+    const sql = `CREATE INDEX CONCURRENTLY IF NOT EXISTS item_index ON "${name}".items (value)`;
+    const first = new PgDB({ client, schemaName: name }).createIndexFromStatement('item_index', sql);
+    void first.catch(() => {});
+    try {
+      await paused;
+      await new PgDB({ client: new PoolAdapter(pools[1]!), schemaName: name }).createIndexFromStatement(
+        'item_index',
+        sql,
+      );
+      const replacement = (await admin.query('SELECT to_regclass($1)::oid AS oid', [`"${name}".item_index`])).rows;
+      release();
+      await first;
+      expect(statements).toEqual([]);
+      expect((await admin.query('SELECT to_regclass($1)::oid AS oid', [`"${name}".item_index`])).rows).toEqual(
+        replacement,
+      );
+      expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
+    } finally {
+      release();
+      await first.catch(() => {});
+      await Promise.all(pools.map(pool => pool.end()));
+    }
+  }, 60000);
+
+  it('serializes overlapping repair transactions without dropping a replacement', async () => {
+    const name = await schema();
+    await admin.query(`CREATE TABLE "${name}".items (value text);
+      CREATE INDEX item_index ON "${name}".items (value)`);
+    await admin.query('UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)', [
+      `"${name}".item_index`,
+    ]);
+    const pools = [new Pool({ connectionString, max: 1 }), new Pool({ connectionString, max: 1 })];
+    const clients = pools.map(pool => new PoolAdapter(pool));
+    const statements = clients.map(captureIndexStatements);
+    let acquired!: () => void;
+    let release!: () => void;
+    const locked = new Promise<void>(resolve => {
+      acquired = resolve;
+    });
+    const gate = new Promise<void>(resolve => {
+      release = resolve;
+    });
+    const transaction = clients[0]!.tx.bind(clients[0]);
+    clients[0]!.tx = callback =>
+      transaction(async tx => {
+        const none = tx.none.bind(tx);
+        tx.none = async (...args) => {
+          const result = await none(...args);
+          if (args[0].startsWith('LOCK TABLE')) {
+            acquired();
+            await gate;
+          }
+          return result;
+        };
+        return callback(tx);
+      });
+    const secondTransaction = clients[1]!.tx.bind(clients[1]);
+    let timeouts = 0;
+    clients[1]!.tx = async callback => {
+      try {
+        return await secondTransaction(callback);
+      } catch (error) {
+        if (typeof error === 'object' && error !== null && 'code' in error && error.code === '55P03') timeouts++;
+        throw error;
+      }
+    };
+    const sql = `CREATE INDEX CONCURRENTLY IF NOT EXISTS item_index ON "${name}".items (value)`;
+    const first = new PgDB({ client: clients[0]!, schemaName: name }).createIndexFromStatement('item_index', sql);
+    void first.catch(() => {});
+    let second: Promise<void> | undefined;
+    try {
+      await locked;
+      second = new PgDB({ client: clients[1]!, schemaName: name }).createIndexFromStatement('item_index', sql);
+      void second.catch(() => {});
+      await waitFor(async () => timeouts > 0);
+      expect(statements[1]).toEqual([]);
+      release();
+      await Promise.all([first, second]);
+      expect(statements.flat().filter(sql => sql.startsWith('DROP INDEX'))).toHaveLength(1);
+      expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
+    } finally {
+      release();
+      await Promise.allSettled([first, second]);
+      await Promise.all(pools.map(pool => pool.end()));
+    }
+  }, 60000);
+
+  it.each(['reader', 'maintenance'] as const)(
+    'defers abandoned-index cleanup behind %s activity, then repairs',
+    async activity => {
+      const name = await schema();
+      await admin.query(`CREATE TABLE "${name}".items (value text);
+      CREATE INDEX item_index ON "${name}".items (value)`);
+      await admin.query('UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)', [
+        `"${name}".item_index`,
+      ]);
+      const reader = await admin.connect();
+      const pool = new Pool({ connectionString, max: 1 });
+      const client = new PoolAdapter(pool);
+      const statements = captureIndexStatements(client);
+      const transaction = client.tx.bind(client);
+      let lockTimeouts = 0;
+      client.tx = async callback => {
+        try {
+          return await transaction(callback);
+        } catch (error) {
+          if (typeof error === 'object' && error !== null && 'code' in error && error.code === '55P03') lockTimeouts++;
+          throw error;
+        }
+      };
+      let recovery: Promise<void> | undefined;
+      try {
+        await reader.query('BEGIN');
+        if (activity === 'maintenance') await reader.query(`LOCK TABLE "${name}".items IN SHARE UPDATE EXCLUSIVE MODE`);
+        else await reader.query(`SELECT * FROM "${name}".items`);
+        recovery = new PgDB({ client, schemaName: name }).createIndexFromStatement(
+          'item_index',
+          `CREATE INDEX CONCURRENTLY IF NOT EXISTS item_index ON "${name}".items (value)`,
+        );
+        void recovery.catch(() => {});
+        await waitFor(async () => lockTimeouts > 0);
+        expect(statements).toEqual([]);
+        expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: false }]);
+        const newReader = new Pool({ connectionString, options: '-c statement_timeout=1000' });
+        try {
+          await expect(newReader.query(`SELECT * FROM "${name}".items`)).resolves.toMatchObject({ rows: [] });
+        } finally {
+          await newReader.end();
+        }
+        await reader.query('COMMIT');
+        await recovery;
+        expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
+      } finally {
+        await reader.query('ROLLBACK');
+        reader.release();
+        await recovery?.catch(() => {});
+        await pool.end();
+      }
+    },
+    60000,
+  );
+
+  it('rolls back the repair lock when cancelled before dropping the index', async () => {
+    const name = await schema();
+    await admin.query(`CREATE TABLE "${name}".items (value text);
+      CREATE INDEX item_index ON "${name}".items (value)`);
+    await admin.query('UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)', [
+      `"${name}".item_index`,
+    ]);
+    const pool = new Pool({ connectionString, max: 1, application_name: name });
+    const client = new PoolAdapter(pool);
+    const transaction = client.tx.bind(client);
+    client.tx = callback =>
+      transaction(async tx => {
+        const none = tx.none.bind(tx);
+        tx.none = async (...args) => {
+          const result = await none(...args);
+          if (args[0].startsWith('LOCK TABLE')) await none('SELECT pg_sleep(30)');
+          return result;
+        };
+        return callback(tx);
+      });
+    const sql = `CREATE INDEX CONCURRENTLY IF NOT EXISTS item_index ON "${name}".items (value)`;
+    const db = new PgDB({ client, schemaName: name });
+    const recovery = db.createIndexFromStatement('item_index', sql);
+    void recovery.catch(() => {});
+    try {
+      await waitFor(async () => {
+        const { rows } = await admin.query(
+          "SELECT pid FROM pg_stat_activity WHERE application_name = $1 AND wait_event = 'PgSleep'",
+          [name],
+        );
+        if (!rows.length) return false;
+        await admin.query('SELECT pg_cancel_backend($1)', [rows[0].pid]);
+        return true;
+      });
+      await expect(recovery).rejects.toMatchObject({ code: '57014' });
+      expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: false }]);
+      client.tx = transaction;
+      await db.createIndexFromStatement('item_index', sql);
+      expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
+    } finally {
+      await recovery.catch(() => {});
+      await pool.end();
     }
   }, 60000);
 
@@ -231,26 +535,37 @@ describe('concurrent first boot (COR-1495)', () => {
             );
             return rows.length > 0;
           });
+          await admin.query(`GRANT CREATE ON SCHEMA "${name}" TO "${observer}";
+            CREATE TABLE "${name}".other_items (value text);
+            ALTER TABLE "${name}".other_items OWNER TO "${observer}"`);
+          const otherSql = `CREATE INDEX CONCURRENTLY other_index ON "${name}".other_items (value)`;
+          await observerPool.query(otherSql);
+          await admin.query(`UPDATE pg_index SET indisvalid = false WHERE indexrelid = to_regclass($1)`, [
+            `"${name}".other_index`,
+          ]);
           const before = await admin.query(`SELECT to_regclass($1)::oid AS oid`, [`"${name}".item_index`]);
           const progress = await observerPool.query(
             `SELECT pid, relid, index_relid FROM pg_stat_progress_create_index`,
           );
           expect(progress.rows.some(row => row.relid === null && row.index_relid === null)).toBe(true);
           const observerClient = new PoolAdapter(observerPool);
-          const statements: string[] = [];
-          const none = observerClient.none.bind(observerClient);
-          observerClient.none = async (...args) => {
-            statements.push(args[0]);
-            return none(...args);
-          };
+          const statements = captureIndexStatements(observerClient);
           const db = new PgDB({ client: observerClient, schemaName: name });
-          recovery = db.createIndexFromStatement('item_index', sql);
+          const target = db.createIndexFromStatement('item_index', sql);
+          void target.catch(() => {});
+          expect(await Promise.race([target.then(() => 'returned'), delay(1000).then(() => 'blocked')])).toBe(
+            'returned',
+          );
+          expect(statements).toEqual([]);
+          recovery = db.createIndexFromStatement('other_index', otherSql);
           void recovery.catch(() => {});
-          await delay(150);
+          expect(await Promise.race([recovery.then(() => 'returned'), delay(1000).then(() => 'blocked')])).toBe(
+            'returned',
+          );
+          expect((await validIndexes(name)).find(index => index.name === 'other_index')?.valid).toBe(true);
+          expect(statements.filter(sql => /^DROP INDEX/i.test(sql))).toEqual([`DROP INDEX "${name}"."other_index"`]);
           await writer.query('COMMIT');
           await building;
-          await recovery;
-          expect(statements.filter(sql => /^DROP INDEX/i.test(sql))).toEqual([]);
           expect((await admin.query(`SELECT to_regclass($1)::oid AS oid`, [`"${name}".item_index`])).rows).toEqual(
             before.rows,
           );
@@ -258,7 +573,10 @@ describe('concurrent first boot (COR-1495)', () => {
             db.createIndexFromStatement('denied_index', `CREATE INDEX denied_index ON "${name}".items (value)`),
           ).rejects.toMatchObject({ code: '42501' });
         }
-        expect(await validIndexes(name)).toEqual([{ name: 'item_index', valid: true }]);
+        expect(await validIndexes(name)).toEqual([
+          { name: 'item_index', valid: true },
+          ...(scenario === 'cross-role builder' ? [{ name: 'other_index', valid: true }] : []),
+        ]);
       } finally {
         await writer.query('ROLLBACK');
         writer.release();
@@ -290,10 +608,9 @@ describe('concurrent first boot (COR-1495)', () => {
       });
       const client = new PoolAdapter(pool);
       const errors: string[] = [];
-      const statements: string[] = [];
+      const statements = captureIndexStatements(client);
       const none = client.none.bind(client);
       client.none = async (...args) => {
-        statements.push(args[0]);
         try {
           return await none(...args);
         } catch (error) {
