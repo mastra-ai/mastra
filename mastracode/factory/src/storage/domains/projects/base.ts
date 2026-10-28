@@ -3,8 +3,9 @@ import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { FactoryStorageDomain } from '@mastra/core/storage';
 import type { CollectionSchema, FactoryStorageOps } from '@mastra/core/storage';
 
+import { DEFAULT_THINKING_LEVEL } from '../../../default-thinking-level.js';
+
 export const DEFAULT_BUILD_PUSH_DEBOUNCE_MINUTES = 10;
-export const DEFAULT_FACTORY_THINKING_LEVEL: ThinkingLevelSetting = 'medium';
 export const FACTORY_MODEL_SCOPES = ['factory', 'user', 'hybrid'] as const;
 export type FactoryModelScope = (typeof FACTORY_MODEL_SCOPES)[number];
 /** The single credential scope one session or run resolves from; `hybrid` is never effective. */
@@ -115,7 +116,7 @@ export const FACTORY_PROJECTS_SCHEMA: CollectionSchema = {
     description: { type: 'text', nullable: true },
     default_model_id: { type: 'text', nullable: true },
     model_scope: { type: 'text', default: 'hybrid' },
-    default_thinking_level: { type: 'text', default: DEFAULT_FACTORY_THINKING_LEVEL },
+    default_thinking_level: { type: 'text', default: DEFAULT_THINKING_LEVEL },
     // Deprecated: no longer read or written. Kept so existing databases need no
     // migration. Old rows may still hold `true`, so never read it to bring Slack
     // work items back. Drop it in a later migration.
@@ -191,7 +192,7 @@ function toFactoryProject(row: FactoryProjectDbRow): FactoryProject {
     modelScope: row.model_scope === 'factory' || row.model_scope === 'user' ? row.model_scope : 'hybrid',
     defaultThinkingLevel: isThinkingLevelSetting(row.default_thinking_level)
       ? row.default_thinking_level
-      : DEFAULT_FACTORY_THINKING_LEVEL,
+      : DEFAULT_THINKING_LEVEL,
     autoRunEnabled: row.auto_run_enabled,
     autoApprovePlans: row.auto_approve_plans ?? false,
     sandboxWorkingDirectory: row.sandbox_working_directory ?? null,

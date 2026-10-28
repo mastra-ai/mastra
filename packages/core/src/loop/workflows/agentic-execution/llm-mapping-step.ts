@@ -48,6 +48,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           logger: rest.logger,
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
+          agent: rest.agent,
         })
       : undefined;
 
@@ -230,7 +231,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       if (
         inputData?.some(
-          toolCall => toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall),
+          toolCall =>
+            toolCall.aborted ||
+            (toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall)),
         )
       ) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
@@ -286,11 +289,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // will see them on the next turn. This handles both tool-not-found errors
         // (hallucinated tool names) and tool execution errors (tool throws).
         //
-        // Check for pending HITL tool calls (no result and no error); in mixed turns these
-        // take priority over continuing the loop. Exclude aborted calls: they also lack a
-        // result/error but were cancelled, not awaiting input, so they must not count as a
-        // suspension or be recorded as a result (see tool-call-step.ts). Denied approvals are
-        // resolved, not pending, so they are excluded too.
+        // Pending HITL tool calls take priority over continuing the loop in mixed turns.
+        // Aborted calls carry cancellation notices rather than awaiting input.
+        // Denied approvals are resolved, not pending, so they are excluded too.
         const hasPendingHITL = inputData.some(
           tc => tc.result === undefined && !tc.error && !tc.aborted && !tc.providerExecuted && !isDeniedApproval(tc),
         );
@@ -302,8 +303,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // streamed and committed before bailing — otherwise a completed server-side tool is
         // silently dropped: no tool-result chunk reaches the client (which then waits forever
         // for the call to leave `input-available`) and history persists it in `call` state as
-        // if it never ran (issue #21637). Aborted and denied-approval calls have no `result`,
-        // so they are excluded by construction and stay unrecorded (issue #17995 / PR #18034).
+        // if it never ran (issue #21637). Cancellation notices are also results;
+        // denied approvals have no `result` and are handled separately.
         const successfulResults = inputData.filter(tc => tc.result !== undefined);
         if (successfulResults.length) {
           const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
@@ -312,9 +313,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
             // can access it on the chunk's providerMetadata.mastra.modelOutput.
             // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
-              ? await getProviderMetadataWithModelOutput(toolCall)
-              : undefined;
+            const providerMetadata =
+              !toolCall.providerExecuted && !toolCall.aborted
+                ? await getProviderMetadataWithModelOutput(toolCall)
+                : undefined;
             const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
               | ProviderMetadata
               | undefined;
@@ -381,7 +383,11 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           }
         }
 
-        if (errorResults?.length > 0 && !hasPendingHITL) {
+        if (
+          errorResults?.length > 0 &&
+          !hasPendingHITL &&
+          !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted))
+        ) {
           // Continue the loop — the error messages are already in the messageList,
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
@@ -409,8 +415,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           initialResult.stepResult.isContinued = false;
         }
 
-        // A run aborted while its tools ran ends here with those calls left incomplete. Report it
-        // as aborted, as an abort seen by the model step does, rather than as a finished turn.
+        // A cancellation notice records the outcome without making the aborted run continue.
         if (rest.options?.abortSignal?.aborted && inputData.some(tc => tc.aborted)) {
           initialResult.stepResult.reason = 'abort';
           initialResult.stepResult.isContinued = false;
@@ -478,9 +483,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
           // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
-            ? await getProviderMetadataWithModelOutput(toolCall)
-            : undefined;
+          const providerMetadata =
+            !toolCall.providerExecuted && !toolCall.aborted
+              ? await getProviderMetadataWithModelOutput(toolCall)
+              : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
 
           const chunk = await transformToolChunk(

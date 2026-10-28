@@ -11,6 +11,8 @@ export interface WorkflowExecutionResult {
   result: unknown;
   state: unknown;
   steps: Record<string, unknown>;
+  /** Present when the run started with `recordStepMeta` on a Worker that records it. */
+  stepMeta?: Record<string, { startedAt: number; endedAt: number }>;
 }
 
 export type StepEntry = {
@@ -21,6 +23,8 @@ export type StepEntry = {
 export type ChildWorkflowEntry = {
   type: 'childWorkflow';
   workflowType: string;
+  /** The child's Mastra workflow id, its key in `steps`. Parallel output is keyed by `workflowType`. */
+  id: string;
 };
 
 export type ParallelEntry = StepEntry | ChildWorkflowEntry;
@@ -30,9 +34,10 @@ export type WorkflowRuntime = ((startArgs?: {
   resourceId?: string;
   inputData?: unknown;
   initialState?: unknown;
+  recordStepMeta?: boolean;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
-  thenWorkflow(workflowType: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
   map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
@@ -56,6 +61,7 @@ export class TemporalExecutionEngine {
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;
+    recordStepMeta?: boolean;
   }): Promise<WorkflowExecutionResult>;
 }
 

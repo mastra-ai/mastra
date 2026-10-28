@@ -1425,19 +1425,23 @@ export class MCPServer extends MCPServerBase {
     // Hosts may detect an MCP App from the call result, so mirror the tool's declared app link onto it.
     const resourceUri = uiResourceUri(tool.mcp?._meta);
     const meta = resourceUri ? { _meta: { ui: { resourceUri }, [RESOURCE_URI_META_KEY]: resourceUri } } : {};
+    // `JSON.stringify` yields `undefined` for a void return (and for functions or symbols). That has
+    // no text form, so the call succeeded with no content rather than with a text block missing `text`.
     if (!tool.outputSchema) {
-      return {
-        isError: false,
-        content: [{ type: 'text', text: typeof value === 'string' ? value : JSON.stringify(value) }],
-        ...meta,
-      };
+      const text = typeof value === 'string' ? value : JSON.stringify(value);
+      return { isError: false, content: text === undefined ? [] : [{ type: 'text', text }], ...meta };
     }
-    // Tools with an output schema already validated `value` against it.
-    const structuredContent = value as Record<string, unknown>;
+    // Tools with an output schema already validated `value` against it; an optional schema can let `undefined` through.
+    // A success result must then carry `structuredContent`, so report the missing output in-band instead.
+    const text = JSON.stringify(value);
+    if (text === undefined) {
+      this.logger.warn(`Tool '${name}' declares an outputSchema but returned no structured output.`);
+      return { ...errorResult(`Tool '${name}' declares an outputSchema but returned no output.`), ...meta };
+    }
     return {
       isError: false,
-      structuredContent,
-      content: [{ type: 'text', text: JSON.stringify(structuredContent) }],
+      structuredContent: value as Record<string, unknown>,
+      content: [{ type: 'text', text }],
       ...meta,
     };
   }

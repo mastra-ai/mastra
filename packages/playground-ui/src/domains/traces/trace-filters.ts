@@ -353,7 +353,7 @@ export const TRACE_FILTER_BAR_LABELS: Record<string, string> = {
   experimentId: 'Experiment ID',
   'spans.name': 'Span name',
   'spans.spanType': 'Span type',
-  'spans.model': 'Model',
+  'spans.model': 'Span Model',
   'spans.provider': 'Provider',
   durationMs: 'Duration (ms)',
   'spans.durationMs': 'Span duration (ms)',

@@ -1,4 +1,5 @@
 // @vitest-environment jsdom
+import { SpanType } from '@mastra/core/observability';
 import { cleanup, fireEvent, render, screen, within } from '@testing-library/react';
 import { afterAll, afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
 
@@ -65,10 +66,33 @@ describe('SpanPayloadProcessor', () => {
   it('shows single values as labelled rows, with copy buttons on ids', () => {
     render(<SpanInputRenderer span={processorToolResultSpan} />);
     expect(valueOf('Tool')).toBe('search');
-    expect(valueOf('Step')).toBe('3');
     expect(valueOf('Provider executed')).toBe('No');
     expect(screen.getByText('call_17')).toBeTruthy();
     expect(screen.getByRole('button', { name: 'Copy to clipboard' })).toBeTruthy();
+  });
+
+  it('leaves the step, retry count and response message id out of the input, since Attributes shows them', () => {
+    render(<SpanInputRenderer span={processorToolResultSpan} />);
+    expect(screen.queryByText('Step')).toBeNull();
+    cleanup();
+    render(<SpanInputRenderer span={processorInputSpan} />);
+    expect(screen.queryByText('Retries')).toBeNull();
+    cleanup();
+    render(<SpanInputRenderer span={processorInputStepSpan} />);
+    expect(screen.queryByText('Message id')).toBeNull();
+    expect(screen.queryByText('msg-step-0')).toBeNull();
+  });
+
+  it('keeps a step that is not a number in the input', () => {
+    const span = makeSpan({
+      ...processorToolResultSpan,
+      input: { ...processorToolResultSpan.input, stepNumber: 'three' },
+    });
+    render(<SpanInputRenderer span={span} />);
+    expect(valueOf('Step')).toBe('three');
+    cleanup();
+    render(<SpanProcessorAttributes span={span} />);
+    expect(screen.queryByText('Step')).toBeNull();
   });
 
   it('keeps the two output hooks apart', () => {
@@ -88,7 +112,6 @@ describe('SpanPayloadProcessor', () => {
     render(<SpanInputRenderer span={processorInputStepSpan} />);
     expect(screen.getByText('Active tools (1)')).toBeTruthy();
     expect(screen.queryByText(/^Tools/)).toBeNull();
-    expect(screen.getByText('msg-step-0')).toBeTruthy();
   });
 
   it('keeps an empty output as JSON, as any other span would', () => {
@@ -121,15 +144,49 @@ describe('SpanProcessorAttributes', () => {
     expect(valueOf('Hook duration')).toBe('1.84s');
   });
 
+  it('shows where in the generation the hook ran', () => {
+    render(<SpanProcessorAttributes span={processorInputSpan} />);
+    expect(valueOf('Retries')).toBe('0');
+    cleanup();
+    render(<SpanProcessorAttributes span={processorToolResultSpan} />);
+    expect(valueOf('Step')).toBe('3');
+  });
+
+  it('shows the assistant message the step answers with, shortened like the other ids and copied in full', async () => {
+    const writeText = vi.fn().mockResolvedValue(undefined);
+    Object.assign(navigator, { clipboard: { writeText } });
+    render(<SpanProcessorAttributes span={processorInputStepSpan} />);
+    expect(valueOf('Assistant message id')).toBe('msg-st');
+    fireEvent.click(screen.getByRole('button', { name: 'Copy assistant message id' }));
+    await vi.waitFor(() => expect(writeText).toHaveBeenCalledWith('msg-step-0'));
+  });
+
   it('shows message-list changes as readable actions', () => {
     render(<SpanProcessorAttributes span={processorInputSpan} />);
-    expect(screen.getByText('Added system message')).toBeTruthy();
-    expect(screen.getByText('context-note · 1 message')).toBeTruthy();
+    expect(valueOf('Added system message')).toBe('context-note · 1 message');
+  });
+
+  it('adds up identical changes into a single row', () => {
+    const span = makeSpan({
+      ...processorInputSpan,
+      attributes: {
+        processorPhase: 'inputStep',
+        messageListMutations: [
+          { type: 'add', source: 'memory', count: 1 },
+          { type: 'add', source: 'memory', count: 1 },
+          { type: 'add', source: 'input', count: 1 },
+        ],
+      },
+    });
+    render(<SpanProcessorAttributes span={span} />);
+    const rows = screen.getAllByText('Added messages').map(key => key.nextElementSibling?.textContent);
+    expect(rows).toEqual(['memory · 2 messages', 'input · 1 message']);
+    expect(slot('span-processor-mutations')).toBeNull();
   });
 
   it('shows cleared and removed messages, with the removed ids collapsed', () => {
     render(<SpanProcessorAttributes span={processorClearedMessagesSpan} />);
-    expect(screen.getByText('Cleared messages')).toBeTruthy();
+    expect(valueOf('Cleared messages')).toBe('2 messages');
     expect(screen.getByText('Removed messages')).toBeTruthy();
     fireEvent.click(screen.getByText('Removed ids (2)'));
     expect(slot('span-processor-mutations')?.textContent).toContain('msg-1');
@@ -189,11 +246,42 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     expect(attributes.textContent).toContain('Answer briefly.');
   });
 
-  it('shows an empty output as JSON without a preview toggle', () => {
+  it('leaves out the output of a processor that returned nothing', () => {
     render(renderView(processorSystemMutationSpan));
-    const output = section('Output');
-    expect(output.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
-    expect(output.querySelector('[data-slot="span-payload-json"]')).not.toBeNull();
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
+  it('leaves out the empty output of a processor that retyped its span', () => {
+    // e.g. memory recall: a processor run recorded as a memory operation.
+    render(
+      renderView(
+        makeSpan({ ...processorSystemMutationSpan, spanId: 'span-memory-recall', spanType: SpanType.MEMORY_OPERATION }),
+      ),
+    );
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
+  it('leaves out the empty output of a chunk that streamed nothing', () => {
+    // e.g. encrypted reasoning: the chunk opens and closes without any delta.
+    render(
+      renderView(
+        makeSpan({
+          spanId: 'span-empty-chunk',
+          spanType: SpanType.MODEL_CHUNK,
+          attributes: { chunkType: 'reasoning', sequenceNumber: 0 },
+          output: {},
+        }),
+      ),
+    );
+    expect(screen.queryByText('Output')).toBeNull();
+    expect(section('Attributes')).toBeTruthy();
+  });
+
+  it('still shows an empty output for spans that are not processors', () => {
+    render(renderView(makeSpan({ spanId: 'span-empty-output', output: {} })));
+    expect(section('Output')).toBeTruthy();
   });
 
   it('shows a failed processor span with its error', () => {

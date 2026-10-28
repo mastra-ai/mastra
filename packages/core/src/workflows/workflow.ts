@@ -1178,6 +1178,7 @@ export function createStepFromProcessor<TProcessorId extends string>(
       // Pass-through data that should flow to the next processor in a chain
       // This enables processor workflows to use .then(), .parallel(), .branch(), etc.
       const passThrough = {
+        agent,
         lateSignalSink,
         phase,
         runId: agentRunId,
@@ -1847,6 +1848,36 @@ type RequireAgentInput<TPrev> = [TPrev] extends [{ prompt: string }]
       readonly receivedPrevOutput: TPrev;
     };
 
+/**
+ * Expected shape of one step passed to `.parallel()`. Distributes over unions so a
+ * non-tuple array of different steps is checked step by step. Input follows the
+ * `.then()` rule: the previous output only has to satisfy the step's input.
+ */
+type ParallelStepCheck<TStep, TState, TPrevSchema, TEngineType, TRequestContext> =
+  TStep extends Step<
+    string,
+    infer S,
+    infer TStepInput,
+    infer O,
+    any, // Don't infer TResume - causes issues with heterogeneous tuples
+    any, // Don't infer TSuspend - causes issues with heterogeneous tuples
+    TEngineType,
+    infer TStepRC
+  >
+    ? Step<
+        string,
+        SubsetOf<S, TState>,
+        TPrevSchema extends TStepInput ? TStepInput : TPrevSchema,
+        O,
+        any,
+        any,
+        TEngineType,
+        // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
+        // declare one matching the workflow's TRequestContext. Mismatched schemas error.
+        unknown extends TStepRC ? unknown : TRequestContext
+      >
+    : `Error: Expected Step with state schema that is a subset of workflow state`;
+
 export class Workflow<
   TEngineType = DefaultEngineType,
   TSteps extends Step<string, any, any, any, any, any, TEngineType, any>[] = Step<
@@ -2033,6 +2064,14 @@ export class Workflow<
 
   __markInternal() {
     this.isInternal = true;
+    // Nested workflows of an internal workflow are its own plumbing (e.g. the
+    // background-task attempt body, the agentic loop iteration), not resources
+    // end users are granted access to.
+    for (const step of Object.values(this.steps)) {
+      if (step instanceof Workflow && !step.isInternal) {
+        step.__markInternal();
+      }
+    }
   }
 
   __registerPrimitives(p: MastraPrimitives) {
@@ -2080,7 +2119,7 @@ export class Workflow<
           return;
         case 'mapping':
           this.steps[entry.id] = createMappingStep(entry.id, entry.mapConfig as MappingConfig) as any;
-          return;
+          break;
       }
     };
     switch (live.type) {
@@ -2111,9 +2150,9 @@ export class Workflow<
           outputSchema: z.object({}),
           execute: async () => ({}),
         });
-        return;
+        break;
       default:
-        return;
+        break;
     }
   }
 
@@ -2608,31 +2647,15 @@ export class Workflow<
   }
 
   // TODO: make typing better here
-  parallel<TParallelSteps extends readonly Step<string, any, TPrevSchema, any, any, any, TEngineType, any>[]>(
+  parallel<TParallelSteps extends readonly Step<string, any, any, any, any, any, TEngineType, any>[]>(
     steps: TParallelSteps & {
-      [K in keyof TParallelSteps]: TParallelSteps[K] extends Step<
-        string,
-        infer S,
+      [K in keyof TParallelSteps]: ParallelStepCheck<
+        TParallelSteps[K],
+        TState,
         TPrevSchema,
-        infer O,
-        any, // Don't infer TResume - causes issues with heterogeneous tuples
-        any, // Don't infer TSuspend - causes issues with heterogeneous tuples
         TEngineType,
-        infer TStepRC
-      >
-        ? Step<
-            string,
-            SubsetOf<S, TState>,
-            TPrevSchema,
-            O,
-            any,
-            any,
-            TEngineType,
-            // Allow steps that don't declare a requestContextSchema (TStepRC=unknown) or that
-            // declare one matching the workflow's TRequestContext. Mismatched schemas error.
-            unknown extends TStepRC ? unknown : TRequestContext
-          >
-        : `Error: Expected Step with state schema that is a subset of workflow state`;
+        TRequestContext
+      >;
     },
     options?: StepFlowEntryOptions,
   ) {
@@ -3177,9 +3200,9 @@ export class Workflow<
     const observabilityContext = resolveObservabilityContext({ tracing, tracingContext, loggerVNext, metrics });
     this.__registerMastra(mastra);
 
-    // FGA authorization check
+    // FGA authorization check (internal workflows are exempt, matching Run.start)
     const fgaProvider = mastra?.getServer()?.fga;
-    if (fgaProvider) {
+    if (fgaProvider && !this.isInternal) {
       const user = requestContext?.get('user' as any);
       await requireFGA({
         fgaProvider,

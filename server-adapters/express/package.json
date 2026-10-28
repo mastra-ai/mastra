@@ -1,6 +1,6 @@
 {
   "name": "@mastra/express",
-  "version": "1.5.24-alpha.3",
+  "version": "1.5.24-alpha.7",
   "description": "Mastra Express adapter for the server",
   "type": "module",
   "main": "dist/index.js",
@@ -27,13 +27,12 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@fastify/busboy": "^3.2.2",
+    "@fastify/busboy": "^3.2.4",
     "@mastra/server": "workspace:*"
   },
   "devDependencies": {
-    "@ai-sdk/openai": "^2.0.135",
+    "@ai-sdk/openai": "^2.0.136",
     "@internal/lint": "workspace:*",
-    "@mastra/server-adapters-test-suite": "workspace:*",
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/ai-sdk": "workspace:*",
@@ -42,12 +41,13 @@
     "@mastra/libsql": "workspace:*",
     "@mastra/memory": "workspace:*",
     "@mastra/observability": "workspace:*",
+    "@mastra/server-adapters-test-suite": "workspace:*",
     "@types/cors": "^2.8.19",
     "@types/express": "^5.0.6",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@types/swagger-ui-express": "^4.1.8",
     "cors": "^2.8.6",
-    "express": "^5.2.1",
+    "express": "^5.3.0",
     "swagger-ui-express": "^5.0.1",
     "tsdown": "0.23.1",
     "typescript": "catalog:",
@@ -55,7 +55,7 @@
     "zod": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.58.0-0 <2.0.0-0",
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0",
     "@types/express": "^5.0.5",
     "express": "^5.1.0"
   },

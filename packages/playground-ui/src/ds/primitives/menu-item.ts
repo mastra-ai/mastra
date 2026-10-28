@@ -98,6 +98,9 @@ export const menuSearchClasses = {
   // row sits one notch taller than an item: the divider does not crowd the first
   // option while the text stays on the item grid.
   container: 'flex items-center gap-2 border-b border-border px-2 py-0.5 text-menu focus-within:bg-fill-subtle',
+  /** Fixed popup header: include the scroll body's inset so search and option icons align. */
+  header:
+    'flex items-center gap-2 border-b border-border px-[calc(var(--spacing)*3+1px)] py-1 text-menu focus-within:bg-fill-subtle',
   icon: 'size-icon-md shrink-0 text-muted-foreground',
   input:
     'h-control-md w-full bg-transparent text-menu text-muted-foreground outline-hidden placeholder:text-muted-foreground',

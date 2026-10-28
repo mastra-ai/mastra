@@ -14,12 +14,16 @@ import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 import { createScorer } from '../../../evals';
 import type { SerializedWorkflowRow } from '../../../storage/domains/workflows/serializing-store.test-utils';
+import type { ToolHooks } from '../../../tools/types';
 import type { WorkflowRunState } from '../../../workflows/types';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
 import { MAP_FINAL_OUTPUT_STEP_ID } from '../workflows/durable-loop-builder';
 import { consumeText, createRestartScenario, findRow } from './restart-harness';
 
 const RECOVERY_TIMEOUT_MS = 5_000;
+
+/** `defaultOptions.hooks` given to the agent of every process started after it is set. */
+let processDefaultHooks: ToolHooks | undefined;
 
 // Every simulated process evaluates a fresh module graph, and each graph
 // creates its own module-level AsyncLocalStorage instances. On Node 22, every
@@ -245,6 +249,7 @@ async function startProcess(
         execute: async () => ({ ok: true }),
       },
     },
+    ...(processDefaultHooks ? { defaultOptions: { hooks: processDefaultHooks } } : {}),
   });
   const durableAgent = kind === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const storage =
@@ -270,6 +275,14 @@ async function startProcess(
 
 function activeStepIds(snapshot: WorkflowRunState | undefined) {
   return Object.keys(snapshot?.activeStepsPath ?? {});
+}
+
+function hasToolResult(value: unknown, toolCallId: string): boolean {
+  if (Array.isArray(value)) return value.some(item => hasToolResult(item, toolCallId));
+  if (!value || typeof value !== 'object') return false;
+  const record = value as Record<string, unknown>;
+  if (record.toolCallId === toolCallId && ('result' in record || record.state === 'result')) return true;
+  return Object.values(record).some(item => hasToolResult(item, toolCallId));
 }
 
 function describeCheckpoint({ outer, inner }: Checkpoint) {
@@ -565,6 +578,41 @@ describe('DurableAgent crash recovery', () => {
       expect(checkpoints.length - recoverable.length).toBeLessThanOrEqual(3);
     },
     120_000,
+  );
+
+  it.each(['durable', 'evented-fallback'] as const)(
+    'runs defaultOptions.hooks.beforeToolCall on a tool call executed after %s recovery',
+    async kind => {
+      const hookCalls: number[] = [];
+      processDefaultHooks = {
+        beforeToolCall: ({ input }) => {
+          hookCalls.push((input as { index: number }).index);
+        },
+      };
+      try {
+        const { checkpoints, runId } = await captureCheckpoints(kind);
+        expect(hookCalls).toEqual([0, 1]);
+
+        // Recover from the last checkpoint taken before the second tool call ran,
+        // so that call executes in the recovering process.
+        const beforeSecondTool = checkpoints.filter(
+          c =>
+            !knownUnrecoverable(c) &&
+            c.inner?.status === 'running' &&
+            activeStepIds(c.inner).includes(DurableStepIds.TOOL_CALL) &&
+            JSON.stringify(c.inner).includes('call-1') &&
+            !hasToolResult(c.inner, 'call-1'),
+        );
+        expect(beforeSecondTool.length).toBeGreaterThan(0);
+
+        hookCalls.length = 0;
+        expect(await recoverFrom(beforeSecondTool.at(-1)!, runId, kind)).toBe('ok');
+        expect(hookCalls).toContain(1);
+      } finally {
+        processDefaultHooks = undefined;
+      }
+    },
+    60_000,
   );
 
   it('preserves unknown usage from before recovery', async () => {

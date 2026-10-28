@@ -257,6 +257,13 @@ export class IntakeStorage extends FactoryStorageDomain {
     await this.#db.updateMany('intake_org_settings', where, { config, updated_at: now });
   }
 
+  /** Overlay `config` onto the stored selections; integrations it omits keep their stored value. */
+  async mergeConfig({ orgId, config }: { orgId: string; config: IntakeConfig }): Promise<IntakeConfig> {
+    const merged: IntakeConfig = Object.assign(Object.create(null), await this.getConfig({ orgId }), config);
+    await this.saveConfig({ orgId, config: merged });
+    return merged;
+  }
+
   async #insertConfigIfAbsent(orgId: string, config: IntakeConfig): Promise<boolean> {
     const now = new Date();
     try {

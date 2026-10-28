@@ -28,22 +28,21 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "deepseek/deepseek-v4-pro": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "deepseek/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["high", "max"]
       }
     ],
-    "openai/gpt-5.5": [
+    "deepseek/deepseek-v4-pro": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["high", "max"]
+      }
+    ],
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
       }
     ],
     "zai-org/glm-5.1": [
@@ -57,9 +56,10 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "openai/gpt-5.5": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
       }
     ]
   }
