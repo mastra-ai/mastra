@@ -174,6 +174,9 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     // persisted, so a run started under an external parent stays a trace root.
     parentSpanId: span.parentSpanId ?? null,
     name: span.name,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: span.stopReasonContext ?? null,
 
     // Entity identification - from span
     entityType: span.entityType ?? null,
@@ -238,6 +241,9 @@ export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpan
   const timeToFirstChunkMs = getTimeToFirstChunkMs(span);
   return {
     name: span.name,
+    ...(span.outcome !== undefined && { outcome: span.outcome }),
+    ...(span.stopReason !== undefined && { stopReason: span.stopReason }),
+    ...(span.stopReasonContext !== undefined && { stopReasonContext: span.stopReasonContext }),
     scope: null,
     attributes: serializeSpanAttributes(span),
     metadata: span.metadata ?? null,

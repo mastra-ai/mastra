@@ -1,10 +1,12 @@
 import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error';
 import type { PubSub } from '../../events/pubsub';
 import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
-import type { ObservabilityContext } from '../../observability';
+import type { ObservabilityContext, SpanTermination } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowTermination } from '../execution-outcome';
 import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -17,6 +19,14 @@ import type {
 } from '../types';
 import { defineLazyWriter } from '../utils';
 import { getControlFlowIdentityAttributes } from './control-flow';
+
+/** The timer resolves both when it expires and when its executor is stopped. */
+function sleepTermination(signal?: AbortSignal): SpanTermination {
+  if (!signal?.aborted) return workflowTermination({ status: 'success' });
+  return signal.reason === WORKFLOW_CANCELLED_SYMBOL
+    ? workflowTermination({ status: 'canceled' })
+    : { outcome: 'interrupted', stopReason: null, stopReasonContext: null };
+}
 
 export interface ExecuteSleepParams extends ObservabilityContext {
   workflowId: string;
@@ -70,6 +80,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.start`,
     options: {
       type: SpanType.WORKFLOW_SLEEP,
+      outcome: null,
       name: `sleep: ${duration ? `${duration}ms` : 'dynamic'}`,
       attributes: {
         durationMs: duration,
@@ -80,59 +91,59 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     executionContext,
   });
 
-  if (fn) {
-    const stepCallId = globalThis.crypto.randomUUID();
-    duration = await engine.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
-      return fn(
-        defineLazyWriter(
-          {
-            runId,
-            workflowId,
-            mastra: engine.mastra!,
-            requestContext,
-            inputData: prevOutput,
-            state: executionContext.state,
-            setState: async (state: any) => {
-              executionContext.state = state;
-            },
-            retryCount: -1,
-            ...createObservabilityContext({ currentSpan: sleepSpan }),
-            getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            // TODO: this function shouldn't have suspend probably?
-            suspend: async (_suspendPayload: any): Promise<any> => {},
-            bail: (() => {}) as () => InnerOutput,
-            abort: () => {
-              abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
-            },
-            [PUBSUB_SYMBOL]: pubsub,
-            [STREAM_FORMAT_SYMBOL]: executionContext.format,
-            engine: engine.getEngineContext(),
-            abortSignal: abortController?.signal,
-          },
-          () =>
-            new ToolStream(
-              {
-                prefix: 'workflow-step',
-                callId: stepCallId,
-                name: 'sleep',
-                runId,
-              },
-              outputWriter,
-            ),
-        ),
-      );
-    });
-
-    // Update sleep span with dynamic duration
-    sleepSpan?.update({
-      attributes: {
-        durationMs: duration,
-      },
-    });
-  }
-
   try {
+    if (fn) {
+      const stepCallId = globalThis.crypto.randomUUID();
+      duration = await engine.wrapDurableOperation(`workflow.${workflowId}.sleep.${entry.id}`, async () => {
+        return fn(
+          defineLazyWriter(
+            {
+              runId,
+              workflowId,
+              mastra: engine.mastra!,
+              requestContext,
+              inputData: prevOutput,
+              state: executionContext.state,
+              setState: async (state: any) => {
+                executionContext.state = state;
+              },
+              retryCount: -1,
+              ...createObservabilityContext({ currentSpan: sleepSpan }),
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(null, stepResults),
+              // TODO: this function shouldn't have suspend probably?
+              suspend: async (_suspendPayload: any): Promise<any> => {},
+              bail: (() => {}) as () => InnerOutput,
+              abort: () => {
+                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+              },
+              [PUBSUB_SYMBOL]: pubsub,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: engine.getEngineContext(),
+              abortSignal: abortController?.signal,
+            },
+            () =>
+              new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: stepCallId,
+                  name: 'sleep',
+                  runId,
+                },
+                outputWriter,
+              ),
+          ),
+        );
+      });
+
+      // Update sleep span with dynamic duration
+      sleepSpan?.update({
+        attributes: {
+          durationMs: duration,
+        },
+      });
+    }
+
     await engine.executeSleepDuration(
       !duration || duration < 0 ? 0 : duration,
       entry.id,
@@ -142,12 +153,18 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
     await engine.endChildSpan({
       span: sleepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.end`,
+      endOptions: sleepTermination(abortController?.signal),
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleep.${entry.id}.span.error`,
-      errorOptions: { error: e as Error },
+      errorOptions: {
+        ...(abortController?.signal.aborted
+          ? sleepTermination(abortController.signal)
+          : workflowTermination({ status: 'failed', error: e })),
+        error: getErrorFromUnknown(e),
+      },
     });
     throw e;
   }
@@ -208,6 +225,7 @@ export async function executeSleepUntil(
     operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.start`,
     options: {
       type: SpanType.WORKFLOW_SLEEP,
+      outcome: null,
       name: `sleepUntil: ${date ? date.toISOString() : 'dynamic'}`,
       attributes: {
         untilDate: date,
@@ -219,80 +237,90 @@ export async function executeSleepUntil(
     executionContext,
   });
 
-  if (fn) {
-    const stepCallId = globalThis.crypto.randomUUID();
-    const dateResult = await engine.wrapDurableOperation(`workflow.${workflowId}.sleepUntil.${entry.id}`, async () => {
-      return fn(
-        defineLazyWriter(
-          {
-            runId,
-            workflowId,
-            mastra: engine.mastra!,
-            requestContext,
-            inputData: prevOutput,
-            state: executionContext.state,
-            setState: async (state: any) => {
-              executionContext.state = state;
-            },
-            retryCount: -1,
-            ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
-            getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            // TODO: this function shouldn't have suspend probably?
-            suspend: async (_suspendPayload: any): Promise<any> => {},
-            bail: (() => {}) as () => InnerOutput,
-            abort: () => {
-              abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
-            },
-            [PUBSUB_SYMBOL]: pubsub,
-            [STREAM_FORMAT_SYMBOL]: executionContext.format,
-            engine: engine.getEngineContext(),
-            abortSignal: abortController?.signal,
-          },
-          () =>
-            new ToolStream(
-              {
-                prefix: 'workflow-step',
-                callId: stepCallId,
-                name: 'sleepUntil',
-                runId,
-              },
-              outputWriter,
-            ),
-        ),
-      );
-    });
-    // Ensure date is a Date object (may be serialized as string by durable execution engines)
-    date = dateResult instanceof Date ? dateResult : new Date(dateResult);
-
-    // Update sleep until span with dynamic duration
-    const time = !date ? 0 : date.getTime() - Date.now();
-    sleepUntilSpan?.update({
-      attributes: {
-        durationMs: Math.max(0, time),
-      },
-    });
-  }
-
-  if (!date) {
-    await engine.endChildSpan({
-      span: sleepUntilSpan,
-      operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
-    });
-    return;
-  }
-
   try {
+    if (fn) {
+      const stepCallId = globalThis.crypto.randomUUID();
+      const dateResult = await engine.wrapDurableOperation(
+        `workflow.${workflowId}.sleepUntil.${entry.id}`,
+        async () => {
+          return fn(
+            defineLazyWriter(
+              {
+                runId,
+                workflowId,
+                mastra: engine.mastra!,
+                requestContext,
+                inputData: prevOutput,
+                state: executionContext.state,
+                setState: async (state: any) => {
+                  executionContext.state = state;
+                },
+                retryCount: -1,
+                ...createObservabilityContext({ currentSpan: sleepUntilSpan }),
+                getInitData: () => stepResults?.input as any,
+                getStepResult: getStepResult.bind(null, stepResults),
+                // TODO: this function shouldn't have suspend probably?
+                suspend: async (_suspendPayload: any): Promise<any> => {},
+                bail: (() => {}) as () => InnerOutput,
+                abort: () => {
+                  abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
+                },
+                [PUBSUB_SYMBOL]: pubsub,
+                [STREAM_FORMAT_SYMBOL]: executionContext.format,
+                engine: engine.getEngineContext(),
+                abortSignal: abortController?.signal,
+              },
+              () =>
+                new ToolStream(
+                  {
+                    prefix: 'workflow-step',
+                    callId: stepCallId,
+                    name: 'sleepUntil',
+                    runId,
+                  },
+                  outputWriter,
+                ),
+            ),
+          );
+        },
+      );
+      // Ensure date is a Date object (may be serialized as string by durable execution engines)
+      date = dateResult instanceof Date ? dateResult : new Date(dateResult);
+
+      // Update sleep until span with dynamic duration
+      const time = !date ? 0 : date.getTime() - Date.now();
+      sleepUntilSpan?.update({
+        attributes: {
+          durationMs: Math.max(0, time),
+        },
+      });
+    }
+
+    if (!date) {
+      await engine.endChildSpan({
+        span: sleepUntilSpan,
+        operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end.nodate`,
+        endOptions: sleepTermination(abortController?.signal),
+      });
+      return;
+    }
+
     await engine.executeSleepUntilDate(date, entry.id, workflowId, abortController?.signal);
     await engine.endChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.end`,
+      endOptions: sleepTermination(abortController?.signal),
     });
   } catch (e) {
     await engine.errorChildSpan({
       span: sleepUntilSpan,
       operationId: `workflow.${workflowId}.run.${runId}.sleepUntil.${entry.id}.span.error`,
-      errorOptions: { error: e as Error },
+      errorOptions: {
+        ...(abortController?.signal.aborted
+          ? sleepTermination(abortController.signal)
+          : workflowTermination({ status: 'failed', error: e })),
+        error: getErrorFromUnknown(e),
+      },
     });
     throw e;
   }

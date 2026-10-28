@@ -29,7 +29,7 @@ import { clearRunLeaseFence, isRunStepActive, setRunLeaseFence, whenRunStepsSett
 import { AGENT_LEASE_LOST_TOOL_GRACE_MS, AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from './run-ownership';
 import { resolveAgentScopes } from './scopes';
 import { createSignal, resolveDeliveryAttributes } from './signals';
-import type { AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
+import type { PendingSignalListener, AgentMessageInput, AgentStateSignalInput, CreatedAgentSignal } from './signals';
 import { applyStateSignal } from './state-signals';
 import { createThreadHistoryFilter, getPartProducedAt, stampPartProducedAt } from './thread-history';
 import { onThreadMessagesSaved } from './thread-saves';
@@ -569,7 +569,7 @@ type AgentThreadRuntimeState = {
   // Signal IDs this runtime queued locally before publishing them, mapped to the owner run they were
   // later forwarded to (if any). Replays of these are echoes, except one addressed to that forwarded owner.
   locallyQueuedSignalIdsByThread: Map<string, Map<string, string | undefined>>;
-  pendingSignalListenersByRunId: Map<string, Set<() => void>>;
+  pendingSignalListenersByRunId: Map<string, Set<PendingSignalListener>>;
   // Signals queued for a run that is starting but has not made its first model
   // request yet. The first LLM step drains these and folds them into that
   // request; `pendingSignalsByThread` follow-ups instead become their own turn.
@@ -5213,7 +5213,7 @@ export class AgentThreadStreamRuntime {
   }
 
   /** @internal Listen only to input actually admitted to this process's owning run. */
-  subscribePendingSignals(runId: string, listener: () => void, pubsub?: PubSub): () => void {
+  subscribePendingSignals(runId: string, listener: PendingSignalListener, pubsub?: PubSub): () => void {
     const state = this.#getState(pubsub);
     if (!state.threadKeysByRunId.has(runId)) return () => {};
     const listeners = state.pendingSignalListenersByRunId.get(runId) ?? new Set();
@@ -5237,7 +5237,10 @@ export class AgentThreadStreamRuntime {
     ) {
       return;
     }
-    for (const listener of [...(state.pendingSignalListenersByRunId.get(runId) ?? [])]) listener();
+    const listeners = [...(state.pendingSignalListenersByRunId.get(runId) ?? [])];
+    if (listeners.length === 0) return;
+    const signals = (state.pendingSignalsByThread.get(key) ?? []).map(signal => signal.toDataPart().data);
+    for (const listener of listeners) listener(signals);
   }
 
   /**

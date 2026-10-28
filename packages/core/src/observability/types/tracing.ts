@@ -11,7 +11,13 @@ import type { MessageListInput } from '../../agent/message-list/types';
 import type { MastraError } from '../../error';
 import type { Mastra } from '../../mastra';
 import type { RequestContext } from '../../request-context';
-import type { LanguageModelUsage, ProviderMetadata, StepStartPayload, StepTripwireData } from '../../stream/types';
+import type {
+  LanguageModelUsage,
+  ProviderMetadata,
+  StepStartPayload,
+  StepFinishPayload,
+  StepTripwireData,
+} from '../../stream/types';
 import type { WorkflowRunStatus, WorkflowStepStatus } from '../../workflows';
 import type {
   CustomSamplerOptions,
@@ -24,6 +30,7 @@ import type {
 } from './core';
 import type { FeedbackInput } from './feedback';
 import type { CostContext } from './metrics';
+import type { SpanOutcomeFields, SpanTermination } from './outcome';
 import type { ScoreInput } from './scores';
 
 // ============================================================================
@@ -1395,7 +1402,7 @@ export interface SpanLink {
 /**
  * Base Span interface
  */
-interface BaseSpan<TType extends SpanType> {
+interface BaseSpan<TType extends SpanType> extends SpanOutcomeFields {
   /** Unique span identifier */
   id: string;
   /** OpenTelemetry-compatible trace ID (32 hex chars) - present on all spans */
@@ -1621,6 +1628,8 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace) that Mastra did not create; carried for external correlation, not Mastra's own parentage */
   externalParentSpanId?: string;
+  /** Initial invocation continued by this execution; supplied by the producer. */
+  resumedFromSpanId?: string;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**
@@ -1730,13 +1739,15 @@ export interface IModelSpanTracker {
    * Falls back to auto-creation on first chunk if the caller forgets.
    */
   startInference?(payload?: StepStartPayload): void;
+  /** Close the provider request before post-response processors and tool execution. */
+  finishInference?(payload: StepFinishPayload): void;
 
   /**
    * End the open MODEL_INFERENCE span as interrupted, keeping the MODEL_STEP open.
    * Called when a queued signal cancels the model request so its replacement
    * opens its own inference span under the same step.
    */
-  interruptInference?(): void;
+  interruptInference?(termination?: SpanTermination): void;
 
   /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans
@@ -1881,7 +1892,7 @@ export interface RecordedTrace {
 // Span Create/Update/Error Option Types
 // ============================================================================
 
-interface CreateBaseOptions<TType extends SpanType> {
+interface CreateBaseOptions<TType extends SpanType> extends SpanOutcomeFields {
   /** Span attributes */
   attributes?: SpanTypeMap[TType];
   /** Span metadata */
@@ -1942,6 +1953,8 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
    * Only used for root spans without a parent.
    */
   externalParentSpanId?: string;
+  /** Native resume linkage, restored by rebuildSpan. */
+  resumedFromSpanId?: string;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created
@@ -1987,7 +2000,7 @@ export interface ChildEventOptions<TType extends SpanType> extends CreateBaseOpt
   output?: SpanOutput<TType>;
 }
 
-interface UpdateBaseOptions<TType extends SpanType> {
+interface UpdateBaseOptions<TType extends SpanType> extends SpanOutcomeFields {
   /** Span attributes */
   attributes?: Partial<SpanTypeMap[TType]>;
   /** Span metadata */
@@ -2032,7 +2045,7 @@ export interface ErrorSpanOptions<TType extends SpanType> extends UpdateBaseOpti
 }
 
 /** Options for retrieving an existing span or creating a new one from a tracing context. */
-export interface GetOrCreateSpanOptions<TType extends SpanType> {
+export interface GetOrCreateSpanOptions<TType extends SpanType> extends SpanOutcomeFields {
   type: TType;
   name: string;
   entityType?: EntityType;

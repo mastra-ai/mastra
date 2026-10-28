@@ -251,3 +251,7 @@ export type { ToolExecutionContext, ToolExecutionError } from './workflows/depre
 
 // Snapshot pruning hook shared with external durable engines (e.g. Inngest)
 export { pruneAgentLoopSnapshot } from '../../loop/workflows/prune-snapshot';
+
+// Shared runtime outcome classification for external durable engines.
+export { endRunSpansWithError } from './run-registry';
+export { agentLoopTermination, executionFailureTermination } from '../../loop/shared/execution-outcome';

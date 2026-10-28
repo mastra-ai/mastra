@@ -17,6 +17,7 @@ import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowTermination } from '../execution-outcome';
 import type { Step, SuspendOptions } from '../step';
 import { getStepResult } from '../step';
 import type {
@@ -208,6 +209,7 @@ export async function executeStep(
     options: {
       name: `workflow step: '${step.id}'`,
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: step.id,
       input: inputData,
@@ -266,7 +268,7 @@ export async function executeStep(
     await engine.endStepSpan({
       span: stepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
-      endOptions: { attributes: { status: 'canceled' } },
+      endOptions: { ...workflowTermination({ status: 'canceled' }), attributes: { status: 'canceled' } },
     });
     const canceledResult = {
       ...omitPriorCompletionFields(stepInfo),
@@ -313,6 +315,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.error`,
             errorOptions: {
+              ...workflowTermination(workflowResult),
               error:
                 workflowResult.error instanceof Error ? workflowResult.error : new Error(String(workflowResult.error)),
               attributes: { status: 'failed' },
@@ -328,6 +331,7 @@ export async function executeStep(
             span: stepSpan as Span<SpanType.WORKFLOW_STEP>,
             operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
             endOptions: {
+              ...workflowTermination(workflowResult),
               output,
               attributes: { status: workflowResult.status },
             },
@@ -642,6 +646,7 @@ export async function executeStep(
       span: stepSpan,
       operationId: `workflow.${workflowId}.run.${runId}.step.${step.id}.span.end`,
       endOptions: {
+        ...workflowTermination(execResults),
         output: execResults.output,
         attributes: {
           status: execResults.status,

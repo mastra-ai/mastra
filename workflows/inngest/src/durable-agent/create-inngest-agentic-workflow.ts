@@ -1,5 +1,6 @@
 import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
 import {
+  agentLoopTermination,
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
   createDurableIsTaskCompleteStep,
@@ -391,6 +392,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
+          if (state.lastStepResult) state.lastStepResult.continuationStopCause = 'delegation';
           await emitStepFinish(false);
           return false;
         }
@@ -402,6 +404,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
+          if (state.lastStepResult) {
+            state.lastStepResult.continuationStopCause = shouldContinue ? 'max_steps' : 'model_finished';
+          }
           await emitStepFinish(false);
           return false;
         }
@@ -444,6 +449,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
+        if (stopped && state.lastStepResult) state.lastStepResult.continuationStopCause = 'stop_condition';
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -487,7 +493,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             finalText = finishResult.outputText;
           }
 
-          const tripwire = finishResult.tripwire;
+          const tripwire = finishResult.tripwire ?? state.lastStepResult?.tripwire;
           if (tripwire && pubsub) {
             await emitChunkEvent(pubsub, state.runId, {
               type: 'tripwire',
@@ -541,11 +547,15 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const observability = mastra?.observability?.getSelectedInstance({});
           // Rebuilt spans end from snapshots taken at run start, so the clock the
           // steps carried through the loop state is applied here.
-          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+          const registry = getRunRegistryEntry(state.runId, mastra);
+          const clock = registry?.resumeModelSpanData ? registry.resumeCompletionStartTime : state.completionStartTime;
+          const completionStartTime = clock ? new Date(clock) : undefined;
           if (state.modelSpanData) {
-            const modelSpan = observability?.rebuildSpan(
-              state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-            ) as AIModelGenerationSpan | undefined;
+            const modelSpan =
+              registry?.resumeModelSpan ??
+              registry?.modelSpan ??
+              (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                AIModelGenerationSpan | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -554,6 +564,12 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               })),
             );
             modelSpan?.createTracker()?.endGeneration({
+              ...agentLoopTermination({
+                stopCause: state.lastStepResult?.continuationStopCause,
+                finishReason: finalOutput.stepResult?.reason,
+                tripwire,
+                maxSteps: state.options?.maxSteps ?? maxSteps,
+              }),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -565,8 +581,17 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
 
           // End AGENT_RUN span with final output
           if (state.agentSpanData) {
-            const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+            const agentSpan =
+              registry?.resumeAgentSpan ??
+              registry?.agentSpan ??
+              observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
+              ...agentLoopTermination({
+                stopCause: state.lastStepResult?.continuationStopCause,
+                finishReason: finalOutput.stepResult?.reason,
+                tripwire,
+                maxSteps: state.options?.maxSteps ?? maxSteps,
+              }),
               output: { text: finalText },
               ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
             });

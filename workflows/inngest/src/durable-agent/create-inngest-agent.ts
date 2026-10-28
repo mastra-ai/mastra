@@ -46,6 +46,7 @@ import {
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
+  endRunSpansWithError,
   emitAbortEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -73,6 +74,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
+import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
 import type {
@@ -927,6 +929,7 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      endRunSpansWithError(runId, error);
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
@@ -1668,6 +1671,38 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
       // Steps and stream-side processors on this segment see the merged
       // context, as core `DurableAgent.resume` does.
       existingEntry.requestContext = callbackOptions.requestContext;
+      // Suspension ends an execution. Resume opens fresh spans so a later
+      // success cannot rewrite the suspended execution's outcome.
+      const originalAgentSpan =
+        existingEntry.resumeAgentSpan ?? existingEntry.agentSpan ?? suspendedSnapshot?.context?.input?.agentSpanData;
+      if (originalAgentSpan?.traceId && mastra) {
+        const resumeAgentSpan = getOrCreateSpan({
+          type: SpanType.AGENT_RUN,
+          outcome: null,
+          name: `agent run: '${agentId}' (resumed)`,
+          entityType: EntityType.AGENT,
+          entityId: agentId,
+          entityName: agentName,
+          metadata: { runId, resumed: true, resumedFromSpanId: originalAgentSpan.id },
+          resumedFromSpanId: originalAgentSpan.id,
+          tracingPolicy: agent.getTracingPolicy(),
+          tracingOptions: { traceId: originalAgentSpan.traceId },
+          requestContext: callbackOptions.requestContext,
+          mastra,
+        });
+        const resumeModelSpan = resumeAgentSpan?.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          outcome: null,
+          name: 'llm (resumed)',
+          metadata: { runId, resumed: true },
+          requestContext: callbackOptions.requestContext,
+        });
+        existingEntry.resumeAgentSpan = resumeAgentSpan;
+        existingEntry.resumeModelSpan = resumeModelSpan;
+        existingEntry.resumeAgentSpanData = resumeAgentSpan?.snapshot?.() ?? resumeAgentSpan?.exportSpan();
+        existingEntry.resumeModelSpanData = resumeModelSpan?.snapshot?.() ?? resumeModelSpan?.exportSpan();
+        existingEntry.resumeCompletionStartTime = undefined;
+      }
       // Re-arm the run-level budget for the resumed session, as core does: a
       // budget on the resume call wins, otherwise the original run's budget from
       // its registry entry (warm) or persisted workflow input (cold).

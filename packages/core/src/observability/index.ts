@@ -16,3 +16,6 @@ export { createObservabilityContext, resolveObservabilityContext } from './conte
 export { startRagIngestion, withRagIngestion } from './rag-ingestion';
 export type { StartRagIngestionOptions, StartRagIngestionResult } from './rag-ingestion';
 export { buildSpanPreviews } from './span-previews';
+
+export { executionFailureTermination } from './execution-outcome';
+export { agentLoopTermination } from '../loop/shared/execution-outcome';

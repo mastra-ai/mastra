@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { spanStopReasonContextSchema } from '../../../observability/outcome-schema';
 import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/span-previews';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
@@ -150,6 +151,11 @@ export const spanRecordSchema = z
       .number()
       .nullish()
       .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
+
+    // Producer-supplied termination fields shared by the exporter record contract.
+    outcome: z.string().nullish(),
+    stopReason: z.string().nullish(),
+    stopReasonContext: spanStopReasonContextSchema.nullish(),
 
     // Database timestamps
     ...dbTimestamps,

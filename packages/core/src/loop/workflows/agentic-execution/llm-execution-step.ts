@@ -1,4 +1,4 @@
-import { ReadableStream } from 'node:stream/web';
+import { ReadableStream, TransformStream } from 'node:stream/web';
 import { isAbortError } from '@ai-sdk/provider-utils-v6';
 import type { LanguageModelV2Usage } from '@ai-sdk/provider-v5';
 import { APICallError } from '@internal/ai-sdk-v5';
@@ -28,6 +28,7 @@ import type {
   ObservabilityContext,
   TracingContext,
 } from '../../../observability';
+import type { SpanTermination } from '../../../observability/types/outcome';
 import { executeWithContextSync, getRootExportSpan } from '../../../observability/utils';
 import type {
   CachedLLMStepResponse,
@@ -101,6 +102,7 @@ import { trackOpenReasoning, watchInterruptibleStream } from '../../shared/inter
 import { buildMemoryHeaders, mergeLlmCallHeaders } from '../../shared/merge-llm-call-headers';
 import { persistUnavailableAttachments } from '../../shared/persist-unavailable-attachments';
 import { recordTerminalErrorMessage } from '../../shared/record-terminal-error-message';
+import { snapshotSignalOutcome } from '../../shared/signal-outcome';
 import { STEP_CONTENT_CHUNK_TYPES } from '../../shared/step-content-chunk-types';
 import { TERMINAL_FINISH_REASONS } from '../../shared/terminal-finish-reasons';
 import type { TranscriptStep } from '../../shared/transcript-step';
@@ -1315,10 +1317,17 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       // (not the run), and the step returns so the loop asks again with that input.
       const subscribePendingSignals = readScoped(scopeCtx, SUBSCRIBE_PENDING_SIGNALS_KEY, 'subscribePendingSignals');
       const interruption = new AbortController();
+      let interruptionOutcome: SpanTermination = { outcome: 'interrupted', stopReason: 'signal_received' };
       let interruptible = false;
-      const stopListening = subscribePendingSignals?.(runId, () => {
-        if (interruptible && !options?.abortSignal?.aborted)
+      const stopListening = subscribePendingSignals?.(runId, signals => {
+        if (interruptible && !options?.abortSignal?.aborted && !interruption.signal.aborted) {
+          interruptionOutcome = {
+            outcome: 'interrupted',
+            stopReason: 'signal_received',
+            stopReasonContext: { signals: snapshotSignalOutcome(signals) },
+          };
           interruption.abort(new Error('Interrupted by a queued signal'));
+        }
       });
       const throwIfInterrupted = () => {
         if (interruption.signal.aborted) throw interruption.signal.reason;
@@ -2176,6 +2185,25 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         if (transcriptStep.messageId !== currentStep.messageId) {
           transcriptStep = { messageId: currentStep.messageId, start: 0, end: 0 };
         }
+        // Capture the provider boundary before processors can hold its finish chunk
+        // or replace the logical result with a guardrail. A rejected buffered reply
+        // does not retroactively reject the completed physical request.
+        const providerStream = (modelResult as ReadableStream<ChunkType<OUTPUT>>).pipeThrough(
+          new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
+            transform(chunk, controller) {
+              if (chunk.type === 'finish') {
+                const reason = chunk.payload.stepResult.reason;
+                if (reason !== 'retry' && reason !== 'tripwire') {
+                  modelSpanTracker?.finishInference?.({
+                    ...chunk.payload,
+                    stepResult: { ...chunk.payload.stepResult, reason },
+                  });
+                }
+              }
+              controller.enqueue(chunk);
+            },
+          }),
+        );
         const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,
@@ -2183,12 +2211,8 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             version: currentStep.model.specificationVersion,
           },
           stream: subscribePendingSignals
-            ? watchInterruptibleStream(
-                modelResult as ReadableStream<ChunkType<OUTPUT>>,
-                interruption.signal,
-                () => (interruptible = false),
-              )
-            : (modelResult as ReadableStream<ChunkType<OUTPUT>>),
+            ? watchInterruptibleStream(providerStream, interruption.signal, () => (interruptible = false))
+            : providerStream,
           messageList,
           messageId: currentStep.messageId,
           options: {
@@ -2814,7 +2838,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         for (const id of openReasoningIds) {
           safeEnqueue(controller, { type: 'reasoning-end', runId, from: ChunkFrom.AGENT, payload: { id } });
         }
-        modelSpanTracker?.interruptInference?.();
+        modelSpanTracker?.interruptInference?.(interruptionOutcome);
         const steps = inputData.output?.steps ?? [];
         const aborted = options?.abortSignal?.aborted === true;
         const result = {

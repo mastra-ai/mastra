@@ -6,7 +6,7 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
+import { Workflow, getEntryWorkflow, isSingleStepEntry, workflowTermination } from '@mastra/core/workflows';
 import type {
   Step,
   StepResult,
@@ -541,6 +541,7 @@ export class InngestWorkflow<
 
           const span = observability.startSpan({
             type: SpanType.WORKFLOW_RUN,
+            outcome: null,
             name: `workflow run: '${this.id}'`,
             entityType: EntityType.WORKFLOW_RUN,
             entityId: this.id,
@@ -677,11 +678,13 @@ export class InngestWorkflow<
 
                 if (result.status === 'failed') {
                   workflowSpan.error({
+                    ...workflowTermination(result),
                     error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
                     attributes: { status: 'failed' },
                   });
                 } else {
                   workflowSpan.end({
+                    ...workflowTermination(result),
                     output: result.status === 'success' ? result.result : undefined,
                     attributes: { status: result.status },
                   });

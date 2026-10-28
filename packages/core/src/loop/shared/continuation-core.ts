@@ -2,8 +2,20 @@ import type { IterationCompleteContext, OnIterationCompleteHandler } from '../..
 import type { IMastraLogger } from '../../logger';
 import type { LoopOptions } from '../types';
 
+export const CONTINUATION_STOP_CAUSES = [
+  'model_finished',
+  'max_steps',
+  'stop_condition',
+  'iteration_hook',
+  'feedback_complete',
+  'delegation',
+] as const;
+export type ContinuationStopCause = (typeof CONTINUATION_STOP_CAUSES)[number];
+
 /** Decision returned by {@link decideContinuation}, projected back onto engine state by the glue. */
 export interface ContinuationDecision {
+  /** Authoritative loop stop boundary; absent while continuing. Not a provider finish reason. */
+  stopCause?: ContinuationStopCause;
   /** True when the loop must stop after this iteration. */
   isFinal: boolean;
   /**
@@ -126,6 +138,8 @@ export async function decideContinuation(deps: ContinuationDeps): Promise<Contin
  */
 async function decideContinuationDurable(deps: ContinuationDeps): Promise<ContinuationDecision> {
   let hasFinishedSteps = false;
+  let stopCause: ContinuationStopCause =
+    deps.llmWantsToContinue && !deps.underMaxSteps ? 'max_steps' : 'model_finished';
   // Hard-stop tracks reasons the onIterationComplete hook must NOT override.
   let hardStop = false;
   let nextPendingFeedbackStop = false;
@@ -136,6 +150,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   if (deps.pendingFeedbackStop) {
     hasFinishedSteps = true;
     hardStop = true;
+    stopCause = 'feedback_complete';
   }
 
   const shouldContinue = deps.llmWantsToContinue;
@@ -153,6 +168,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
     );
     if (conditions.some(Boolean)) {
       hasFinishedSteps = true;
+      stopCause = 'stop_condition';
     }
   }
 
@@ -161,6 +177,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   if (deps.consumeDelegationBail()) {
     hasFinishedSteps = true;
     hardStop = true;
+    stopCause = 'delegation';
   }
 
   let isFinal = !shouldContinue || !deps.underMaxSteps || hasFinishedSteps;
@@ -198,11 +215,14 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
         } else if (iterationResult.continue === false && !hasFinishedSteps) {
           hasFinishedSteps = true;
           isFinal = true;
+          stopCause = 'iteration_hook';
         } else if (iterationResult.continue === true && !hardStop && (hasFinishedSteps || !shouldContinue)) {
           if (deps.underMaxSteps) {
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;
+          } else {
+            stopCause = 'max_steps';
           }
         }
       }
@@ -212,7 +232,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
     }
   }
 
-  return { isFinal, forceContinue, nextPendingFeedbackStop };
+  return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };
 }
 
 /**
@@ -230,6 +250,8 @@ async function decideContinuationDefault(
   policy: Extract<ContinuationPolicy, { mode: 'default' }>,
 ): Promise<ContinuationDecision> {
   let hasFinishedSteps = false;
+  let stopCause: ContinuationStopCause =
+    deps.llmWantsToContinue && !deps.underMaxSteps ? 'max_steps' : 'model_finished';
   let nextPendingFeedbackStop = false;
 
   // SOFT stop: the previous turn's `{ continue: false, feedback }`
@@ -239,6 +261,7 @@ async function decideContinuationDefault(
   // released contract let hook authors override the two-phase stop.
   if (deps.pendingFeedbackStop) {
     hasFinishedSteps = true;
+    stopCause = 'feedback_complete';
   }
 
   const shouldContinue = deps.llmWantsToContinue;
@@ -258,6 +281,8 @@ async function decideContinuationDefault(
     );
     if (conditions.some(Boolean)) {
       hasFinishedSteps = true;
+      // When both match, the exhausted budget already prevents the requested turn.
+      stopCause = deps.underMaxSteps ? 'stop_condition' : 'max_steps';
     }
   }
 
@@ -305,6 +330,7 @@ async function decideContinuationDefault(
         } else if (iterationResult.continue === false && !hasFinishedSteps) {
           hasFinishedSteps = true;
           isFinal = true;
+          stopCause = 'iteration_hook';
         } else if (iterationResult.continue === true && (hasFinishedSteps || !shouldContinue)) {
           // Resurrection: `{ continue: true }` on a stopped run forces
           // another turn. Inject feedback before reopening the run so the
@@ -316,6 +342,8 @@ async function decideContinuationDefault(
             hasFinishedSteps = false;
             isFinal = false;
             forceContinue = true;
+          } else {
+            stopCause = 'max_steps';
           }
         }
       }
@@ -341,7 +369,8 @@ async function decideContinuationDefault(
   if (!hasFinishedSteps && deps.consumeDelegationBail()) {
     isFinal = true;
     forceContinue = false;
+    stopCause = 'delegation';
   }
 
-  return { isFinal, forceContinue, nextPendingFeedbackStop };
+  return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };
 }

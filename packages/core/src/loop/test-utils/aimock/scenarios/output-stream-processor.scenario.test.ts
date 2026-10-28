@@ -1,6 +1,8 @@
 import { stepCountIs } from '@internal/ai-sdk-v5';
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { SpanType } from '../../../../observability';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
 import { createTool } from '../../../../tools';
@@ -330,6 +332,48 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(JSON.stringify(requests[1]!.body)).toContain('shipped');
     expect(JSON.stringify(requests[1]!.body)).not.toContain('MARGIN-42');
     expect(JSON.stringify((await memory.recall(THREAD)).messages)).not.toContain('MARGIN-42');
+  });
+
+  it('a blocked order result closes the step without rewriting the provider completion', async () => {
+    const { observability, ended } = captureOutcomeEvents();
+    const { output, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      prompt: CUSTOMER_QUESTION,
+      maxSteps: 3,
+      tools: {
+        lookupOrder: createTool({
+          id: 'lookupOrder',
+          description: 'Look up the order',
+          inputSchema: z.object({}),
+          execute: async () => ({ internalMargin: 'MARGIN-42' }),
+        }),
+      },
+      outputProcessors: [
+        {
+          id: 'result-policy',
+          processToolResult: ({ abort }) => abort('Private result blocked'),
+        },
+      ],
+      fixtures: llm =>
+        llm.on(
+          { endpoint: 'chat' },
+          {
+            toolCalls: [{ id: 'blocked-order', name: 'lookupOrder', arguments: {} }],
+          },
+        ),
+    });
+    expect(output.tripwire).toMatchObject({ processorId: 'result-policy', reason: 'Private result blocked' });
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+      expect(ended(type).at(-1)).toMatchObject({
+        outcome: 'blocked',
+        stopReason: 'guardrail',
+        stopReasonContext: { tripwire: { processorId: 'result-policy', reason: 'Private result blocked' } },
+      });
+    }
+    expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success', stopReason: null }]);
+    expect(requests).toHaveLength(1);
   });
 
   const lookupOrderFixtures =
