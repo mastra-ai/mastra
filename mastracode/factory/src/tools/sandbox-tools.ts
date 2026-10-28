@@ -1,3 +1,4 @@
+import type { BrowserCookie, MastraBrowser } from '@mastra/core/browser';
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -13,19 +14,11 @@ export interface FactorySandboxToolDependencies {
   /** The session's running sandbox, if this process has one. */
   findSandbox: (input: RecreateSessionSandboxInput) => Promise<object | undefined>;
   /** The browser session agents drive, when Factory has one. */
-  browser?: object;
+  browser?: MastraBrowser;
 }
 
 interface PortUrlSandbox {
-  getPortUrl(port: number): Promise<{ url: string; cookie: object }>;
-}
-
-interface CookieBrowser {
-  setCookies(cookies: object[], threadId: string): Promise<void>;
-}
-
-function canSetCookies(browser: object | undefined): browser is CookieBrowser {
-  return typeof (browser as Partial<CookieBrowser> | undefined)?.setCookies === 'function';
+  getPortUrl(port: number): Promise<{ url: string; cookie: BrowserCookie }>;
 }
 
 function hasPortUrl(sandbox: object): sandbox is PortUrlSandbox {
@@ -90,7 +83,7 @@ export function createFactorySandboxTools(
       // The browser tool can't sign in, so it gets the preview cookie directly.
       // The cookie never goes back to the model.
       const threadId = context?.agent?.threadId;
-      if (threadId && canSetCookies(deps.browser)) {
+      if (threadId && deps.browser) {
         // Browsers that can't take cookies throw; the link still works, the browser just has to sign in.
         await deps.browser.setCookies([cookie], threadId).catch(() => {});
       }

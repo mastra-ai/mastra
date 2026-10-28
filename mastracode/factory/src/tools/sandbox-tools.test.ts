@@ -1,3 +1,4 @@
+import type { MastraBrowser } from '@mastra/core/browser';
 import { describe, expect, it, vi } from 'vitest';
 
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
@@ -66,7 +67,8 @@ function portUrlTool(sandbox: object | undefined, found = true, browser?: object
     sessions: { getSourceControlBySessionId: vi.fn(async () => (found ? sourceControl : null)) },
     resetSandbox: vi.fn(async () => 'reset' as const),
     findSandbox,
-    ...(browser && { browser }),
+    // Only setCookies matters here.
+    ...(browser && { browser: browser as unknown as MastraBrowser }),
   }).factory_sandbox_port_url!;
   const run = (port: number, threadId: string | null = 'thread-1') =>
     (tool.execute as (input: { port: number }, context: unknown) => Promise<unknown>)(
