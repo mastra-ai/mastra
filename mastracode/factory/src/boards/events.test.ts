@@ -112,15 +112,25 @@ describe('rulePhaseContext', () => {
     expect(rulePhaseContext(boards, item(['queued']))).toEqual({
       id: 'queued',
       kind: 'resting',
+      nextPhases: ['shipping', 'shipped'],
       outcomes: ['ship', 'skip'],
     });
     expect(rulePhaseContext(boards, item(['shipping']))).toEqual({
       id: 'shipping',
       kind: 'working',
+      context: 'release',
       role: 'release',
+      nextPhases: ['shipped'],
       outcomes: [],
     });
-    expect(rulePhaseContext(boards, item(['execute'], null))).toMatchObject({ kind: 'working', role: 'work' });
+    // Work declares nextPhases and no outcome names, so rules test the targets through nextPhases.
+    expect(rulePhaseContext(boards, item(['execute'], null))).toMatchObject({
+      kind: 'working',
+      context: 'work',
+      role: 'work',
+      outcomes: [],
+      nextPhases: expect.arrayContaining(['review', 'done', 'canceled']),
+    });
   });
 
   it('fails closed for multi-stage rows, undeclared phases, and uninstalled boards', () => {

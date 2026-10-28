@@ -39,7 +39,7 @@
     "qwen3.8-flash-next"
   ],
   "reasoning": {
-    "laguna-s-2.1": [
+    "glm-5.x-menthol": [
       {
         "type": "toggle"
       }
@@ -53,22 +53,20 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "glm-5.3": [
+    "mimo-v2.6-pro-rl": [
       {
-        "type": "effort",
-        "values": ["low", "high", "max"]
+        "type": "toggle"
       }
     ],
-    "qwen3.8-flash-next": [
+    "minimax-m3": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "xhigh"]
+        "type": "toggle"
       }
     ],
-    "glm-5.3-flash": [
+    "muse-glimmer-30b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["low", "medium", "high", "xhigh"]
       }
     ],
     "glm-5.2": [
@@ -77,10 +75,25 @@
         "values": ["none", "high", "max"]
       }
     ],
-    "muse-glimmer-30b": [
+    "mimo-v2.6-flash-rl": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nemotron-3-nano-omni-30b-a3b-reasoning": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "laguna-s-2.1": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-v4-flash-0731": [
@@ -92,7 +105,13 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "minimax-m3": [
+    "glm-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "nemotron-3.5-content-safety": [
       {
         "type": "toggle"
       }
@@ -106,29 +125,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "glm-5.x-menthol": [
+    "qwen3.8-flash-next": [
       {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3-nano-omni-30b-a3b-reasoning": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nemotron-3.5-content-safety": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-pro-rl": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "mimo-v2.6-flash-rl": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "xhigh"]
       }
     ]
   }

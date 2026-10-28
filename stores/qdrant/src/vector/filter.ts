@@ -200,9 +200,8 @@ export class QdrantFilterTranslator extends BaseFilterTranslator<QdrantVectorFil
       return {};
     } else if (conditions.length === 1 && isNested) {
       return conditions[0];
-    } else {
-      return { must: conditions };
     }
+    return { must: conditions };
   }
 
   private handleLogicalOperators(entries: [string, any][], isNested: boolean, fieldKey?: string): any | null {

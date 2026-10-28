@@ -1,0 +1,54 @@
+{
+  "name": "template-insurance-policy-checking",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Reconcile agreed insurance terms with issued policy documents and prepare evidence-backed policy checking reports for broker review.",
+  "license": "Apache-2.0",
+  "type": "module",
+  "engines": {
+    "node": "^22.19.0 || >=24.11.0"
+  },
+  "os": [
+    "darwin",
+    "linux"
+  ],
+  "scripts": {
+    "dev": "node scripts/mastra-cli.mjs dev",
+    "build": "node scripts/mastra-cli.mjs build",
+    "start": "node scripts/mastra-cli.mjs start",
+    "typecheck": "tsc --noEmit",
+    "format": "oxfmt .",
+    "format:check": "oxfmt --check .",
+    "test:unit": "vitest run tests/unit.test.ts",
+    "test:integration": "vitest run tests/*.integration.test.ts",
+    "test:reconciliation": "vitest run tests/reconciliation.integration.test.ts",
+    "test:reports": "vitest run tests/reports.integration.test.ts",
+    "test:studio": "playwright test",
+    "test:review": "vitest run tests/review.integration.test.ts",
+    "test:evaluation": "vitest run tests/evaluation.integration.test.ts tests/operations.integration.test.ts tests/live-authorization.test.ts",
+    "evaluate:live": "node --env-file-if-exists=.env --import ./tests/source-loader.mjs scripts/live-evaluation-runner.ts",
+    "test:use-cases": "playwright test tests/use-cases.studio.test.ts",
+    "prepare:use-cases": "node --import ./tests/source-loader.mjs scripts/use-cases-generator.ts",
+    "test": "vitest run"
+  },
+  "dependencies": {
+    "@ai-sdk/openai": "3.0.130",
+    "@libsql/client": "^0.18.0",
+    "@mastra/core": "latest",
+    "@mastra/libsql": "latest",
+    "@mastra/memory": "latest",
+    "pdfjs-dist": "^6.4.299",
+    "pdfkit": "0.19.1",
+    "zod": "^4.6.7"
+  },
+  "devDependencies": {
+    "@playwright/test": "^1.64.1",
+    "@types/node": "^24.10.9",
+    "@types/pdfkit": "0.17.7",
+    "mastra": "latest",
+    "oxfmt": "0.59.0",
+    "pdf-lib": "^1.17.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.0.5"
+  }
+}

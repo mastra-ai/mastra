@@ -23,6 +23,8 @@ import { it, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
+import { MessageHistory } from '../../../../processors/memory';
+import type { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import {
@@ -97,6 +99,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     async blockSave => {
       const onError = vi.fn();
       let toolStarted = false;
+      const execution = Promise.withResolvers<unknown>();
+      const onOutput = vi.fn();
       const memory = new MockMemory();
       let releaseSave!: () => void;
       const saveGate = new Promise<void>(resolve => {
@@ -126,8 +130,9 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
               inputSchema: z.object({}),
               execute: async () => {
                 toolStarted = true;
-                return new Promise<never>(() => {});
+                return execution.promise;
               },
+              onOutput,
             }),
           },
           modelSettings: { timeout: { totalMs: DEADLINE_MS } },
@@ -154,11 +159,32 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+        const prefix = engine === 'inngest' ? 'inngest:' : '';
+        for (const name of durable
+          ? ['durable-agentic-loop', 'durable-agentic-execution']
+          : ['agentic-loop', 'executionWorkflow']) {
+          await expect
+            .poll(async () => {
+              const snapshot = await workflows!.loadWorkflowSnapshot({
+                workflowName: `${prefix}${name}`,
+                runId: result.output.runId,
+              });
+              return snapshot?.status;
+            })
+            .not.toBe('running');
+        }
+        execution.reject(new Error('tool failed after the total deadline'));
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(onOutput).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledTimes(1);
         if (blockSave && (engine === 'durable' || engine === 'evented')) {
           await new Promise(resolve => setTimeout(resolve, 50));
           expect(saveBlocked).toBe(false);
         }
       } finally {
+        execution.resolve(undefined);
         releaseSave();
         saveSpy.mockRestore();
       }
@@ -166,11 +192,29 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS,
   );
 
-  it.each([false, true])(
-    'only completed steps reach memory at the deadline (savePerStep: %s)',
-    async savePerStep => {
+  it.each([
+    { savePerStep: false, readOnly: false },
+    { savePerStep: true, readOnly: false },
+    { savePerStep: false, readOnly: true },
+    // History disabled in config, but the agent saves through an explicitly configured MessageHistory.
+    { savePerStep: false, readOnly: false, explicitHistory: true },
+    // Same, but that MessageHistory writes to its own store, not the agent memory store.
+    { savePerStep: false, readOnly: false, explicitHistory: true, historyStore: true },
+    // Same, but the agent picks MessageHistory from requestContext, and a tool changes that context
+    // mid-run. The deadline save must use the processors the run started with.
+    { savePerStep: false, readOnly: false, dynamicHistory: true },
+    // A custom processor takes the message-history id, so memory adds no MessageHistory and the
+    // finish path would not save to agent memory. The deadline save must not either.
+    { savePerStep: false, readOnly: false, customHistory: true },
+    // History disabled in config and no MessageHistory configured, so the finish path saves nothing.
+    // The deadline save must not either.
+    { savePerStep: false, readOnly: false, historyOff: true },
+  ])(
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore, customHistory: $customHistory, historyOff: $historyOff)',
+    async ({ savePerStep, readOnly, explicitHistory, dynamicHistory, historyStore, customHistory, historyOff }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}`;
+      const historyMemory = historyStore ? new MockMemory() : memory;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}-${!!dynamicHistory}-${!!historyStore}-${!!customHistory}-${!!historyOff}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -184,6 +228,22 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         prompt: 'Look up the order, then check the courier.',
         maxSteps: 3,
         savePerStep,
+        ...(readOnly && { memoryOptions: { readOnly } }),
+        ...(explicitHistory && {
+          memoryOptions: { lastMessages: false },
+          outputProcessors: [new MessageHistory({ storage: (await historyMemory.storage.getStore('memory'))! })],
+        }),
+        ...(dynamicHistory && {
+          memoryOptions: { lastMessages: false },
+          agentOutputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+            requestContext.get('history') === 'off'
+              ? []
+              : [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
+        }),
+        ...(historyOff && { memoryOptions: { lastMessages: false } }),
+        ...(customHistory && {
+          outputProcessors: [{ id: 'message-history', processOutputResult: ({ messages }: any) => messages }],
+        }),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
@@ -191,7 +251,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
             id: 'lookup',
             description: 'Look up an order.',
             inputSchema: z.object({}),
-            execute: async () => {
+            execute: async (_input, context) => {
+              context?.requestContext?.set('history', 'off');
               completedTool = true;
               return { status: 'shipped' };
             },
@@ -230,12 +291,19 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const errors = result.chunks!.filter(chunk => chunk.type === 'error');
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-      const { messages } = await memory.recall({ threadId, resourceId });
+      const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
-      expect(saved.includes('Look up the order, then check the courier.')).toBe(
-        savePerStep || engine === 'durable' || engine === 'evented',
-      );
-      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
+      // Durable and evented persist the input through agent memory regardless of the configured
+      // MessageHistory or lastMessages. Inngest saves nothing at the deadline beyond the savePerStep
+      // flush. Both predate this test and are out of scope here.
+      const durable = engine === 'durable' || engine === 'evented';
+      const inputSaved =
+        !readOnly &&
+        (engine === 'inngest'
+          ? savePerStep
+          : !(historyStore && durable) && !((customHistory || historyOff) && !durable));
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
+      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
     TEST_TIMEOUT_MS,

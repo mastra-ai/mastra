@@ -1,5 +1,6 @@
 import { THREAD_QUERY_FIELD_REGISTRY } from '@mastra/core/storage';
 import type { TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { MessagesSquareIcon } from 'lucide-react';
 import { describe, expect, it } from 'vitest';
 import type { TraceFilterGroup, TraceFilterToken } from '../traces/trace-query-filters';
 import { buildThreadQueryWhere, createThreadFilterBarFields, THREAD_FILTER_FIELD_IDS } from './thread-filters';
@@ -69,6 +70,10 @@ describe('thread filter fields', () => {
       expect(byId('traceCount')).toMatchObject({ type: 'number' });
       expect(byId('traceCount').operators).toContain('gte');
       expect(byId('traceCount').operators).not.toContain('exists');
+    });
+
+    it('labels the trace count as Messages with the Threads message icon', () => {
+      expect(byId('traceCount')).toMatchObject({ label: 'Messages', icon: MessagesSquareIcon });
     });
 
     it('treats time to first chunk as a number', () => {

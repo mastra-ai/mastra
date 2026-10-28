@@ -1,6 +1,6 @@
 {
   "name": "@mastra/editor",
-  "version": "0.16.5-alpha.2",
+  "version": "0.16.5",
   "description": "Mastra Editor for agent management and instantiation",
   "license": "Apache-2.0",
   "main": "dist/index.cjs",

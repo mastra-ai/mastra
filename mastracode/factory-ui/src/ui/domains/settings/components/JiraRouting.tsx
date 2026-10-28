@@ -2,9 +2,10 @@ import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Input } from '@mastra/playground-ui/components/Input';
 import { Select, SelectContent, SelectItem, SelectTrigger } from '@mastra/playground-ui/components/Select';
-import { SettingsFieldsetRow, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 import { toast } from '@mastra/playground-ui/components/Toaster';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Plus, RotateCcw, X } from 'lucide-react';
 import { useState } from 'react';
 
 import {
@@ -14,10 +15,14 @@ import {
 } from '../../../../hooks/useIntakeConfig';
 import { IntakeBindingConflictError } from '../../factory/services/intake';
 import type { IntakeSourceBinding } from '../../factory/services/intake';
-import { BoardPicker } from './LinearRouting';
+import { SourcePicker } from './IntakeSourcePicker';
+import type { SourcePickerProps } from './IntakeSourcePicker';
+import { BoardPicker } from './IntakeSourceRouting';
 
 const ALL_ISSUES = 'all';
 const LABELLED = 'labelled';
+
+type Factory = { id: string; name: string };
 
 /** Comma-separated labels as typed, trimmed and without blanks. */
 function splitLabels(value: string): string[] {
@@ -25,40 +30,6 @@ function splitLabels(value: string): string[] {
     .split(',')
     .map(label => label.trim())
     .filter(Boolean);
-}
-
-type Factory = { id: string; name: string };
-
-/**
- * Routing for selected Jira projects. Unlike other providers, one Jira project
- * can feed several factories: each takes either all issues or only the issues
- * carrying its labels. Label filters beat "all issues", and an issue carrying
- * two factories' labels goes to the factory that was added first.
- */
-export function JiraRouting({
-  sourceIds,
-  sources,
-  factories,
-}: {
-  sourceIds: string[];
-  sources: { id: string; name: string }[];
-  factories: Factory[];
-}) {
-  const bindingsQuery = useIntakeBindingsQuery();
-  const bindings = (bindingsQuery.data ?? []).filter(binding => binding.integrationId === 'jira');
-  return (
-    <div role="group" aria-label="Jira routing" className="flex flex-col">
-      {sourceIds.map(sourceId => (
-        <JiraProjectRouting
-          key={sourceId}
-          sourceId={sourceId}
-          name={sources.find(source => source.id === sourceId)?.name ?? sourceId}
-          bindings={bindings.filter(binding => binding.sourceId === sourceId)}
-          factories={factories}
-        />
-      ))}
-    </div>
-  );
 }
 
 function factoryName(factories: Factory[], id: string): string {
@@ -78,7 +49,53 @@ function conflictMessage(error: unknown, factories: Factory[]): string {
     .join('; ');
 }
 
-function JiraProjectRouting({
+/**
+ * Selected Jira projects with their routing. Unlike other providers, one Jira
+ * project can feed several factories: each takes either all issues or only the
+ * issues carrying its labels. Label filters beat "all issues", and an issue
+ * carrying two factories' labels goes to the factory that was added first.
+ */
+export function JiraRoutedSourcePicker({ factories, ...picker }: SourcePickerProps & { factories: Factory[] }) {
+  const bindingsQuery = useIntakeBindingsQuery();
+  const bindings = bindingsQuery.data;
+  const bindingsFor = (sourceId: string) =>
+    (bindings ?? []).filter(binding => binding.integrationId === 'jira' && binding.sourceId === sourceId);
+
+  return (
+    <>
+      <SourcePicker
+        {...picker}
+        itemDescription={sourceId => {
+          if (!bindings) return undefined;
+          const routes = bindingsFor(sourceId);
+          if (routes.length === 0) return "Not routed — this project's issues won't be picked up.";
+          if (routes.length > 1)
+            return 'Label filters take precedence over "All issues". An issue matching two filters goes to the factory added first.';
+          return undefined;
+        }}
+        itemDetails={item =>
+          bindings && (
+            <JiraSourceRoutes
+              sourceId={item.id}
+              name={item.label}
+              bindings={bindingsFor(item.id)}
+              factories={factories}
+            />
+          )
+        }
+      />
+      {bindingsQuery.isError && (
+        <SettingsRow label="Routing is unavailable" description="Your source routes could not be loaded.">
+          <Button size="sm" variant="ghost" icon={<RotateCcw />} onClick={() => void bindingsQuery.refetch()}>
+            Retry
+          </Button>
+        </SettingsRow>
+      )}
+    </>
+  );
+}
+
+function JiraSourceRoutes({
   sourceId,
   name,
   bindings,
@@ -94,11 +111,6 @@ function JiraProjectRouting({
   const [errors, setErrors] = useState<Record<string, string>>({});
   const busy = save.isPending || remove.isPending;
   const unbound = factories.filter(factory => !bindings.some(binding => binding.factoryProjectId === factory.id));
-  const takesAllIssues = bindings.some(binding => (binding.labels ?? null) === null);
-  const [draftFactory, setDraftFactory] = useState<string | null>(null);
-  const [draftLabels, setDraftLabels] = useState('');
-  const parsedDraftLabels = splitLabels(draftLabels);
-  const addError = draftFactory ? errors[draftFactory] : undefined;
 
   const setError = (factoryProjectId: string, message: string | null) =>
     setErrors(current => {
@@ -138,74 +150,7 @@ function JiraProjectRouting({
     );
 
   return (
-    <div className="flex flex-col">
-      <SettingsRow
-        label={name}
-        description={
-          bindings.length === 0
-            ? "Not routed — this project's issues won't be picked up."
-            : bindings.length > 1
-              ? 'Label filters take precedence over "All issues". An issue matching two filters goes to the factory added first.'
-              : undefined
-        }
-      />
-      {unbound.length > 0 && (
-        <SettingsFieldsetRow
-          label={`Add a factory for ${name}`}
-          description={
-            takesAllIssues
-              ? 'Another factory takes all issues, so name the labels this factory should take.'
-              : 'Leave labels empty to take all issues.'
-          }
-        >
-          <div className="flex items-center gap-2">
-            <Select value={draftFactory ?? ''} disabled={busy} onValueChange={setDraftFactory}>
-              <SelectTrigger size="sm" aria-label={`Factory to add for ${name}`} className="w-auto">
-                <Txt as="span" variant="caption">
-                  {draftFactory ? factoryName(factories, draftFactory) : 'Choose a factory'}
-                </Txt>
-              </SelectTrigger>
-              <SelectContent>
-                {unbound.map(factory => (
-                  <SelectItem key={factory.id} value={factory.id}>
-                    {factory.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <Input
-              size="sm"
-              aria-label={`Labels for the new ${name} factory`}
-              placeholder="payments, billing"
-              value={draftLabels}
-              disabled={busy}
-              onChange={event => setDraftLabels(event.target.value)}
-            />
-            <Button
-              size="sm"
-              disabled={busy || !draftFactory || (takesAllIssues && parsedDraftLabels.length === 0)}
-              onClick={() => {
-                if (!draftFactory) return;
-                route(
-                  draftFactory,
-                  { board: null, labels: parsedDraftLabels.length > 0 ? parsedDraftLabels : null },
-                  () => {
-                    setDraftFactory(null);
-                    setDraftLabels('');
-                  },
-                );
-              }}
-            >
-              Add
-            </Button>
-          </div>
-          {addError && (
-            <Txt tone="muted" as="p" variant="caption">
-              {addError}
-            </Txt>
-          )}
-        </SettingsFieldsetRow>
-      )}
+    <ul aria-label={`Factories for ${name}`} className="border-border mt-1 flex flex-col gap-2 border-l pl-3">
       {bindings.map(binding => (
         <JiraBindingRow
           key={binding.factoryProjectId}
@@ -222,7 +167,96 @@ function JiraProjectRouting({
           onRemove={() => unroute(binding.factoryProjectId)}
         />
       ))}
-    </div>
+      {unbound.length > 0 && (
+        <AddJiraFactory
+          name={name}
+          factories={factories}
+          unbound={unbound}
+          takesAllIssues={bindings.some(binding => (binding.labels ?? null) === null)}
+          errors={errors}
+          disabled={busy}
+          onAdd={(factoryProjectId, labels, onDone) => route(factoryProjectId, { board: null, labels }, onDone)}
+        />
+      )}
+    </ul>
+  );
+}
+
+function AddJiraFactory({
+  name,
+  factories,
+  unbound,
+  takesAllIssues,
+  errors,
+  disabled,
+  onAdd,
+}: {
+  name: string;
+  factories: Factory[];
+  unbound: Factory[];
+  takesAllIssues: boolean;
+  errors: Record<string, string>;
+  disabled: boolean;
+  onAdd: (factoryProjectId: string, labels: string[] | null, onDone: () => void) => void;
+}) {
+  const [factory, setFactory] = useState<string | null>(null);
+  const [labels, setLabels] = useState('');
+  const parsed = splitLabels(labels);
+  const error = factory ? errors[factory] : undefined;
+  const hint = takesAllIssues
+    ? 'Another factory takes all issues, so name the labels this factory should take.'
+    : 'Leave labels empty to take all issues.';
+
+  return (
+    <li className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Select value={factory ?? ''} disabled={disabled} onValueChange={setFactory}>
+          <SelectTrigger size="sm" aria-label={`Factory to add for ${name}`} className="w-auto max-w-full min-w-0">
+            <Txt as="span" variant="caption">
+              {factory ? factoryName(factories, factory) : 'Add a factory'}
+            </Txt>
+          </SelectTrigger>
+          <SelectContent>
+            {unbound.map(candidate => (
+              <SelectItem key={candidate.id} value={candidate.id}>
+                {candidate.name}
+              </SelectItem>
+            ))}
+          </SelectContent>
+        </Select>
+        {factory && (
+          <>
+            <Input
+              size="sm"
+              aria-label={`Labels for the new ${name} factory`}
+              placeholder="Labels, e.g. payments, billing"
+              value={labels}
+              disabled={disabled}
+              onChange={event => setLabels(event.target.value)}
+              className="w-56 max-w-full"
+            />
+            <Button
+              size="sm"
+              icon={<Plus />}
+              disabled={disabled || (takesAllIssues && parsed.length === 0)}
+              onClick={() =>
+                onAdd(factory, parsed.length > 0 ? parsed : null, () => {
+                  setFactory(null);
+                  setLabels('');
+                })
+              }
+            >
+              Add
+            </Button>
+          </>
+        )}
+      </div>
+      {factory && (
+        <Txt as="p" variant="meta" tone="muted" role={error ? 'alert' : undefined}>
+          {error ?? hint}
+        </Txt>
+      )}
+    </li>
   );
 }
 
@@ -276,84 +310,97 @@ function JiraBindingRow({
           : undefined);
 
   return (
-    <SettingsFieldsetRow label={factory} description={description}>
-      <div className="flex flex-col gap-2">
-        <div className="flex items-center gap-2">
-          <BoardPicker
-            name={`${name} in ${factory}`}
-            factoryProjectId={binding.factoryProjectId}
-            board={binding.board}
+    <li aria-label={factory} className="flex flex-col gap-1">
+      <div className="flex flex-wrap items-center gap-2">
+        <Txt as="span" variant="caption" className="min-w-24 wrap-anywhere">
+          {factory}
+        </Txt>
+        <BoardPicker
+          name={`${name} in ${factory}`}
+          factoryProjectId={binding.factoryProjectId}
+          board={binding.board}
+          disabled={disabled}
+          onChange={onBoardChange}
+        />
+        <Select
+          value={filtered ? LABELLED : ALL_ISSUES}
+          disabled={disabled}
+          onValueChange={value => {
+            if (value === ALL_ISSUES) {
+              setLabelled(false);
+              if (saved !== null) onLabelsChange(null);
+            } else {
+              setLabelled(true);
+            }
+          }}
+        >
+          <SelectTrigger
+            size="sm"
+            aria-label={`Issues from ${name} for ${factory}`}
+            className="w-auto max-w-full min-w-0"
+          >
+            <Txt as="span" variant="caption">
+              {filtered ? 'Only issues labelled…' : 'All issues'}
+            </Txt>
+          </SelectTrigger>
+          <SelectContent>
+            <SelectItem value={ALL_ISSUES}>All issues</SelectItem>
+            <SelectItem value={LABELLED}>Only issues labelled…</SelectItem>
+          </SelectContent>
+        </Select>
+        <Button
+          size="sm"
+          variant="ghost"
+          icon={<X />}
+          disabled={disabled}
+          onClick={onRemove}
+          aria-label={`Stop routing ${name} to ${factory}`}
+          className="ml-auto"
+        >
+          Unroute
+        </Button>
+      </div>
+      {filtered && (
+        <div className="flex flex-wrap items-center gap-1">
+          {labels.map(label => (
+            <Badge key={label} size="sm" variant="neutral">
+              <span className="flex items-center gap-1">
+                {label}
+                <button
+                  type="button"
+                  aria-label={`Remove label ${label}`}
+                  disabled={disabled || labels.length === 1}
+                  onClick={() => onLabelsChange(labels.filter(existing => existing !== label))}
+                  className="disabled:opacity-40"
+                >
+                  <X className="size-3" aria-hidden />
+                </button>
+              </span>
+            </Badge>
+          ))}
+          <Input
+            size="sm"
+            aria-label={`Add label for ${factory}`}
+            placeholder="Add label"
+            value={draft}
             disabled={disabled}
-            onChange={onBoardChange}
-          />
-          <Select
-            value={filtered ? LABELLED : ALL_ISSUES}
-            disabled={disabled}
-            onValueChange={value => {
-              if (value === ALL_ISSUES) {
-                setLabelled(false);
-                if (saved !== null) onLabelsChange(null);
-              } else {
-                setLabelled(true);
+            onChange={event => setDraft(event.target.value)}
+            onKeyDown={event => {
+              if (event.key === 'Enter' || event.key === ',') {
+                event.preventDefault();
+                addDraft();
               }
             }}
-          >
-            <SelectTrigger size="sm" aria-label={`Issues from ${name} for ${factory}`} className="w-auto">
-              <Txt as="span" variant="caption">
-                {filtered ? 'Only issues labelled…' : 'All issues'}
-              </Txt>
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value={ALL_ISSUES}>All issues</SelectItem>
-              <SelectItem value={LABELLED}>Only issues labelled…</SelectItem>
-            </SelectContent>
-          </Select>
-          <Button
-            size="sm"
-            variant="ghost"
-            disabled={disabled}
-            onClick={onRemove}
-            aria-label={`Stop routing ${name} to ${factory}`}
-          >
-            Remove
-          </Button>
+            onBlur={addDraft}
+            className="w-32"
+          />
         </div>
-        {filtered && (
-          <div className="flex flex-wrap items-center gap-2">
-            {labels.map(label => (
-              <span key={label} className="flex items-center gap-1">
-                <Badge size="sm" variant="neutral">
-                  {label}
-                </Badge>
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  disabled={disabled || labels.length === 1}
-                  aria-label={`Remove label ${label}`}
-                  onClick={() => onLabelsChange(labels.filter(existing => existing !== label))}
-                >
-                  ×
-                </Button>
-              </span>
-            ))}
-            <Input
-              size="sm"
-              aria-label={`Add label for ${factory}`}
-              placeholder="Add label"
-              value={draft}
-              disabled={disabled}
-              onChange={event => setDraft(event.target.value)}
-              onKeyDown={event => {
-                if (event.key === 'Enter' || event.key === ',') {
-                  event.preventDefault();
-                  addDraft();
-                }
-              }}
-              onBlur={addDraft}
-            />
-          </div>
-        )}
-      </div>
-    </SettingsFieldsetRow>
+      )}
+      {description && (
+        <Txt as="p" variant="meta" tone="muted" role={error ? 'alert' : undefined} className="wrap-anywhere">
+          {description}
+        </Txt>
+      )}
+    </li>
   );
 }

@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 24 providers (948 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 25 providers (978 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -35,6 +35,7 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
 | [OneDrive](#onedrive) | `one-drive` | 20 |
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
+| <ProviderLogo slug="microsoftoutlook" /> [Microsoft Outlook](#microsoft-outlook) | `outlook` | 30 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
 | <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
@@ -834,6 +835,43 @@ Provider ID: `openai` · 26 tools
 | `openai_list_vector_stores` | List vector stores from OpenAI. |
 | `openai_search_vector_store` | Search a vector store for semantically matching content chunks |
 | `openai_update_vector_store` | Update a vector store in OpenAI |
+
+## Microsoft Outlook
+
+Provider ID: `outlook` · 30 tools
+
+| Tool | Description |
+| - | - |
+| `outlook_add_event_attachment` | Attach a small file (under 3 MB) to an Outlook event. |
+| `outlook_add_message_attachment` | Attach a file to a draft message. Note: 3 MB simple upload limit applies. |
+| `outlook_cancel_event` | Cancel a meeting and send the cancellation notice to attendees |
+| `outlook_copy_message` | Copy a message to another mail folder. |
+| `outlook_create_calendar` | Create a secondary calendar in the mailbox. |
+| `outlook_create_draft_message` | Create a draft email message |
+| `outlook_create_event` | Create an event on a calendar. |
+| `outlook_create_mail_folder` | Create a child mail folder in Outlook. |
+| `outlook_delete_calendar` | Delete a secondary calendar. |
+| `outlook_delete_event` | Delete an event from a calendar. |
+| `outlook_delete_message` | Delete a message from the mailbox |
+| `outlook_download_message_attachment` | Download the content of a file attachment on a message. |
+| `outlook_get_calendar` | Retrieve a calendar by ID. |
+| `outlook_get_event` | Retrieve an event by ID from the user's calendar |
+| `outlook_get_message` | Retrieve a message by ID. |
+| `outlook_list_calendar_events` | List events from a calendar or date window. |
+| `outlook_list_calendars` | List calendars in the mailbox. |
+| `outlook_list_event_attachments` | List attachments on an event. |
+| `outlook_list_mail_folder_children` | List child folders under a mail folder |
+| `outlook_list_mail_folders` | List top-level mail folders from the mailbox |
+| `outlook_list_message_attachments` | List attachments on a message. |
+| `outlook_list_messages` | List messages from a mail folder. |
+| `outlook_move_message` | Move a message to another mail folder. |
+| `outlook_reply_all_to_message` | Reply to all recipients on a message |
+| `outlook_reply_to_message` | Reply to a message sender. |
+| `outlook_send_draft_message` | Send an existing draft message. |
+| `outlook_send_mail` | Send a new email message immediately |
+| `outlook_update_calendar` | Update calendar properties. |
+| `outlook_update_event` | Update event details in Outlook calendar. |
+| `outlook_update_message` | Update a draft or mutable message fields. |
 
 ## PostHog
 

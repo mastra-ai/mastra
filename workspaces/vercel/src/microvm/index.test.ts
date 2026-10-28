@@ -409,6 +409,9 @@ describe('VercelSandbox', () => {
       expect(text).toContain('Vercel Sandbox');
       expect(text).toContain('Firecracker MicroVM');
       expect(text).toContain('node24');
+      expect(text).toContain('Workspace filesystem mounting tools are not available through this Mastra adapter');
+      expect(text).toContain('the underlying Vercel Sandbox supports FUSE mounts');
+      expect(text).not.toContain('Filesystem mounting (FUSE) is not supported');
     });
 
     it('honors a string override', () => {

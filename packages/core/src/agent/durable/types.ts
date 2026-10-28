@@ -410,6 +410,8 @@ export interface DurableLLMStepOutput {
   processorRetryCount?: number;
   /** Processor retry feedback message */
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps that an output processor held until this step's stream ended */
+  releasedToolResultIds?: string[];
   /** Updated serializable state */
   state: SerializableDurableState;
   /** Exported model_generation span data (only set when there are tool calls) */
@@ -485,6 +487,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  /**
+   * Set when an output processor dropped the tool-result chunk without a
+   * tripwire. The model still gets the result, but callbacks leave it out of
+   * `toolResults`, as the stream never emitted it.
+   */
+  resultHidden?: boolean;
   /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
@@ -565,6 +573,8 @@ export interface DurableAgenticExecutionOutput {
   /** Processor retry tracking */
   processorRetryCount?: number;
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps emitted at the end of this iteration's stream */
+  releasedToolResultIds?: string[];
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */

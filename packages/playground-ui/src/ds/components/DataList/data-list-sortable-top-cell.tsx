@@ -59,7 +59,7 @@ export function DataListSortableTopCell<K extends string = string>({
   return (
     <DataListTopCell
       data-sort={sort ?? 'none'}
-      className={cn('gap-1 overflow-visible', align === 'end' && 'flex-row-reverse', className)}
+      className={cn('gap-1 overflow-visible', align === 'end' && 'justify-end', className)}
       {...props}
     >
       <span className="min-w-0 truncate">{children}</span>

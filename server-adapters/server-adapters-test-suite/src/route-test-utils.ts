@@ -160,9 +160,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodDefault') {
     if ('_zod' in schema) {
       return def.defaultValue;
-    } else {
-      return def.defaultValue();
     }
+    return def.defaultValue();
   }
 
   if (typeName === 'ZodString') {
@@ -290,17 +289,15 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodLiteral') {
     if ('_zod' in schema) {
       return def.values?.[0];
-    } else {
-      return def.value;
     }
+    return def.value;
   }
 
   if (typeName === 'ZodEnum') {
     if ('_zod' in schema) {
       return Object.values(def.entries)[0];
-    } else {
-      return def.values[0];
     }
+    return def.values[0];
   }
   if (typeName === 'ZodNativeEnum') {
     const values = Object.values(def.values);
@@ -310,9 +307,8 @@ export function generateValidDataFromSchema(schema: z.ZodTypeAny, fieldName?: st
   if (typeName === 'ZodArray') {
     if ('_zod' in schema) {
       return [generateValidDataFromSchema(def.element, fieldName)];
-    } else {
-      return [generateValidDataFromSchema(def.type, fieldName)];
     }
+    return [generateValidDataFromSchema(def.type, fieldName)];
   }
 
   if (typeName === 'ZodObject') {
