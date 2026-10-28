@@ -6,7 +6,7 @@ import { useFactoriesQuery } from '../../../../hooks/useFactories';
 import { hasResumableFactoryOnboarding } from '../../workspaces/services/onboardingFlow';
 import { Navigate, Outlet, ScrollRestoration, useLocation } from 'react-router';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { useState } from 'react';
+import { Suspense, useState } from 'react';
 import { SessionExpiredDialog } from './SessionExpiredDialog';
 
 export const RootGuards = () => {
@@ -57,7 +57,9 @@ const OnboardingGuard = () => {
   return (
     <>
       <FactoryWebTelemetry />
-      <Outlet />
+      <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
+        <Outlet />
+      </Suspense>
     </>
   );
 };

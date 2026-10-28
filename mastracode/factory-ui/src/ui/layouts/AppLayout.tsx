@@ -1,6 +1,8 @@
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
+import { Suspense } from 'react';
 import { Outlet } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
@@ -41,7 +43,15 @@ function AppFrame() {
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
+        <Suspense
+          fallback={
+            <div className="flex flex-1 items-center justify-center p-6">
+              <Spinner aria-label="Loading page" />
+            </div>
+          }
+        >
+          <Outlet />
+        </Suspense>
       </MainCard>
     </AppShell>
   );

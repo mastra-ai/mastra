@@ -11,9 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { lazy, Suspense } from 'react';
-import type { ComponentType } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -31,22 +29,20 @@ import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
 // Keep the boards eager. These secondary pages load after their route guards
-// allow them, with the loading boundary inside the app shell so the sidebar stays.
-const KnowledgePage = lazyPage(() =>
-  import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })),
-);
-const CreateFactoryPage = lazyPage(() =>
+// allow them; the loading boundary sits inside the app shell so the sidebar stays.
+const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })));
+const CreateFactoryPage = lazy(() =>
   import('./pages/CreateFactoryPage').then(module => ({ default: module.CreateFactoryPage })),
 );
-const OnboardingPage = lazyPage(() =>
+const OnboardingPage = lazy(() =>
   import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
 );
-const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
-const SlackConnectionPage = lazyPage(() =>
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
+const SlackConnectionPage = lazy(() =>
   import('./pages/SlackConnectionPage').then(module => ({ default: module.SlackConnectionPage })),
 );
-const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
-const SignInPage = lazyPage(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
+const RulesPage = lazy(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
+const SignInPage = lazy(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
 
 // Resolve chat modules before committing navigation so the session providers
 // and page mount together. Mounting the page later can re-fetch failed queries
@@ -59,24 +55,6 @@ async function loadNewPage() {
 async function loadThreadPage() {
   const { ThreadPage } = await import('./pages/ThreadPage');
   return { Component: ThreadPage };
-}
-
-function lazyPage(load: () => Promise<{ default: ComponentType }>) {
-  const Page = lazy(load);
-
-  return function LazyPage() {
-    return (
-      <Suspense
-        fallback={
-          <div className="flex flex-1 items-center justify-center p-6">
-            <Spinner aria-label="Loading page" />
-          </div>
-        }
-      >
-        <Page />
-      </Suspense>
-    );
-  };
 }
 
 function RootLanding() {
@@ -223,7 +201,15 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
-    { path: '/signin', element: <SignInPage />, errorElement: <RouteErrorPage /> },
+    {
+      path: '/signin',
+      element: (
+        <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
+          <SignInPage />
+        </Suspense>
+      ),
+      errorElement: <RouteErrorPage />,
+    },
   ];
 }
 
