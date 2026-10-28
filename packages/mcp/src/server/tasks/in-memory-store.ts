@@ -92,6 +92,8 @@ interface TaskRecord {
 
 const DEFAULT_EXPIRED_RETENTION_MS = 60_000;
 
+const MAX_TIMER_DELAY_MS = 2_147_483_647;
+
 /**
  * Default {@link MCPTaskStore}: tasks live in this process. A task created here can only be read on
  * the same instance and does not survive a restart, so use it for single-instance servers.
@@ -132,10 +134,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       usedInputKeys: new Set(),
       abort: new AbortController(),
     };
-    if (record.ttlMs !== null) {
-      record.expiryTimer = setTimeout(() => this.#expire(record), record.ttlMs);
-      record.expiryTimer.unref?.();
-    }
+    if (record.ttlMs !== null) this.#armExpiry(record, now + record.ttlMs);
     this.#tasks.set(record.taskId, record);
     return this.#snapshot(record);
   }
@@ -339,6 +338,16 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     for (const [taskId, record] of this.#tasks) {
       if (record.purgeAt !== undefined && now >= record.purgeAt) this.#tasks.delete(taskId);
     }
+  }
+
+  /** setTimeout fires after 1 ms past 2^31-1 ms (~24.8 days), so a longer TTL waits in steps. */
+  #armExpiry(record: TaskRecord, expiresAt: number): void {
+    const delay = expiresAt - this.#now();
+    record.expiryTimer =
+      delay > MAX_TIMER_DELAY_MS
+        ? setTimeout(() => this.#armExpiry(record, expiresAt), MAX_TIMER_DELAY_MS)
+        : setTimeout(() => this.#expire(record), delay);
+    record.expiryTimer.unref?.();
   }
 
   #expire(record: TaskRecord): void {
