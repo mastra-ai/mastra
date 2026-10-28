@@ -1,9 +1,11 @@
-import type { DashboardQuery, DashboardWidget } from '@mastra/client-js';
-
-/**
- * Widgets describing today's Metrics cards, one per card. The request- and DOM-equality tests render
- * each next to its card; they're the seed of `METRICS_DASHBOARD`.
- */
+import type {
+  DashboardColumn,
+  DashboardDefinition,
+  DashboardDrilldownTarget,
+  DashboardQuery,
+  DashboardWidget,
+  DashboardWidgetView,
+} from '@mastra/client-js';
 
 const INPUT = 'mastra_model_total_input_tokens';
 const OUTPUT = 'mastra_model_total_output_tokens';
@@ -31,9 +33,12 @@ const agentRunsByStatus: DashboardQuery = {
 const FAILED = ['error', 'failed'];
 const completedRuns = { query: 'runs', notGroups: FAILED };
 const failedRuns = { query: 'runs', groups: FAILED };
-const agentRunsTraces = { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: 'agent' }] } as const;
+const agentRunsTraces: DashboardDrilldownTarget = {
+  page: 'traces',
+  filters: [{ fieldId: 'rootEntityType', value: 'agent' }],
+};
 
-export const kpisWidget: DashboardWidget = {
+const kpisWidget: DashboardWidget = {
   id: 'kpis',
   span: 12,
   kind: 'kpis',
@@ -113,7 +118,7 @@ export const kpisWidget: DashboardWidget = {
   ],
 };
 
-export const tokenUsageWidget: DashboardWidget = {
+const tokenUsageWidget: DashboardWidget = {
   id: 'token-usage',
   span: 12,
   kind: 'timeseries',
@@ -168,7 +173,7 @@ export const tokenUsageWidget: DashboardWidget = {
   ],
 };
 
-export const agentRunsWidget: DashboardWidget = {
+const agentRunsWidget: DashboardWidget = {
   id: 'agent-runs',
   span: 6,
   kind: 'timeseries',
@@ -194,7 +199,7 @@ export const agentRunsWidget: DashboardWidget = {
   ],
 };
 
-export const failureRateWidget: DashboardWidget = {
+const failureRateWidget: DashboardWidget = {
   id: 'failure-rate',
   span: 6,
   kind: 'timeseries',
@@ -247,7 +252,7 @@ export const failureRateWidget: DashboardWidget = {
   ],
 };
 
-const latencyView = (label: string, metric: string, rootEntityType: string, noun: string) => ({
+const latencyView = (label: string, metric: string, rootEntityType: string, noun: string): DashboardWidgetView => ({
   label,
   queries: [
     {
@@ -256,9 +261,9 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
       request: 'percentiles',
       name: metric,
       percentiles: [0.5, 0.95, 0.99],
-    } satisfies DashboardQuery,
+    },
   ],
-  drilldown: { action: { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: rootEntityType }] } } as const,
+  drilldown: { action: { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: rootEntityType }] } },
   options: {
     chart: 'line',
     format: 'duration',
@@ -281,7 +286,7 @@ const latencyView = (label: string, metric: string, rootEntityType: string, noun
   },
 });
 
-export const latencyWidget: DashboardWidget = {
+const latencyWidget: DashboardWidget = {
   id: 'latency',
   span: 6,
   kind: 'timeseries',
@@ -303,7 +308,7 @@ const DISTINCT_IDS = [
 ] as const;
 const distinctMeasures = DISTINCT_IDS.map(([measure]) => measure);
 
-export const distinctIdsWidget: DashboardWidget = {
+const distinctIdsWidget: DashboardWidget = {
   id: 'distinct-ids',
   span: 6,
   kind: 'timeseries',
@@ -336,12 +341,14 @@ export const distinctIdsWidget: DashboardWidget = {
   ],
 };
 
-export const scoresWidget: DashboardWidget = {
+const scoresWidget: DashboardWidget = {
   id: 'scores',
   span: 12,
   kind: 'scores',
   title: 'Scores',
   description: 'Average scorer result, 0 to 1.',
+  // Scores need a project, so the org dashboard leaves them out (OBS-725).
+  scope: 'project',
   views: [
     {
       queries: [
@@ -373,7 +380,10 @@ const usageTotals = (groupBy: string[], filters?: Record<string, string>): Dashb
 });
 
 /** Count, errors and P95 from the `figures` query; tokens and cost from `usage`. */
-const figureColumns = (count: { label: string; measure: string; unit: 'traces' | 'spans' }, usage: boolean) => [
+const figureColumns = (
+  count: { label: string; measure: string; unit: 'traces' | 'spans' },
+  usage: boolean,
+): DashboardColumn[] => [
   { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
   { id: 'p95', options: { query: 'figures', measure: 'duration.p95' } },
   ...(usage
@@ -385,7 +395,7 @@ const figureColumns = (count: { label: string; measure: string; unit: 'traces' |
   { id: 'count', label: count.label, options: { query: 'figures', measure: count.measure, unit: count.unit } },
 ];
 
-const project = { id: 'project', scope: 'org' } as const;
+const project: DashboardColumn = { id: 'project', scope: 'org' };
 const scoped = (scope: 'org' | 'project', dimension: string) =>
   scope === 'org' ? ['projectId', dimension] : [dimension];
 
@@ -395,7 +405,7 @@ const entityView = (
   spanTypes: string[],
   description: string,
   emptyMessage: string,
-) => {
+): DashboardWidgetView => {
   const groupBy = scoped(scope, 'entityName');
   const agents = label === 'Agents';
   const usage = agents;
@@ -413,7 +423,13 @@ const entityView = (
             ? { op: 'eq', left: { path: 'spanType' }, right: { literal: spanTypes[0] } }
             : { op: 'in', value: { path: 'spanType' }, set: spanTypes },
         groupBy,
-        measures: ['count', ...(traces ? ['countDistinct.traceId'] : []), 'errorCount', 'errorRate', 'duration.p95'],
+        measures: [
+          'count',
+          ...(traces ? (['countDistinct.traceId'] as const) : []),
+          'errorCount',
+          'errorRate',
+          'duration.p95',
+        ],
         limit: SPAN_LIMIT,
         compare: 'previousWindow',
       },
@@ -432,12 +448,12 @@ const entityView = (
   };
 };
 
-const traceColumns = (scope: 'org' | 'project') => [
+const traceColumns = (scope: 'org' | 'project'): DashboardColumn[] => [
   ...(scope === 'org' ? [project] : []),
   ...figureColumns({ label: 'Traces', measure: 'count', unit: 'traces' }, true),
 ];
 
-const environmentsView = (scope: 'org' | 'project') => {
+const environmentsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'environment');
   return {
     label: 'Environments',
@@ -448,7 +464,7 @@ const environmentsView = (scope: 'org' | 'project') => {
         id: 'figures',
         source: 'traceAggregate',
         groupBy,
-        measures: ERRORS,
+        measures: [...ERRORS],
         limit: TRACE_LIMIT,
         compare: 'previousWindow',
       },
@@ -464,19 +480,19 @@ const environmentsView = (scope: 'org' | 'project') => {
   };
 };
 
-const threadsView = (scope: 'org' | 'project') => {
+const threadsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'threadId');
-  const threads = {
+  const threads: DashboardQuery = {
     id: 'figures',
     source: 'traceAggregate',
     where: hasThread,
     groupBy: scope === 'org' ? ['projectId', 'threadId'] : ['resourceId', 'threadId'],
-    measures: ERRORS,
+    measures: [...ERRORS],
     limit: TRACE_LIMIT,
     compare: 'previousWindow',
   };
   // Org-wide the second dimension is the project, so a third request names each thread's resource.
-  const resources = {
+  const resources: DashboardQuery = {
     id: 'resources',
     source: 'traceAggregate',
     where: hasThread,
@@ -506,7 +522,7 @@ const threadsView = (scope: 'org' | 'project') => {
   };
 };
 
-const modelsView = (scope: 'org' | 'project') => {
+const modelsView = (scope: 'org' | 'project'): DashboardWidgetView => {
   const groupBy = scoped(scope, 'model');
   return {
     label: 'Models',
@@ -541,7 +557,7 @@ const modelsView = (scope: 'org' | 'project') => {
   };
 };
 
-const scopedViews = (scope: 'org' | 'project') => [
+const scopedViews = (scope: 'org' | 'project'): DashboardWidgetView[] => [
   entityView(
     scope,
     'Agents',
@@ -568,7 +584,7 @@ const scopedViews = (scope: 'org' | 'project') => [
   environmentsView(scope),
 ];
 
-export const breakdownWidget = {
+const breakdownWidget: DashboardWidget = {
   id: 'breakdown',
   span: 12,
   kind: 'breakdown',
@@ -601,4 +617,20 @@ export const breakdownWidget = {
     ...scopedViews('org'),
     ...scopedViews('project'),
   ],
-} as DashboardWidget;
+};
+
+/**
+ * The built-in Metrics dashboard: today's Metrics page as a definition. Org and project pages use
+ * the same one; scope-tagged widgets, views and columns cover the differences.
+ */
+export const METRICS_DASHBOARD: DashboardDefinition = {
+  schemaVersion: 1,
+  rows: [
+    { widgets: [kpisWidget] },
+    { widgets: [breakdownWidget] },
+    { widgets: [tokenUsageWidget] },
+    { widgets: [agentRunsWidget, failureRateWidget] },
+    { widgets: [latencyWidget, distinctIdsWidget] },
+    { widgets: [scoresWidget] },
+  ],
+};

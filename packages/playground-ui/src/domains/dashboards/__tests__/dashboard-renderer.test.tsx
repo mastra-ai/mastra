@@ -13,7 +13,7 @@ import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
 import { defineWidgetKind } from '../widget-kind';
 import type { AnyWidgetKind } from '../widget-kind';
-import { agentRunsWidget, distinctIdsWidget, kpisWidget } from './fixtures/metrics-widgets';
+import { metricsWidget } from './equality-harness';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
@@ -145,7 +145,7 @@ describe('DashboardRenderer', () => {
           HttpResponse.json({ error: 'boom' }, { status: 500 }),
         ),
       );
-      const { container } = renderDashboard(definition(kpisWidget, agentRunsWidget));
+      const { container } = renderDashboard(definition(metricsWidget('kpis'), metricsWidget('agent-runs')));
       await waitFor(() => expect(within(cell(container, 'kpis')).getAllByText("Couldn't load")).toHaveLength(4));
       expect(await within(cell(container, 'agent-runs')).findByText('runs')).toBeDefined();
     });
@@ -214,7 +214,9 @@ describe('DashboardRenderer', () => {
           .json()
           .then(b => metrics.push(b));
     });
-    renderDashboard(definition(agentRunsWidget, distinctIdsWidget), { environment: 'production' });
+    renderDashboard(definition(metricsWidget('agent-runs'), metricsWidget('distinct-ids')), {
+      environment: 'production',
+    });
     await waitFor(() => expect(traces.length).toBeGreaterThan(0));
     await waitFor(() => expect(metrics.length).toBeGreaterThan(0));
     server.events.removeAllListeners();
@@ -225,10 +227,11 @@ describe('DashboardRenderer', () => {
   it("sends nothing and shows no data when a widget's filters contradict the page's", async () => {
     const sent: string[] = [];
     server.events.on('request:start', ({ request }) => sent.push(new URL(request.url).pathname));
-    const [view] = agentRunsWidget.views;
+    const agentRuns = metricsWidget('agent-runs');
+    const [view] = agentRuns.views;
     const [runs] = view.queries;
     const staging: DashboardWidget = {
-      ...agentRunsWidget,
+      ...agentRuns,
       views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } } as DashboardQuery] }],
     };
     const { container } = renderDashboard(definition(staging), { environment: 'production' });

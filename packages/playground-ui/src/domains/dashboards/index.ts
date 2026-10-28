@@ -7,6 +7,7 @@ export type { DashboardSpan } from './components/dashboard-grid';
 export { ViewGate } from './components/view-gate';
 export { WidgetError } from './components/widget-error';
 export { useDrilldown, useViewTabs } from './components/widget-hooks';
+export { METRICS_DASHBOARD } from './metrics-dashboard';
 export { useDashboardRequests } from './hooks/use-dashboard-requests';
 export * from './kinds';
 export { dashboardDefaults } from './lib/definition';
