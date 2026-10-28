@@ -23,10 +23,10 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.3": [
+    "zai-org/GLM-5.2": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -35,10 +35,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "zai-org/GLM-5.2": [
+    "zai-org/GLM-5.3": [
       {
         "type": "effort",
-        "values": ["high", "max"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

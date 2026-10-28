@@ -10,7 +10,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { Knowledge, createPinnedTools } from '@mastra/core/knowledge';
+import { Knowledge } from '@mastra/core/knowledge';
 import { RequestContext } from '@mastra/core/request-context';
 import { LibSQLStore, LibSQLVector } from '@mastra/libsql';
 import { Memory } from '@mastra/memory';
@@ -80,7 +80,7 @@ describe('Pinned knowledge live proof', () => {
         lastMessages: 20,
       },
     });
-    const knowledge = new Knowledge({ id: 'proof', storage, pins: { maxPins: 20, maxTokens: 500 } });
+    const knowledge = new Knowledge({ id: 'proof', storage, pinnedContext: { maxPins: 20, maxTokens: 500 } });
 
     const agent = new Agent({
       id: 'proof-agent',
@@ -96,13 +96,8 @@ describe('Pinned knowledge live proof', () => {
     const requestContext = new RequestContext();
     const turnOptions = { memory: { thread: threadId, resource: resourceId }, requestContext } as any;
 
-    const scope = [`resource:${resourceId}`, `thread:${threadId}`];
-    const tools = createPinnedTools({ storage } as any, {
-      scope,
-      sourceThreadId: threadId,
-      maxPins: 20,
-      maxTokens: 500,
-    });
+    const tools = knowledge.createTools();
+    const curator = { agent: { agentId: 'curator', resourceId, threadId } } as any;
 
     // Turn 1: no pins yet — no pinned-knowledge tag in the prompt.
     await agent.generate('Hello there.', turnOptions);
@@ -110,7 +105,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 1: no pins, no pinned-knowledge tag — OK');
 
     // Curator pins a standing instruction.
-    const pin = await tools.knowledge_pin!.execute!({ text: 'Always answer in French.' } as any, {} as any);
+    const pin = await tools.knowledge_pin!.execute!({ op: 'pin', text: 'Always answer in French.' } as any, curator);
 
     // Turn 2: snapshot appears.
     await agent.generate('What is the capital of France?', turnOptions);
@@ -126,9 +121,9 @@ describe('Pinned knowledge live proof', () => {
     console.info(`[proof] turn 3: unchanged set, tag occurrences ${before} -> ${after} — OK`);
 
     // Curator edits the pin.
-    const edited = await tools.knowledge_edit_pin!.execute!(
-      { recordId: pin.id, text: 'Always answer in French. Politely.' } as any,
-      {} as any,
+    const edited = await tools.knowledge_pin!.execute!(
+      { op: 'edit', recordId: pin.id, text: 'Always answer in French. Politely.' } as any,
+      curator,
     );
 
     // Turn 4: the change arrives (delta while the snapshot is visible).
@@ -137,7 +132,7 @@ describe('Pinned knowledge live proof', () => {
     console.info('[proof] turn 4: edit delivered — OK');
 
     // Curator unpins.
-    await tools.knowledge_unpin!.execute!({ recordId: edited.id } as any, {} as any);
+    await tools.knowledge_pin!.execute!({ op: 'unpin', recordId: edited.id } as any, curator);
 
     // Turn 5: lane clears — the latest state carries no pin body.
     await agent.generate('One more thing.', turnOptions);

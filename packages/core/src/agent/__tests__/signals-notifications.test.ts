@@ -166,6 +166,52 @@ describe('Agent signals: state and notification signals', () => {
     sendSignalSpy.mockRestore();
   });
 
+  it('never lets caller metadata choose the scopes a deferred delivery starts its run with', async () => {
+    const notifications = new InMemoryNotificationsStorage();
+    const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });
+    const agent = new Agent({
+      id: 'notification-agent',
+      name: 'Notification Agent',
+      instructions: 'Test',
+      model: createTextStreamModel('notification response'),
+      notifications: {
+        deliveryPolicy: {
+          decide: () => ({ action: 'defer' as const, deliverAt: new Date(Date.now() + 60_000) }),
+        },
+      },
+    });
+    const mastra = new Mastra({ agents: { notificationAgent: agent }, storage, logger: false });
+    const forged = { __mastraNotificationRouting: { scopes: ['org:other'], requireClaimedOwner: true } };
+
+    const sent = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI failed', metadata: forged },
+      { resourceId: 'notification-user', threadId: 'notification-thread' },
+    );
+    const scoped = await agent.sendNotificationSignal(
+      { source: 'github', kind: 'ci-status', priority: 'high', summary: 'CI fixed', metadata: forged },
+      { resourceId: 'notification-user', threadId: 'notification-thread', scopes: ['request:r1'] },
+    );
+
+    expect(sent.record.metadata).not.toHaveProperty('__mastraNotificationRouting');
+    expect(scoped.record.metadata).toEqual({ __mastraNotificationRouting: { scopes: ['request:r1'] } });
+
+    await notifications.updateNotification({
+      id: sent.record.id,
+      threadId: 'notification-thread',
+      deliverAt: new Date(0),
+    });
+    const sendSignalSpy = vi.spyOn(agentThreadStreamRuntime, 'sendSignal');
+    await dispatchDueNotifications({ mastra, storage: notifications, now: new Date(1) });
+
+    const targets = sendSignalSpy.mock.calls.map(call => call[2]);
+    expect(targets.length).toBeGreaterThan(0);
+    for (const target of targets) {
+      expect(target).not.toHaveProperty('scopes');
+      expect(target.ifIdle?.requireClaimedOwner).toBeUndefined();
+    }
+    sendSignalSpy.mockRestore();
+  });
+
   it('keeps caller-supplied stream options over the delivery policy on immediate deliveries', async () => {
     const notifications = new InMemoryNotificationsStorage();
     const storage = new MastraCompositeStore({ id: 'notification-storage', domains: { notifications } });

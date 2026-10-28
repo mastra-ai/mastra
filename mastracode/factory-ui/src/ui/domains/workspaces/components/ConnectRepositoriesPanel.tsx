@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { ScrollArea } from '@mastra/playground-ui/components/ScrollArea';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
 import { RefreshCw } from 'lucide-react';
@@ -14,7 +15,6 @@ import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { useLinkRepositoryMutation, useUnlinkRepositoryMutation } from '../../../../hooks/useFactories';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
 import { FolderIcon, GitLabIcon } from '../../../ui/icons';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import { connectGithub, isGitLabRepository } from '../services/github';
 
@@ -67,13 +67,22 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
   const busyRepoId = linkRepository.isPending ? linkRepository.variables?.repo.id : null;
   const unlinkingId = unlinkRepository.isPending ? unlinkRepository.variables?.projectRepositoryId : null;
 
-  if (statusQuery.isPending || gitlabStatusQuery.isPending) {
-    return <SkeletonRows label="Loading source control status" rows={3} rowClassName="h-10 w-full rounded-xl" />;
+  const statusPending = statusQuery.isPending || gitlabStatusQuery.isPending;
+  // Linked repositories come with the Factory, so only the available list waits on providers.
+  const availablePending =
+    statusPending || (githubConnected && reposQuery.isPending) || (gitlabConfigured && gitlabProjectsQuery.isPending);
+
+  if (statusPending && linked.length === 0) {
+    return (
+      <div className="p-2">
+        <LoadingRow label="Loading source control status">Checking source control connections…</LoadingRow>
+      </div>
+    );
   }
 
   return (
     <div className="flex min-w-0 flex-col" aria-label="Connect repositories">
-      {status && !gitlabConfigured && (
+      {!statusPending && status && !gitlabConfigured && (
         <StatusCallout
           status={status}
           connected={githubConnected}
@@ -160,10 +169,11 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
                 </div>
               ))}
 
-              {(githubConnected && reposQuery.isPending) || (gitlabConfigured && gitlabProjectsQuery.isPending) ? (
-                <div className="px-2 py-2">
-                  <SkeletonRows label="Loading repositories" rows={3} rowClassName="h-8 w-full rounded-md" />
-                </div>
+              {availablePending ? (
+                <>
+                  {visibleLinked.length > 0 && <ListHeading>Available</ListHeading>}
+                  <LoadingRow label="Loading repositories">Loading available repositories…</LoadingRow>
+                </>
               ) : available.length === 0 ? (
                 visibleLinked.length === 0 && (
                   <Txt tone="muted" as="p" variant="caption" className="px-2 py-2">
@@ -212,6 +222,17 @@ export function ConnectRepositoriesPanel({ factory }: { factory: FactoryProject 
           </ScrollArea>
         </>
       )}
+    </div>
+  );
+}
+
+function LoadingRow({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <div role="status" aria-label={label} className="flex items-center gap-2 px-2 py-2">
+      <Spinner size="sm" aria-hidden="true" role="presentation" className="text-muted-foreground" />
+      <Txt as="span" variant="caption" tone="muted">
+        {children}
+      </Txt>
     </div>
   );
 }

@@ -2,7 +2,7 @@ import type { AgentScopeEntry } from '@mastra/core/agent';
 import type { MastraCodeState } from './schema.js';
 
 /**
- * The org tag local (TUI/studio) Knowledge is written under when the caller gives no tags. A
+ * The org tag the built-in (`knowledge: true`) Knowledge writes under when the host gives no scopes. A
  * fixed literal on purpose: deriving it from a hostname, machine id or path would fragment local
  * Knowledge per machine or checkout, so several machines sharing one store could never share it.
  */
@@ -13,8 +13,10 @@ export type KnowledgeSessionScopes =
   | { resolved: false; reason: string };
 
 function tagOf(entry: AgentScopeEntry): string {
-  return typeof entry === 'string' ? entry : entry.tag;
+  return typeof entry === 'string' ? entry : entry.scope;
 }
+
+const writable = (scope: string): AgentScopeEntry => ({ scope, access: 'write' });
 
 function isIdentityTag(tag: string): boolean {
   return tag.startsWith('resource:') || tag.startsWith('thread:');
@@ -25,11 +27,12 @@ function isIdentityTag(tag: string): boolean {
  * Every Knowledge reader and writer in a session (the code agent, the /knowledge inspector) uses
  * this, so what the agent writes is what the inspector reads.
  *
+ * The tags this adds are writable; the host's keep the access the host gave them.
+ *
  * - Factory sessions require `org:<factoryOrgId>` and `project:<factoryProjectId>`, so projects stay
  *   isolated. A host tag of the same type with another value is refused. A Factory session with
  *   no org resolves to nothing (fail closed): a session owner is a user id, never an org.
- * - Local sessions get `org:local` only when the host gives no tags besides `resource:`/`thread:`.
- *   Any host tag (`org:self`, `team:self:x`) turns the default off.
+ * - Local sessions act with the host's scopes as given.
  */
 export function resolveKnowledgeSessionScopes(
   state: MastraCodeState | undefined,
@@ -51,11 +54,10 @@ export function resolveKnowledgeSessionScopes(
       }
     }
     const held = new Set(hostScopes.map(tagOf));
-    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag))] };
+    return { resolved: true, scopes: [...hostScopes, ...required.filter(tag => !held.has(tag)).map(writable)] };
   }
 
-  if (hostScopes.some(entry => !isIdentityTag(tagOf(entry)))) return { resolved: true, scopes: [...hostScopes] };
-  return { resolved: true, scopes: [...hostScopes, `org:${LOCAL_KNOWLEDGE_ORG_ID}`] };
+  return { resolved: true, scopes: [...hostScopes] };
 }
 
 /**

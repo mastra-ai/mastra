@@ -111,14 +111,6 @@ describe('AgentController Resource', () => {
     expect(JSON.parse(init.body as string)).toEqual({ message: 'see attached', files });
   });
 
-  it('sends a message with scopes for its run', async () => {
-    mockJson({ ok: true });
-    const scopes = ['request:r25', { tag: 'org:self', access: 'read' as const }];
-    await client.getAgentController('code').session('user-1').sendMessage({ content: 'fix it', scopes });
-    const [, init] = lastCall();
-    expect(JSON.parse(init.body as string)).toEqual({ message: 'fix it', scopes });
-  });
-
   it('steers and follows up with file attachments', async () => {
     const session = client.getAgentController('code').session('user-1');
     const files = [{ data: 'aGVsbG8=', mediaType: 'image/png', filename: 'shot.png' }];
@@ -428,6 +420,21 @@ describe('AgentController Resource', () => {
       fromOwnerId: 'owner-a',
       toOwnerId: 'owner-b',
     });
+  });
+
+  it('passes displayState=false to the session stream', async () => {
+    mockSse([]);
+    const sub = await client
+      .getAgentController('code')
+      .session('user-1')
+      .subscribe({
+        displayState: false,
+        onEvent: () => {},
+      });
+    expect(lastCall()[0]).toBe(
+      'http://localhost:4111/api/agent-controller/code/sessions/user-1/stream?displayState=false',
+    );
+    sub.unsubscribe();
   });
 
   it('hydrates message-start timestamps while preserving compact SSE lifecycle payloads', async () => {

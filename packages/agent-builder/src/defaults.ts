@@ -2823,7 +2823,7 @@ export const mastra = new Mastra({
           if (includeMetadata) {
             item.size = stats.size;
             item.lastModified = stats.mtime.toISOString();
-            item.permissions = `0${(stats.mode & parseInt('777', 8)).toString(8)}`;
+            item.permissions = `0${(stats.mode & 0o777).toString(8)}`;
           }
 
           items.push(item);

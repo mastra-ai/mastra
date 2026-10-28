@@ -446,6 +446,8 @@ export interface SignalSettings {
   experimentalCrossAgentSignals: boolean;
   /** Experimental: give the agent tools to create and manage `/schedules` schedules on its thread. */
   experimentalScheduleTools: boolean;
+  /** Experimental: give the agent Knowledge (search, read, write, pin) on Mastra Code's own storage. */
+  experimentalKnowledge: boolean;
   /** Poll interval for GitHub PR subscriptions. */
   githubPollIntervalMs: number;
 }
@@ -542,6 +544,7 @@ const DEFAULTS: GlobalSettings = {
     experimentalGithubSignals: false,
     experimentalCrossAgentSignals: false,
     experimentalScheduleTools: false,
+    experimentalKnowledge: false,
     githubPollIntervalMs: GITHUB_POLL_INTERVAL_DEFAULT_MS,
   },
   mcp: { claudeCodeGlobal: false, codexGlobal: false },
@@ -568,6 +571,7 @@ function signalSettingsEqual(left: SignalSettings, right: SignalSettings): boole
     left.experimentalGithubSignals === right.experimentalGithubSignals &&
     left.experimentalCrossAgentSignals === right.experimentalCrossAgentSignals &&
     left.experimentalScheduleTools === right.experimentalScheduleTools &&
+    left.experimentalKnowledge === right.experimentalKnowledge &&
     left.githubPollIntervalMs === right.githubPollIntervalMs
   );
 }
@@ -758,6 +762,10 @@ function parseSignalSettings(rawSignals: unknown): SignalSettings {
       typeof raw.experimentalScheduleTools === 'boolean'
         ? raw.experimentalScheduleTools
         : DEFAULTS.signals.experimentalScheduleTools,
+    experimentalKnowledge:
+      typeof raw.experimentalKnowledge === 'boolean'
+        ? raw.experimentalKnowledge
+        : DEFAULTS.signals.experimentalKnowledge,
     githubPollIntervalMs: parseGithubPollIntervalMs(raw.githubPollIntervalMs),
   };
 }

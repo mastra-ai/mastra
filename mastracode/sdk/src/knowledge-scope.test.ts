@@ -1,36 +1,29 @@
 import { describe, expect, it } from 'vitest';
 
-import { knowledgeSessionTags, LOCAL_KNOWLEDGE_ORG_ID, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
+import { knowledgeSessionTags, resolveKnowledgeSessionScopes } from './knowledge-scope.js';
 
 describe('resolveKnowledgeSessionScopes', () => {
-  it('gives a local session with no host tags the fixed local org, regardless of project or machine', () => {
-    const expected = { resolved: true, scopes: ['org:local'] };
-    expect(LOCAL_KNOWLEDGE_ORG_ID).toBe('local');
-    expect(resolveKnowledgeSessionScopes(undefined)).toEqual(expected);
-    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never)).toEqual(expected);
-    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/other' } as never, ['resource:u1'])).toEqual({
+  it("acts with the host's scopes as given in a local session, adding no org", () => {
+    expect(resolveKnowledgeSessionScopes(undefined)).toEqual({ resolved: true, scopes: [] });
+    expect(resolveKnowledgeSessionScopes({ projectPath: '/tmp/p' } as never, ['resource:u1'])).toEqual({
       resolved: true,
-      scopes: ['resource:u1', 'org:local'],
+      scopes: ['resource:u1'],
     });
-  });
-
-  it('adds no org:local once the host gives any shared tag, read-only included', () => {
-    expect(resolveKnowledgeSessionScopes(undefined, ['team:self:x', 'agent:alex'])).toEqual({
-      resolved: true,
-      scopes: ['team:self:x', 'agent:alex'],
-    });
-    const member = [{ tag: 'org:self', access: 'read' as const }, 'team:self:x'];
+    const member = [{ scope: 'org:self', access: 'read' as const }, 'team:self:x'];
     expect(resolveKnowledgeSessionScopes(undefined, member)).toEqual({ resolved: true, scopes: member });
   });
 
   it('requires the Factory org and project tags, trimmed the way the seeder stores them', () => {
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: ' org-1 ', factoryProjectId: 'proj-1' } as never)).toEqual({
       resolved: true,
-      scopes: ['org:org-1', 'project:proj-1'],
+      scopes: [
+        { scope: 'org:org-1', access: 'write' },
+        { scope: 'project:proj-1', access: 'write' },
+      ],
     });
     expect(resolveKnowledgeSessionScopes({ factoryOrgId: 'org-1' } as never, ['agent:a'])).toEqual({
       resolved: true,
-      scopes: ['agent:a', 'org:org-1'],
+      scopes: ['agent:a', { scope: 'org:org-1', access: 'write' }],
     });
   });
 

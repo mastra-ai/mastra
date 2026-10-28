@@ -64,7 +64,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   const runOptions = () => ({ memory: { thread: 'thread-1', resource: 'user-1' } });
 
   it('gives the agent read and write tools and its usage instructions', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'attach' }), tools: true });
     const prompts: unknown[][] = [];
     const agent = new Agent({
       id: 'writer',
@@ -73,8 +73,8 @@ describe('Knowledge attached to an Agent without Memory', () => {
       model: scriptedModel(
         [
           {
-            toolName: 'knowledge_create',
-            input: { name: 'Deploy policy', kind: 'policy', text: 'Deploys freeze on Fridays.' },
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'Deploy policy', kind: 'policy', text: 'Deploys freeze on Fridays.' },
           },
           { toolName: 'knowledge_search', input: { query: 'Fridays' } },
           { text: 'Noted.' },
@@ -103,13 +103,16 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(system).toContain(KNOWLEDGE_WRITE_INSTRUCTIONS);
   });
 
-  it('attaches read tools only by default, and no instruction block when instructions is false', async () => {
+  it('attaches no tools by default, and no instruction block when instructions is false', async () => {
     const prompts: unknown[][] = [];
     const agent = new Agent({
       id: 'reader',
       name: 'reader',
       instructions: 'You answer questions.',
-      model: scriptedModel([{ toolName: 'knowledge_create', input: { name: 'x', kind: 'y', text: 'z' } }], prompts),
+      model: scriptedModel(
+        [{ toolName: 'knowledge_record', input: { op: 'add', node: 'x', kind: 'y', text: 'z' } }],
+        prompts,
+      ),
       knowledge: new Knowledge({ storage: new InMemoryStore({ id: 'reader' }), instructions: false }),
     });
 
@@ -118,6 +121,27 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(Object.keys(tools)).toEqual([]);
     expect(toolResults(result)).toHaveLength(0);
     expect(systemText(prompts[0]!)).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
+  });
+
+  it('gives no tools by default; { read: true } the two read tools; true all four; pinnedContext adds knowledge_pin', () => {
+    const names = (config: ConstructorParameters<typeof Knowledge>[0]) =>
+      Object.keys(new Knowledge(config).createTools()).sort();
+    expect(names({})).toEqual([]);
+    expect(new Knowledge({}).getInstructions()).not.toContain(KNOWLEDGE_READ_INSTRUCTIONS);
+    expect(names({ tools: { read: true } })).toEqual(['knowledge_read', 'knowledge_search']);
+    expect(names({ tools: true })).toEqual([
+      'knowledge_node',
+      'knowledge_read',
+      'knowledge_record',
+      'knowledge_search',
+    ]);
+    expect(names({ tools: true, pinnedContext: true })).toEqual([
+      'knowledge_node',
+      'knowledge_pin',
+      'knowledge_read',
+      'knowledge_record',
+      'knowledge_search',
+    ]);
   });
 
   it('resolves Knowledge registered on Mastra by key', async () => {
@@ -135,7 +159,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
   });
 
   it('scopes tools by the run tags: another run with different tags sees nothing', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tags' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tags' }), tools: true });
     const writer = new Agent({
       id: 'writer',
       name: 'writer',
@@ -143,14 +167,17 @@ describe('Knowledge attached to an Agent without Memory', () => {
       model: scriptedModel(
         [
           {
-            toolName: 'knowledge_create',
-            input: { name: 'Plan', kind: 'doc', text: 'Ship Friday.', scope: ['team:acme:support'] },
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'Plan', kind: 'doc', text: 'Ship Friday.', scope: ['team:acme:support'] },
           },
         ],
         [],
       ),
       knowledge,
-      scopes: ['team:acme:support', 'agent:alex'],
+      scopes: [
+        { scope: 'team:acme:support', access: 'write' },
+        { scope: 'agent:alex', access: 'write' },
+      ],
     });
     const result = await writer.generate('Note it.', { maxSteps: 2, memory: { thread: 'w-1', resource: 'alex' } });
     const [created] = toolResults(result) as any[];
@@ -173,13 +200,18 @@ describe('Knowledge attached to an Agent without Memory', () => {
   });
 
   it('refuses a write naming a tag the run does not hold', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'refuse' }), tools: { write: true } });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'refuse' }), tools: true });
     const agent = new Agent({
       id: 'writer',
       name: 'writer',
       instructions: 'x',
       model: scriptedModel(
-        [{ toolName: 'knowledge_create', input: { name: 'X', kind: 'doc', text: 'y', scope: ['team:acme:sales'] } }],
+        [
+          {
+            toolName: 'knowledge_record',
+            input: { op: 'add', node: 'X', kind: 'doc', text: 'y', scope: ['team:acme:sales'] },
+          },
+        ],
         [],
       ),
       knowledge,
@@ -191,9 +223,12 @@ describe('Knowledge attached to an Agent without Memory', () => {
     expect(await (await knowledge.getStorage()).listNodes({ scope: ['team:acme:sales'] })).toEqual([]);
   });
 
-  it('holds a read-only tag for reads only: visible, left out of default writes, refused when named', async () => {
+  it.each([
+    ['a plain tag', 'org:self'],
+    ['{ access: "read" }', { scope: 'org:self', access: 'read' as const }],
+  ])('holds %s read-only: visible, left out of default writes, refused when named', async (_, orgEntry) => {
     const storage = new InMemoryStore({ id: 'read-only' });
-    const knowledge = new Knowledge({ storage, tools: { write: true } });
+    const knowledge = new Knowledge({ storage, tools: true });
     const store = await knowledge.getStorage();
     const orgNode = await store.createNode({ name: 'Org policy', kind: 'policy', scope: ['org:self'] });
     await store.appendKnowledge({
@@ -212,7 +247,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
         instructions: 'x',
         model: scriptedModel(calls, []),
         knowledge,
-        scopes: [{ tag: 'org:self', access: 'read' }, 'team:self:x'],
+        scopes: [orgEntry, { scope: 'team:self:x', access: 'write' }],
       }).generate('go', { maxSteps: 2, memory: { thread: 'm-1', resource: 'member' } });
 
     const searched = await member([{ toolName: 'knowledge_search', input: { query: 'Fridays' } }]);
@@ -221,7 +256,7 @@ describe('Knowledge attached to an Agent without Memory', () => {
     );
 
     const created = await member([
-      { toolName: 'knowledge_create', input: { name: 'Team note', kind: 'doc', text: 'x' } },
+      { toolName: 'knowledge_record', input: { op: 'add', node: 'Team note', kind: 'doc', text: 'x' } },
     ]);
     expect((toolResults(created)[0] as any).result.record.scope).toEqual([
       'resource:member',
@@ -230,16 +265,21 @@ describe('Knowledge attached to an Agent without Memory', () => {
     ]);
 
     const named = await member([
-      { toolName: 'knowledge_create', input: { name: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] } },
+      {
+        toolName: 'knowledge_record',
+        input: { op: 'add', node: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] },
+      },
     ]);
     expect(toolErrors(named)).toEqual(['"org:self" is read-only for this run.']);
 
-    const appended = await member([{ toolName: 'knowledge_append', input: { node: orgNode.id, text: 'z' } }]);
+    const appended = await member([
+      { toolName: 'knowledge_record', input: { op: 'add', node: orgNode.id, text: 'z' } },
+    ]);
     expect(toolErrors(appended)).toEqual(['"org:self" is read-only for this run.']);
   });
 
   it('delivers pins to an agent without Memory within the call that pins and on the next call', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-memory' }), pins: true });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'pins-no-memory' }), pinnedContext: true });
     const prompts: unknown[][] = [];
     const agent = (calls: Call[]) =>
       new Agent({
@@ -252,16 +292,15 @@ describe('Knowledge attached to an Agent without Memory', () => {
       });
     expect(agent([]).hasOwnMemory()).toBe(false);
 
-    const noThread = await agent([{ toolName: 'knowledge_pin', input: { text: 'x' } }]).generate('pin', {
+    const noThread = await agent([{ toolName: 'knowledge_pin', input: { op: 'pin', text: 'x' } }]).generate('pin', {
       maxSteps: 2,
     });
     expect(toolErrors(noThread)).toEqual(['Knowledge tools require an active threadId.']);
     prompts.length = 0;
 
-    const pinned = await agent([{ toolName: 'knowledge_pin', input: { text: 'Always answer in French.' } }]).generate(
-      'pin it',
-      { maxSteps: 2, memory: { thread: 'p-1', resource: 'u' } },
-    );
+    const pinned = await agent([
+      { toolName: 'knowledge_pin', input: { op: 'pin', text: 'Always answer in French.' } },
+    ]).generate('pin it', { maxSteps: 2, memory: { thread: 'p-1', resource: 'u' } });
     expect(toolErrors(pinned)).toEqual([]);
     const pin = (
       await knowledge

@@ -4,14 +4,15 @@
 '@mastra/factory': minor
 ---
 
-Mastra Code no longer ships the experimental Subconscious. `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` is now `MASTRACODE_EXPERIMENTAL_KNOWLEDGE` (setting the old flag prints a warning and does nothing), and the Subconscious activity view and `ask_memory` tool are removed. Threads that already contain Subconscious activity keep working; the activity is skipped silently.
+Mastra Code no longer ships the experimental Subconscious: the Subconscious activity view and `ask_memory` tool are removed, and `MASTRACODE_EXPERIMENTAL_SUBCONSCIOUS` does nothing. Threads that already contain Subconscious activity keep working; the activity is skipped silently.
 
-With `MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1` the code agent gets Knowledge tools (read, write, pin) and pinned knowledge on every turn. Hosts pass their own with `createMastraCode({ knowledge: { instance, scopes } })`, or turn it off with `knowledge: false`:
+Knowledge is opt-in. In the TUI, turn on **Experimental Knowledge** in `/settings` and restart: the code agent gets the Knowledge tools (search, read, write, pin) and pinned context every turn, stored with Mastra Code under a shared `org:local` scope. Hosts attach their own Knowledge the way an Agent does, with `knowledge` and `scopes`, or keep it off with `knowledge: false`:
 
 ```ts
 const code = await createMastraCode({
-  knowledge: { instance: companyKnowledge, scopes: [{ tag: 'org:acme', access: 'read' }, 'team:acme:support'] },
+  knowledge: companyKnowledge,
+  scopes: ['org:acme', { scope: 'team:acme:support', access: 'write' }],
 });
 ```
 
-Local sessions write under `org:local` when no scopes are given; Factory sessions always add their `org:` and `project:` tags.
+A plain scope is read-only; `{ scope, access: 'write' }` lets the agent write there. Factory sessions always add writable `org:` and `project:` scopes. Knowledge registers on the mounted Mastra under its `id`; pass `knowledge: { key, instance }` to use another key.
