@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
@@ -469,11 +469,12 @@ describe('chat run errors on an account limit', () => {
 
   it('does not name a credential on an older failure, which may predate a credential change', async () => {
     stubCredential('organization');
-    renderWithProviders(
+    const { client } = renderWithProviders(
       <ErrorSession messages={[rateLimited, userMessage('Try again.')]} modelId="anthropic/claude-opus-5-5" />,
     );
 
     expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    await waitForMutationsIdle(client);
     expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
   });
 
@@ -536,9 +537,10 @@ describe('chat run errors on an account limit', () => {
       statusCode: 429,
       modelId: 'gpt-5.5',
     });
-    renderWithProviders(<ErrorSession messages={[codexLimited]} modelId="openai/gpt-5.5" />);
+    const { client } = renderWithProviders(<ErrorSession messages={[codexLimited]} modelId="openai/gpt-5.5" />);
 
     expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    await waitForMutationsIdle(client);
     expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
   });
 });
