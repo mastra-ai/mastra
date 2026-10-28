@@ -415,6 +415,7 @@ describe('MastraPlatformExporter', () => {
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
         timeToFirstTokenMs: 321.5,
         errorCount: 2,
       };

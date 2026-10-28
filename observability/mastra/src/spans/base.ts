@@ -227,6 +227,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   public resumedFromSpanId?: string;
   public outcome?: string;
   public stopReason?: string;
+  public stopReasonContext?: Record<string, unknown>;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -323,6 +324,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.resumedFromSpanId = options.resumedFromSpanId;
     this.outcome = options.outcome;
     this.stopReason = options.stopReason;
+    this.stopReasonContext = options.stopReasonContext;
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -712,6 +714,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
+      ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace

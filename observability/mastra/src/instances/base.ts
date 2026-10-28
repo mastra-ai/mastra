@@ -356,6 +356,7 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       resumedFromSpanId: cached.resumedFromSpanId,
       outcome: cached.outcome,
       stopReason: cached.stopReason,
+      stopReasonContext: cached.stopReasonContext,
       links: cached.links,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,

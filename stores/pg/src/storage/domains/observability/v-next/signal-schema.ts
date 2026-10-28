@@ -100,6 +100,7 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'stopReason', type: 'text', nullable: true },
   { name: 'timeToFirstTokenMs', type: 'double precision', nullable: true },
   { name: 'errorCount', type: 'integer', nullable: true },
+  { name: 'stopReasonContext', type: 'jsonb', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },

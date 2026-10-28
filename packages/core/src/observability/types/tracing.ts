@@ -1635,6 +1635,8 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   outcome?: string;
   /** Machine-readable cause of stopping, when the producer has one */
   stopReason?: string;
+  /** Structured details behind `stopReason`, such as the limit that was hit; carried as supplied */
+  stopReasonContext?: Record<string, unknown>;
   /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
   timeToFirstTokenMs?: number;
   /** Errors in this span and all nested spans, filled at export; the live span does not carry it */
@@ -1964,6 +1966,7 @@ export interface CreateSpanOptions<TType extends SpanType> extends CreateBaseOpt
   resumedFromSpanId?: string;
   outcome?: string;
   stopReason?: string;
+  stopReasonContext?: Record<string, unknown>;
   /**
    * Start time for this span.
    * Used when rebuilding a span from cached data, or when a span is created

@@ -179,6 +179,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   provider           LowCardinality(Nullable(String)),
   outcome            LowCardinality(Nullable(String)),
   stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
   timeToFirstTokenMs Nullable(Float64),
   errorCount         Nullable(UInt32),
 
@@ -268,6 +269,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   provider           LowCardinality(Nullable(String)),
   outcome            LowCardinality(Nullable(String)),
   stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
   timeToFirstTokenMs Nullable(Float64),
   errorCount         Nullable(UInt32),
 
@@ -382,6 +384,7 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   provider           LowCardinality(Nullable(String)),
   outcome            LowCardinality(Nullable(String)),
   stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
   timeToFirstTokenMs Nullable(Float64),
   errorCount         Nullable(UInt32),
 
@@ -1294,6 +1297,7 @@ export const ADDED_SPAN_COLUMNS = [
   ['provider', 'LowCardinality(Nullable(String))'],
   ['outcome', 'LowCardinality(Nullable(String))'],
   ['stopReason', 'LowCardinality(Nullable(String))'],
+  ['stopReasonContext', 'Nullable(String)'],
   ['timeToFirstTokenMs', 'Nullable(Float64)'],
   ['errorCount', 'Nullable(UInt32)'],
 ] as const;

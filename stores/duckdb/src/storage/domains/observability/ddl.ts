@@ -88,6 +88,7 @@ CREATE TABLE IF NOT EXISTS span_events (
   stopReason VARCHAR,
   timeToFirstTokenMs DOUBLE,
   errorCount INTEGER,
+  stopReasonContext JSON,
 
   -- JSON fields
   attributes JSON,
@@ -383,6 +384,7 @@ export const ALL_MIGRATIONS = [
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReason VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS timeToFirstTokenMs DOUBLE`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS errorCount INTEGER`,
+  `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS stopReasonContext JSON`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityType VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityId VARCHAR`,
   `ALTER TABLE span_events ADD COLUMN IF NOT EXISTS parentEntityName VARCHAR`,

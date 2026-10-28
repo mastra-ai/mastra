@@ -379,6 +379,7 @@ export const ADDED_SPAN_COLUMNS = [
   ['stopReason', 'text'],
   ['timeToFirstTokenMs', 'double precision'],
   ['errorCount', 'integer'],
+  ['stopReasonContext', 'jsonb'],
 ] as const;
 
 /**

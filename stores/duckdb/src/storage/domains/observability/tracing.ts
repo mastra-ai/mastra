@@ -70,6 +70,7 @@ const COLUMNS = [
   'stopReason',
   'timeToFirstTokenMs',
   'errorCount',
+  'stopReasonContext',
   'experimentId',
   'entityType',
   'entityId',
@@ -192,7 +193,8 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('outcome')},
     ${argMaxNonNull('stopReason')},
     ${argMaxNonNull('timeToFirstTokenMs')},
-    ${argMaxNonNull('errorCount')}
+    ${argMaxNonNull('errorCount')},
+    ${argMaxNonNull('stopReasonContext')}
   FROM span_events
 `;
 
@@ -438,6 +440,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     stopReason: (row.stopReason as string) ?? null,
     timeToFirstTokenMs: (row.timeToFirstTokenMs as number) ?? null,
     errorCount: (row.errorCount as number) ?? null,
+    stopReasonContext: parseJson(row.stopReasonContext) as Record<string, unknown> | null,
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
@@ -668,6 +671,7 @@ interface SpanEventRow {
   stopReason: string | null;
   timeToFirstTokenMs: number | null;
   errorCount: number | null;
+  stopReasonContext: Record<string, unknown> | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -758,6 +762,7 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.stopReason),
     v(row.timeToFirstTokenMs),
     v(row.errorCount),
+    jsonV(row.stopReasonContext),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -824,6 +829,7 @@ function copiedSpanColumns(s: CreateSpanArgs['span']) {
     stopReason: s.stopReason ?? null,
     timeToFirstTokenMs: s.timeToFirstTokenMs ?? null,
     errorCount: s.errorCount ?? null,
+    stopReasonContext: s.stopReasonContext ?? null,
   };
 }
 

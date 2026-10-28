@@ -320,6 +320,9 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   outcome?: string
   stopReason?: string
 
+  /** Structured details behind stopReason, such as the limit that was hit */
+  stopReasonContext?: Record<string, unknown>
+
   /** Milliseconds from the model call to the first token received */
   timeToFirstTokenMs?: number
 

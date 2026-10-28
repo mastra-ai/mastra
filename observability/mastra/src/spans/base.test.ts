@@ -599,6 +599,7 @@ describe('Span', () => {
         resumedFromSpanId: 'a1b2c3d4e5f60718',
         outcome: 'success',
         stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
       };
       const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
       const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });

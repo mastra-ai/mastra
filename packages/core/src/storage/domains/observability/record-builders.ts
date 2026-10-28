@@ -182,6 +182,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     provider: span.provider ?? null,
     outcome: span.outcome ?? null,
     stopReason: span.stopReason ?? null,
+    stopReasonContext: span.stopReasonContext ?? null,
     timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
     errorCount: span.errorCount ?? null,
 
@@ -251,6 +252,7 @@ const SUPPLIED_SPAN_COLUMNS = [
   'provider',
   'outcome',
   'stopReason',
+  'stopReasonContext',
   'timeToFirstTokenMs',
   'errorCount',
   'inputPreview',

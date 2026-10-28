@@ -6463,10 +6463,13 @@ LIMIT 1`,
         provider: 'openai',
         outcome: 'success',
         stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
         timeToFirstTokenMs: 321.5,
         errorCount: 2,
       };
       const columns = Object.keys(fields);
+      // The raw column holds the JSON text; the store parses it on read.
+      const stored = { ...fields, stopReasonContext: JSON.stringify(fields.stopReasonContext) };
       const startedAt = new Date('2026-01-01T00:00:00Z');
       const span = (traceId: string) => ({
         traceId,
@@ -6510,7 +6513,7 @@ LIMIT 1`,
             format: 'JSONEachRow',
           });
           expect(await result.json(), table).toEqual([
-            { traceId: 'native-upgrade-new', ...fields },
+            { traceId: 'native-upgrade-new', ...stored },
             { traceId: 'native-upgrade-old', ...Object.fromEntries(columns.map(column => [column, null])) },
           ]);
         }

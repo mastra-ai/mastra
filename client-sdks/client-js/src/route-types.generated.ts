@@ -3532,6 +3532,12 @@ type Shared_Type_61 = {
   outcome?: (string | null) | undefined;
   /** Machine-readable cause of stopping, when known */
   stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
   /** Errors in this span and all nested spans; null when unknown */
@@ -3665,6 +3671,12 @@ type Shared_Type_63 = {
   outcome?: (string | null) | undefined;
   /** Machine-readable cause of stopping, when known */
   stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
   /** Milliseconds from the model call to the first token received; null when unknown */
   timeToFirstTokenMs?: (number | null) | undefined;
   /** Errors in this span and all nested spans; null when unknown */
