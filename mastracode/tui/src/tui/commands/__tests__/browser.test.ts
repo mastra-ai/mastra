@@ -1,6 +1,7 @@
 import type { BrowserSettings } from '@mastra/code-sdk/onboarding/settings';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
+import { closeActiveBrowser } from '../../../browser-lifecycle.js';
 import { handleBrowserCommand } from '../browser.js';
 import type { SlashCommandContext } from '../types.js';
 
@@ -49,7 +50,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 function createContext() {
-  const browserInstance = { id: 'browser-instance' };
+  const browserInstance = { id: 'browser-instance', close: vi.fn(async () => {}) };
   const staticAgent = { setBrowser: vi.fn() };
   const dynamicAgent = { setBrowser: vi.fn() };
   const controllerState = { mode: 'review' };
@@ -106,7 +107,8 @@ async function openedPicker() {
 }
 
 describe('handleBrowserCommand', () => {
-  beforeEach(() => {
+  beforeEach(async () => {
+    await closeActiveBrowser();
     browserMocks.checkProfileProviderMismatch.mockReset();
     browserMocks.createBrowserFromSettings.mockReset();
     browserMocks.loadSettings.mockReset();
@@ -158,6 +160,43 @@ describe('handleBrowserCommand', () => {
     expect(browserMocks.saveSettings).toHaveBeenCalledWith(settings);
     expect(settings.browser.enabled).toBe(true);
     expect(ctx.showInfo).toHaveBeenCalledWith('Browser enabled (Stagehand).');
+  });
+
+  it('closes the running browser before attaching its replacement, so the profile is free to relaunch', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    const replacement = { id: 'replacement', close: vi.fn(async () => {}) };
+    browserMocks.createBrowserFromSettings.mockResolvedValueOnce(browserInstance).mockResolvedValueOnce(replacement);
+
+    await handleBrowserCommand(ctx, ['on']);
+    expect(browserInstance.close).not.toHaveBeenCalled();
+
+    const order: string[] = [];
+    browserInstance.close.mockImplementation(async () => {
+      order.push('close old');
+    });
+    staticAgent.setBrowser.mockImplementation((b: { id: string } | undefined) => {
+      order.push(`attach ${b?.id}`);
+    });
+    await handleBrowserCommand(ctx, ['on']);
+
+    // The old browser releases the profile before agents can launch the replacement on it.
+    expect(order).toEqual(['close old', 'attach replacement']);
+    expect(replacement.close).not.toHaveBeenCalled();
+  });
+
+  it('closes the running browser when the browser is turned off', async () => {
+    const { ctx, settings, browserInstance, staticAgent } = createContext();
+    browserMocks.loadSettings.mockReturnValue(settings);
+    browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
+    browserMocks.createBrowserFromSettings.mockResolvedValue(browserInstance);
+
+    await handleBrowserCommand(ctx, ['on']);
+    await handleBrowserCommand(ctx, ['off']);
+
+    expect(browserInstance.close).toHaveBeenCalledOnce();
+    expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(undefined);
   });
 
   describe('set model', () => {

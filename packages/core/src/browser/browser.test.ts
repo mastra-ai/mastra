@@ -1,8 +1,26 @@
-import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSync } from 'node:fs';
-import { tmpdir } from 'node:os';
+import {
+  existsSync,
+  writeFileSync,
+  symlinkSync,
+  readdirSync,
+  mkdtempSync,
+  rmSync,
+  lstatSync,
+  readlinkSync,
+} from 'node:fs';
+import { createServer } from 'node:net';
+import type { Server } from 'node:net';
+import { hostname, tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanupProfileLockFiles, killProcessGroup, resolveLaunchViewport, resolveViewportSize } from './browser';
+import {
+  BrowserProfileInUseError,
+  MastraBrowser,
+  cleanupProfileLockFiles,
+  killProcessGroup,
+  resolveLaunchViewport,
+  resolveViewportSize,
+} from './browser';
 
 describe('cleanupProfileLockFiles', () => {
   let profileDir: string;
@@ -103,6 +121,118 @@ describe('killProcessGroup', () => {
     killProcessGroup(pid as number);
     expect(killSpy).not.toHaveBeenCalled();
     killSpy.mockRestore();
+  });
+});
+
+describe('MastraBrowser launch with a locked profile', () => {
+  // A minimal provider: doLaunch stands in for Chrome starting on the profile.
+  class FakeBrowser extends MastraBrowser {
+    readonly id = 'fake';
+    readonly name = 'Fake';
+    readonly provider = 'fake';
+    doLaunch = vi.fn(async () => {});
+    protected async doClose() {}
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+  }
+
+  let profileDir: string;
+  let socketDir: string;
+  let server: Server | undefined;
+
+  beforeEach(() => {
+    profileDir = mkdtempSync(join(tmpdir(), 'browser-profile-'));
+    // Chrome keeps the real socket in a short temp dir and links to it from the profile.
+    socketDir = mkdtempSync(join(tmpdir(), 'sock-'));
+  });
+
+  afterEach(async () => {
+    if (server?.listening) await new Promise(r => server!.close(r));
+    server = undefined;
+    rmSync(profileDir, { recursive: true, force: true });
+    rmSync(socketDir, { recursive: true, force: true });
+  });
+
+  /** Lay out the lock files Chrome leaves in a profile it holds. */
+  async function lockProfile(holder: string, { listening }: { listening: boolean }) {
+    const socketPath = join(socketDir, 'SingletonSocket');
+    server = createServer(socket => socket.destroy());
+    await new Promise<void>(r => server!.listen(socketPath, r));
+    if (!listening) {
+      // The holder died: its socket is no longer accepting connections.
+      await new Promise(r => server!.close(r));
+    }
+    symlinkSync(holder, join(profileDir, 'SingletonLock'));
+    symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+    symlinkSync('12345', join(profileDir, 'SingletonCookie'));
+  }
+
+  it.skipIf(process.platform === 'win32')(
+    'fails with an error naming the profile and holding PID when a browser holds the profile',
+    async () => {
+      await lockProfile(`${hostname()}-4242`, { listening: true });
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      const error = await browser.launch().catch(e => e);
+
+      expect(error).toBeInstanceOf(BrowserProfileInUseError);
+      expect(error.message).toContain(profileDir);
+      expect(error.message).toContain('PID 4242');
+      expect(browser.doLaunch).not.toHaveBeenCalled();
+      // The live holder's lock is left alone.
+      expect(readlinkSync(join(profileDir, 'SingletonLock'))).toBe(`${hostname()}-4242`);
+    },
+  );
+
+  it.skipIf(process.platform === 'win32')('removes a stale lock left by a dead browser and launches', async () => {
+    await lockProfile(`${hostname()}-4242`, { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    for (const file of ['SingletonLock', 'SingletonSocket', 'SingletonCookie']) {
+      expect(() => lstatSync(join(profileDir, file))).toThrow();
+    }
+  });
+
+  // The lock's PID now belongs to an unrelated live process (PID reuse). Chrome
+  // treats that as a held profile, but nothing serves the profile.
+  it.skipIf(process.platform === 'win32')('removes a stale lock whose PID was reused by another process', async () => {
+    await lockProfile(`${hostname()}-${process.pid}`, { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
+  it.skipIf(process.platform === 'win32')('removes a stale lock left under a different hostname', async () => {
+    await lockProfile('old-hostname.local-4242', { listening: false });
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+  });
+
+  it('launches normally when the profile is not locked', async () => {
+    writeFileSync(join(profileDir, 'Preferences'), '{}');
+    const browser = new FakeBrowser({ profile: profileDir });
+
+    await browser.launch();
+
+    expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+    expect(existsSync(join(profileDir, 'Preferences'))).toBe(true);
   });
 });
 

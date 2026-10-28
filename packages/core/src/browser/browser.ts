@@ -21,8 +21,10 @@
  * Both extend this base class and implement `getTools()` to return their tools.
  */
 
-import { existsSync, unlinkSync, lstatSync, readdirSync } from 'node:fs';
-import { join } from 'node:path';
+import { existsSync, unlinkSync, lstatSync, readdirSync, readlinkSync } from 'node:fs';
+import { createConnection } from 'node:net';
+import { hostname } from 'node:os';
+import { join, resolve } from 'node:path';
 
 import { MastraBase } from '../base';
 import { RegisteredLogger } from '../logger/constants';
@@ -95,6 +97,108 @@ export function cleanupProfileLockFiles(
     // Profile directory may not be readable, ignore
     logger?.warn?.(`Failed to clean up profile lock files in ${profilePath}: ${err}`);
   }
+}
+
+/**
+ * Thrown when a browser profile is held by another running browser process.
+ */
+export class BrowserProfileInUseError extends Error {
+  constructor(
+    readonly profilePath: string,
+    readonly holderPid?: number,
+    readonly holderHost?: string,
+  ) {
+    const holder =
+      holderPid === undefined
+        ? 'another browser process'
+        : `another browser process (PID ${holderPid}${holderHost && holderHost !== hostname() ? ` on host ${holderHost}` : ''})`;
+    const killHint = holderPid === undefined ? '' : ` (for example: kill ${holderPid})`;
+    super(
+      `Browser profile "${profilePath}" is already in use by ${holder}. ` +
+        `Close that browser${killHint} or use a different profile, then try again.`,
+    );
+    this.name = 'BrowserProfileInUseError';
+  }
+}
+
+/**
+ * Resolves true if something is listening on the Unix socket at `socketPath`.
+ * Only a refused connection or a missing socket counts as "nobody listening";
+ * any other outcome is treated as a live listener so a lock is never removed
+ * from a profile that might still be in use.
+ */
+function isSocketAccepting(socketPath: string, timeoutMs = 1000): Promise<boolean> {
+  return new Promise(resolve => {
+    const socket = createConnection(socketPath);
+    const finish = (accepting: boolean) => {
+      socket.destroy();
+      resolve(accepting);
+    };
+    socket.setTimeout(timeoutMs, () => finish(true));
+    socket.once('connect', () => finish(true));
+    socket.once('error', (err: NodeJS.ErrnoException) => finish(err.code !== 'ECONNREFUSED' && err.code !== 'ENOENT'));
+  });
+}
+
+/** Read a symlink's target, or undefined if `path` is missing or not a symlink. */
+function readLinkTarget(path: string): string | undefined {
+  try {
+    return readlinkSync(path);
+  } catch {
+    return undefined;
+  }
+}
+
+/**
+ * Make a local Chrome profile usable before launching a browser on it.
+ *
+ * Chrome marks a profile as in use with a `SingletonLock` symlink (pointing at
+ * `<hostname>-<pid>`) and a `SingletonSocket` the running browser listens on.
+ * A new Chrome started on a locked profile hands off to the holder and exits,
+ * so no DevTools port ever opens and the launcher fails with ECONNREFUSED. If
+ * the holder is gone but the lock remains (a crash, SIGKILL, a changed
+ * hostname), Chrome may refuse the profile, and the browser stays broken.
+ *
+ * - No lock: nothing to do.
+ * - A browser still listens on the profile's socket: throws
+ *   {@link BrowserProfileInUseError} naming the profile and holding PID.
+ * - Nothing listens: the lock is stale, so the lock files are removed.
+ *
+ * The socket check is used instead of a PID check because a PID can be reused
+ * by an unrelated process, and a hung Chrome still holds its socket.
+ * No-op on Windows, where Chrome does not use these lock files.
+ */
+export async function releaseStaleProfileLock(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): Promise<void> {
+  if (!profilePath || process.platform === 'win32') return;
+
+  const lockPath = join(profilePath, 'SingletonLock');
+  try {
+    lstatSync(lockPath);
+  } catch {
+    return;
+  }
+  const lockTarget = readLinkTarget(lockPath);
+
+  const match = lockTarget?.match(/^(.*)-(\d+)$/);
+  const holderHost = match?.[1];
+  const holderPid = match ? Number(match[2]) : undefined;
+
+  // SingletonSocket links to the real socket in a temp dir. Connect to the
+  // link target, like Chrome does: the profile path can exceed the Unix
+  // socket path limit.
+  const socketLink = join(profilePath, 'SingletonSocket');
+  const socketTarget = readLinkTarget(socketLink);
+  if (await isSocketAccepting(socketTarget ? resolve(profilePath, socketTarget) : socketLink)) {
+    throw new BrowserProfileInUseError(profilePath, holderPid, holderHost);
+  }
+
+  logger?.warn?.(
+    `Removing stale browser profile lock in ${profilePath}` + (lockTarget ? ` (left by ${lockTarget})` : ''),
+  );
+  cleanupProfileLockFiles(profilePath, logger);
 }
 
 // =============================================================================
@@ -683,6 +787,17 @@ export abstract class MastraBrowser extends MastraBase {
   protected abstract doClose(): Promise<void>;
 
   /**
+   * Local Chrome profile directory this browser launches with, or undefined
+   * when it does not launch a local browser on a profile (no profile set, or
+   * a remote browser). launch() checks this profile's lock before launching.
+   * Override when the provider can connect to a remote browser in other ways.
+   */
+  protected getLocalProfilePath(): string | undefined {
+    if (this.config.cdpUrl) return undefined;
+    return this.config.profile;
+  }
+
+  /**
    * Get the CDP WebSocket URL for connecting to this browser.
    * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
@@ -725,6 +840,10 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._launchPromise = (async () => {
       try {
+        const localProfile = this.getLocalProfilePath();
+        if (localProfile) {
+          await releaseStaleProfileLock(localProfile, this.logger);
+        }
         await this.doLaunch();
         this.status = 'ready';
 

@@ -20,6 +20,7 @@ import {
 } from '@mastra/code-sdk/onboarding/settings';
 import { remapOpenAIModelForCodexOAuth } from '@mastra/code-sdk/providers/model-ids';
 import type { MastraBrowser } from '@mastra/core/browser';
+import { replaceActiveBrowser } from '../../browser-lifecycle.js';
 import type { ModelItem } from '../components/model-selector.js';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import { askModalQuestion } from '../modal-question.js';
@@ -302,12 +303,14 @@ function resolveModeAgent(mode: unknown, agentControllerState: unknown): Browser
  * @param chatModelId the chat model passed to `createBrowserFromSettings` for
  *   this browser, so the recorded model matches what was really launched.
  */
-function applyBrowserToAgents(
+async function applyBrowserToAgents(
   ctx: SlashCommandContext,
   browser: MastraBrowser | undefined,
   browserSettings?: BrowserSettings,
   chatModelId?: string,
-): void {
+): Promise<void> {
+  // The old browser must release its profile before the new one can launch on it.
+  await replaceActiveBrowser(browser);
   const modes = ctx.controller.listModes();
   let agentControllerState: unknown;
   for (const mode of modes) {
@@ -622,7 +625,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     const disabledSettings = { ...settings.browser, enabled: false };
     settings.browser = disabledSettings;
     saveSettings(settings);
-    applyBrowserToAgents(ctx, undefined, disabledSettings);
+    await applyBrowserToAgents(ctx, undefined, disabledSettings);
     ctx.showInfo('Browser disabled.');
     return;
   }
@@ -640,7 +643,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     try {
       const chatModelId = launchChatModelId(ctx);
       const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
-      applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
+      await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
       if (nextBrowser.profile && nextBrowser.provider) {
         setProfileProvider(nextBrowser.profile, nextBrowser.provider);
       }
@@ -673,19 +676,19 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
         try {
           const chatModelId = launchChatModelId(ctx);
           const browserInstance = await createBrowserFromSettings(settings.browser, { chatModelId });
-          applyBrowserToAgents(ctx, browserInstance, settings.browser, chatModelId);
+          await applyBrowserToAgents(ctx, browserInstance, settings.browser, chatModelId);
         } catch (err) {
           // If recreation fails, disable and report
           settings.browser.enabled = false;
           saveSettings(settings);
-          applyBrowserToAgents(ctx, undefined);
+          await applyBrowserToAgents(ctx, undefined);
           ctx.showError(
             `Browser settings reset, but failed to restart: ${err instanceof Error ? err.message : String(err)}`,
           );
           return;
         }
       } else {
-        applyBrowserToAgents(ctx, undefined);
+        await applyBrowserToAgents(ctx, undefined);
       }
       ctx.showInfo('Browser settings reset to defaults.');
       return;
@@ -757,7 +760,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     if (!browserInstance && browser.enabled) {
       const chatModelId = launchChatModelId(ctx);
       browserInstance = await createBrowserFromSettings(browser, { chatModelId });
-      applyBrowserToAgents(ctx, browserInstance, browser, chatModelId);
+      await applyBrowserToAgents(ctx, browserInstance, browser, chatModelId);
     }
 
     if (!browserInstance) {
@@ -817,7 +820,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
     if (browser.enabled) {
       settings.browser.enabled = false;
       saveSettings(settings);
-      applyBrowserToAgents(ctx, undefined);
+      await applyBrowserToAgents(ctx, undefined);
       ctx.showInfo('Browser automation disabled.');
     } else {
       ctx.showInfo('Browser automation remains disabled.');
@@ -989,7 +992,7 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
   const chatModelId = launchChatModelId(ctx);
   try {
     const browserInstance = await createBrowserFromSettings(nextBrowser, { chatModelId });
-    applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
+    await applyBrowserToAgents(ctx, browserInstance, nextBrowser, chatModelId);
     if (nextBrowser.profile && nextBrowser.provider) {
       setProfileProvider(nextBrowser.profile, nextBrowser.provider);
     }

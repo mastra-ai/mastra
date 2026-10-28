@@ -226,6 +226,10 @@ export class StagehandBrowser extends MastraBrowser {
     return config.env === 'BROWSERBASE' || config.cdpUrl != null;
   }
 
+  protected override getLocalProfilePath(): string | undefined {
+    return this.isConnectedToRemoteBrowser() ? undefined : this.stagehandConfig.profile;
+  }
+
   /**
    * Set up close event listener for a shared Stagehand instance.
    * Listens to both context and page close events for robust detection.

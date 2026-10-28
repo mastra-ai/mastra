@@ -26,6 +26,7 @@ import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-d
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
+import { closeActiveBrowser, replaceActiveBrowser } from './browser-lifecycle.js';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
 import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
@@ -268,6 +269,7 @@ async function bootLocal(
     void loadBrowser(chatModelId)
       .then(browser => {
         if (!browser) return;
+        void replaceActiveBrowser(browser);
         controller.setBrowser(browser);
         void session.state
           .set({
@@ -306,7 +308,9 @@ const asyncCleanup = (): Promise<void> => {
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
     remoteSession?.disconnect();
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals()]);
+    // A local browser is a detached process holding its profile lock; left
+    // running, it breaks the next launch on that profile.
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeActiveBrowser()]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);
