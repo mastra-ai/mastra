@@ -7,7 +7,7 @@ import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { useSwitchAgentControllerThreadMutation } from '../../../../../hooks/useAgentControllerThreadMutations';
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
@@ -45,10 +45,12 @@ function ErrorSession({
   messages,
   liveEvent,
   boundThreadId = 'thread-1',
+  modelId = 'openai/gpt-5.5',
 }: {
   messages: MastraDBMessage[];
   liveEvent?: AgentControllerEvent;
   boundThreadId?: string;
+  modelId?: string;
 }) {
   const { transcript, onEvent, localUser, failLocalUser, clearPending, pushNotice } = useAgentControllerTranscript({
     initialThreadId: 'thread-1',
@@ -82,7 +84,7 @@ function ErrorSession({
             sessionId: 'session-1',
             resourceId: 'resource-1',
             modeId: 'build',
-            modelId: 'openai/gpt-5.5',
+            modelId,
           },
         }}
       >
@@ -400,5 +402,145 @@ describe('chat run errors', () => {
     await user.click(screen.getByRole('button', { name: 'New session' }));
 
     expect(await screen.findByText('New session draft')).toBeVisible();
+  });
+});
+
+describe('chat run errors on an account limit', () => {
+  const rateLimited = failedReply(
+    "This request would exceed your account's rate limit. Please try again later.",
+    'AI_APICallError',
+    { statusCode: 429, modelId: 'claude-opus-5-5' },
+  );
+
+  function stubCredential(credentialHolder: 'organization' | 'personal') {
+    server.use(
+      http.get(`${TEST_BASE_URL}/auth/me`, () =>
+        HttpResponse.json({
+          authenticated: true,
+          user: { userId: 'user-damien', name: 'Damien Schneider', organizationId: 'org-1' },
+        }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/factory/projects/factory-1`, () =>
+        HttpResponse.json({ project: { id: 'factory-1', modelScope: 'hybrid' } }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+        HttpResponse.json({ modelId: null, thinkingLevel: null }),
+      ),
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'anthropic/claude-opus-5-5',
+              provider: 'anthropic',
+              modelName: 'claude-opus-5-5',
+              hasApiKey: true,
+              credentialLabel: 'Claude Pro/Max',
+              credentialHolder,
+            },
+            {
+              id: 'openai/gpt-5.5',
+              provider: 'openai',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'ChatGPT Plus/Pro',
+              credentialHolder,
+            },
+          ],
+          modelScope: credentialHolder === 'organization' ? 'factory' : 'user',
+          defaultModelId: null,
+        }),
+      ),
+    );
+  }
+
+  it('tells a work-item reviewer the limit belongs to the organization’s subscription, not theirs', async () => {
+    stubCredential('organization');
+    renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
+
+    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+  });
+
+  it('tells the chat owner the limit belongs to their own subscription', async () => {
+    stubCredential('personal');
+    renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
+
+    expect(await screen.findByText('Runs on Claude Pro/Max · Damien Schneider (you)')).toBeVisible();
+  });
+
+  it('does not name a credential on an older failure, which may predate a credential change', async () => {
+    stubCredential('organization');
+    const { client } = renderWithProviders(
+      <ErrorSession messages={[rateLimited, userMessage('Try again.')]} modelId="anthropic/claude-opus-5-5" />,
+    );
+
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
+  });
+
+  it('stops naming the failed model’s credential once the session switches to another provider', async () => {
+    const modelSwitches: unknown[] = [];
+    stubCredential('organization');
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
+      <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
+    );
+    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+
+    await user.click(await screen.findByRole('button', { name: 'Change model' }));
+    await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.5' }]));
+    rerender(<ErrorSession messages={[rateLimited]} modelId="openai/gpt-5.5" />);
+
+    expect(screen.getByText('Provider rate limit reached')).toBeVisible();
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
+  });
+
+  it('names no credential when another provider serves the same model name the session moved to', async () => {
+    stubCredential('organization');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'openai-codex/gpt-5.5',
+              provider: 'openai-codex',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'ChatGPT Plus/Pro',
+              credentialHolder: 'organization',
+            },
+            {
+              id: 'openai/gpt-5.5',
+              provider: 'openai',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'OpenAI API key',
+              credentialHolder: 'organization',
+            },
+          ],
+          modelScope: 'factory',
+          defaultModelId: null,
+        }),
+      ),
+    );
+    const codexLimited = failedReply('Rate limit reached for gpt-5.5.', 'AI_APICallError', {
+      statusCode: 429,
+      modelId: 'gpt-5.5',
+    });
+    const { client } = renderWithProviders(<ErrorSession messages={[codexLimited]} modelId="openai/gpt-5.5" />);
+
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    await waitForMutationsIdle(client);
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
   });
 });
