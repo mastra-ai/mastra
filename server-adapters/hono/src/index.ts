@@ -414,6 +414,11 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
     return result;
   }
 
+  /** Adapter `mcpOptions` win; otherwise use `server.mcpOptions` from the Mastra config. */
+  private resolveMcpOptions() {
+    return this.mcpOptions ?? this.mastra.getServer()?.mcpOptions;
+  }
+
   async sendResponse(route: ServerRoute, response: Context, result: unknown, prefix?: string): Promise<any> {
     const resolvedPrefix = prefix ?? this.prefix ?? '';
 
@@ -440,7 +445,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
       const { req, res } = toReqRes(response.req.raw);
 
       // Merge class-level mcpOptions with route-specific options (route takes precedence)
-      const { setRequestAuth, ...options } = { ...this.mcpOptions, ...routeMcpOptions };
+      const { setRequestAuth, ...options } = { ...this.resolveMcpOptions(), ...routeMcpOptions };
 
       // `toReqRes` builds a fresh IncomingMessage, so the principal resolved by
       // auth middleware never reaches the MCP transport unless we bridge it here.
@@ -495,7 +500,7 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
         await applyMcpRequestAuth({
           req,
           requestContext: response.get('requestContext'),
-          setRequestAuth: this.mcpOptions?.setRequestAuth,
+          setRequestAuth: this.resolveMcpOptions()?.setRequestAuth,
         });
 
         return await server.startHonoSSE({
