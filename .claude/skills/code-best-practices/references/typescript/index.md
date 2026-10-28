@@ -1,18 +1,10 @@
 # TypeScript and JavaScript
 
-## Eliminating Waterfalls
-
-| Rule             | Title                                    | Impact   | Summary                                                                 | Canonical file                            |
-| ---------------- | ---------------------------------------- | -------- | ----------------------------------------------------------------------- | ----------------------------------------- |
-| `async-parallel` | Promise.all() for Independent Operations | CRITICAL | Execute independent async operations concurrently with `Promise.all()`. | [async-parallel](async/async-parallel.md) |
-
 ## JavaScript Performance
 
-| Rule                    | Title                                             | Impact     | Summary                                                                                     | Canonical file                                                |
-| ----------------------- | ------------------------------------------------- | ---------- | ------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
-| `js-set-map-lookups`    | Use Set/Map for O(1) Lookups                      | LOW-MEDIUM | Convert arrays to `Set` or `Map` for repeated membership checks.                            | [js-set-map-lookups](performance/js-set-map-lookups.md)       |
-| `js-tosorted-immutable` | Use toSorted() Instead of sort() for Immutability | MEDIUM     | Use `toSorted()` instead of mutating arrays with `sort()`.                                  | [js-tosorted-immutable](performance/js-tosorted-immutable.md) |
-| `js-length-check-first` | Early Length Check for Array Comparisons          | HIGH       | Check array lengths before expensive comparisons, sorting, serialization, or deep equality. | [js-length-check-first](performance/js-length-check-first.md) |
+| Rule                    | Title                                             | Impact | Summary                                                    | Canonical file                                                |
+| ----------------------- | ------------------------------------------------- | ------ | ---------------------------------------------------------- | ------------------------------------------------------------- |
+| `js-tosorted-immutable` | Use toSorted() Instead of sort() for Immutability | MEDIUM | Use `toSorted()` instead of mutating arrays with `sort()`. | [js-tosorted-immutable](performance/js-tosorted-immutable.md) |
 
 ## Code Structure
 
@@ -24,7 +16,7 @@
 
 ## Type Safety
 
-| Rule                       | Title                                     | Impact | Summary                                                                                                                | Canonical file                                          |
-| -------------------------- | ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------- |
-| `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with real guards, query generics, typed factories, or `implements`. | [types-no-type-assertions](types-no-type-assertions.md) |
-| `types-no-null`            | Use undefined for Absence, Not null       | HIGH   | Model absence with optional `?`/`undefined`; convert external `null` at boundaries and keep internal types null-free.  | [types-no-null](types-no-null.md)                       |
+| Rule                       | Title                                     | Impact | Summary                                                                                                                | Canonical file                                                |
+| -------------------------- | ----------------------------------------- | ------ | ---------------------------------------------------------------------------------------------------------------------- | ------------------------------------------------------------- |
+| `types-no-type-assertions` | No `as` Type Assertions (Including Tests) | HIGH   | Never use `as` casts (production or tests); narrow with real guards, query generics, typed factories, or `implements`. | [types-no-type-assertions](types/types-no-type-assertions.md) |
+| `types-no-null`            | Use undefined for Absence, Not null       | HIGH   | Model absence with optional `?`/`undefined`; convert external `null` at boundaries and keep internal types null-free.  | [types-no-null](types/types-no-null.md)                       |
