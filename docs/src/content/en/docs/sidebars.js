@@ -220,6 +220,11 @@ const sidebars = {
             },
           ],
         },
+        {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
+        },
       ],
     },
     {
