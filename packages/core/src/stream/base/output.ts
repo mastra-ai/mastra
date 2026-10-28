@@ -33,7 +33,11 @@ import type {
 } from '../types';
 import { isDataChunk } from '../types';
 import { safeClose, safeEnqueue } from './input';
-import { createJsonTextStreamTransformer, createObjectStreamTransformer } from './output-format-handlers';
+import {
+  createJsonTextStreamTransformer,
+  createObjectStreamTransformer,
+  isStructuredOutputError,
+} from './output-format-handlers';
 import { isChunkOutputProcessed } from './output-processed';
 import { getChunkProducedAt, stampChunkProducedAt } from './produced-at';
 import { getTransformedSchema } from './schema';
@@ -1069,6 +1073,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
       }
     };
 
+    let structuredOutputErrored = false;
+
     this.#baseStream = processedStream.pipeThrough(
       new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
         transform: async (chunk, controller) => {
@@ -1076,7 +1082,14 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
           // still records the call built from the streamed args. Calls with no streamed args
           // stay pending: the error may be retried, and the retry delivers the real tool-call.
           if (chunk.type === 'error') {
-            flushPendingToolCalls(controller, { onlyStreamed: true });
+            // A structured-output error fails the step: its pending calls, streamed or not, must
+            // not be recorded (a half-streamed input would otherwise run as `{}`/partial args).
+            if (isStructuredOutputError(chunk.payload.error)) {
+              structuredOutputErrored = true;
+              self.#pendingToolCalls = Object.create(null);
+            } else {
+              flushPendingToolCalls(controller, { onlyStreamed: true });
+            }
           }
           // A call's outcome must not precede the call itself.
           if (chunk.type === 'tool-result' || chunk.type === 'tool-error') {
@@ -1544,7 +1557,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
             case 'finish':
               // A tripwire/abort bail ends the run without the final tool-call; don't record a
               // placeholder no-args call for it.
-              if ((chunk.payload.stepResult.reason as string) === 'tripwire') {
+              // The same holds after a structured-output error: that step is failing, and a
+              // pending call whose input never arrived would run with empty args.
+              if ((chunk.payload.stepResult.reason as string) === 'tripwire' || structuredOutputErrored) {
                 self.#pendingToolCalls = Object.create(null);
               } else {
                 flushPendingToolCalls(controller);

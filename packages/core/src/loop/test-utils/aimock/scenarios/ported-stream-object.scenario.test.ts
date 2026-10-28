@@ -1,7 +1,8 @@
 import { createOpenAI } from '@ai-sdk/openai-v6';
 import { jsonSchema, pipeTextStreamToResponse } from '@internal/ai-sdk-v5';
-import { expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
+import { createTool } from '../../../../tools';
 import { createMockServerResponse } from '../../mock-server-response';
 import { describeForAllEngines, isDurableEngineVariant, runLoopScenario } from '../aimock-scenario';
 import type { RunLoopScenarioOptions } from '../aimock-scenario';
@@ -341,5 +342,151 @@ describeForAllEngines('AIMock loop scenario: ported streamObject (real providers
   it('streams only the full value for a non-ambiguous enum', async () => {
     const { output } = await run(enumDeltas(['"foo', 'bar']), z.enum(['foobar', 'barfoo']));
     expect(await collect(output.objectStream)).toStrictEqual(['foobar']);
+  });
+
+  describe('when structured output fails before the model finish chunk', () => {
+    const updateStatus = (execute: () => Promise<string>) => ({
+      'update-status': createTool({
+        id: 'update-status',
+        description: 'Update the status.',
+        inputSchema: z.object({}),
+        execute,
+      }),
+    });
+
+    // A function_call item whose input ends but whose tool-call never reaches the loop. The real
+    // v6 provider emits tool-input-end and tool-call together from output_item.done, so the
+    // model below drops the tool-call part: that is the only way to reach a pending call whose
+    // input ended without the call (a custom provider or a cut connection can produce it).
+    const endedToolCall = (argumentDeltas: string[]) => [
+      {
+        type: 'response.output_item.added',
+        output_index: 1,
+        item: { type: 'function_call', id: 'fc_1', call_id: 'call-1', name: 'update-status', arguments: '' },
+      },
+      ...argumentDeltas.map(delta => ({
+        type: 'response.function_call_arguments.delta',
+        item_id: 'fc_1',
+        output_index: 1,
+        delta,
+      })),
+      {
+        type: 'response.output_item.done',
+        output_index: 1,
+        item: {
+          type: 'function_call',
+          id: 'fc_1',
+          call_id: 'call-1',
+          name: 'update-status',
+          arguments: argumentDeltas.join(''),
+          status: 'completed',
+        },
+      },
+    ];
+
+    const withoutToolCallParts = () => {
+      const model = p.openaiModel();
+      return Object.assign(Object.create(model), {
+        doStream: async (options: Parameters<typeof model.doStream>[0]) => {
+          const result = await model.doStream(options);
+          return {
+            ...result,
+            stream: result.stream.pipeThrough(
+              new TransformStream({
+                transform(part, controller) {
+                  if (part.type !== 'tool-call') controller.enqueue(part);
+                },
+              }),
+            ),
+          };
+        },
+      }) as typeof model;
+    };
+
+    const runFailure = async (
+      events: unknown[],
+      schema: unknown,
+      { followUp, ...extra }: Partial<RunLoopScenarioOptions> & { followUp?: unknown[] } = {},
+    ): Promise<{ output: any; error: any }> => {
+      p.openai.responses.push(events, ...(followUp ? [followUp] : []));
+      const { output } = await runLoopScenario({
+        engine,
+        llm: p.llm,
+        model: () => p.openaiModel(),
+        prompt: 'Answer with JSON.',
+        fixtures: () => {},
+        structuredOutput: { schema: schema as any },
+        expectStreamError: true,
+        ...extra,
+      });
+      const error = await output.object.then(
+        () => undefined,
+        (err: unknown) => err,
+      );
+      return { output, error };
+    };
+
+    it('keeps the step usage when the output is truncated', async () => {
+      const { output, error } = await runFailure(
+        responsesText(['{ "content": "Hello'], { incomplete_details: { reason: 'max_output_tokens' } }),
+        contentSchema,
+      );
+
+      expect(error).toMatchObject({ id: 'STRUCTURED_OUTPUT_TRUNCATED' });
+      expect(await output.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+      expect(await output.totalUsage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+    });
+
+    it('keeps the step usage when an enum result is malformed', async () => {
+      const { output, error } = await runFailure(responsesText(['{ "answer": "sunny" }']), enumSchema);
+
+      expect(error?.message).toContain('Invalid enum format');
+      expect(await output.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+    });
+
+    it('keeps the validation error and the step usage when the object does not match', async () => {
+      const { output, error } = await runFailure(responsesText(['{ "invalid": "Hello, world!" }']), contentSchema);
+
+      expect(error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+      expect(await output.error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+      expect(await output.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+    });
+
+    // Open question: durable and evented validate structured output on the final step only, so a
+    // step whose tool input ended without a tool-call runs that call with {} and the run goes on;
+    // plain and fs fail the step and drop the call (#28671). Each engine's behaviour is pinned.
+    const expectPendingCallOutcome = async (output: any, error: any, execute: ReturnType<typeof vi.fn>) => {
+      if (isDurableEngineVariant(engine)) {
+        expect(error).toBeUndefined();
+        expect(execute).toHaveBeenCalledTimes(1);
+        expect(execute.mock.calls[0]![0]).toEqual({});
+        expect(p.openai.requests).toHaveLength(2);
+        expect(await output.object).toStrictEqual({ content: 'after' });
+        return;
+      }
+      expect(error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+      expect(await output.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+      expect(execute).not.toHaveBeenCalled();
+      expect((await output.toolCalls) ?? []).toEqual([]);
+      expect(p.openai.requests).toHaveLength(1);
+    };
+
+    for (const [name, argumentDeltas] of [
+      ['does not run a tool whose input never arrived before the validation error', []],
+      ['does not run a tool whose streamed input was cut off before the validation error', ['{']],
+    ] as const) {
+      it(name, async () => {
+        const execute = vi.fn(async () => 'ran');
+        const events = responsesText(['{ "invalid": "Hello, world!" }']);
+        events.splice(-1, 0, ...endedToolCall([...argumentDeltas]));
+        const { output, error } = await runFailure(events, contentSchema, {
+          tools: updateStatus(execute),
+          model: withoutToolCallParts,
+          // Only durable and evented reach this follow-up call.
+          followUp: responsesText(['{ "content": "after" }']),
+        });
+        await expectPendingCallOutcome(output, error, execute);
+      });
+    }
   });
 });

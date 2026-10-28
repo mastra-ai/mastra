@@ -19,10 +19,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "zai-org/glm-5.3-flash": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ],
     "aleph-alpha/kolibri-1": [
@@ -31,10 +31,10 @@
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "zai-org/glm-5.3-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["low", "high", "max"]
       }
     ]
   }

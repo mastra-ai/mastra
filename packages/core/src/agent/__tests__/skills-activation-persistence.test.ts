@@ -123,25 +123,24 @@ describe('stateless skill tool behavior', () => {
                 },
               ]),
             };
-          } else {
-            // Step 1: model responds with text
-            return {
-              rawCall: { rawPrompt: null, rawSettings: {} },
-              warnings: [],
-              stream: convertArrayToReadableStream([
-                { type: 'stream-start', warnings: [] },
-                { type: 'response-metadata', id: 'id-1', modelId: 'mock', timestamp: new Date(0) },
-                { type: 'text-start', id: 'text-1' },
-                { type: 'text-delta', id: 'text-1', delta: 'Got the skill instructions!' },
-                { type: 'text-end', id: 'text-1' },
-                {
-                  type: 'finish',
-                  finishReason: 'stop',
-                  usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
-                },
-              ]),
-            };
           }
+          // Step 1: model responds with text
+          return {
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+            stream: convertArrayToReadableStream([
+              { type: 'stream-start', warnings: [] },
+              { type: 'response-metadata', id: 'id-1', modelId: 'mock', timestamp: new Date(0) },
+              { type: 'text-start', id: 'text-1' },
+              { type: 'text-delta', id: 'text-1', delta: 'Got the skill instructions!' },
+              { type: 'text-end', id: 'text-1' },
+              {
+                type: 'finish',
+                finishReason: 'stop',
+                usage: { inputTokens: 10, outputTokens: 5, totalTokens: 15 },
+              },
+            ]),
+          };
         },
       });
 

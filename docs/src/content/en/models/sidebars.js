@@ -701,6 +701,11 @@ const sidebars = {
         },
         {
           type: 'doc',
+          id: 'providers/modular',
+          label: 'Modular',
+        },
+        {
+          type: 'doc',
           id: 'providers/moonshotai',
           label: 'Moonshot AI',
         },

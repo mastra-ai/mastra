@@ -5,11 +5,12 @@ import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
 import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
 import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 function registerAuthHandler() {
   server.use(
@@ -80,6 +81,111 @@ describe('Model provider onboarding', () => {
 
       expect(screen.getByText(/No providers match/)).toHaveTextContent('No providers match “no-such-provider”.');
       expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when creating a custom provider', () => {
+    function registerCustomProviderHandlers() {
+      let created = false;
+      const provider = {
+        id: 'my-llm',
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        hasApiKey: true,
+        models: ['model-a'],
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: created
+              ? [{ id: 'my-llm/model-a', provider: 'my-llm', modelName: 'model-a', hasApiKey: true }]
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/custom-providers`, async ({ request }) => {
+          expect(await request.json()).toEqual({
+            name: 'my-llm',
+            url: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            models: ['model-a'],
+          });
+          created = true;
+          return HttpResponse.json({ ok: true, provider });
+        }),
+      );
+    }
+
+    async function createCustomProvider() {
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
+      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      return user;
+    }
+
+    it('requires a model before creating a provider during setup', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+
+      expect(await screen.findByText('At least one model is required.')).toBeVisible();
+    });
+
+    it('refreshes the catalogs and continues to organization model selection', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      const onComplete = vi.fn<() => void>();
+      const { client } = renderWithProviders(
+        <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
+      );
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+
+    it('continues to personal model selection with the stored custom provider', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+      const onContinue = vi.fn<() => void>();
+      const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Review setup' }));
+      expect(onContinue).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
     });
   });
 
