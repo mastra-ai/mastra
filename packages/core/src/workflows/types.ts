@@ -617,11 +617,23 @@ export interface WorkflowOptions {
    * supports it (in-memory, `@mastra/pg`, `@mastra/libsql`), and can't be
    * combined with `pruneSnapshot`. Steps read earlier results with
    * `getStepResultAsync`; sync `getStepResult` throws. Runs keep the version
-   * they were created with: resuming a run after changing this option throws.
+   * they were created with: a run resumed after this option changes continues
+   * in its stored version. A nested workflow's run uses its parent run's
+   * version, so this option applies only when the workflow runs on its own.
    *
    * @experimental
    */
   storageVersion?: 1 | 2;
+
+  /**
+   * When `storageVersion` isn't set, a new top-level run takes version 2 if
+   * it runs on the default engine and the store supports it, otherwise 1.
+   * Unlike an explicit `storageVersion: 2`, this never throws, and runs it
+   * stores as version 2 skip `pruneSnapshot`.
+   *
+   * @internal
+   */
+  autoStorageVersion?: boolean;
 
   /**
    * Called before a workflow run starts executing, and awaited.

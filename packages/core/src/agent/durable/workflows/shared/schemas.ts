@@ -177,7 +177,8 @@ export const baseIterationStateSchema = z.object({
   requestContextEntries: z.record(z.string(), z.any()).optional(),
   // Iteration tracking
   iterationCount: z.number(),
-  accumulatedSteps: z.array(z.any()),
+  // Absent when the run keeps its step records in workflow state.
+  accumulatedSteps: z.array(z.any()).optional(),
   accumulatedUsage: accumulatedUsageSchema,
   // Identifies states whose usage accumulator preserves unknown counters. Older
   // states have no marker and may contain partial totals presented as complete.

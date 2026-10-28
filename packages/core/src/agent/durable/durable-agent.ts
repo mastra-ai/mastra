@@ -91,6 +91,7 @@ import type {
 } from './types';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
+import { readAccumulatedSteps } from './workflows/shared/accumulated-steps';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
@@ -1073,10 +1074,11 @@ export class DurableAgent<
         : persisted.snapshot;
     const llmStep = snapshot.context?.[DurableStepIds.LLM_EXECUTION];
     if (llmStep?.status !== 'success') return [];
-    // The nested input holds completed iterations; the LLM output holds the
+    // The step records hold completed iterations (in workflow state, or in the
+    // nested input on runs that never seeded them); the LLM output holds the
     // current iteration, which has not reached the accumulator yet.
     const toolCalls: DurableToolCallInput[] = [
-      ...(snapshot.context.input?.accumulatedSteps ?? []).flatMap(
+      ...readAccumulatedSteps(snapshot.value, snapshot.context.input).flatMap(
         (step: { toolCalls?: DurableToolCallInput[] }) => step.toolCalls ?? [],
       ),
       ...(llmStep.output.toolCalls ?? []),
@@ -2114,6 +2116,19 @@ export class DurableAgent<
   }
 
   /**
+   * Whether new runs of this agent's loop are stored as workflow storage
+   * version 2 where the engine and store support it (see the workflow's
+   * `autoStorageVersion` option). A resumed run stays in its stored version.
+   * Off until version 2 prunes what version 1 prunes: a paused v2 run's
+   * largest write is 1.5 times v1's (see snapshot-write-amplification.test.ts).
+   * EventedAgent overrides this to `false`.
+   * @internal
+   */
+  protected get storesRunsInJournal(): boolean {
+    return false;
+  }
+
+  /**
    * Resolve the engine this agent's workflow instance actually runs on.
    *
    * An evented agent without a Mastra host cannot execute evented runs — the
@@ -2297,6 +2312,7 @@ export class DurableAgent<
       // in-process engine (see resolveWorkflowEngine).
       engine: this.resolveWorkflowEngine(),
       shouldPersistSnapshot: this.resolveShouldPersistSnapshot(),
+      autoStorageVersion: this.storesRunsInJournal,
     });
   }
 

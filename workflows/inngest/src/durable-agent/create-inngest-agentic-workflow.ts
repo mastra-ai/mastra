@@ -95,6 +95,8 @@ export interface InngestDurableAgenticWorkflowOptions {
  * Iteration state schema - extends base with observability fields.
  */
 const iterationStateSchema = baseIterationStateSchema.extend({
+  // This loop threads step records through the iteration payload
+  accumulatedSteps: z.array(z.any()),
   // Fallback model list; the shared base state update does not carry it
   modelList: z.array(modelListEntrySchema).optional(),
   // Observability - exported span data for agent run

@@ -79,6 +79,7 @@ import { expect, vi } from 'vitest';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
+import { storeRunsInV2 } from './storage-version';
 
 export type RestartKind = 'durable' | 'evented' | 'evented-fallback' | 'workflow';
 
@@ -239,10 +240,15 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
     }
 
-    const agent =
+    // Checkpoints are v1 rows, restored through `persistWorkflowSnapshot`, and `copyStore` carries
+    // v2's tables over as they are now rather than as they were at the checkpoint. So agents
+    // store their runs in v1.
+    const agent = storeRunsInV2(
       options.kind === 'durable'
         ? core.createDurableAgent({ agent: built })
-        : core.createEventedAgent({ agent: built });
+        : core.createEventedAgent({ agent: built }),
+      false,
+    );
     // Before `new Mastra(...)`: the engine resolves during agent registration.
     if (options.kind === 'evented-fallback') {
       vi.spyOn(storage.stores.workflows!, 'supportsConcurrentUpdates').mockReturnValue(false);
