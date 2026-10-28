@@ -31,6 +31,33 @@ export interface MCPTaskCreateParams {
   context?: Record<string, unknown>;
   /** The span of the request that created the task. Kept with the task so every attempt joins its trace. */
   trace?: MCPTaskTrace;
+  /**
+   * Most open (`working` or `input_required`) tasks allowed for this principal and for the whole
+   * store, counting the one being created. Over either, `create` rejects with
+   * {@link MCPTaskLimitError} and records nothing. Omitted: no limit.
+   */
+  limits?: MCPTaskLimits;
+}
+
+/** @experimental SEP-2663 extension; API may change. */
+export interface MCPTaskLimits {
+  perPrincipal: number;
+  total: number;
+}
+
+/**
+ * Thrown by {@link MCPTaskStore.create} when the task would go over one of its `limits`.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export class MCPTaskLimitError extends Error {
+  constructor(
+    readonly scope: 'principal' | 'total',
+    readonly limit: number,
+  ) {
+    super(`Too many open MCP tasks ${scope === 'principal' ? 'for this principal' : 'in this store'} (limit ${limit})`);
+    this.name = 'MCPTaskLimitError';
+  }
 }
 
 /**
@@ -59,6 +86,8 @@ export interface MCPTaskAccess {
  *
  * - `create` must not resolve before an immediate `get(taskId)` would succeed, including on another
  *   instance when the store is shared (SEP-2663 durable creation).
+ * - `create` enforces `limits` by rejecting with {@link MCPTaskLimitError}. A store that ignores
+ *   `limits` caps nothing.
  * - `get`, `update` and `cancel` resolve `undefined`/`false` for an unknown, expired or
  *   foreign-principal task. The server answers all three cases with the same `-32602`.
  * - `update` ignores unknown and already-answered input keys.

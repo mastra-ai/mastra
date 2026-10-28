@@ -15,6 +15,7 @@ import type {
   MCPTaskStatus,
 } from '../../shared/tasks';
 import {
+  MCPTaskLimitError,
   decodeTaskListCursor,
   isPastTaskListCursor,
   matchesTaskListOptions,
@@ -115,6 +116,9 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
   readonly #tasks = new Map<string, TaskRecord>();
   /** The same records, by task key. */
   readonly #byKey = new Map<string, TaskRecord>();
+  /** Open (non-terminal) tasks per principal, and in total. */
+  readonly #openByPrincipal = new Map<string, number>();
+  #open = 0;
   readonly #now: () => number;
   readonly #expiredRetentionMs: number;
 
@@ -127,6 +131,13 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     assertNonNegativeInteger('ttlMs', params.ttlMs);
     assertNonNegativeInteger('pollIntervalMs', params.pollIntervalMs);
     this.#sweep();
+    const openForPrincipal = this.#openByPrincipal.get(params.principal) ?? 0;
+    if (params.limits) {
+      if (openForPrincipal >= params.limits.perPrincipal) {
+        throw new MCPTaskLimitError('principal', params.limits.perPrincipal);
+      }
+      if (this.#open >= params.limits.total) throw new MCPTaskLimitError('total', params.limits.total);
+    }
     const now = this.#now();
     const taskId = createTaskId();
     const record: TaskRecord = {
@@ -148,6 +159,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     if (record.ttlMs !== null) this.#armExpiry(record, now + record.ttlMs);
     this.#tasks.set(record.taskId, record);
     this.#byKey.set(record.taskKey, record);
+    this.#openByPrincipal.set(record.principal, openForPrincipal + 1);
+    this.#open++;
     return this.#snapshot(record);
   }
 
@@ -377,6 +390,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     }
     this.#tasks.clear();
     this.#byKey.clear();
+    this.#openByPrincipal.clear();
+    this.#open = 0;
   }
 
   /** Without `access`, any principal's task (admin). */
@@ -425,7 +440,12 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     record.lastUpdatedAt = this.#now();
   }
 
+  /** The only way a task turns terminal, so it is also where it stops counting as open. */
   #finish(record: TaskRecord, status: 'completed' | 'failed' | 'cancelled', reason?: Error): void {
+    const open = this.#openByPrincipal.get(record.principal)! - 1;
+    if (open === 0) this.#openByPrincipal.delete(record.principal);
+    else this.#openByPrincipal.set(record.principal, open);
+    this.#open--;
     this.#transition(record, status);
     const pending = record.pendingInput;
     record.pendingInput = undefined;

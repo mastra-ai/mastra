@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailedTaskSchema, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
+import { MCPTaskLimitError } from './store';
 import type { MCPTaskAttempt, MCPTaskAttemptOutcome } from './store';
 
 const alice = { principal: 'alice' };
@@ -9,6 +10,7 @@ const elicit = (message: string) => ({
   method: 'elicitation/create',
   params: { mode: 'form', message, requestedSchema: { type: 'object', properties: {} } },
 });
+const text = (value: string) => ({ content: [{ type: 'text' as const, text: value }] });
 
 describe('InMemoryMCPTaskStore', () => {
   let store: InMemoryMCPTaskStore;
@@ -163,7 +165,6 @@ describe('InMemoryMCPTaskStore', () => {
   });
 
   describe('run', () => {
-    const text = (value: string) => ({ content: [{ type: 'text' as const, text: value }] });
     const settled = async (taskId: string, status: string) => {
       await vi.waitFor(async () => expect((await store.get(taskId, alice))?.status).toBe(status));
       return store.get(taskId, alice);
@@ -367,5 +368,84 @@ describe('InMemoryMCPTaskStore', () => {
       { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 1, resumed: false, recovered: false },
       { ...trace, taskKey: taskKeyOf(task.taskId), attempt: 2, resumed: true, recovered: false },
     ]);
+  });
+
+  describe('open task limits', () => {
+    const limits = { perPrincipal: 2, total: 3 };
+    const create = (principal: string, ttlMs: number | null = null) => store.create({ ttlMs, principal, limits });
+    const refusal = (principal: string) =>
+      create(principal).then(
+        () => undefined,
+        (error: unknown) => error,
+      );
+
+    it('refuses a task past the per-principal and total limits, counting each principal apart', async () => {
+      store = new InMemoryMCPTaskStore();
+      await create('alice');
+      await create('alice');
+      const perPrincipal = await refusal('alice');
+      expect(perPrincipal).toBeInstanceOf(MCPTaskLimitError);
+      expect(perPrincipal).toMatchObject({ scope: 'principal', limit: 2 });
+
+      await create('bob');
+      expect(await refusal('carol')).toMatchObject({ scope: 'total', limit: 3 });
+    });
+
+    it('enforces no limit when create gets none', async () => {
+      store = new InMemoryMCPTaskStore();
+      await create('alice');
+      await create('alice');
+      await expect(store.create({ ttlMs: null, principal: 'alice' })).resolves.toMatchObject({ status: 'working' });
+    });
+
+    it('frees a slot when a task completes, fails, is cancelled or expires, but not while it waits for input', async () => {
+      vi.useFakeTimers({ now: 0 });
+      store = new InMemoryMCPTaskStore();
+      const completed = await create('alice');
+      const failed = await create('alice');
+
+      store.handle(completed.taskId).complete(text('done'));
+      // A second terminal write is ignored and must not free another slot.
+      store.handle(completed.taskId).fail({ code: TASKS_ERROR_CODES.InternalError, message: 'late' });
+      const waiting = await create('alice');
+      expect(await refusal('alice')).toMatchObject({ scope: 'principal' });
+
+      void store
+        .handle(waiting.taskId)
+        .requireInput({ a: elicit('ok?') })
+        .catch(() => {});
+      expect(await refusal('alice')).toMatchObject({ scope: 'principal' });
+
+      store.handle(failed.taskId).fail({ code: TASKS_ERROR_CODES.InternalError, message: 'broken' });
+      const cancelled = await create('alice');
+      expect(await store.cancel(cancelled.taskId, alice)).toBe(true);
+      expect(await store.cancel(cancelled.taskId, alice)).toBe(true);
+      // bob can't cancel alice's task, so it frees nothing.
+      expect(await store.cancel(waiting.taskId, bob)).toBe(false);
+      const expiring = await create('alice', 1_000);
+      expect(await refusal('alice')).toMatchObject({ scope: 'principal' });
+
+      await vi.advanceTimersByTimeAsync(1_000);
+      expect(await store.get(expiring.taskId, alice)).toMatchObject({ status: 'failed' });
+      await expect(create('alice')).resolves.toMatchObject({ status: 'working' });
+      expect(await refusal('alice')).toMatchObject({ scope: 'principal' });
+    });
+
+    it('frees a slot when work run by the store settles', async () => {
+      store = new InMemoryMCPTaskStore();
+      const first = await create('alice');
+      await create('alice');
+      store.run(first.taskId, async () => ({ status: 'completed', result: text('done') }));
+      await vi.waitFor(async () => expect((await store.get(first.taskId, alice))?.status).toBe('completed'));
+      await expect(create('alice')).resolves.toMatchObject({ status: 'working' });
+    });
+
+    it('starts counting from zero after close', async () => {
+      store = new InMemoryMCPTaskStore();
+      await create('alice');
+      await create('alice');
+      store.close();
+      await expect(create('alice')).resolves.toMatchObject({ status: 'working' });
+    });
   });
 });
