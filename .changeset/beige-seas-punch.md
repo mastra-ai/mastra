@@ -6,6 +6,8 @@ Fixed evented durable agents stopping when their API process shuts down. Survivi
 
 Shared evented execution now requires a shared storage adapter with `supportsRunFencing()` and the agent and Mastra host to use the same underlying pubsub transport. Unsupported shared configurations are rejected before dispatch. Process-local execution and existing hostless or non-atomic-storage fallbacks are unchanged.
 
+Caller-provided durable and evented agent `runId` values must not contain the reserved `\u0000retake\u0000` lease delimiter. These IDs now reject with a `TypeError` before ownership is claimed; use a run ID without that delimiter.
+
 **Migration**
 
 Before: an unfenced store or separate agent transport could be configured for shared execution:

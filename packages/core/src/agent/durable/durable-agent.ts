@@ -3067,6 +3067,9 @@ export class DurableAgent<
     // 1. Claim the run before preparing it, so a run that is already executing
     // fails before any span or memory write is made for this call.
     const runId = options?.runId ?? crypto.randomUUID();
+    if (runId.includes('\u0000retake\u0000')) {
+      throw new TypeError('`runId` must not contain the reserved lease delimiter "\\u0000retake\\u0000".');
+    }
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 
@@ -4689,6 +4692,9 @@ export class DurableAgent<
 
     // 1. Claim the run before preparing it — see stream().
     const runId = options?.runId ?? crypto.randomUUID();
+    if (runId.includes('\u0000retake\u0000')) {
+      throw new TypeError('`runId` must not contain the reserved lease delimiter "\\u0000retake\\u0000".');
+    }
     const requestContext = options?.requestContext ?? new RequestContext();
     const executionFence = await this.#claimExecution(runId, 'acquire', requestContext);
 

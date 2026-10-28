@@ -986,6 +986,59 @@ describe.each<OwnershipBackend>(['storage', 'lease'])(
       next.release();
     });
 
+    describe.each(['default', 'evented'] as const)('%s reserved lease delimiter validation', engine => {
+      it.each(['stream', 'generate'] as const)(
+        '%s rejects a reserved lease delimiter before claiming ownership',
+        async method => {
+          const storage = createStorage(backend);
+          const model = gatedModel('This execution must never reach the model.');
+          model.release();
+          const agent = new Agent({
+            id: 'reserved-run-id-agent',
+            name: 'Reserved run ID agent',
+            instructions: 'Answer the request.',
+            model: model.model as LanguageModelV2,
+          });
+          const durableAgent =
+            engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+          new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+          const runId = 'custom\u0000retake\u000042';
+          const workflows = (await storage.getStore('workflows'))!;
+
+          await expect(durableAgent[method]('hello', { runId })).rejects.toEqual(
+            new TypeError('`runId` must not contain the reserved lease delimiter "\\u0000retake\\u0000".'),
+          );
+          expect(await workflows.getRunOwnership({ runId })).toBeNull();
+          expect(await pubsub.getLeaseOwner(executionLeaseKey(durableAgent.id, runId))).toBeUndefined();
+          expect(globalRunRegistry.has(runId)).toBe(false);
+          expect(model.calls()).toBe(0);
+        },
+      );
+
+      it.each(['stream', 'generate'] as const)(
+        '%s accepts custom run IDs without the reserved delimiter',
+        async method => {
+          const storage = createStorage(backend);
+          const model = gatedModel('Custom run completed.');
+          model.release();
+          const agent = new Agent({
+            id: 'custom-run-id-agent',
+            name: 'Custom run ID agent',
+            instructions: 'Answer the request.',
+            model: model.model as LanguageModelV2,
+          });
+          const durableAgent =
+            engine === 'evented' ? createEventedAgent({ agent, pubsub }) : createDurableAgent({ agent, pubsub });
+          new Mastra({ agents: { agent: durableAgent }, storage, pubsub, logger: false });
+
+          const result = await durableAgent[method]('hello', { runId: String.raw`custom\u0000retake\u000042` });
+          expect(await ('output' in result ? result.output.text : result.text)).toBe('Custom run completed.');
+          expect(model.calls()).toBe(1);
+          if ('cleanup' in result) result.cleanup();
+        },
+      );
+    });
+
     it('stream({ runId }) rejects with CONFLICT while another execution holds the run', async () => {
       const storage = createStorage(backend);
       const model = gatedModel('never produced');
