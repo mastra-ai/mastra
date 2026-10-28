@@ -152,8 +152,10 @@ export const spanRecordSchema = z
       .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
 
     // Native span fields. Copied from the exported span as supplied; a value the producer did not
-    // set is stored as null, never derived. `outcome` / `stopReason` values follow the shared
-    // outcome contract and are not validated here.
+    // set is stored as null, never derived on write. On read, `getSpan` / `getTrace` fall back to
+    // the `attributes` strings for `model` and `provider` when the column is null, so rows written
+    // before the columns agree with the trace and span queries. `outcome` / `stopReason` values
+    // follow the shared outcome contract and are not validated here.
     externalParentSpanId: z
       .string()
       .nullish()

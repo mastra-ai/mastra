@@ -326,8 +326,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     this.stopReason = options.stopReason;
     // Cleaned like metadata: the context is serialized by every exporter, so an
     // Error or BigInt inside it must not turn into {} or throw mid-batch.
-    this.stopReasonContext =
-      options.stopReasonContext === undefined ? undefined : deepClean(options.stopReasonContext, this.deepCleanOptions);
+    this.stopReasonContext = deepClean(options.stopReasonContext, this.deepCleanOptions);
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
