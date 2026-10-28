@@ -1,7 +1,7 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
 
-import { SkeletonRows } from '../../../../ui/SkeletonRows';
+import { PaletteRowsSkeleton } from '../../../../ui/PaletteRowsSkeleton';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ProviderConnection } from '../../hooks/useProviderConnection';
 import { matchesProviderQuery } from '../../hooks/useProviderConnection';
@@ -16,7 +16,7 @@ export interface CreateFactoryProviderRowsProps {
 
 export function CreateFactoryProviderRows({ connection, query, error }: CreateFactoryProviderRowsProps) {
   if (connection.isPending) {
-    return <SkeletonRows label="Loading model providers" rows={3} rowClassName="mx-2 my-1 h-12 rounded-xl" />;
+    return <PaletteRowsSkeleton label="Loading model providers" rows={3} />;
   }
   if (connection.catalogError)
     return <CreateFactoryPaletteAlert>{connection.catalogError.message}</CreateFactoryPaletteAlert>;
