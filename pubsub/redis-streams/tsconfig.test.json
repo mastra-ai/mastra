@@ -1,0 +1,11 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "paths": {
+      "@mastra/core/*": ["../../packages/core/src/*"]
+    }
+  },
+  "include": ["src/**/*", "test-fixtures/**/*", "tsdown.config.ts"],
+  "exclude": ["node_modules", "**/*.test.ts", "test-fixtures/cli-project/**"]
+}

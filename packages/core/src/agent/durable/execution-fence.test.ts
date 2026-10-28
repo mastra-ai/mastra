@@ -139,6 +139,23 @@ describe('ExecutionFence heartbeat', () => {
     await fence.settle(async () => {});
   });
 
+  it('stops an execution after an event-loop pause outlives its lease without renewing or reacquiring it', async () => {
+    vi.useFakeTimers();
+    const pubsub = new EventEmitterPubSub();
+    const fence = await claim(pubsub, 'run-1');
+    const renew = vi.spyOn(pubsub, 'renewLease');
+    const acquire = vi.spyOn(pubsub, 'acquireLease');
+
+    // Move wall time without running timers, as happens while the event loop is blocked.
+    vi.setSystemTime(Date.now() + EXECUTION_LEASE_TTL_MS + 1);
+    await vi.advanceTimersByTimeAsync(EXECUTION_LEASE_RENEW_INTERVAL_MS);
+
+    expect(fence.isLost()).toBe(true);
+    await expect(fence.verify()).rejects.toMatchObject({ id: EXECUTION_UNVERIFIED_ERROR_ID });
+    expect(renew).not.toHaveBeenCalled();
+    expect(acquire).not.toHaveBeenCalled();
+  });
+
   it('marks the fence lost when a renewal fails, without re-acquiring the lease', async () => {
     vi.useFakeTimers();
     const pubsub = new EventEmitterPubSub();
