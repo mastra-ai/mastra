@@ -23,7 +23,13 @@
     "zai-org/GLM-5.2-FP8"
   ],
   "reasoning": {
-    "ambient/large": [
+    "zai-org/GLM-5.2-FP8": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "z-ai/glm-5.2": [
       {
         "type": "effort",
         "values": ["high", "max"]
@@ -34,16 +40,9 @@
         "type": "toggle"
       }
     ],
-    "z-ai/glm-5.2": [
+    "qwen/qwen3.6-27b": [
       {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
+        "type": "toggle"
       }
     ],
     "qwen/qwen3.8-27b": [
@@ -55,9 +54,10 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "qwen/qwen3.6-27b": [
+    "ambient/large": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ]
   }

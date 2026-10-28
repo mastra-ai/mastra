@@ -17,19 +17,13 @@
     "qwen3.8-27b"
   ],
   "reasoning": {
-    "gemma4-26b": [
-      {
-        "type": "effort",
-        "values": ["none", "high"]
-      }
-    ],
     "glm5.3-754b": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
-    "mistral4-119b": [
+    "qwen3.6-35b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -41,13 +35,13 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "qwen3.8-27b": [
+    "mistral4-119b": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "high"]
       }
     ],
-    "qwen3.6-35b": [
+    "gemma4-26b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -57,6 +51,12 @@
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

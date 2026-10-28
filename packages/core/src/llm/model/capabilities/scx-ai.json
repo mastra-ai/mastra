@@ -15,16 +15,16 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "Qwen3.8-Max": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
     "GLM-5.2": [
       {
         "type": "effort",
         "values": ["none", "high", "max"]
+      }
+    ],
+    "Qwen3.8-Max": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

@@ -25,16 +25,16 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
     "deepseek-ai/deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "qwen/qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

@@ -27,10 +27,10 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen/qwen3.8-27b": [
+    "deepseek-ai/deepseek-v4-flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
+        "values": ["none", "low", "high", "max"]
       }
     ],
     "deepseek-ai/deepseek-v4.1-flash-1017": [
@@ -39,10 +39,10 @@
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "deepseek-ai/deepseek-v4-flash": [
+    "qwen/qwen3.8-27b": [
       {
         "type": "effort",
-        "values": ["none", "low", "high", "max"]
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }
