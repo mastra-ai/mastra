@@ -1,5 +1,27 @@
 # @mastra/playground-ui
 
+## 66.0.0-alpha.7
+
+### Patch Changes
+
+- Improved image attachments in chat messages: images now show unobscured, with the file name and type in a row below them instead of over the lower half of the image. ([#28642](https://github.com/mastra-ai/mastra/pull/28642))
+
+- Updated dependencies [[`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d)]:
+  - @mastra/core@1.80.0-alpha.7
+  - @mastra/client-js@1.57.0-alpha.7
+  - @mastra/react@1.13.0-alpha.7
+
+## 66.0.0-alpha.6
+
+### Patch Changes
+
+- Added a Messages column to the Threads list showing how many messages each thread has. The count covers the whole thread, not only the selected time range. The matching Threads filter is now called Messages instead of Trace count. ([#28610](https://github.com/mastra-ai/mastra/pull/28610))
+
+- Updated dependencies [[`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c)]:
+  - @mastra/core@1.80.0-alpha.6
+  - @mastra/react@1.13.0-alpha.6
+  - @mastra/client-js@1.57.0-alpha.6
+
 ## 66.0.0-alpha.5
 
 ### Minor Changes

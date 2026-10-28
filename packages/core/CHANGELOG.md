@@ -1,5 +1,53 @@
 # @mastra/core
 
+## 1.80.0-alpha.7
+
+### Patch Changes
+
+- Fixed Claude 5.x thinking blocks being stripped from earlier assistant messages on every request, which changed the prompt prefix each step and broke Anthropic prompt caching. The `anthropic-strip-empty-signed-reasoning-content` rule in `ProviderHistoryCompat` now runs only after Anthropic rejects the history with the "thinking blocks cannot be modified" error, so valid empty-text signed blocks are replayed unchanged. ([#28552](https://github.com/mastra-ai/mastra/pull/28552))
+
+- **Fixed canceled runs that hang on tools that ignore cancellation.** ([#28472](https://github.com/mastra-ai/mastra/pull/28472))
+
+  - Cancellation gives running tool executions a 250 ms grace period to settle and keeps successful results completed within that window across eager, deferred, and durable execution.
+  - Canceled tool calls emit a `tool-result` chunk carrying a cancellation notice and record it in conversation history so the next turn knows the tool started and may still be running. Check the tool's status before retrying. Execution activity is released, and later results and failures are ignored without changing timeout errors.
+  - Unless the caller cancels the run, retry and fallback still wait for running eager work, record its result or error, and reuse it before the replacement attempt begins.
+
+  Already-started tool code and external side effects may continue after cancellation.
+
+## 1.80.0-alpha.6
+
+### Minor Changes
+
+- Added opt-in `withRunStatus: true` for thread subscriptions to emit ordered `thread-run-status` chunks with `success`, `failed`, `aborted`, or `suspended` outcomes without closing the subscription. Reconnecting subscribers recover outcomes retained by the PubSub backend. Initial history includes `activeRunId`, the run owning the thread during hydration, or `null` when idle. ([#28621](https://github.com/mastra-ai/mastra/pull/28621))
+
+  ```ts
+  const subscription = await agent.subscribeToThread({
+    resourceId: 'user-123',
+    threadId: 'thread-456',
+    withRunStatus: true,
+  });
+
+  for await (const chunk of subscription.stream) {
+    if (chunk.type === 'thread-run-status') {
+      console.log(chunk.runId, chunk.payload.status);
+    }
+  }
+  ```
+
+### Patch Changes
+
+- Durable agents now honor their configured `notifications.deliveryPolicy`, and forked durable agents retain their Mastra instance so notification signals can be sent from forks. ([#28639](https://github.com/mastra-ai/mastra/pull/28639))
+
+- Fixed structured output results and validation errors arriving after the finish event, so idle-thread subscribers receive them before the run ends. Runs that finish with an error no longer publish a final structured result or fallback value. ([#28617](https://github.com/mastra-ai/mastra/pull/28617))
+
+  Fixed finish callbacks for streams that emit an error before finish, including non-structured runs. Previously accessed result promises still reject, but no longer interrupt stream completion or prevent `onFinish` and final cleanup from running. `onFinish.finishReason` now reports `'error'` for failed runs.
+
+- Fixed `observe(runId, { offset })` replaying the whole run when the offset is at or past the end of the run's log on a transport that keeps old messages, such as Redis Streams. While the run's log is retained, the observer now skips every event below the offset and receives events once the run reaches it. If the log expired or was cleared and the run starts numbering again from 0, the observer resyncs and receives the new events from the start. ([#28348](https://github.com/mastra-ai/mastra/pull/28348))
+
+  `createEventedAgent` can still re-send events from before the offset when processes share a pubsub such as Redis Streams but each uses the default in-memory server cache. Mastra now logs a one-time warning when this happens. To resume evented agents from an offset, configure a server cache that every process shares, such as `RedisServerCache`.
+
+- Fixed `DurableAgent.recover()` reporting an initial pending snapshot without workflow input as corrupt. It now throws `DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE` with guidance to enable running-checkpoint persistence before starting the run, while preserving malformed-snapshot and ownership checks. ([#28611](https://github.com/mastra-ai/mastra/pull/28611))
+
 ## 1.80.0-alpha.5
 
 ### Minor Changes

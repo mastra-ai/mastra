@@ -1,5 +1,27 @@
 # @mastra/factory
 
+## 0.25.0-alpha.8
+
+### Patch Changes
+
+- The Docker sandbox setting and its low-memory warning no longer name the underlying sandbox provider. ([#28646](https://github.com/mastra-ai/mastra/pull/28646))
+
+- Updated dependencies [[`164b9c1`](https://github.com/mastra-ai/mastra/commit/164b9c196afb3e477e97029c369b34a14b84544b), [`cb99bcf`](https://github.com/mastra-ai/mastra/commit/cb99bcf4f538b68552303e97b4fe78e35abf9cd7), [`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d)]:
+  - @mastra/mcp@2.6.0-alpha.3
+  - @mastra/platform-workspace@1.10.0-alpha.3
+  - @mastra/core@1.80.0-alpha.7
+  - @mastra/code-sdk@1.16.0-alpha.8
+
+## 0.25.0-alpha.7
+
+### Patch Changes
+
+- Factory tools now return a web link (`url`) for work items and sessions, and channel agents link Factory items the same way they link pull requests. Refusals that used to say "do it from the Factory UI" now tell the agent to ask the person in their signed-in chat instead. ([#28630](https://github.com/mastra-ai/mastra/pull/28630))
+
+- Updated dependencies [[`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c)]:
+  - @mastra/core@1.80.0-alpha.6
+  - @mastra/code-sdk@1.16.0-alpha.7
+
 ## 0.25.0-alpha.6
 
 ### Patch Changes

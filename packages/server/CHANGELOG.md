@@ -1,5 +1,35 @@
 # @mastra/server
 
+## 1.80.0-alpha.7
+
+### Patch Changes
+
+- Updated dependencies [[`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d)]:
+  - @mastra/core@1.80.0-alpha.7
+
+## 1.80.0-alpha.6
+
+### Patch Changes
+
+- Return HTTP 409 Conflict from `POST /agents/:agentId/recover` when the run is no longer active. ([#28611](https://github.com/mastra-ai/mastra/pull/28611))
+
+- Fixed HTTP agent observation to emit public stream frames directly instead of internal PubSub envelopes, restoring text, tool results, and finish metadata when reconnecting. Update consumers of `/observe` to read the public frame directly: ([#28618](https://github.com/mastra-ai/mastra/pull/28618))
+
+  ```ts
+  // Before
+  const text = event.data.payload.text;
+  ```
+
+  ```ts
+  // After
+  const text = event.payload.text;
+  ```
+
+  Raw PubSub events and inclusive replay offsets are unchanged.
+
+- Updated dependencies [[`ac953f0`](https://github.com/mastra-ai/mastra/commit/ac953f08a74d063ce0e8d2368b36556f715b1fb0), [`a6077b7`](https://github.com/mastra-ai/mastra/commit/a6077b7f61bde8d302f20b54a2dced2d969887aa), [`e718b91`](https://github.com/mastra-ai/mastra/commit/e718b91a64eb720cd755b7fd78255d0ab5a412de), [`3143101`](https://github.com/mastra-ai/mastra/commit/31431019ddd56d0b5677f8cd169f715f0e907266), [`a7cc444`](https://github.com/mastra-ai/mastra/commit/a7cc44423357eaa1e0a73c63ce28ba08ca2ce85c)]:
+  - @mastra/core@1.80.0-alpha.6
+
 ## 1.80.0-alpha.5
 
 ### Patch Changes

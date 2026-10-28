@@ -1,5 +1,17 @@
 # @mastra/mcp
 
+## 2.6.0-alpha.3
+
+### Patch Changes
+
+- dependencies updates: ([#28580](https://github.com/mastra-ai/mastra/pull/28580))
+  - Updated dependency [`@modelcontextprotocol/client@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/client/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/core@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/core/v/2.4.0) (from `2.3.1`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/node@2.1.2` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/node/v/2.1.2) (from `2.0.0`, in `dependencies`)
+  - Updated dependency [`@modelcontextprotocol/server@2.4.0` ↗︎](https://www.npmjs.com/package/@modelcontextprotocol/server/v/2.4.0) (from `2.3.1`, in `dependencies`)
+- Updated dependencies [[`59421d0`](https://github.com/mastra-ai/mastra/commit/59421d0137a0642c60b687567e33bf2358be4c64), [`6f5eadb`](https://github.com/mastra-ai/mastra/commit/6f5eadbf7744a48ee742b940455e969922c3277d)]:
+  - @mastra/core@1.80.0-alpha.7
+
 ## 2.6.0-alpha.2
 
 ### Patch Changes
