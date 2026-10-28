@@ -81,18 +81,20 @@ async function waitForCredits({
   const spinner = p.spinner();
   spinner.start('Waiting for your credits (press any key to stop waiting)');
 
+  // A key press or the time limit ends the wait, including a balance request still in flight.
+  const wait = new AbortController();
   let stopped = false;
   const stopListening = listenForSkipInput(() => {
     stopped = true;
+    wait.abort();
   });
-  const deadline = Date.now() + PURCHASE_TIMEOUT_MS;
+  const deadline = setTimeout(() => wait.abort(), PURCHASE_TIMEOUT_MS);
+  const waitSignal = signal ? AbortSignal.any([signal, wait.signal]) : wait.signal;
   try {
-    while (!stopped && Date.now() < deadline) {
-      signal?.throwIfAborted();
-      await sleep(POLL_INTERVAL_MS, signal);
-      if (stopped) break;
-      const latest = await getGatewayCredits(token, orgId, signal).catch(error => {
-        if (signal?.aborted) throw error;
+    while (!waitSignal.aborted) {
+      await sleep(POLL_INTERVAL_MS, waitSignal);
+      const latest = await getGatewayCredits(token, orgId, waitSignal).catch(error => {
+        if (waitSignal.aborted) throw error;
         return undefined;
       });
       if (latest && (latest.unlimited || latest.remaining > before)) {
@@ -102,9 +104,12 @@ async function waitForCredits({
       }
     }
   } catch (error) {
-    spinner.stop('Stopped waiting for credits.');
-    throw error;
+    if (signal?.aborted) {
+      spinner.stop('Stopped waiting for credits.');
+      throw error;
+    }
   } finally {
+    clearTimeout(deadline);
     stopListening();
   }
 

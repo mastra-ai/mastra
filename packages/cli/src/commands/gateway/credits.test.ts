@@ -98,12 +98,11 @@ describe('offerGatewayCredits', () => {
     expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for credits.');
   });
 
-  it('stops the spinner and cleans up when the wait is aborted', async () => {
+  it('stops the spinner and rethrows when the create flow aborts', async () => {
     vi.useFakeTimers();
     vi.mocked(prompts.select).mockResolvedValueOnce('buy');
     vi.mocked(api.getGatewayCredits).mockResolvedValue(credits(0));
     const controller = new AbortController();
-    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
 
     const result = offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0), signal: controller.signal });
     const settled = expect(result).rejects.toThrow('cancelled');
@@ -111,8 +110,32 @@ describe('offerGatewayCredits', () => {
     controller.abort(new Error('cancelled'));
     await settled;
 
-    expect(removeListener).toHaveBeenCalledTimes(2);
-    expect(api.getGatewayCredits).toHaveBeenCalledWith('t', 'o', controller.signal);
+    const forwarded = vi.mocked(api.getGatewayCredits).mock.calls[0]![2]!;
+    expect(forwarded.aborted).toBe(true);
+    expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for credits.');
+  });
+
+  it('a key press cancels a balance request that is still pending', async () => {
+    vi.useFakeTimers();
+    vi.mocked(prompts.select).mockResolvedValueOnce('buy');
+    let pendingSignal: AbortSignal | undefined;
+    vi.mocked(api.getGatewayCredits).mockImplementation(
+      (_token, _orgId, signal) =>
+        new Promise((_resolve, reject) => {
+          pendingSignal = signal;
+          signal?.addEventListener('abort', () => reject(signal.reason), { once: true });
+        }),
+    );
+    vi.mocked(credentials.listenForSkipInput).mockImplementationOnce(onSkip => {
+      setTimeout(onSkip, 5_000); // after the first poll started and never answered
+      return () => {};
+    });
+
+    const result = offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0) });
+    await vi.advanceTimersByTimeAsync(6_000);
+
+    await expect(result).resolves.toEqual({ remaining: 0 });
+    expect(pendingSignal?.aborted).toBe(true);
     expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for credits.');
   });
 
