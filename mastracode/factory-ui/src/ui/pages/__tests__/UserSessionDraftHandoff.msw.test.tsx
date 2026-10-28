@@ -1,204 +1,19 @@
 import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { http, HttpResponse } from 'msw';
 import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
-import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../e2e/ui/render';
+import { renderWithProviders, waitForMutationsIdle } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
-import type { FactoryUserSession } from '../../domains/workspaces/services/user-sessions';
+import { DRAFT_SESSION_ID, FACTORY_ID, stubDraftRoute } from './fixtures/draftRoute';
 
 if (typeof globalThis.Element !== 'undefined' && !Element.prototype.scrollIntoView) {
   Element.prototype.scrollIntoView = () => {};
 }
 
-const FACTORY_ID = 'factory-draft-handoff';
-const REPOSITORY_ID = 'repository-draft-handoff';
-const DRAFT_SESSION_ID = '30000000-0000-4000-8000-000000000001';
-const AGENT_CONTROLLER_API = `${TEST_BASE_URL}/api/agent-controller/code`;
-
-const createdSession: FactoryUserSession = {
-  id: 'row-draft',
-  sessionId: DRAFT_SESSION_ID,
-  projectRepositoryId: REPOSITORY_ID,
-  orgId: 'org-1',
-  userId: 'user-1',
-  visibility: 'private',
-  title: 'fix the login bug',
-  branch: `user/session-${DRAFT_SESSION_ID}`,
-  baseBranch: 'main',
-  sandboxId: null,
-  sandboxWorkdir: null,
-  materializedAt: null,
-  createdAt: '2026-08-07T09:00:00.000Z',
-  updatedAt: '2026-08-07T09:00:00.000Z',
-};
-
-interface DraftRoute {
-  createBodies: unknown[];
-  posted: string[];
-  bindings: string[];
-  bindingsBeforePrompt: string[];
-  finishWorkspace: () => void;
-}
-
-interface DraftRouteOptions {
-  factoryProjectGate?: Promise<void>;
-  defaultModelId?: string | null;
-  /** Messages the session thread holds once it exists. */
-  persistedMessages?: unknown[];
-}
-
-function readSentMessage(body: unknown): string {
-  if (typeof body !== 'object' || body === null || !('message' in body)) return '';
-  return typeof body.message === 'string' ? body.message : '';
-}
-
-function stubDraftRoute({
-  factoryProjectGate,
-  defaultModelId = null,
-  persistedMessages = [],
-}: DraftRouteOptions = {}): DraftRoute {
-  let releaseWorkspace = () => {};
-  // The server creates the session's thread only once the controller session
-  // boots, so until then reading its history is a 404, as in production.
-  let threadExists = false;
-  const workspaceReady = new Promise<void>(resolve => {
-    releaseWorkspace = () => {
-      threadExists = true;
-      resolve();
-    };
-  });
-  const route: DraftRoute = {
-    createBodies: [],
-    posted: [],
-    bindings: [],
-    bindingsBeforePrompt: [],
-    finishWorkspace: () => releaseWorkspace(),
-  };
-
-  function readBody(body: unknown, key: string): string {
-    return typeof body === 'object' && body !== null && key in body ? String(Reflect.get(body, key)) : '';
-  }
-
-  server.use(
-    http.get(`${TEST_BASE_URL}/auth/me`, () =>
-      HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
-      HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}`, async () => {
-      await factoryProjectGate;
-      return HttpResponse.json({
-        project: {
-          id: FACTORY_ID,
-          name: 'Acme Factory',
-          defaultModelId: 'openai/gpt-4o-mini',
-          defaultThinkingLevel: 'medium',
-        },
-      });
-    }),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/source-control-connections`, () =>
-      HttpResponse.json({
-        connections: [
-          {
-            id: 'connection-1',
-            installationId: 'installation-1',
-            repositories: [
-              {
-                id: REPOSITORY_ID,
-                branch: 'main',
-                sandboxWorkdir: '/workspace/acme',
-                repository: { slug: 'acme/app', defaultBranch: 'main' },
-              },
-            ],
-          },
-        ],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
-      HttpResponse.json({ workItems: [] }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/config/default-model`, () => HttpResponse.json({ modelId: defaultModelId })),
-    http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-      HttpResponse.json({
-        models: [{ id: 'openai/gpt-4o-mini', provider: 'openai', modelName: 'gpt-4o-mini', hasApiKey: true }],
-      }),
-    ),
-    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () => HttpResponse.json({ sessions: [] })),
-    http.post(`${TEST_BASE_URL}/web/source-control/projects/${REPOSITORY_ID}/sessions`, async ({ request }) => {
-      route.createBodies.push(await request.json());
-      return HttpResponse.json({ session: createdSession });
-    }),
-    http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    http.get(`${TEST_BASE_URL}/web/user-sessions/${DRAFT_SESSION_ID}`, () =>
-      HttpResponse.json({ session: createdSession }),
-    ),
-    http.post(`${AGENT_CONTROLLER_API}/sessions`, async () => {
-      await workspaceReady;
-      return HttpResponse.json({ controllerId: 'code', resourceId: DRAFT_SESSION_ID, threadId: DRAFT_SESSION_ID });
-    }),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/mode`, async ({ request }) => {
-      route.bindings.push(`mode:${readBody(await request.json(), 'modeId')}`);
-      return HttpResponse.json({ ok: true });
-    }),
-    http.get(`${AGENT_CONTROLLER_API}/models`, () => HttpResponse.json({ models: [] })),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId`, ({ params }) =>
-      HttpResponse.json({
-        controllerId: 'code',
-        resourceId: params.resourceId,
-        modeId: 'build',
-        modelId: 'openai/gpt-4o-mini',
-        threadId: DRAFT_SESSION_ID,
-        settings: { yolo: false, thinkingLevel: 'medium', notifications: 'bell', smartEditing: true },
-      }),
-    ),
-    http.put(`${AGENT_CONTROLLER_API}/sessions/:resourceId/state`, () => HttpResponse.json({})),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/permissions`, () => HttpResponse.json({})),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads`, () => HttpResponse.json({ threads: [] })),
-    http.get(`${AGENT_CONTROLLER_API}/sessions/:resourceId/threads/:threadId/messages`, () =>
-      threadExists
-        ? HttpResponse.json({ messages: persistedMessages })
-        : HttpResponse.json({ error: 'Thread not found' }, { status: 404 }),
-    ),
-    http.get(
-      `${AGENT_CONTROLLER_API}/sessions/:resourceId/stream`,
-      () =>
-        new Response(new ReadableStream<Uint8Array>({ start() {}, cancel() {} }), {
-          headers: { 'content-type': 'text/event-stream' },
-        }),
-    ),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/model`, async ({ request }) => {
-      const body = await request.json();
-      const thinkingLevel = readBody(body, 'thinkingLevel');
-      const thinkingSuffix = thinkingLevel ? ` thinking:${thinkingLevel}` : '';
-      route.bindings.push(`model:${readBody(body, 'modelId')}${thinkingSuffix}`);
-      return HttpResponse.json({ ok: true });
-    }),
-    http.post(`${AGENT_CONTROLLER_API}/sessions/:resourceId/messages`, async ({ request }) => {
-      route.bindingsBeforePrompt = [...route.bindings];
-      route.posted.push(readSentMessage(await request.json()));
-      await workspaceReady;
-      return HttpResponse.json({ ok: true });
-    }),
-    http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
-      HttpResponse.json({
-        workspacePath: `/workspace/${DRAFT_SESSION_ID}`,
-        root: '.artifacts',
-        rootPath: '',
-        entries: [],
-      }),
-    ),
-  );
-
-  return route;
-}
-
 describe('a user session draft on the real thread route', () => {
   it('given a new draft, when the first prompt is sent, then the session starts without a mode picker or mode switch', async () => {
-    const route = stubDraftRoute();
+    const route = stubDraftRoute({ defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -220,7 +35,7 @@ describe('a user session draft on the real thread route', () => {
       expect(router.state.location.pathname).toBe(`/factories/${FACTORY_ID}/user/threads/${DRAFT_SESSION_ID}`),
     );
     await waitFor(() => expect(route.posted).toEqual(['fix the login bug']));
-    expect(route.bindingsBeforePrompt).toEqual(['model:openai/gpt-4o-mini']);
+    expect(route.bindingsBeforePrompt).toEqual([]);
     const thread = within(screen.getByRole('main'));
     // The title lands in the header breadcrumb as well; the transcript renders the message as a paragraph.
     await waitFor(() => expect(thread.getByText('fix the login bug', { selector: 'p' })).toBeInTheDocument());
@@ -289,7 +104,7 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
@@ -313,12 +128,12 @@ describe('a user session draft on the real thread route', () => {
 
     const message = await screen.findByRole('textbox', { name: 'Message' });
     await waitFor(() => expect(message).toBeEnabled());
-    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Factory default' }));
+    await user.click(await screen.findByRole('button', { name: 'Thinking: Medium · Built-in default' }));
     const ramp = screen.getByRole('slider', { name: 'Thinking' });
     fireEvent.change(ramp, { target: { value: '3' } });
     fireEvent.keyUp(ramp);
     await user.click(await screen.findByRole('button', { name: 'Use default' }));
-    expect(await screen.findByText('Follows the Factory default.')).toBeInTheDocument();
+    expect(await screen.findByText('Follows the Built-in default.')).toBeInTheDocument();
     await user.type(message, 'use the default');
     await user.keyboard('{Enter}');
 
@@ -330,11 +145,11 @@ describe('a user session draft on the real thread route', () => {
   });
 
   it('keeps typing free while the draft model resolves, but holds the send', async () => {
-    let releaseFactoryProject = () => {};
-    const factoryProjectGate = new Promise<void>(resolve => {
-      releaseFactoryProject = resolve;
+    let releaseModelDefaults = () => {};
+    const modelDefaultsGate = new Promise<void>(resolve => {
+      releaseModelDefaults = resolve;
     });
-    const route = stubDraftRoute({ factoryProjectGate });
+    const route = stubDraftRoute({ modelDefaultsGate, defaultModelId: 'openai/gpt-4o-mini' });
     const user = userEvent.setup();
     const router = createMemoryRouter(createAppRoutes(), {
       initialEntries: [`/factories/${FACTORY_ID}/user/new/${DRAFT_SESSION_ID}`],
@@ -352,7 +167,7 @@ describe('a user session draft on the real thread route', () => {
     expect(message).toHaveValue('fix the login bug');
     expect(route.createBodies).toEqual([]);
 
-    releaseFactoryProject();
+    releaseModelDefaults();
 
     await waitFor(() => expect(screen.getByRole('button', { name: 'Send message' })).toBeEnabled());
     expect(message).toHaveValue('fix the login bug');

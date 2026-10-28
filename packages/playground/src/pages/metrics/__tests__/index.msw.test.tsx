@@ -6,6 +6,10 @@ import { describe, expect, it, vi } from 'vitest';
 import Metrics from '..';
 import {
   aggregate,
+  aggregateStorage,
+  nestedAgentRuns,
+  emptyTraceAggregate,
+  traceAggregateOnlyStorage,
   breakdown,
   percentiles,
   supportedStorage,
@@ -231,7 +235,7 @@ describe('Metrics storage support', () => {
   });
 
   describe('when the dashboard has data', () => {
-    it('opens traces with the dashboard filters from "View in Traces"', async () => {
+    it('opens traces with the dashboard filters from "View in traces"', async () => {
       observeRequests();
       server.use(
         http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(supportedStorage)),
@@ -239,14 +243,105 @@ describe('Metrics storage support', () => {
 
       renderPage('/metrics?period=7d&filterEnvironment=production');
 
-      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in Traces' });
-      if (!tokenUsageTraces) throw new Error('No "View in Traces" button');
+      const [tokenUsageTraces] = await screen.findAllByRole('button', { name: 'View in traces' });
+      if (!tokenUsageTraces) throw new Error('No "View in traces" button');
       fireEvent.click(tokenUsageTraces);
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
       const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
       expect(url.searchParams.get('datePreset')).toBe('last-7d');
       expect(url.searchParams.get('filterEnvironment')).toBe('production');
+    });
+  });
+
+  describe('when the server answers trace and span aggregates', () => {
+    it('shows the Resources and threads card', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByText('Resources and threads')).toBeTruthy();
+    });
+
+    it('folds Usage into Breakdown, with Models and Threads tabs', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByRole('tab', { name: 'Models' })).toBeTruthy();
+      expect(screen.getByRole('tab', { name: 'Threads' })).toBeTruthy();
+      expect(screen.queryByText('Usage')).toBeNull();
+    });
+
+    it('replaces Trace volume with Breakdown, whose rows open the traces an agent ran in, nested or not', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(aggregateStorage)),
+        http.post(`${TEST_BASE_URL}/api/observability/traces/aggregate`, () => HttpResponse.json(emptyTraceAggregate)),
+        http.post(`${TEST_BASE_URL}/api/observability/spans/aggregate`, () => HttpResponse.json(nestedAgentRuns)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      fireEvent.click(await screen.findByTitle('Explore Subagent'));
+      expect(screen.queryByText('Trace volume')).toBeNull();
+      await waitFor(() => expect(screen.getByTestId('location').textContent).toMatch(/^\/traces\?/));
+      const url = new URL(screen.getByTestId('location').textContent ?? '', 'http://localhost');
+      expect(JSON.parse(url.searchParams.get('filterGroup') ?? '{}')).toMatchObject({
+        logic: 'and',
+        nodes: [
+          { fieldId: 'spans.spanType', value: 'agent_run' },
+          { fieldId: 'spans.entityName', value: 'Explore Subagent' },
+        ],
+      });
+    });
+  });
+
+  describe('when the server answers trace aggregates but not span aggregates', () => {
+    it('keeps the page as it was, without Resources and threads', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(screen.queryByText('Resources and threads')).toBeNull();
+    });
+
+    it('keeps the Usage card', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      await screen.findAllByRole('button', { name: 'View in traces' });
+      expect(await screen.findByText('Usage')).toBeTruthy();
+    });
+
+    it('keeps Trace volume and shows no Breakdown', async () => {
+      observeRequests();
+      server.use(
+        http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(traceAggregateOnlyStorage)),
+      );
+
+      renderPage('/metrics?period=7d');
+
+      expect(await screen.findByText('Trace volume')).toBeTruthy();
+      expect(screen.queryByText('Breakdown')).toBeNull();
     });
   });
 });

@@ -282,22 +282,21 @@ async function runSingleToolSchemaTest(
         receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext,
         testId,
       };
-    } else {
-      const error =
-        toolResult?.payload?.result?.error ||
-        toolResult?.result?.error ||
-        response.text ||
-        'Tool call failed or result missing';
-      return {
-        modelName: model.modelId,
-        testName: toolName,
-        modelProvider: model.provider,
-        status: 'failure',
-        error: error,
-        receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
-        testId,
-      };
     }
+    const error =
+      toolResult?.payload?.result?.error ||
+      toolResult?.result?.error ||
+      response.text ||
+      'Tool call failed or result missing';
+    return {
+      modelName: model.modelId,
+      testName: toolName,
+      modelProvider: model.provider,
+      status: 'failure',
+      error: error,
+      receivedContext: toolResult?.payload?.result?.receivedContext || toolResult?.result?.receivedContext || null,
+      testId,
+    };
   } catch (e: any) {
     let status: Result['status'] = 'error';
     if (e.message.includes('does not support zod type:')) {
@@ -382,30 +381,24 @@ const testTools = runSchemasIndividually
     ];
 
 // Group tests by model provider for better organization
-const modelsByProviderV1 = modelsToTestV1.reduce(
-  (acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  },
-  {} as Record<string, (typeof modelsToTestV1)[number][]>,
-);
+const modelsByProviderV1 = modelsToTestV1.reduce<Record<string, (typeof modelsToTestV1)[number][]>>((acc, model) => {
+  const provider = model.provider;
+  if (!acc[provider]) {
+    acc[provider] = [];
+  }
+  acc[provider].push(model);
+  return acc;
+}, {});
 
 // Group tests by model provider for better organization
-const modelsByProviderV2 = modelsToTestV2.reduce(
-  (acc, model) => {
-    const provider = model.provider;
-    if (!acc[provider]) {
-      acc[provider] = [];
-    }
-    acc[provider].push(model);
-    return acc;
-  },
-  {} as Record<string, (typeof modelsToTestV2)[number][]>,
-);
+const modelsByProviderV2 = modelsToTestV2.reduce<Record<string, (typeof modelsToTestV2)[number][]>>((acc, model) => {
+  const provider = model.provider;
+  if (!acc[provider]) {
+    acc[provider] = [];
+  }
+  acc[provider].push(model);
+  return acc;
+}, {});
 
 [...Object.entries(modelsByProviderV1), ...Object.entries(modelsByProviderV2)].forEach(([provider, models]) => {
   [

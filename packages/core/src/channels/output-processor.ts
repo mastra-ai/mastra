@@ -9,7 +9,7 @@ import type { AgentChannels } from './agent-channels';
 import { runStaticDriver } from './chat-driver-static';
 import { runStreamingDriver } from './chat-driver-streaming';
 import type { PendingApprovalRecord } from './stream-helpers';
-import type { ToolDisplay, ToolDisplayFn } from './types';
+import type { ChannelAdapterBaseConfig, ToolDisplay, ToolDisplayFn } from './types';
 
 /**
  * Per-run render dependencies stashed onto `requestContext` by
@@ -37,13 +37,18 @@ export interface ChatChannelRenderContext {
   takePendingApproval: (toolCallId: string) => PendingApprovalRecord | undefined;
   wrapStream: (stream: AsyncIterable<AgentChunkType<any>>) => AsyncIterable<AgentChunkType<any>>;
   typingGate: { active: boolean };
-  formatError?: (error: Error) => unknown;
+  formatError?: ChannelAdapterBaseConfig['formatError'];
   /** Dialect for the final reply text. Absent means `'markdown'` (driver-level default). */
   textFormat?: 'markdown' | 'plain';
+  /** `'hidden'` keeps reply text out of the channel. Absent means `'show'`. */
+  textDisplay?: 'show' | 'hidden';
   /** Buffered-text behavior on abort. Absent means `'flush'` (driver-level default). */
   onAbort?: 'flush' | 'discard';
   approvalContext?: { toolCallId: string; messageId: string };
 }
+
+/** Chunks that carry reply text, kept out of the channel by `textDisplay: 'hidden'`. */
+const TEXT_CHUNK_TYPES: ReadonlySet<string> = new Set(['text-start', 'text-delta', 'text-end']);
 
 /** Key the processor reads off `requestContext` to locate its render deps. */
 export const CHAT_CHANNEL_RENDER_CONTEXT_KEY = '__mastra_chat_channel_render';
@@ -173,7 +178,7 @@ export class ChatChannelOutputProcessor {
     let session = state.session as RenderSession | undefined;
 
     if (!session) {
-      session = this.#openSession(render);
+      session = this.#openSession(render, requestContext);
       state.session = session;
     }
 
@@ -242,9 +247,15 @@ export class ChatChannelOutputProcessor {
     return undefined;
   }
 
-  #openSession(render: ChatChannelRenderContext): RenderSession {
+  #openSession(
+    render: ChatChannelRenderContext,
+    requestContext: ProcessOutputStreamArgs['requestContext'],
+  ): RenderSession {
     const queue = createChunkQueue();
-    const wrapped = render.wrapStream(queue.iterable);
+    // Hidden text is dropped after the typing-status wrapper, so a run that is
+    // only writing text still shows as typing.
+    const typed = render.wrapStream(queue.iterable);
+    const wrapped = render.textDisplay === 'hidden' ? withoutText(typed) : typed;
 
     // Seed the approval-card stash on resumed runs so the driver can resolve
     // `messageId` for the incoming `tool-result` even though it never saw the
@@ -260,6 +271,8 @@ export class ChatChannelOutputProcessor {
       });
     }
 
+    const renderError = render.formatError;
+    const formatError = renderError && ((error: Error) => renderError(error, { requestContext }));
     const driverPromise = (
       render.streaming.enabled
         ? runStreamingDriver({
@@ -275,7 +288,7 @@ export class ChatChannelOutputProcessor {
             getPendingApproval: render.getPendingApproval,
             takePendingApproval: render.takePendingApproval,
             typingGate: render.typingGate,
-            formatError: render.formatError,
+            formatError,
             textFormat: render.textFormat,
           })
         : runStaticDriver({
@@ -289,7 +302,7 @@ export class ChatChannelOutputProcessor {
             onApprovalPosted: render.onApprovalPosted,
             getPendingApproval: render.getPendingApproval,
             takePendingApproval: render.takePendingApproval,
-            formatError: render.formatError,
+            formatError,
             textFormat: render.textFormat,
             onAbort: render.onAbort,
           })
@@ -304,5 +317,11 @@ export class ChatChannelOutputProcessor {
     driverPromise.catch(() => {});
 
     return { queue, driverPromise };
+  }
+}
+
+async function* withoutText(stream: AsyncIterable<AgentChunkType<any>>): AsyncIterable<AgentChunkType<any>> {
+  for await (const chunk of stream) {
+    if (!TEXT_CHUNK_TYPES.has(chunk.type)) yield chunk;
   }
 }

@@ -5,6 +5,8 @@ import { queryKeys } from '../api/keys';
 
 export interface ServerFeatures {
   knowledge: boolean;
+  /** The server serves its MCP endpoint. Absent from servers that predate it. */
+  mcp?: boolean;
 }
 
 export function useServerFeatures() {

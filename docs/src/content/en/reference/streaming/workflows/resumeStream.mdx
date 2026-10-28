@@ -159,7 +159,7 @@ if (result!.status === 'suspended') {
   },
   {
     name: 'stream.result',
-    type: 'Promise<WorkflowResult<TState, TOutput, TSteps>>',
+    type: 'Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>',
     description: 'A promise that resolves to the final workflow result',
   },
   {

@@ -1,6 +1,6 @@
 {
   "name": "@internal/workspace",
-  "version": "0.0.17",
+  "version": "0.0.18",
   "description": "Internal conventions shared by Mastra sandbox providers and their consumers",
   "private": true,
   "type": "module",
@@ -36,8 +36,8 @@
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
-    "tsdown": "0.22.9",
+    "@types/node": "22.19.15",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

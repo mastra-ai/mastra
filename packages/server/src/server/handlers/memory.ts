@@ -71,6 +71,7 @@ import {
   getContextResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
+  getHandlerFGAProvider,
 } from './utils';
 
 interface MemoryContext extends Context {
@@ -100,7 +101,7 @@ function hasFGAUser(requestContext?: RequestContext): requestContext is RequestC
 }
 
 function shouldFilterThreadsWithFGA(mastra: any, requestContext?: RequestContext): requestContext is RequestContext {
-  return !!mastra.getServer?.()?.fga && hasFGAUser(requestContext);
+  return !!getHandlerFGAProvider(mastra, requestContext) && hasFGAUser(requestContext);
 }
 
 async function filterAccessibleThreads({
@@ -112,7 +113,7 @@ async function filterAccessibleThreads({
   requestContext?: RequestContext;
   threads: StorageThreadType[];
 }): Promise<StorageThreadType[]> {
-  const fgaProvider = mastra.getServer?.()?.fga;
+  const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
   if (!fgaProvider || !hasFGAUser(requestContext) || threads.length === 0) {
     return threads;
   }
@@ -1712,7 +1713,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       // would let any authenticated caller reassign ownership. Reject that state
       // rather than granting an implicit privilege.
       const server = mastra.getServer?.();
-      if (server?.auth && !server?.fga) {
+      if (server?.auth && !getHandlerFGAProvider(mastra, requestContext)) {
         throw new HTTPException(403, {
           message:
             'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',

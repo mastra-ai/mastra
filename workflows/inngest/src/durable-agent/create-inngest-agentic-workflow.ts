@@ -1,6 +1,8 @@
-import { buildDeferredStepFinishChunk } from '@internal/core/durable';
+import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
 import {
   createDurableBackgroundTaskCheckStep,
+  createDurableGoalStep,
+  createDurableIsTaskCompleteStep,
   createDurableLLMExecutionStep,
   createDurableLLMMappingStep,
   createDurableToolCallStep,
@@ -219,6 +221,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
       { id: 'extract-tool-calls' },
@@ -256,7 +259,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           toolResults,
           runId: initData.runId,
           agentId: initData.agentId,
-          messageId: initData.messageId,
+          // A processor retry rotates the response message id; carry it forward as core does.
+          messageId: llmOutput?.stepResult?.messageId ?? initData.messageId,
           state: llmOutput?.state ?? initData.state,
         };
       },
@@ -294,6 +298,10 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       },
       { id: 'update-iteration-state' },
     )
+    // Step 8: isTaskComplete scorers, then goal evaluation, as in core's durable loop.
+    // Both read their closures from the in-process run registry and no-op without them.
+    .then(createDurableIsTaskCompleteStep(maxSteps))
+    .then(createDurableGoalStep())
     .commit();
 
   // Create the main agentic loop workflow with dowhile
@@ -365,6 +373,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           const deferredChunk = buildDeferredStepFinishChunk(state, isContinued);
           state.deferredStepFinishChunk = undefined;
           if (deferredChunk && pubsub) {
+            // Carry the step's response messages so `onStepFinish(event).response.messages` and
+            // `output.steps[i].response.messages` match the regular loop (#26780), as core does.
+            try {
+              const list = new MessageList({}).deserialize(state.messageListState);
+              deferredChunk.payload._durableResponseMessages = list.get.response.aiV5.model();
+            } catch (error) {
+              mastra?.getLogger?.()?.warn?.(`[InngestDurableAgent] Could not rebuild step-finish messages: ${error}`);
+            }
             await step.run(`emit-step-finish-${state.runId}-${state.iterationCount}`, async () => {
               await emitChunkEvent(pubsub, state.runId, deferredChunk);
             });
@@ -403,7 +419,9 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           if (!stopWhen || state.accumulatedSteps.length === 0) {
             return false;
           }
-          const steps = state.accumulatedSteps as any;
+          // Hand stopWhen the full step content stream.steps reports, not the
+          // compacted snapshot records (tool-result outputs restored).
+          const steps = expandDurableSteps(state.accumulatedSteps) as any;
           const conditions = await Promise.all(
             (Array.isArray(stopWhen) ? stopWhen : [stopWhen]).map(async condition => {
               try {
@@ -481,6 +499,19 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           if (pubsub && !tripwire) {
             for (const chunk of finishResult.structuredOutputChunks ?? []) {
               await emitChunkEvent(pubsub, state.runId, { ...chunk, runId: state.runId } as any);
+            }
+          }
+
+          // generateTitle.emitEvent: hold FINISH until the title is saved, then stream it as a
+          // transient chunk so consumers see it before the stream closes (as core does).
+          if (pubsub && !tripwire && finishResult.titleForStream) {
+            const title = await finishResult.titleForStream;
+            if (title && initData.state?.threadId) {
+              await emitChunkEvent(pubsub, state.runId, {
+                type: 'data-thread-title',
+                data: { threadId: initData.state.threadId, title },
+                transient: true,
+              });
             }
           }
 

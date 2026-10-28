@@ -10,12 +10,20 @@ import { cn } from '@/lib/utils';
 
 type ActivityStatus = 'idle' | 'running' | 'error';
 
+/** `row` sits on a hover surface; `inline` reads as text beside prose: no surface, no inset, the line lifts on hover. */
+type ActivityAppearance = 'row' | 'inline';
+
 interface ActivityContextValue {
   open: boolean;
   foldable: boolean;
   status: ActivityStatus;
+  appearance: ActivityAppearance;
   toggle: () => void;
 }
+
+const LIFTS = 'transition-colors motion-reduce:transition-none';
+const LIFTS_TO_FOREGROUND = `${LIFTS} group-hover/row:text-foreground group-has-focus-visible/row:text-foreground`;
+const LIFTS_TO_MUTED = `${LIFTS} group-hover/row:text-muted-foreground group-has-focus-visible/row:text-muted-foreground`;
 
 const ActivityContext = createContext<ActivityContextValue | undefined>(undefined);
 
@@ -28,6 +36,10 @@ function useActivity() {
   return context;
 }
 
+function useInline() {
+  return useContext(ActivityContext)?.appearance === 'inline';
+}
+
 export interface ActivityProps extends Omit<
   ComponentProps<typeof Collapsible>,
   'defaultOpen' | 'onOpenChange' | 'open'
@@ -37,6 +49,7 @@ export interface ActivityProps extends Omit<
   onOpenChange?: (open: boolean) => void;
   foldable?: boolean;
   status?: ActivityStatus;
+  appearance?: ActivityAppearance;
 }
 
 export function Activity({
@@ -45,6 +58,7 @@ export function Activity({
   onOpenChange = noopOpenChange,
   foldable = true,
   status = 'idle',
+  appearance = 'row',
   className,
   children,
   ...props
@@ -59,7 +73,7 @@ export function Activity({
   };
 
   return (
-    <ActivityContext.Provider value={{ open, foldable, status, toggle: () => handleOpenChange(!open) }}>
+    <ActivityContext.Provider value={{ open, foldable, status, appearance, toggle: () => handleOpenChange(!open) }}>
       <Collapsible
         open={open}
         onOpenChange={handleOpenChange}
@@ -82,14 +96,14 @@ export function Activity({
 }
 
 export const ActivityTrigger = ({ className, children, ...props }: ComponentProps<'div'>) => {
-  const { foldable } = useActivity();
+  const { foldable, appearance } = useActivity();
   const lineId = useId();
 
   return (
     <div
       className={cn(
         'group/row relative w-full min-w-0 rounded-md transition-colors motion-reduce:transition-none',
-        foldable && 'hover:bg-fill',
+        foldable && appearance === 'row' && 'hover:bg-fill',
         className,
       )}
       {...props}
@@ -108,12 +122,16 @@ export const ActivityTrigger = ({ className, children, ...props }: ComponentProp
 };
 
 export const ActivityHeader = ({ className, children, ...props }: ComponentProps<'span'>) => {
-  const { status } = useActivity();
+  const { status, appearance } = useActivity();
 
   return (
     <Shimmer
       active={status === 'running'}
-      className={cn('flex w-full min-w-0 items-center gap-2 px-1.5 py-1', className)}
+      className={cn(
+        'flex min-w-0 items-center gap-2 py-1',
+        appearance === 'inline' ? 'w-fit max-w-full' : 'w-full px-1.5',
+        className,
+      )}
       {...props}
     >
       {children}
@@ -138,13 +156,14 @@ export const ActivityLeading = ({ className, children, ...props }: ComponentProp
 };
 
 export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) => {
-  const { status } = useActivity();
+  const { status, appearance } = useActivity();
 
   return (
     <span
       className={cn(
         'flex size-4 shrink-0 items-center justify-center [&_svg]:size-3.5 [&_svg]:shrink-0',
         status === 'error' ? 'text-destructive-foreground' : 'text-placeholder',
+        status !== 'error' && appearance === 'inline' && LIFTS_TO_MUTED,
         className,
       )}
       {...props}
@@ -152,9 +171,19 @@ export const ActivityIcon = ({ className, ...props }: ComponentProps<'span'>) =>
   );
 };
 
-export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => (
-  <Txt as="span" variant="caption" tone="muted" className={cn('max-w-[55%] shrink-0 truncate', className)} {...props} />
-);
+export const ActivityLabel = ({ className, ...props }: ComponentProps<typeof Txt>) => {
+  const inline = useInline();
+
+  return (
+    <Txt
+      as="span"
+      variant="caption"
+      tone="muted"
+      className={cn('shrink-0 truncate', inline ? `max-w-none ${LIFTS_TO_FOREGROUND}` : 'max-w-[55%]', className)}
+      {...props}
+    />
+  );
+};
 
 export interface ActivityDetailProps extends Omit<ComponentProps<typeof Txt>, 'font'> {
   font?: 'mono' | 'sans';
@@ -163,6 +192,7 @@ export interface ActivityDetailProps extends Omit<ComponentProps<typeof Txt>, 'f
 
 export const ActivityDetail = ({ font = 'mono', wrap = false, className, ...props }: ActivityDetailProps) => {
   const arriving = useArriving();
+  const inline = useInline();
 
   return (
     <Txt
@@ -170,7 +200,7 @@ export const ActivityDetail = ({ font = 'mono', wrap = false, className, ...prop
       variant="meta"
       tone="muted"
       font={font === 'mono' ? 'mono' : undefined}
-      className={cn('min-w-0', wrap ? 'break-words' : 'truncate', arriving, className)}
+      className={cn('min-w-0', wrap ? 'break-words' : 'truncate', inline && LIFTS_TO_FOREGROUND, arriving, className)}
       {...props}
     />
   );
@@ -184,13 +214,22 @@ export interface ActivitySpacerProps extends ComponentProps<'span'> {
   rule?: boolean;
 }
 
-export const ActivitySpacer = ({ rule, className, ...props }: ActivitySpacerProps) => (
-  <span
-    aria-hidden
-    className={cn('min-w-2 flex-1', rule && 'h-px bg-border mask-r-from-[calc(100%-min(100%,160px))]', className)}
-    {...props}
-  />
-);
+export const ActivitySpacer = ({ rule, className, ...props }: ActivitySpacerProps) => {
+  const inline = useInline();
+
+  return (
+    <span
+      aria-hidden
+      className={cn(
+        'min-w-2 flex-1',
+        rule && 'h-px bg-border mask-r-from-[calc(100%-min(100%,160px))]',
+        inline && !rule && 'hidden',
+        className,
+      )}
+      {...props}
+    />
+  );
+};
 
 export const ActivityTrailing = ({ className, ...props }: ComponentProps<'span'>) => (
   <span className={cn('flex shrink-0 items-center', className)} {...props} />
@@ -239,15 +278,18 @@ export const ActivityHeadline = ({
   badges,
   ...props
 }: ActivityHeadlineProps) => {
-  const { status } = useActivity();
+  const { status, appearance } = useActivity();
   const hasBadges = Boolean(badges);
+  const labelShrinks = Boolean(description) || (appearance === 'inline' && !detail);
 
   return (
     <ActivityHeader {...props}>
       <ActivityLeading>{leading}</ActivityLeading>
       <ActivityIcon>{icon}</ActivityIcon>
       <span className={cn('contents', hasBadges && 'flex min-w-0 flex-1 flex-wrap items-center gap-x-2 gap-y-1')}>
-        <ActivityLabel className={cn(description && 'max-w-none min-w-0 shrink')}>{description || label}</ActivityLabel>
+        <ActivityLabel className={cn(labelShrinks && 'max-w-none min-w-0 shrink')}>
+          {description || label}
+        </ActivityLabel>
         {badges}
         {!description && detail && (
           <ActivityDetail font={detailFont} wrap={wrapDetail} className={cn(hasBadges && 'grow basis-40')}>
@@ -266,18 +308,30 @@ export const ActivityHeadline = ({
   );
 };
 
-export const ActivityContent = ({ className, children, ...props }: ComponentProps<typeof CollapsibleContent>) => (
-  <CollapsibleContent className="max-w-full min-w-0" {...props}>
-    <div
-      className={cn(
-        "relative ml-[14px] flex max-w-full min-w-0 flex-col gap-1.5 py-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
-        className,
-      )}
-    >
-      {children}
-    </div>
-  </CollapsibleContent>
-);
+export interface ActivityContentProps extends ComponentProps<typeof CollapsibleContent> {
+  /** Drop the rail and its indent, so the content lines up with the text around the line. */
+  flush?: boolean;
+}
+
+export const ActivityContent = ({ flush = false, className, children, ...props }: ActivityContentProps) => {
+  const inline = useInline();
+
+  return (
+    <CollapsibleContent className="max-w-full min-w-0" {...props}>
+      <div
+        className={cn(
+          'relative flex max-w-full min-w-0 flex-col py-1.5',
+          !flush &&
+            "gap-1.5 pr-1 pl-4 before:absolute before:inset-y-0 before:left-0 before:w-px before:bg-border before:mask-b-from-[calc(100%-min(40%,80px))] before:content-['']",
+          !flush && (inline ? 'ml-2' : 'ml-[14px]'),
+          className,
+        )}
+      >
+        {children}
+      </div>
+    </CollapsibleContent>
+  );
+};
 
 export interface ActivityItemProps extends Omit<ActivityProps, 'children' | 'open' | 'onOpenChange' | 'foldable'> {
   icon: ReactNode;
@@ -319,4 +373,4 @@ export function ActivityItem({
   );
 }
 
-export type { ActivityStatus };
+export type { ActivityAppearance, ActivityStatus };

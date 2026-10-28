@@ -2,12 +2,13 @@ import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
-import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
-import { Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
+import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -26,23 +27,34 @@ export type MetricsLineChartSeries = {
 const LINE_WIDTH = 1.75;
 /** Opacity at the top of the fill under a line (it fades to nothing at the base). */
 const AREA_OPACITY = 0.12;
+
+/**
+ * How the series draw.
+ * - `default`: 1.75px lines over a fill.
+ * - `thin`: 1.5px lines (emphasis included) over a fainter fill (40% of the default), for small
+ *   cards in a grid.
+ */
+export type MetricsLineChartLineStyle = 'default' | 'thin';
+
+const LINE_STYLES: Record<MetricsLineChartLineStyle, { width: number; emphasis: number; areaOpacity: number }> = {
+  default: { width: LINE_WIDTH, emphasis: LINE_WIDTH + 0.5, areaOpacity: AREA_OPACITY },
+  thin: { width: 1.5, emphasis: 1.5, areaOpacity: AREA_OPACITY * 0.4 },
+};
+
+/**
+ * Fills fade out sideways over their first and last 24px, so they don't end in a hard vertical
+ * edge where the line starts and stops. A mask sized to each fill's own box.
+ */
+const THIN_FILL_FADE = '[&_.recharts-area-area]:mask-x-from-[calc(100%-24px)]';
 /** A series with this few points gets a dot on each: a lone point draws no line at all. */
 const SPARSE_POINTS = 12;
 
-// Positioned via transform so the hover line glides between points instead of jumping.
-function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
+// Jumps straight to the hovered point, with the dots and the tooltip.
+function HoverLine({ points }: { points?: { x: number; y: number }[] }) {
   const [top, bottom] = points ?? [];
   if (!top || !bottom) return null;
   return (
-    <line
-      x1={0}
-      x2={0}
-      y1={top.y}
-      y2={bottom.y}
-      {...CHART_CURSOR_PROPS}
-      className="pointer-events-none transition-transform duration-150 ease-out"
-      style={{ transform: `translateX(${top.x}px)` }}
-    />
+    <line x1={top.x} x2={top.x} y1={top.y} y2={bottom.y} {...CHART_CURSOR_PROPS} className="pointer-events-none" />
   );
 }
 
@@ -68,6 +80,13 @@ export type MetricsLineChartProps = {
   tooltipLabelKey?: string;
   /** Render a visible dot on every point. Series with few points get them anyway. */
   showDots?: boolean;
+  /**
+   * Point markers. `auto`: on every point of a sparse series (or all with `showDots`). `hover`:
+   * none at rest, only the hovered point's.
+   */
+  dots?: 'auto' | 'hover';
+  /** Line weight and fill. `thin` suits small cards in a grid. */
+  lineStyle?: MetricsLineChartLineStyle;
   /** Set to `false` to render `MetricsLineChartLegend` elsewhere, e.g. next to tabs. */
   showLegend?: boolean;
   /** Formats tooltip values (e.g. `ms`, `%`), and y-axis ticks unless `axisFormatter` is set. */
@@ -109,6 +128,8 @@ function LinePlot({
   xLabels = 'auto',
   tooltipLabelKey,
   showDots = false,
+  dots = 'auto',
+  lineStyle = 'default',
   valueFormatter,
   axisFormatter,
   showYAxis = true,
@@ -119,6 +140,9 @@ function LinePlot({
   const format = valueFormatter ?? compactNumber.format;
   const isSparse = (key: string) => data.filter(row => typeof row[key] === 'number').length <= SPARSE_POINTS;
   const plotWidth = size.width - (showYAxis ? Y_AXIS_WIDTH : 0);
+  const line = LINE_STYLES[lineStyle];
+  const restDot = (s: MetricsLineChartSeries) =>
+    dots === 'auto' && (showDots || isSparse(s.dataKey)) ? { r: 3, fill: s.color, strokeWidth: 0 } : false;
   const activeDot = (s: MetricsLineChartSeries) => ({
     r: 3.5,
     fill: s.color,
@@ -134,7 +158,13 @@ function LinePlot({
   });
 
   return (
-    <ChartPlot height={height} plotRef={ref} onResize={onResize} clickable={!!onBucketClick}>
+    <ChartPlot
+      height={height}
+      plotRef={ref}
+      onResize={onResize}
+      clickable={!!onBucketClick}
+      className={cn(lineStyle === 'thin' && THIN_FILL_FADE)}
+    >
       <ComposedChart
         data={data}
         margin={CHART_MARGIN}
@@ -147,17 +177,35 @@ function LinePlot({
         <defs>
           {series.map((s, i) => (
             <linearGradient key={s.dataKey} id={`${id}-area-${i}`} x1="0" y1="0" x2="0" y2="1">
-              <stop offset="0%" stopColor={s.color} stopOpacity={AREA_OPACITY} />
+              <stop offset="0%" stopColor={s.color} stopOpacity={line.areaOpacity} />
               <stop offset="95%" stopColor={s.color} stopOpacity={0} />
             </linearGradient>
           ))}
         </defs>
         <CartesianGrid {...CHART_GRID_PROPS} />
         {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
-        {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
+        {valueYAxis({
+          show: showYAxis,
+          size,
+          formatter: axisFormatter ?? format,
+          domain: yDomain,
+          max: dataMax(
+            data,
+            series.map(s => s.dataKey),
+          ),
+          integer: isWholeData(
+            data,
+            series.map(s => s.dataKey),
+          ),
+        })}
         <Tooltip
-          content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}
-          cursor={<SmoothCursor />}
+          {...CHART_TOOLTIP_PROPS}
+          content={
+            <ChartTooltipPosition>
+              <MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />
+            </ChartTooltipPosition>
+          }
+          cursor={<HoverLine />}
         />
         {series.map((s, i) => {
           const common = {
@@ -165,9 +213,9 @@ function LinePlot({
             dataKey: s.dataKey,
             name: s.label,
             stroke: s.color,
-            strokeWidth: s.emphasis ? LINE_WIDTH + 0.5 : LINE_WIDTH,
+            strokeWidth: s.emphasis ? line.emphasis : line.width,
             strokeDasharray: s.dashed ? '4 3' : undefined,
-            dot: showDots || isSparse(s.dataKey) ? { r: 3, fill: s.color, strokeWidth: 0 } : false,
+            dot: restDot(s),
             activeDot: activeDot(s),
             isAnimationActive: false,
             connectNulls: true,

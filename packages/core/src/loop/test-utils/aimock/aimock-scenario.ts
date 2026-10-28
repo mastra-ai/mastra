@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
+import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../agent/durable';
@@ -20,6 +21,16 @@ import type {
 import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
 
 export { isDurableEngineVariant } from './types';
+
+/**
+ * Whether a tool result appears anywhere in the request. AIMock's `hasToolResult`
+ * only looks at messages after the last `user` message, so scenarios that add a
+ * user-role message after a tool round (signals, queued messages, request
+ * processors) must match on the whole conversation instead.
+ */
+export function anyToolResult(req: ChatCompletionRequest): boolean {
+  return req.messages.some(message => message.role === 'tool');
+}
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -110,6 +121,7 @@ export async function createSharedAgent(
     | 'errorProcessors'
     | 'defaultOptions'
     | 'pubsub'
+    | 'cache'
     | 'engine'
     | 'inputProcessors'
   > = {},
@@ -144,11 +156,13 @@ async function buildScenarioAgent({
   errorProcessors,
   defaultOptions,
   pubsub,
+  cache,
   engine,
   inputProcessors,
   fsRouted,
   maxRetries,
   inputProcessorsOnAgent,
+  agentOutputProcessors,
 }: { inputProcessorsOnAgent?: boolean } & Pick<
   RunLoopScenarioOptions,
   | 'llm'
@@ -167,10 +181,12 @@ async function buildScenarioAgent({
   | 'errorProcessors'
   | 'defaultOptions'
   | 'pubsub'
+  | 'cache'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
   | 'maxRetries'
+  | 'agentOutputProcessors'
 >): Promise<{ agent: any; mastra: any }> {
   const openai = createOpenAI({
     apiKey: 'aimock-test-key',
@@ -217,6 +233,7 @@ async function buildScenarioAgent({
         ...(defaultOptions ? { defaultOptions } : {}),
         ...(maxRetries === undefined ? {} : { maxRetries }),
         ...(inputProcessorsOnAgent && inputProcessors ? { inputProcessors } : {}),
+        ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
       },
       instructionsMd: (instructions as string | undefined) ?? defaultInstructions,
       ...(fsTools ? { tools: fsTools } : {}),
@@ -238,6 +255,7 @@ async function buildScenarioAgent({
       ...(errorProcessors ? { errorProcessors } : {}),
       ...(defaultOptions ? { defaultOptions } : {}),
       ...(maxRetries === undefined ? {} : { maxRetries }),
+      ...(agentOutputProcessors ? { outputProcessors: agentOutputProcessors } : {}),
       // For durable engines, inputProcessors must be on the agent constructor
       // (not yet supported as call-time options for durable); outputProcessors
       // are forwarded at call-time via preparation.ts.
@@ -271,6 +289,7 @@ async function buildScenarioAgent({
     storage: new InMemoryStore(),
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
+    ...(cache ? { cache } : {}),
   });
 
   if (isFs) {
@@ -314,6 +333,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     outputProcessors,
     maxProcessorRetries,
     requireToolApproval,
+    closeOnSuspend,
     inputProcessors,
     prepareStep,
     transform,
@@ -327,6 +347,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     workflows,
     requestContext,
     collectChunks,
+    expectStreamError,
     manualStreamConsumption,
     backgroundTasks,
     startWorkers,
@@ -343,6 +364,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     providerOptions,
     modelSettings,
     maxRetries,
+    agentOutputProcessors,
     toolsets,
     errorProcessors,
     onError,
@@ -352,8 +374,10 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     savePerStep,
     actor,
     defaultOptions,
+    hooks,
     sharedAgent,
     pubsub,
+    cache,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -408,10 +432,12 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       errorProcessors,
       defaultOptions,
       pubsub,
+      cache,
       engine,
       inputProcessors,
       fsRouted,
       maxRetries,
+      agentOutputProcessors,
     });
     agent = built.agent;
     mastra = built.mastra;
@@ -450,6 +476,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+    ...(closeOnSuspend !== undefined && isDurable ? { closeOnSuspend } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without
     // this, the agent's constructor list is the base and the shared stability defaults are added
@@ -459,6 +486,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
     ...(delegation ? { delegation } : {}),
+    ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
@@ -498,6 +526,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
   // before we hand back the captured journal.
   let chunks: ChunkType[] | undefined;
   let suspendedDuringDrain = false;
+  let streamError: unknown;
+  let streamErrored = false;
   if (manualStreamConsumption) {
     // Skip consumption — test will manually drain the stream after publishing events.
   } else if (collectChunks) {
@@ -512,8 +542,9 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error (e.g. provider errors) — we still want the chunks collected so far
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else if (isDurable) {
     // Durable: drain via fullStream iteration
@@ -525,22 +556,32 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
           break;
         }
       }
-    } catch {
-      // Stream may error on provider failures — swallow so runLoopScenario still returns
+    } catch (error) {
+      streamError = error;
+      streamErrored = true;
     }
   } else {
-    await output.consumeStream();
+    // consumeStream resolves on a failed drain and only reports it through onError.
+    await output.consumeStream({
+      onError: error => {
+        streamError = error;
+        streamErrored = true;
+      },
+    });
   }
 
   // Clean up durable resources — but NOT when the stream was suspended or
   // the test wants to consume the stream manually (e.g. streamUntilIdle tests
   // that publish bg-task events after runLoopScenario returns).
   if (isDurable && rawResult.cleanup && !suspendedDuringDrain && !manualStreamConsumption) {
-    try {
-      rawResult.cleanup();
-    } catch {
-      // cleanup may race
-    }
+    rawResult.cleanup();
+  }
+
+  if (streamErrored && !expectStreamError) {
+    throw new Error(
+      `runLoopScenario: stream failed while draining (set expectStreamError if the scenario triggers this on purpose): ${String(streamError)}`,
+      { cause: streamError },
+    );
   }
 
   return {
@@ -548,6 +589,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     requests: llm.getRequests(),
     llm,
     ...(chunks ? { chunks } : {}),
+    ...(streamErrored ? { streamError } : {}),
     agent,
     mastra,
   };

@@ -34,7 +34,7 @@ export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEnt
                 <Badge icon={<CopyIcon />}>{workflowId}</Badge>
               </button>
             </TooltipTrigger>
-            <TooltipContent>Copy Workflow ID for use in code</TooltipContent>
+            <TooltipContent>Copy workflow ID for use in code</TooltipContent>
           </Tooltip>
 
           <Badge>

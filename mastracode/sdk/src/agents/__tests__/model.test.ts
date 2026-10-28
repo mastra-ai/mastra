@@ -54,6 +54,10 @@ vi.mock('../../providers/openai-codex.js', () => ({
   createReasoningEffortMiddleware: vi.fn((providerKey: string, effort?: string) =>
     effort === undefined ? undefined : { __middleware: 'reasoning-effort', providerKey, effort },
   ),
+  createPromptCacheKeyMiddleware: vi.fn((key?: string) =>
+    key === undefined ? undefined : { __middleware: 'prompt-cache-key', key },
+  ),
+  getRequestThreadId: vi.fn((headers?: Record<string, string>) => headers?.['x-thread-id']),
   getEffectiveThinkingLevel: vi.fn((_modelId: string, level: string) => level),
   THINKING_LEVEL_TO_REASONING_EFFORT: {
     off: undefined,
@@ -595,7 +599,7 @@ describe('resolveModel', () => {
       requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
 
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(
-        "No usable openai credential is available. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses personal credentials only, so organization credentials don't apply. Connect the provider, then try again.",
       );
       expect(() => resolveModel('openai/gpt-4o', { requestContext })).toThrow(ProviderAuthRequiredError);
       try {
@@ -634,7 +638,7 @@ describe('resolveModel', () => {
 
       await expect(resolution).rejects.toThrow(ProviderAuthRequiredError);
       await expect(resolution).rejects.toThrow(
-        "No usable openai credential is available. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
+        "No usable openai credential is available for openai/gpt-4o. This Factory uses organization credentials only, so personal provider sign-ins don't apply. Add an organization credential, then try again.",
       );
     });
 

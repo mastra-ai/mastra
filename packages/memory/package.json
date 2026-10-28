@@ -1,6 +1,6 @@
 {
   "name": "@mastra/memory",
-  "version": "1.39.0",
+  "version": "1.39.1",
   "description": "",
   "type": "module",
   "main": "./dist/index.js",
@@ -64,16 +64,16 @@
   "dependencies": {
     "@mastra/schema-compat": "workspace:*",
     "async-mutex": "^0.5.0",
-    "diff": "^8.0.3",
+    "diff": "^8.0.4",
     "json-schema": "^0.4.0",
-    "lru-cache": "^11.2.7",
+    "lru-cache": "^11.5.3",
     "probe-image-size": "^7.4.0",
     "xxhash-wasm": "^1.1.0",
     "zod": "catalog:"
   },
   "devDependencies": {
     "@ai-sdk/openai-v5": "npm:@ai-sdk/openai@2.0.135",
-    "@copilotkit/aimock": "^1.29.0",
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/ai-sdk-v4": "workspace:*",
     "@internal/ai-sdk-v5": "workspace:*",
     "@internal/ai-v6": "workspace:*",
@@ -82,18 +82,17 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/json-schema": "^7.0.15",
-    "@types/lru-cache": "^7.10.10",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tokenx": "^1.6.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.4.1-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "homepage": "https://mastra.ai",
   "repository": {

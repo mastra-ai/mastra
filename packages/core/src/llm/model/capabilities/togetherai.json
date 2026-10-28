@@ -67,18 +67,70 @@
     "zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
+    "openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3-1": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4.1-Flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "high", "max"]
+      }
+    ],
+    "nvidia/nemotron-3-ultra-550b-a55b": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
+      {
+        "type": "toggle"
+      }
+    ],
     "moonshotai/Kimi-K3": [
       {
         "type": "effort",
         "values": ["none", "low", "high", "max"]
       }
     ],
-    "Qwen/Qwen3.5-397B-A17B": [
+    "thinkingmachines/Inkling": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "Qwen/Qwen3.5-9B": [
+    "meta-models/Muse-Spark-Open-816B-A42B": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "MiniMaxAI/MiniMax-M3": [
       {
         "type": "toggle"
       }
@@ -88,15 +140,29 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.1": [
+    "Qwen/Qwen3.5-9B": [
       {
         "type": "toggle"
+      }
+    ],
+    "Qwen/Qwen3.5-397B-A17B": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "reflection/Beam-1.0-501B-A23B": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "zai-org/GLM-5.3-Flash": [
@@ -110,81 +176,15 @@
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2": [
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.1": [
       {
         "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Pro-0813": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4-Flash-0731": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "max"]
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3-1": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "reflection/Beam-1.0-501B-A23B": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "MiniMaxAI/MiniMax-M3": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/nemotron-3-ultra-550b-a55b": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "nvidia/NVIDIA-Nemotron-3.5-Super-VL": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "meta-models/Muse-Spark-Open-816B-A42B": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "thinkingmachines/Inkling": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

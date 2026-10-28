@@ -161,6 +161,7 @@ export function FilterBarChip({
   children,
 }: FilterBarChipProps) {
   const ctx = useFilterBarContext();
+  const [initial] = useState(() => !ctx.mounted);
   const [openSegment, setOpenSegment] = useState<FilterBarSegment | null>(null);
   const field = ctx.getField(item.fieldId);
   const operator = ctx.getOperator(item.operatorId);
@@ -241,7 +242,7 @@ export function FilterBarChip({
           event.preventDefault();
           ctx.removeItem(item.id);
           ctx.focusAfterRemove(index);
-          return;
+          break;
         default:
       }
     },
@@ -270,6 +271,7 @@ export function FilterBarChip({
         aria-hidden={draft || leaving || undefined}
         data-slot="filter-bar-chip"
         data-draft={draft || undefined}
+        data-initial={initial || undefined}
         data-readonly={readOnly || undefined}
         data-leaving={leaving || undefined}
         data-shine={(shine && !leaving) || undefined}

@@ -32,7 +32,7 @@ describe('useSessionListView', () => {
   it('opens on the default grouping when the stored grouping is unknown', () => {
     localStorage.setItem(STORAGE_KEY, JSON.stringify({ groupBy: 'project' }));
 
-    expect(renderHook(() => useSessionListView()).result.current.view.groupBy).toBe('board');
+    expect(renderHook(() => useSessionListView()).result.current.view.groupBy).toBe('none');
   });
 
   it('keeps hidden groups that are string lists and drops the malformed ones', () => {
@@ -62,7 +62,7 @@ describe('useSessionListView', () => {
   it('does not count a stored setting that equals the default as a change', () => {
     localStorage.setItem(
       STORAGE_KEY,
-      JSON.stringify({ sort: 'activity', groupBy: 'board', hiddenGroups: { status: [] } }),
+      JSON.stringify({ sort: 'activity', groupBy: 'none', hiddenGroups: { status: [] } }),
     );
 
     expect(renderHook(() => useSessionListView()).result.current.changedSettingCount).toBe(0);
@@ -85,14 +85,15 @@ describe('useSessionListView', () => {
       { key: 'user', label: 'User', icon: 'user' },
     ];
     const { result } = renderHook(() => useSessionListView());
+    act(() => result.current.updateView({ groupBy: 'board' }));
 
     act(() => result.current.changeGroupOrder(['user', 'board:work'], defaultHeadings));
-    expect(storedView()).toEqual({ groupOrder: { board: ['user', 'board:work'] } });
+    expect(storedView()).toEqual({ groupBy: 'board', groupOrder: { board: ['user', 'board:work'] } });
     expect(result.current.groupOrderKeys).toEqual(['user', 'board:work']);
-    expect(result.current.changedSettingCount).toBe(1);
+    expect(result.current.changedSettingCount).toBe(2);
 
     act(() => result.current.changeGroupOrder(['board:work', 'user'], defaultHeadings));
-    expect(storedView()).toEqual({});
+    expect(storedView()).toEqual({ groupBy: 'board' });
     expect(result.current.groupOrderKeys).toEqual([]);
   });
 

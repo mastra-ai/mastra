@@ -5,7 +5,7 @@
 import { spawn } from 'node:child_process';
 import fs from 'node:fs';
 
-import { createMastraCode } from '@mastra/code-sdk';
+import { createMastraCode, resolveSubagentsSetting } from '@mastra/code-sdk';
 import { createMastraCodeAnalytics } from '@mastra/code-sdk/analytics';
 import { isStreamDestroyedError } from '@mastra/code-sdk/error-classification';
 import { RemoteController } from '@mastra/code-sdk/factory/remote-controller';
@@ -39,7 +39,6 @@ import {
   shouldRejectResumeWithoutTTY,
   shouldRunHeadless,
 } from './resume-command.js';
-import { resolveTuiSubagents } from './subagent-settings.js';
 import { applyThemePreference, normalizeThemePreference } from './tui/commands/theme.js';
 import { MastraTUI } from './tui/index.js';
 import { getUpdateCommandArgs, runUpdateCommand } from './update-command.js';
@@ -193,7 +192,7 @@ async function bootLocal(
     unixSocketPubSub: !isTruthyEnv('MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB'),
     disableMcp: isTruthyEnv('MASTRACODE_DISABLE_MCP'),
     disableHooks: isTruthyEnv('MASTRACODE_DISABLE_HOOKS'),
-    subagents: resolveTuiSubagents(settings.preferences.subagentsEnabled),
+    subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
     ...(isTruthyEnv('MASTRACODE_DISABLE_MEMORY') ? { memory: false as never } : {}),
     ...(initialState ? { initialState: initialState as never } : {}),
   });

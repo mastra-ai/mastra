@@ -1,3 +1,4 @@
+import { Tabs } from '@base-ui/react/tabs';
 import { ArrowLeftIcon } from 'lucide-react';
 import React from 'react';
 import type { ComponentPropsWithoutRef } from 'react';
@@ -56,13 +57,15 @@ export function SidebarNavStackView({
   }
 
   return (
-    <div
+    <Tabs.Panel
       {...props}
+      value={value}
+      role={undefined}
+      tabIndex={undefined}
       data-slot="sidebar-nav-stack-view"
       data-value={value}
       aria-hidden={!active}
-      inert={!active}
-      className={sidebarNavStackPageClasses(active, 'view', className)}
+      className={sidebarNavStackPageClasses('view', className)}
     >
       <button
         ref={backRef}
@@ -76,6 +79,6 @@ export function SidebarNavStackView({
         <span aria-hidden="true" />
       </button>
       {children}
-    </div>
+    </Tabs.Panel>
   );
 }

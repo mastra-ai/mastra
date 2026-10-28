@@ -28,3 +28,13 @@ export {
   type FilesApiErrorKind,
   type FilesCommandResult,
 } from './files-api-filesystem';
+export {
+  ATTACH_TIMEOUT_MS,
+  CommandsApiProcessManager,
+  CommandsApiProcessHandle,
+  type CommandsApi,
+  type CommandsApiHandle,
+  type CommandsApiOperation,
+  type CommandsApiProcessManagerOptions,
+  type CommandsApiStreamOptions,
+} from './commands-api-process-manager';

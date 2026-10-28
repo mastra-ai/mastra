@@ -157,6 +157,10 @@ export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
+export const agentRunPathParams = agentIdPathParams.extend({
+  runId: z.string().min(1).describe('Unique identifier for the agent run'),
+});
+
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
@@ -313,6 +317,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
+  modelReleaseDates: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -789,6 +794,7 @@ const agentThreadBodySchema = z.object({
 });
 
 export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withRunStatus: z.boolean().optional().describe('Emit thread-run-status chunks, including retained outcomes'),
   withInitialHistory: z
     .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
     .optional()
