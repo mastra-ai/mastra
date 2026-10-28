@@ -4,6 +4,7 @@
 import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
+import { RequestContext } from '@mastra/core/request-context';
 import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
@@ -59,7 +60,10 @@ describe('browser_screenshot', () => {
     await rm(dir, { recursive: true, force: true });
   });
 
-  async function screenshot(input: { path?: string }, context: { workspace?: Workspace }) {
+  async function screenshot(
+    input: { path?: string },
+    context: { workspace?: Workspace; requestContext?: RequestContext },
+  ) {
     const tool = createScreenshotTool(browser);
     return (await tool.execute!(input, context as never)) as ScreenshotResult;
   }
@@ -104,6 +108,37 @@ describe('browser_screenshot', () => {
     expect(output.value).toEqual([
       { type: 'media', mediaType: 'image/png', data: PNG.toString('base64') },
       { type: 'text', text: "Couldn't save the screenshot: disk full" },
+    ]);
+  });
+
+  it('saves into a filesystem the workspace resolves per request', async () => {
+    const requestContext = new RequestContext();
+    requestContext.set('tenant', 'acme');
+    const tenantDir = join(dir, 'acme');
+    const resolved = new Workspace({
+      filesystem: ({ requestContext }) =>
+        new LocalFilesystem({ basePath: join(dir, requestContext.get('tenant') as string) }),
+    });
+
+    const result = await screenshot({ path: 'tenant.png' }, { workspace: resolved, requestContext });
+
+    expect(result.path).toBe('tenant.png');
+    expect(await readFile(join(tenantDir, 'tenant.png'))).toEqual(PNG);
+  });
+
+  it('still shows the model the screenshot when resolving the filesystem fails', async () => {
+    const failing = new Workspace({
+      filesystem: () => {
+        throw new Error('no tenant');
+      },
+    });
+    const tool = createScreenshotTool(browser);
+    const result = await screenshot({ path: 'page.png' }, { workspace: failing, requestContext: new RequestContext() });
+
+    const output = tool.toModelOutput!(result as never) as { value: Array<Record<string, unknown>> };
+    expect(output.value).toEqual([
+      { type: 'media', mediaType: 'image/png', data: PNG.toString('base64') },
+      { type: 'text', text: "Couldn't save the screenshot: no tenant" },
     ]);
   });
 
