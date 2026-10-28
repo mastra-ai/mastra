@@ -23,6 +23,9 @@ importers:
       '@clack/prompts':
         specifier: ^1.7.0
         version: 1.8.1
+      '@mastra/agent-browser':
+        specifier: link:../../browser/agent-browser
+        version: link:../../browser/agent-browser
       '@mastra/auth-workos':
         specifier: link:../../auth/workos
         version: link:../../auth/workos
