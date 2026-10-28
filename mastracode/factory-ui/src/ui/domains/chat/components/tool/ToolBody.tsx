@@ -8,6 +8,8 @@ import {
   toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 
+import { useState } from 'react';
+
 import type { ToolCall } from '../../services/transcript';
 
 /** The PNG a finished `browser_screenshot` returned, as an image URL. */
@@ -28,20 +30,32 @@ export function toolHasBody(tool: ToolCall, command: string | undefined): boolea
   return hasToolArguments(tool) || toolResultText(tool) !== undefined;
 }
 
+/** Full-page captures are tall, so the image starts capped and opens to full size on click. */
+function Screenshot({ src }: { src: string }) {
+  const [fullSize, setFullSize] = useState(false);
+  return (
+    <button
+      type="button"
+      aria-label={fullSize ? 'Show smaller' : 'Show full size'}
+      aria-pressed={fullSize}
+      onClick={() => setFullSize(value => !value)}
+      className={fullSize ? 'cursor-zoom-out' : 'cursor-zoom-in'}
+    >
+      <img
+        src={src}
+        alt="Screenshot of the agent's browser"
+        className={`border-border max-w-full rounded-md border ${fullSize ? '' : 'max-h-[480px]'}`}
+      />
+    </button>
+  );
+}
+
 export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   const edit = toolEdit(tool.toolName, tool.args);
   const resultText = toolResultText(tool);
   const screenshot = screenshotSrc(tool);
 
-  if (screenshot) {
-    return (
-      <img
-        src={screenshot}
-        alt="Screenshot of the agent's browser"
-        className="border-border max-h-[480px] max-w-full rounded-md border"
-      />
-    );
-  }
+  if (screenshot) return <Screenshot src={screenshot} />;
 
   if (edit) {
     return (

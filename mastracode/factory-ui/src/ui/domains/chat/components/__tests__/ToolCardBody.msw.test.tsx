@@ -80,6 +80,19 @@ describe('Factory tool body', () => {
       expect(screen.queryByText(/iVBORw0KGgo/)).not.toBeInTheDocument();
     });
 
+    it('opens a capped screenshot to full size and back', async () => {
+      renderWithProviders(<ToolCard tool={screenshotTool} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+      const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
+      expect(image).toHaveClass('max-h-[480px]');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show full size' }));
+      expect(image).not.toHaveClass('max-h-[480px]');
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show smaller' }));
+      expect(image).toHaveClass('max-h-[480px]');
+    });
+
     it('shows the failure message when no image came back', async () => {
       renderWithProviders(<ToolCard tool={{ ...screenshotTool, result: { message: 'Browser is not open' } }} />);
       await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
