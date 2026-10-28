@@ -829,6 +829,19 @@ export abstract class MastraBrowser extends MastraBase {
   }
 
   /**
+   * Make the local profile safe to launch Chrome on: release a stale lock (or
+   * throw {@link BrowserProfileInUseError} if a live browser holds it), then
+   * clear chrome-launcher's logs. launch() calls this; providers that start
+   * Chrome outside launch() (e.g. a per-thread browser) must call it first too.
+   */
+  protected async prepareLocalProfile(): Promise<void> {
+    const localProfile = this.getLocalProfilePath();
+    if (!localProfile) return;
+    await releaseStaleProfileLock(localProfile, this.logger);
+    clearChromeLauncherLogs(localProfile, this.logger);
+  }
+
+  /**
    * Get the CDP WebSocket URL for connecting to this browser.
    * CLI providers (BrowserViewer) implement this to expose the URL for CLI tools.
    * SDK providers typically return null as they manage their own CDP connections.
@@ -871,11 +884,7 @@ export abstract class MastraBrowser extends MastraBase {
 
     this._launchPromise = (async () => {
       try {
-        const localProfile = this.getLocalProfilePath();
-        if (localProfile) {
-          await releaseStaleProfileLock(localProfile, this.logger);
-          clearChromeLauncherLogs(localProfile, this.logger);
-        }
+        await this.prepareLocalProfile();
         await this.doLaunch();
         this.status = 'ready';
 

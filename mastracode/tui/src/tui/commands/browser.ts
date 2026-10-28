@@ -310,7 +310,8 @@ async function applyBrowserToAgents(
   chatModelId?: string,
 ): Promise<void> {
   // The old browser must release its profile before the new one can launch on it.
-  await replaceActiveBrowser(browser);
+  // If a later /browser call replaced this browser meanwhile, that call owns the agents.
+  if (!(await replaceActiveBrowser(browser))) return;
   const modes = ctx.controller.listModes();
   let agentControllerState: unknown;
   for (const mode of modes) {

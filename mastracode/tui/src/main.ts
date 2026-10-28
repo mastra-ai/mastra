@@ -26,7 +26,12 @@ import type { ProcessMemoryDiagnostics } from '@mastra/code-sdk/process-memory-d
 import { setupDebugLogging, truncateLogFile } from '@mastra/code-sdk/utils/debug-log';
 import { drainPipedStdin, reopenStdinFromTTY } from '@mastra/code-sdk/utils/stdin-pipe';
 import { releaseAllThreadLocks } from '@mastra/code-sdk/utils/thread-lock';
-import { closeActiveBrowser, replaceActiveBrowser } from './browser-lifecycle.js';
+import {
+  activeBrowserGeneration,
+  closeActiveBrowser,
+  discardBrowser,
+  replaceActiveBrowser,
+} from './browser-lifecycle.js';
 import { TUI_CO_AUTHOR } from './commit-attribution.js';
 import { initialMessageOptions, pipedInputConflict, takeInitialPrompt, takePackFlag } from './initial-prompt.js';
 import {
@@ -266,10 +271,16 @@ async function bootLocal(
   if (settings.browser.enabled) {
     // Captured once: the Stagehand instance is fixed at launch and shared by every thread.
     const chatModelId = session.model.get();
+    // The TUI is already running, so /browser can replace the browser while this one loads.
+    const startGeneration = activeBrowserGeneration();
     void loadBrowser(chatModelId)
-      .then(browser => {
+      .then(async browser => {
         if (!browser) return;
-        void replaceActiveBrowser(browser);
+        if (activeBrowserGeneration() !== startGeneration) {
+          await discardBrowser(browser);
+          return;
+        }
+        if (!(await replaceActiveBrowser(browser))) return;
         controller.setBrowser(browser);
         void session.state
           .set({
@@ -284,6 +295,10 @@ async function bootLocal(
 
 const asyncCleanup = (): Promise<void> => {
   cleanupPromise ??= (async () => {
+    // A local browser is a detached process holding its profile lock; left
+    // running, it breaks the next launch on that profile. Start closing it first
+    // so it finishes inside the shutdown deadline whatever the steps below take.
+    const browserClosed = closeActiveBrowser();
     releaseAllThreadLocks();
     // Release thread claims before the slow teardown below, so a restarted
     // session can claim its thread (and peers can reach it) right away.
@@ -308,9 +323,7 @@ const asyncCleanup = (): Promise<void> => {
     // Release this process's notification dispatch leases before the pubsub that holds them closes.
     await stopNotificationDispatch?.().catch(() => {});
     remoteSession?.disconnect();
-    // A local browser is a detached process holding its profile lock; left
-    // running, it breaks the next launch on that profile.
-    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), closeActiveBrowser()]);
+    await Promise.allSettled([mcpManager?.disconnect(), controller?.stopIntervals(), browserClosed]);
     // Mastra owns the workspaces and must destroy them to stop retained language
     // servers before storage is closed.
     await Promise.allSettled([controller?.getMastra()?.shutdown(), analytics?.shutdown()]);

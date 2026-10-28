@@ -1,3 +1,4 @@
+import { spawn } from 'node:child_process';
 import {
   appendFileSync,
   existsSync,
@@ -226,6 +227,30 @@ describe('MastraBrowser launch with a locked profile', () => {
     expect(browser.doLaunch).toHaveBeenCalledTimes(1);
     expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
   });
+
+  it.skipIf(process.platform === 'win32')(
+    'removes a stale lock whose holder was SIGKILLed and left its socket file behind',
+    async () => {
+      // Like a crashed Chrome: the socket file stays on disk, connecting to it gets ECONNREFUSED.
+      const socketPath = join(socketDir, 'SingletonSocket');
+      const child = spawn(process.execPath, [
+        '-e',
+        `require('net').createServer().listen(${JSON.stringify(socketPath)}, () => console.log('ready'))`,
+      ]);
+      await new Promise<void>(r => child.stdout.once('data', () => r()));
+      child.kill('SIGKILL');
+      await new Promise(r => child.once('exit', r));
+      expect(existsSync(socketPath)).toBe(true);
+      symlinkSync(`${hostname()}-${child.pid}`, join(profileDir, 'SingletonLock'));
+      symlinkSync(socketPath, join(profileDir, 'SingletonSocket'));
+      const browser = new FakeBrowser({ profile: profileDir });
+
+      await browser.launch();
+
+      expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+      expect(() => lstatSync(join(profileDir, 'SingletonLock'))).toThrow();
+    },
+  );
 
   it('launches normally when the profile is not locked', async () => {
     writeFileSync(join(profileDir, 'Preferences'), '{}');

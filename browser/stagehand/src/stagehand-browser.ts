@@ -184,6 +184,11 @@ export class StagehandBrowser extends MastraBrowser {
    * Used by thread manager for 'thread' scope.
    */
   private async createStagehandInstance(): Promise<Stagehand> {
+    // While another thread's Chrome is alive, a new thread's Chrome starts without
+    // launch() running again, so the profile must be prepared here too.
+    if (this.getScope() === 'thread') {
+      await this.prepareLocalProfile();
+    }
     const stagehandOptions = await this.buildStagehandOptions();
     const stagehand = new Stagehand(stagehandOptions);
     await stagehand.init();

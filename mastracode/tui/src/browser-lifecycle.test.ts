@@ -49,4 +49,23 @@ describe('browser lifecycle', () => {
 
     await expect(closing).resolves.toBeUndefined();
   });
+
+  // Startup loads its browser while /browser can already run: the replacement
+  // that finishes closing the old browser last must not win over a newer one.
+  it('reports a browser replaced while the previous one was closing as no longer active', async () => {
+    let finishClose!: () => void;
+    const old = fakeBrowser(() => new Promise<void>(r => (finishClose = r)));
+    await replaceActiveBrowser(old);
+
+    const first = fakeBrowser();
+    const second = fakeBrowser();
+    const firstApplied = replaceActiveBrowser(first);
+    const secondApplied = replaceActiveBrowser(second);
+    finishClose();
+
+    expect(await firstApplied).toBe(false);
+    expect(await secondApplied).toBe(true);
+    expect(first.close).toHaveBeenCalledOnce();
+    expect(second.close).not.toHaveBeenCalled();
+  });
 });

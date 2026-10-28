@@ -1,3 +1,6 @@
+import { existsSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 // Create mocks BEFORE vi.mock using vi.hoisted so they're available in the mock
@@ -846,6 +849,39 @@ describe('StagehandBrowser', () => {
         );
       });
     });
+  });
+});
+
+describe('StagehandBrowser thread scope on a profile', () => {
+  let profileDir: string;
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+    profileDir = mkdtempSync(join(tmpdir(), 'stagehand-profile-'));
+  });
+
+  afterEach(() => {
+    rmSync(profileDir, { recursive: true, force: true });
+  });
+
+  // Issue #28664: while another thread's Chrome is alive, a new thread's Chrome starts
+  // without launch() running again. chrome-launcher would then read a dead port from the log.
+  it('clears stale launcher logs before starting another thread browser', async () => {
+    const browser = new StagehandBrowser({ scope: 'thread', profile: profileDir });
+    browser.setCurrentThread('thread-1');
+    await browser.ensureReady();
+    const staleLog = join(profileDir, 'chrome-err.log');
+    writeFileSync(staleLog, 'DevTools listening on ws://127.0.0.1:50047/devtools/browser/old\n');
+    let logAtChromeStart: boolean | undefined;
+    mockStagehand.init.mockImplementationOnce(async () => {
+      logAtChromeStart = existsSync(staleLog);
+    });
+
+    browser.setCurrentThread('thread-2');
+    await browser.ensureReady();
+
+    expect(mockStagehandConstructor).toHaveBeenCalledTimes(2);
+    expect(logAtChromeStart).toBe(false);
   });
 });
 
