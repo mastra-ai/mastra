@@ -55,6 +55,7 @@ export function CustomProvidersSection() {
 
       {draft && (
         <CustomProviderForm
+          key={draft === 'new' ? 'new' : draft.id}
           provider={draft === 'new' ? undefined : draft}
           onCancel={() => setDraft(null)}
           onSaved={() => setDraft(null)}
