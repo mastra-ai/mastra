@@ -109,7 +109,8 @@
                   "instructions": "You are an agent in a workflow",
                   "model": "mock-model-id",
                   "provider": "mock-provider",
-                  "completionStartTime": "<date>"
+                  "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -140,6 +141,7 @@
                       "streaming": true,
                       "parameters": {},
                       "completionStartTime": "<date>",
+                      "inferenceStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "1",
                       "responseModel": "mock-model-id",
@@ -202,6 +204,7 @@
                           "provider": "mock-provider",
                           "messageId": "<messageId-1>",
                           "completionStartTime": "<date>",
+                          "inferenceStartTime": "<date>",
                           "usage": {
                             "inputTokens": 10,
                             "outputTokens": 20,

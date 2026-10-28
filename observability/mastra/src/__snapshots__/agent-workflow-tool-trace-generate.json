@@ -34,7 +34,8 @@
           "model": "mock-model-id",
           "provider": "mock-provider",
           "availableTools": ["workflowExecutor"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "inferenceStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -114,6 +115,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "inferenceStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -190,6 +192,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -634,6 +637,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,

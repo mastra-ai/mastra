@@ -33,7 +33,8 @@
           "model": "mock-model-id",
           "provider": "mock-provider",
           "availableTools": ["calculator"],
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "inferenceStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -88,6 +89,7 @@
                 }
               ],
               "completionStartTime": "<date>",
+              "inferenceStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -161,6 +163,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 15,
@@ -525,6 +528,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>",
                   "usage": {
                     "inputTokens": 20,
                     "outputTokens": 10,

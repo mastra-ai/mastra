@@ -29,7 +29,8 @@
           "instructions": "Return a simple response",
           "model": "mock-model-id",
           "provider": "mock-provider",
-          "completionStartTime": "<date>"
+          "completionStartTime": "<date>",
+          "inferenceStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -63,6 +64,7 @@
               "streaming": true,
               "parameters": {},
               "completionStartTime": "<date>",
+              "inferenceStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -128,6 +130,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
+                  "inferenceStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -401,7 +404,9 @@
                   "text": 25
                 }
               },
-              "hookDurationMs": { "__any__": "number" }
+              "hookDurationMs": {
+                "__any__": "number"
+              }
             },
             "metadata": {
               "runId": "<runId-1>",
