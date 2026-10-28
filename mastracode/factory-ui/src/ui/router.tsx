@@ -11,7 +11,6 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { lazy, Suspense } from 'react';
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
@@ -23,28 +22,31 @@ import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
-import { lazyPage, SessionLayout } from './layouts/PageSuspense';
+import { lazyPage } from './layouts/PageSuspense';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
-// Only the boards ship in the startup bundle. Every other page loads on first
-// visit behind its own loader (see `lazyPage`), session pages behind the one
-// they share (`SessionLayout`), onboarding and sign-in behind the full-screen one.
-const NewPage = lazy(() => import('./pages/NewPage').then(module => ({ default: module.NewPage })));
-const ThreadPage = lazy(() => import('./pages/ThreadPage').then(module => ({ default: module.ThreadPage })));
+// Only the boards ship in the startup bundle; every other page loads on first
+// visit behind its own loader (see `lazyPage`).
+const NewPage = lazyPage(() => import('./pages/NewPage').then(module => module.NewPage));
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
 const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
 const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
 const SlackConnectionPage = lazyPage(() =>
   import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
 );
 const CreateFactoryPage = lazyPage(() => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage));
-const OnboardingPage = lazy(() =>
-  import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
-);
 const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage));
-const SignInPage = lazy(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
+const OnboardingPage = lazyPage(
+  () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
+  <AuthPendingSkeleton label="Loading page" />,
+);
+const SignInPage = lazyPage(
+  () => import('./pages/SignInPage').then(module => module.SignInPage),
+  <AuthPendingSkeleton label="Loading page" />,
+);
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -139,14 +141,7 @@ export function createAppRoutes(): RouteObject[] {
       errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <RootLanding /> },
-        {
-          path: 'onboarding',
-          element: (
-            <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
-              <OnboardingPage />
-            </Suspense>
-          ),
-        },
+        { path: 'onboarding', element: <OnboardingPage /> },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,
@@ -159,16 +154,11 @@ export function createAppRoutes(): RouteObject[] {
                   errorElement: <AppRouteErrorPage />,
                   children: [
                     { index: true, element: <FactoryHomeRedirect /> },
-                    {
-                      element: <SessionLayout />,
-                      children: [
-                        { path: 'workspaces/:sessionId', element: <NewPage /> },
-                        { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
-                        { path: 'user/new/:draftSessionId', element: <NewPage /> },
-                        { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                        { path: 'new', element: <NewPage /> },
-                      ],
-                    },
+                    { path: 'workspaces/:sessionId', element: <NewPage /> },
+                    { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
+                    { path: 'user/new/:draftSessionId', element: <NewPage /> },
+                    { path: 'user/threads/:threadId', element: <ThreadPage /> },
+                    { path: 'new', element: <NewPage /> },
                     { path: 'new-factory', element: <CreateFactoryPage /> },
                     { path: 'work', element: <WorkBoardPage /> },
                     { path: 'review', element: <ReviewBoardPage /> },
@@ -203,11 +193,7 @@ export function createAppRoutes(): RouteObject[] {
     },
     {
       path: '/signin',
-      element: (
-        <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
-          <SignInPage />
-        </Suspense>
-      ),
+      element: <SignInPage />,
       errorElement: <RouteErrorPage />,
     },
   ];
