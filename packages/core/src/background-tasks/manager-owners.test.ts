@@ -476,6 +476,37 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       expect(await a.getTask(task.id)).toMatchObject({ status: 'suspended', suspendPayload: { question: 2 } });
     });
 
+    it('frees the slot once another worker has handled a published portable resume', async () => {
+      // a's resume events are delivered only to b, so a never sees the resume
+      // handled and has to learn it from storage.
+      const toB = new EventEmitterPubSub();
+      class ResumeGoesToB extends EventEmitterPubSub {
+        override async publish(...args: Parameters<EventEmitterPubSub['publish']>): Promise<void> {
+          if (args[1].type === 'task.resume') return toB.publish(...args);
+          return super.publish(...args);
+        }
+      }
+      const a = await makeManager(
+        { globalConcurrency: 1, perAgentConcurrency: 1, backpressure: 'reject', leaseDurationMs: 3_000 },
+        new ResumeGoesToB(),
+      );
+      const b = await makeManager({ globalConcurrency: 10, perAgentConcurrency: 10, leaseDurationMs: 3_000 }, toB);
+      const executor = {
+        execute: async (_args: any, opts?: any) => opts?.resumeData ?? opts?.suspend?.({ needs: 'input' }),
+      };
+      a.registerStaticExecutor('mcp-server:ops:ask', executor);
+      b.registerStaticExecutor('mcp-server:ops:ask', executor);
+      const { task } = await a.enqueue({ ...payload('mcp-server:ops', 'ask'), toolName: 'mcp-server:ops:ask' });
+      await vi.waitFor(async () => expect((await a.getTask(task.id))?.status).toBe('suspended'));
+
+      await a.resume(task.id, { answer: 'yes' });
+      await vi.waitFor(async () => expect((await a.getTask(task.id))?.status).toBe('completed'));
+
+      // Nothing is running, so the next portable task must get the slot.
+      const next = await a.enqueue({ ...payload('mcp-server:ops', 'next'), toolName: 'mcp-server:ops:ask' });
+      expect(next.task.status).not.toBe('failed');
+    });
+
     it('does not admit more queued portable resumes than there are free slots', async () => {
       const mgr = await makeManager(
         { globalConcurrency: 1, perAgentConcurrency: 5, leaseDurationMs: 3_000 },
