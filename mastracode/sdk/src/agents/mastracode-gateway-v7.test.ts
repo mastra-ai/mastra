@@ -56,7 +56,7 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
     mock = new LLMock({ port: 0 });
     mock.on(
       { sequenceIndex: 0 },
-      { toolCalls: [{ id: 'call_read', name: 'read_file', arguments: '{}' }], usage: USAGE },
+      { toolCalls: [{ id: 'call_read', name: 'read_file', arguments: '{"path":"picture.png"}' }], usage: USAGE },
     );
     mock.on({ sequenceIndex: 1 }, { content: 'The file contains a picture.', usage: USAGE });
     mock.on({ sequenceIndex: 2 }, { content: 'I still have the picture.', usage: USAGE });
@@ -128,8 +128,11 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
             read_file: createTool({
               id: 'read_file',
               description: 'Read the picture file',
-              inputSchema: z.object({}),
-              execute: async () => 'picture file',
+              inputSchema: z.strictObject({ path: z.string() }),
+              execute: async ({ path }) => {
+                expect(path).toBe('picture.png');
+                return 'picture file';
+              },
               toModelOutput: () => ({
                 type: 'content',
                 value: [
@@ -209,8 +212,84 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
         expect(body).toMatchObject({ reasoning: { effort: 'high' }, prompt_cache_key: 'picture-thread' });
       }
       if (route.providerId === 'google') {
-        expect(body).toMatchObject({ generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } });
+        expect(body).toMatchObject({
+          generationConfig: { thinkingConfig: { thinkingLevel: 'high' } },
+          tools: [
+            {
+              functionDeclarations: [
+                {
+                  name: 'read_file',
+                  parametersJsonSchema: {
+                    type: 'object',
+                    properties: { path: { type: 'string' } },
+                    required: ['path'],
+                  },
+                },
+              ],
+            },
+          ],
+        });
+        const declarations = (body.tools as Array<{ functionDeclarations: Record<string, unknown>[] }>).flatMap(
+          tool => tool.functionDeclarations,
+        );
+        expect(declarations.find(declaration => declaration.name === 'read_file')).not.toHaveProperty('parameters');
       }
     },
   );
+
+  if (route.providerId === 'google') {
+    it.each(['generate', 'stream'] as const)(
+      '%s returns validated structured output with the native Gemini v7 JSON schema',
+      async method => {
+        const answer = { selection: 'C', reason: 'Reliability matters most.' };
+        mock.reset().on({ sequenceIndex: 0 }, { content: JSON.stringify(answer), usage: USAGE });
+        const gateway = new MastraCodeGateway({
+          mastraGatewayBaseUrl: mock.url,
+          routeThroughMastraGateway: false,
+          thinkingLevel: 'high',
+          credentialStore: new AuthStorage(join(directory, 'auth.json')),
+          customProviders: [],
+        });
+        const agent = new Agent({
+          id: 'v7-gemini-structured-choice',
+          name: 'Option selector',
+          instructions: 'Choose the option that best meets the user priorities.',
+          model: gateway.resolveLanguageModel({ providerId: 'google', modelId: route.modelId, apiKey: 'tenant-key' }),
+        });
+        const prompt = [
+          {
+            role: 'user' as const,
+            content: 'Choose A for speed, B for price, or C for reliability. Reliability is my priority.',
+          },
+          { role: 'assistant' as const, content: 'I will select the most reliable option.' },
+        ];
+        const options = {
+          structuredOutput: { schema: z.strictObject({ selection: z.enum(['A', 'B', 'C']), reason: z.string() }) },
+        };
+        const result =
+          method === 'generate'
+            ? await agent.generate(prompt, options)
+            : await (await agent.stream(prompt, options)).getFullOutput();
+
+        expect(result.object).toEqual(answer);
+        expect(result.error).toBeUndefined();
+        expect(sent).toHaveLength(1);
+        expect(sent[0]!.headers.get('x-goog-api-key')).toBe('tenant-key');
+        expect(sent[0]!.body).toMatchObject({
+          generationConfig: {
+            responseMimeType: 'application/json',
+            responseJsonSchema: {
+              type: 'object',
+              properties: { selection: { type: 'string', enum: ['A', 'B', 'C'] }, reason: { type: 'string' } },
+              required: ['selection', 'reason'],
+              additionalProperties: false,
+            },
+            thinkingConfig: { thinkingLevel: 'high' },
+          },
+        });
+        expect(sent[0]!.body.generationConfig).not.toHaveProperty('responseSchema');
+        expect(JSON.stringify(sent[0]!.body.contents)).toContain('I will select the most reliable option.');
+      },
+    );
+  }
 });
