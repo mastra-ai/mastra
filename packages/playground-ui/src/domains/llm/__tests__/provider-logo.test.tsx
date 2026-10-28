@@ -26,6 +26,7 @@ describe('ProviderLogo', () => {
     'moonshotai',
     'xai',
     'x-ai',
+    'typesafe',
   ])('draws the bundled %s mark without fetching a remote logo', providerId => {
     render(<ProviderLogo providerId={providerId} size="md" />);
     const mark = screen.getByRole('img', { name: `${providerId} logo` });
@@ -39,12 +40,15 @@ describe('ProviderLogo', () => {
     expect(fills).toEqual(['#D97757']);
   });
 
-  it.each(['openai', 'openrouter', 'z-ai', 'moonshotai', 'x-ai'])('draws the %s mark in the text color', providerId => {
-    render(<ProviderLogo providerId={providerId} />);
-    const markup = screen.getByRole('img').outerHTML;
-    expect(markup).toContain('currentColor');
-    expect(markup).not.toMatch(/#[0-9a-f]{3,8}\b/i);
-  });
+  it.each(['openai', 'openrouter', 'z-ai', 'moonshotai', 'x-ai', 'typesafe'])(
+    'draws the %s mark in the text color',
+    providerId => {
+      render(<ProviderLogo providerId={providerId} />);
+      const markup = screen.getByRole('img').outerHTML;
+      expect(markup).toContain('currentColor');
+      expect(markup).not.toMatch(/#[0-9a-f]{3,8}\b/i);
+    },
+  );
 
   it.each(['google', 'qwen', 'minimax', 'meta'])('gives each %s mark its own gradient ids', providerId => {
     render(
