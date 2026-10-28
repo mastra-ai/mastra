@@ -231,6 +231,30 @@ describe('JSONImportDialog', () => {
     await waitForMutationsIdle(queryClient);
   });
 
+  it('cancels the post-close reset timer when the dialog unmounts', () => {
+    const resetTimers: ReturnType<typeof setTimeout>[] = [];
+    const realSetTimeout = globalThis.setTimeout;
+    vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler: () => void, ms?: number) => {
+      const id = realSetTimeout(handler, ms);
+      if (ms === 150) resetTimers.push(id);
+      return id;
+    });
+    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
+    try {
+      const { unmount, onOpenChange } = renderDialog();
+      fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      expect(resetTimers).toHaveLength(1);
+
+      // If the timer survives unmount it fires into a torn-down tree ("window is not defined" after jsdom teardown).
+      unmount();
+      expect(clearSpy).toHaveBeenCalledWith(resetTimers[0]);
+    } finally {
+      vi.restoreAllMocks();
+    }
+  });
+
   it('copies the example JSON and flips the button label', async () => {
     const writeText = vi.fn().mockResolvedValue(undefined);
     Object.assign(navigator, { clipboard: { writeText } });
