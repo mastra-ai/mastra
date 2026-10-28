@@ -220,11 +220,6 @@ const sidebars = {
             },
           ],
         },
-        {
-          type: 'doc',
-          id: 'classifier',
-          label: 'Classifier',
-        },
       ],
     },
     {
@@ -334,6 +329,11 @@ const sidebars = {
           type: 'doc',
           id: 'browser',
           label: 'Browser',
+        },
+        {
+          type: 'doc',
+          id: 'classifier',
+          label: 'Classifier',
         },
         {
           type: 'category',
