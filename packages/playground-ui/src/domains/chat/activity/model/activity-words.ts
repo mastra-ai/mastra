@@ -34,7 +34,10 @@ function summarize(calls: readonly WordedCall[]): string {
     const { label } = presentTool(toolName, args);
     counts.set(label, (counts.get(label) ?? 0) + 1);
   }
-  const phrases = [...counts].map(([label, count]) => (count === 1 ? toolPhrases(label).one : toolPhrases(label).many));
+  const phrases = [...counts].map(([label, count]) => {
+    const { one, many } = toolPhrases(label);
+    return count === 1 ? one : many;
+  });
   const rest = phrases.length - SUMMARY_KINDS;
   const said = rest > 0 ? [...phrases.slice(0, SUMMARY_KINDS), `and ${rest} more`] : phrases;
   const sentence = said.join(', ');

@@ -7,8 +7,7 @@ import { messageEntryView } from '../message-entry-view';
 import { draws, hasVisibleText, renderableParts, toolFromInvocationPart } from '../transcript-parts';
 import type { MessagePart, ToolPart } from '../transcript-parts';
 
-// Drawn as their own messages, so they end a stretch of tool work instead of joining it.
-const UNGROUPABLE_TOOLS = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
+const TOOLS_DRAWN_AS_MESSAGES = new Set(['ask_user', 'submit_plan', 'skill', 'reply_in_thread']);
 
 export type StretchMember =
   | {
@@ -36,17 +35,21 @@ export interface EntryActivity {
   hidden: ReadonlySet<string>;
 }
 
+export const NO_ACTIVITY: EntryActivity = { hosts: new Map(), hidden: new Set() };
+
 type PartRole = 'joins' | 'ends' | 'ignored';
 
 interface PlanItem {
   key: string;
   entryId: string;
-  role: PartRole;
   at?: number;
+  /** Set when the item joins a stretch; anything else ends one. */
   member?: StretchMember;
 }
 
 type JoinItem = PlanItem & { member: StretchMember };
+
+type MutableEntryActivity = { hosts: Map<string, ActivityStretch>; hidden: Set<string> };
 
 /** A part's identity across renders: tool calls by id, anything else by its slot in `renderableParts`. */
 export function activityPartKey(entryId: string, part: MessagePart, index: number): string {
@@ -73,7 +76,7 @@ function classifyPart(
       return 'ends';
     case 'tool-invocation': {
       const { toolName, toolCallId } = part.toolInvocation;
-      return UNGROUPABLE_TOOLS.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';
+      return TOOLS_DRAWN_AS_MESSAGES.has(toolName) || suspensions.has(toolCallId) ? 'ends' : 'joins';
     }
     default:
       return 'ignored';
@@ -104,32 +107,47 @@ function messageTime(entry: MessageEntry): number | undefined {
 }
 
 function entryItems(entry: TimelineEntry, suspensions: ReadonlyMap<string, SuspensionPrompt>): PlanItem[] {
-  if (entry.kind !== 'message') return [{ key: entry.id, entryId: entry.id, role: 'ends' }];
+  if (entry.kind !== 'message') return [{ key: entry.id, entryId: entry.id }];
 
   const parts = renderableParts(entry);
   const view = messageEntryView(entry, parts);
   if (view.kind === 'hidden') return [];
   const at = messageTime(entry);
-  if (view.kind !== 'parts') return [{ key: entry.id, entryId: entry.id, role: 'ends', at }];
+  if (view.kind !== 'parts') return [{ key: entry.id, entryId: entry.id, at }];
   if (entry.message.role !== 'assistant') {
     const drawsAny = parts.some(part => draws(part, suspensions, entry.runtimeTools));
-    return drawsAny ? [{ key: entry.id, entryId: entry.id, role: 'ends', at }] : [];
+    return drawsAny ? [{ key: entry.id, entryId: entry.id, at }] : [];
   }
 
-  return parts.map((part, index) => {
+  return parts.flatMap((part, index): PlanItem[] => {
     const role = classifyPart(part, entry, suspensions);
-    return {
-      key: activityPartKey(entry.id, part, index),
-      entryId: entry.id,
-      role,
-      at: part.createdAt ?? at,
-      member: role === 'joins' ? member(entry, part, index) : undefined,
-    };
+    if (role === 'ignored') return [];
+    return [
+      {
+        key: activityPartKey(entry.id, part, index),
+        entryId: entry.id,
+        at: part.createdAt ?? at,
+        member: role === 'joins' ? member(entry, part, index) : undefined,
+      },
+    ];
   });
 }
 
 function elapsedBetween(start: number | undefined, end: number | undefined): number | undefined {
-  return start !== undefined && end !== undefined && end >= start ? end - start : undefined;
+  if (start === undefined || end === undefined || end < start) return undefined;
+  return end - start;
+}
+
+function isRunningCall({ member }: JoinItem): boolean {
+  return member.kind === 'tool' && toolFromInvocationPart(member.part, member.runtime).status === 'running';
+}
+
+function activityOf(plan: Map<string, MutableEntryActivity>, entryId: string): MutableEntryActivity {
+  const existing = plan.get(entryId);
+  if (existing) return existing;
+  const created: MutableEntryActivity = { hosts: new Map(), hidden: new Set() };
+  plan.set(entryId, created);
+  return created;
 }
 
 /**
@@ -141,42 +159,26 @@ export function planTurnActivity(
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
   runningTurn: boolean,
 ): ReadonlyMap<string, EntryActivity> {
-  const items = entries.flatMap(entry => entryItems(entry, suspensions)).filter(item => item.role !== 'ignored');
+  const items = entries.flatMap(entry => entryItems(entry, suspensions));
   const runs = groupConsecutive<PlanItem, JoinItem>(items, {
     key: item => item.key,
     joins: (item): item is JoinItem => item.member !== undefined,
     min: 1,
   });
-
-  const lastItem = items.at(-1);
-  const after = new Map(items.slice(0, -1).map((item, index) => [item, items[index + 1]]));
-  const plan = new Map<string, { hosts: Map<string, ActivityStretch>; hidden: Set<string> }>();
-  const activityOf = (entryId: string) => {
-    let activity = plan.get(entryId);
-    if (!activity) {
-      activity = { hosts: new Map(), hidden: new Set() };
-      plan.set(entryId, activity);
-    }
-    return activity;
-  };
+  const itemAfter = new Map(items.map((item, index) => [item, items.at(index + 1)]));
+  const plan = new Map<string, MutableEntryActivity>();
 
   for (const [key, run] of runs.byFirstKey) {
     const [first, ...rest] = run;
-    const last = run[run.length - 1];
-    const live =
-      runningTurn &&
-      (last === lastItem ||
-        run.some(
-          ({ member }) =>
-            member.kind === 'tool' && toolFromInvocationPart(member.part, member.runtime).status === 'running',
-        ));
-    activityOf(first.entryId).hosts.set(key, {
+    const endedBy = itemAfter.get(rest.at(-1) ?? first);
+    const live = runningTurn && (endedBy === undefined || run.some(isRunningCall));
+    activityOf(plan, first.entryId).hosts.set(key, {
       key,
       members: run.map(item => item.member),
       live,
-      elapsedMs: live ? undefined : elapsedBetween(first.at, after.get(last)?.at),
+      elapsedMs: live ? undefined : elapsedBetween(first.at, endedBy?.at),
     });
-    for (const item of rest) activityOf(item.entryId).hidden.add(item.key);
+    for (const item of rest) activityOf(plan, item.entryId).hidden.add(item.key);
   }
 
   return plan;

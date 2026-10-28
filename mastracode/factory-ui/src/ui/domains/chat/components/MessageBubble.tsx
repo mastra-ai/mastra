@@ -34,8 +34,9 @@ import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import { draws, hasVisibleText, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import type { MessagePart } from './transcript-parts';
 import { HostedStretch } from './activity/HostedStretch';
-import { activityPartKey, reasoningWithState } from './activity/activity-plan';
+import { activityPartKey, NO_ACTIVITY, reasoningWithState } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
 import { messageEntryView } from './message-entry-view';
@@ -64,7 +65,7 @@ export function MessageBubble({
   onRespond,
   viewerId,
   owner,
-  activity,
+  activity = NO_ACTIVITY,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -84,10 +85,12 @@ export function MessageBubble({
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
   const drawsOwnPart = written.some((part, index) => {
     const key = activityPartKey(entry.id, part, index);
-    if (activity?.hosts.has(key)) return true;
-    return draws(part, suspensions, entry.runtimeTools) && !activity?.hidden.has(key);
+    if (activity.hosts.has(key)) return true;
+    return draws(part, suspensions, entry.runtimeTools) && !activity.hidden.has(key);
   });
-  const revealed = new Map(parts.map((part, index) => [activityPartKey(entry.id, part, index), part] as const));
+  const revealed = new Map<string, MessagePart>(
+    parts.map((part, index) => [activityPartKey(entry.id, part, index), part]),
+  );
   const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
 
   const origin = channelOrigin(entry.message);
@@ -95,6 +98,8 @@ export function MessageBubble({
   const sender = author && author.id !== viewerId ? author : undefined;
   const prose = messageText(entry.message.role === 'user' ? content : written);
   const meta = metaText(entry, prose, reply);
+  const showsReplyFooter = Boolean(meta);
+  const drawsAnything = hasRenderablePart && (drawsOwnPart || showsReplyFooter);
   const steeringStatus = steeringLabel(entry);
   const steeringPending = entry.deliveryStatus === 'pending';
   const steeringFailed = entry.deliveryStatus === 'failed';
@@ -193,16 +198,16 @@ export function MessageBubble({
     },
     Reasoning: (part: ReasoningPart) => {
       const key = keyOfPart.get(part);
-      const stretch = key === undefined ? undefined : activity?.hosts.get(key);
+      const stretch = key === undefined ? undefined : activity.hosts.get(key);
       if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
-      if (key !== undefined && activity?.hidden.has(key)) return null;
+      if (key !== undefined && activity.hidden.has(key)) return null;
       return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
     },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const stretch = activity?.hosts.get(toolCallId);
+      const stretch = activity.hosts.get(toolCallId);
       if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
-      if (activity?.hidden.has(toolCallId)) return null;
+      if (activity.hidden.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
@@ -262,8 +267,7 @@ export function MessageBubble({
     case 'parts':
       break;
   }
-  // A step whose parts all draw inside an earlier step's stretch still carries the reply's footer when it ends the turn.
-  if (!hasRenderablePart || (!drawsOwnPart && !meta)) return null;
+  if (!drawsAnything) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
 }

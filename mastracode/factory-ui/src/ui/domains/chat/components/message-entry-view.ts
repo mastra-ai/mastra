@@ -2,6 +2,7 @@ import { parseSkillActivation } from '@mastra/playground-ui/domains/chat/message
 import type { SkillActivation } from '@mastra/playground-ui/domains/chat/messages/skill-activation';
 
 import type { MessageEntry, NotificationEntry, NotificationSummaryEntry } from '../services/transcript';
+import { isRecord } from './transcript-shared';
 import type { MessagePart } from './transcript-parts';
 import { isSkillNotificationSignal, notificationMetadata } from './TranscriptNotifications';
 import {
@@ -18,29 +19,23 @@ export interface StatusMetadata {
   level: 'info' | 'error';
 }
 
+type StatusPart = Record<string, unknown> & { type: string };
+
+function isStatusPart(part: unknown): part is StatusPart {
+  if (!isRecord(part) || typeof part.type !== 'string') return false;
+  return part.type === 'notification_summary' || part.type === 'harness-error' || part.type.startsWith('om_');
+}
+
 function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
   const harnessContent = entry.message.content.metadata?.harnessContent;
   if (!Array.isArray(harnessContent)) return undefined;
+  const statusPart = harnessContent.find(isStatusPart);
+  if (!statusPart) return undefined;
 
-  const statusPart = harnessContent.find(
-    part =>
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      typeof part.type === 'string' &&
-      (part.type === 'notification_summary' || part.type.startsWith('om_') || part.type === 'harness-error'),
-  );
-  if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
-
-  const text =
-    'text' in statusPart && typeof statusPart.text === 'string'
-      ? statusPart.text
-      : 'message' in statusPart && typeof statusPart.message === 'string'
-        ? statusPart.message
-        : '';
+  const text = [statusPart.text, statusPart.message].find(value => typeof value === 'string');
   return {
-    id: `${entry.id}-${String(statusPart.type)}`,
-    text,
+    id: `${entry.id}-${statusPart.type}`,
+    text: text ?? '',
     level: statusPart.type === 'harness-error' ? 'error' : 'info',
   };
 }
