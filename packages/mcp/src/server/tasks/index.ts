@@ -7,6 +7,8 @@ export type {
   MCPTaskListPage,
   MCPTaskStoreAdmin,
   MCPTaskAttempt,
+  MCPTaskAttemptTrace,
+  MCPTaskTrace,
   MCPTaskAttemptOutcome,
   MCPTaskCreateParams,
   MCPTaskRunOptions,

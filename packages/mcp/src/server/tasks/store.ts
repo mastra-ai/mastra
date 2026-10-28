@@ -8,15 +8,7 @@ import type {
   MCPTaskStatus,
 } from '../../shared/tasks';
 
-/**
- * The key a task id is stored and administered under. The id is a bearer token, so stores and
- * admin views only ever keep and show its SHA-256 hash.
- *
- * @experimental SEP-2663 extension; API may change.
- */
-export function taskKeyOf(taskId: string): string {
-  return createHash('sha256').update(taskId).digest('base64url');
-}
+export { taskKeyOf } from '../../shared/tasks';
 
 /** How a principal is stored and shown. Principals can carry user and subject ids, so only their hash is kept. */
 export function principalKeyOf(principal: string): string {
@@ -37,6 +29,18 @@ export interface MCPTaskCreateParams {
   principal: string;
   /** Store-defined data the server's execution needs to find the work again, e.g. a workflow run id. */
   context?: Record<string, unknown>;
+  /** The span of the request that created the task. Kept with the task so every attempt joins its trace. */
+  trace?: MCPTaskTrace;
+}
+
+/**
+ * Where a task's trace starts: the span of the `tools/call` that created it.
+ *
+ * @experimental SEP-2663 extension; API may change.
+ */
+export interface MCPTaskTrace {
+  traceId: string;
+  spanId: string;
 }
 
 /**
@@ -79,6 +83,12 @@ export interface MCPTaskStore {
    * for the first call to `work`; every later attempt still goes through `work`.
    */
   run(taskId: string, work: MCPTaskWork, options?: MCPTaskRunOptions): void;
+  /**
+   * The trace given to `create`, for a caller that may `get` the task; `undefined` otherwise.
+   * Lets `tasks/update` and `tasks/cancel` join the task's trace. Optional: without it they are
+   * traced on their own.
+   */
+  traceOf?(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined>;
 }
 
 /** @experimental SEP-2663 extension; API may change. */
@@ -106,6 +116,11 @@ export interface MCPTaskRunOptions {
 export interface MCPTaskAttempt {
   /** Aborts when the task is cancelled or expires. */
   signal: AbortSignal;
+  /**
+   * The task's trace and which attempt this is, for the attempt's span. A store that omits it runs
+   * the attempt untraced.
+   */
+  trace?: MCPTaskAttemptTrace;
   resume?: {
     /** The answers to every key the previous attempt asked for. */
     inputResponses: MCPTaskInputResponses;
@@ -128,6 +143,18 @@ export type MCPTaskAttemptOutcome =
       inputRequests: MCPTaskInputRequests;
       suspendPayload?: unknown;
     };
+
+/** @experimental SEP-2663 extension; API may change. */
+export interface MCPTaskAttemptTrace extends MCPTaskTrace {
+  /** The task's key, `taskKeyOf(taskId)`: safe to record, unlike the id. */
+  taskKey: string;
+  /** 1 for the first run; counts every retry and resume. */
+  attempt: number;
+  /** Run again with the answers to an `input_required` outcome. */
+  resumed: boolean;
+  /** Run again because an earlier attempt was lost with its process. */
+  recovered: boolean;
+}
 
 /** @experimental SEP-2663 extension; API may change. */
 export type MCPTaskWork = (attempt: MCPTaskAttempt) => Promise<MCPTaskAttemptOutcome>;

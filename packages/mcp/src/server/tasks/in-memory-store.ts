@@ -1,5 +1,11 @@
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { createTaskId, isTerminalTaskStatus, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
+import {
+  createTaskId,
+  isTerminalTaskStatus,
+  suggestedPollIntervalMs,
+  taskKeyOf,
+  TASKS_ERROR_CODES,
+} from '../../shared/tasks';
 import type {
   MCPDetailedTask,
   MCPTask,
@@ -14,7 +20,6 @@ import {
   matchesTaskListOptions,
   nextTaskListCursor,
   principalKeyOf,
-  taskKeyOf,
   toListing,
 } from './store';
 import type {
@@ -29,6 +34,7 @@ import type {
   MCPTaskRunOptions,
   MCPTaskStore,
   MCPTaskStoreAdmin,
+  MCPTaskTrace,
   MCPTaskWork,
 } from './store';
 
@@ -73,6 +79,9 @@ interface TaskRecord {
   principal: string;
   clientLabel?: string;
   context?: Record<string, unknown>;
+  trace?: MCPTaskTrace;
+  /** Attempts started so far, for the attempt span. */
+  attempts: number;
   status: MCPTaskStatus;
   statusMessage?: string;
   createdAt: number;
@@ -124,6 +133,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
       principal: params.principal,
       clientLabel,
       context: params.context,
+      ...(params.trace && { trace: params.trace }),
+      attempts: 0,
       status: 'working',
       createdAt: now,
       lastUpdatedAt: now,
@@ -215,6 +226,10 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
     return 'done';
   }
 
+  async traceOf(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined> {
+    return this.#lookup(taskKeyOf(taskId), access)?.trace;
+  }
+
   /** The context recorded at creation. */
   context(taskId: string): Record<string, unknown> | undefined {
     return this.#tasks.get(taskId)?.context;
@@ -222,12 +237,13 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
 
   run(taskId: string, work: MCPTaskWork, options: MCPTaskRunOptions = {}): void {
     const record = this.#tasks.get(taskId);
-    if (!record) throw new Error(`MCP task "${taskId}" not found`);
+    if (!record) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
     const initial = options.initialAttempt;
     if (!initial) {
       this.#attempt(record, work);
       return;
     }
+    record.attempts++;
     const signal = record.abort.signal;
     const abort = () => initial.abort(signal.reason);
     if (signal.aborted) abort();
@@ -240,7 +256,20 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
   }
 
   #attempt(record: TaskRecord, work: MCPTaskWork, resume?: MCPTaskAttempt['resume']): void {
-    const attempt: MCPTaskAttempt = { signal: record.abort.signal, ...(resume && { resume }) };
+    record.attempts++;
+    const attempt: MCPTaskAttempt = {
+      signal: record.abort.signal,
+      ...(resume && { resume }),
+      ...(record.trace && {
+        trace: {
+          ...record.trace,
+          taskKey: taskKeyOf(record.taskId),
+          attempt: record.attempts,
+          resumed: resume !== undefined,
+          recovered: false,
+        },
+      }),
+    };
     this.#settle(
       record,
       work,
@@ -299,7 +328,7 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
   /** The writer for a task this store holds. Writes after the task is terminal are ignored. */
   handle(taskId: string): MCPTaskHandle {
     const record = this.#tasks.get(taskId);
-    if (!record) throw new Error(`MCP task "${taskId}" not found`);
+    if (!record) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
     const live = () => !isTerminalTaskStatus(record.status);
     return {
       taskId,
@@ -310,13 +339,16 @@ export class InMemoryMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdmin {
         record.lastUpdatedAt = this.#now();
       },
       requireInput: requests => {
-        if (!live()) return Promise.reject(new Error(`MCP task "${taskId}" is no longer running`));
-        if (record.pendingInput) return Promise.reject(new Error(`MCP task "${taskId}" is already waiting for input`));
+        if (!live()) return Promise.reject(new Error(`MCP task ${taskKeyOf(taskId)} is no longer running`));
+        if (record.pendingInput)
+          return Promise.reject(new Error(`MCP task ${taskKeyOf(taskId)} is already waiting for input`));
         const keys = Object.keys(requests);
         if (keys.length === 0) return Promise.reject(new Error('requireInput needs at least one input request'));
         const reused = keys.find(key => record.usedInputKeys.has(key));
         if (reused !== undefined) {
-          return Promise.reject(new Error(`Input request key "${reused}" was already used by MCP task "${taskId}"`));
+          return Promise.reject(
+            new Error(`Input request key "${reused}" was already used by MCP task ${taskKeyOf(taskId)}`),
+          );
         }
         for (const key of keys) record.usedInputKeys.add(key);
         return new Promise<MCPTaskInputResponses>((resolve, reject) => {

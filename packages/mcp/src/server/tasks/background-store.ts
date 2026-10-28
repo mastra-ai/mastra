@@ -2,7 +2,7 @@ import type { BackgroundTask, BackgroundTaskManager, TaskContext, ToolExecutor }
 import type { IMastraLogger } from '@mastra/core/logger';
 import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
-import { createTaskId, suggestedPollIntervalMs, TASKS_ERROR_CODES } from '../../shared/tasks';
+import { createTaskId, suggestedPollIntervalMs, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
 import {
   decodeTaskListCursor,
@@ -10,13 +10,13 @@ import {
   matchesTaskListOptions,
   nextTaskListCursor,
   principalKeyOf,
-  taskKeyOf,
   toListing,
 } from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAdminOutcome,
   MCPTaskAttempt,
+  MCPTaskAttemptTrace,
   MCPTaskCreateParams,
   MCPTaskListing,
   MCPTaskListOptions,
@@ -24,6 +24,7 @@ import type {
   MCPTaskRunOptions,
   MCPTaskStore,
   MCPTaskStoreAdmin,
+  MCPTaskTrace,
   MCPTaskWork,
 } from './store';
 
@@ -51,6 +52,8 @@ export interface BackgroundTaskEnvelope {
   v: 1;
   /** The caller's principal, hashed with {@link principalKeyOf}. */
   principalKey: string;
+  /** The span of the request that created the task; every attempt's span is its child. */
+  trace?: MCPTaskTrace;
   /** Who sent the task, readable for operators; never a credential, and never used to authorize. */
   clientLabel?: string;
   ttlMs: number | null;
@@ -61,6 +64,11 @@ export interface BackgroundTaskEnvelope {
   inputResponses?: MCPTaskInputResponses;
   /** Every input key this task ever asked for; keys must be unique over its lifetime. */
   usedInputKeys: string[];
+  /**
+   * Attempts started so far, for a traced task's attempt spans. Core's reclaim of a lost attempt
+   * leaves `retryCount` alone, so the row itself can't tell a recovered run from a first one.
+   */
+  attempts?: number;
 }
 
 /** What the executor receives as `args`: it gets nothing else from the row. */
@@ -269,6 +277,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
       v: ENVELOPE_VERSION,
       principalKey,
       ...(clientLabel !== undefined && { clientLabel }),
+      ...(params.trace && { trace: { traceId: params.trace.traceId, spanId: params.trace.spanId } }),
       ttlMs: params.ttlMs,
       ...(params.pollIntervalMs !== undefined && { pollIntervalMs: params.pollIntervalMs }),
       recover,
@@ -334,7 +343,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
 
   run(taskId: string, work: MCPTaskWork, options: MCPTaskRunOptions = {}): void {
     const gate = this.#gates.get(taskId);
-    if (!gate) throw new Error(`MCP task "${taskId}" not found`);
+    if (!gate) throw new Error(`MCP task ${taskKeyOf(taskId)} not found`);
     this.#gates.delete(taskId);
     const { initialAttempt } = options;
     if (initialAttempt && gate.rowId) {
@@ -474,6 +483,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     }
     if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
     return stored ? 'done' : 'ignored';
+  }
+
+  async traceOf(taskId: string, access: MCPTaskAccess): Promise<MCPTaskTrace | undefined> {
+    return (await this.#find(taskKeyOf(taskId), access))?.envelope.trace;
   }
 
   async #cancel(taskKey: string, access?: MCPTaskAccess): Promise<MCPTaskAdminOutcome> {
@@ -663,6 +676,28 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     }
   }
 
+  /**
+   * Counts the attempt this worker just claimed, for a traced task, and describes it for its span.
+   * The write is fenced on the claim; losing it only costs the span its number.
+   */
+  async #countAttempt(taskKey: string, resumed: boolean): Promise<MCPTaskAttemptTrace | undefined> {
+    const { tasks } = await this.#manager.listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 });
+    const row = tasks[0];
+    const envelope = row && envelopeOf(row);
+    if (!row || !envelope?.trace) return undefined;
+    const attempt = (envelope.attempts ?? 0) + 1;
+    const storage = await this.#manager.getStorage();
+    await storage
+      .updateTask(
+        row.id,
+        { metadata: { ...envelope, attempts: attempt } },
+        { expectedStatus: 'running', expectedOwnerId: row.ownerId ?? null },
+      )
+      .catch(() => undefined);
+    // A run that is neither the first nor a resume replaces an attempt lost with its worker.
+    return { ...envelope.trace, taskKey, attempt, resumed, recovered: !resumed && attempt > 1 };
+  }
+
   /** Runs one attempt and turns its outcome into what the background-task workflow records. */
   async #execute(
     work: MCPTaskWork,
@@ -672,6 +707,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
   ): Promise<unknown> {
     const signal = options?.abortSignal ?? new AbortController().signal;
     const resumeData = options?.resumeData as RowResume | undefined;
+    const trace = await this.#countAttempt(args.taskKey, resumeData !== undefined);
     let outcome: Promise<Awaited<ReturnType<MCPTaskWork>>>;
     if (initial) {
       const abort = () => initial.abort(signal.reason);
@@ -681,6 +717,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore, MCPTaskStoreAdm
     } else {
       const attempt: MCPTaskAttempt = {
         signal,
+        ...(trace && { trace }),
         ...(resumeData && {
           resume: { inputResponses: resumeData.inputResponses, suspendPayload: resumeData.suspendPayload },
         }),
