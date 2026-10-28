@@ -2,6 +2,7 @@ import type { MastraClient } from '@mastra/client-js';
 import { useMastraClient } from '@mastra/react';
 import { keepPreviousData, useQueries, useQueryClient } from '@tanstack/react-query';
 import type { UseQueryResult } from '@tanstack/react-query';
+import { useRef } from 'react';
 import { useAggregateLimiter } from '../../metrics/hooks/use-aggregate-limiter';
 import type { RequestLimiter } from '../../metrics/lib/request-limiter';
 import type { DashboardRequest } from '../lib/requests';
@@ -28,8 +29,9 @@ function queryOptions(
           })
       : () => sendRequest(client, request),
     placeholderData: keepPreviousData,
-    // The window is part of every request, so an answer never goes stale: a tab opened again reuses it.
-    staleTime: Infinity,
+    // Grouped aggregates and usage breakdowns keep an answer for the frozen window, as the cards' do; the
+    // other cards refetch a tab opened again, so these do too.
+    ...(isAggregate || request.method === 'getMetricBreakdown' ? { staleTime: Infinity } : {}),
     // Aggregates retry in the client only, as `useTraceAggregate` does.
     ...(isAggregate ? { retry: false, refetchOnWindowFocus: false } : {}),
   };
@@ -49,6 +51,28 @@ export function useDashboardRequests(requests: (DashboardRequest | undefined)[])
   const results = useQueries({
     queries: sent.map(request => queryOptions(request, client, limiter, isObserved)),
   });
+  const last = useRef<{ method: DashboardRequest['method']; data: unknown }[]>([]);
   let next = 0;
-  return requests.map(r => (r === undefined ? undefined : results[next++]));
+  return requests.map((request, slot) => {
+    if (request === undefined) return undefined;
+    const result = results[next++];
+    if (!result) return undefined;
+    if (result.data !== undefined && !result.isPlaceholderData) {
+      last.current[slot] = { method: request.method, data: result.data };
+      return result;
+    }
+    // A changed request is a new query, and `useQueries` drops `keepPreviousData` across that, unlike the
+    // cards' `useQuery`: hold the slot's last answer while the new one loads, if it has the same shape.
+    const held = last.current[slot];
+    if (!result.isPending || held?.method !== request.method) return result;
+    return {
+      ...result,
+      data: held.data,
+      status: 'success',
+      isPending: false,
+      isLoading: false,
+      isSuccess: true,
+      isPlaceholderData: true,
+    };
+  });
 }
