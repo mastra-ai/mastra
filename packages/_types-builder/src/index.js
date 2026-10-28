@@ -4,7 +4,7 @@ import { glob as globby } from 'tinyglobby';
 import fs from 'node:fs/promises';
 import path from 'node:path';
 import { statSync } from 'node:fs';
-import { replaceTypes } from './replace-types.js';
+import { createReplaceTypesState, replaceTypes } from './replace-types.js';
 import { embedTypes } from './embed-types.js';
 
 const rgxFrom = /(?<=from )['|"](.*)['|"]/gm;
@@ -169,11 +169,12 @@ export async function generateTypes(rootDir, bundledPackages = new Set(), { roll
       );
     }
 
+    const replaceTypesState = createReplaceTypesState();
     for (const dtsFile of dtsFiles) {
       const fullPath = path.join(rootDir, dtsFile);
       if (bundledPackages.size) {
         try {
-          await replaceTypes(fullPath, rootDir, bundledPackages);
+          await replaceTypes(fullPath, rootDir, bundledPackages, replaceTypesState);
         } catch (err) {
           // eslint-disable-next-line no-console
           console.log(`failed to embed types: ${fullPath}`, err);
