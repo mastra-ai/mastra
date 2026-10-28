@@ -22,10 +22,12 @@ export function createScreenshotTool(browser: AgentBrowser) {
       if (!input.path || !('base64' in result)) return result;
 
       try {
-        // Workspaces can resolve their filesystem per request, so use the resolver rather than the static getter.
-        const filesystem = await workspace?.resolveFilesystem({
-          requestContext: requestContext ?? new RequestContext(),
-        });
+        // Workspaces can resolve their filesystem per request, so prefer the resolver. Core versions
+        // before it existed (this package supports them) only have the static filesystem.
+        const filesystem =
+          typeof workspace?.resolveFilesystem === 'function'
+            ? await workspace.resolveFilesystem({ requestContext: requestContext ?? new RequestContext() })
+            : workspace?.filesystem;
         if (!filesystem) {
           return { ...result, saveError: 'There is no workspace filesystem to save the screenshot into.' };
         }

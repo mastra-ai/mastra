@@ -126,6 +126,16 @@ describe('browser_screenshot', () => {
     expect(await readFile(join(tenantDir, 'tenant.png'))).toEqual(PNG);
   });
 
+  it('saves into the static filesystem of a workspace from a core version without resolveFilesystem', async () => {
+    // @mastra/core 1.22 (the oldest this package supports) has only the static getter.
+    const olderWorkspace = { filesystem: workspace.filesystem } as unknown as Workspace;
+
+    const result = await screenshot({ path: 'old.png' }, { workspace: olderWorkspace });
+
+    expect(result.path).toBe('old.png');
+    expect(await readFile(join(dir, 'old.png'))).toEqual(PNG);
+  });
+
   it('still shows the model the screenshot when resolving the filesystem fails', async () => {
     const failing = new Workspace({
       filesystem: () => {
