@@ -180,6 +180,9 @@ export type RecordTypes = {
   mastra_channel_config: Record<string, any>;
   [TABLE_NOTIFICATIONS]: Record<string, any>;
   mastra_thread_state: Record<string, any>;
+  mastra_signal_subscriptions: Record<string, any>;
+  mastra_signal_subscription_deliveries: Record<string, any>;
+  mastra_signal_subscription_coordination: Record<string, any>;
   mastra_workflow_definitions: Record<string, any>;
   mastra_knowledge_nodes: Record<string, any>;
   mastra_knowledge_records: Record<string, any>;
