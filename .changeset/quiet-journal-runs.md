@@ -13,4 +13,4 @@ const workflow = createWorkflow({
 });
 ```
 
-Version 2 works only with in-memory storage and the default engine for now. Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`. A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`. Version 2 stores the workflow state as JSON, so values such as `Date` are read back as strings, as with database storage. A finished nested run can read back as its parent's current state plus its own changes. Runs keep the version they were created with, so resuming a run after changing this option throws.
+Version 2 works only with in-memory storage and the default engine for now. Inside version 2 runs, use `await getStepResultAsync(step)` instead of `getStepResult(step)`. A `shouldPersistSnapshot` predicate on a version 2 run sees earlier successful steps without their `output`. Version 2 stores the workflow state as JSON, so values such as `Date` are read back as strings, as with database storage. Runs keep the version they were created with, so resuming a run after changing this option throws.

@@ -31,7 +31,9 @@ import type { ExecuteSleepParams, ExecuteSleepUntilParams } from './handlers/sle
 import { executeSleep as executeSleepHandler, executeSleepUntil as executeSleepUntilHandler } from './handlers/sleep';
 import type { ExecuteStepParams } from './handlers/step';
 import { executeStep as executeStepHandler } from './handlers/step';
+import { rebaseNestedState } from './nested-state';
 import { RunJournal } from './run-journal';
+import type { StateBase } from './run-journal';
 import type { ConditionFunction, ConditionFunctionParams, Step } from './step';
 import { createMappingStep, createStepFromAgent, createStepFromClassifier, createStepFromTool } from './step-factories';
 import type {
@@ -731,7 +733,14 @@ export class DefaultExecutionEngine extends ExecutionEngine {
    * Apply mutable context changes back to the execution context.
    */
   applyMutableContext(executionContext: ExecutionContext, mutableContext: MutableContext): void {
-    Object.assign(executionContext.state, mutableContext.state);
+    // A nested run's changes are rebased here, not when it finishes: steps running alongside it
+    // may change the state in between.
+    Object.assign(
+      executionContext.state,
+      mutableContext.stateBase
+        ? rebaseNestedState(executionContext.state, mutableContext.stateBase, mutableContext.state)
+        : mutableContext.state,
+    );
     Object.assign(executionContext.suspendedPaths, mutableContext.suspendedPaths);
     Object.assign(executionContext.resumeLabels, mutableContext.resumeLabels);
   }
@@ -782,11 +791,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     /** @experimental */
     storageVersion?: 1 | 2;
     /** @internal */
-    statePatchBytes?: number;
+    storedState?: { seq: number; patchBytes: number };
     /** @internal */
-    inheritedState?: Record<string, unknown>;
-    /** @internal */
-    copyStateOnPause?: boolean;
+    inheritedState?: StateBase;
     /** Trace IDs for creating child spans in durable execution */
     tracingIds?: {
       traceId: string;
@@ -841,9 +848,9 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         seed,
         // The loaded state, which the run continues from.
         state: resume ? initialState : restart?.state,
-        statePatchBytes: params.statePatchBytes,
-        inheritedState: params.inheritedState,
-        copyStateOnPause: params.copyStateOnPause,
+        storedState: params.storedState,
+        inherited: params.inheritedState,
+        resumed: !!resume,
       });
       this.#journals.set(runId, journal);
     }

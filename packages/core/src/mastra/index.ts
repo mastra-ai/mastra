@@ -4232,7 +4232,14 @@ export class Mastra<
    */
   public async restartAllActiveWorkflowRuns(): Promise<void> {
     const activeRuns = await this.listActiveWorkflowRuns();
-    const runs = activeRuns.runs;
+    // A nested run whose parent is restarted here is re-driven by its parent's step. Restarting it
+    // too would run the same nested run twice at once.
+    const active = new Set(activeRuns.runs.map(run => `${run.workflowName}\u0000${run.runId}`));
+    const runs = activeRuns.runs.filter(run => {
+      const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+      const parent = snapshot?.parentWorkflow;
+      return !parent || !active.has(`${parent.workflowId}\u0000${parent.runId}`);
+    });
     if (runs.length > 0) {
       this.#logger.debug(`Restarting ${runs.length} active workflow run${runs.length > 1 ? 's' : ''}`);
     }
