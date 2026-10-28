@@ -44,7 +44,6 @@ import { describe, expect, it } from 'vitest';
 import {
   chunksOfType,
   createRecordingModel,
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   expectEngineParity,
   textOnlyTape,
 } from '../../../loop/test-utils/aimock/parity';
@@ -139,10 +138,6 @@ async function runRetryZero() {
         modelSettings: { maxRetries: 3 },
         memory: { thread: 't27-thread-retry-zero', resource: 't27-resource-retry-zero' },
       });
-    },
-    differences: {
-      durable: FAILED_STEP_WARNINGS_DIFFERENCE,
-      evented: FAILED_STEP_WARNINGS_DIFFERENCE,
     },
   });
   return { results, served };

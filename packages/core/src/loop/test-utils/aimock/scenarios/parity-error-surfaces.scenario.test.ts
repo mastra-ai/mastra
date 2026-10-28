@@ -32,7 +32,6 @@ import {
   type EngineParityResults,
   type ModelScript,
   type ParityTarget,
-  FAILED_STEP_WARNINGS_DIFFERENCE,
   describeParity,
   expectParity,
 } from '../parity';
@@ -74,11 +73,6 @@ function scenario(target: ParityTarget, model: ModelScript): Omit<EngineParitySc
       }),
     input: 'Go.',
     options: { memory: { thread: THREAD, resource: RESOURCE } },
-    ...(model === MODEL_4XX
-      ? {
-          differences: { [target]: FAILED_STEP_WARNINGS_DIFFERENCE },
-        }
-      : {}),
   };
 }
 

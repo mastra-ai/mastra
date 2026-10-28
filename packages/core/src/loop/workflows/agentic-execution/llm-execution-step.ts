@@ -49,7 +49,7 @@ import { RequestContext } from '../../../request-context';
 import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/prepare-tools';
 import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
-import { safeEnqueue } from '../../../stream/base';
+import { reportedWarnings, safeEnqueue } from '../../../stream/base/input';
 import { MastraModelOutput } from '../../../stream/base/output';
 import { isStructuredOutputError } from '../../../stream/base/output-format-handlers';
 import type {
@@ -916,10 +916,10 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
-            reason: chunk.payload.reason,
+            reason: chunk.payload.stepResult.reason,
             rawReason: chunk.payload.stepResult.rawReason,
             logprobs: chunk.payload.logprobs,
-            warnings: responseFromModel.warnings,
+            warnings: reportedWarnings(responseFromModel.warnings),
             totalUsage: chunk.payload.totalUsage,
             headers: responseFromModel.rawResponse?.headers,
             messageId,
@@ -2930,7 +2930,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
             : {}),
           stepResult: {
             reason,
-            warnings,
+            warnings: reportedWarnings(warnings),
             isContinued: false,
           },
           metadata: {
@@ -3125,7 +3125,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
           messageId: outputStream.messageId,
           stepResult: {
             reason: 'retry',
-            warnings,
+            warnings: reportedWarnings(warnings),
             isContinued: true,
           },
           metadata: {
@@ -3496,7 +3496,7 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         stepResult: {
           reason: stepReason,
           ...(runState.state.stepResult?.rawReason && { rawReason: runState.state.stepResult.rawReason }),
-          warnings,
+          warnings: reportedWarnings(warnings),
           isContinued: shouldContinue,
           // Pass retry metadata for tracking
           ...(shouldRetry && processOutputStepTripwire

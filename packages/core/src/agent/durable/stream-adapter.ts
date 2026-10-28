@@ -1111,6 +1111,8 @@ export function createDurableAgentStream<OUTPUT = undefined>(
         tracingContext,
         experimentalTransform,
         hideSignals,
+        // Raw chunks reach pubsub only when the run enabled includeRawChunks, so pass them through.
+        includeRawChunks: true,
       },
     }),
   );

@@ -1,4 +1,5 @@
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import { fallbackResponseMetadata } from '../shared/fallback-response-metadata';
 import type { StreamInternal } from '../types';
 
 type State = {
@@ -22,8 +23,7 @@ export class AgenticRunState {
   constructor({ _internal, model }: { _internal: StreamInternal; model: MastraLanguageModel }) {
     this.#state = {
       responseMetadata: {
-        id: _internal?.generateId?.(),
-        timestamp: _internal?.currentDate?.(),
+        ...fallbackResponseMetadata({ generateId: _internal?.generateId, currentDate: _internal?.currentDate }),
         modelId: model.modelId,
         modelVersion: model.specificationVersion,
         modelProvider: model.provider,

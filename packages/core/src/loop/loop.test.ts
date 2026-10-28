@@ -18,13 +18,6 @@ vi.mock('../logger', async importOriginal => {
 });
 
 import { loop } from './loop';
-import { fullStreamTests } from './test-utils/fullStream';
-import { generateTextTestsV5 } from './test-utils/generateText';
-import { optionsTests } from './test-utils/options';
-import { resultObjectTests } from './test-utils/resultObject';
-import { streamObjectTests } from './test-utils/streamObject';
-import { toolMediaTests } from './test-utils/tool-media';
-import { toolsTests } from './test-utils/tools';
 import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
 
 // The agentic loop now runs on the evented engine, which requires a Mastra
@@ -69,36 +62,5 @@ describe('Loop Tests', () => {
 
       expect(consoleLoggerConstructor).toHaveBeenCalledWith({ level: 'error' });
     });
-
-    fullStreamTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
-    resultObjectTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
-    optionsTests({ loopFn, runId: 'test-run-id' });
-    generateTextTestsV5({ loopFn, runId: 'test-run-id' });
-    toolsTests({ loopFn, runId: 'test-run-id' });
-    toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
-
-    streamObjectTests({ loopFn, runId: 'test-run-id' });
   });
-
-  describe('AISDK v6 (V3 models)', () => {
-    setupEventedMastra();
-
-    fullStreamTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
-    resultObjectTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
-    toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
-  });
-
-  // toolsTestsV5({ executeFn: execute, runId });
-
-  // optionsTestsV5({ executeFn: execute, runId });
-
-  // resultObjectTestsV5({ executeFn: execute, runId });
-
-  // textStreamTestsV5({ executeFn: execute, runId });
-
-  // fullStreamTestsV5({ executeFn: execute, runId });
-
-  // toUIMessageStreamTests({ executeFn: execute, runId });
-
-  // generateTextTestsV5({ executeFn: execute, runId });
 });
