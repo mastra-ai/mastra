@@ -432,6 +432,8 @@ export interface SessionEnvironmentRepo {
 
 /** The session's factory environment, resolved from the project and its `inEnvironment` links. */
 export interface SessionEnvironment {
+  /** The factory's display name. */
+  factoryName: string;
   repos: SessionEnvironmentRepo[];
   workspaceSetupCommand: string | undefined;
   /** Only an absolute root is passed on; the templates reject anything else. */
@@ -517,6 +519,7 @@ export async function resolveProjectEnvironment(
   }
   const workdir = project.sandboxWorkingDirectory?.trim();
   return {
+    factoryName: project.name,
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
@@ -811,6 +814,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
+                ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
+                ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first
                 // start). Providers that reattach by physical id use it to resume the
                 // original VM instead of provisioning a replacement.

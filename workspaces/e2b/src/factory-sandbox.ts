@@ -89,7 +89,13 @@ function settingsSchema(options: E2BFactorySandboxOptions): PublicSchema<E2BFact
   return { ...SETTINGS_SCHEMA, properties } as PublicSchema<E2BFactorySandboxSettings>;
 }
 
-export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template'> {
+export interface E2BFactorySandboxOptions extends Omit<E2BSandboxOptions, 'id' | 'sandboxId' | 'template' | 'env'> {
+  /**
+   * Environment variables of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Provider-side defaults used when a setting is unset. Never stored by factory. */
   defaults?: Partial<E2BFactorySandboxSettings>;
 }
@@ -137,9 +143,10 @@ export class E2BFactorySandbox extends FactorySandbox<E2BFactorySandboxSettings>
   }
 
   create(ctx: FactorySandboxContext, settings: E2BFactorySandboxSettings): E2BSandbox {
-    const { defaults, ...options } = this.#options;
+    const { defaults, env, ...options } = this.#options;
     return new E2BSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sandboxId: ctx.sandboxId,
       template: this.template(ctx, settings),

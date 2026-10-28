@@ -14,8 +14,11 @@ export interface LocalFactorySandboxOptions {
    * host variables that keep git and TLS working (HOME, USER, SHELL, locale,
    * SSL_CERT_*, …), so app secrets never reach commands run against untrusted
    * repository checkouts. PATH is always added by LocalSandbox itself.
+   *
+   * A function receives each session's context, so a credential can go to one
+   * factory's sessions only: `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
    */
-  env?: Record<string, string>;
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
 }
 
 const HOST_ENV_KEYS = [
@@ -52,7 +55,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
   readonly provider = 'local';
 
   readonly #root: string;
-  readonly #env: Record<string, string>;
+  readonly #env: NonNullable<LocalFactorySandboxOptions['env']>;
 
   constructor(options: LocalFactorySandboxOptions = {}) {
     super();
@@ -67,7 +70,7 @@ export class LocalFactorySandbox extends FactorySandbox<Record<string, never>> {
       id: ctx.sessionId,
       timeout: 30_000,
       workingDirectory: join(this.#root, ctx.sessionId),
-      env: this.#env,
+      env: typeof this.#env === 'function' ? this.#env(ctx) : this.#env,
     });
   }
 }

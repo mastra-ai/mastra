@@ -95,8 +95,14 @@ function settingsSchema(
 
 export interface PlatformFactorySandboxOptions extends Omit<
   PlatformSandboxOptions,
-  'id' | 'sandboxId' | 'sessionId' | 'template'
+  'id' | 'sandboxId' | 'sessionId' | 'template' | 'env'
 > {
+  /**
+   * Runtime environment of every session sandbox. A function receives each
+   * session's context, so a credential can go to one factory's sessions only:
+   * `ctx => (ctx.factoryId === id ? { TOKEN } : {})`.
+   */
+  env?: Record<string, string> | ((ctx: FactorySandboxContext) => Record<string, string>);
   /** Options for the environment's repo template. */
   template?: {
     /** Build-only environment, excluded from template identity and runtime sandboxes. */
@@ -157,9 +163,10 @@ export class PlatformFactorySandbox extends FactorySandbox<PlatformFactorySandbo
   }
 
   create(ctx: FactorySandboxContext, settings: PlatformFactorySandboxSettings): PlatformSandbox {
-    const { defaults, template: _template, ...options } = this.#options;
+    const { defaults, template: _template, env, ...options } = this.#options;
     return new PlatformSandbox({
       ...options,
+      ...(env ? { env: typeof env === 'function' ? env(ctx) : env } : {}),
       id: ctx.sessionId,
       sessionId: ctx.sessionId,
       sandboxId: ctx.sandboxId,

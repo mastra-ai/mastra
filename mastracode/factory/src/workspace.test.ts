@@ -3408,6 +3408,7 @@ describe('factory environment sandbox context', () => {
     const project = {
       id: 'factory-1',
       orgId: 'org-1',
+      name: 'Platform',
       sandboxWorkingDirectory: '/workspace',
       workspaceSetupCommand: 'touch .workspace-ready',
       ...options.project,
@@ -3547,6 +3548,8 @@ describe('factory environment sandbox context', () => {
     const ctx = mocks.createSandbox.mock.calls[0]![0] as any;
     expect(ctx).toMatchObject({
       sessionId: 'session-a',
+      factoryId: 'factory-1',
+      factoryName: 'Platform',
       repoFullName: 'octocat/hello',
       workspaceSetupCommand: 'touch .workspace-ready',
       continueOnSetupFailure: true,
@@ -3558,6 +3561,8 @@ describe('factory environment sandbox context', () => {
     expect('idleTimeoutMinutes' in ctx).toBe(false);
     expect(Object.keys(ctx).sort()).toEqual([
       'continueOnSetupFailure',
+      'factoryId',
+      'factoryName',
       'getRepositoryAccess',
       'repoFullName',
       'repos',
@@ -3621,18 +3626,17 @@ describe('factory environment sandbox context', () => {
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-a') });
     await resolver({ requestContext: createGithubRequestContext('project-1', 'session-b') });
 
+    const singleRepoKeys = ['getRepositoryAccess', 'repoFullName', 'sandboxId', 'sessionId', 'setupCommand'];
     for (const call of mocks.createSandbox.mock.calls) {
       const ctx = call[0] as any;
       expect(ctx).toMatchObject({ repoFullName: 'octocat/hello', setupCommand: 'pnpm i' });
       expect(typeof ctx.getRepositoryAccess).toBe('function');
-      expect(Object.keys(ctx).sort()).toEqual([
-        'getRepositoryAccess',
-        'repoFullName',
-        'sandboxId',
-        'sessionId',
-        'setupCommand',
-      ]);
     }
+    // The factory session still names its factory; the session without one carries neither field.
+    const [factoryCtx, legacyCtx] = mocks.createSandbox.mock.calls.map(call => call[0] as any);
+    expect(factoryCtx).toMatchObject({ factoryId: 'factory-1', factoryName: 'Platform' });
+    expect(Object.keys(factoryCtx).sort()).toEqual(['factoryId', 'factoryName', ...singleRepoKeys]);
+    expect(Object.keys(legacyCtx).sort()).toEqual(singleRepoKeys);
     // The settings belong to the project: the factory session boots with them
     // in single-repository form too; a session without a factory gets none.
     expect(sandbox.calls.map(call => call.settings)).toEqual([{ memoryMb: 4096 }, {}]);
