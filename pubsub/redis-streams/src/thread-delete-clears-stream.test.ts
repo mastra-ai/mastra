@@ -65,6 +65,8 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
       await expect.poll(() => redis.exists([deletedKey, keptKey]), { timeout: 5_000 }).toBe(2);
 
       await memory.deleteThread(deletedThread);
+      // The stream is cleared in the background; settled() is the join point.
+      await memory.settled();
 
       expect(await memory.getThreadById({ threadId: deletedThread })).toBeNull();
       expect(await redis.exists(deletedKey)).toBe(0);
@@ -76,4 +78,23 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
       if (leftovers.length) await redis.del(leftovers);
     }
   }, 30_000);
+
+  it('does not wait on an unreachable pubsub to delete the thread', async () => {
+    // Nothing listens on port 1; the client keeps reconnecting forever.
+    const client = createClient({ url: 'redis://127.0.0.1:1', socket: { reconnectStrategy: 50 } });
+    client.on('error', () => {});
+    const pubsub = new RedisStreamsPubSub({ client: client as never });
+    const memory = new Memory();
+    const openai = createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${mock.url.replace(/\/+$/, '')}/v1` });
+    const agent = new Agent({ id: 'a', name: 'a', instructions: 'Reply.', model: openai('gpt-4o-mini'), memory });
+    const mastra = new Mastra({ agents: { agent }, logger: false, storage: new InMemoryStore(), pubsub });
+    await mastra.getAgent('agent').getMemory(); // registers Mastra (storage + pubsub) on the memory
+    const thread = await memory.createThread({ resourceId: 'user-1', threadId: `thread-${randomUUID()}` });
+
+    const deleted = memory.deleteThread(thread.id).then(() => 'deleted');
+    const timedOut = new Promise(resolve => setTimeout(() => resolve('timed out'), 2_000));
+    expect(await Promise.race([deleted, timedOut])).toBe('deleted');
+    expect(await memory.getThreadById({ threadId: thread.id })).toBeNull();
+    client.destroy();
+  }, 10_000);
 });

@@ -77,16 +77,6 @@ function compareStreamIds(a: string, b: string): number {
 }
 
 /**
- * Disconnect a client, standalone or cluster.
- *
- * node-redis 5 `quit()` never settles on a client that is open but waiting to
- * reconnect: it marks the socket closed, which ends the reconnect loop before
- * QUIT is ever written. Such a client has nothing on the wire to drain, and its
- * offline-queued commands could not be sent after `quit()` either, so destroy
- * it instead. A cluster's `quit()` quits every node client, so one
- * reconnecting node is enough to hang it.
- */
-/**
  * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
  * return the policy when the server can evict keys under memory pressure.
  */
@@ -97,6 +87,16 @@ function evictingMaxmemoryPolicy(info: string): string | undefined {
   return policy;
 }
 
+/**
+ * Disconnect a client, standalone or cluster.
+ *
+ * node-redis 5 `quit()` never settles on a client that is open but waiting to
+ * reconnect: it marks the socket closed, which ends the reconnect loop before
+ * QUIT is ever written. Such a client has nothing on the wire to drain, and its
+ * offline-queued commands could not be sent after `quit()` either, so destroy
+ * it instead. A cluster's `quit()` quits every node client, so one
+ * reconnecting node is enough to hang it.
+ */
 async function disconnect(client: RedisClientType): Promise<void> {
   const reconnecting = (c?: { isOpen: boolean; isReady?: boolean }) => !!c && c.isOpen && c.isReady === false;
   const cluster = client as unknown as Partial<Pick<RedisClusterType, 'masters' | 'replicas'>>;

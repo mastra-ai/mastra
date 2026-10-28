@@ -54,12 +54,6 @@ const NACK_IF_OWNED_SCRIPT = `
 `;
 
 /**
- * Flatten an error into searchable text. node-redis MULTI failures throw a
- * `MultiErrorReply` whose own message is just "N commands failed…" — the real
- * per-command errors (e.g. BUSYGROUP) live in `err.replies`, so those are
- * folded in too.
- */
-/**
  * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
  * return the policy when the server can evict keys under memory pressure.
  */
@@ -70,6 +64,12 @@ function evictingMaxmemoryPolicy(info: string): string | undefined {
   return policy;
 }
 
+/**
+ * Flatten an error into searchable text. node-redis MULTI failures throw a
+ * `MultiErrorReply` whose own message is just "N commands failed…" — the real
+ * per-command errors (e.g. BUSYGROUP) live in `err.replies`, so those are
+ * folded in too.
+ */
 function errorText(err: unknown): string {
   const parts: string[] = [err instanceof Error ? err.message : String(err)];
   if (err instanceof Error && 'replies' in err && Array.isArray((err as { replies?: unknown[] }).replies)) {

@@ -8,12 +8,15 @@ Idle topic streams now expire after 7 days by default. Previously `streamIdleTtl
 Every write still refreshes the TTL, so a topic in active use never expires. If a grouped worker can be offline for more than 7 days while publishers are quiet, and must replay the backlog when it comes back, raise the TTL or turn expiry off:
 
 ```typescript
-// Before: streams never expired unless you set this
-new RedisStreamsPubSub({ url, streamIdleTtlMs: 7 * 24 * 60 * 60 * 1000 });
+// Before: streams created by this pubsub never expired
+// After: they expire after 7 days without a write
+new RedisStreamsPubSub({ url });
 
-// After: 7 days by default; opt out explicitly to keep streams forever
+// To keep the old behavior, turn expiry off explicitly
 new RedisStreamsPubSub({ url, streamIdleTtlMs: 0 });
 ```
+
+**Check your eviction policy before upgrading.** Under a `volatile-*` policy, Redis only evicts keys that have a TTL. Streams used to have none, so they were safe from eviction; now they can be evicted under memory pressure, losing events. Set `maxmemory-policy` to `noeviction`.
 
 Existing streams created without a TTL only get one on their next write. See the reference docs for a runbook to reclaim them.
 

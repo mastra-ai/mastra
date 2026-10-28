@@ -490,13 +490,13 @@ export class Memory extends MastraMemory {
   private _knowledgeSemanticIndex?: Promise<KnowledgeSemanticIndexCoordinator>;
 
   /**
-   * Every vector cleanup that deleteThread or deleteMessages started in the background.
+   * Every vector or event-stream cleanup that deleteThread or deleteMessages started in the background.
    * Callers do not wait for the cleanup, so this handle is the only join point.
    */
   private pendingVectorCleanup: Promise<void> = Promise.resolve();
 
   /**
-   * Adds a background vector cleanup to the join handle.
+   * Adds a background cleanup to the join handle.
    * The handle keeps the earlier cleanups, so it settles only after all of them end.
    */
   private trackVectorCleanup(cleanup: Promise<void>): void {
@@ -506,7 +506,7 @@ export class Memory extends MastraMemory {
   /**
    * Resolve once all background work this Memory started has finished: observational-memory
    * cycles (buffered observation and reflection, including the nested agent runs they spawn)
-   * and vector cleanup from `deleteThread` / `deleteMessages`.
+   * and vector and event-stream cleanup from `deleteThread` / `deleteMessages`.
    *
    * Callers that own the storage connection should await this before closing it, otherwise
    * background statements can race the close.
@@ -1201,7 +1201,11 @@ export class Memory extends MastraMemory {
     }
 
     await memoryStore.deleteThread({ threadId });
-    await this.clearThreadStream(threadId, resourceId);
+    // Background, so deleting a thread never waits on the pubsub (e.g. Redis reconnecting).
+    // The peer range still admits @mastra/core versions without clearThreadStream.
+    if (typeof this.clearThreadStream === 'function') {
+      this.trackVectorCleanup(this.clearThreadStream(threadId, resourceId));
+    }
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
     }

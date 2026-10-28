@@ -395,10 +395,31 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       const inspector = await createInspector();
       for (const topic of [publishTopic, subscribeTopic]) {
         const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
-        expect(pttl).toBeGreaterThan(0);
+        expect(pttl).toBeGreaterThan(sevenDays - 60_000);
         expect(pttl).toBeLessThanOrEqual(sevenDays);
       }
     }, 15_000);
+
+    it('keeps delivering to a live subscriber after its idle stream expires', async () => {
+      // Expiry, unlike clearTopic(), happens while the reader is blocked in
+      // XREADGROUP with no local cursor reset; the read loop must recreate the
+      // group and keep delivering.
+      const ps = createPubSub({ streamIdleTtlMs: 300 });
+      const topic = `ttl-expire-live-${randomUUID()}`;
+      const received: number[] = [];
+      await ps.subscribe(topic, (event, ack) => {
+        received.push((event.data as { n: number }).n);
+        void ack?.();
+      });
+      await ps.publish(topic, makeEvent({ data: { n: 1 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
+
+      const inspector = await createInspector();
+      await expect.poll(() => inspector.exists(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
+
+      await ps.publish(topic, makeEvent({ data: { n: 2 } }));
+      await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
+    }, 20_000);
 
     it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
       const ps = createPubSub({ streamIdleTtlMs: 0 });
