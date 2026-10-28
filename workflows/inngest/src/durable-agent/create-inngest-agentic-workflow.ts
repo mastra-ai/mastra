@@ -204,7 +204,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // First-chunk clock carried from earlier iterations (first write wins)
           completionStartTime: state.completionStartTime,
-          inferenceStartTime: state.inferenceStartTime,
+          timeToFirstTokenMs: state.timeToFirstTokenMs,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -222,7 +222,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
-          inferenceStartTime: llmOutput.inferenceStartTime,
+          timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
@@ -545,7 +545,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // steps carried through the loop state are applied here.
           const clocks = {
             ...(state.completionStartTime ? { completionStartTime: new Date(state.completionStartTime) } : {}),
-            ...(state.inferenceStartTime ? { inferenceStartTime: new Date(state.inferenceStartTime) } : {}),
+            ...(state.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: state.timeToFirstTokenMs } : {}),
           };
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(

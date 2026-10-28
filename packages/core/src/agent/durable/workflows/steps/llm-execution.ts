@@ -168,8 +168,8 @@ const durableLLMInputSchema = z.object({
   modelSpanData: z.any().optional(),
   // First-chunk clock carried from earlier iterations (first write wins)
   completionStartTime: z.coerce.date().optional(),
-  // Start of the inference that streamed that chunk, carried the same way
-  inferenceStartTime: z.coerce.date().optional(),
+  // Time to first token of the inference that streamed that chunk, carried the same way
+  timeToFirstTokenMs: z.number().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
   signalPreempted: z.boolean().optional(),
@@ -229,8 +229,8 @@ const durableLLMOutputSchema = z.object({
   deferredStepFinishChunk: z.any().optional(),
   // When this step's inference streamed its first chunk; the loop keeps the first one
   completionStartTime: z.coerce.date().optional(),
-  // When the inference that streamed that chunk started; kept with it
-  inferenceStartTime: z.coerce.date().optional(),
+  // Time to first token of the inference that streamed that chunk; kept with it
+  timeToFirstTokenMs: z.number().optional(),
 });
 
 /**
@@ -585,7 +585,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       let endAttemptSpans: (() => void) | undefined;
       // The attempt's first-chunk clocks. Every step output returned after the model call
       // carries them, since the finalizer ends the rebuilt spans with the loop state's copy.
-      let recordClocks: (() => { completionStartTime?: Date; inferenceStartTime?: Date }) | undefined;
+      let recordClocks: (() => { completionStartTime?: Date; timeToFirstTokenMs?: number }) | undefined;
       const finishInterruptedRequest = async (error: unknown, modelId: string): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
         stopListening?.();
@@ -810,19 +810,19 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               if (carriedClocks.completionStartTime) {
                 attributes.completionStartTime ??= carriedClocks.completionStartTime;
               }
-              if (carriedClocks.inferenceStartTime) {
-                attributes.inferenceStartTime ??= carriedClocks.inferenceStartTime;
+              if (carriedClocks.timeToFirstTokenMs !== undefined) {
+                attributes.timeToFirstTokenMs ??= carriedClocks.timeToFirstTokenMs;
               }
               return { ...data, attributes };
             };
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
-              const inferenceStartTime = modelSpanTracker?.getInferenceStartTime?.();
+              const timeToFirstTokenMs = modelSpanTracker?.getTimeToFirstTokenMs?.();
               if (resumeRegistry?.resumeModelSpanData) {
                 resumeRegistry.resumeCompletionStartTime ??= completionStartTime;
-                resumeRegistry.resumeInferenceStartTime ??= inferenceStartTime;
+                resumeRegistry.resumeTimeToFirstTokenMs ??= timeToFirstTokenMs;
               }
-              return { completionStartTime, inferenceStartTime };
+              return { completionStartTime, timeToFirstTokenMs };
             };
             const modelSpan = inputModelSpanData
               ? (observability?.rebuildSpan(withCarriedClocks(inputModelSpanData)) as AIModelGenerationSpan | undefined)

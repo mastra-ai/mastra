@@ -543,7 +543,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
               completionStartTime: state.completionStartTime,
-              inferenceStartTime: state.inferenceStartTime,
+              timeToFirstTokenMs: state.timeToFirstTokenMs,
             };
           },
           { id: 'map-to-llm-input' },
@@ -558,7 +558,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
-              inferenceStartTime: llmOutput.inferenceStartTime,
+              timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];

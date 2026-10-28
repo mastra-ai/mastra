@@ -208,8 +208,8 @@ export const baseIterationStateSchema = z.object({
   modelSpanData: z.any().optional(),
   // First chunk clock, carried so the final step can end the generation and AGENT_RUN with it
   completionStartTime: z.coerce.date().optional(),
-  // Start of the inference that streamed that chunk, carried the same way
-  inferenceStartTime: z.coerce.date().optional(),
+  // Time to first token of the inference that streamed that chunk, carried the same way
+  timeToFirstTokenMs: z.number().optional(),
 });
 
 /**

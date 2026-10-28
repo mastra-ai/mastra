@@ -4,7 +4,7 @@ import type { AccumulatedUsage, BaseIterationState } from './schemas';
 
 interface SpanClocks {
   completionStartTime?: Date | string;
-  inferenceStartTime?: Date | string;
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -14,16 +14,16 @@ interface SpanClocks {
  */
 export function carriedSpanClocks(
   registry:
-    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeInferenceStartTime'>
+    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeTimeToFirstTokenMs'>
     | undefined,
   state: SpanClocks,
-): { completionStartTime?: Date; inferenceStartTime?: Date } | undefined {
+): { completionStartTime?: Date; timeToFirstTokenMs?: number } | undefined {
   const clocks: SpanClocks = registry?.resumeModelSpanData
-    ? { completionStartTime: registry.resumeCompletionStartTime, inferenceStartTime: registry.resumeInferenceStartTime }
+    ? { completionStartTime: registry.resumeCompletionStartTime, timeToFirstTokenMs: registry.resumeTimeToFirstTokenMs }
     : state;
   const attributes = {
     ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
-    ...(clocks.inferenceStartTime ? { inferenceStartTime: new Date(clocks.inferenceStartTime) } : {}),
+    ...(clocks.timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs: clocks.timeToFirstTokenMs } : {}),
   };
   return Object.keys(attributes).length ? attributes : undefined;
 }
@@ -218,6 +218,6 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     modelSpanData: currentState.modelSpanData,
     // First inference wins; later iterations never overwrite it.
     completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
-    inferenceStartTime: currentState.inferenceStartTime ?? executionOutput.inferenceStartTime,
+    timeToFirstTokenMs: currentState.timeToFirstTokenMs ?? executionOutput.timeToFirstTokenMs,
   };
 }

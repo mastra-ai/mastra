@@ -102,10 +102,10 @@ async function expectSharedClock(agentName: string) {
   expect(clockOf(inference)).toBeTypeOf('number');
   expect(inference!.timeToFirstTokenMs).toBeTypeOf('number');
   for (const span of [inTrace.find(s => s.type === 'model_generation'), agentRun]) {
-    const inferenceStartTime = (span?.attributes as { inferenceStartTime?: Date | string } | undefined)
-      ?.inferenceStartTime;
     expect(clockOf(span)).toBe(clockOf(inference));
-    expect(inferenceStartTime && new Date(inferenceStartTime).getTime()).toBe(inference!.startTime.getTime());
+    expect((span?.attributes as { timeToFirstTokenMs?: number } | undefined)?.timeToFirstTokenMs).toBe(
+      inference!.timeToFirstTokenMs,
+    );
     expect(span?.timeToFirstTokenMs).toBe(inference!.timeToFirstTokenMs);
   }
 }

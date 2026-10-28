@@ -97,8 +97,8 @@ const durableToolCallInputSchema = z.object({
   stepSpanData: z.any().optional(),
   // First-chunk clock of the step that produced this call, for ending spans on suspend
   completionStartTime: z.coerce.date().optional(),
-  // Inference-start clock of the same step, used the same way
-  inferenceStartTime: z.coerce.date().optional(),
+  // Time to first token of the same step, used the same way
+  timeToFirstTokenMs: z.number().optional(),
   // Model usage of the step that produced this call, reported on its suspension chunk
   stepUsage: z.any().optional(),
 });
@@ -424,7 +424,7 @@ export function createDurableToolCallStep() {
         agentSpanData?: unknown;
         modelSpanData?: unknown;
         completionStartTime?: Date | string;
-        inferenceStartTime?: Date | string;
+        timeToFirstTokenMs?: number;
       }>();
 
       const { runId, options: agentOptions, state } = initData;
@@ -453,7 +453,7 @@ export function createDurableToolCallStep() {
           // iteration) for the originals.
           const attributes = carriedSpanClocks(reg, {
             completionStartTime: initData.completionStartTime ?? typedInput.completionStartTime,
-            inferenceStartTime: initData.inferenceStartTime ?? typedInput.inferenceStartTime,
+            timeToFirstTokenMs: initData.timeToFirstTokenMs ?? typedInput.timeToFirstTokenMs,
           });
           if (typedInput.stepSpanData) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
