@@ -39,7 +39,7 @@ async function seed() {
     { getKnowledgeStore: () => knowledge.getStorage() },
     { scope: org, sourceThreadId: 't1', maxPins: 20, maxTokens: 500 },
   ) as Record<string, { execute: (input: unknown) => Promise<unknown> }>;
-  await pinTools.knowledge_pin!.execute({ text: 'Always read [[Payments]] first.' });
+  await pinTools.knowledge_pin!.execute({ op: 'pin', text: 'Always read [[Payments]] first.' });
   return { store, org, team, payments, runbook, secret };
 }
 
