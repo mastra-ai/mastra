@@ -30,7 +30,7 @@
           "model": "mock-model-id",
           "provider": "mock-provider",
           "completionStartTime": "<date>",
-          "inferenceStartTime": "<date>"
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -64,7 +64,7 @@
               "streaming": true,
               "parameters": {},
               "completionStartTime": "<date>",
-              "inferenceStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -130,7 +130,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
-                  "inferenceStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -298,6 +298,7 @@
                       },
                       "finishReason": "stop",
                       "warnings": [],
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },

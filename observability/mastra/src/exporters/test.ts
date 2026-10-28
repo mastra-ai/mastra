@@ -1004,6 +1004,9 @@ export class TestExporter extends BaseExporter {
       if (key === 'createdAt' && typeof value === 'number') {
         return '<date>';
       }
+      if (key === 'timeToFirstTokenMs' && typeof value === 'number') {
+        return '<ms>';
+      }
       if (typeof value === 'string') {
         // Special handling for traceId - use the shared traceIdMap (handles both UUID and 32-char hex formats)
         if (key === 'traceId' && (uuidRegex.test(value) || hexId32Regex.test(value))) {

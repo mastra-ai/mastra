@@ -391,7 +391,7 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
-  #inferenceStartTime?: Date;
+  #timeToFirstTokenMs?: number;
   #inferenceCompletionStartTime?: Date;
   /**
    * True between a step's `step-start` and `step-finish` chunks, the window in which
@@ -424,25 +424,29 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Record when the provider's first chunk arrived and when the inference that
-   * streamed it started, then copy both clocks up the agent's own chain (step →
-   * generation → agent run), first write wins at each level. Time to first
-   * chunk is `completionStartTime - startTime` on whichever span is being read;
-   * time to first token is `completionStartTime - inferenceStartTime`.
+   * Record when the provider's first chunk arrived. Time to first token is measured
+   * once here, on the inference that streamed the chunk, and the number is copied up
+   * the agent's own chain (step → generation → agent run) with the chunk's clock,
+   * first write wins at each level. Time to first chunk is `completionStartTime -
+   * startTime` on whichever span is being read.
    */
   #captureCompletionStartTime(): void {
     this.#ensureStepAndInference();
     if (this.#inferenceCompletionStartTime) return;
     const now = new Date();
-    const inferenceStartTime = this.#currentInferenceSpan?.startTime;
+    const inference = this.#currentInferenceSpan;
+    const timeToFirstTokenMs = inference ? now.getTime() - inference.startTime.getTime() : undefined;
     this.#inferenceCompletionStartTime = now;
     this.#completionStartTime ??= now;
-    this.#inferenceStartTime ??= inferenceStartTime;
+    this.#timeToFirstTokenMs ??= timeToFirstTokenMs;
+    if (timeToFirstTokenMs !== undefined) inference!.update({ attributes: { timeToFirstTokenMs } });
     for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
       if (!span) continue;
       const attributes = {
         ...(span.attributes?.completionStartTime ? {} : { completionStartTime: now }),
-        ...(inferenceStartTime && !span.attributes?.inferenceStartTime ? { inferenceStartTime } : {}),
+        ...(timeToFirstTokenMs !== undefined && span.attributes?.timeToFirstTokenMs === undefined
+          ? { timeToFirstTokenMs }
+          : {}),
       };
       if (Object.keys(attributes).length) span.update({ attributes });
     }
@@ -496,7 +500,7 @@ export class ModelSpanTracker {
       // clock it carried through the loop state.
       spanOptions.attributes.completionStartTime =
         this.#completionStartTime ?? spanOptions.attributes.completionStartTime;
-      spanOptions.attributes.inferenceStartTime = this.#inferenceStartTime ?? spanOptions.attributes.inferenceStartTime;
+      spanOptions.attributes.timeToFirstTokenMs = this.#timeToFirstTokenMs ?? spanOptions.attributes.timeToFirstTokenMs;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
       spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
       if (!spanOptions.attributes.costContext) {
@@ -511,8 +515,8 @@ export class ModelSpanTracker {
     return this.#completionStartTime;
   }
 
-  getInferenceStartTime(): Date | undefined {
-    return this.#inferenceStartTime;
+  getTimeToFirstTokenMs(): number | undefined {
+    return this.#timeToFirstTokenMs;
   }
 
   /**

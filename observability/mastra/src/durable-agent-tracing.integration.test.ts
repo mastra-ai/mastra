@@ -250,8 +250,7 @@ const idOf = (s: any) => s.id ?? s.spanId;
 const parentOf = (s: any) => s.parentSpanId;
 const clockOf = (s: any) =>
   s?.attributes?.completionStartTime ? +new Date(s.attributes.completionStartTime) : undefined;
-const inferenceClockOf = (s: any) =>
-  s?.attributes?.inferenceStartTime ? +new Date(s.attributes.inferenceStartTime) : undefined;
+const ttftAttributeOf = (s: any) => s?.attributes?.timeToFirstTokenMs;
 const startOf = (s: any) => +new Date(s.startTime);
 const byStart = (spans: any[]) => [...spans].sort((a, b) => +new Date(a.startTime) - +new Date(b.startTime));
 
@@ -330,19 +329,20 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     expect(steps.map(clockOf)).toEqual(inferences.map(clockOf));
     expect(clockOf(testExporter.getSpansByType('model_generation' as any)[0])).toBe(first);
     expect(clockOf(testExporter.getSpansByType('agent_run' as any)[0])).toBe(first);
-    expect(steps.map(inferenceClockOf)).toEqual(inferences.map(startOf));
+    expect(steps.map(ttftAttributeOf)).toEqual(inferences.map(ttftAttributeOf));
+    expect(inferences.map(ttftAttributeOf)).toEqual(inferences.map(s => s.timeToFirstTokenMs));
 
     // Later iterations rebuild the generation and AGENT_RUN from the run-start
     // snapshot; the second step's chunk must not overwrite the clocks mid-run,
     // so every exported update and end carries the first ones.
     for (const type of ['model_generation', 'agent_run']) {
       const span = testExporter.getSpansByType(type as any)[0] as any;
-      expect(inferenceClockOf(span)).toBe(startOf(inferences[0]));
+      expect(ttftAttributeOf(span)).toBe(inferences[0].timeToFirstTokenMs);
       expect(span.timeToFirstTokenMs).toBe(inferences[0].timeToFirstTokenMs);
       const { events } = testExporter.getBySpanId(idOf(span));
       for (const [read, expected] of [
         [clockOf, first],
-        [inferenceClockOf, startOf(inferences[0])],
+        [ttftAttributeOf, inferences[0].timeToFirstTokenMs],
       ] as const) {
         const clocks = events.map(e => read((e as any).exportedSpan)).filter(c => c !== undefined);
         expect(clocks.length).toBeGreaterThan(0);
@@ -393,12 +393,13 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     clocks.forEach((clock, i) => {
       expect(clock).toBeGreaterThanOrEqual(+new Date((runs[i] as any).startTime));
       expect([clockOf(runs[i]), clockOf(generations[i])]).toEqual([clock, clock]);
-      const inferenceStart = startOf(inferences[i]);
-      expect([inferenceClockOf(runs[i]), inferenceClockOf(generations[i])]).toEqual([inferenceStart, inferenceStart]);
+      const ttft = (inferences[i] as any).timeToFirstTokenMs;
+      expect(ttft).toBeTypeOf('number');
+      expect([ttftAttributeOf(runs[i]), ttftAttributeOf(generations[i])]).toEqual([ttft, ttft]);
     });
     for (const span of [...runs, ...generations]) {
       const { events } = testExporter.getBySpanId(idOf(span));
-      for (const read of [clockOf, inferenceClockOf]) {
+      for (const read of [clockOf, ttftAttributeOf]) {
         const spanClocks = events.map(e => read((e as any).exportedSpan)).filter(c => c !== undefined);
         expect(new Set(spanClocks)).toEqual(new Set([read(span)]));
       }
@@ -416,7 +417,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     for (const type of ['model_step', 'model_generation', 'agent_run']) {
       const span = testExporter.getSpansByType(type as any)[0] as any;
       expect(clockOf(span)).toBe(first);
-      expect(inferenceClockOf(span)).toBe(startOf(inference));
+      expect(ttftAttributeOf(span)).toBe(inference.timeToFirstTokenMs);
       expect(span.timeToFirstTokenMs).toBe(inference.timeToFirstTokenMs);
     }
     expect(inference.timeToFirstTokenMs).toBe(first! - startOf(inference));
@@ -441,11 +442,11 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       // The failed attempt ends its rebuilt generation too, so read the run's last end.
       const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
       const ended = events.findLast(e => e.type === 'span_ended')!.exportedSpan as any;
-      expect(inferenceClockOf(ended)).toBe(startOf(inference));
+      expect(ttftAttributeOf(ended)).toBe(inference.timeToFirstTokenMs);
       expect(ended.timeToFirstTokenMs).toBe(clockOf(inference)! - startOf(inference));
       expect(ended.timeToFirstTokenMs).toBeLessThan(failAfterMs);
-      const clocks = events.map(e => inferenceClockOf((e as any).exportedSpan)).filter(c => c !== undefined);
-      expect(new Set(clocks)).toEqual(new Set([startOf(inference)]));
+      const values = events.map(e => ttftAttributeOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(new Set(values)).toEqual(new Set([inference.timeToFirstTokenMs]));
     }
   });
 
@@ -488,7 +489,7 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
     for (const type of ['model_generation', 'agent_run']) {
       const ended = testExporter.getSpansByType(type as any)[0] as any;
       expect(clockOf(ended)).toBe(first);
-      expect(inferenceClockOf(ended)).toBe(inferenceStart);
+      expect(ttftAttributeOf(ended)).toBe(first! - inferenceStart);
       expect(ended.timeToFirstTokenMs).toBe(first! - inferenceStart);
       expect(getTimeToFirstChunkMs(ended)).toBe(first! - startOf(ended));
     }

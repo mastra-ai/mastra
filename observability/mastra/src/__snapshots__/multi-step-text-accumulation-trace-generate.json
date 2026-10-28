@@ -34,7 +34,7 @@
           "provider": "mock-provider",
           "availableTools": ["calculator"],
           "completionStartTime": "<date>",
-          "inferenceStartTime": "<date>"
+          "timeToFirstTokenMs": "<ms>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -89,7 +89,7 @@
                 }
               ],
               "completionStartTime": "<date>",
-              "inferenceStartTime": "<date>",
+              "timeToFirstTokenMs": "<ms>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
@@ -163,7 +163,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
-                  "inferenceStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 10,
                     "outputTokens": 15,
@@ -361,6 +361,7 @@
                       },
                       "finishReason": "tool-calls",
                       "warnings": [],
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },
@@ -528,7 +529,7 @@
                   "provider": "mock-provider",
                   "messageId": "<messageId-1>",
                   "completionStartTime": "<date>",
-                  "inferenceStartTime": "<date>",
+                  "timeToFirstTokenMs": "<ms>",
                   "usage": {
                     "inputTokens": 20,
                     "outputTokens": 10,
@@ -804,6 +805,7 @@
                       },
                       "finishReason": "stop",
                       "warnings": [],
+                      "timeToFirstTokenMs": "<ms>",
                       "completionStartTime": "<date>",
                       "responseModel": "mock-model-id"
                     },
