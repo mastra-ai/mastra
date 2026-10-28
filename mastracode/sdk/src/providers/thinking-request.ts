@@ -9,8 +9,6 @@ export interface ThinkingRequestFormat {
   sendEffort?: (effort: ActiveThinkingLevel) => ThinkingProviderOptions;
   acceptedEfforts?: readonly ActiveThinkingLevel[];
   enableThinking?: ThinkingProviderOptions;
-  /** Provider option aliases that also override the session's thinking level. */
-  callerControlKeys?: readonly string[];
 }
 
 const LOW_TO_HIGH: readonly ActiveThinkingLevel[] = ['low', 'medium', 'high'];
@@ -23,19 +21,6 @@ const OPENROUTER_FORMAT: ThinkingRequestFormat = {
   enableThinking: ENABLE_REASONING,
 };
 
-const MISTRAL_MULTI_EFFORT_MODELS = new Set(['zai-glm-5', 'zai-glm-5-3', 'zai-glm-5-3-flash', 'zai-glm-latest']);
-const MISTRAL_FORMAT: ThinkingRequestFormat = {
-  optionsKey: 'mistral',
-  sendEffort: sendReasoningEffort,
-  acceptedEfforts: ['high'],
-};
-const PERPLEXITY_FORMAT: ThinkingRequestFormat = {
-  optionsKey: 'perplexity',
-  sendEffort: effort => ({ reasoning: { effort } }),
-  acceptedEfforts: [...LOW_TO_HIGH, 'xhigh'],
-  callerControlKeys: ['reasoning_effort'],
-};
-
 const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>> = {
   deepseek: {
     optionsKey: 'deepseek',
@@ -45,6 +30,7 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
   openrouter: OPENROUTER_FORMAT,
   alibaba: { optionsKey: 'alibaba', enableThinking: { enableThinking: true } },
   groq: { optionsKey: 'groq', sendEffort: sendReasoningEffort, acceptedEfforts: LOW_TO_HIGH },
+  mistral: { optionsKey: 'mistral', sendEffort: sendReasoningEffort, acceptedEfforts: ['high'] },
   xai: { optionsKey: 'xai', sendEffort: sendReasoningEffort, acceptedEfforts: [...LOW_TO_HIGH, 'xhigh'] },
   togetherai: {
     optionsKey: 'togetherai',
@@ -59,8 +45,7 @@ const REQUEST_FORMATS_BY_PROVIDER: Partial<Record<string, ThinkingRequestFormat>
     enableThinking: ENABLE_REASONING,
   },
   cerebras: { optionsKey: 'cerebras', sendEffort: sendReasoningEffort },
-  perplexity: PERPLEXITY_FORMAT,
-  'perplexity-agent': PERPLEXITY_FORMAT,
+  perplexity: { optionsKey: 'perplexity', sendEffort: effort => ({ reasoning_effort: effort }) },
 };
 
 const THINKING_ADAPTER_PROVIDERS: ReadonlySet<string> = new Set(['anthropic', 'openai', 'google']);
@@ -83,13 +68,8 @@ export function isRoutedWithoutThinking(modelId: string): boolean {
 
 export function thinkingRequestFormatFor(modelId: string): ThinkingRequestFormat | undefined {
   const routedThroughMastraGateway = modelId.startsWith(MASTRA_GATEWAY_PREFIX);
-  const [provider = '', ...modelParts] = stripMastraGatewayPrefix(modelId).split('/');
+  const [provider = ''] = stripMastraGatewayPrefix(modelId).split('/');
   if (isThinkingAdapterProvider(provider)) return undefined;
   if (routedThroughMastraGateway) return OPENROUTER_FORMAT;
-  if (provider === 'mistral') {
-    return MISTRAL_MULTI_EFFORT_MODELS.has(modelParts.join('/'))
-      ? { ...MISTRAL_FORMAT, acceptedEfforts: ['low', 'high', 'max'] }
-      : MISTRAL_FORMAT;
-  }
   return REQUEST_FORMATS_BY_PROVIDER[provider.includes('alibaba') ? 'alibaba' : provider];
 }

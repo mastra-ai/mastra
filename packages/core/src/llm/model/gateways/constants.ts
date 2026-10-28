@@ -14,7 +14,6 @@ export const PROVIDERS_WITH_INSTALLED_PACKAGES = [
   'openai',
   'openrouter',
   'perplexity',
-  'perplexity-agent',
   'togetherai',
   'vercel',
   'xai',

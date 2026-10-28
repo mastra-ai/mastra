@@ -27,11 +27,7 @@ export function providerThinkingOptions(
   const sendsEffort = requestable.some(option => option.type === 'effort');
   const options = sendsEffort ? effortOptions : format.enableThinking;
   if (!options) return undefined;
-  const controlKeys = new Set([
-    ...Object.keys(effortOptions ?? {}),
-    ...Object.keys(format.enableThinking ?? {}),
-    ...(format.callerControlKeys ?? []),
-  ]);
+  const controlKeys = new Set([...Object.keys(effortOptions ?? {}), ...Object.keys(format.enableThinking ?? {})]);
   return { optionsKey: format.optionsKey, options, controlKeys };
 }
 

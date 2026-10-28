@@ -17,9 +17,9 @@ import type { SlashCommandContext } from './types.js';
 /** Sentinel value used by the selector for "clear the session override". */
 const DEFAULT_ITEM_VALUE = '__default__';
 
-/** Models with an active thinking level available in the picker. */
+/** Models that support reasoning effort. */
 function supportsThinking(modelId: string): boolean {
-  return getThinkingLevelsForModel(modelId).some(level => level.id !== 'off');
+  return modelId.startsWith('openai/') || modelId.startsWith('anthropic/');
 }
 
 function levelLabel(levelId: string): string {

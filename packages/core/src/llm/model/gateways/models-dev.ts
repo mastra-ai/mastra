@@ -5,9 +5,10 @@ import { createDeepInfra } from '@ai-sdk/deepinfra-v7';
 import { createDeepSeek } from '@ai-sdk/deepseek-v7';
 import { createGoogle } from '@ai-sdk/google-v7';
 import { createGroq } from '@ai-sdk/groq-v7';
-import { createMistral } from '@ai-sdk/mistral-v7';
+import { createMistral } from '@ai-sdk/mistral-v6';
 import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v7';
 import { createOpenAI } from '@ai-sdk/openai-v7';
+import { createPerplexity } from '@ai-sdk/perplexity-v6';
 import { createTogetherAI } from '@ai-sdk/togetherai-v7';
 import { createXai } from '@ai-sdk/xai-v7';
 import { createGateway } from '@internal/ai-v7';
@@ -25,8 +26,6 @@ import type {
   TemperatureCapabilities,
 } from './base.js';
 import { EXCLUDED_PROVIDERS, MASTRA_USER_AGENT, PROVIDERS_WITH_INSTALLED_PACKAGES } from './constants.js';
-import { normalizePerplexityCatalog } from './perplexity-catalog.js';
-import { createPerplexityGatewayModel } from './perplexity.js';
 
 interface ModelsDevModelInfo {
   id: string;
@@ -169,7 +168,7 @@ export class ModelsDevGateway extends MastraModelGateway {
       throw new Error(`Failed to fetch from models.dev: ${response.statusText}`);
     }
 
-    const data = normalizePerplexityCatalog((await response.json()) as ModelsDevResponse);
+    const data = (await response.json()) as ModelsDevResponse;
 
     // Reset capability maps so removed providers/models are not retained across syncs
     this.attachmentCapabilities = {};
@@ -428,9 +427,13 @@ export class ModelsDevGateway extends MastraModelGateway {
         return createXai({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'deepseek':
         return createDeepSeek({ apiKey, baseURL, headers: mastraHeaders })(modelId);
-      case 'perplexity':
-      case 'perplexity-agent':
-        return createPerplexityGatewayModel(modelId, { apiKey, baseURL, headers: mastraHeaders });
+      case 'perplexity': {
+        const hasIntegrationHeader = Object.keys(mastraHeaders).some(key => key.toLowerCase() === 'x-pplx-integration');
+        const perplexityHeaders = hasIntegrationHeader
+          ? mastraHeaders
+          : { 'X-Pplx-Integration': MASTRA_USER_AGENT, ...mastraHeaders };
+        return createPerplexity({ apiKey, baseURL, headers: perplexityHeaders })(modelId);
+      }
       case 'cerebras':
         return createCerebras({ apiKey, baseURL, headers: mastraHeaders })(modelId);
       case 'togetherai':
@@ -475,10 +478,6 @@ export class ModelsDevGateway extends MastraModelGateway {
         if (npm === '@ai-sdk/mistral') {
           if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);
           return createMistral({ apiKey, baseURL, headers: mastraHeaders })(modelId);
-        }
-
-        if (npm === '@ai-sdk/perplexity') {
-          return createPerplexityGatewayModel(modelId, { apiKey, baseURL, headers: mastraHeaders });
         }
 
         if (!baseURL) throw new Error(`No API URL found for ${providerId}/${modelId}`);

@@ -4,7 +4,6 @@ import { fileURLToPath } from 'node:url';
 import { z } from 'zod/v4';
 import type { ProviderConfig } from '../src/llm';
 import { EXCLUDED_PROVIDERS, PROVIDERS_WITH_INSTALLED_PACKAGES } from '../src/llm/model/gateways/constants';
-import { normalizePerplexityCatalog, PERPLEXITY_AGENT_PRESETS } from '../src/llm/model/gateways/perplexity-catalog';
 import { generateProviderOptionsSection } from './generate-provider-options-docs';
 import { getGatewayPageMetadata, getModelsDevAttribution, getProviderPageMetadata } from './model-doc-metadata';
 import type { ModelPageData } from './model-doc-metadata';
@@ -249,7 +248,7 @@ async function parseProviders(): Promise<GroupedProviders> {
 async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPageData[]; packageName?: string }> {
   try {
     const response = await fetch('https://models.dev/api.json');
-    const data = normalizePerplexityCatalog(await response.json());
+    const data = await response.json();
     const provider = data[providerId];
 
     if (!provider?.models) return { models: [] };
@@ -257,13 +256,6 @@ async function fetchProviderInfo(providerId: string): Promise<{ models: ModelPag
     const models = Object.entries(provider.models)
       // The model.status is an optional enum of 'alpha' | 'beta' | 'deprecated'. Filter out deprecated models.
       .filter(([_, model]: [string, any]) => model.status !== 'deprecated')
-      // Presets choose models and tools at runtime, so their direct-model
-      // capabilities and token prices cannot be inferred from the catalog.
-      .filter(
-        ([modelId]) =>
-          !['perplexity', 'perplexity-agent'].includes(providerId) ||
-          !(PERPLEXITY_AGENT_PRESETS as readonly string[]).includes(modelId),
-      )
       .map(([modelId, model]: [string, any]) => ({
         model: `${providerId}/${modelId}`,
         imageInput: model.modalities?.input?.includes('image') || false,
@@ -296,9 +288,6 @@ async function generateProviderPage(
   const requiredEnvVars = getRequiredEnvVars(provider);
   const authEnvVars = Array.isArray(provider.apiKeyEnvVar) ? provider.apiKeyEnvVar : [provider.apiKeyEnvVar];
   const additionalEnvVars = requiredEnvVars.filter(envVar => !authEnvVars.includes(envVar));
-  const isPerplexity = provider.id === 'perplexity' || provider.id === 'perplexity-agent';
-  const exampleModel = isPerplexity ? 'low' : provider.models[0];
-  const advancedModel = isPerplexity ? 'high' : provider.models[provider.models.length - 1];
 
   // Get documentation URL if available
   const rawDocUrl = (providerRegistry[provider.id] as any).docUrl;
@@ -352,7 +341,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "${provider.id}/${exampleModel}"
+  model: "${provider.id}/${provider.models[0]}"
 });
 
 // Generate a response
@@ -360,31 +349,21 @@ const response = await agent.generate("Hello!");
 
 // Stream a response
 const stream = await agent.stream("Tell me a story");
-for await (const chunk of stream.textStream) {
+for await (const chunk of stream) {
   console.log(chunk);
 }
 \`\`\`
 ${
-  isPerplexity
-    ? `
-:::note
-
-Mastra uses Perplexity's native Agent API at \`/v1/agent\`. Choose a preset (\`fast\`, \`low\`, \`medium\`, \`high\`, or \`xhigh\`) or a direct model ID from the table below. Presets select provider-managed models and tools; the table describes direct models only. Both \`perplexity/\` and \`perplexity-agent/\` use \`PERPLEXITY_API_KEY\`.
-
-Retired bare Sonar IDs require an explicit replacement. See [Perplexity Agent API migration](/reference/agents/agent#perplexity-agent-api) for model selection, option changes, and unsupported inputs and results.
-
-:::
-`
-    : !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
-      ? // if it's not a directly supported provider then it's openai compatible, so warn about it
-        `
+  !PROVIDERS_WITH_INSTALLED_PACKAGES.includes(provider.id)
+    ? // if it's not a directly supported provider then it's openai compatible, so warn about it
+      `
 :::note
 
 Mastra uses the OpenAI-compatible \`/chat/completions\` endpoint. Some provider-specific features may not be available. Check the [${provider.name} documentation](${docUrl || '#'}) for details.
 
 :::
 `
-      : ``
+    : ``
 }
 ## Models
 
@@ -408,7 +387,7 @@ const agent = new Agent({
     url: "${provider.url}",`
       : ''
   }
-    id: "${provider.id}/${exampleModel}",
+    id: "${provider.id}/${provider.models[0]}",
     apiKey: process.env.${provider.apiKeyEnvVar},
     headers: {
       "X-Custom-Header": "value"
@@ -426,10 +405,10 @@ const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.get("task") === "complex";
+    const useAdvanced = requestContext.task === "complex";
     return useAdvanced
-      ? "${provider.id}/${advancedModel}"
-      : "${provider.id}/${exampleModel}";
+      ? "${provider.id}/${provider.models[provider.models.length - 1]}"
+      : "${provider.id}/${provider.models[0]}";
   }
 });
 \`\`\`

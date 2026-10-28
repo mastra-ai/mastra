@@ -1,8 +1,4 @@
-import { once } from 'node:events';
 import { mkdirSync, rmSync, writeFileSync } from 'node:fs';
-import { createServer } from 'node:http';
-import type { Server } from 'node:http';
-import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterAll, afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
@@ -41,36 +37,22 @@ async function requestBody(model: any, providerOptions?: Record<string, Record<s
 
 describe('MastraCodeGateway thinking level forwarding', () => {
   const prevOpenAIKey = process.env.OPENAI_API_KEY;
-  let server: Server;
 
-  beforeEach(async () => {
+  beforeEach(() => {
     process.env.OPENAI_API_KEY = 'sk-test';
     writeFileSync(join(appDataDir, 'auth.json'), '{}', 'utf8');
     reloadAuthStorage();
-    server = createServer(async (request, response) => {
-      const chunks: Buffer[] = [];
-      for await (const chunk of request) chunks.push(Buffer.from(chunk));
-      bodies.push(JSON.parse(Buffer.concat(chunks).toString()));
-      response.writeHead(400, { 'content-type': 'application/json' });
-      response.end(JSON.stringify({ error: { message: 'Request captured by the provider fixture' } }));
-    });
-    server.listen(0, '127.0.0.1');
-    await once(server, 'listening');
-    const baseURL = `http://127.0.0.1:${(server.address() as AddressInfo).port}`;
-    const realFetch = globalThis.fetch;
-    vi.spyOn(globalThis, 'fetch').mockImplementation((input, init) => {
-      const request = new Request(input, init);
-      const url = new URL(request.url);
-      return realFetch(new Request(`${baseURL}${url.pathname}${url.search}`, request));
-    });
+    vi.stubGlobal(
+      'fetch',
+      vi.fn(async (_url: unknown, init?: RequestInit) => {
+        bodies.push(JSON.parse(String(init?.body)));
+        return new Response('{}', { status: 500 });
+      }),
+    );
   });
 
-  afterEach(async () => {
-    vi.restoreAllMocks();
-    await new Promise<void>((resolve, reject) => {
-      server.close(error => (error ? reject(error) : resolve()));
-      server.closeAllConnections();
-    });
+  afterEach(() => {
+    vi.unstubAllGlobals();
     if (prevOpenAIKey === undefined) delete process.env.OPENAI_API_KEY;
     else process.env.OPENAI_API_KEY = prevOpenAIKey;
   });
@@ -105,10 +87,6 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect((await requestBody(resolve('max', 'mistral', 'zai-glm-5-2'))).reasoning_effort).toBe('high');
   });
 
-  it.each(['low', 'max'] as const)('sends Mistral GLM-5.3 the selected %s effort', async level => {
-    expect((await requestBody(resolve(level, 'mistral', 'zai-glm-5-3'))).reasoning_effort).toBe(level);
-  });
-
   it.each(['grok-4.5', 'grok-4.6'])('sends Extra high to xAI %s, which lists it', async modelId => {
     expect((await requestBody(resolve('max', 'xai', modelId))).reasoning).toEqual({ effort: 'xhigh' });
   });
@@ -117,35 +95,12 @@ describe('MastraCodeGateway thinking level forwarding', () => {
     expect(await requestBody(resolve('xhigh', 'xai', 'grok-4.20-0309-reasoning'))).not.toHaveProperty('reasoning');
   });
 
-  it('passes Cerebras the closest listed effort', async () => {
-    expect((await requestBody(resolve('max', 'cerebras', 'gpt-oss-120b'))).reasoning_effort).toBe('high');
+  it.each([
+    ['perplexity', 'sonar-reasoning-pro'],
+    ['cerebras', 'gpt-oss-120b'],
+  ])('passes %s the closest listed effort', async (providerId, modelId) => {
+    expect((await requestBody(resolve('max', providerId, modelId))).reasoning_effort).toBe('high');
   });
-
-  it.each(['perplexity', 'perplexity-agent'])('sends %s thinking through the Agent API options', async providerId => {
-    const body = await requestBody(resolve('max', providerId, 'openai/gpt-5.5'));
-    expect(body.reasoning).toEqual({ effort: 'xhigh' });
-    expect(body).not.toHaveProperty('reasoning_effort');
-  });
-
-  it.each(['perplexity', 'perplexity-agent'])(
-    "preserves the caller's legacy %s reasoning setting over the session level",
-    async providerId => {
-      const body = await requestBody(resolve('high', providerId, 'openai/gpt-5.5'), {
-        perplexity: { reasoning_effort: 'low' },
-      });
-      expect(body.reasoning).toEqual({ effort: 'low' });
-    },
-  );
-
-  it.each(['perplexity', 'perplexity-agent'])(
-    "preserves the caller's native %s reasoning setting over the session level",
-    async providerId => {
-      const body = await requestBody(resolve('high', providerId, 'openai/gpt-5.5'), {
-        perplexity: { reasoning: { effort: 'low' } },
-      });
-      expect(body.reasoning).toEqual({ effort: 'low' });
-    },
-  );
 
   it.each([
     ['togetherai', 'Qwen/Qwen3.5-9B'],
@@ -218,8 +173,6 @@ describe('MastraCodeGateway thinking level forwarding', () => {
       ['togetherai', 'Qwen/Qwen3.5-9B'],
       ['alibaba', 'qwen-flash'],
       ['openrouter', 'deepseek/deepseek-v4-pro'],
-      ['perplexity', 'openai/gpt-5.5'],
-      ['perplexity-agent', 'openai/gpt-5.5'],
     ] as const) {
       const body = await requestBody(resolve(level, providerId, modelId));
       for (const thinkingField of ['thinking', 'reasoning_effort', 'reasoning', 'enable_thinking']) {

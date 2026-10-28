@@ -33,9 +33,6 @@ const routes: Array<{ name: string; providerId: string; modelId: string; oauth?:
   { name: 'OpenAI API key', providerId: 'openai', modelId: 'gpt-5.5' },
   { name: 'Codex OAuth', providerId: 'openai', modelId: 'gpt-5.5', oauth: true },
   { name: 'Gemini thinking', providerId: 'google', modelId: 'gemini-3-flash-preview' },
-  { name: 'Mistral API key', providerId: 'mistral', modelId: 'zai-glm-5-3-flash' },
-  { name: 'Perplexity Agent API key', providerId: 'perplexity', modelId: 'openai/gpt-5.5' },
-  { name: 'Perplexity Agent alias API key', providerId: 'perplexity-agent', modelId: 'openai/gpt-5.5' },
   { name: 'custom endpoint', providerId: 'local', modelId: 'local-model' },
   { name: 'xAI OAuth', providerId: 'xai', modelId: 'grok-4.6', oauth: true },
   { name: 'Kimi OAuth', providerId: 'kimi-for-coding', modelId: 'k3', oauth: true },
@@ -51,7 +48,7 @@ const routes: Array<{ name: string; providerId: string; modelId: string; oauth?:
 describe.each(routes)('AI SDK v7 conversations through $name', route => {
   let mock: LLMock;
   let directory: string;
-  let sent: Array<{ path: string; body: Record<string, unknown>; headers: Headers }>;
+  let sent: Array<{ body: Record<string, unknown>; headers: Headers }>;
 
   beforeEach(async () => {
     directory = mkdtempSync(join(tmpdir(), 'mastracode-v7-'));
@@ -71,10 +68,10 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
     vi.spyOn(globalThis, 'fetch').mockImplementation(async (input, init) => {
       const request = new Request(input, init);
       const original = new URL(request.url);
-      sent.push({ path: original.pathname, body: await request.clone().json(), headers: request.headers });
+      sent.push({ body: await request.clone().json(), headers: request.headers });
       const path = original.pathname.endsWith('/messages')
         ? '/v1/messages'
-        : original.pathname.includes('/codex/responses') || original.pathname === '/v1/agent'
+        : original.pathname.includes('/codex/responses')
           ? '/v1/responses'
           : original.pathname;
       return realFetch(new Request(`${mock.url}${path}${original.search}`, request));
@@ -118,11 +115,7 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
       const model = gateway.resolveLanguageModel({
         providerId: route.providerId,
         modelId: route.modelId,
-        apiKey: route.gateway
-          ? 'organization-key'
-          : route.oauth
-            ? 'tenant-key'
-            : await gateway.getApiKey(`${route.providerId}/${route.modelId}`),
+        apiKey: route.gateway ? 'organization-key' : 'tenant-key',
         headers: { 'x-thread-id': 'picture-thread' },
       });
       const createAgent = (model: ReturnType<MastraCodeGateway['resolveLanguageModel']>) =>
@@ -157,12 +150,11 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
 
       expect(result.text).toBe('The file contains a picture.');
       expect(result.finishReason).toBe('stop');
-      // AIMock's shared chat renderer emits usage only when requested. Mistral
-      // and these compatible routes omit that flag; retain unknown counters
-      // when the fixture sends none instead of inventing token counts.
+      // These OpenAI-compatible routes do not request streaming usage; retain
+      // unknown counters rather than inventing token counts when none are sent.
       const hasUsage =
         method === 'generate' ||
-        (!['local', 'xai', 'github-copilot', 'mistral'].includes(route.providerId) && !(route.gateway && !route.oauth));
+        (!['local', 'xai', 'github-copilot'].includes(route.providerId) && !(route.gateway && !route.oauth));
       expect(result.totalUsage).toMatchObject(
         hasUsage
           ? { inputTokens: 20, outputTokens: 10, totalTokens: 30 }
@@ -188,9 +180,7 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
         nextGateway.resolveLanguageModel({
           providerId: nextProviderId,
           modelId: nextProviderId === 'openai' ? 'gpt-5.5' : 'claude-sonnet-4-6',
-          apiKey: await nextGateway.getApiKey(
-            `${nextProviderId}/${nextProviderId === 'openai' ? 'gpt-5.5' : 'claude-sonnet-4-6'}`,
-          ),
+          apiKey: 'next-tenant-key',
         }),
       );
       const followUp = await run(
@@ -220,23 +210,6 @@ describe.each(routes)('AI SDK v7 conversations through $name', route => {
       }
       if (route.providerId === 'google') {
         expect(body).toMatchObject({ generationConfig: { thinkingConfig: { thinkingLevel: 'high' } } });
-      }
-      if (route.providerId === 'mistral') {
-        expect(requests[0]!.path).toBe('/v1/chat/completions');
-        expect(body).toMatchObject({ model: route.modelId, reasoning_effort: 'high' });
-      }
-      if (['perplexity', 'perplexity-agent'].includes(route.providerId)) {
-        // AIMock serves the shared Agent/Responses function-call schema at
-        // /v1/responses; assert the native path before forwarding to that fixture.
-        expect(requests.slice(0, 2).map(request => request.path)).toEqual(['/v1/agent', '/v1/agent']);
-        expect(body).toMatchObject({ model: route.modelId, reasoning: { effort: 'high' } });
-        expect(body).not.toHaveProperty('reasoning_effort');
-        expect(requests[1]!.body).toMatchObject({
-          input: expect.arrayContaining([
-            expect.objectContaining({ type: 'function_call', call_id: 'call_read', name: 'read_file' }),
-            expect.objectContaining({ type: 'function_call_output', call_id: 'call_read', output: 'picture file' }),
-          ]),
-        });
       }
     },
   );

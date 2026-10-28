@@ -104,31 +104,6 @@ describe('thinking model capabilities', () => {
       ['off', 'low', 'medium', 'high', 'xhigh'],
     ],
     [
-      'Mistral GLM-5.3 offers its low, high and max efforts',
-      'mistral/zai-glm-5-3',
-      effort('low', 'medium', 'high', 'xhigh', 'max'),
-      ['off', 'low', 'high', 'max'],
-    ],
-    [
-      'older Mistral models retain their high-only reasoning control',
-      'mistral/zai-glm-5-2',
-      effort('none', 'high', 'max'),
-      ['off', 'high'],
-    ],
-    [
-      'Perplexity direct Agent models offer only efforts accepted by the Agent API',
-      'perplexity/openai/gpt-5.5',
-      effort('low', 'medium', 'high', 'xhigh', 'max'),
-      ['off', 'low', 'medium', 'high', 'xhigh'],
-    ],
-    [
-      'the Perplexity Agent provider alias uses the same supported controls',
-      'perplexity-agent/openai/gpt-5.5',
-      effort('low', 'medium', 'high', 'xhigh', 'max'),
-      ['off', 'low', 'medium', 'high', 'xhigh'],
-    ],
-    ['Perplexity presets without published controls offer only off', 'perplexity/fast', [], ['off']],
-    [
       'Alibaba offers its thinking switch, not efforts its request cannot send',
       'alibaba/qwen-plus',
       [{ type: 'toggle' }, ...effort('low', 'high')],
