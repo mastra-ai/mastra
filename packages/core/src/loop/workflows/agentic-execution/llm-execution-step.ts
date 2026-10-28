@@ -50,6 +50,7 @@ import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/pr
 import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
+import { isStructuredOutputError } from '../../../stream/base/output-format-handlers';
 import { MastraModelOutput } from '../../../stream/base/output';
 import type {
   ChunkType,
@@ -528,11 +529,6 @@ function buildTripWireBailResponse<OUTPUT = undefined, TOOLS extends ToolSet = T
     stepTools,
   };
 }
-
-const STRUCTURED_OUTPUT_ERROR_IDS = new Set([
-  'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED',
-  'STRUCTURED_OUTPUT_TRUNCATED',
-]);
 
 async function processOutputStream<OUTPUT = undefined>({
   collectedChunks = [],
@@ -1168,10 +1164,7 @@ async function processOutputStream<OUTPUT = undefined>({
     }
 
     if (runState.state.hasErrored) {
-      if (
-        chunk.type === 'error' &&
-        STRUCTURED_OUTPUT_ERROR_IDS.has((chunk.payload.error as { id?: string } | undefined)?.id ?? '')
-      ) {
+      if (chunk.type === 'error' && isStructuredOutputError(chunk.payload.error)) {
         awaitingFinishAfterStructuredOutputError = true;
         continue;
       }
