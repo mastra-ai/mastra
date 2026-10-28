@@ -1,9 +1,8 @@
 ---
 '@mastra/core': minor
-'@mastra/client-js': patch
 ---
 
-Added a schema for custom dashboard definitions. A definition lays out rows of widgets on a 12-column grid; each widget stores its own trace aggregate, span aggregate, metrics, or scores queries without a time range, which the page supplies.
+Added a schema for custom dashboard definitions. A definition lays out rows of widgets on a 12-column grid; each widget stores its own trace aggregate, span aggregate, metrics, or scores queries without a time range, which the page supplies. Comparison with the previous window is set with `compare: 'previousWindow'` on any query, and a scores query without `scorerId` covers every scorer found at run time. A view can set its own `description`, `scope`, and `drilldown` (`action` and `click` targets), overriding the widget's.
 
 `dashboardDefinitionSchema` validates a whole definition. `dashboardDefinitionEnvelopeSchema` checks only what a service storing dashboards needs (known `schemaVersion`, at most 20 widgets, 1 to 8 queries per view, 64 KiB serialized, unique widget ids, every widget has `kind` and `views`), so new widget kinds can be stored without upgrading that service.
 

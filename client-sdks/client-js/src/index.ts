@@ -52,6 +52,7 @@ export type {
   DashboardDefinition,
   DashboardDefinitionEnvelope,
   DashboardDrilldown,
+  DashboardDrilldownTarget,
   DashboardFilterGroup,
   DashboardFilterNode,
   DashboardFilterToken,

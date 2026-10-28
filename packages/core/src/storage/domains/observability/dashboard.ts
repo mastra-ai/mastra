@@ -63,15 +63,22 @@ const spanAggregateDashboardQuerySchema = spanAggregateQueryObjectSchema.extend(
 const metricsQueryFilters = metricsFilterSchema.omit({ timestamp: true }).strict().optional();
 const scoresQueryFilters = scoresFilterSchema.omit({ timestamp: true }).strict().optional();
 
-const metricsSource = { source: z.literal('metrics') } as const;
-const scoresSource = { source: z.literal('scores') } as const;
+const metricsSource = { source: z.literal('metrics'), compare: compareSchema } as const;
+const scoresSource = { source: z.literal('scores'), compare: compareSchema } as const;
+
+// Dashboards state comparison only through `compare`, so the aggregate args' `comparePeriod` is dropped.
+const { comparePeriod: _metricComparePeriod, ...metricAggregateShape } = getMetricAggregateArgsSchema.shape;
+const { comparePeriod: _scoreComparePeriod, ...scoreAggregateShape } = getScoreAggregateArgsSchema.shape;
+
+// Omitted means the widget discovers scorers at run time, like the Scores card.
+const optionalScorerId = { scorerId: getScoreAggregateArgsSchema.shape.scorerId.optional() } as const;
 
 const metricsDashboardQuerySchema = z.discriminatedUnion('request', [
   z
     .object({
       ...metricsSource,
       request: z.literal('aggregate'),
-      ...getMetricAggregateArgsSchema.shape,
+      ...metricAggregateShape,
       filters: metricsQueryFilters,
     })
     .strict()
@@ -111,7 +118,8 @@ const scoresDashboardQuerySchema = z.discriminatedUnion('request', [
     .object({
       ...scoresSource,
       request: z.literal('aggregate'),
-      ...getScoreAggregateArgsSchema.shape,
+      ...scoreAggregateShape,
+      ...optionalScorerId,
       filters: scoresQueryFilters,
     })
     .strict(),
@@ -120,6 +128,7 @@ const scoresDashboardQuerySchema = z.discriminatedUnion('request', [
       ...scoresSource,
       request: z.literal('breakdown'),
       ...getScoreBreakdownArgsSchema.shape,
+      ...optionalScorerId,
       filters: scoresQueryFilters,
     })
     .strict(),
@@ -129,6 +138,7 @@ const scoresDashboardQuerySchema = z.discriminatedUnion('request', [
       request: z.literal('timeSeries'),
       ...getScoreTimeSeriesArgsSchema.shape,
       interval: getScoreTimeSeriesArgsSchema.shape.interval.optional(),
+      ...optionalScorerId,
       filters: scoresQueryFilters,
     })
     .strict(),
@@ -138,6 +148,7 @@ const scoresDashboardQuerySchema = z.discriminatedUnion('request', [
       request: z.literal('percentiles'),
       ...getScorePercentilesArgsSchema.shape,
       interval: getScorePercentilesArgsSchema.shape.interval.optional(),
+      ...optionalScorerId,
       filters: scoresQueryFilters,
     })
     .strict(),
@@ -223,22 +234,37 @@ export const dashboardColumnSchema = z
   })
   .strict();
 
-export const dashboardDrilldownSchema = z
+export const dashboardDrilldownTargetSchema = z
   .object({
     page: z.enum(DASHBOARD_DRILLDOWN_PAGES),
-    /** Added to the clicked row's dimensions and the page's range when the drilldown opens. */
+    /** Added to the page's range (and, for `click`, the clicked row's dimensions) when the drilldown opens. */
     filters: z.array(dashboardFilterNodeSchema).optional(),
+  })
+  .strict();
+
+export const dashboardDrilldownSchema = z
+  .object({
+    /** Opened from the widget's action button. */
+    action: dashboardDrilldownTargetSchema.optional(),
+    /** Opened by clicking a row, bar or point. */
+    click: dashboardDrilldownTargetSchema.optional(),
   })
   .strict();
 
 export const dashboardWidgetViewSchema = z
   .object({
     label: z.string().optional(),
+    /** Overrides the widget's description. */
+    description: z.string().optional(),
     queries: queriesArraySchema(dashboardQuerySchema),
     /** Table widgets only. */
     columns: z.array(dashboardColumnSchema).optional(),
     /** Per-kind presentation options. */
     options: z.record(z.string(), z.unknown()).optional(),
+    /** Overrides the widget's drilldown. */
+    drilldown: dashboardDrilldownSchema.optional(),
+    /** Shown only at this scope. */
+    scope: scopeSchema,
   })
   .strict();
 
@@ -316,4 +342,5 @@ export type DashboardQuery = z.input<typeof dashboardQueryUnionSchema>;
 export type NormalizedDashboardQuery = z.output<typeof dashboardQueryUnionSchema>;
 export type DashboardColumn = z.input<typeof dashboardColumnSchema>;
 export type DashboardDrilldown = z.input<typeof dashboardDrilldownSchema>;
+export type DashboardDrilldownTarget = z.input<typeof dashboardDrilldownTargetSchema>;
 export type DashboardDefaults = z.input<typeof dashboardDefaultsSchema>;
