@@ -75,6 +75,15 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser.setCookies', () => {
     expect(cookiesSeen.get('/restored')).toBe('preview=early');
   }, 30_000);
 
+  it('with a shared browser, sends cookies queued under one thread to every thread', async () => {
+    browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'shared' });
+
+    await browser.setCookies([cookie('shared')], 'thread-1');
+    await browser.ensureReady();
+
+    expect(await titleAt(origin, 'thread-2')).toBe('preview=shared');
+  }, 30_000);
+
   it('adds cookies to a running browser, only for that thread', async () => {
     browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'thread' });
     expect(await titleAt(origin, 'thread-1')).toBe('no cookie');

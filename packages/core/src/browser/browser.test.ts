@@ -176,7 +176,7 @@ describe('MastraBrowser.setCookies', () => {
   }
 
   it('drops cookies queued for a thread that closes before its browser opens', async () => {
-    const browser = new QueueingBrowser({ headless: true });
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
     await browser.setCookies([{ name: 'kept', value: 'v', url: 'https://example.com' }], 'thread-1');
     await browser.setCookies([{ name: 'dropped', value: 'v', url: 'https://example.com' }], 'thread-2');
 
@@ -185,6 +185,16 @@ describe('MastraBrowser.setCookies', () => {
     await browser.openThread('thread-2');
 
     expect(browser.added).toEqual(['kept']);
+  });
+
+  it('shares one queue across threads with a shared browser', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'shared' });
+    await browser.setCookies([{ name: 'shared', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    await browser.closeThreadSession('thread-1');
+    await browser.openThread('thread-2');
+
+    expect(browser.added).toEqual(['shared']);
   });
 
   it('drops every queued cookie when the browser closes', async () => {

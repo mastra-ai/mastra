@@ -1418,7 +1418,8 @@ export abstract class MastraBrowser extends MastraBase {
    * @param threadId - The thread ID whose session should be closed
    */
   async closeThreadSession(threadId: string): Promise<void> {
-    this.pendingCookies.delete(threadId);
+    // A shared browser outlives any one thread, so its queue stays.
+    if (this.getScope() === 'thread') this.pendingCookies.delete(threadId);
     if (!this.threadManager) {
       return;
     }
@@ -1545,8 +1546,13 @@ export abstract class MastraBrowser extends MastraBase {
   // Cookies
   // ---------------------------------------------------------------------------
 
-  /** Cookies waiting for a thread's browser to open, by thread. */
+  /** Cookies waiting for a browser to open, by thread (one shared entry with `scope: 'shared'`). */
   private readonly pendingCookies = new Map<string, BrowserCookie[]>();
+
+  /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
+  private cookieQueueKey(threadId: string): string {
+    return this.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
+  }
 
   /**
    * Add cookies to a thread's browser, so its pages can open a site your app
@@ -1561,7 +1567,8 @@ export abstract class MastraBrowser extends MastraBase {
   async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     if (await this.addCookiesToOpenBrowser(cookies, effectiveThreadId)) return;
-    this.pendingCookies.set(effectiveThreadId, [...(this.pendingCookies.get(effectiveThreadId) ?? []), ...cookies]);
+    const key = this.cookieQueueKey(effectiveThreadId);
+    this.pendingCookies.set(key, [...(this.pendingCookies.get(key) ?? []), ...cookies]);
   }
 
   /**
@@ -1577,9 +1584,10 @@ export abstract class MastraBrowser extends MastraBase {
 
   /** Add the cookies {@link setCookies} queued while the thread's browser wasn't open. */
   protected async addPendingCookies(threadId: string): Promise<void> {
-    const pending = this.pendingCookies.get(threadId);
+    const key = this.cookieQueueKey(threadId);
+    const pending = this.pendingCookies.get(key);
     if (!pending) return;
-    if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(threadId);
+    if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(key);
   }
 
   // ---------------------------------------------------------------------------
