@@ -1,6 +1,5 @@
 ---
-'@mastra/redis-streams': patch
 '@mastra/core': patch
 ---
 
-Fixed thread stream topics growing without bound for agents without memory, such as the observational memory observer and reflector. Finished runs of these agents are now removed from the topic 30 seconds after they end, like failed runs already were, instead of being kept until the stream length cap.
+Fixed thread stream topics growing without bound for agents without memory, such as the observational memory observer and reflector. Their finished runs, successful or failed, were never removed from the topic and piled up until the stream length cap. Both are now removed 30 seconds after the run ends.
