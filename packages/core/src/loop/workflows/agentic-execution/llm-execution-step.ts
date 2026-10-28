@@ -904,7 +904,7 @@ async function processOutputStream<OUTPUT = undefined>({
         runState.setState({
           providerOptions: chunk.payload.metadata?.providerMetadata ?? chunk.payload.providerMetadata,
           stepResult: {
-            reason: chunk.payload.reason,
+            reason: chunk.payload.stepResult.reason,
             rawReason: chunk.payload.stepResult.rawReason,
             logprobs: chunk.payload.logprobs,
             warnings: reportedWarnings(responseFromModel.warnings),

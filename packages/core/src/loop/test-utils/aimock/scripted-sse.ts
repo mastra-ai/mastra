@@ -74,6 +74,9 @@ export function useScriptedProviders() {
       endpoint.requests = [];
       endpoint.requestHeaders = [];
     }
+    llm.clearFixtures();
+    llm.clearRequests();
+    llm.resetMatchCounts();
   });
   afterAll(async () => {
     await llm.stop();
