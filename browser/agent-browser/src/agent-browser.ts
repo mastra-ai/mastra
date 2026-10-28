@@ -104,6 +104,8 @@ export class AgentBrowser extends MastraBrowser {
         // `isRemoteThreadBrowser`.
         this.setupCloseListenerForThread(manager, threadId, this.isRemoteThreadBrowser());
       },
+      // Cookies go in before saved tabs reload, so restored pages load signed in.
+      onBrowserOpened: (threadId: string) => this.addPendingCookies(threadId),
     };
     const createTm =
       config.createThreadManager ??

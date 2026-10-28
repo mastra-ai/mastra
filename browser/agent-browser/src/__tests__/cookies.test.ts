@@ -22,7 +22,9 @@ try {
 }
 
 describe.skipIf(!canLaunchBrowser)('AgentBrowser.setCookies', () => {
+  const cookiesSeen = new Map<string, string>();
   const server = createServer((req, res) => {
+    cookiesSeen.set(req.url ?? '/', req.headers.cookie ?? 'no cookie');
     res.writeHead(200, { 'content-type': 'text/html' });
     res.end(`<title>${req.headers.cookie ?? 'no cookie'}</title>`);
   });
@@ -57,6 +59,20 @@ describe.skipIf(!canLaunchBrowser)('AgentBrowser.setCookies', () => {
     await browser.setCookies([cookie('early')], 'thread-1');
 
     expect(await titleAt(origin, 'thread-1')).toBe('preview=early');
+  }, 30_000);
+
+  it('adds cookies before restoring saved tabs, so they load signed in', async () => {
+    browser = new AgentBrowser({ headless: true, timeout: 15_000, scope: 'thread' });
+    await browser.ensureReady();
+    browser['threadManager'].updateBrowserState('thread-1', {
+      tabs: [{ url: `${origin}/restored`, title: '' }],
+      activeTabIndex: 0,
+    });
+
+    await browser.setCookies([cookie('early')], 'thread-1');
+    await browser.getManagerForThread('thread-1');
+
+    expect(cookiesSeen.get('/restored')).toBe('preview=early');
   }, 30_000);
 
   it('adds cookies to a running browser, only for that thread', async () => {

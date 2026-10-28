@@ -86,6 +86,8 @@ export class StagehandBrowser extends MastraBrowser {
       onBrowserCreated: (stagehand, threadId) => {
         this.setupCloseListener(stagehand, () => this.handleThreadBrowserDisconnected(threadId), threadId);
       },
+      // Cookies go in before saved tabs reload, so restored pages load signed in.
+      onBrowserOpened: threadId => this.addPendingCookies(threadId),
     });
   }
 

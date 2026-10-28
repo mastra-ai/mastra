@@ -740,6 +740,28 @@ describe('StagehandBrowser', () => {
       expect(mockContext.addCookies).toHaveBeenCalledWith([cookie]);
       await threaded.close();
     });
+
+    it('adds cookies before restoring saved tabs', async () => {
+      const threaded = new StagehandBrowser({ scope: 'thread' });
+      await threaded.launch();
+      threaded['threadManager'].updateBrowserState('thread-1', {
+        tabs: [{ url: 'https://sbx.preview.test/' }],
+        activeTabIndex: 0,
+      });
+      const order: string[] = [];
+      mockContext.addCookies.mockImplementationOnce(async () => {
+        order.push('cookies');
+      });
+      mockPage.goto.mockImplementationOnce(async () => {
+        order.push('restore');
+      });
+
+      await threaded.setCookies([cookie], 'thread-1');
+      await threaded.getManagerForThread('thread-1');
+
+      expect(order).toEqual(['cookies', 'restore']);
+      await threaded.close();
+    });
   });
 
   describe('event injection', () => {
