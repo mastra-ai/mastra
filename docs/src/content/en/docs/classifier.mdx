@@ -13,7 +13,7 @@ A classifier asks a decision model a fixed set of typed questions about state, t
 
 Use a classifier when your application needs a decision rather than a conversation. The questions are fixed, the state is any JSON-compatible data you already have, and each answer comes back typed.
 
-Classifiers run on a decision model: a model configured to answer this kind of question, wrapped in a provider adapter such as the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). It isn't the agent's language model, and the constructor doesn't accept a `'provider/model'` string. See [Choosing a decision model](#choosing-a-decision-model).
+Classifiers run on a decision model: a model configured to answer this kind of question. Create it with a provider's `decisionModel()` factory, such as the [TypeSafe AI provider](https://ai-sdk.dev/providers/ai-sdk-providers/typesafe-ai). It isn't the agent's language model, and the constructor doesn't accept a `'provider/model'` string. See [Choosing a decision model](#choosing-a-decision-model).
 
 ## When to use a classifier
 
@@ -26,7 +26,7 @@ Use a classifier when the decision has a small, known set of outcomes:
 
 A classifier fits when you can describe the decision as a question with a fixed answer shape. If the model needs to produce a data object with many interdependent fields, use [structured output](/docs/agents/structured-output) on an agent instead.
 
-Evals solve a different problem. An eval measures whether outputs are good over time, while a classifier makes one decision at runtime that your application acts on. Use [`createClassifierScorer()`](/reference/evals/create-classifier-scorer) to project a classifier answer into a score for the eval pipeline.
+[Evals](/docs/evals/overview) answer a different question: they measure whether outputs are good over time, while a classifier makes one decision at runtime that your application acts on. Use [`createClassifierScorer()`](/reference/evals/create-classifier-scorer) to project a classifier answer into a score for the eval pipeline.
 
 ## How classifiers work
 
@@ -38,7 +38,7 @@ Questions come in three types:
 - `score` picks a position on an ordered `criteria` list. The list indexes define the range, and providers can return fractional scores.
 - `boolean` returns the probability that the statement is true. A value of `0.9` means the decision model estimates a 90% chance the answer is `true`. It doesn't mean the model is 90% confident of whichever outcome is more likely.
 
-This example asks one boolean question and acts on the answer:
+This example uses the TypeSafe AI provider. Install `@ai-sdk/typesafe-ai` and set `TYPESAFE_AI_API_KEY` before running it. It asks one boolean question and acts on the answer:
 
 ```typescript title="src/mastra/safety.ts"
 import { Classifier } from '@mastra/core/classifier'
@@ -72,7 +72,7 @@ For guidance on writing questions that produce stable answers, see [Designing qu
 
 ## Where classifiers run
 
-Call `decide()` directly when your application controls the decision point. Mastra also runs classifiers through several integrations:
+Call [`decide()`](/reference/classifier/classifier#decideoptions) directly when your application controls the decision point. Mastra also runs classifiers in several places:
 
 - **Workflow routing.** A [`.classifier()`](/docs/workflows/control-flow#route-with-a-classifier) step classifies the workflow input before `.branch()` routes on the answer.
 - **Guardrails and moderation.** [`ClassifierProcessor`](/reference/processors/classifier-processor) runs a classifier over agent input, output, or stream chunks and passes the answers to `onResult`, where you can abort or filter the content. See [Guardrails](/docs/agents/guardrails).
@@ -85,13 +85,15 @@ You can also register classifiers on the `Mastra` instance, which shares them ac
 
 The examples on this page use the TypeSafe AI provider. Other AI SDK providers, including OpenAI, Anthropic, and Google, expose `decisionModel()` factories as well. Each provider declares which question types its models support. For the full list of providers and model IDs, see [Decision models](/reference/classifier/classifier#decision-models).
 
+If provider output needs normalization before the classifier validates it, wrap the decision model in [`MastraDecisionModel`](/reference/classifier/classifier#customize-provider-responses). The classifier wraps a raw AI SDK decision model in `MastraDecisionModel` automatically.
+
 The classifier forwards the state you pass to the provider along with each question's `instructions`. Send only the data the decision needs. If the state contains sensitive fields, redact them before the call or use a provider that meets your data-handling requirements.
 
 ## Reliability
 
 `decide()` makes two retry attempts after retryable AI SDK `APICallError` failures by default. Set `maxRetries` to change the count. Other errors reject immediately, and an `abortSignal` cancels the active request and any wait between retries.
 
-Before returning, the classifier validates provider output. It requires exactly one answer per question, checks that each answer matches its question type, and rejects incomplete probability distributions, out-of-range scores, non-finite token counts, and invalid response timestamps. Invalid output rejects instead of returning partial answers.
+Before returning, the classifier validates provider output. It requires exactly one answer per question, checks that each answer matches its question type, and rejects incomplete probability distributions, out-of-range scores, non-finite token counts, and invalid response timestamps. Invalid output rejects instead of returning partial answers. See [Validation and errors](/reference/classifier/classifier#validation-and-errors) for the full list.
 
 ## Observability
 
@@ -101,7 +103,7 @@ Classifier traces appear under the classifier entity in [Studio](/docs/studio/ov
 
 ## Next steps
 
-- [Classifier reference](/reference/classifier/classifier): constructor options, per-call questions, return values, and custom provider responses
+- [Classifier reference](/reference/classifier/classifier): constructor options, per-call questions, return values, validation, and custom provider responses
 - [Route with a classifier](/docs/workflows/control-flow#route-with-a-classifier): use answers to drive workflow branches
 - [ClassifierProcessor](/reference/processors/classifier-processor): enforce a policy on agent input and output
 - [Conditional approval with a function](/docs/agents/human-in-the-loop#conditional-approval-with-a-function): combine a classifier with tool approval
