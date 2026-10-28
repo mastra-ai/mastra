@@ -1,3 +1,5 @@
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonRows } from '../../../../ui/SkeletonRows';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { X } from 'lucide-react';
 
@@ -77,7 +79,12 @@ export function KnowledgeScopeFlyout({
             Recent activity
           </Txt>
           {activity.isPending ? (
-            <p className="text-muted-foreground mt-2 text-xs">Loading…</p>
+            <SkeletonRows label="Loading recent activity" rows={3} className="mt-2 gap-2">
+              <div aria-hidden className="border-border border-l pl-2">
+                <SkeletonText line="text-meta" className="w-4/5 motion-reduce:before:animate-none" />
+                <SkeletonText line="text-meta" className="w-1/2 motion-reduce:before:animate-none" />
+              </div>
+            </SkeletonRows>
           ) : activity.isError ? (
             <p className="text-muted-foreground mt-2 text-xs">Unable to load recent activity.</p>
           ) : recentActivity.length === 0 ? (

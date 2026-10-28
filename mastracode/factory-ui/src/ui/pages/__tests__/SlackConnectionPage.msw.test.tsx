@@ -88,6 +88,7 @@ describe('SlackConnectionPage', () => {
     renderPage();
     const user = userEvent.setup();
 
+    await screen.findByText('Example Workspace');
     const connectionSection = (await screen.findByRole('heading', { level: 2, name: 'Connection' })).closest('section');
     if (!connectionSection) throw new Error('Connection section not found');
 
