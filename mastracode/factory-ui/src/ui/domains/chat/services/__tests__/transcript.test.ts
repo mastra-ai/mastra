@@ -1906,6 +1906,28 @@ describe('live user-signal events render the same as their persisted copy', () =
     expect(state.entries).toEqual([]);
   });
 
+  it('keeps a plain message whose signal arrived before its send failed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'hello from the composer' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+
+    state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
+
+    expect(state.entries).toMatchObject([
+      {
+        id: 'local-1',
+        message: {
+          id: 'sig-web',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+        },
+      },
+    ]);
+  });
+
   it('keeps non-user signals alone', () => {
     const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
     let state = createInitialTranscript({ messages: [], threadId: 't1' });

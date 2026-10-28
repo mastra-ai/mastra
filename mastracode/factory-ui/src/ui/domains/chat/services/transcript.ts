@@ -190,7 +190,8 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
         entries: state.entries.flatMap(entry => {
           if (entry.kind !== 'message' || entry.id !== action.id) return [entry];
           if (entry.deliveryStatus === 'pending') return [{ ...entry, deliveryStatus: 'failed' as const }];
-          return entry.deliveryStatus === undefined ? [] : [entry];
+          const echoed = entry.message.id !== entry.id;
+          return entry.deliveryStatus === undefined && !echoed ? [] : [entry];
         }),
       };
     case 'localNotice':
