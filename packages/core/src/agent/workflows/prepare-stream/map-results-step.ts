@@ -6,6 +6,8 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
+import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
+import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
@@ -106,8 +108,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
     };
 
     const saveInputAfterTotalTimeout = async () => {
-      // OM owns its own writes, matching the durable engine's final persistence.
-      if (!memory || !memoryData.thread?.id || memoryConfig?.readOnly || memoryConfig?.observationalMemory) return;
+      if (!memory || !memoryData.thread?.id) return;
+      // Mirror the finish path: only the MessageHistory output processor saves the turn, and
+      // it is skipped when history is disabled or observational memory owns the writes.
+      const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
+      if (
+        effectiveConfig.readOnly ||
+        !normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled ||
+        isObservationalMemoryEnabled(effectiveConfig.observationalMemory)
+      ) {
+        return;
+      }
       const input = filterMessagesForPersistence(messageList.get.input.db());
       if (input.length === 0) return;
 
