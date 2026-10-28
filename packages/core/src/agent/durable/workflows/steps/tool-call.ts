@@ -451,10 +451,15 @@ export function createDurableToolCallStep() {
           // Rebuilt spans come from the run-start snapshot, so end them with the clocks
           // their segment captured: the loop state's (or this step's, on the first
           // iteration) for the originals.
-          const attributes = carriedSpanClocks(reg, {
-            completionStartTime: initData.completionStartTime ?? typedInput.completionStartTime,
-            timeToFirstTokenMs: initData.timeToFirstTokenMs ?? typedInput.timeToFirstTokenMs,
-          });
+          const attributes = carriedSpanClocks(
+            reg,
+            initData.completionStartTime
+              ? { completionStartTime: initData.completionStartTime, timeToFirstTokenMs: initData.timeToFirstTokenMs }
+              : {
+                  completionStartTime: typedInput.completionStartTime,
+                  timeToFirstTokenMs: typedInput.timeToFirstTokenMs,
+                },
+          );
           if (typedInput.stepSpanData) {
             obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
           }

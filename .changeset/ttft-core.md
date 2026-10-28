@@ -10,4 +10,4 @@ const page = await storage.queryTraces(
 );
 ```
 
-Durable agents now carry the start of the model call that streamed the run's first chunk across steps, so their generation and agent run spans report time to first token too.
+Durable agents now carry the time to first token of the model call that streamed the run's first chunk across steps, so their generation and agent run spans report it too.

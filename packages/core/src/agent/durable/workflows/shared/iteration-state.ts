@@ -216,8 +216,13 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     // Carry span identity forward unchanged so every iteration shares one trace.
     agentSpanData: currentState.agentSpanData,
     modelSpanData: currentState.modelSpanData,
-    // First inference wins; later iterations never overwrite it.
-    completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
-    timeToFirstTokenMs: currentState.timeToFirstTokenMs ?? executionOutput.timeToFirstTokenMs,
+    // First inference wins; later iterations never overwrite it. Both values travel
+    // together, so state saved with only the clock never gains a later step's number.
+    ...(currentState.completionStartTime
+      ? { completionStartTime: currentState.completionStartTime, timeToFirstTokenMs: currentState.timeToFirstTokenMs }
+      : {
+          completionStartTime: executionOutput.completionStartTime,
+          timeToFirstTokenMs: executionOutput.timeToFirstTokenMs,
+        }),
   };
 }

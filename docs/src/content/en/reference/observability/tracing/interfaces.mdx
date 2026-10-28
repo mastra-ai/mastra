@@ -756,6 +756,12 @@ interface ModelGenerationAttributes {
   /** Whether this was a streaming response */
   streaming?: boolean
 
+  /** When the generation's first inference streamed its first chunk */
+  completionStartTime?: Date
+
+  /** Time to first token of the model inference that streamed the generation's first chunk */
+  timeToFirstTokenMs?: number
+
   /** Reason the generation finished */
   finishReason?: string
 }

@@ -805,15 +805,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const withCarriedClocks = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T => {
-              if (!carriedClocks) return data;
-              const attributes: NonNullable<T['attributes']> = { ...data.attributes };
-              if (carriedClocks.completionStartTime) {
-                attributes.completionStartTime ??= carriedClocks.completionStartTime;
-              }
-              if (carriedClocks.timeToFirstTokenMs !== undefined) {
-                attributes.timeToFirstTokenMs ??= carriedClocks.timeToFirstTokenMs;
-              }
-              return { ...data, attributes };
+              // Both values travel together; a span that already has the clock keeps its pair.
+              if (!carriedClocks?.completionStartTime || data.attributes?.completionStartTime) return data;
+              return { ...data, attributes: { ...data.attributes, ...carriedClocks } };
             };
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
