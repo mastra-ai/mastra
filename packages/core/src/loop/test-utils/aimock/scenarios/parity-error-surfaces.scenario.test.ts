@@ -365,6 +365,57 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     TEST_TIMEOUT_MS + 5_000,
   );
 
+  // Durable engines save the input before the run starts, so the deadline can fire during that save,
+  // before anything has called the model. The other engines save the input when the run finishes.
+  it.skipIf(engine !== 'durable' && engine !== 'evented' && engine !== 'inngest')(
+    'a deadline during a slow input save stops the run before it starts',
+    async () => {
+      const memory = new MockMemory();
+      const saveMessages = memory.saveMessages.bind(memory);
+      const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
+        if (args.messages.some(message => message.role === 'user')) {
+          await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 500));
+        }
+        return saveMessages(args);
+      });
+      try {
+        const result = await runLoopScenario({
+          engine,
+          llm: getMock(),
+          memory,
+          threadId: `slow-input-${engine}`,
+          resourceId: RESOURCE,
+          prompt: 'Save me slowly.',
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+          collectChunks: true,
+          fixtures: llm => {
+            llm.on({ endpoint: 'chat' }, { content: 'Must not reach the model.' });
+          },
+        });
+
+        const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+        expect(errors).toHaveLength(1);
+        expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+        // Give a run started after the deadline time to reach the model.
+        await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+        expect(getMock().getRequests()).toHaveLength(0);
+        // Nothing written during startup may outlive the deadline's cleanup.
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        const prefix = engine === 'inngest' ? 'inngest:' : '';
+        for (const name of ['durable-agentic-loop', 'durable-agentic-execution']) {
+          const snapshot = await workflows!.loadWorkflowSnapshot({
+            workflowName: `${prefix}${name}`,
+            runId: result.output.runId,
+          });
+          expect(snapshot?.status).not.toBe('running');
+        }
+      } finally {
+        saveSpy.mockRestore();
+      }
+    },
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
     '%s settles at the deadline without waiting for the tool',
     async method => {
