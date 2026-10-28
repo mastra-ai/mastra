@@ -168,7 +168,6 @@ export function getOrCreateSpan<T extends SpanType>(options: GetOrCreateSpanOpti
     traceId: tracingOptions?.traceId,
     // A resumed run's parent is the suspended span, a Mastra span in the trace.
     parentSpanId: resumedFromSpanId,
-    resumedFromSpanId,
     // tracingOptions.parentSpanId is the public external-correlation channel;
     // the id belongs to the caller's tracing system, not Mastra's own parentage.
     externalParentSpanId: tracingOptions?.parentSpanId,
