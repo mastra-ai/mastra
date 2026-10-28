@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, KeyRound, LogIn, Plus } from 'lucide-react';
+import { Check, KeyRound, LogIn, ServerCog } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 
@@ -77,7 +77,7 @@ export function ModelProviderPicker({
             {CONNECTION_METHOD_LABEL.oauth}
           </Tab>
           <Tab value="custom">
-            <Plus aria-hidden="true" />
+            <ServerCog aria-hidden="true" />
             Custom provider
           </Tab>
         </TabList>
