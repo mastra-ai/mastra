@@ -257,7 +257,7 @@ export const WorkflowTimeTravelForm = ({
         resumeData: Object.keys(parsedResume)?.length > 0 ? parsedResume : undefined,
         context: Object.keys(parsedContext)?.length > 0 ? parsedContext : undefined,
         nestedStepsContext: Object.keys(parsedNestedContext)?.length > 0 ? parsedNestedContext : undefined,
-        requestContext: requestContext,
+        requestContext,
         ...(isContinueRun ? { perStep: false } : {}),
       };
 

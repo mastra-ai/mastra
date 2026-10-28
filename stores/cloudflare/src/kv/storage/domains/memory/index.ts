@@ -1191,7 +1191,7 @@ export class MemoryStorageCloudflare extends MemoryStorage {
           // Add to destination thread's order
           const destOrderKey = this.getThreadMessagesKey(messageUpdate.threadId);
           const destEntries = await this.getSortedMessages(destOrderKey);
-          const newEntry = { id: id, score: Date.now() };
+          const newEntry = { id, score: Date.now() };
           destEntries.push(newEntry);
           await this.updateSortedMessages(destOrderKey, destEntries);
         } else {

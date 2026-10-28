@@ -593,7 +593,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
         const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
         const snapshot: any = await workflowsStore?.loadWorkflowSnapshot({
           workflowName: step.id,
-          runId: runId,
+          runId,
         });
 
         const nestedResumeSteps = resume.steps.slice(1);
@@ -624,12 +624,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             inputData,
             requestContext: forwardedRequestContext,
             parentStream,
-            runId: runId,
+            runId,
             ...(replayOnly
               ? { initialState: executionContext.state ?? {} }
               : {
                   resume: {
-                    runId: runId,
+                    runId,
                     steps: nestedResumeSteps,
                     resumePayload: resume.resumePayload,
                     resumePath: nestedResumeStepId
@@ -812,7 +812,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
                   __workflow_meta: {
                     ...nestedMeta,
                     ...(propagatedForeachOutput ? { foreachOutput: propagatedForeachOutput } : {}),
-                    runId: runId,
+                    runId,
                     path: suspendPath,
                   },
                 },

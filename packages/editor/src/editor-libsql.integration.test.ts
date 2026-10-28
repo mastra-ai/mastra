@@ -174,7 +174,7 @@ class MockGateway extends MastraModelGateway {
     // Mock embedding model that returns fixed-size vectors
     return {
       specificationVersion: 'v2',
-      modelId: modelId,
+      modelId,
       provider: providerId,
       maxEmbeddingsPerCall: 2048,
       supportsParallelCalls: true,

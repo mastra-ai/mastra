@@ -286,7 +286,7 @@ describe('agent-controller routes', () => {
   describe('ABORT_AGENT_CONTROLLER_SESSION_ROUTE', () => {
     it('acks an abort on an idle session', async () => {
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra: mastra,
+        mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any);
@@ -374,7 +374,7 @@ describe('agent-controller routes', () => {
   describe('SEND_AGENT_CONTROLLER_MESSAGE_ROUTE', () => {
     it('acks a send (reply streams over SSE, not this response)', async () => {
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra: mastra,
+        mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any);
@@ -1931,7 +1931,7 @@ describe('agent-controller routes', () => {
   describe('SWITCH_AGENT_CONTROLLER_MODE_ROUTE', () => {
     it('switches the active mode', async () => {
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra: mastra,
+        mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any);
@@ -1955,7 +1955,7 @@ describe('agent-controller routes', () => {
   describe('SWITCH_AGENT_CONTROLLER_MODEL_ROUTE', () => {
     it('switches and persists the model and thinking level together', async () => {
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra: mastra,
+        mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any);
@@ -2006,7 +2006,7 @@ describe('agent-controller routes', () => {
 
     it('switches the session model', async () => {
       await CREATE_AGENT_CONTROLLER_SESSION_ROUTE.handler({
-        mastra: mastra,
+        mastra,
         controllerId: 'code',
         resourceId: 'user-1',
       } as any);

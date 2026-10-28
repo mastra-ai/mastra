@@ -100,7 +100,7 @@ export function getTransformedSchema<OUTPUT = undefined>(
   if (itemSchema.type === 'array') {
     const innerElement = itemSchema.items;
     const arrayOutputSchema: JSONSchema7 = {
-      $schema: $schema,
+      $schema,
       type: 'object',
       properties: {
         elements: { type: 'array', items: innerElement },
@@ -118,7 +118,7 @@ export function getTransformedSchema<OUTPUT = undefined>(
   // Handle enum schemas - wrap in object like AI SDK does
   if (itemSchema.enum && Array.isArray(itemSchema.enum)) {
     const enumOutputSchema: JSONSchema7 = {
-      $schema: $schema,
+      $schema,
       type: 'object',
       properties: {
         result: { type: itemSchema.type || 'string', enum: itemSchema.enum },
@@ -134,7 +134,7 @@ export function getTransformedSchema<OUTPUT = undefined>(
   }
 
   return {
-    jsonSchema: jsonSchema,
+    jsonSchema,
     outputFormat: jsonSchema.type, // 'object'
   };
 }

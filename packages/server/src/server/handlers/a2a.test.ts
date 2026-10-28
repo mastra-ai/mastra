@@ -52,7 +52,7 @@ class MockAgent extends Agent {
 function createMockMastra(agents: Record<string, Agent>) {
   return new Mastra({
     logger: false,
-    agents: agents,
+    agents,
     storage: {
       init: vi.fn(),
       __setLogger: vi.fn(),

@@ -1067,11 +1067,11 @@ export class InworldRealtimeVoice extends MastraVoice {
 
   private sendEvent(type: string, data: any) {
     if (!this.ws || this.ws.readyState !== this.ws.OPEN) {
-      this.queue.push({ type: type, ...data });
+      this.queue.push({ type, ...data });
     } else {
       this.ws?.send(
         JSON.stringify({
-          type: type,
+          type,
           ...data,
         }),
       );

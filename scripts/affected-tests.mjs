@@ -854,7 +854,7 @@ const affectedSorted = [...selectedResult.affected].sort();
 
 if (flags.json) {
   const output = {
-    changedFiles: changedFiles,
+    changedFiles,
     affectedTests: affectedSorted,
     count: affectedSorted.length,
     elapsed: `${elapsed}ms`,

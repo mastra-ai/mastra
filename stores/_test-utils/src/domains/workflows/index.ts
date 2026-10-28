@@ -692,7 +692,7 @@ export function createWorkflowsTests({ storage, workflowResultsNoopWhenRunMissin
             status: 'waiting',
           },
         ],
-        runId: runId,
+        runId,
         timestamp: Date.now(),
       };
 

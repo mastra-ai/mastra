@@ -29,7 +29,7 @@ export class CloudflareVector extends MastraVector<VectorizeVectorFilter> {
     this.accountId = accountId;
 
     this.client = new Cloudflare({
-      apiToken: apiToken,
+      apiToken,
     });
   }
 

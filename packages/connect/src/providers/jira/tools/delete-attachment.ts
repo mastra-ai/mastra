@@ -55,8 +55,8 @@ export function deleteAttachmentTool(proxy: PlatformProxy) {
           // Cache the values in metadata for subsequent runs
           if (cloudId && baseUrl) {
             await platformProxy.updateMetadata({
-              cloudId: cloudId,
-              baseUrl: baseUrl,
+              cloudId,
+              baseUrl,
             });
           }
         }

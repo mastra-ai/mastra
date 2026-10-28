@@ -292,7 +292,7 @@ export class GoogleVoice extends MastraVoice {
    * @returns {Promise<Array<{voiceId: string, languageCodes: string[]}>>} List of available voices and their supported languages. Default language is en-US.
    */
   async getSpeakers({ languageCode = 'en-US' }: { languageCode?: string } = {}) {
-    const [response] = await this.ttsClient.listVoices({ languageCode: languageCode });
+    const [response] = await this.ttsClient.listVoices({ languageCode });
     return (response?.voices || [])
       .filter(voice => voice.name && voice.languageCodes)
       .map(voice => ({

@@ -2879,7 +2879,7 @@ export class Mastra<
       underlyingAgent.__registerPrimitives({
         logger: this.getLogger(),
         storage: this.getStorage(),
-        agents: agents,
+        agents,
         tts: this.#tts,
         vectors: this.#vectors,
       });
@@ -3014,7 +3014,7 @@ export class Mastra<
     mastraAgent.__registerPrimitives({
       logger: this.getLogger(),
       storage: this.getStorage(),
-      agents: agents,
+      agents,
       tts: this.#tts,
       vectors: this.#vectors,
     });

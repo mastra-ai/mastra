@@ -80,7 +80,7 @@ export async function getDynamicInstructionSections({
     coAuthorName: coAuthor?.name,
     coAuthorEmail: coAuthor?.email,
     activePlan: state?.activePlan ?? null,
-    modeId: modeId,
+    modeId,
     currentDate: new Date().toISOString().split('T')[0]!,
     workingDir: projectPath,
     state,

@@ -698,7 +698,7 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
   if (typeof scorersToUse === 'function') {
     try {
       scorersToUse = await scorersToUse({
-        requestContext: requestContext,
+        requestContext,
       });
     } catch (e) {
       const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
@@ -729,14 +729,14 @@ export async function runScorersForStep(params: RunScorersParams): Promise<void>
       runScorer({
         mastra: engine.mastra,
         scorerId: scorerObject.scorer.id,
-        scorerObject: scorerObject,
-        runId: runId,
-        input: input,
-        output: output,
+        scorerObject,
+        runId,
+        input,
+        output,
         requestContext,
         entity: {
           id: workflowId,
-          stepId: stepId,
+          stepId,
         },
         structuredOutput: true,
         source: 'LIVE',

@@ -12,7 +12,7 @@ app.get('/service-one', async c => {
   try {
     const response = await serviceTwoClient.getMessage('http://localhost:3001');
     const message = 'service-one response. Response from service-two: "' + response.message + '"';
-    return c.json({ message: message, traceId: response.traceId });
+    return c.json({ message, traceId: response.traceId });
   } catch (error) {
     console.error('[service-one] Failed to call service-two', error);
     return c.json(

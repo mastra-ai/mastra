@@ -950,7 +950,7 @@ export class CoreToolBuilder extends MastraBase {
                   toolCallId: execOptions?.toolCallId,
                 },
             tracingPolicy: options.tracingPolicy,
-            tracingContext: tracingContext,
+            tracingContext,
             requestContext: toolRequestContext,
             mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
           });

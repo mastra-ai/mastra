@@ -1504,7 +1504,7 @@ describe('sub-agent prompt input normalization (GitHub #14154)', () => {
       name: 'Parent Agent',
       instructions: 'You are a parent agent',
       model: mockModel,
-      agents: { subAgent: subAgent },
+      agents: { subAgent },
     });
 
     const tools = await parentAgent['convertTools']({

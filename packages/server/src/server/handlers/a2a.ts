@@ -2502,7 +2502,7 @@ export const AGENT_EXECUTION_ROUTE = createRoute({
     const result = await getAgentExecutionHandler({
       requestId,
       mastra,
-      agentId: agentId,
+      agentId,
       requestContext,
       method,
       params,

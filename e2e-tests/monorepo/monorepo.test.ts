@@ -280,7 +280,7 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
   });
 
   it('preserves project names and missing-manifest errors in the installed deployer', async () => {
-    const appDir = join(fixturePath, 'apps', 'custom');
+    const cwd = join(fixturePath, 'apps', 'custom');
     const missingProject = join(fixturePath, 'missing-project');
     await execa(
       'node',
@@ -289,13 +289,13 @@ describe.sequential.for([['pnpm'] as const])(`%s monorepo`, ([pkgManager]) => {
         '-e',
         `import assert from 'node:assert/strict';
 import { DepsService } from '@mastra/deployer/services';
-assert.equal(await new DepsService(${JSON.stringify(appDir)}).getProjectName(), '@inner/app');
+assert.equal(await new DepsService(${JSON.stringify(cwd)}).getProjectName(), '@inner/app');
 await assert.rejects(new DepsService(${JSON.stringify(missingProject)}).getProjectName(), {
   code: 'ENOENT',
   path: ${JSON.stringify(join(missingProject, 'package.json'))},
 });`,
       ],
-      { cwd: appDir },
+      { cwd },
     );
   });
 

@@ -2479,7 +2479,7 @@ describe('SemanticRecall', () => {
       const processor1 = new SemanticRecall({
         storage: mockStorage,
         vector: mockVector,
-        embedder: embedder,
+        embedder,
         indexName: customIndexName,
         topK: 3,
       });
@@ -2516,7 +2516,7 @@ describe('SemanticRecall', () => {
       const processor2 = new SemanticRecall({
         storage: mockStorage,
         vector: mockVector,
-        embedder: embedder,
+        embedder,
         indexName: customIndexName,
         topK: 3,
       });

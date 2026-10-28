@@ -1135,8 +1135,8 @@ export class MemoryStorageClickhouse extends MemoryStorage {
             `,
         query_params: {
           ...queryParams,
-          perPage: perPage,
-          offset: offset,
+          perPage,
+          offset,
         },
         clickhouse_settings: {
           date_time_input_format: 'best_effort',

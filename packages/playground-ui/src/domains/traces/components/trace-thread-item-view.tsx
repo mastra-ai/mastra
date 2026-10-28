@@ -20,7 +20,7 @@ const noop = () => {};
 
 export function TraceThreadItemView({ traceId, onHighlightSpans, className }: TraceThreadItemViewProps) {
   const { data, isLoading, error } = useTraceSpans({
-    traceId: traceId,
+    traceId,
     passive: true,
     queryOptions: { enabled: !!traceId },
   });

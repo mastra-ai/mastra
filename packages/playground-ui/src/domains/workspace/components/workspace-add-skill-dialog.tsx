@@ -105,11 +105,11 @@ export function WorkspaceAddSkillDialog({
     : writableMounts?.[0]?.path;
 
   const { data: popularData, isLoading: isLoadingPopular } = usePopularSkillsSh({
-    workspaceId: workspaceId,
+    workspaceId,
     queryOptions: { enabled: !!workspaceId },
   });
 
-  const searchMutation = useSearchSkillsSh({ workspaceId: workspaceId });
+  const searchMutation = useSearchSkillsSh({ workspaceId });
 
   const parsedSource = useMemo(() => {
     if (!selectedSkill?.topSource) return null;

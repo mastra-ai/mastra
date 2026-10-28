@@ -1146,7 +1146,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
         kNearestNeighborsCount: topK,
         fields: [vectorFieldName],
         exhaustive: exhaustiveSearch,
-        weight: weight,
+        weight,
         // Oversampling only makes sense for approximate (compressed) search — Azure
         // rejects the combination of oversampling and exhaustive search outright.
         ...(oversampling && !exhaustiveSearch && { oversampling }),
@@ -1171,7 +1171,7 @@ export class AzureAISearchVector extends MastraVector<AzureAISearchVectorFilter>
       // Prepare vector search options
       const vectorSearchOptions: VectorSearchOptions<any> = {
         queries: allVectorQueries,
-        filterMode: filterMode,
+        filterMode,
       };
 
       // Prepare field selection. The vector field is declared `retrievable: true`

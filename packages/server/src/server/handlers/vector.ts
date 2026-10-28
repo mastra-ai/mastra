@@ -349,7 +349,7 @@ export const DESCRIBE_INDEX_ROUTE = createRoute({
       }
 
       const vector = getVector(mastra, vectorName);
-      const stats: IndexStats = await vector.describeIndex({ indexName: indexName });
+      const stats: IndexStats = await vector.describeIndex({ indexName });
 
       return {
         dimension: stats.dimension,
@@ -379,7 +379,7 @@ export const DELETE_INDEX_ROUTE = createRoute({
       }
 
       const vector = getVector(mastra, vectorName);
-      await vector.deleteIndex({ indexName: indexName });
+      await vector.deleteIndex({ indexName });
       return { success: true };
     } catch (error) {
       return handleError(error, 'Error deleting index');

@@ -110,7 +110,7 @@ export function upsertRowTool(proxy: PlatformProxy) {
           insertDataOption: 'INSERT_ROWS',
         },
         data: {
-          range: range,
+          range,
           majorDimension: 'ROWS',
           values: [values],
         },

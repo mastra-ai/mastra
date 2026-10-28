@@ -113,7 +113,7 @@ export class ChromaVector extends MastraVector<ChromaVectorFilter> {
         ids: generatedIds,
         embeddings: vectors,
         metadatas: metadata,
-        documents: documents,
+        documents,
       });
 
       return generatedIds;

@@ -38,8 +38,8 @@ export function createErrorResponse(
   // For errors, ID should be the same as request ID, or null if that couldn't be determined
   return {
     jsonrpc: '2.0',
-    id: id, // Can be null if request ID was invalid/missing
-    error: error,
+    id, // Can be null if request ID was invalid/missing
+    error,
   };
 }
 
@@ -51,8 +51,8 @@ export function createSuccessResponse<T>(id: number | string | null, result: T):
 
   return {
     jsonrpc: '2.0',
-    id: id,
-    result: result,
+    id,
+    result,
   };
 }
 

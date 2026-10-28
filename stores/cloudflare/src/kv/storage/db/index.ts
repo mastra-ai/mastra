@@ -139,7 +139,7 @@ export class CloudflareKVDB extends MastraBase {
     if (this.bindings) {
       return {
         id: title,
-        title: title,
+        title,
         supports_url_encoding: true,
       };
     }

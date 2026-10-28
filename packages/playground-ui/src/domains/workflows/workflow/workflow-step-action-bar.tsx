@@ -118,7 +118,7 @@ export const WorkflowStepActionBar = ({
       workflowId,
       step: stepKey,
       inputData: stepPayload?.hasMultiSteps ? undefined : stepPayload?.input,
-      requestContext: requestContext,
+      requestContext,
       ...(isContinueRun ? { perStep: false } : {}),
       ...(stepPayload?.hasMultiSteps
         ? {

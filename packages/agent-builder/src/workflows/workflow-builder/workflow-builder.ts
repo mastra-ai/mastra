@@ -327,7 +327,7 @@ ${workflowBuilderPrompts.validation.instructions}`,
         resumeData,
       });
 
-      const originalInstructions = await executionAgent.getInstructions({ requestContext: requestContext });
+      const originalInstructions = await executionAgent.getInstructions({ requestContext });
 
       const enhancedOptions = {
         stopWhen: stepCountIs(100),

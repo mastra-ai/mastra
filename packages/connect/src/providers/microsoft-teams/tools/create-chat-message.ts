@@ -92,7 +92,7 @@ export function createChatMessageTool(proxy: PlatformProxy) {
         endpoint: `/v1.0/chats/${input.chatId}/messages`,
         data: {
           body: {
-            contentType: contentType,
+            contentType,
             content: input.body.content,
           },
         },

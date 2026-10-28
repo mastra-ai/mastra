@@ -133,7 +133,7 @@ export function TraceSpanPanel({
   spanFeedbackTabSlot,
 }: TraceSpanPanelProps) {
   const { data: spanDetailData, isLoading: isLoadingSpanDetail } = useSpanDetail({
-    traceId: traceId,
+    traceId,
     spanId: selectedSpanId ?? '',
     queryOptions: { enabled: !!traceId && !!selectedSpanId },
   });

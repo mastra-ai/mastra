@@ -361,7 +361,7 @@ export class CouchbaseVector extends MastraVector {
         ?.fields?.[0]?.similarity as CouchbaseMetric;
       return {
         dimension: dimensions,
-        count: count,
+        count,
         metric: Object.keys(DISTANCE_MAPPING).find(
           key => DISTANCE_MAPPING[key as MastraMetric] === metric,
         ) as MastraMetric,

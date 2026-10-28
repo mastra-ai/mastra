@@ -2243,7 +2243,7 @@ export class GeminiLiveVoice extends MastraVoice<
       message = data;
     } else {
       // For other messages, create the standard structure
-      message = { type: type, ...data };
+      message = { type, ...data };
     }
 
     if (!this.ws || !this.connectionManager.isConnected()) {

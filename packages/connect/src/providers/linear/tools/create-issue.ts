@@ -169,8 +169,8 @@ export function createIssueTool(proxy: PlatformProxy) {
       const response = await platformProxy.post({
         endpoint: '/graphql',
         data: {
-          query: query,
-          variables: variables,
+          query,
+          variables,
         },
         retries: 3,
       });

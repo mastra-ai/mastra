@@ -67,7 +67,7 @@ export function parse(input: string | RegExp, loose?: boolean): ParsedPattern {
   }
 
   return {
-    keys: keys,
+    keys,
     pattern: new RegExp('^' + pattern + (loose ? '(?=$|/)' : '/?$'), 'i'),
   };
 }

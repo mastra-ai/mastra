@@ -6481,7 +6481,7 @@ describe.sequential('Workflow', () => {
       resumerequestContext.set('testKey', testValue + '2');
 
       const result = await run.resume({
-        step: step,
+        step,
         resumeData: {
           human: true,
         },

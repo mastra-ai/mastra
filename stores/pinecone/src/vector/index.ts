@@ -149,8 +149,8 @@ export class PineconeVector extends MastraVector<PineconeVectorFilter> {
     try {
       await this.client.createIndex({
         name: indexName,
-        dimension: dimension,
-        metric: metric,
+        dimension,
+        metric,
         spec: {
           serverless: {
             cloud: this.cloud,

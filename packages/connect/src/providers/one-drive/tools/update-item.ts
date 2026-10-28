@@ -162,7 +162,7 @@ export function updateItemTool(proxy: PlatformProxy) {
       const response = await platformProxy.patch({
         // https://learn.microsoft.com/graph/api/driveitem-update
         endpoint: `/v1.0/me/drive/items/${encodeURIComponent(input.itemId)}`,
-        data: data,
+        data,
         retries: 3,
       });
 

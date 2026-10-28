@@ -272,7 +272,7 @@ export function createListMessagesTest({ storage }: { storage: MastraStorage }) 
         }),
       ];
 
-      await memoryStorage.saveMessages({ messages: messages });
+      await memoryStorage.saveMessages({ messages });
 
       const { messages: retrievedMessages } = await memoryStorage.listMessages({ threadId: thread.id });
       expect(retrievedMessages).toHaveLength(3);

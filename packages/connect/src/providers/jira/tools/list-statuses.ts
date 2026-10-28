@@ -90,8 +90,8 @@ export function listStatusesTool(proxy: PlatformProxy) {
         baseUrl = firstResource.url;
 
         await platformProxy.updateMetadata({
-          cloudId: cloudId,
-          baseUrl: baseUrl,
+          cloudId,
+          baseUrl,
         });
       }
 

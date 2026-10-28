@@ -88,7 +88,7 @@ export class ScoresInMemory extends ScoresStorage {
       scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: page,
+        page,
         perPage: perPageForResponse,
         hasMore: perPageInput === false ? false : scores.length > end,
       },
@@ -117,7 +117,7 @@ export class ScoresInMemory extends ScoresStorage {
       scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: page,
+        page,
         perPage: perPageForResponse,
         hasMore: perPageInput === false ? false : scores.length > end,
       },
@@ -150,7 +150,7 @@ export class ScoresInMemory extends ScoresStorage {
       scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: page,
+        page,
         perPage: perPageForResponse,
         hasMore: perPageInput === false ? false : scores.length > end,
       },
@@ -182,7 +182,7 @@ export class ScoresInMemory extends ScoresStorage {
       scores: scores.slice(start, end),
       pagination: {
         total: scores.length,
-        page: page,
+        page,
         perPage: perPageForResponse,
         hasMore: perPageInput === false ? false : scores.length > end,
       },

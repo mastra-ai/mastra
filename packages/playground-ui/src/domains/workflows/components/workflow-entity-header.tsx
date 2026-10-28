@@ -15,8 +15,8 @@ export interface WorkflowEntityHeaderProps {
 
 export const WorkflowEntityHeader = ({ workflowId, requestContext }: WorkflowEntityHeaderProps) => {
   const { data: workflow, isLoading } = useWorkflow({
-    workflowId: workflowId,
-    requestContext: requestContext,
+    workflowId,
+    requestContext,
     queryOptions: { enabled: Boolean(workflowId) },
   });
   const { handleCopy } = useCopyToClipboard({ text: workflowId });

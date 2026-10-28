@@ -87,8 +87,8 @@ export function listProjectsTool(proxy: PlatformProxy) {
       const startAt = input.startAt ?? 0;
 
       const params: Record<string, string | number> = {
-        maxResults: maxResults,
-        startAt: startAt,
+        maxResults,
+        startAt,
       };
 
       if (input.query) {
@@ -102,7 +102,7 @@ export function listProjectsTool(proxy: PlatformProxy) {
       // https://developer.atlassian.com/cloud/jira/platform/rest/v3/api-group-projects/#api-rest-api-3-project-search-get
       const response = await platformProxy.get({
         endpoint: `/ex/jira/${cloudId}/rest/api/3/project/search`,
-        params: params,
+        params,
         headers: {
           'X-Atlassian-Token': 'no-check',
         },
@@ -131,7 +131,7 @@ export function listProjectsTool(proxy: PlatformProxy) {
       }));
 
       return {
-        projects: projects,
+        projects,
         total: page.total,
         isLast: page.isLast,
         ...(!page.isLast && { nextStartAt: page.startAt + page.values.length }),

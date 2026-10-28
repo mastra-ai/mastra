@@ -79,15 +79,15 @@ export function updateAttendeeResponseTool(proxy: PlatformProxy) {
         throw new platformProxy.ActionError({
           type: 'not_found',
           message: `Attendee with email ${attendeeEmail} not found on event.`,
-          attendeeEmail: attendeeEmail,
-          eventId: eventId,
+          attendeeEmail,
+          eventId,
         });
       }
 
       const updatedAttendees = attendees.map((a: unknown, index: number) => {
         if (index === attendeeIndex) {
           if (a && typeof a === 'object') {
-            return { ...a, responseStatus: responseStatus };
+            return { ...a, responseStatus };
           }
           return a;
         }
@@ -129,7 +129,7 @@ export function updateAttendeeResponseTool(proxy: PlatformProxy) {
 
       return {
         eventId: String(patchedEvent.id || eventId),
-        calendarId: calendarId,
+        calendarId,
         attendee: {
           email: String(matchedAttendee.email),
           responseStatus: String(matchedAttendee.responseStatus || responseStatus),

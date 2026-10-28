@@ -336,7 +336,7 @@ export class WorkflowsStorageMongoDB extends WorkflowsStorage {
         status: 'pending',
         value: {},
         waitingPaths: {},
-        runId: runId,
+        runId,
         requestContext: {},
       };
 

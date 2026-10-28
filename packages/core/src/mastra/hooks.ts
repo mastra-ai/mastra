@@ -104,7 +104,7 @@ export function createOnScorerHook(mastra: Mastra) {
         ...rest,
         ...runResult,
         entityId,
-        scorerId: scorerId,
+        scorerId,
         spanId,
         traceId,
         scorer: {

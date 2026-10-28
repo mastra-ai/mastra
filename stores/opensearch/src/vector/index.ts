@@ -101,7 +101,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
               id: { type: 'keyword' },
               embedding: {
                 type: 'knn_vector',
-                dimension: dimension,
+                dimension,
                 method: {
                   name: 'hnsw',
                   space_type: METRIC_MAPPING[metric],
@@ -432,7 +432,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       const { body } = await this.client
         .get({
           index: indexName,
-          id: id,
+          id,
         })
         .catch(() => {
           throw new Error(`Document with ID ${id} not found in index ${indexName}`);
@@ -486,7 +486,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
       // Update the document
       await this.client.index({
         index: indexName,
-        id: id,
+        id,
         body: updatedDoc,
         refresh: true,
       });
@@ -572,7 +572,7 @@ export class OpenSearchVector extends MastraVector<OpenSearchVectorFilter> {
     try {
       await this.client.delete({
         index: indexName,
-        id: id,
+        id,
         refresh: true,
       });
     } catch (error: unknown) {

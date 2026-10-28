@@ -126,7 +126,7 @@ export class VoyageMultimodalEmbeddingModel {
       inputs: sdkInputs as any,
       model: this.modelId,
       inputType: toSdkInputType(inputType),
-      truncation: truncation,
+      truncation,
     });
 
     // Extract embeddings from response

@@ -543,7 +543,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       const result = await this.client
         .get({
           index: indexName,
-          id: id,
+          id,
           _source: ['embedding', 'metadata'],
         })
         .catch(() => {
@@ -596,7 +596,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
       // Update the document
       await this.client.index({
         index: indexName,
-        id: id,
+        id,
         document: updatedDoc,
         refresh: true,
       });
@@ -680,7 +680,7 @@ export class ElasticSearchVector extends MastraVector<ElasticSearchVectorFilter>
     try {
       await this.client.delete({
         index: indexName,
-        id: id,
+        id,
         refresh: true,
       });
     } catch (error: unknown) {

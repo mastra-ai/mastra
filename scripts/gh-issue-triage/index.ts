@@ -47,8 +47,8 @@ async function main() {
         command: 'npx',
         args: ['@modelcontextprotocol/server-slack'],
         env: {
-          SLACK_BOT_TOKEN: SLACK_BOT_TOKEN,
-          SLACK_TEAM_ID: SLACK_TEAM_ID,
+          SLACK_BOT_TOKEN,
+          SLACK_TEAM_ID,
           SLACK_CHANNEL_IDS: CHANNEL_ID,
         },
       },

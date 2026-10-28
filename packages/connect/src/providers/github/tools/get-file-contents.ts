@@ -91,7 +91,7 @@ export function getFileContentsTool(proxy: PlatformProxy) {
       const encodedPath = input.path.split('/').map(encodeURIComponent).join('/');
       const response = await platformProxy.get({
         endpoint: `/repos/${encodeURIComponent(input.owner)}/${encodeURIComponent(input.repo)}/contents/${encodedPath}`,
-        params: params,
+        params,
         retries: 3,
       });
 
@@ -128,7 +128,7 @@ export function getFileContentsTool(proxy: PlatformProxy) {
           path: input.path,
           sha: '',
           url: '',
-          entries: entries,
+          entries,
         };
         return result;
       }

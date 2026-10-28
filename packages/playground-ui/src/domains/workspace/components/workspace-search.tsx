@@ -88,8 +88,8 @@ function SearchInput() {
 export function WorkspaceSearchResults() {
   const { workspaceId, query, activeFilePath, setActiveFilePath, searchFiles, searchSkills } = useWorkspaceContext();
   const { data, isLoading, isError, error } = useWorkspaceSearch({
-    workspaceId: workspaceId,
-    query: query,
+    workspaceId,
+    query,
     files: searchFiles,
     skills: searchSkills,
     queryOptions: { enabled: query.trim().length > 0 && (searchFiles || searchSkills) },

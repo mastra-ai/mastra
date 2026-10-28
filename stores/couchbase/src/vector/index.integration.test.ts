@@ -130,8 +130,8 @@ describe('Integration Testing CouchbaseVector', async () => {
 
         // Connect to the cluster
         cluster = await connect(connectionString, {
-          username: username,
-          password: password,
+          username,
+          password,
           configProfile: 'wanDevelopment',
         });
 
@@ -756,7 +756,7 @@ describe('Integration Testing CouchbaseVector', async () => {
         // Create index with this metric
         await couchbase_client.createIndex({
           indexName: testIndexName,
-          dimension: dimension,
+          dimension,
           metric: mastraMetric,
         });
         await new Promise(resolve => setTimeout(resolve, 1000));

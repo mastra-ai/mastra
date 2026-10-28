@@ -525,7 +525,7 @@ export async function createDefaultTestContext(): Promise<AdapterTestContext> {
     version: '1.1.0',
     description: 'Test MCP Server 2',
     tools: {
-      failingTool: failingTool,
+      failingTool,
     },
     appResources: {
       'ui://test/app2': {

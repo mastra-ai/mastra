@@ -895,7 +895,7 @@ export class WorkflowEventProcessor extends EventProcessor {
         actor,
         resumeData,
         activeStepsPath: {},
-        parentWorkflow: parentWorkflow,
+        parentWorkflow,
       },
     });
   }
@@ -1192,7 +1192,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           status: finalStatus,
           result: normalizedPrevResult,
           activePaths: executionPath,
-          activeStepsPath: activeStepsPath,
+          activeStepsPath,
         },
       });
     }
@@ -1450,7 +1450,7 @@ export class WorkflowEventProcessor extends EventProcessor {
                 // keep resumeLabels / foreachIndex etc. — only the runId and path change as we propagate up
                 ...(prevResult.suspendPayload?.__workflow_meta ?? {}),
                 resumeLabels: Object.keys(resumeLabels).length > 0 ? resumeLabels : undefined,
-                runId: runId,
+                runId,
                 path: propagatedPath,
               },
             },
@@ -1548,7 +1548,7 @@ export class WorkflowEventProcessor extends EventProcessor {
           status: 'failed',
           error: (prevResult as any).error,
           activePaths: executionPath,
-          activeStepsPath: activeStepsPath,
+          activeStepsPath,
         },
       });
     }

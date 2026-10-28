@@ -7598,7 +7598,7 @@ export class Agent<
       runScorer({
         mastra: this.#mastra ?? this.#ephemeralMastra,
         scorerId: scorerObject.scorer.id,
-        scorerObject: scorerObject,
+        scorerObject,
         runId,
         input: scorerInput,
         output: scorerOutput,
@@ -7752,7 +7752,7 @@ export class Agent<
 
         return {
           id: modelId,
-          model: model,
+          model,
           maxRetries: modelConfig.maxRetries ?? 0,
           maxRetriesConfigured: modelConfig.maxRetriesConfigured,
           enabled: isEnabled,

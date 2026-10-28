@@ -804,7 +804,7 @@ export class ObservationalMemory {
       model: reflectionModel,
       maxRetries: config.reflection?.maxRetries ?? RETRY_CONFIG.maxRetries,
       failurePolicy: config.reflection?.failurePolicy ?? 'abort',
-      observationTokens: observationTokens,
+      observationTokens,
       shareTokenBudget: isSharedBudget,
       modelSettings: {
         ...(reflectionTemperature !== undefined ? { temperature: reflectionTemperature } : {}),

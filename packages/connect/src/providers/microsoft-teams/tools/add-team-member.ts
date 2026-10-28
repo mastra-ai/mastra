@@ -46,7 +46,7 @@ export function addTeamMemberTool(proxy: PlatformProxy) {
         endpoint: `/v1.0/teams/${input.teamId}/members`,
         data: {
           '@odata.type': '#microsoft.graph.aadUserConversationMember',
-          roles: roles,
+          roles,
           'user@odata.bind': `https://graph.microsoft.com/v1.0/users('${input.userId}')`,
         },
         retries: 3,
