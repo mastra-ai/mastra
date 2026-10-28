@@ -126,6 +126,12 @@ const traceAggregateRequestObjectSchema = z
   })
   .strict();
 
+/**
+ * A trace aggregate request without its time range, for callers that store a query and supply the
+ * range at run time (dashboard widgets). Apply `findPredicateComplexityIssue` before parsing.
+ */
+export const traceAggregateQueryObjectSchema = traceAggregateRequestObjectSchema.omit({ timeRange: true });
+
 export const traceAggregateRequestSchema = z.preprocess((input, context) => {
   const issuePath = findPredicateComplexityIssue(input, [['where'], ['having']]);
   if (issuePath) {
