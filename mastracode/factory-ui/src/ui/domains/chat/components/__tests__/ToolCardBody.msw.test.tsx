@@ -59,6 +59,8 @@ describe('Factory tool body', () => {
   });
 
   describe('when the agent takes a browser screenshot', () => {
+    // A complete 1x1 PNG, so the fixture is an image a browser can actually decode.
+    const PNG = 'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAAC0lEQVR4nGNgAAIAAAUAAXpeqz8AAAAASUVORK5CYII=';
     const screenshotTool = {
       toolCallId: 'shot',
       toolName: 'browser_screenshot',
@@ -66,7 +68,7 @@ describe('Factory tool body', () => {
       argsText: '{}',
       status: 'done' as const,
       output: '',
-      result: { base64: 'iVBORw0KGgo=', url: 'https://3000-sbx.e2b.app', title: 'Vite App' },
+      result: { base64: PNG, url: 'https://3000-sbx.e2b.app', title: 'Vite App' },
     };
 
     it('shows the screenshot instead of its base64', async () => {
@@ -75,7 +77,7 @@ describe('Factory tool body', () => {
 
       expect(screen.getByRole('img', { name: "Screenshot of the agent's browser" })).toHaveAttribute(
         'src',
-        'data:image/png;base64,iVBORw0KGgo=',
+        `data:image/png;base64,${PNG}`,
       );
       expect(screen.queryByText(/iVBORw0KGgo/)).not.toBeInTheDocument();
     });
