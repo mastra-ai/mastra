@@ -22,3 +22,5 @@ try {
   throw error;
 }
 ```
+
+Added `browser.retire()` and `browser.killProcesses()` for code that replaces one browser with another. `close()` lets the browser relaunch the next time something uses it; `retire()` closes it for good, so a tool call still holding the old browser gets an error instead of starting an untracked Chrome. `killProcesses()` force-kills the browser's processes when `close()` fails or hangs.

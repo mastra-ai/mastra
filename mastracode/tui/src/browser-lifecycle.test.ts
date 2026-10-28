@@ -3,8 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { closeActiveBrowser, replaceActiveBrowser } from './browser-lifecycle.js';
 
-function fakeBrowser(close: () => Promise<void> = async () => {}) {
-  return { close: vi.fn(close) } as unknown as MastraBrowser & { close: ReturnType<typeof vi.fn> };
+function fakeBrowser(retire: () => Promise<void> = async () => {}) {
+  return { retire: vi.fn(retire), killProcesses: vi.fn() } as unknown as MastraBrowser & {
+    retire: ReturnType<typeof vi.fn>;
+    killProcesses: ReturnType<typeof vi.fn>;
+  };
 }
 
 describe('browser lifecycle', () => {
@@ -13,13 +16,14 @@ describe('browser lifecycle', () => {
     await closeActiveBrowser();
   });
 
-  it('closes the active browser on shutdown', async () => {
+  it('retires the active browser on shutdown', async () => {
     const browser = fakeBrowser();
     await replaceActiveBrowser(browser);
 
     await closeActiveBrowser();
 
-    expect(browser.close).toHaveBeenCalledOnce();
+    expect(browser.retire).toHaveBeenCalledOnce();
+    expect(browser.killProcesses).not.toHaveBeenCalled();
   });
 
   it('does not close a browser that is re-applied as the active one', async () => {
@@ -27,27 +31,32 @@ describe('browser lifecycle', () => {
     await replaceActiveBrowser(browser);
     await replaceActiveBrowser(browser);
 
-    expect(browser.close).not.toHaveBeenCalled();
+    expect(browser.retire).not.toHaveBeenCalled();
   });
 
-  it('still finishes shutdown when the browser fails to close', async () => {
+  it('kills the browser processes when close fails', async () => {
     const browser = fakeBrowser(async () => {
       throw new Error('CDP gone');
     });
     await replaceActiveBrowser(browser);
 
     await expect(closeActiveBrowser()).resolves.toBeUndefined();
+    expect(browser.killProcesses).toHaveBeenCalledOnce();
   });
 
-  it('gives up on a hung browser close so exit is not blocked', async () => {
+  it('kills the browser processes when close hangs, so exit and replacement are not blocked', async () => {
     vi.useFakeTimers();
-    const browser = fakeBrowser(() => new Promise(() => {}));
-    await replaceActiveBrowser(browser);
+    const old = fakeBrowser(() => new Promise(() => {}));
+    await replaceActiveBrowser(old);
 
-    const closing = closeActiveBrowser();
-    await vi.advanceTimersByTimeAsync(5_000);
+    const next = fakeBrowser();
+    const applied = replaceActiveBrowser(next);
+    await vi.advanceTimersByTimeAsync(4_999);
+    expect(old.killProcesses).not.toHaveBeenCalled();
+    await vi.advanceTimersByTimeAsync(1);
 
-    await expect(closing).resolves.toBeUndefined();
+    expect(await applied).toBe(true);
+    expect(old.killProcesses).toHaveBeenCalledOnce();
   });
 
   // Startup loads its browser while /browser can already run: the replacement
@@ -65,7 +74,7 @@ describe('browser lifecycle', () => {
 
     expect(await firstApplied).toBe(false);
     expect(await secondApplied).toBe(true);
-    expect(first.close).toHaveBeenCalledOnce();
-    expect(second.close).not.toHaveBeenCalled();
+    expect(first.retire).toHaveBeenCalledOnce();
+    expect(second.retire).not.toHaveBeenCalled();
   });
 });

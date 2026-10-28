@@ -622,6 +622,9 @@ export abstract class MastraBrowser extends MastraBase {
   /** Error message when status is 'error' */
   error?: string;
 
+  /** Set by retire(): the browser never launches again. */
+  private retired = false;
+
   /**
    * Whether the browser is running in headless mode.
    * Returns true by default if not explicitly configured.
@@ -864,6 +867,10 @@ export abstract class MastraBrowser extends MastraBase {
       this.setCurrentThread(threadId);
     }
 
+    if (this.retired) {
+      throw new Error(`Browser ${this.id} was retired and cannot be launched again`);
+    }
+
     // Already ready
     if (this.status === 'ready') {
       return;
@@ -965,16 +972,36 @@ export abstract class MastraBrowser extends MastraBase {
       } finally {
         this._closePromise = undefined;
         // Kill orphaned child processes (GPU, renderer, crashpad, etc.)
-        killProcessGroup(this.sharedBrowserPid, this.logger);
-        this.sharedBrowserPid = undefined;
-        for (const [, pid] of this.threadBrowserPids) {
-          killProcessGroup(pid, this.logger);
-        }
-        this.threadBrowserPids.clear();
+        this.killProcesses();
       }
     })();
 
     return this._closePromise;
+  }
+
+  /**
+   * Close the browser for good. Unlike close(), a retired browser never
+   * relaunches, so a caller still holding it (e.g. a tool call that started
+   * before the browser was replaced) gets an error instead of a new Chrome
+   * that nothing tracks.
+   */
+  async retire(): Promise<void> {
+    this.retired = true;
+    await this.close();
+  }
+
+  /**
+   * SIGKILL the browser processes this instance launched. For when close()
+   * cannot be waited on (it hangs, or the process is about to exit), so the
+   * browser does not outlive its owner and keep holding its profile.
+   */
+  killProcesses(): void {
+    killProcessGroup(this.sharedBrowserPid, this.logger);
+    this.sharedBrowserPid = undefined;
+    for (const [, pid] of this.threadBrowserPids) {
+      killProcessGroup(pid, this.logger);
+    }
+    this.threadBrowserPids.clear();
   }
 
   /**
@@ -999,6 +1026,9 @@ export abstract class MastraBrowser extends MastraBase {
    * If browser was previously closed, it will be re-launched.
    */
   async ensureReady(): Promise<void> {
+    if (this.retired) {
+      throw new Error(`Browser ${this.id} was retired and cannot be used`);
+    }
     if (this.status === 'ready') {
       // Check if browser is still alive (handles external closure)
       // checkBrowserAlive() should save lastBrowserState internally if it detects closure
@@ -1024,6 +1054,9 @@ export abstract class MastraBrowser extends MastraBase {
     if (this.status === 'closing') {
       // Wait for close to complete, then re-launch
       await this._closePromise;
+      if (this.retired) {
+        throw new Error(`Browser ${this.id} was retired and cannot be used`);
+      }
       this.status = 'pending';
       await this.launch();
       return;

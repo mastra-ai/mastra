@@ -50,7 +50,7 @@ vi.mock('../../prompt-api-key.js', () => ({
 }));
 
 function createContext() {
-  const browserInstance = { id: 'browser-instance', close: vi.fn(async () => {}) };
+  const browserInstance = { id: 'browser-instance', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
   const staticAgent = { setBrowser: vi.fn() };
   const dynamicAgent = { setBrowser: vi.fn() };
   const controllerState = { mode: 'review' };
@@ -164,14 +164,14 @@ describe('handleBrowserCommand', () => {
     const { ctx, settings, browserInstance, staticAgent } = createContext();
     browserMocks.loadSettings.mockReturnValue(settings);
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
-    const replacement = { id: 'replacement', close: vi.fn(async () => {}) };
+    const replacement = { id: 'replacement', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
     browserMocks.createBrowserFromSettings.mockResolvedValueOnce(browserInstance).mockResolvedValueOnce(replacement);
 
     await handleBrowserCommand(ctx, ['on']);
-    expect(browserInstance.close).not.toHaveBeenCalled();
+    expect(browserInstance.retire).not.toHaveBeenCalled();
 
     const order: string[] = [];
-    browserInstance.close.mockImplementation(async () => {
+    browserInstance.retire.mockImplementation(async () => {
       order.push('close old');
     });
     staticAgent.setBrowser.mockImplementation((b: { id: string } | undefined) => {
@@ -182,15 +182,15 @@ describe('handleBrowserCommand', () => {
     // Agents drop the old browser before it closes, so they can't relaunch it while it closes,
     // and the old browser releases the profile before agents can launch the replacement on it.
     expect(order).toEqual(['attach undefined', 'close old', 'attach replacement']);
-    expect(replacement.close).not.toHaveBeenCalled();
+    expect(replacement.retire).not.toHaveBeenCalled();
   });
 
   it('does not attach or save a browser that a later /browser command replaced while the old one closed', async () => {
     const { ctx, settings, browserInstance, staticAgent } = createContext();
     browserMocks.loadSettings.mockReturnValue(settings);
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
-    const first = { id: 'first', close: vi.fn(async () => {}) };
-    const second = { id: 'second', close: vi.fn(async () => {}) };
+    const first = { id: 'first', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
     browserMocks.createBrowserFromSettings
       .mockResolvedValueOnce(browserInstance)
       .mockResolvedValueOnce(first)
@@ -200,14 +200,14 @@ describe('handleBrowserCommand', () => {
     browserMocks.saveSettings.mockClear();
 
     let finishOldClose!: () => void;
-    browserInstance.close.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
+    browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
     const losing = handleBrowserCommand(ctx, ['on']);
     await vi.waitFor(() => expect(finishOldClose).toBeDefined());
     await handleBrowserCommand(ctx, ['on']);
     finishOldClose();
     await losing;
 
-    expect(first.close).toHaveBeenCalledOnce();
+    expect(first.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(first);
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
     expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
@@ -218,8 +218,8 @@ describe('handleBrowserCommand', () => {
     const { ctx, settings, browserInstance, staticAgent } = createContext();
     browserMocks.loadSettings.mockReturnValue(settings);
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
-    const cleared = { id: 'cleared', close: vi.fn(async () => {}) };
-    const second = { id: 'second', close: vi.fn(async () => {}) };
+    const cleared = { id: 'cleared', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
     browserMocks.createBrowserFromSettings
       .mockResolvedValueOnce(browserInstance)
       .mockResolvedValueOnce(cleared)
@@ -229,7 +229,7 @@ describe('handleBrowserCommand', () => {
     browserMocks.saveSettings.mockClear();
 
     let finishOldClose!: () => void;
-    browserInstance.close.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
+    browserInstance.retire.mockImplementation(() => new Promise<void>(resolve => (finishOldClose = resolve)));
     const losing = handleBrowserCommand(ctx, ['clear']);
     await vi.waitFor(() => expect(finishOldClose).toBeDefined());
     await handleBrowserCommand(ctx, ['on']);
@@ -253,8 +253,8 @@ describe('handleBrowserCommand', () => {
       persisted = structuredClone(next);
     });
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
-    const cleared = { id: 'cleared', close: vi.fn(async () => {}) };
-    const second = { id: 'second', close: vi.fn(async () => {}) };
+    const cleared = { id: 'cleared', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
+    const second = { id: 'second', killProcesses: vi.fn(), retire: vi.fn(async () => {}) };
     let finishClearedCreate!: () => void;
     browserMocks.createBrowserFromSettings
       .mockResolvedValueOnce(browserInstance)
@@ -270,8 +270,8 @@ describe('handleBrowserCommand', () => {
     finishClearedCreate();
     await losing;
 
-    expect(second.close).not.toHaveBeenCalled();
-    expect(cleared.close).toHaveBeenCalledOnce();
+    expect(second.retire).not.toHaveBeenCalled();
+    expect(cleared.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(cleared);
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
     expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
@@ -292,7 +292,7 @@ describe('handleBrowserCommand', () => {
     await handleBrowserCommand(ctx, ['on']);
     await handleBrowserCommand(ctx, ['off']);
 
-    expect(browserInstance.close).toHaveBeenCalledOnce();
+    expect(browserInstance.retire).toHaveBeenCalledOnce();
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(undefined);
   });
 

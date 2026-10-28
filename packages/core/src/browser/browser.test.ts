@@ -127,6 +127,84 @@ describe('killProcessGroup', () => {
   });
 });
 
+describe('MastraBrowser retire', () => {
+  class ClosableBrowser extends MastraBrowser {
+    readonly id = 'closable';
+    readonly name = 'Closable';
+    readonly provider = 'closable';
+    doLaunch = vi.fn(async () => {});
+    finishClose: () => void = () => {};
+    protected doClose() {
+      return new Promise<void>(resolve => {
+        this.finishClose = resolve;
+      });
+    }
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+    adoptPid(pid: number) {
+      this.sharedBrowserPid = pid;
+    }
+  }
+
+  it('does not relaunch for a caller that reaches ensureReady while the browser is being retired', async () => {
+    const browser = new ClosableBrowser({ headless: true });
+    await browser.ensureReady();
+    expect(browser.doLaunch).toHaveBeenCalledOnce();
+
+    // A tool that captured the browser before it was replaced calls in mid-close.
+    const retiring = browser.retire();
+    await vi.waitFor(() => expect(browser.status).toBe('closing'));
+    const lateToolCall = browser.ensureReady();
+    browser.finishClose();
+    await retiring;
+
+    await expect(lateToolCall).rejects.toThrow('was retired');
+    await expect(browser.ensureReady()).rejects.toThrow('was retired');
+    expect(browser.doLaunch).toHaveBeenCalledOnce();
+    expect(browser.status).toBe('closed');
+  });
+
+  it('still relaunches after a plain close', async () => {
+    const browser = new ClosableBrowser({ headless: true });
+    await browser.ensureReady();
+    const closing = browser.close();
+    await vi.waitFor(() => expect(browser.status).toBe('closing'));
+    const nextCall = browser.ensureReady();
+    browser.finishClose();
+    await closing;
+    await nextCall;
+    expect(browser.doLaunch).toHaveBeenCalledTimes(2);
+    expect(browser.status).toBe('ready');
+  });
+
+  it.skipIf(process.platform === 'win32')(
+    'killProcesses ends the browser process group without waiting for close',
+    async () => {
+      const browser = new ClosableBrowser({ headless: true });
+      // Detached like chrome-launcher's Chrome, so it leads its own process group.
+      const child = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], {
+        detached: true,
+        stdio: 'ignore',
+      });
+      const exited = new Promise<NodeJS.Signals | null>(resolve =>
+        child.once('exit', (_code, signal) => resolve(signal)),
+      );
+      browser.adoptPid(child.pid!);
+
+      browser.killProcesses();
+
+      expect(await exited).toBe('SIGKILL');
+    },
+  );
+});
+
 describe('MastraBrowser launch with a locked profile', () => {
   // A minimal provider: doLaunch stands in for Chrome starting on the profile.
   class FakeBrowser extends MastraBrowser {

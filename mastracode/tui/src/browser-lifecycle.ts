@@ -9,16 +9,27 @@ let activeBrowser: MastraBrowser | undefined;
 
 const CLOSE_TIMEOUT_MS = 5_000;
 
+/**
+ * Retire a browser: it closes and never relaunches, even for a tool call that
+ * still holds it. If close fails or takes longer than CLOSE_TIMEOUT_MS, its
+ * processes are killed so the old Chrome cannot keep holding the profile.
+ */
 async function closeBrowser(browser: MastraBrowser): Promise<void> {
   let timer: ReturnType<typeof setTimeout> | undefined;
-  await Promise.race([
-    browser.close().catch(() => {}),
-    new Promise<void>(resolve => {
-      timer = setTimeout(resolve, CLOSE_TIMEOUT_MS);
+  const closed = await Promise.race([
+    browser.retire().then(
+      () => true,
+      () => false,
+    ),
+    new Promise<false>(resolve => {
+      timer = setTimeout(() => resolve(false), CLOSE_TIMEOUT_MS);
       timer.unref?.();
     }),
   ]);
   clearTimeout(timer);
+  if (!closed) {
+    browser.killProcesses();
+  }
 }
 
 /**
