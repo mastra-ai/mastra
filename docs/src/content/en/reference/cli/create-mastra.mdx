@@ -31,7 +31,7 @@ Omit `--llm` to select the provider and optionally enter its API key interactive
 
 Select **Mastra Gateway** to call every model with one key. The command opens the browser to sign in to Mastra, creates a Gateway API key, and writes it to `.env` as `MASTRA_GATEWAY_API_KEY`. The agent's models use the `mastra/` prefix, for example `mastra/openai/gpt-6.1-sol`.
 
-Model calls are paid per token from your Gateway credits. If your balance is $0, the command offers to open the Mastra dashboard, where you add credits and can turn on automatic top-ups. The command waits until the new balance shows up. Skip it and add credits later with [`mastra gateway credits`](/reference/cli/mastra#mastra-gateway-credits).
+Model calls are paid per token from your Gateway credits. If your balance is $0, the command offers to open the Mastra dashboard, where you add credits and can turn on automatic top-ups. The command waits until the new balance shows up; press any key to stop waiting. Skip it and add credits later with [`mastra gateway credits`](/reference/cli/mastra#mastra-gateway-credits).
 
 To use an existing Gateway key without signing in, pass it with `--llm-api-key`:
 
