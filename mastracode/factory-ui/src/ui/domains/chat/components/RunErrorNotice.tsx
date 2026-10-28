@@ -19,12 +19,17 @@ import type { ComponentType } from 'react';
 
 import { ChatSessionContext } from '../context/ChatSessionContext';
 import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext';
+import { ContinueRunAction } from './ContinueRunAction';
+import { NewSessionAction } from './NewSessionAction';
 import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { RunErrorCredential } from './RunErrorCredential';
 import { ChangeModelAction } from './StatusLine/ModelPicker';
 
-const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType> = {
+const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType<{ entryId: string }>> = {
+  continue: ContinueRunAction,
   credentials: ProviderReconnectAction,
   model: ChangeModelAction,
+  new_session: NewSessionAction,
 };
 
 export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['error']; entryId: string }) {
@@ -45,12 +50,13 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
   return (
     <Notice
       variant="destructive"
+      className="gap-y-2"
       title={title}
       action={
         <>
           {recoveries.map(recovery => {
             const RecoveryAction = RECOVERY_ACTIONS[recovery];
-            return <RecoveryAction key={recovery} />;
+            return <RecoveryAction key={recovery} entryId={entryId} />;
           })}
           <Dialog>
             <DialogTrigger
@@ -78,6 +84,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
           Model: {formatModelName(model)}
         </Txt>
       )}
+      {model && recoveries.includes('credentials') && <RunErrorCredential entryId={entryId} modelId={model} />}
     </Notice>
   );
 }

@@ -592,6 +592,35 @@ describe('Span', () => {
 
       expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
     });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
+
+    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+      const instance = tracing();
+      const context = { error: new Error('limit hit'), steps: 10n };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
+      const exported = span.exportSpan();
+
+      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
+      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
+      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
+    });
   });
 
   describe('getExternalParentId', () => {
@@ -1617,6 +1646,81 @@ describe('Span', () => {
         providerMetadata: { provider: { useful: true } },
         keep: 'chunk',
       });
+    });
+
+    it('keeps Vercel AI Gateway routing on model step metadata while stripping the rest of provider metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const routing = {
+        finalProvider: 'anthropic',
+        resolvedProvider: 'bedrock',
+        modelAttempts: [
+          {
+            providerAttempts: [
+              { provider: 'bedrock', success: false, statusCode: 429 },
+              { provider: 'anthropic', success: true, statusCode: 200 },
+            ],
+          },
+        ],
+      };
+      const providerMetadata = {
+        gateway: { routing, cost: '0.0045', generationId: 'gen_1' },
+        anthropic: { cacheCreationInputTokens: 0 },
+      };
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: providerMetadata, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, headers: { 'x-vercel-id': 'req_1' } } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-gateway');
+
+      expect(stepSpan?.metadata).toEqual({
+        keep: 'metadata',
+        headers: { 'x-vercel-id': 'req_1' },
+        providerMetadata: { gateway: { routing } },
+      });
+    });
+
+    it('still strips model step provider metadata when reading gateway routing throws', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const providerMetadata: Record<string, unknown> = { openai: { secretish: true } };
+      Object.defineProperty(providerMetadata, 'gateway', {
+        enumerable: true,
+        get() {
+          throw new Error('gateway getter failed');
+        },
+      });
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-throwing-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: { legacy: true }, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, endKeep: 'metadata' } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-throwing-gateway');
+
+      expect(stepSpan?.metadata).toEqual({ keep: 'metadata', endKeep: 'metadata' });
     });
 
     it('does not throw when model step metadata has throwing getters during construction', () => {

@@ -18,7 +18,7 @@ const renderInField = () =>
   renderWithProviders(
     <>
       <Field>
-        <PersonalDefaultModel factoryId="fp-1" />
+        <PersonalDefaultModel />
       </Field>
       <Toaster position="bottom-right" />
     </>,
@@ -29,18 +29,18 @@ const THINKING_URL = `${DEFAULT_MODEL_URL}/thinking`;
 const MODELS_URL = `${TEST_BASE_URL}/web/config/models`;
 const FACTORY_URL = `${TEST_BASE_URL}/web/factory/projects/fp-1`;
 const UNAVAILABLE_WARNING = /None of your connected accounts can run/;
-const FOLLOWING_FACTORY_LOW = 'Thinking: Low · Factory default';
+const FOLLOWING_BUILT_IN = 'Thinking: Medium · Built-in default';
 
 const models: AvailableModelOption[] = [
   { id: 'openai/gpt-5', provider: 'openai', modelName: 'gpt-5', hasApiKey: true },
   { id: 'anthropic/claude-sonnet-4-5', provider: 'anthropic', modelName: 'claude-sonnet-4-5', hasApiKey: true },
 ];
 
-function stubPersonalCatalog(catalog: AvailableModelOption[]) {
+function stubPersonalCatalog(catalog: AvailableModelOption[], fallbackModelId: string | null = null) {
   server.use(
     http.get(MODELS_URL, ({ request }) => {
       expect(new URL(request.url).searchParams.get('scope')).toBe('user');
-      return HttpResponse.json({ models: catalog });
+      return HttpResponse.json({ models: catalog, fallbackModelId });
     }),
   );
 }
@@ -98,10 +98,33 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: 'Apply to running sessions' }));
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
     await waitForMutationsIdle(client);
 
     expect(screen.getByText(/Switched 1 session/)).toHaveTextContent('Switched 1 session. 1 skipped: not running (1)');
+  });
+
+  it('does not claim nothing was running when every running chat failed to switch', async () => {
+    stubPersonalCatalog(models);
+    server.use(
+      http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: 'openai/gpt-5', thinkingLevel: null })),
+      http.post(`${DEFAULT_MODEL_URL}/apply`, () =>
+        HttpResponse.json({
+          modelId: 'openai/gpt-5',
+          applied: [],
+          skipped: [{ sessionId: 'running-session', reason: 'apply-failed' }],
+        }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { client } = renderInField();
+
+    await user.click(await screen.findByRole('button', { name: 'Apply to my running chats' }));
+    await waitForMutationsIdle(client);
+
+    expect(screen.getByText(/No sessions switched/)).toHaveTextContent(
+      'No sessions switched. 1 skipped: apply failed (1)',
+    );
   });
 
   it('clears the personal default', async () => {
@@ -170,7 +193,16 @@ describe('PersonalDefaultModel', () => {
     ).toBeInTheDocument();
   });
 
-  it('saves a personal thinking level and hands it back to the Factory default', async () => {
+  it('names the built-in model new chats start on until a personal model is chosen', async () => {
+    stubPersonalCatalog(models, 'openai/gpt-5');
+    server.use(http.get(DEFAULT_MODEL_URL, () => HttpResponse.json({ modelId: null, thinkingLevel: null })));
+
+    renderInField();
+
+    expect(await screen.findByPlaceholderText('GPT-5 · Built-in default')).toBeInTheDocument();
+  });
+
+  it('follows the built-in level, never the Factory level, until a personal level is saved, and hands back to it', async () => {
     let thinkingLevel: DefaultModelResponse['thinkingLevel'] = null;
     const putBodies: unknown[] = [];
     stubPersonalCatalog(models);
@@ -186,21 +218,21 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await user.click(await screen.findByRole('button', { name: FOLLOWING_FACTORY_LOW }));
-    expect(screen.getByText('Follows the Factory default.')).toBeInTheDocument();
+    await user.click(await screen.findByRole('button', { name: FOLLOWING_BUILT_IN }));
+    expect(screen.getByText('Follows the Built-in default.')).toBeInTheDocument();
     await user.keyboard('{Escape}');
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await waitForMutationsIdle(client);
 
     expect(putBodies).toEqual([{ thinkingLevel: 'high' }]);
     expect(await screen.findByRole('button', { name: 'Thinking: High' })).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'Use Factory default' }));
+    await user.click(screen.getByRole('button', { name: 'Use default' }));
     await waitForMutationsIdle(client);
 
     expect(putBodies).toEqual([{ thinkingLevel: 'high' }, { thinkingLevel: null }]);
-    expect(await screen.findByRole('button', { name: FOLLOWING_FACTORY_LOW })).toBeInTheDocument();
+    expect(await screen.findByRole('button', { name: FOLLOWING_BUILT_IN })).toBeInTheDocument();
   });
 
   it('puts the personal thinking level back when the server rejects it', async () => {
@@ -212,11 +244,11 @@ describe('PersonalDefaultModel', () => {
     const user = userEvent.setup();
     const { client } = renderInField();
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText('default_model_not_set')).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: FOLLOWING_FACTORY_LOW })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: FOLLOWING_BUILT_IN })).toBeInTheDocument();
   });
 
   it('keeps a cleared personal model cleared when a thinking change still in flight then fails', async () => {
@@ -241,7 +273,7 @@ describe('PersonalDefaultModel', () => {
     const { client } = renderInField();
     const modelPicker = await screen.findByRole('combobox', { name: 'Personal default model' });
 
-    await dragThinkingTo(user, FOLLOWING_FACTORY_LOW, 3);
+    await dragThinkingTo(user, FOLLOWING_BUILT_IN, 3);
     await user.keyboard('{Escape}');
     await user.click(screen.getByRole('button', { name: 'Clear' }));
     await waitFor(() => expect(modelPicker).toHaveValue(''));

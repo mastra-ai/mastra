@@ -392,7 +392,7 @@ describe('installed board transition policies', () => {
     const { item, storage, board } = await setup(() => ({ type: 'allow', accept: true }));
     const rejecting = defineBoard({
       id: board.id,
-      title: board.title,
+      name: board.name,
       initialPhase: 'approval',
       transitionPolicy: board.transitionPolicy,
       phases: {
@@ -1561,6 +1561,61 @@ describe('FactoryTransitionService', () => {
     });
 
     expect(result).toMatchObject({ status: 'rejected', code: 'approval_required' });
+  });
+
+  it('lets the planner move to Building when its phase auto-approves submit_plan for the card', async () => {
+    // A board that keeps the Work policy and ends Planning with an auto-approved
+    // submit_plan: the plan needs no person, so the agent's own move must stand.
+    const planned = defineBoard({
+      id: 'planned',
+      name: 'Planned',
+      initialPhase: 'intake',
+      transitionPolicy: workBoard.transitionPolicy,
+      phases: {
+        ...workBoard.phases,
+        planning: {
+          ...workBoard.phases.planning,
+          exitTool: {
+            id: 'submit_plan',
+            autoApprove: true,
+            autoApproveWhen: {
+              operator: 'AND',
+              conditions: [{ field: 'item.labels', operator: 'contains', value: 'effort:low' }],
+            },
+          },
+        },
+      },
+    });
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const service = new FactoryTransitionService({
+      configVersion: 'rules-v1',
+      storage,
+      boards: createBoardRegistry({ boards: [planned] }),
+      autoApprovePlans: async () => false,
+    });
+    const move = (item: { id: string; revision: number; board?: string | null }, identity: string) =>
+      service.transition({
+        ...request(item, { board: 'planned', stage: 'execute' }),
+        actor: { type: 'agent', bindingId: 'binding-1', role: 'plan' },
+        ingress: { type: 'agent', identity },
+        cause: 'plan written',
+      });
+
+    const low = await createItem(storage, {
+      board: 'planned',
+      stages: ['planning'],
+      metadata: { labels: ['effort:low'] },
+    });
+    expect(await move(low, 'low')).toMatchObject({ status: 'accepted' });
+    expect((await storage.get({ orgId: 'org-1', id: low.id }))?.stages).toEqual(['execute']);
+
+    const high = await createItem(storage, {
+      board: 'planned',
+      sourceKey: '2',
+      stages: ['planning'],
+      metadata: { labels: ['effort:high'] },
+    });
+    expect(await move(high, 'high')).toMatchObject({ status: 'rejected', code: 'approval_required' });
   });
 
   it('still hands the next seat its run when an agent moves the card past its own stage', async () => {

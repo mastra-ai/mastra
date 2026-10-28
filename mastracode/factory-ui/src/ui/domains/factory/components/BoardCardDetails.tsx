@@ -1,5 +1,5 @@
 import { MarkdownRenderer } from '@mastra/playground-ui/components/MarkdownRenderer';
-import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+import { SkeletonText } from '@mastra/playground-ui/components/Skeleton';
 
 import { useGitHubIssueDetail, useGitHubPullRequestDetail } from '../../../../hooks/useFactoryData';
 import { useGitLabIssueDetail, useGitLabMergeRequestDetail } from '../../../../hooks/useGitLabData';
@@ -99,10 +99,12 @@ export function CardSourceDescription({
 
   if (query.isPending) {
     return (
-      <div className="flex flex-col gap-1.5" aria-hidden>
-        <Skeleton className="h-3 w-full" />
-        <Skeleton className="h-3 w-4/5" />
-        <Skeleton className="h-3 w-2/3" />
+      <div role="status" aria-label="Loading description">
+        <div aria-hidden>
+          <SkeletonText line="text-caption" className="w-full motion-reduce:before:animate-none" />
+          <SkeletonText line="text-caption" className="w-4/5 motion-reduce:before:animate-none" />
+          <SkeletonText line="text-caption" className="w-2/3 motion-reduce:before:animate-none" />
+        </div>
       </div>
     );
   }

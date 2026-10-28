@@ -1,5 +1,6 @@
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController, AgentControllerEventListener, Session } from '@mastra/core/agent-controller';
+import { classifyProviderError, PROVIDER_CALL_ERROR_NAME } from '@mastra/core/error';
 import { RequestContext } from '@mastra/core/request-context';
 import type { SubmitPlanResumeData } from '@mastra/core/tools';
 
@@ -10,6 +11,7 @@ import {
   workItemPhaseSemantics,
 } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { autoApprovedExitTool, startsInAutoPhase } from '../boards/phase-automation.js';
 import { moveCardToBoard } from '../boards/relocate.js';
 import {
   FACTORY_OPEN_RUN_STALE_MS,
@@ -107,14 +109,21 @@ function causeOf(error: unknown): unknown {
   return error && typeof error === 'object' && 'cause' in error ? error.cause : undefined;
 }
 
+function isProviderCallError(error: unknown): boolean {
+  if (!error || typeof error !== 'object') return false;
+  if ('name' in error && typeof error.name === 'string' && PROVIDER_CALL_ERROR_NAME.test(error.name)) return true;
+  return 'statusCode' in error || 'responseBody' in error;
+}
+
 function runErrorCode(error: unknown, message: string): FactoryDispatchFailureCode {
   const lower = message.toLowerCase();
   if (lower.includes(CREDENTIAL_RESOLUTION_FAILURE)) {
     return lower.includes(NO_AUTHENTICATED_USER) ? 'run_user_unauthenticated' : 'run_credentials_unavailable';
   }
-  // Model credentials a person can fix: a provider's structured 401/403.
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
-  return status === 401 || status === 403 ? 'run_credentials_unavailable' : 'run_failed';
+  if (status === 401 || status === 403) return 'run_credentials_unavailable';
+  const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
+  return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
@@ -894,6 +903,7 @@ export class FactoryDecisionDispatcher {
     if (item && externallyAuthoredWorkItem(item)) return true;
     if (item?.autonomyArmedAt != null) return false;
     if (item && reviewsFactoryAuthoredCode(item, decision)) return false;
+    if (item && startsInAutoPhase(this.#boards, item, decision)) return false;
     return !(await this.#isAutoRunEnabled({ orgId: record.orgId, factoryProjectId: record.factoryProjectId }));
   }
 
@@ -1580,14 +1590,22 @@ export class FactoryDecisionDispatcher {
     return session;
   }
 
-  /** Unset means off: a plan nobody asked us to answer is a plan someone should see. */
+  /**
+   * Whether the run answers its plan approvals itself: the project says so, or the card's phase
+   * ends with an auto-approved `submit_plan`. Unset means off: a plan nobody asked us to answer is
+   * a plan someone should see.
+   */
   async #plansAreAutoApproved({
     orgId,
     factoryProjectId,
+    workItemId,
   }: {
     orgId: string;
     factoryProjectId: string;
+    workItemId: string | null;
   }): Promise<boolean> {
+    const item = workItemId ? await this.#storage.get({ orgId, id: workItemId }) : null;
+    if (item && autoApprovedExitTool(this.#boards, item) === 'submit_plan') return true;
     return this.#autoApprovePlans ? await this.#autoApprovePlans({ orgId, factoryProjectId }) : false;
   }
 
@@ -1784,7 +1802,7 @@ export class FactoryDecisionDispatcher {
           const since = new Date();
           const run = watchRun(session, {
             timeoutMs: this.#skillCompletionObservationTimeoutMs,
-            approvePlans: await this.#plansAreAutoApproved(record),
+            approvePlans: await this.#plansAreAutoApproved({ ...record, workItemId: binding.workItemId }),
             label: 'Factory kickoff run',
             runStillActive: () =>
               this.#controller.listActiveThreadRuns().some(active => active.threadId === binding.threadId),

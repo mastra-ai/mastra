@@ -1,6 +1,7 @@
 import { describe, expect, it } from 'vitest';
 import {
   DEFAULT_TRACE_COLUMN_PREFERENCES,
+  THREAD_LIST_COLUMN_PREFERENCES,
   TRACE_COLUMN_CATALOGS,
   TRACE_OPTIONAL_COLUMNS,
   TRACE_USAGE_COLUMNS,
@@ -121,6 +122,23 @@ describe('trace list columns', () => {
         'endTime',
       ]);
     });
+
+    it('places the trace count right after duration, in tracks and keys alike', () => {
+      const preferences: TraceColumnPreferences = {
+        visibleColumns: ['timeToFirstChunk', 'traceCount', 'duration'],
+        customColumns: [],
+        metadataKeys: [],
+      };
+      expect(buildTraceListColumns(preferences)).toBe('11rem minmax(8rem,1fr) 6rem 7rem 6rem 7rem');
+      expect(buildTraceListColumnKeys(preferences)).toEqual([
+        'startTime',
+        'name',
+        'status',
+        'duration',
+        'traceCount',
+        'timeToFirstChunk',
+      ]);
+    });
   });
 
   describe('when saved preferences are missing for a list with its own defaults', () => {
@@ -155,6 +173,7 @@ describe('trace list columns', () => {
         'input',
         'output',
         'duration',
+        'traceCount',
         'timeToFirstChunk',
         'endTime',
         'environment',
@@ -196,6 +215,16 @@ describe('trace list columns', () => {
         customColumns: [],
         metadataKeys: [],
       });
+    });
+
+    it('shows the trace count only on the threads list, which no column picker offers', () => {
+      expect(THREAD_LIST_COLUMN_PREFERENCES).toEqual({
+        ...DEFAULT_TRACE_COLUMN_PREFERENCES,
+        visibleColumns: [...DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns, 'traceCount'],
+      });
+      expect(buildTraceListColumnKeys(DEFAULT_TRACE_COLUMN_PREFERENCES)).not.toContain('traceCount');
+      expect(TRACE_COLUMN_CATALOGS.traces.standardColumns).not.toContain('traceCount');
+      expect(TRACE_COLUMN_CATALOGS.spans.standardColumns).not.toContain('traceCount');
     });
   });
 
@@ -320,6 +349,7 @@ describe('trace list columns', () => {
       ['input', '11rem 14rem minmax(8rem,1fr) 6rem'],
       ['type', '11rem 7rem minmax(8rem,1fr) 6rem'],
       ['duration', '11rem minmax(8rem,1fr) 6rem 7rem'],
+      ['traceCount', '11rem minmax(8rem,1fr) 6rem 6rem'],
       ['endTime', '11rem minmax(8rem,1fr) 6rem 11rem'],
       ['environment', '11rem minmax(8rem,1fr) 6rem 8rem'],
       ['totalTokens', '11rem minmax(8rem,1fr) 6rem 8rem'],

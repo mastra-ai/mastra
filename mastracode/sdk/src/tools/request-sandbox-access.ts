@@ -107,12 +107,11 @@ export const requestSandboxAccessTool = createTool({
           content: `Access granted: "${absolutePath}" has been added to allowed paths. You can now access files in this directory.`,
           isError: false,
         };
-      } else {
-        return {
-          content: `Access denied: The user declined access to "${absolutePath}".`,
-          isError: false,
-        };
       }
+      return {
+        content: `Access denied: The user declined access to "${absolutePath}".`,
+        isError: false,
+      };
     } catch (error) {
       const msg = error instanceof Error ? error.message : 'Unknown error';
       return {

@@ -52,8 +52,10 @@ import { attachJiraRules } from './rules.js';
 
 /** Deployment-global Jira Cloud credentials. All credential fields are required. */
 export interface JiraIntegrationConfig {
-  /** Site base URL, e.g. `https://acme.atlassian.net`. */
+  /** Site base URL, e.g. `https://acme.atlassian.net`, used for browser links. */
   baseUrl: string;
+  /** API base URL for scoped tokens. Defaults to `baseUrl`. */
+  apiBaseUrl?: string;
   /** Atlassian account email the API token belongs to. */
   email: string;
   /** API token from id.atlassian.com → Security → API tokens. */
@@ -80,6 +82,19 @@ export const DEPLOYMENT_CONNECTION: IntegrationConnection = { type: 'oauth', acc
 const ISSUE_KEY_PATTERN = /^[A-Za-z][A-Za-z0-9_]*-\d+$/;
 
 const UUID_PATTERN = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+function normalizeSiteBaseUrl(baseUrl: string): string {
+  let parsed: URL;
+  try {
+    parsed = new URL(baseUrl);
+  } catch {
+    throw new Error(`JiraIntegration baseUrl is not an absolute URL: "${baseUrl}".`);
+  }
+  if (parsed.protocol !== 'https:' && parsed.protocol !== 'http:') {
+    throw new Error(`JiraIntegration baseUrl must be an http(s) URL: "${baseUrl}".`);
+  }
+  return baseUrl.replace(/\/+$/, '');
+}
 
 /**
  * Capability state types (`capabilities/intake.ts`) → Jira status-category
@@ -111,6 +126,7 @@ export class JiraIntegration implements FactoryIntegration {
   readonly id = 'jira';
 
   readonly #config: JiraIntegrationConfig;
+  readonly #baseUrl: string;
   /** Typed REST client bound to the deployment credentials. */
   readonly api: JiraApiClient;
 
@@ -127,8 +143,9 @@ export class JiraIntegration implements FactoryIntegration {
 
   constructor(config: JiraIntegrationConfig) {
     this.#rules = resolveJiraRules(config.rules);
-    // JiraApiClient validates the credential group and normalizes the URL.
-    this.api = new JiraApiClient(config);
+    this.#baseUrl = normalizeSiteBaseUrl(config.baseUrl);
+    // JiraApiClient validates the credential group and normalizes the API URL.
+    this.api = new JiraApiClient({ ...config, baseUrl: config.apiBaseUrl ?? config.baseUrl });
     this.#config = config;
   }
 
@@ -193,7 +210,7 @@ export class JiraIntegration implements FactoryIntegration {
 
   /** Normalized site base URL (no trailing slash) — `/browse/<key>` links hang off this. */
   get baseUrl(): string {
-    return this.api.baseUrl;
+    return this.#baseUrl;
   }
 
   readonly intake: Intake = {

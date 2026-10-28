@@ -29,12 +29,6 @@
         "values": ["high", "max"]
       }
     ],
-    "zai-org/GLM-5.2-FP8": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
     "qwen/qwen3.8-27b": [
       {
         "type": "toggle"
@@ -55,6 +49,12 @@
       }
     ],
     "ambient/large": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2-FP8": [
       {
         "type": "effort",
         "values": ["high", "max"]

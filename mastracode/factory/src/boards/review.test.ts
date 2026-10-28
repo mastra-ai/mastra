@@ -60,8 +60,8 @@ async function reviewArguments(headBranch: string): Promise<string> {
 
 describe('reviewBoard', () => {
   it('keeps completed reviews terminal when the PR or MR is later closed without merging', () => {
-    expect(reviewBoard.phases.done.outcomes).not.toHaveProperty('closed');
-    expect(reviewBoard.phases.canceled.outcomes.reviewRequested).toBe('review');
+    expect(reviewBoard.phases.done.nextPhases).toEqual(['review']);
+    expect(reviewBoard.phases.canceled.nextPhases).toEqual(['review']);
   });
   it('names a GitLab merge request and points its kickoff at provider-neutral review tools', async () => {
     const decision = await reviewBoard.rules.review?.gitlabPullRequest?.onEnter?.(gitlabReviewContext());
