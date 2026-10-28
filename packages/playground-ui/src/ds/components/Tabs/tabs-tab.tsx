@@ -93,6 +93,9 @@ export const Tab = ({
       value={value}
       disabled={disabled || overflowed}
       data-slot="tab"
+      // Base UI's drawer and toast swipe skips buttons but not a `div` tab: without this, pressing a
+      // tab inside a drawer starts a swipe and the click never reaches the tab.
+      data-base-ui-swipe-ignore=""
       data-closable={onClose ? '' : undefined}
       className={tabClassName}
       onClick={onClick}

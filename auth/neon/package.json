@@ -1,6 +1,6 @@
 {
   "name": "@mastra/auth-neon",
-  "version": "0.3.4",
+  "version": "0.3.5",
   "description": "Mastra Neon Auth integration",
   "type": "module",
   "main": "dist/index.js",
@@ -27,7 +27,7 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "jose": "^6.2.11"
+    "jose": "^6.2.12"
   },
   "peerDependencies": {
     "@mastra/core": ">=1.0.0-0 <2.0.0-0"
@@ -36,10 +36,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

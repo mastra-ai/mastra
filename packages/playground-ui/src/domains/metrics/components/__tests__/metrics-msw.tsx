@@ -1,6 +1,14 @@
+import type {
+  AggregateSpansResponse,
+  AggregateTracesResponse,
+  GetObservabilityCapabilitiesResponse,
+} from '@mastra/client-js';
+import { planTraceAggregate, spanAggregateRequestSchema, traceAggregateRequestSchema } from '@mastra/core/storage';
+import type { NormalizedSpanAggregateRequest, NormalizedTraceAggregateRequest } from '@mastra/core/storage';
 import { http, HttpResponse, delay } from 'msw';
 import type { ReactNode } from 'react';
 import { MetricsProvider } from '../../hooks/use-metrics';
+import type { MetricsScope } from '../../hooks/use-metrics';
 import {
   agentLatencyFixture,
   agentRunSeriesFixture,
@@ -18,11 +26,99 @@ import {
   threadSpendBreakdownFixture,
   tokenSeriesFixture,
 } from './fixtures/metrics';
+import { olderServerCapabilities } from './fixtures/trace-aggregate';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const API = `${TEST_BASE_URL}/api/observability/metrics`;
 const SCORES_API = `${TEST_BASE_URL}/api/observability/scores`;
+export const CAPABILITIES_API = `${TEST_BASE_URL}/api/observability/capabilities`;
+export const TRACE_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/traces/aggregate`;
+export const PERCENTILES_API = `${API}/percentiles`;
+export const SPAN_AGGREGATE_API = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
+
+/** Capabilities the server reports; `'missing'` is a server without the capabilities route. */
+export function serveCapabilities(capabilities: GetObservabilityCapabilitiesResponse | 'missing') {
+  server.use(
+    http.get(CAPABILITIES_API, () =>
+      capabilities === 'missing'
+        ? HttpResponse.json({ error: 'Not found' }, { status: 404 })
+        : HttpResponse.json(capabilities),
+    ),
+  );
+}
+
+/**
+ * The seed helpers below answer capabilities as a server without `aggregateTraces()`, so cards keep
+ * today's sources. Call `serveCapabilities` after them to test a newer server.
+ */
+const olderServer = () => http.get(CAPABILITIES_API, () => HttpResponse.json(olderServerCapabilities));
+
+export type TraceAggregateRequest = NormalizedTraceAggregateRequest;
+
+/**
+ * Answers `aggregateTraces()` from the request body. The body goes through the server's own schema
+ * and planner (bucket and row caps, groupable dimensions), so a request the server would reject
+ * fails the test.
+ */
+export function serveTraceAggregate(
+  respond: (
+    request: TraceAggregateRequest,
+  ) => AggregateTracesResponse | Response | Promise<AggregateTracesResponse | Response>,
+) {
+  server.use(
+    http.post(TRACE_AGGREGATE_API, async ({ request }) => {
+      const parsed = traceAggregateRequestSchema.safeParse(await request.json());
+      if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+      try {
+        planTraceAggregate(parsed.data);
+      } catch (error) {
+        return HttpResponse.json({ error: String(error) }, { status: 400 });
+      }
+      const result = await respond(parsed.data);
+      return result instanceof Response ? result : HttpResponse.json(result);
+    }),
+  );
+}
+
+export type SpanAggregateRequest = NormalizedSpanAggregateRequest;
+
+/** Answers `aggregateSpans()` from the request body, parsed with the server's own schema. */
+export function serveSpanAggregate(
+  respond: (
+    request: SpanAggregateRequest,
+  ) => AggregateSpansResponse | Response | Promise<AggregateSpansResponse | Response>,
+) {
+  server.use(
+    http.post(SPAN_AGGREGATE_API, async ({ request }) => {
+      const parsed = spanAggregateRequestSchema.safeParse(await request.json());
+      if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+      const result = await respond(parsed.data);
+      return result instanceof Response ? result : HttpResponse.json(result);
+    }),
+  );
+}
+
+/**
+ * Answers an aggregate route the way Platform's mobs-query does on an organization-wide page,
+ * where `projectId` is also a dimension. The OSS schema rejects that dimension, so the body is
+ * passed through as sent.
+ */
+export function serveOrgAggregate(
+  route: 'traces' | 'spans',
+  respond: (request: { groupBy: string[] }) => AggregateTracesResponse,
+) {
+  server.use(
+    http.post(route === 'traces' ? TRACE_AGGREGATE_API : SPAN_AGGREGATE_API, async ({ request }) => {
+      const body: unknown = await request.json();
+      const groupBy =
+        typeof body === 'object' && body !== null && 'groupBy' in body && Array.isArray(body.groupBy)
+          ? body.groupBy.map(String)
+          : [];
+      return HttpResponse.json(respond({ groupBy }));
+    }),
+  );
+}
 
 /** The metric a request asks for, and what it groups by. */
 async function readMetricRequest(request: Request) {
@@ -39,6 +135,7 @@ async function readMetricRequest(request: Request) {
 /** Seeded data: agent runs, tokens, one agent's volume and latency, and one scorer's results. */
 export function seedMetrics() {
   server.use(
+    olderServer(),
     http.post(`${API}/aggregate`, async ({ request }) => {
       // Agent runs count; threads (a distinct count of the same metric) stay empty.
       const { name, aggregation } = await readMetricRequest(request);
@@ -73,6 +170,7 @@ export function seedMetrics() {
 
 export function emptyMetrics() {
   server.use(
+    olderServer(),
     http.post(`${API}/aggregate`, () => HttpResponse.json(emptyAggregateFixture)),
     http.post(`${API}/breakdown`, () => HttpResponse.json(emptyBreakdownFixture)),
     http.post(`${API}/timeseries`, () => HttpResponse.json(emptySeriesFixture)),
@@ -84,6 +182,7 @@ export function emptyMetrics() {
 export function failingMetrics() {
   const fail = () => HttpResponse.json(metricsErrorFixture, { status: 500 });
   server.use(
+    olderServer(),
     http.post(`${API}/aggregate`, fail),
     http.post(`${API}/breakdown`, fail),
     http.post(`${API}/timeseries`, fail),
@@ -99,6 +198,7 @@ export function pendingMetrics() {
     return HttpResponse.json({});
   };
   server.use(
+    olderServer(),
     http.post(`${API}/:operation`, hang),
     http.get(SCORES_API, hang),
     http.post(`${SCORES_API}/:operation`, hang),
@@ -106,9 +206,15 @@ export function pendingMetrics() {
 }
 
 /** Renders a card inside a 24h, unfiltered metrics dashboard. */
-export function renderInMetrics(ui: ReactNode) {
+export function renderInMetrics(ui: ReactNode, { scope }: { scope?: MetricsScope } = {}) {
   return renderWithProviders(
-    <MetricsProvider preset="24h" filterTokens={[]} onPresetChange={() => {}} onFilterTokensChange={() => {}}>
+    <MetricsProvider
+      preset="24h"
+      filterTokens={[]}
+      onPresetChange={() => {}}
+      onFilterTokensChange={() => {}}
+      scope={scope}
+    >
       {ui}
     </MetricsProvider>,
   );

@@ -2,11 +2,15 @@ packages:
   - '.'
 
 overrides:
+  # Vanta 2026-10-26: CVE-2026-111181 (body-parser <1.20.9), via verdaccio -> express 4
+  body-parser@<1.20.9: 1.20.9
+  # Vanta 2026-10-21: GHSA-587h-7wmj-h5pm (CVE-2026-112942/3/4) via vitest 4 (vite ^6||^7||^8)
+  'vite@>=8.0.0 <8.3.3': 8.3.4
   adm-zip@<=0.6.0: 0.6.1
   image-size@<=2.0.2: 2.0.4
   qs@>=6.7.0 <6.16.0: 6.16.0
   proxy-addr: 2.0.8
-  fast-uri: 3.1.8
+  fast-uri: 3.1.9
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
@@ -21,9 +25,9 @@ overrides:
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21
   brace-expansion@>=4.0.0 <5.0.12: 5.0.12
   jose@>=4.14.0 <6.2.12: 6.2.12
-  hono@<4.13.8: 4.13.8
-  better-auth: ^1.7.7
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  hono@<4.13.8: 4.13.11
+  better-auth: ^1.7.13
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
   '@modelcontextprotocol/sdk@>=1.0.0 <1.32.0': 1.32.1
   '@ai-sdk/provider-utils@>=3.0.0 <3.0.38': 3.0.38
   es-toolkit@<1.52.0: 1.52.0
@@ -42,4 +46,4 @@ overrides:
 allowBuilds:
   esbuild: true
 patchedDependencies:
-  'body-parser@1.20.6': patches/body-parser@1.20.6.patch
+  'body-parser@1.20.9': patches/body-parser@1.20.9.patch

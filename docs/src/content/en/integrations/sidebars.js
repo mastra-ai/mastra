@@ -65,6 +65,15 @@ const sidebars = {
       items: [
         {
           type: 'doc',
+          id: 'frameworks/angular',
+          label: 'Angular',
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/angular/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/angular/white?viewbox=auto&size=28',
+          },
+        },
+        {
+          type: 'doc',
           id: 'frameworks/astro',
           label: 'Astro',
           customProps: { icon: 'https://cdn.simpleicons.org/astro?viewbox=auto&size=28' },
@@ -898,6 +907,12 @@ const sidebars = {
           id: 'file-storage/mesa',
           label: 'Mesa',
           customProps: { icon: '/img/integrations/mesa.svg', customCSS: 'dark:invert' },
+        },
+        {
+          type: 'doc',
+          id: 'file-storage/neon',
+          label: 'Neon Object Storage',
+          customProps: { icon: 'https://cdn.simpleicons.org/neon?viewbox=auto&size=28' },
         },
         {
           type: 'doc',

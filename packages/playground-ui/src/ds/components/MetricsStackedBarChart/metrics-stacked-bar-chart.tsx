@@ -4,14 +4,23 @@ import type { LabelProps } from 'recharts';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
 import { MetricsLineChartLegend, MetricsLineChartTooltip } from '@/ds/components/MetricsLineChart';
-import { CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import { CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { singleBarBox, stackedSegmentBox } from '@/ds/primitives/chart-column-layout';
 import type { SegmentBox } from '@/ds/primitives/chart-column-layout';
-import { CHART_TICK, Y_AXIS_WIDTH, compactNumber, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
+import {
+  CHART_TICK,
+  Y_AXIS_WIDTH,
+  compactNumber,
+  dataMax,
+  isWholeData,
+  timeXAxis,
+  valueYAxis,
+} from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_AXIS_FONT_SIZE, CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
+import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -64,7 +73,7 @@ function segmentShape({
     const { y, height: h } = laid;
     const radius = Math.min(RADIUS, Math.floor(h / 3));
     // Dimming is a CSS rule keyed on `data-bucket` (see `HoverDim`), so hovering re-renders no bars.
-    const bucket = { 'data-bucket': index, style: { transition: 'opacity 150ms ease-out' } };
+    const bucket = { 'data-bucket': index };
 
     if (capped) {
       return (
@@ -232,24 +241,47 @@ function BarPlot({
           </defs>
           <CartesianGrid {...CHART_GRID_PROPS} />
           {timeXAxis({ data, xKey, timestampKey, xLabels, plotWidth })}
-          {valueYAxis({ show: showYAxis, size, formatter: axisFormatter ?? format, domain: yDomain })}
+          {valueYAxis({
+            show: showYAxis,
+            size,
+            formatter: axisFormatter ?? format,
+            domain: yDomain,
+            // A reference line above the bars stays on the axis.
+            max: Math.max(
+              dataMax(
+                data,
+                series.map(s => s.dataKey),
+                true,
+              ),
+              referenceLine?.value ?? 0,
+            ),
+            integer: isWholeData(
+              data,
+              series.map(s => s.dataKey),
+            ),
+          })}
           {overlay &&
             valueYAxis({
               id: 'overlay',
               show: false,
               size,
               formatter: overlay.valueFormatter ?? compactNumber.format,
+              max: dataMax(data, [overlay.dataKey]),
+              integer: isWholeData(data, [overlay.dataKey]),
               right: true,
             })}
           <Tooltip
+            {...CHART_TOOLTIP_PROPS}
             cursor={false}
             content={
-              <MetricsLineChartTooltip
-                formatValue={format}
-                showTotal={showTotal && !overlay}
-                labelKey={tooltipLabelKey}
-                formatByKey={overlay?.valueFormatter ? { [overlay.dataKey]: overlay.valueFormatter } : undefined}
-              />
+              <ChartTooltipPosition>
+                <MetricsLineChartTooltip
+                  formatValue={format}
+                  showTotal={showTotal && !overlay}
+                  labelKey={tooltipLabelKey}
+                  formatByKey={overlay?.valueFormatter ? { [overlay.dataKey]: overlay.valueFormatter } : undefined}
+                />
+              </ChartTooltipPosition>
             }
           />
           {series.map((s, i) => (

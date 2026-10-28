@@ -21,6 +21,7 @@ import type {
   ObservabilityInstance,
   CustomSamplerOptions,
   ExportedSpan,
+  SpanSnapshot,
   AnyExportedSpan,
   TraceState,
   TracingOptions,
@@ -222,11 +223,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
         return new NoOpSpan<TType>({ ...rest, metadata }, this);
       }
       // Parent is valid (sampled), so child will also be sampled - continue to create actual span
-    } else {
+    } else if (!this.shouldSample(customSamplerOptions)) {
       // Root span: perform sampling check
-      if (!this.shouldSample(customSamplerOptions)) {
-        return new NoOpSpan<TType>({ ...rest, metadata }, this);
-      }
+
+      return new NoOpSpan<TType>({ ...rest, metadata }, this);
     }
 
     // Compute or inherit TraceState
@@ -341,10 +341,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * - Can have end(), update(), error() called on it
    * - Will emit SPAN_ENDED or SPAN_UPDATED when those methods are called
    *
-   * @param cached - The exported span data to rebuild from
+   * @param cached - The span snapshot to rebuild from
    * @returns A span that can have lifecycle methods called on it
    */
-  rebuildSpan<TType extends SpanType>(cached: ExportedSpan<TType>): Span<TType> {
+  rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
@@ -353,6 +353,10 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       spanId: cached.id,
       parentSpanId: cached.parentSpanId,
       externalParentSpanId: cached.externalParentSpanId,
+      resumedFromSpanId: cached.resumedFromSpanId,
+      outcome: cached.outcome,
+      stopReason: cached.stopReason,
+      stopReasonContext: cached.stopReasonContext,
       links: cached.links,
       startTime: cached.startTime instanceof Date ? cached.startTime : new Date(cached.startTime),
       input: cached.input,
@@ -362,13 +366,30 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       entityId: cached.entityId,
       entityName: cached.entityName,
       tracingPolicy: cached.isInternal ? { internal: InternalSpans.ALL } : undefined,
-      traceState: cached.nestedUnderParent ? { requestContextKeys: [], nestedUnderParent: true } : undefined,
+      traceState: this.rebuildTraceState(cached),
     });
+
+    // The rebuilt span has no live parent, so restore the lineage computed before export
+    if (span instanceof BaseSpan) {
+      span.restoreEntityLineage(cached);
+    }
 
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 
     return span;
+  }
+
+  /**
+   * Restore the trace-level rules for a rebuilt span. Spans saved with
+   * `exportSpan()` before `snapshot()` existed fall back to the instance's
+   * configured keys, so an in-flight durable run keeps at least those across an upgrade.
+   */
+  private rebuildTraceState<TType extends SpanType>(cached: SpanSnapshot<TType>): TraceState | undefined {
+    if (cached.traceState) return cached.traceState;
+    const fallback = this.computeTraceState();
+    if (!cached.nestedUnderParent) return fallback;
+    return { requestContextKeys: fallback?.requestContextKeys ?? [], nestedUnderParent: true };
   }
 
   // ============================================================================

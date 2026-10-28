@@ -782,11 +782,19 @@ describe('createMastraCode', () => {
     );
   });
 
-  it.each([{}, { subagents: undefined }])(
-    'registers native defaults when subagents is omitted or undefined (%j)',
-    async config => {
-      const { createMastraCode } = await import('../index.js');
-      await createMastraCode(config);
+  it.each([{}, { subagents: undefined }])('registers no subagents when subagents is omitted (%j)', async config => {
+    const { createMastraCode } = await import('../index.js');
+    await createMastraCode(config);
+    expect(controllerConstructorMock.mock.calls[0]![0].subagents).toEqual([]);
+  });
+
+  it.each([['builtinSubagents'], ['resolveSubagentsSetting(true)']])(
+    'registers the built-in subagents with mode default models when opted in via %s',
+    async via => {
+      const { createMastraCode, builtinSubagents, resolveSubagentsSetting } = await import('../index.js');
+      await createMastraCode({
+        subagents: via === 'builtinSubagents' ? [...builtinSubagents] : resolveSubagentsSetting(true),
+      });
       const { subagents, modes } = controllerConstructorMock.mock.calls[0]![0];
       expect(subagents.map((agent: { id: string }) => agent.id)).toEqual(['explore', 'plan', 'execute']);
       for (const [index, modeId] of ['fast', 'plan', 'build'].entries()) {
@@ -806,7 +814,11 @@ describe('createMastraCode', () => {
 
   it('uses the default custom mode model when native modes are absent', async () => {
     const { createMastraCode } = await import('../index.js');
-    await createMastraCode({ modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({
+      modes: [{ id: 'review', name: 'Review', defaultModelId: 'openai/review-model' }],
+      subagents: [...builtinSubagents],
+    });
     expect(
       controllerConstructorMock.mock.calls[0]![0].subagents.map(
         (agent: { defaultModelId: string }) => agent.defaultModelId,
@@ -866,7 +878,8 @@ describe('createMastraCode', () => {
   it('filters disabled workspace tools from native subagent allowlists', async () => {
     const { createMastraCode } = await import('../index.js');
     const { executeSubagent } = await import('../agents/subagents/execute.js');
-    await createMastraCode({ disabledTools: ['execute_command'] });
+    const { builtinSubagents } = await import('../index.js');
+    await createMastraCode({ disabledTools: ['execute_command'], subagents: [...builtinSubagents] });
     const registered = controllerConstructorMock.mock.calls[0]![0].subagents as {
       id: string;
       allowedWorkspaceTools?: string[];
@@ -1745,12 +1758,23 @@ describe('createMastraCode', () => {
     // Third matcher: provider server failures use the same retry budget and visible status.
     const serverErrorPolicy = options!.matchers![2] as typeof transientConnectionPolicy;
     expect(typeof serverErrorPolicy.match).toBe('function');
-    expect(serverErrorPolicy.match!(new Error('Server error. The API may be experiencing issues.'))).toBe(true);
+    expect(serverErrorPolicy.match!(new Error('Internal Server Error'))).toBe(true);
+    expect(
+      serverErrorPolicy.match!({ type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } }),
+    ).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Bad gateway'), { status: 502 }))).toBe(true);
     // Gateway timeouts (504) exhaust the transient budget before the
     // account-rotation processor may classify them as a persistent outage.
     expect(serverErrorPolicy.match!(Object.assign(new Error('Gateway timeout'), { statusCode: 504 }))).toBe(true);
     expect(serverErrorPolicy.match!(Object.assign(new Error('Server error'), { statusCode: 500 }))).toBe(true);
+    expect(
+      serverErrorPolicy.match!(
+        Object.assign(new Error('Service Unavailable'), {
+          statusCode: 503,
+          responseBody: '{"error":{"message":"prompt is too long: 210345 tokens > 200000 maximum"}}',
+        }),
+      ),
+    ).toBe(false);
     expect(serverErrorPolicy.maxRetries).toBe(10);
     expect(serverErrorPolicy.delayMs!({ retryCount: 0 })).toBe(500);
     expect(typeof serverErrorPolicy.onRetry).toBe('function');
@@ -2220,7 +2244,10 @@ describe('createMastraCode', () => {
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
   });
 
-  async function decideDelivery(options: Record<string, unknown>, { ownedHere }: { ownedHere: boolean }) {
+  async function decideDelivery(
+    options: Record<string, unknown>,
+    { ownedHere, metadata }: { ownedHere: boolean; metadata?: Record<string, unknown> },
+  ) {
     const { createMastraCode } = await import('../index.js');
     const mastraCode = await createMastraCode(options);
     if (!ownedHere) controllerGetSessionMock.mockResolvedValue(undefined);
@@ -2228,7 +2255,13 @@ describe('createMastraCode', () => {
       .map(call => call[0] as Record<string, any>)
       .find(config => config.notifications)?.notifications?.deliveryPolicy?.decide;
     const decision = await decide({
-      record: { priority: 'high', source: 'sentinel', resourceId: 'project-resource', threadId: 'some-thread' },
+      record: {
+        priority: 'high',
+        source: 'sentinel',
+        resourceId: 'project-resource',
+        threadId: 'some-thread',
+        metadata,
+      },
       threadState: 'idle',
       now: new Date('2026-10-01T00:00:00.000Z'),
     });
@@ -2240,7 +2273,13 @@ describe('createMastraCode', () => {
   it("leaves another project's notifications for that project's process, with the socket pubsub on or off", async () => {
     for (const unixSocketPubSub of [true, false]) {
       const decision = await decideDelivery({ unixSocketPubSub }, { ownedHere: false });
-      expect(decision).toMatchObject({ action: 'deliver', hold: true });
+      // Due now rather than delivered, so the first send does not wake it here either.
+      expect(decision).toEqual({
+        action: 'defer',
+        deliverAt: new Date('2026-10-01T00:00:00.000Z'),
+        reason: 'idle-high',
+        hold: true,
+      });
       expect(decision.streamOptions).toBeUndefined();
     }
   });
@@ -2252,12 +2291,27 @@ describe('createMastraCode', () => {
     expect(decision.streamOptions).toBeDefined();
   });
 
-  it('does not hold notifications when the embedder configured its own PubSub', async () => {
-    for (const ownedHere of [true, false]) {
-      expect(await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere })).not.toHaveProperty(
-        'hold',
-      );
-    }
+  it("delivers this resource's notifications from the shared schedule when the embedder configured its own PubSub", async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: true });
+
+    expect(decision).not.toHaveProperty('hold');
+    expect(decision.streamOptions).toBeDefined();
+  });
+
+  it('leaves a resource no session here serves for its own process when the embedder configured its own PubSub', async () => {
+    const decision = await decideDelivery({ pubsub: {} as any, crossProcessPubSub: true }, { ownedHere: false });
+
+    expect(decision).toMatchObject({ action: 'defer', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
+  });
+
+  it("still sends a delivery routed to the thread's claimed owner when no session here serves it", async () => {
+    // Where Core keeps a sender's `requireClaimedOwner` on the record.
+    const metadata = { __mastraNotificationRouting: { requireClaimedOwner: true } };
+    const decision = await decideDelivery({ unixSocketPubSub: true }, { ownedHere: false, metadata });
+
+    expect(decision).toMatchObject({ action: 'deliver', hold: true });
+    expect(decision.streamOptions).toBeUndefined();
   });
 
   it("holds another project's thread on a shared resource, and runs it as that project's session once one is live here", async () => {
@@ -2277,7 +2331,7 @@ describe('createMastraCode', () => {
     };
 
     const foreign = await decide(input);
-    expect(foreign).toMatchObject({ action: 'deliver', hold: true });
+    expect(foreign).toMatchObject({ action: 'defer', hold: true });
     expect(foreign.streamOptions).toBeUndefined();
     expect(prepareWakeRequestContext).not.toHaveBeenCalled();
 

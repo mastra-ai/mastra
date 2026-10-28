@@ -170,7 +170,7 @@ export function DatasetVersionsPanel({
                     disabled={isFetchingNextPage}
                     className="w-full"
                   >
-                    {isFetchingNextPage ? 'Loading...' : 'Load More'}
+                    {isFetchingNextPage ? 'Loading...' : 'Load more'}
                   </Button>
                 </li>
               )}

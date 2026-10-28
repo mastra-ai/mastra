@@ -1,6 +1,7 @@
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { Event } from '../../events/types';
+import { noopLogger } from '../../logger';
 import { InMemoryDB } from '../../storage/domains/inmemory-db';
 import { InMemorySchedulesStorage } from '../../storage/domains/schedules/inmemory';
 import { Scheduler, TOPIC_AGENT_SCHEDULES } from './scheduler';
@@ -346,6 +347,61 @@ describe('Scheduler', () => {
     expect(triggers).toHaveLength(1);
   });
 
+  it.each(['workflow', 'agent'] as const)(
+    'retries a transient %s publish failure with the same claim id',
+    async targetType => {
+      vi.useFakeTimers();
+      vi.setSystemTime(new Date('2026-09-23T10:00:01Z'));
+
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events: workflowEvents } = captureWorkflowsTopic(pubsub);
+      const { events: agentEvents } = captureAgentSchedulesTopic(pubsub);
+      const original = pubsub.publish.bind(pubsub);
+      const attempts: Event[] = [];
+      vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, options) => {
+        if (topic === 'workflows' || topic === TOPIC_AGENT_SCHEDULES) {
+          attempts.push(event);
+          if (attempts.length === 1) throw new Error('temporary outage');
+        }
+        return original(topic, event, options);
+      });
+      const onError = vi.fn();
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
+      const fireAt = Date.now() - 1_000;
+      await store.createSchedule({
+        id: 'sched-transient',
+        target:
+          targetType === 'workflow'
+            ? { type: 'workflow', workflowId: 'wf-test' }
+            : { type: 'agent', agentId: 'agent-test', prompt: 'hello' },
+        cron: '0 0 10 23 9 * 2026',
+        status: 'active',
+        nextFireAt: fireAt,
+        createdAt: fireAt,
+        updatedAt: fireAt,
+      });
+
+      const tick = scheduler.tick();
+      await vi.advanceTimersByTimeAsync(100);
+      await tick;
+      await scheduler.tick();
+
+      const published = targetType === 'workflow' ? workflowEvents : agentEvents;
+      expect(attempts).toHaveLength(2);
+      expect(attempts.map(event => event.runId)).toEqual([
+        `sched_sched-transient_${fireAt}`,
+        `sched_sched-transient_${fireAt}`,
+      ]);
+      expect(published).toHaveLength(1);
+      expect((await store.getSchedule('sched-transient'))!.status).toBe('completed');
+      expect(onError).not.toHaveBeenCalled();
+      const triggers = await store.listTriggers('sched-transient');
+      if (targetType === 'workflow') expect(triggers.map(trigger => trigger.outcome)).toEqual(['published']);
+      else expect(triggers).toHaveLength(0); // Agent worker records the successful run.
+    },
+  );
+
   it('records a failed trigger when publish throws and invokes onError', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
@@ -376,10 +432,144 @@ describe('Scheduler', () => {
     expect(triggers).toHaveLength(1);
     expect(triggers[0]!.outcome).toBe('failed');
     expect(triggers[0]!.error).toBe('boom');
+    expect(publishSpy).toHaveBeenCalledTimes(3);
     expect(onError).toHaveBeenCalledOnce();
     expect(onError.mock.calls[0]![1]).toEqual({ scheduleId: 'sched-fail' });
 
     publishSpy.mockRestore();
+  });
+
+  describe.each(['workflow', 'agent'] as const)('%s publication failures', targetType => {
+    it.each([false, true])('preserves successful publication and claim metadata (terminal=%s)', async terminal => {
+      vi.useFakeTimers();
+      const fireAt = Date.parse('2026-10-23T12:00:00Z');
+      vi.setSystemTime(fireAt + 1_000);
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } =
+        targetType === 'workflow' ? await captureWorkflowsTopic(pubsub) : await captureAgentSchedulesTopic(pubsub);
+      await store.createSchedule({
+        id: 'publication-control',
+        target:
+          targetType === 'workflow'
+            ? { type: 'workflow', workflowId: 'wf-test' }
+            : { type: 'agent', agentId: 'agent-test', prompt: 'Check status' },
+        cron: terminal ? '0 0 12 23 10 * 2026' : '* * * * *',
+        timezone: 'UTC',
+        status: 'active',
+        nextFireAt: fireAt,
+        createdAt: fireAt,
+        updatedAt: fireAt,
+      });
+      const logger = { ...noopLogger, info: vi.fn() };
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub });
+      scheduler.__setLogger(logger);
+      await scheduler.tick();
+      const runId = `sched_publication-control_${fireAt}`;
+      const identity = { scheduleId: 'publication-control', runId, scheduledFireAt: fireAt };
+      expect(logger.info.mock.calls).toEqual([
+        ['Claimed schedule occurrence', identity],
+        ['Published schedule occurrence', identity],
+      ]);
+      expect(await store.getSchedule('publication-control')).toMatchObject({
+        status: terminal ? 'completed' : 'active',
+        nextFireAt: terminal ? fireAt : fireAt + 60_000,
+        lastRunId: runId,
+        lastFireAt: fireAt + 1_000,
+      });
+      expect(events).toHaveLength(1);
+      expect(events[0]).toMatchObject(
+        targetType === 'workflow'
+          ? { type: 'workflow.start', runId, data: { workflowId: 'wf-test', runId } }
+          : {
+              type: 'agent-schedule.fire',
+              runId,
+              data: { scheduleId: 'publication-control', claimId: runId, scheduledFireAt: fireAt },
+            },
+      );
+    });
+
+    it.each([false, true])('reports the unconfirmed occurrence without replay (terminal=%s)', async terminal => {
+      vi.useFakeTimers();
+      const fireAt = Date.parse('2026-10-23T12:00:00Z');
+      vi.setSystemTime(fireAt + 1_000);
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } =
+        targetType === 'workflow' ? await captureWorkflowsTopic(pubsub) : await captureAgentSchedulesTopic(pubsub);
+      const originalPublish = pubsub.publish.bind(pubsub);
+      const publish = vi.spyOn(pubsub, 'publish').mockRejectedValue(new Error('broker unavailable'));
+      const logger = { ...noopLogger, info: vi.fn(), error: vi.fn() };
+      const onError = vi.fn();
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { onError } });
+      scheduler.__setLogger(logger);
+      await store.createSchedule({
+        id: 'publication-failure',
+        target:
+          targetType === 'workflow'
+            ? { type: 'workflow', workflowId: 'wf-test' }
+            : { type: 'agent', agentId: 'agent-test', prompt: 'Check status' },
+        cron: terminal ? '0 0 12 23 10 * 2026' : '* * * * *',
+        timezone: 'UTC',
+        status: 'active',
+        nextFireAt: fireAt,
+        createdAt: fireAt,
+        updatedAt: fireAt,
+      });
+
+      const tick = scheduler.tick();
+      await vi.advanceTimersByTimeAsync(0);
+      expect(publish).toHaveBeenCalledTimes(1);
+      expect(logger.info).toHaveBeenCalledWith('Claimed schedule occurrence', {
+        scheduleId: 'publication-failure',
+        runId: `sched_publication-failure_${fireAt}`,
+        scheduledFireAt: fireAt,
+      });
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(100);
+      expect(publish).toHaveBeenCalledTimes(2);
+      expect(logger.error).not.toHaveBeenCalled();
+      expect(onError).not.toHaveBeenCalled();
+      await vi.advanceTimersByTimeAsync(200);
+      await tick;
+      expect(onError).toHaveBeenCalledExactlyOnceWith(expect.any(Error), { scheduleId: 'publication-failure' });
+      expect(logger.info).not.toHaveBeenCalledWith('Published schedule occurrence', expect.anything());
+      expect(await store.getSchedule('publication-failure')).toMatchObject({
+        status: terminal ? 'completed' : 'active',
+        nextFireAt: terminal ? fireAt : fireAt + 60_000,
+        lastRunId: `sched_publication-failure_${fireAt}`,
+      });
+      expect(await store.listTriggers('publication-failure')).toMatchObject([
+        { outcome: 'failed', scheduledFireAt: fireAt, error: 'broker unavailable' },
+      ]);
+      expect(logger.error).toHaveBeenCalledWith(
+        'Failed to publish target.start for schedule',
+        expect.objectContaining({
+          scheduleId: 'publication-failure',
+          scheduledFireAt: fireAt,
+          runId: `sched_publication-failure_${fireAt}`,
+          publicationOutcome: 'unknown',
+          automaticReplay: false,
+        }),
+      );
+
+      const replacement = new Scheduler({ schedulesStore: store, pubsub });
+      await replacement.tick();
+      expect(publish).toHaveBeenCalledTimes(3);
+      expect(events).toHaveLength(0);
+      publish.mockImplementation(originalPublish);
+      vi.setSystemTime(fireAt + 60_001);
+      await replacement.tick();
+      expect(events).toHaveLength(terminal ? 0 : 1);
+      expect(publish).toHaveBeenCalledTimes(terminal ? 3 : 4);
+      if (!terminal) {
+        expect(await store.getSchedule('publication-failure')).toMatchObject({
+          nextFireAt: fireAt + 120_000,
+          lastRunId: `sched_publication-failure_${fireAt + 60_000}`,
+        });
+      }
+    });
   });
 
   it('isolates a throwing onError handler so the tick loop keeps processing the batch', async () => {
@@ -483,41 +673,25 @@ describe('Scheduler', () => {
     expect(scheduler.isRunning).toBe(false);
   });
 
-  it('does not keep the event loop alive after stop (setInterval is unrefed)', async () => {
-    const origSetInterval = globalThis.setInterval;
+  it('does not keep the event loop alive (the tick timer is unrefed)', async () => {
+    const origSetTimeout = globalThis.setTimeout;
     const unref = vi.fn();
-    const setIntervalSpy = vi
-      .spyOn(globalThis, 'setInterval')
-      .mockImplementation((handler: any, ms?: number, ...args: any[]) => {
-        const handle = origSetInterval(handler, ms, ...args);
-        // Replace unref on the real handle with a spy so we can assert it's called
+    const setTimeoutSpy = vi.spyOn(globalThis, 'setTimeout').mockImplementation(((
+      handler: any,
+      ms?: number,
+      ...args: any[]
+    ) => {
+      const handle = origSetTimeout(handler, ms, ...args);
+      if (ms === 60_000) {
+        // Replace unref on the scheduler's handle with a spy so we can assert it's called
         const origUnref = handle.unref.bind(handle);
         handle.unref = () => {
           unref();
           return origUnref();
         };
-        return handle;
-      });
-
-    const { store } = makeStore();
-    const pubsub = new EventEmitterPubSub();
-    const scheduler = new Scheduler({
-      schedulesStore: store,
-      pubsub,
-      config: { tickIntervalMs: 60_000 },
-    });
-
-    await scheduler.start();
-    expect(setIntervalSpy).toHaveBeenCalledOnce();
-    expect(unref).toHaveBeenCalled();
-
-    await scheduler.stop();
-    setIntervalSpy.mockRestore();
-  });
-
-  it('starts on runtimes where setInterval returns a numeric handle (e.g. Cloudflare Workers)', async () => {
-    // workerd's setInterval returns a number, which has no .unref method
-    const setIntervalSpy = vi.spyOn(globalThis, 'setInterval').mockImplementation((() => 123) as any);
+      }
+      return handle;
+    }) as any);
 
     try {
       const { store } = makeStore();
@@ -525,7 +699,34 @@ describe('Scheduler', () => {
       const scheduler = new Scheduler({
         schedulesStore: store,
         pubsub,
-        config: { tickIntervalMs: 60_000 },
+        config: { enabled: true, tickIntervalMs: 60_000 },
+      });
+
+      await scheduler.start();
+      expect(setTimeoutSpy.mock.calls.filter(call => call[1] === 60_000)).toHaveLength(1);
+      expect(unref).toHaveBeenCalled();
+
+      await scheduler.stop();
+    } finally {
+      setTimeoutSpy.mockRestore();
+    }
+  });
+
+  it('starts on runtimes where setTimeout returns a numeric handle (e.g. Cloudflare Workers)', async () => {
+    // workerd's setTimeout returns a number, which has no .unref method
+    const origSetTimeout = globalThis.setTimeout;
+    const setTimeoutSpy = vi
+      .spyOn(globalThis, 'setTimeout')
+      .mockImplementation(((handler: any, ms?: number, ...args: any[]) =>
+        ms === 60_000 ? 123 : origSetTimeout(handler, ms, ...args)) as any);
+
+    try {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: { enabled: true, tickIntervalMs: 60_000 },
       });
 
       await expect(scheduler.start()).resolves.toBeUndefined();
@@ -533,7 +734,7 @@ describe('Scheduler', () => {
 
       await scheduler.stop();
     } finally {
-      setIntervalSpy.mockRestore();
+      setTimeoutSpy.mockRestore();
     }
   });
 
@@ -1089,6 +1290,147 @@ describe('Scheduler', () => {
     });
   });
 
+  describe('sleeping between fires', () => {
+    const wait = (ms: number) => new Promise(resolve => setTimeout(resolve, ms));
+    const row = (id: string, nextFireAt: number) => ({
+      id,
+      target: { type: 'workflow' as const, workflowId: 'wf-test' },
+      cron: '0 0 1 1 *',
+      status: 'active' as const,
+      nextFireAt,
+      createdAt: Date.now(),
+      updatedAt: Date.now(),
+    });
+
+    it('does not poll storage on every tick when nothing is scheduled', async () => {
+      const { store } = makeStore();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { tickIntervalMs: 20 },
+      });
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      const stSpy = vi.spyOn(globalThis, 'setTimeout');
+
+      await scheduler.start();
+      await wait(250);
+      // Warm-up tick plus one bounded earliest-fire lookup, then nothing.
+      expect(listDue).toHaveBeenCalledTimes(2);
+      // No timer is armed at all: an idle scheduler waits for a wake.
+      expect(stSpy.mock.calls.some(call => (call[1] ?? 0) >= 60_000)).toBe(false);
+
+      await scheduler.stop();
+      stSpy.mockRestore();
+    });
+
+    it('sleeps until the earliest schedule is due, then fires it', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      await store.createSchedule(row('sched-soon', Date.now() + 300));
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { tickIntervalMs: 20 } });
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      await wait(150);
+      // Warm-up tick plus one earliest-fire lookup: no polling while waiting for the fire.
+      expect(listDue).toHaveBeenCalledTimes(2);
+      expect(events).toHaveLength(0);
+
+      await wait(400);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('looks up the next fire with one bounded query instead of loading every active schedule', async () => {
+      const { store } = makeStore();
+      const far = Date.now() + 3_600_000;
+      for (let i = 0; i < 50; i++) await store.createSchedule(row(`sched-${i}`, far + i * 1000));
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { tickIntervalMs: 20 },
+      });
+      const listAll = vi.spyOn(store, 'listSchedules');
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      scheduler.wake();
+      scheduler.wake();
+      await wait(100);
+
+      expect(listAll).not.toHaveBeenCalled();
+      const lookups = listDue.mock.calls.filter(([now]) => now === Number.MAX_SAFE_INTEGER);
+      expect(lookups.length).toBeGreaterThan(0);
+      for (const [, limit] of lookups) expect(limit).toBe(1);
+
+      await scheduler.stop();
+    });
+
+    it('retries at the tick interval after a tick throws instead of going quiet', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      let calls = 0;
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub,
+        config: {
+          tickIntervalMs: 20,
+          isTargetReady: () => {
+            if (++calls === 1) throw new Error('readiness probe crashed');
+            return true;
+          },
+        },
+      });
+      await store.createSchedule(row('sched-crash', Date.now() - 1));
+
+      await scheduler.start();
+      await wait(250);
+
+      expect(calls).toBeGreaterThan(1);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('fires a schedule created while sleeping as soon as it is woken', async () => {
+      const { store } = makeStore();
+      const pubsub = new EventEmitterPubSub();
+      const { events } = captureWorkflowsTopic(pubsub);
+      const scheduler = new Scheduler({ schedulesStore: store, pubsub, config: { tickIntervalMs: 20 } });
+
+      await scheduler.start();
+      await store.createSchedule(row('sched-new', Date.now() - 1));
+      await wait(100);
+      expect(events).toHaveLength(0);
+
+      scheduler.wake();
+      await wait(100);
+      expect(events).toHaveLength(1);
+
+      await scheduler.stop();
+    });
+
+    it('keeps polling at the tick interval when explicitly enabled', async () => {
+      const { store } = makeStore();
+      const scheduler = new Scheduler({
+        schedulesStore: store,
+        pubsub: new EventEmitterPubSub(),
+        config: { enabled: true, tickIntervalMs: 20 },
+      });
+      const listDue = vi.spyOn(store, 'listDueSchedules');
+
+      await scheduler.start();
+      await wait(250);
+      expect(listDue.mock.calls.length).toBeGreaterThan(3);
+
+      await scheduler.stop();
+    });
+  });
+
   it('applies defaults when config values are explicitly undefined', async () => {
     const { store } = makeStore();
     const pubsub = new EventEmitterPubSub();
@@ -1102,7 +1444,7 @@ describe('Scheduler', () => {
     });
 
     const listDue = vi.spyOn(store, 'listDueSchedules');
-    const siSpy = vi.spyOn(globalThis, 'setInterval');
+    const stSpy = vi.spyOn(globalThis, 'setTimeout');
 
     await scheduler.start();
 
@@ -1111,16 +1453,11 @@ describe('Scheduler', () => {
     const batchArg = listDue.mock.calls[0]![1];
     expect(batchArg).toBe(100);
 
-    // tickIntervalMs should fall back to 10_000 (the default), not undefined
-    // setInterval is called once after the warm-up tick
-    const intervalCall = siSpy.mock.calls.find(call => {
-      const cb = call[0];
-      return typeof cb === 'function' && call[1] !== undefined;
-    });
-    expect(intervalCall).toBeDefined();
-    expect(intervalCall![1]).toBe(10_000);
+    // tickIntervalMs should fall back to 10_000 (the default), not undefined:
+    // an enabled scheduler arms its next tick at the interval after warm-up.
+    expect(stSpy.mock.calls.some(call => call[1] === 10_000)).toBe(true);
 
     await scheduler.stop();
-    siSpy.mockRestore();
+    stSpy.mockRestore();
   });
 });

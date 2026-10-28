@@ -169,13 +169,10 @@ async function getInputPlugins(
 
   return [
     virtual(
-      Array.from(virtualDependencies.entries()).reduce(
-        (acc, [dep, virtualDep]) => {
-          acc[`#virtual-${dep}`] = virtualDep.virtual;
-          return acc;
-        },
-        {} as Record<string, string>,
-      ),
+      Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+        acc[`#virtual-${dep}`] = virtualDep.virtual;
+        return acc;
+      }, {}),
     ),
     moduleAlias(alias, path.join(rootDir, 'package.json'), platform),
     tsConfigPaths({ cwd: projectRoot }),
@@ -190,9 +187,8 @@ async function getInputPlugins(
             ...[...transpilePackagesMap.values()].map(p => {
               if (path.isAbsolute(p)) {
                 return new RegExp(`^${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
-              } else {
-                return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
               }
+              return new RegExp(`\/${p.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}/(?!.*node_modules).*$`);
             }),
             // Also match workspace packages resolved through node_modules symlinks
             // (common in pnpm workspaces). Match by package name in node_modules path.
@@ -354,13 +350,10 @@ async function buildExternalDependencies(
 
   const bundler = await rollup({
     logLevel: process.env.MASTRA_BUNDLER_DEBUG === 'true' ? 'debug' : 'silent',
-    input: Array.from(virtualDependencies.entries()).reduce(
-      (acc, [dep, virtualDep]) => {
-        acc[virtualDep.name] = `#virtual-${dep}`;
-        return acc;
-      },
-      {} as Record<string, string>,
-    ),
+    input: Array.from(virtualDependencies.entries()).reduce<Record<string, string>>((acc, [dep, virtualDep]) => {
+      acc[virtualDep.name] = `#virtual-${dep}`;
+      return acc;
+    }, {}),
     external: rollupExternals,
     treeshake: noBundling ? false : 'safest',
     plugins,
@@ -436,10 +429,8 @@ function findExternalImporter(
   for (const id of [...module.imports, ...module.dynamicImports]) {
     if (isDependencyPartOfPackage(id, external)) {
       return module;
-    } else {
-      if (id.endsWith('.mjs')) {
-        capturedFiles.add(id);
-      }
+    } else if (id.endsWith('.mjs')) {
+      capturedFiles.add(id);
     }
   }
 

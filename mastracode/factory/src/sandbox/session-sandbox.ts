@@ -298,6 +298,11 @@ export function hasFailedSetupCommand(sessionId: string, command: string): boole
   return failedSetupCommands.get(sessionId)?.has(command) ?? false;
 }
 
+/** Forget a session's failed setup commands, so a replacement VM runs them again. */
+export function clearFailedSetupCommands(sessionId: string): void {
+  failedSetupCommands.delete(sessionId);
+}
+
 /**
  * The setup completion marker is a convention shared with the repo templates
  * (`@internal/workspace`): `.mastra-sandbox/setup` beside the checkout,

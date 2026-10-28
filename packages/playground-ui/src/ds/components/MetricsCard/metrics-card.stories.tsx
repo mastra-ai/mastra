@@ -253,10 +253,10 @@ export const ActionsOnHover: Story = {
         <MetricsCard.TopBar>
           <MetricsCard.TitleAndDescription title="Latency" description="Edge duration percentiles." />
           <MetricsCard.Actions reveal="hover">
-            <Button variant="ghost" size="icon-md" tooltip="View in Traces">
+            <Button variant="ghost" size="icon-md" tooltip="View in traces">
               <EyeIcon />
             </Button>
-            <Button variant="ghost" size="icon-md" tooltip="View errors in Logs">
+            <Button variant="ghost" size="icon-md" tooltip="View errors in logs">
               <LogsIcon />
             </Button>
           </MetricsCard.Actions>

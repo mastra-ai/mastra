@@ -80,7 +80,7 @@ test.describe('Item and review panel layout', () => {
         test(`opens ${inline ? 'an inline panel' : 'a drawer'} that can be closed`, async ({ page }, testInfo) => {
           await page.goto(url);
           const panel = page.getByRole(inline ? 'region' : 'dialog', { name: label });
-          const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+          const close = panel.getByRole('button', { name: 'Close panel', exact: true });
           await expect(close).toBeVisible();
           const screenshot = testInfo.outputPath(`${surface.replaceAll(' ', '-')}-${device}.png`);
           await page.screenshot({ path: screenshot });
@@ -97,7 +97,7 @@ test.describe('Item and review panel layout', () => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = datasetItem(page, 'item-a');
       await panel.getByRole('button', { name: 'Open actions menu' }).click();
-      await page.getByRole('menuitem', { name: 'Delete Item' }).click();
+      await page.getByRole('menuitem', { name: 'Delete item' }).click();
       const confirmation = page.getByRole('alertdialog', { name: 'Delete Item' });
       await confirmation.getByRole('button', { name: 'Cancel', exact: true }).click();
       await expect(confirmation).toBeHidden();
@@ -111,7 +111,7 @@ test.describe('Item and review panel layout', () => {
       await page.goto('/datasets/ds-1/items/item-a');
       const first = datasetItem(page, 'item-a');
       await expect(first).toBeVisible();
-      await first.getByRole('button', { name: 'Close Panel', exact: true }).click();
+      await first.getByRole('button', { name: 'Close panel', exact: true }).click();
       await expect(first).toBeHidden();
       await page.getByText('item-b', { exact: true }).click();
       await expect(datasetItem(page, 'item-b')).toBeVisible();
@@ -130,7 +130,7 @@ test.describe('Item and review panel layout', () => {
     test('scrolls inside the card and keeps navigating', async ({ page }) => {
       await page.goto('/datasets/ds-1/items/item-a');
       const panel = datasetItem(page, 'item-a');
-      await expect(panel.getByRole('button', { name: 'Close Panel', exact: true })).toBeVisible();
+      await expect(panel.getByRole('button', { name: 'Close panel', exact: true })).toBeVisible();
       // Payloads are clipped until expanded, so open one to overflow the card.
       await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
       const contentScrollTop = await scrollCardContent(page, panel, true);
@@ -165,7 +165,7 @@ test.describe('Item and review panel layout', () => {
       test('scrolls inside the card and still closes', async ({ page }) => {
         await page.goto(url);
         const panel = page.getByRole(inline ? 'region' : 'dialog', { name: label });
-        const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+        const close = panel.getByRole('button', { name: 'Close panel', exact: true });
         await expect(close).toBeVisible();
         // Payloads are clipped until expanded, so open one to overflow the card.
         await panel.getByRole('region', { name: 'Input' }).getByRole('button', { name: 'Expand' }).click();
@@ -187,10 +187,10 @@ test.describe('Item and review panel layout', () => {
       const trace = page.getByRole('dialog', { name: /^Trace / });
       await expect(trace).toBeVisible();
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeVisible();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeVisible();
       // The span column has no close button: clicking the selected span again toggles it off.
       await trace.getByText('Experiment tool call', { exact: true }).click();
-      await expect(trace.getByRole('heading', { name: /span-child/ })).toBeHidden();
+      await expect(trace.getByRole('heading', { name: /child1/ })).toBeHidden();
       await trace.getByRole('button', { name: 'Close trace', exact: true }).click();
       await expect(trace).toBeHidden();
       await expect(panel.getByText('first question', { exact: false })).toBeVisible();
@@ -201,7 +201,7 @@ test.describe('Item and review panel layout', () => {
     test('closes from the close control', async ({ page }) => {
       await page.goto('/experiments/review-queue?experiment=exp-1&review=res-3');
       const panel = page.getByRole('dialog', { name: 'Review item res-3' });
-      const close = panel.getByRole('button', { name: 'Close Panel', exact: true });
+      const close = panel.getByRole('button', { name: 'Close panel', exact: true });
       await expect(close).toBeVisible();
       await close.click({ timeout: 3000 });
       await expect(panel).toBeHidden();

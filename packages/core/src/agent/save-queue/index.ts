@@ -199,9 +199,8 @@ export class SaveQueueManager {
 
     if (earliest && now - earliest > SaveQueueManager.MAX_STALENESS_MS) {
       return this.flushMessages(messageList, threadId, memoryConfig);
-    } else {
-      return this.debounceSave(threadId, messageList, memoryConfig);
     }
+    return this.debounceSave(threadId, messageList, memoryConfig);
   }
 
   /**

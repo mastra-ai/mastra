@@ -1,6 +1,6 @@
 {
   "name": "@mastra/sentry",
-  "version": "1.2.28",
+  "version": "1.2.29",
   "description": "Sentry AI observability exporter for Mastra",
   "type": "module",
   "main": "dist/index.js",
@@ -39,10 +39,10 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },

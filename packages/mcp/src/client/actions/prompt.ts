@@ -47,13 +47,12 @@ export class PromptClientActions {
       const response = await this.client.listPrompts();
       if (response && response.prompts && Array.isArray(response.prompts)) {
         return response.prompts.map(prompt => ({ ...prompt }));
-      } else {
-        this.logger.warn('Prompts response did not have expected structure', {
-          server: this.client.name,
-          response,
-        });
-        return [];
       }
+      this.logger.warn('Prompts response did not have expected structure', {
+        server: this.client.name,
+        response,
+      });
+      return [];
     } catch (e: any) {
       // MCP Server might not support prompts, so we return an empty array
       if (e.code === ProtocolErrorCode.MethodNotFound) {

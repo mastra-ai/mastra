@@ -25,6 +25,8 @@ import type {
   TraceQueryGroupResponse,
   AggregateTracesArgs,
   AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
   GetTraceQueryFieldsArgs,
   GetTraceQueryFieldsResponse,
   GetTraceQueryValuesArgs,
@@ -330,8 +332,17 @@ export class Observability extends BaseResource {
    * Groups and measures the traces selected by a time range and optional trace-query predicate.
    * Check `capabilities.traceAggregate` from `getObservabilityCapabilities()` first; servers without it return 404 or 501.
    */
-  aggregateTraces(params: AggregateTracesArgs): Promise<AggregateTracesResponse> {
-    return this.request('/observability/traces/aggregate', { method: 'POST', body: params });
+  aggregateTraces(params: AggregateTracesArgs, options?: { signal?: AbortSignal }): Promise<AggregateTracesResponse> {
+    return this.request('/observability/traces/aggregate', { method: 'POST', body: params, signal: options?.signal });
+  }
+
+  /**
+   * Groups and measures individual completed spans selected by a time range and optional span-query predicate.
+   * Token and cost measures count usage recorded on each span itself. Check `capabilities.spanAggregate` from
+   * `getObservabilityCapabilities()` first; servers without it return 404 or 501.
+   */
+  aggregateSpans(params: AggregateSpansArgs): Promise<AggregateSpansResponse> {
+    return this.request('/observability/spans/aggregate', { method: 'POST', body: params });
   }
 
   /** Returns canonical and observed fields available to the advanced trace-query grammar. */

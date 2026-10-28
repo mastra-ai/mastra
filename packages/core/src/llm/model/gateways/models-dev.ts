@@ -31,6 +31,7 @@ interface ModelsDevModelInfo {
   id: string;
   name?: string;
   status?: string;
+  release_date?: string;
   modalities?: { input?: string[]; output?: string[] };
   attachment?: boolean;
   temperature?: boolean;
@@ -211,6 +212,11 @@ export class ModelsDevGateway extends MastraModelGateway {
         // offer models for *new* selection can hide or mark them.
         const allModels = Object.entries(providerInfo.models);
         const modelIds = allModels.map(([modelId]) => modelId).sort();
+        const modelReleaseDates = Object.fromEntries(
+          allModels.flatMap(([modelId, info]) =>
+            typeof info?.release_date === 'string' && info.release_date ? [[modelId, info.release_date]] : [],
+          ),
+        );
         const deprecatedModelIds = allModels
           .filter(([, modelInfo]) => modelInfo?.status === 'deprecated')
           .map(([modelId]) => modelId)
@@ -277,6 +283,7 @@ export class ModelsDevGateway extends MastraModelGateway {
           apiKeyHeader,
           name: providerInfo.name || providerId.charAt(0).toUpperCase() + providerId.slice(1),
           models: modelIds,
+          ...(Object.keys(modelReleaseDates).length > 0 ? { modelReleaseDates } : {}),
           docUrl: providerInfo.doc, // Include documentation URL if available
           gateway: `models.dev`,
           // Only store npm when it's a non-default SDK (not openai-compatible/gateway) to keep the registry small
@@ -480,6 +487,10 @@ export class ModelsDevGateway extends MastraModelGateway {
           baseURL,
           headers: mastraHeaders,
           supportsStructuredOutputs: true,
+          // Kimi's coding endpoint only reports usage at the standard top level of a stream chunk when
+          // asked; without stream_options.include_usage it nests usage inside choices[0], which the AI
+          // SDK never reads, so every Kimi step's token counts came back undefined (r325).
+          ...(providerId.startsWith('kimi-code-plan') ? { includeUsage: true } : {}),
         }).chatModel(modelId);
       }
     }

@@ -19,7 +19,6 @@ import {
   primeTenantCredentialsForRequestContext,
   primeTenantCredentialsForTenant,
 } from '../../routes/tenant-credentials.js';
-import { markNewChannelSession } from '../../session/channel-session-link-processor.js';
 import {
   createSourceControlSessionLookup,
   FactorySourceControlConflictError,
@@ -46,9 +45,11 @@ import type { ExternalWorkItemSource, WorkItemRow, WorkItemsStorage } from '../.
 import { FACTORY_SLACK_SENDER_KEY } from '../../tools/scope.js';
 import type { FactoryChannelsConfig } from '../base.js';
 import { prepareSessionRunContext } from '../subscription-session.js';
+import { markNewChannelSession } from './channel-session-link-processor.js';
 
 import { resolveEmojiShortcodes } from './emoji.js';
 import { slackCommentSource } from './feed-publisher.js';
+import { slackRunErrorCard } from './run-error-card.js';
 
 // Derive the thread/message types from the core handler signature rather than
 // importing them from `chat` directly: mc-web can resolve a different `chat`
@@ -742,19 +743,28 @@ async function findInternalThread(mastra: Mastra | undefined, thread: HandlerThr
     },
     perPage: 1,
   })) ?? { threads: [] };
-  return threads[0];
+  return threads[0] ?? null;
 }
+
+type InternalThread = Awaited<ReturnType<typeof findInternalThread>>;
 
 async function prepareExistingSessionOwnerContext(
   thread: HandlerThread,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { expectedOrgId?: string; senderUserId?: string; requireInternalThread: boolean },
+  options: {
+    expectedOrgId?: string;
+    senderUserId?: string;
+    requireInternalThread: boolean;
+    /** Already looked up by the caller; `null` means it doesn't exist. */
+    internalThread?: InternalThread;
+  },
 ): Promise<'ready' | 'organization-mismatch' | 'access-denied'> {
   const sourceControls = configuredSourceControls(deps);
   if (sourceControls.length === 0 && !options.requireInternalThread) return 'ready';
 
-  const internalThread = await findInternalThread(ctx.mastra, thread);
+  const internalThread =
+    options.internalThread !== undefined ? options.internalThread : await findInternalThread(ctx.mastra, thread);
   if (!internalThread) {
     if (options.requireInternalThread) {
       throw new Error(`Could not resolve the internal Slack thread for ${thread.id}.`);
@@ -820,7 +830,7 @@ async function gateDispatch(
   message: HandlerMessage,
   deps: SlackChannelDeps,
   ctx: ChannelHandlerContext,
-  options: { requireInternalThread: boolean } = { requireInternalThread: false },
+  options: { requireInternalThread: boolean; internalThread?: InternalThread } = { requireInternalThread: false },
 ): Promise<{
   routed?: { link: ChannelAccountLink; factoryProjectId: string };
 } | null> {
@@ -840,6 +850,7 @@ async function gateDispatch(
       expectedOrgId: sender.link.orgId,
       senderUserId: sender.link.userId,
       requireInternalThread: options.requireInternalThread,
+      internalThread: options.internalThread,
     });
     if (ownerContext === 'access-denied') {
       await thread.post('This private Factory session belongs to another user.');
@@ -1052,30 +1063,88 @@ export const createHandlers = (deps: SlackChannelDeps): ChannelHandlers => {
       // thread without the bot replying. Word boundary so messages that
       // merely start with "aside..." (e.g. "asides can wait") still route.
       if (/^aside\b/i.test(message.text)) return ingestAside(thread, message, deps);
+      // Looked up once here for the mute check and the access gate below.
+      const internalThread = await findInternalThread(ctx.mastra, thread);
+      // A muted thread ignores everything that doesn't tag the bot, and the
+      // skipped messages never reach the session.
+      if (!message.isMention && internalThread?.metadata?.[MUTED_KEY] === 'true') return;
       // A subscribed follow-up from an unlinked sender must not run either
       // (e.g. the link was removed mid-conversation), and it must still
       // resolve a factory (e.g. the default was cleared or its factory
-      // deleted mid-conversation).
+      // deleted mid-conversation). Mute and unmute pass the same gate, so only
+      // someone allowed to prompt this session can change what it listens to.
       try {
-        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true });
+        const gate = await gateDispatch(thread, message, deps, ctx, { requireInternalThread: true, internalThread });
         if (!gate) return;
       } catch (error) {
         await reportPreDispatchError(thread, message, ctx, error);
         return;
       }
+      const command = message.isMention ? muteCommand(message) : undefined;
+      if (command && internalThread) return setThreadMuted(thread, internalThread, message, ctx, command === 'mute');
       acknowledgeReceipt(thread, deps);
       await defaultHandler(thread, message);
     },
-    onMention: newSessionChatHandler,
+    onMention: async (thread, message, defaultHandler, ctx) => {
+      // `@bot mute` in a thread the bot never joined has nothing to mute, and
+      // must not start a session about the word "mute".
+      if (muteCommand(message)) return;
+      await newSessionChatHandler(thread, message, defaultHandler, ctx);
+    },
     onDirectMessage: newSessionChatHandler,
   };
 };
 
+/** Thread metadata key; one Factory runs one Slack app, so this is per bot. */
+const MUTED_KEY = 'factory_muted';
+
+/**
+ * `mute` or `unmute` when that word, with the mentions taken out, is the whole
+ * message. Reads Slack's raw text, where a mention is still `<@U…>`: the
+ * normalized `message.text` spells it as the bot's display name, which can
+ * hold spaces and punctuation (`@Mastra Factory(Caleb)`).
+ */
+function muteCommand(message: HandlerMessage): 'mute' | 'unmute' | undefined {
+  const raw = message.raw as { text?: unknown } | undefined;
+  const text = typeof raw?.text === 'string' ? raw.text : message.text;
+  const rest = text
+    .replace(/<@[^>]+>/g, ' ')
+    .replace(/(?<!\w)@[\w.-]+/g, ' ')
+    .trim()
+    .replace(/[.!]+$/, '')
+    .toLowerCase();
+  return rest === 'mute' || rest === 'unmute' ? rest : undefined;
+}
+
+/**
+ * Stored on the Mastra thread next to `channel_subscribed`, so a mute holds
+ * across deploys and replicas. Callers run the sender's link and session
+ * access gate first. A reaction confirms it without posting.
+ */
+async function setThreadMuted(
+  thread: HandlerThread,
+  internal: NonNullable<InternalThread>,
+  message: HandlerMessage,
+  ctx: ChannelHandlerContext,
+  muted: boolean,
+): Promise<void> {
+  const store = await ctx.mastra?.getStorage()?.getStore('memory');
+  if (!store) return;
+  await store.patchThread({ id: internal.id, metadata: { ...internal.metadata, [MUTED_KEY]: String(muted) } });
+  try {
+    await thread.adapter.addReaction(thread.id, message.id, muted ? 'mute' : 'loud_sound');
+  } catch (error) {
+    console.warn('[slack] mute reaction failed', { thread: thread.id, error });
+  }
+}
+
 /** Slack app credentials, passed in explicitly rather than read from env here. */
 interface SlackCredentials {
+  mode?: 'webhook' | 'socket';
   clientId?: string;
   clientSecret?: string;
-  signingSecret: string;
+  signingSecret?: string;
+  appToken?: string;
   botToken?: string;
 }
 
@@ -1083,10 +1152,11 @@ export function createSlackChannelsConfig(deps: SlackChannelDeps & { slack: Slac
   // Per HTTP attempt, not per call: the WebClient's own retry policy still
   // waits out a 429. Without it a dead socket hangs a post forever.
   const adapter = createSlackAdapter({ ...deps.slack, webClientOptions: { timeout: SLACK_REQUEST_TIMEOUT_MS } });
+  const formatError: SlackAdapterChannelConfig['formatError'] = deps.adapterOptions?.formatError ?? slackRunErrorCard;
   const slack =
     deps.adapterOptions?.streaming === false
-      ? { adapter, ...deps.adapterOptions }
-      : { adapter, ...deps.adapterOptions, streaming: deps.adapterOptions?.streaming ?? true };
+      ? { adapter, ...deps.adapterOptions, formatError }
+      : { adapter, ...deps.adapterOptions, formatError, streaming: deps.adapterOptions?.streaming ?? true };
 
   const startedSessions: SlackStartedSessions = new WeakMap();
   return {

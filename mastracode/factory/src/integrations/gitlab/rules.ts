@@ -354,6 +354,12 @@ export class GitLabRules {
     // Without an update time the commit time still orders the push; dropping
     // the write would leave the pass naming the head the last verdict covered.
     const headAt = timestamp(mergeRequest?.updated_at) ?? timestamp(lastCommit?.timestamp);
+    const unchangedListedHead =
+      parsed.deliveryId.startsWith('poll:merge-request-head:') &&
+      headAt !== undefined &&
+      reviewItem?.metadata?.pullRequestHeadSha === headSha &&
+      (reviewItem?.metadata?.pullRequestHeadAt !== headAt ||
+        reviewItem?.metadata?.pullRequestHeadDeliveryId !== parsed.deliveryId);
     let pushedReviewItem = reviewItem;
     if (event === 'mergeRequestUpdated' && headSha && reviewItem) {
       const parent = items.find(item => item.id === reviewItem.parentWorkItemId);
@@ -364,6 +370,7 @@ export class GitLabRules {
         id: reviewItem.id,
         headSha,
         headAt,
+        deliveryId: parsed.deliveryId.startsWith('poll:merge-request-head:') ? parsed.deliveryId : undefined,
       });
       if (parent) {
         await recordPullRequestHead(this.options.storage, {
@@ -375,6 +382,7 @@ export class GitLabRules {
         });
       }
       pushedReviewItem = (await this.options.storage.get({ orgId: reviewItem.orgId, id: reviewItem.id })) ?? reviewItem;
+      if (unchangedListedHead) return { status: 'ignored' };
     }
     const candidates: Array<WorkItemRow | undefined> =
       event === 'mergeRequestMerged'

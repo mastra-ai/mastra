@@ -41,13 +41,19 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { QueueHealthStorage } from '../storage/domains/queue-health/base.js';
 import {
+  SessionBranchHeldError,
   SessionOwnershipMismatchError,
   SourceControlConnectionNotFoundError,
 } from '../storage/domains/source-control/base.js';
 import type { SourceControlStorage, SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import { isAgentActor } from '../storage/domains/work-items/base.js';
 import type { FactoryDispatchFailureCode, WorkItemsStorage } from '../storage/domains/work-items/base.js';
-import { workItemBranch, workItemBranchSource, workItemThreadTitle } from '../work-item-branch.js';
+import {
+  legacyGithubWorkItemBranch,
+  workItemBranch,
+  workItemBranchSource,
+  workItemThreadTitle,
+} from '../work-item-branch.js';
 import { buildAutomationRunRoutes } from './automation-runs.js';
 import { ConfigRoutes } from './config.js';
 import { invalidateCustomProvidersSnapshots } from './custom-provider-source.js';
@@ -118,6 +124,8 @@ export interface FactoryApiRoutesDeps {
   intakeReady: boolean;
   factoryReady: boolean;
   knowledgeEnabled: boolean;
+  /** The Factory MCP endpoint is mounted; surfaced so the UI can show its URL. */
+  mcpEnabled: boolean;
   /** Providers the operator opted in to run on the server process's own credentials. */
   deploymentModelProviders?: ReadonlySet<string>;
   knowledgeKey?: string;
@@ -246,7 +254,11 @@ async function inheritEarlierSession(
   }
   for (const role of candidates) {
     const session = await reuseBoundSession(sourceControl, input, role);
-    if (session && session.branch === branch && session.projectRepositoryId === projectRepositoryId) {
+    if (
+      session &&
+      (session.branch === branch || session.branch === legacyGithubWorkItemBranch(branch)) &&
+      session.projectRepositoryId === projectRepositoryId
+    ) {
       return session;
     }
   }
@@ -368,7 +380,14 @@ export async function prepareFactoryRuleBinding(
           // The card resolved to a linked repository the sandbox will not check out.
           throw new FactoryDispatchError(
             'source_repository_missing',
-            `Repository ${repository.slug} is linked but not in this Factory's environment. Turn it on under Settings → Environment, then retry.`,
+            `Repository ${repository.slug} is linked but not pre-cloned for this Factory. Turn on Pre-clone under Settings → Repositories, then retry.`,
+            { cause: error },
+          );
+        }
+        if (error instanceof SessionBranchHeldError) {
+          throw new FactoryDispatchError(
+            'session_unavailable',
+            `${error.message} The run cannot start until branch ${branch} is free for this repository.`,
             { cause: error },
           );
         }
@@ -637,6 +656,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
     'POST /web/github/projects/:id/sessions',
     'GET /web/user-sessions/:sessionId',
     'DELETE /web/user-sessions/:sessionId',
+    'POST /web/user-sessions/:sessionId/owner',
     'POST /web/user-sessions/:sessionId/title',
   ]);
   const providerRoutes = integrationRoutes.filter(
@@ -651,6 +671,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
           projects: deps.domains.projects,
           ...(deps.users ? { users: deps.users } : {}),
           controller: deps.controller,
+          audit: deps.audit,
           memorySettings: deps.domains.memorySettings,
           sessionRetirement: deps.sessionRetirement,
           // A local sandbox's destroy keeps the session directory, so recreate
@@ -748,7 +769,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       memorySettings: deps.domains.memorySettings,
       factoryProjects: deps.domains.projects,
       customProviders: deps.domains.customProviders,
-      features: { knowledge: deps.knowledgeEnabled },
+      features: { knowledge: deps.knowledgeEnabled, mcp: deps.mcpEnabled },
       deploymentProviders: deps.deploymentModelProviders,
       onCredentialsChanged: invalidateTenantCredentialSnapshots,
       onCustomProvidersChanged: invalidateCustomProvidersSnapshots,

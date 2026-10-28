@@ -80,13 +80,16 @@ function runNext(key: string, queue: KeyQueue): void {
  * Runs `op` once every earlier op on `key` has settled (reflection-priority ops first among those
  * still waiting) and resolves or rejects with its result. A rejection reaches only this caller.
  *
+ * Aborting `abortSignal` while the op is still queued rejects the caller and skips the op. Once the
+ * op has started, the caller waits for its result, so work after a landed commit still runs.
+ *
  * Enqueueing on a key from inside an op that holds the same key, directly or through nested ops
  * on other keys, would deadlock, so it rejects.
  */
 export function runOMCommit<T>(
   key: string,
   op: () => Promise<T>,
-  { priority = 'normal' }: { priority?: OMCommitPriority } = {},
+  { priority = 'normal', abortSignal }: { priority?: OMCommitPriority; abortSignal?: AbortSignal } = {},
 ): Promise<T> {
   if (holdsKey(key)) {
     return Promise.reject(
@@ -94,7 +97,9 @@ export function runOMCommit<T>(
     );
   }
 
-  return new Promise<T>((resolve, reject) => {
+  if (abortSignal?.aborted) return Promise.reject(abortSignal.reason);
+  let started = false;
+  const work = new Promise<T>((resolve, reject) => {
     let queue = queues.get(key);
     if (!queue) {
       queue = { running: null, reflection: [], normal: [] };
@@ -126,7 +131,13 @@ export function runOMCommit<T>(
       stallTimer.unref?.();
       // Release the key before settling the caller, so the caller observes it free.
       heldKeys
-        .run(held, () => Promise.resolve().then(op))
+        .run(held, () =>
+          Promise.resolve().then(() => {
+            abortSignal?.throwIfAborted();
+            started = true;
+            return op();
+          }),
+        )
         .then(
           value => {
             release();
@@ -141,6 +152,14 @@ export function runOMCommit<T>(
 
     (priority === 'reflection' ? owner.reflection : owner.normal).push(start);
     if (owner.running === null) runNext(key, owner);
+  });
+  if (!abortSignal) return work;
+  return new Promise<T>((resolve, reject) => {
+    const onAbort = () => {
+      if (!started) reject(abortSignal.reason);
+    };
+    abortSignal.addEventListener('abort', onAbort, { once: true });
+    work.then(resolve, reject).finally(() => abortSignal.removeEventListener('abort', onAbort));
   });
 }
 
