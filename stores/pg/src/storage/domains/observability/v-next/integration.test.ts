@@ -2127,9 +2127,13 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         const today = await harness.domain.getTrace({ traceId: 'runout-today-trace' });
         expect(today?.spans.map(span => span.spanId)).toEqual(['runout-today-span']);
 
-        const futurePartition = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(10))}`);
-        await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${futurePartition}`);
-        await harness.baseClient.none(`DROP TABLE ${futurePartition}`);
+        for (const table of ALL_SIGNAL_TABLES) {
+          const futurePartition = qualifiedTable(harness.schema, `${table}_p${yyyymmdd(dayAt(10))}`);
+          await harness.baseClient.none(
+            `ALTER TABLE ${qualifiedTable(harness.schema, table)} DETACH PARTITION ${futurePartition}`,
+          );
+          await harness.baseClient.none(`DROP TABLE ${futurePartition}`);
+        }
         const future = dayAt(10, 11);
         await harness.domain.batchCreateSpans({
           records: [makeSpan({ traceId: 'runout-future-trace', spanId: 'runout-future-span', startedAt: future })],
