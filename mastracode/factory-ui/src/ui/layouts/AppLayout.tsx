@@ -2,7 +2,8 @@ import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
-import { Outlet, useNavigation } from 'react-router';
+import { Suspense } from 'react';
+import { Outlet, useMatches } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
@@ -35,24 +36,30 @@ function SidebarShortcuts() {
   return null;
 }
 
-// The delay keeps fast navigations from flashing the loader.
+/** Routes sharing a `pageGroup` share one loading boundary: moving between them never shows the loader. */
+export type PageHandle = { pageGroup: string };
+
+function isPageHandle(handle: unknown): handle is PageHandle {
+  return typeof handle === 'object' && handle !== null && 'pageGroup' in handle && typeof handle.pageGroup === 'string';
+}
+
+// Navigations run in a transition, where a boundary already showing a page keeps
+// it instead of the loader, so each page needs its own boundary.
 function RoutedPage() {
-  const loading = useNavigation().state === 'loading';
+  const page = useMatches().at(-1);
+  const handle = page?.handle;
 
   return (
-    <>
-      <div
-        className={loading ? 'contents invisible transition-[visibility] delay-150 duration-0' : 'contents'}
-        inert={loading}
-      >
-        <Outlet />
-      </div>
-      {loading ? (
-        <div className="absolute inset-0 flex items-center justify-center transition-opacity delay-150 starting:opacity-0">
+    <Suspense
+      key={isPageHandle(handle) ? handle.pageGroup : page?.id}
+      fallback={
+        <div className="flex flex-1 items-center justify-center transition-opacity delay-150 starting:opacity-0">
           <BrandLoader size="lg" aria-label="Loading page" />
         </div>
-      ) : null}
-    </>
+      }
+    >
+      <Outlet />
+    </Suspense>
   );
 }
 
