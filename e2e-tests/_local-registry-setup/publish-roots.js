@@ -4,37 +4,33 @@ import { join, relative, sep } from 'node:path';
 
 const DEPENDENCY_FIELDS = ['dependencies', 'devDependencies', 'optionalDependencies', 'peerDependencies'];
 
+// Every suite installs Mastra packages through this one dist-tag, locally and in CI.
+export const E2E_TAG = 'e2e-test';
+
 const SHARED_REGISTRY_SUITES = {
   commonjs: {
-    tag: 'commonjs-e2e-test',
     manifestGlobs: ['e2e-tests/commonjs/template/package.json'],
   },
   monorepo: {
-    tag: 'monorepo-test',
     manifestGlobs: ['e2e-tests/monorepo/template/**/package.json'],
   },
   'no-bundling': {
-    tag: 'no-bundling-test',
     manifestGlobs: ['e2e-tests/no-bundling/template/package.json'],
     extraRoots: ['@mastra/deployer'],
   },
   deployers: {
-    tag: 'deployers-e2e-test',
     manifestGlobs: ['e2e-tests/deployers/template/**/package.json'],
     extraRoots: ['@mastra/deployer-vercel', '@mastra/deployer-netlify'],
   },
   'type-check': {
-    tag: 'type-check-test',
     manifestGlobs: ['e2e-tests/type-check/template/package.json'],
   },
   'create-mastra': {
-    tag: 'create-mastra-e2e-test',
     manifestGlobs: [],
     extraRoots: ['create-mastra'],
     includeCreateMastraBuildRoots: true,
   },
   'experiment-worker': {
-    tag: 'experiment-worker-e2e-test',
     manifestGlobs: ['e2e-tests/experiment-worker/fixtures/**/package.json'],
     extraRoots: ['@mastra/deployer'],
   },
@@ -91,11 +87,11 @@ async function expandManifestGlob(rootDir, glob) {
   throw new Error(`Unsupported E2E publish manifest glob: ${glob}`);
 }
 
-function collectSnapshotDependencies(manifest, tag) {
+function collectSnapshotDependencies(manifest) {
   const roots = [];
   for (const field of DEPENDENCY_FIELDS) {
     for (const [name, version] of Object.entries(manifest[field] || {})) {
-      if (version === tag) {
+      if (version === E2E_TAG) {
         roots.push(name);
       }
     }
@@ -108,7 +104,7 @@ async function getFixtureRoots(rootDir, suite) {
   const roots = [];
 
   for (const manifestPath of manifests) {
-    roots.push(...collectSnapshotDependencies(readJson(join(rootDir, manifestPath)), suite.tag));
+    roots.push(...collectSnapshotDependencies(readJson(join(rootDir, manifestPath))));
   }
 
   return roots;
@@ -153,15 +149,4 @@ export async function getSharedRegistryPublishRoots(rootDir) {
 
 export async function getSharedRegistryPublishFilters(rootDir) {
   return rootsToFilters(await getSharedRegistryPublishRoots(rootDir));
-}
-
-export async function getSharedRegistryPublishGroups(rootDir) {
-  const groups = [];
-  for (const [suiteName, suite] of Object.entries(SHARED_REGISTRY_SUITES)) {
-    groups.push({
-      tag: suite.tag,
-      publishFilters: await getSuitePublishFilters(rootDir, suiteName),
-    });
-  }
-  return groups;
 }

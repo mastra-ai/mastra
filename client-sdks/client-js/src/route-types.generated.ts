@@ -3520,6 +3520,28 @@ type Shared_Type_61 = {
   errorPreview?: (string | null) | undefined;
   /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
   timeToFirstChunkMs?: (number | null) | undefined;
+  /** Immediate parent span owned by an external tracing system; null when Mastra owns the parent */
+  externalParentSpanId?: (string | null) | undefined;
+  /** Span id of the initial invocation a resumed execution continues; null on the initial execution */
+  resumedFromSpanId?: (string | null) | undefined;
+  /** Model identity for this span, where applicable */
+  model?: (string | null) | undefined;
+  /** Provider paired with model */
+  provider?: (string | null) | undefined;
+  /** How this execution ended; null while it is still running */
+  outcome?: (string | null) | undefined;
+  /** Machine-readable cause of stopping, when known */
+  stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
@@ -3637,6 +3659,28 @@ type Shared_Type_63 = {
   errorPreview?: (string | null) | undefined;
   /** Milliseconds from span start to the first streamed chunk; null when the span never streamed one */
   timeToFirstChunkMs?: (number | null) | undefined;
+  /** Immediate parent span owned by an external tracing system; null when Mastra owns the parent */
+  externalParentSpanId?: (string | null) | undefined;
+  /** Span id of the initial invocation a resumed execution continues; null on the initial execution */
+  resumedFromSpanId?: (string | null) | undefined;
+  /** Model identity for this span, where applicable */
+  model?: (string | null) | undefined;
+  /** Provider paired with model */
+  provider?: (string | null) | undefined;
+  /** How this execution ended; null while it is still running */
+  outcome?: (string | null) | undefined;
+  /** Machine-readable cause of stopping, when known */
+  stopReason?: (string | null) | undefined;
+  /** Structured details behind stopReason, such as the limit that was hit; null when unknown */
+  stopReasonContext?:
+    | ({
+        [key: string]: unknown;
+      } | null)
+    | undefined;
+  /** Milliseconds from the model call to the first token received; null when unknown */
+  timeToFirstTokenMs?: (number | null) | undefined;
+  /** Errors in this span and all nested spans; null when unknown */
+  errorCount?: (number | null) | undefined;
   /** Database record creation time */
   createdAt: Date;
   /** Database record last update time */
