@@ -168,7 +168,7 @@ const durableLLMInputSchema = z.object({
   modelSpanData: z.any().optional(),
   // First-chunk clock carried from earlier iterations (first write wins)
   completionStartTime: z.coerce.date().optional(),
-  // First inference start carried the same way
+  // Start of the inference that streamed that chunk, carried the same way
   inferenceStartTime: z.coerce.date().optional(),
   // Step index for continuation (step: 0, 1, 2, ...)
   stepIndex: z.number().optional(),
@@ -229,7 +229,7 @@ const durableLLMOutputSchema = z.object({
   deferredStepFinishChunk: z.any().optional(),
   // When this step's inference streamed its first chunk; the loop keeps the first one
   completionStartTime: z.coerce.date().optional(),
-  // When this step's first inference started; the loop keeps the first one
+  // When the inference that streamed that chunk started; kept with it
   inferenceStartTime: z.coerce.date().optional(),
 });
 
@@ -792,7 +792,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const inputModelSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeModelSpanData ??
               inputData.modelSpanData) as ExportedSpan<SpanType.MODEL_GENERATION> | undefined;
             // Rebuilt spans come from the run-start snapshot, so re-apply the carried
-            // first-inference clocks before the tracker sees them; otherwise a later
+            // first-chunk clocks before the tracker sees them; otherwise a later
             // step would overwrite them mid-run. The loop state carries the originals'
             // clocks; a resumed segment has fresh spans, so its clocks live on the
             // registry beside them.

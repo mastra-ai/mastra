@@ -424,21 +424,27 @@ export class ModelSpanTracker {
   }
 
   /**
-   * Record when the provider's first chunk arrived and copy that clock up the
-   * agent's own chain (inference → step → generation → agent run), first write
-   * wins at each level. Time to first chunk is derived later as
-   * `completionStartTime - startTime` on whichever span is being read.
+   * Record when the provider's first chunk arrived and when the inference that
+   * streamed it started, then copy both clocks up the agent's own chain (step →
+   * generation → agent run), first write wins at each level. Time to first
+   * chunk is `completionStartTime - startTime` on whichever span is being read;
+   * time to first token is `completionStartTime - inferenceStartTime`.
    */
   #captureCompletionStartTime(): void {
     this.#ensureStepAndInference();
     if (this.#inferenceCompletionStartTime) return;
     const now = new Date();
+    const inferenceStartTime = this.#currentInferenceSpan?.startTime;
     this.#inferenceCompletionStartTime = now;
     this.#completionStartTime ??= now;
+    this.#inferenceStartTime ??= inferenceStartTime;
     for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
-      if (span && !span.attributes?.completionStartTime) {
-        span.update({ attributes: { completionStartTime: now } });
-      }
+      if (!span) continue;
+      const attributes = {
+        ...(span.attributes?.completionStartTime ? {} : { completionStartTime: now }),
+        ...(inferenceStartTime && !span.attributes?.inferenceStartTime ? { inferenceStartTime } : {}),
+      };
+      if (Object.keys(attributes).length) span.update({ attributes });
     }
   }
 
@@ -675,23 +681,6 @@ export class ModelSpanTracker {
       input,
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
-    this.#captureInferenceStartTime();
-  }
-
-  /**
-   * Copy the first inference's start up the agent's own chain (step → generation
-   * → agent run), first write wins at each level, so time to first token is
-   * `completionStartTime - inferenceStartTime` on whichever span is being read.
-   */
-  #captureInferenceStartTime(): void {
-    const startTime = this.#currentInferenceSpan?.startTime;
-    if (!startTime) return;
-    this.#inferenceStartTime ??= startTime;
-    for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
-      if (span && !span.attributes?.inferenceStartTime) {
-        span.update({ attributes: { inferenceStartTime: startTime } });
-      }
-    }
   }
 
   /**

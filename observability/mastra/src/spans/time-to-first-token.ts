@@ -1,10 +1,10 @@
 import { SpanType } from '@mastra/core/observability';
 
 /**
- * Time to first token in milliseconds: from the start of the first MODEL_INFERENCE
- * to its first streamed chunk. A MODEL_INFERENCE span measures from its own start;
- * spans above it read the `inferenceStartTime` the tracker copied up. Undefined
- * when either clock is missing.
+ * Time to first token in milliseconds: from the start of the MODEL_INFERENCE that
+ * streamed the first chunk to that chunk. A MODEL_INFERENCE span measures from its
+ * own start; spans above it read the `inferenceStartTime` the tracker copied up with
+ * the chunk's clock. Undefined when either clock is missing.
  */
 export function getTimeToFirstTokenMs(span: {
   type: SpanType;

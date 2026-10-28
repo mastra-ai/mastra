@@ -122,6 +122,31 @@ function cachedToolThenTextModel() {
   });
 }
 
+/** An error the AI SDK retry ladder treats like a provider 5xx (`APICallError` markers + `isRetryable`). */
+function retryableError(message: string): Error {
+  const error = new Error(message) as Error & Record<symbol | string, unknown>;
+  error[Symbol.for('vercel.ai.error')] = true;
+  error[Symbol.for('vercel.ai.error.AI_APICallError')] = true;
+  error.isRetryable = true;
+  error.statusCode = 503;
+  return error;
+}
+
+/** The first call fails after `failAfterMs` without streaming anything; later calls stream `text`. */
+function failOnceThenTextModel(text: string, failAfterMs: number) {
+  const answer = textModel(text);
+  let call = 0;
+  return new MockLanguageModelV2({
+    doStream: async options => {
+      if (call++ === 0) {
+        await new Promise(resolve => setTimeout(resolve, failAfterMs));
+        throw retryableError('provider unavailable');
+      }
+      return answer.doStream(options);
+    },
+  });
+}
+
 /** Emits an error chunk so the run fails mid-stream (exercises the error path). */
 function errorModel() {
   return new MockLanguageModelV2({
@@ -178,8 +203,9 @@ const weatherTool = createTool({
   execute: async ({ city }: { city: string }) => ({ city, tempC: 21 }),
 });
 
-function buildMastra(testExporter: TestExporter, agent: Agent, variant: 'durable' | 'evented') {
-  const wrapped = variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
+function buildMastra(testExporter: TestExporter, agent: Agent, variant: 'durable' | 'evented' | 'plain') {
+  const wrapped =
+    variant === 'plain' ? agent : variant === 'durable' ? createDurableAgent({ agent }) : createEventedAgent({ agent });
   const mastra = new Mastra({
     agents: { wrapped } as any,
     storage: new MockStore(),
@@ -383,6 +409,54 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
       expect(span.timeToFirstTokenMs).toBe(inference.timeToFirstTokenMs);
     }
     expect(inference.timeToFirstTokenMs).toBe(first! - startOf(inference));
+  });
+
+  it('DurableAgent retry: time to first token counts from the attempt that streamed, not the failed one', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: failOnceThenTextModel('Hello', failAfterMs) as any,
+      maxRetries: 1,
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const streamed = testExporter.getSpansByType('model_inference' as any).filter(span => clockOf(span) !== undefined);
+    expect(streamed).toHaveLength(1);
+    const inference = streamed[0] as any;
+    for (const type of ['model_generation', 'agent_run']) {
+      // The failed attempt ends its rebuilt generation too, so read the run's last end.
+      const { events } = testExporter.getBySpanId(idOf(testExporter.getSpansByType(type as any)[0]));
+      const ended = events.findLast(e => e.type === 'span_ended')!.exportedSpan as any;
+      expect(inferenceClockOf(ended)).toBe(startOf(inference));
+      expect(ended.timeToFirstTokenMs).toBe(clockOf(inference)! - startOf(inference));
+      expect(ended.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+      const clocks = events.map(e => inferenceClockOf((e as any).exportedSpan)).filter(c => c !== undefined);
+      expect(new Set(clocks)).toEqual(new Set([startOf(inference)]));
+    }
+  });
+
+  // Not at parity yet: the in-process Agent retries inside the AI SDK call (p-retry in
+  // execute()), so one MODEL_INFERENCE covers the failed attempt and the backoff, and its
+  // time to first token includes both. DurableAgent owns its retry loop and opens one
+  // inference per attempt.
+  it.fails('Agent retry: time to first token counts from the attempt that streamed, as on DurableAgent', async () => {
+    const failAfterMs = 200;
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: failOnceThenTextModel('Hello', failAfterMs) as any,
+      maxRetries: 1,
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'plain');
+    await (await wrapped.stream('hi')).consumeStream();
+    await settle(testExporter);
+
+    const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
+    expect(agentRun.timeToFirstTokenMs).toBeLessThan(failAfterMs);
   });
 
   it('DurableAgent fatal model error: root, generation, step AND inference all closed (no dangling)', async () => {

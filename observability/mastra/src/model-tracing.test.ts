@@ -2675,6 +2675,75 @@ describe('ModelSpanTracker', () => {
         expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])! - t0).toBe(250);
       });
 
+      it('measures from the inference that streamed the first chunk, not one interrupted before it', async () => {
+        const t0 = now;
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        tracker.startStep();
+        advance(50);
+        tracker.startInference(); // +50, preempted before any chunk
+        advance(50);
+        tracker.interruptInference(); // +100
+        advance(20);
+        tracker.startInference(); // +120, the replacement request
+
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [
+                { type: 'step-start', payload: {} }, // +220
+                { type: 'text-delta', payload: { text: 'a' } }, // +320 first chunk
+                stepFinish('stop'), // +420
+              ],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        expect(testExporter.getSpansByType(SpanType.MODEL_INFERENCE).map(span => span.startTime.getTime())).toEqual([
+          t0 + 50,
+          t0 + 120,
+        ]);
+        for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+          expect(inferenceClockOf(testExporter.getSpansByType(type)[0])).toBe(t0 + 120);
+          expect(ttftOf(type)).toEqual([200]);
+        }
+        expect(ttftOf(SpanType.MODEL_INFERENCE)).toEqual([undefined, 200]);
+      });
+
+      it('takes neither clock from a chunk the agent emits outside the model response', async () => {
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [
+                // A resumed leg reports a finished tool before any model call.
+                {
+                  type: 'tool-result',
+                  from: 'AGENT',
+                  payload: { toolCallId: 'c1', toolName: 'weather', result: { tempC: 21 } },
+                },
+              ],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        const chain = [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN];
+        const events = testExporter.events.filter(event => chain.includes(event.exportedSpan.type));
+        expect(new Set(events.map(event => event.exportedSpan.type))).toEqual(new Set(chain));
+        for (const { exportedSpan } of events) {
+          expect(exportedSpan.attributes).not.toHaveProperty('inferenceStartTime');
+          expect(exportedSpan.attributes).not.toHaveProperty('completionStartTime');
+        }
+      });
+
       it('keeps the first generation clock on the agent run across generations', async () => {
         const t0 = now;
         const { agentSpan, modelSpan } = startRun();
@@ -2752,7 +2821,6 @@ describe('ModelSpanTracker', () => {
         coreFeatures.delete('model-inference-span');
         await run();
 
-        expect(inferenceClockOf(testExporter.getSpansByType(SpanType.MODEL_STEP)[0])).toBeDefined();
         for (const type of [
           SpanType.MODEL_INFERENCE,
           SpanType.MODEL_STEP,
@@ -2760,6 +2828,7 @@ describe('ModelSpanTracker', () => {
           SpanType.AGENT_RUN,
         ]) {
           for (const span of testExporter.getSpansByType(type)) {
+            expect(span.attributes).not.toHaveProperty('inferenceStartTime');
             expect(span).not.toHaveProperty('timeToFirstTokenMs');
           }
         }

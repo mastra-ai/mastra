@@ -424,7 +424,7 @@ export interface DurableLLMStepOutput {
   deferredStepFinishChunk?: unknown;
   /** When this step's inference streamed its first chunk (the first one is kept for the generation) */
   completionStartTime?: Date;
-  /** When this step's first inference started (the first one is kept for the generation) */
+  /** When the inference that streamed this step's first chunk started (kept with that chunk's clock) */
   inferenceStartTime?: Date;
 }
 
@@ -587,7 +587,7 @@ export interface DurableAgenticExecutionOutput {
   deferredStepFinishChunk?: unknown;
   /** When this iteration's inference streamed its first chunk */
   completionStartTime?: Date;
-  /** When this iteration's first inference started */
+  /** When the inference that streamed this iteration's first chunk started */
   inferenceStartTime?: Date;
 }
 

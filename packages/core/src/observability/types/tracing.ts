@@ -198,8 +198,8 @@ export interface AgentRunAttributes extends AIBaseAttributes {
    */
   completionStartTime?: Date;
   /**
-   * When the run's first MODEL_INFERENCE started; copied the same way as
-   * `completionStartTime`. Absent when no inference was opened.
+   * When the MODEL_INFERENCE that streamed the run's first chunk started;
+   * copied the same way as `completionStartTime`. Absent when no chunk was streamed.
    */
   inferenceStartTime?: Date;
 }
@@ -354,7 +354,7 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
-  /** When the generation's first MODEL_INFERENCE started. Absent when no inference was opened. */
+  /** When the MODEL_INFERENCE that streamed the generation's first chunk started. Absent when no chunk was streamed. */
   inferenceStartTime?: Date;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
@@ -390,7 +390,7 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   warnings?: Record<string, any>;
   /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
   completionStartTime?: Date;
-  /** When the step's first MODEL_INFERENCE started. Absent when no inference was opened. */
+  /** When the MODEL_INFERENCE that streamed the step's first chunk started. Absent when no chunk was streamed. */
   inferenceStartTime?: Date;
 }
 
@@ -1747,7 +1747,7 @@ export interface IModelSpanTracker {
    * `endGeneration`, since that step uses a fresh tracker.
    */
   getCompletionStartTime?(): Date | undefined;
-  /** When the first MODEL_INFERENCE opened by this tracker started; carried the same way. */
+  /** When the MODEL_INFERENCE that streamed this tracker's first chunk started; carried the same way. */
   getInferenceStartTime?(): Date | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;

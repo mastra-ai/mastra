@@ -8,7 +8,7 @@ interface SpanClocks {
 }
 
 /**
- * The first-inference clocks for spans rebuilt from a run-start snapshot. A
+ * The first-chunk clocks for spans rebuilt from a run-start snapshot. A
  * resumed segment keeps them on the run registry beside its fresh spans; the
  * originals keep them in the loop state. Undefined when none was captured yet.
  */
