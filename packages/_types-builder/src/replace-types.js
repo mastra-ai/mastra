@@ -1,5 +1,5 @@
 // Typescript tooling really sucks so we are going to do some transfomrations ourselves
-import { readFile, writeFile, mkdir, copyFile, stat } from 'node:fs/promises';
+import { readFile, writeFile, mkdir, stat } from 'node:fs/promises';
 import { join, dirname, relative, resolve, extname, sep } from 'node:path';
 import { Project, SyntaxKind } from 'ts-morph';
 import { getPackageInfo } from 'local-pkg';
@@ -132,117 +132,158 @@ async function resolveRelativeDeclaration(moduleSpecifier, fromFile) {
   return null;
 }
 
-async function copyDeclarationGraph(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, visited) {
-  const normalizedSourceFilePath = resolve(sourceFilePath);
-  if (visited.has(normalizedSourceFilePath)) {
-    return;
-  }
-
-  visited.add(normalizedSourceFilePath);
-
-  const destFilePath = join(destRootDir, relative(sourceRootDir, sourceFilePath));
-  await mkdir(dirname(destFilePath), { recursive: true });
-  await copyFile(sourceFilePath, destFilePath);
-
-  await replaceBundledReferences(destFilePath, rootDir, bundledPackages, visited, sourceFilePath);
-
-  const Program = new Project();
-  const sourceFile = Program.addSourceFileAtPath(sourceFilePath);
-
-  for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
-    const referencedFile = await resolveRelativeDeclaration(moduleSpecifier.getLiteralValue(), sourceFilePath);
-    if (referencedFile && resolve(referencedFile).startsWith(resolve(sourceRootDir))) {
-      await copyDeclarationGraph(referencedFile, sourceRootDir, destRootDir, rootDir, bundledPackages, visited);
-    }
-  }
+/**
+ * Run-scoped caches shared by every `replaceTypes` call of one `generateTypes` run.
+ *
+ * Each top-level declaration file re-walks the whole bundled declaration graph it references, with its own
+ * `visited` set, and the order of those walks decides which copy wins when two sources map to the same
+ * `_types` path. The caches below keep that exact sequence of writes; they only skip re-parsing files,
+ * re-resolving packages, and rewriting files with the content they already hold.
+ */
+export function createReplaceTypesState() {
+  return {
+    /** @type {Map<string, Promise<any>>} copy plan per source file + destination root */
+    plans: new Map(),
+    /** @type {Map<string, Promise<any>>} bundled specifier resolution per specifier + resolver directory */
+    resolutions: new Map(),
+    /** @type {Map<string, string>} last content this run wrote to each path */
+    written: new Map(),
+    /** @type {Set<string>} directories this run already created */
+    dirs: new Set(),
+  };
 }
 
-async function replaceBundledReferences(file, rootDir, bundledPackages, visited, resolverParentFile = file) {
-  const importsToReplace = new Set();
-
-  const Program = new Project();
-  const sourceFile = Program.addSourceFileAtPath(file);
-
-  for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
-    const hasExternal = Array.from(bundledPackages).some(pkg =>
-      matchesBundledPackage(moduleSpecifier.getLiteralValue(), pkg),
-    );
-
-    if (hasExternal) {
-      importsToReplace.add(moduleSpecifier);
-    }
-  }
-
-  if (importsToReplace.size === 0) {
+async function ensureDir(dir, state) {
+  if (state.dirs.has(dir)) {
     return;
   }
+  await mkdir(dir, { recursive: true });
+  state.dirs.add(dir);
+}
 
-  const fileDirname = dirname(file);
-  const typesDestDir = join(rootDir, 'dist', '_types');
+async function writeIfChanged(file, content, state) {
+  if (state.written.get(file) === content) {
+    return;
+  }
+  await writeFile(file, content);
+  state.written.set(file, content);
+}
 
-  for (const moduleSpecifier of importsToReplace) {
-    const pkgName = getPackageName(moduleSpecifier.getLiteralValue());
-    if (!pkgName) {
-      continue;
-    }
+// Same escaping as ts-morph's StringLiteral#setLiteralValue (StringUtils.escapeForWithinString).
+function escapeForWithinString(value, quote) {
+  return value.replaceAll(quote, `\\${quote}`).replace(/(\r?\n)/g, '\\$1');
+}
 
-    let sourcePkgName = pkgName;
-    let sourcePkgRootPath = await getPackageRootPath(pkgName, resolverParentFile);
-    let typesFiles;
+function parseDeclaration(file, code) {
+  return new Project().createSourceFile(file, code, { overwrite: true });
+}
 
-    if (sourcePkgRootPath) {
-      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-      const exportSpecifier =
-        pkgJson.name && pkgJson.name !== pkgName
-          ? moduleSpecifier.getLiteralValue().replace(pkgName, pkgJson.name)
-          : moduleSpecifier.getLiteralValue();
-      typesFiles = resolveExports(pkgJson, exportSpecifier, {
-        conditions: ['types'],
-      });
-      if (!pkgJson.exports) {
-        const subpath = moduleSpecifier.getLiteralValue().slice(pkgName.length + 1);
-        const typesEntry = subpath || pkgJson.types || pkgJson.typings;
-        if (typesEntry) {
-          typesFiles = [typesEntry];
-        }
+function getBundledSpecifiers(sourceFile, bundledPackages) {
+  return getModuleSpecifiers(sourceFile).filter(moduleSpecifier =>
+    Array.from(bundledPackages).some(pkg => matchesBundledPackage(moduleSpecifier.getLiteralValue(), pkg)),
+  );
+}
+
+async function resolveBundledSpecifier(specifier, resolverParentFile, rootDir, state) {
+  const parentDir = extname(resolverParentFile) ? dirname(resolverParentFile) : resolverParentFile;
+  const key = `${specifier}\0${parentDir}`;
+  let resolution = state.resolutions.get(key);
+  if (!resolution) {
+    resolution = resolveBundledSpecifierUncached(specifier, resolverParentFile, rootDir);
+    state.resolutions.set(key, resolution);
+  }
+  return resolution;
+}
+
+async function resolveBundledSpecifierUncached(specifier, resolverParentFile, rootDir) {
+  const pkgName = getPackageName(specifier);
+  if (!pkgName) {
+    return null;
+  }
+
+  let sourcePkgName = pkgName;
+  let sourcePkgRootPath = await getPackageRootPath(pkgName, resolverParentFile);
+  let typesFiles;
+
+  if (sourcePkgRootPath) {
+    const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+    const exportSpecifier =
+      pkgJson.name && pkgJson.name !== pkgName ? specifier.replace(pkgName, pkgJson.name) : specifier;
+    typesFiles = resolveExports(pkgJson, exportSpecifier, {
+      conditions: ['types'],
+    });
+    if (!pkgJson.exports) {
+      const subpath = specifier.slice(pkgName.length + 1);
+      const typesEntry = subpath || pkgJson.types || pkgJson.typings;
+      if (typesEntry) {
+        typesFiles = [typesEntry];
       }
     }
+  }
 
-    if (!typesFiles || typesFiles.length === 0) {
-      const typesPkgName = getTypesPackageName(pkgName);
-      const typesPkgRootPath = await getPackageRootPath(typesPkgName, resolverParentFile);
-      if (!typesPkgRootPath) {
-        continue;
-      }
-
-      sourcePkgName = typesPkgName;
-      sourcePkgRootPath = typesPkgRootPath;
-      const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-      typesFiles = pkgJson.types ? [pkgJson.types] : resolveExports(pkgJson, typesPkgName, { conditions: ['types'] });
+  if (!typesFiles || typesFiles.length === 0) {
+    const typesPkgName = getTypesPackageName(pkgName);
+    const typesPkgRootPath = await getPackageRootPath(typesPkgName, resolverParentFile);
+    if (!typesPkgRootPath) {
+      return null;
     }
 
-    if (!typesFiles || typesFiles.length === 0) {
+    sourcePkgName = typesPkgName;
+    sourcePkgRootPath = typesPkgRootPath;
+    const pkgJson = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+    typesFiles = pkgJson.types ? [pkgJson.types] : resolveExports(pkgJson, typesPkgName, { conditions: ['types'] });
+  }
+
+  if (!typesFiles || typesFiles.length === 0) {
+    return null;
+  }
+
+  const sourceTypesPath =
+    (await resolveRelativeDeclaration(`./${typesFiles[0]}`, join(sourcePkgRootPath, 'package.json'))) ??
+    join(sourcePkgRootPath, typesFiles[0]);
+  const destTypesRoot = join(rootDir, 'dist', '_types', sourcePkgName.replace('/', '_'));
+
+  // Legacy CommonJS declarations must not inherit the consuming package's ESM mode.
+  const sourcePackage = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
+
+  return {
+    sourcePkgRootPath,
+    sourceTypesPath,
+    destTypesRoot,
+    destTypesPath: join(destTypesRoot, relative(sourcePkgRootPath, sourceTypesPath)),
+    packageJson: JSON.stringify({ type: sourcePackage.type ?? 'commonjs' }),
+  };
+}
+
+/**
+ * Resolves every bundled import of `sourceFile` and returns the rewritten text plus the bundled declaration
+ * graphs that have to be copied, in import order.
+ */
+async function planBundledReferences(sourceFile, fileDir, resolverParentFile, rootDir, bundledPackages, state) {
+  const specifiers = getBundledSpecifiers(sourceFile, bundledPackages);
+  if (specifiers.length === 0) {
+    return null;
+  }
+
+  const steps = [];
+  const edits = [];
+  for (const moduleSpecifier of specifiers) {
+    const resolution = await resolveBundledSpecifier(
+      moduleSpecifier.getLiteralValue(),
+      resolverParentFile,
+      rootDir,
+      state,
+    );
+    if (!resolution) {
       continue;
     }
-
-    const sourceTypesPath =
-      (await resolveRelativeDeclaration(`./${typesFiles[0]}`, join(sourcePkgRootPath, 'package.json'))) ??
-      join(sourcePkgRootPath, typesFiles[0]);
-    const typesFile = relative(sourcePkgRootPath, sourceTypesPath);
-    const destTypesRoot = join(typesDestDir, sourcePkgName.replace('/', '_'));
-    const destTypesPath = join(destTypesRoot, typesFile);
-
-    // Legacy CommonJS declarations must not inherit the consuming package's ESM mode.
-    const sourcePackage = JSON.parse(await readFile(join(sourcePkgRootPath, 'package.json'), 'utf8'));
-    await mkdir(destTypesRoot, { recursive: true });
-    await writeFile(join(destTypesRoot, 'package.json'), JSON.stringify({ type: sourcePackage.type ?? 'commonjs' }));
-    await copyDeclarationGraph(sourceTypesPath, sourcePkgRootPath, destTypesRoot, rootDir, bundledPackages, visited);
+    steps.push(resolution);
 
     // Module specifiers must always use POSIX separators ('/'), but path.relative()
     // returns OS-native separators (backslashes on Windows). Without this normalization,
     // generated .d.ts files contain unresolvable specifiers like '..\_types\...' that
     // break `moduleResolution: "bundler"` on Windows. On POSIX, sep === '/' so this is a no-op.
-    let relativeImport = relative(fileDirname, destTypesPath)
+    let relativeImport = relative(fileDir, resolution.destTypesPath)
       .split(sep)
       .join('/')
       .replace(/\.d\.([cm]?)ts$/, '.$1js');
@@ -250,23 +291,117 @@ async function replaceBundledReferences(file, rootDir, bundledPackages, visited,
       relativeImport = './' + relativeImport;
     }
 
-    moduleSpecifier.setLiteralValue(relativeImport);
+    const quote = moduleSpecifier.getText()[0] === "'" ? "'" : '"';
+    edits.push({
+      start: moduleSpecifier.getStart() + 1,
+      end: moduleSpecifier.getEnd() - 1,
+      text: escapeForWithinString(relativeImport, quote),
+    });
   }
 
-  await sourceFile.save();
+  let text = sourceFile.getFullText();
+  for (const edit of edits.reverse()) {
+    text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
+  }
+
+  return { text, steps };
 }
 
-export async function replaceTypes(file, rootDir, bundledPackages) {
-  const code = await readFile(file, 'utf8');
-  const Program = new Project();
-  const sourceFile = Program.createSourceFile(file, code, { overwrite: true });
-  const shouldRunEmbed = getModuleSpecifiers(sourceFile).some(moduleSpecifier =>
-    Array.from(bundledPackages).some(pkg => matchesBundledPackage(moduleSpecifier.getLiteralValue(), pkg)),
+async function getCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state) {
+  const key = `${sourceFilePath}\0${sourceRootDir}\0${destRootDir}`;
+  let plan = state.plans.get(key);
+  if (!plan) {
+    plan = buildCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state);
+    state.plans.set(key, plan);
+  }
+  return plan;
+}
+
+async function buildCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state) {
+  const destFilePath = join(destRootDir, relative(sourceRootDir, sourceFilePath));
+  const code = await readFile(sourceFilePath, 'utf8');
+  const sourceFile = parseDeclaration(sourceFilePath, code);
+
+  const bundled = await planBundledReferences(
+    sourceFile,
+    dirname(destFilePath),
+    sourceFilePath,
+    rootDir,
+    bundledPackages,
+    state,
   );
 
-  if (!shouldRunEmbed) {
+  const relativeChildren = [];
+  for (const moduleSpecifier of getModuleSpecifiers(sourceFile)) {
+    const referencedFile = await resolveRelativeDeclaration(moduleSpecifier.getLiteralValue(), sourceFilePath);
+    if (referencedFile && resolve(referencedFile).startsWith(resolve(sourceRootDir))) {
+      relativeChildren.push(referencedFile);
+    }
+  }
+
+  return {
+    destFilePath,
+    text: bundled?.text ?? code,
+    steps: bundled?.steps ?? null,
+    relativeChildren,
+  };
+}
+
+async function copyBundledDependencies(steps, rootDir, bundledPackages, visited, state) {
+  for (const step of steps) {
+    await ensureDir(step.destTypesRoot, state);
+    await writeIfChanged(join(step.destTypesRoot, 'package.json'), step.packageJson, state);
+    await copyDeclarationGraph(
+      step.sourceTypesPath,
+      step.sourcePkgRootPath,
+      step.destTypesRoot,
+      rootDir,
+      bundledPackages,
+      visited,
+      state,
+    );
+  }
+}
+
+async function copyDeclarationGraph(
+  sourceFilePath,
+  sourceRootDir,
+  destRootDir,
+  rootDir,
+  bundledPackages,
+  visited,
+  state,
+) {
+  const normalizedSourceFilePath = resolve(sourceFilePath);
+  if (visited.has(normalizedSourceFilePath)) {
     return;
   }
 
-  await replaceBundledReferences(file, rootDir, bundledPackages, new Set());
+  visited.add(normalizedSourceFilePath);
+
+  const plan = await getCopyPlan(sourceFilePath, sourceRootDir, destRootDir, rootDir, bundledPackages, state);
+  await ensureDir(dirname(plan.destFilePath), state);
+
+  if (plan.steps) {
+    await copyBundledDependencies(plan.steps, rootDir, bundledPackages, visited, state);
+  }
+  // A file with bundled imports is written after its dependencies, so it wins if one of them maps to the same path.
+  await writeIfChanged(plan.destFilePath, plan.text, state);
+
+  for (const referencedFile of plan.relativeChildren) {
+    await copyDeclarationGraph(referencedFile, sourceRootDir, destRootDir, rootDir, bundledPackages, visited, state);
+  }
+}
+
+export async function replaceTypes(file, rootDir, bundledPackages, state = createReplaceTypesState()) {
+  const code = await readFile(file, 'utf8');
+  const sourceFile = parseDeclaration(file, code);
+  const bundled = await planBundledReferences(sourceFile, dirname(file), file, rootDir, bundledPackages, state);
+
+  if (!bundled) {
+    return;
+  }
+
+  await copyBundledDependencies(bundled.steps, rootDir, bundledPackages, new Set(), state);
+  await writeIfChanged(file, bundled.text, state);
 }
