@@ -168,6 +168,13 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
     });
   });
 
+  it('rotates on a rate limit a provider reports as a plain 400', () => {
+    expect(classifyRotationError(apiError(400, { message: 'Rate limit exceeded' }))).toEqual({
+      kind: 'rotate',
+      reason: 'rate-limit',
+    });
+  });
+
   it('never rotates on quota wording riding a non-quota status or generic limit text', () => {
     expect(
       classifyRotationError(apiError(404, { message: 'You have exceeded your usage limit for Claude Max' })),
@@ -214,6 +221,52 @@ describe('classifyRotationError (locked Q7 taxonomy)', () => {
   ] as const)('classifies HTTP %d from a nested provider error', (statusCode, expected) => {
     const wrapper = new Error('provider request failed', { cause: apiError(statusCode) });
     expect(classifyRotationError(wrapper)).toEqual(expected);
+  });
+
+  it.each([
+    [
+      'an authentication error named only in the body',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"type":"error","error":{"type":"authentication_error","message":"invalid x-api-key"}}',
+      }),
+      { kind: 'rotate', reason: 'auth-failed' },
+    ],
+    [
+      'a usage limit named only in the body detail',
+      Object.assign(apiError(400, { message: 'Bad Request' }), {
+        responseBody: '{"detail":"You have hit your usage limit for this plan."}',
+      }),
+      { kind: 'rotate', reason: 'quota-exhausted' },
+    ],
+    [
+      'a rate-limit stream frame',
+      { type: 'error', error: { type: 'rate_limit_error', message: 'This account has exceeded its rate limit.' } },
+      { kind: 'rotate', reason: 'rate-limit' },
+    ],
+    [
+      'an overloaded stream frame',
+      { type: 'error', error: { type: 'overloaded_error', message: 'Overloaded' } },
+      { kind: 'hop' },
+    ],
+  ] as const)('reads %s through the shared provider reader', (_label, error, expected) => {
+    expect(classifyRotationError(error)).toEqual(expected);
+  });
+
+  it.each([
+    [429, { kind: 'rotate', reason: 'rate-limit' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [503, { kind: 'hop' }],
+  ] as const)('keeps classifying a numeric status %d', (status, expected) => {
+    expect(classifyRotationError(Object.assign(new Error('request failed'), { status }))).toEqual(expected);
+  });
+
+  it.each([
+    [503, { kind: 'hop' }],
+    [401, { kind: 'rotate', reason: 'auth-failed' }],
+    [404, { kind: 'never' }],
+  ] as const)('lets a numeric status %d outrank usage-limit wording', (status, expected) => {
+    const error = Object.assign(new Error('Your weekly limit has been reached'), { status });
+    expect(classifyRotationError(error)).toEqual(expected);
   });
 
   it('classifies a nested ProviderAuthRequiredError', () => {

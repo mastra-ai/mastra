@@ -1,9 +1,13 @@
-import { DEFAULT_TRACES_FILTERS } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
+import {
+  DEFAULT_TRACES_FILTERS,
+  DEFAULT_TRACES_SORT,
+} from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
-  TracesSortDirection,
+  TracesSort,
+  TracesSortField,
 } from '@mastra/playground-ui/domains/traces/components/traces-explorer';
 import {
   TRACE_ANCHOR_SPAN_ID_PARAM,
@@ -29,8 +33,7 @@ const SCORE_ID_PARAM = 'scoreId';
 const HIGHLIGHT_SPAN_IDS_PARAM = 'highlightSpanIds';
 const PAGE_PARAM = 'page';
 
-const TRACES_SORT_KEYS = ['startedAt'] as const;
-const DEFAULT_TRACES_SORT = { key: 'startedAt', direction: 'desc' } as const;
+const TRACES_SORT_FIELDS: readonly TracesSortField[] = ['startedAt', 'timeToFirstChunkMs'];
 
 const SELECTION_PARAMS = [
   TRACE_ID_PARAM,
@@ -117,17 +120,22 @@ function encodeSelection(base: URLSearchParams, selection: TracesSelection): URL
   return next;
 }
 
-function encodeSortDirection(base: URLSearchParams, direction: TracesSortDirection): URLSearchParams {
+function decodeSort(params: URLSearchParams): TracesSort {
+  const sort = readUrlSort(params, TRACES_SORT_FIELDS);
+  return sort ? { field: sort.key, direction: sort.direction } : DEFAULT_TRACES_SORT;
+}
+
+function encodeSort(base: URLSearchParams, sort: TracesSort): URLSearchParams {
   const next = new URLSearchParams(base);
-  next.set(SORT_KEY_PARAM, DEFAULT_TRACES_SORT.key);
-  next.set(SORT_DIR_PARAM, direction);
+  next.set(SORT_KEY_PARAM, sort.field);
+  next.set(SORT_DIR_PARAM, sort.direction);
   next.delete(PAGE_PARAM);
   return next;
 }
 
 /**
  * URL codec for the traces explorer: decodes search params into the explorer's controlled
- * `selection` / `filters` / `sortDirection` values and encodes their changes back.
+ * `selection` / `filters` / `sort` values and encodes their changes back.
  *
  * Each value is memoized on only the params it reads, so a trace click doesn't hand the explorer
  * new filters and vice versa. The explorer emits its full state once per action, and each write
@@ -142,18 +150,17 @@ export function useTracesRouteState(
 ) {
   const filtersKey = pickParams(searchParams, key => !NON_FILTER_PARAMS.has(key));
   const selectionKey = pickParams(searchParams, key => SELECTION_PARAMS.includes(key));
+  const sortKey = pickParams(searchParams, key => key === SORT_KEY_PARAM || key === SORT_DIR_PARAM);
 
   const filters = useMemo(() => decodeFilters(new URLSearchParams(filtersKey)), [filtersKey]);
   const selection = useMemo(() => decodeSelection(new URLSearchParams(selectionKey)), [selectionKey]);
-  const sortDirection: TracesSortDirection =
-    readUrlSort(searchParams, TRACES_SORT_KEYS, DEFAULT_TRACES_SORT)?.direction ?? DEFAULT_TRACES_SORT.direction;
+  const sort = useMemo(() => decodeSort(new URLSearchParams(sortKey)), [sortKey]);
 
   const setState = (next: TracesExplorerState) =>
     setPersistedSearchParams(encodeSelection(encodeFilters(searchParams, next.filters), next.selection), {
       replace: true,
     });
-  const setSortDirection = (next: TracesSortDirection) =>
-    setSearchParams(encodeSortDirection(searchParams, next), { replace: true });
+  const setSort = (next: TracesSort) => setSearchParams(encodeSort(searchParams, next), { replace: true });
 
-  return { selection, filters, setState, sortDirection, setSortDirection };
+  return { selection, filters, setState, sort, setSort };
 }

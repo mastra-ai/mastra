@@ -277,6 +277,8 @@ export interface AgentControllerRequestOptions {
 
 /** Options for subscribing to an agent controller session's event stream. */
 export interface SubscribeAgentControllerSessionOptions {
+  /** Set to false to omit full display_state_changed snapshots, including the initial snapshot. Defaults to true. */
+  displayState?: boolean;
   /** Called for each event received over the stream. */
   onEvent: (event: AgentControllerEvent) => void;
   /**
@@ -437,10 +439,13 @@ export class AgentControllerSession extends BaseResource {
       const abort = new AbortController();
       currentAbort = abort;
       let openTimer: ReturnType<typeof setTimeout> | undefined;
-      const request = this.request(`${this.base()}/stream`, {
-        stream: true,
-        signal: abort.signal,
-      }) as Promise<Response>;
+      const request = this.request(
+        `${this.base()}/stream${options.displayState === false ? '?displayState=false' : ''}`,
+        {
+          stream: true,
+          signal: abort.signal,
+        },
+      ) as Promise<Response>;
       // If the timeout wins the race, a late response must be cancelled and a late
       // rejection must not surface as unhandled.
       request
@@ -692,28 +697,18 @@ export class AgentControllerSession extends BaseResource {
    * Pass a structured message to attach files (e.g. pasted images) as base64-encoded data:
    * `sendMessage({ content: 'What is in this image?', files })`.
    * Pass `options.requestContext` to merge custom context into the run's request context.
-   * Pass `scopes` for the message's run; the server refuses tag types its controller's
-   * `allowedMessageScopeTypes` doesn't list (none by default).
    */
   async sendMessage(
-    message:
-      | string
-      | {
-          content: string;
-          files?: Array<{ data: string; mediaType: string; filename?: string }>;
-          scopes?: Array<string | { tag: string; access: 'read' }>;
-        },
+    message: string | { content: string; files?: Array<{ data: string; mediaType: string; filename?: string }> },
     options?: AgentControllerRequestOptions,
   ): Promise<void> {
-    const { content, files, scopes } =
-      typeof message === 'string' ? { content: message, files: undefined, scopes: undefined } : message;
+    const { content, files } = typeof message === 'string' ? { content: message, files: undefined } : message;
     const requestContext = parseClientRequestContext(options?.requestContext);
     await this.request(`${this.base()}/messages`, {
       method: 'POST',
       body: {
         message: content,
         ...(files?.length ? { files } : {}),
-        ...(scopes?.length ? { scopes } : {}),
         ...(requestContext ? { requestContext } : {}),
       },
     });

@@ -70,9 +70,10 @@ function deterministicObservationModel(curate = false) {
           controller.enqueue({
             type: 'tool-call',
             toolCallId: 'wave-1-create',
-            toolName: 'knowledge_create',
+            toolName: 'knowledge_record',
             input: JSON.stringify({
-              name: 'Atlas refund launch',
+              op: 'add',
+              node: 'Atlas refund launch',
               kind: 'feature',
               text: '[[Maya Chen]] owns the [[Atlas refund launch]].',
               scope: ['org:acme', 'resource:shipyard'],
@@ -154,7 +155,7 @@ function createRuntime(storage: MastraCompositeStore) {
     description: 'Product architecture, repository work, and operational knowledge for Mastra.',
     storage,
     structure,
-    tools: { read: true, write: true },
+    tools: true,
   });
   const curator = deterministicObservationModel(true);
   const memory = new Memory({ storage });
@@ -167,7 +168,7 @@ function createRuntime(storage: MastraCompositeStore) {
     model: curator.model,
     memory,
     knowledge: 'mastra',
-    scopes: ['org:acme'],
+    scopes: [{ scope: 'org:acme', access: 'write' }],
   });
   const mastra = new Mastra({
     agents: { curator: agent },

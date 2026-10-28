@@ -5,6 +5,7 @@ import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import { useFactoryProjectQuery } from '../../../../hooks/useFactoryDefaultModel';
 import {
   MODEL_DEFAULTS_TONES,
+  MODEL_DEFAULTS_UNUSED_NOTE,
   MODEL_LANE_ICONS,
   MODEL_LANE_LABELS,
   lanesUsing,
@@ -23,7 +24,7 @@ export function MemoryUsedBy({ factoryId, defaults }: { factoryId: string; defau
   if (lanes.length === 0) {
     return (
       <Txt as="span" variant="meta" tone="muted">
-        Not used in this scope
+        {MODEL_DEFAULTS_UNUSED_NOTE}
       </Txt>
     );
   }

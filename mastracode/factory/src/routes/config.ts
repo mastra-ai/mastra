@@ -1,3 +1,4 @@
+import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
@@ -45,6 +46,7 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -129,6 +131,7 @@ export interface ModelCatalog {
     }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
+  getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
@@ -1055,6 +1058,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                   personalThinkingLevel: ThinkingLevelSetting | null;
                 }
               | undefined;
+            let credentialTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1116,6 +1120,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               const scope = z.enum(['org', 'user']).safeParse(c.req.query('scope'));
               if (!scope.success) return c.json({ error: 'invalid_model_scope' }, 400);
               tenantCredentials = allTenantCredentials?.filter(record => record.scope === scope.data);
+              if (tenant) {
+                credentialTenant = {
+                  orgId: tenantOrgId(tenant),
+                  userId: tenant.userId,
+                  credentialScope: scope.data === 'user' ? 'user' : 'factory',
+                };
+              }
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();
@@ -1123,6 +1134,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
               const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
               tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+              credentialTenant = {
+                orgId: tenantOrgId(tenant),
+                userId: tenant.userId,
+                credentialScope: credentialScope === 'user' ? 'user' : 'factory',
+              };
             }
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
@@ -1138,7 +1154,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               deploymentProviders,
               listCustomProviders,
             });
-            return c.json({ ...sessionPolicy, models });
+            if (!credentialTenant) return c.json({ ...sessionPolicy, models });
+            const modeModelId = controller.getDefaultMode?.().defaultModelId;
+            const candidate =
+              (await resolveTenantProviderDefaultModel(credentialTenant, modeModelId).catch(error => {
+                console.warn('[Factory Config] Failed to resolve a provider default model', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                return undefined;
+              })) ?? modeModelId;
+            const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
+            return c.json({ fallbackModelId, models });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }

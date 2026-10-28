@@ -64,6 +64,7 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
+import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
@@ -802,14 +803,13 @@ export class MastraFactory {
         }
       });
     }
-    const knowledgeEnabled =
-      this.#config.knowledge !== undefined || process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE === '1';
+    const knowledgeEnabled = this.#config.knowledge !== undefined;
     const githubIntegration = integrations.find(integration => integration.id === 'github') as
       | GithubIntegration
       | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
-    );
+    ) as GitLabIntegrationBase | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -1110,14 +1110,36 @@ export class MastraFactory {
             },
           }
         : {}),
-      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+      ...(githubIntegration || gitlabIntegration
         ? {
             onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
-              void githubIntegration
-                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
-                .catch(error => {
-                  console.warn('[factory] Failed to import a linked repository backlog:', error);
-                });
+              void (async () => {
+                const linkedInGithub =
+                  githubIntegration &&
+                  (await sourceControlStorage.forIntegration('github').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  }));
+                if (linkedInGithub) {
+                  await githubIntegration.ingestLinkedRepositoryBacklog({
+                    orgId,
+                    projectRepositoryId: projectRepository.id,
+                  });
+                } else if (gitlabIntegration) {
+                  const linkedInGitlab = await sourceControlStorage.forIntegration('gitlab').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  });
+                  if (linkedInGitlab) {
+                    await gitlabIntegration.ingestLinkedRepositoryBacklog({
+                      orgId,
+                      projectRepositoryId: projectRepository.id,
+                    });
+                  }
+                }
+              })().catch(error => {
+                console.warn('[factory] Failed to import a linked repository backlog:', error);
+              });
             },
           }
         : {}),

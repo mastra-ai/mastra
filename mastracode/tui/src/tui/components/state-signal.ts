@@ -11,7 +11,7 @@ export interface StateSignalOptions {
 }
 
 /** Readable names for state ids whose wire value would mislead (Knowledge pins keep a legacy id). */
-const STATE_LABELS: Record<string, string> = { 'subconscious-pins': 'pinned knowledge' };
+const STATE_LABELS: Record<string, string> = { knowledge: 'pinned context' };
 
 export class StateSignalComponent extends Container {
   constructor(options: StateSignalOptions) {

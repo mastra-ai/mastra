@@ -23780,8 +23780,10 @@ export interface GetAgentControllerControllerIdSessionsSessionIdThreadsThreadIdM
 export type GetAgentControllerControllerIdSessionsSessionIdStream_PathParams =
   GetAgentControllerControllerIdSessionsSessionId_PathParams;
 
-export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams =
-  PostAgentControllerControllerIdSessions_QueryParams;
+export type GetAgentControllerControllerIdSessionsSessionIdStream_QueryParams = {
+  sessionScope?: never | undefined;
+  displayState?: boolean | undefined;
+};
 
 export type GetAgentControllerControllerIdSessionsSessionIdStream_Request = Simplify<
   (GetAgentControllerControllerIdSessionsSessionIdStream_PathParams extends never
@@ -23827,15 +23829,6 @@ export type PostAgentControllerControllerIdSessionsSessionIdMessages_Body = {
         filename?: string | undefined;
       }[]
     | undefined;
-  scopes?:
-    | (
-        | string
-        | {
-            tag: string;
-            access: 'read';
-          }
-      )[]
-    | undefined;
 };
 
 export type PostAgentControllerControllerIdSessionsSessionIdMessages_Response =
@@ -23875,21 +23868,8 @@ export type PostAgentControllerControllerIdSessionsSessionIdSteer_PathParams =
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_QueryParams =
   PostAgentControllerControllerIdSessions_QueryParams;
 
-export type PostAgentControllerControllerIdSessionsSessionIdSteer_Body = {
-  message: string;
-  requestContext?:
-    | {
-        [key: string]: unknown;
-      }
-    | undefined;
-  files?:
-    | {
-        data: string;
-        mediaType: string;
-        filename?: string | undefined;
-      }[]
-    | undefined;
-};
+export type PostAgentControllerControllerIdSessionsSessionIdSteer_Body =
+  PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsSessionIdSteer_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;
@@ -23929,7 +23909,7 @@ export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_QueryParams
   PostAgentControllerControllerIdSessions_QueryParams;
 
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Body =
-  PostAgentControllerControllerIdSessionsSessionIdSteer_Body;
+  PostAgentControllerControllerIdSessionsSessionIdMessages_Body;
 
 export type PostAgentControllerControllerIdSessionsSessionIdFollowUp_Response =
   DeleteAgentControllerControllerIdSessionsSessionIdThreadsThreadId_Response;

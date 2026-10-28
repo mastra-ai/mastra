@@ -843,8 +843,9 @@ interface AgentConfigBase<
    */
   memory?: DynamicArgument<MastraMemory, TRequestContext>;
   /**
-   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`,
-   * or `{ tag, access: 'read' }` to hold a tag read-only.
+   * Scopes every run of this agent acts with, as `<type>:<value>` addresses such as `org:acme`.
+   * A plain address is read-only; `{ scope: 'team:core', access: 'write' }` lets the run write
+   * there too. `resource:` and `thread:` scopes are always writable.
    * Unioned with per-call `scopes` and the reserved `mastra__scopes` request-context key.
    * A resolver function runs once per call with the request context.
    */

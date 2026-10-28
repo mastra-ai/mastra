@@ -22,5 +22,6 @@ export function toTracesListViewTraces(traces: TraceQueryTrace[]): TracesListVie
     status: trace.status,
     startedAt: trace.startedAt,
     endedAt: trace.endedAt,
+    timeToFirstChunkMs: trace.timeToFirstChunkMs,
   }));
 }

@@ -66,8 +66,9 @@ function knowledgeSchemaVersion(databasePath: string) {
   }
 }
 
-async function start(directory: string, databasePath: string) {
+async function start(directory: string, databasePath: string, knowledge?: true) {
   return createMastraCode({
+    knowledge,
     cwd: directory,
     homeDir: directory,
     configDir: '.mastracode-test',
@@ -85,22 +86,20 @@ async function start(directory: string, databasePath: string) {
 
 describe('createMastraCode on a database with v1 Knowledge rows', () => {
   it('starts without touching Knowledge when Knowledge is off', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '');
     const { directory, databasePath } = createV1Database();
 
     const code = await start(directory, databasePath);
 
     expect(code.knowledge).toBeUndefined();
     expect(code.knowledgeInspector).toBeUndefined();
-    expect(code.knowledgeInspectorUnavailableReason).toContain('MASTRACODE_EXPERIMENTAL_KNOWLEDGE=1');
+    expect(code.knowledgeInspectorUnavailableReason).toContain('/settings');
     expect(countV1Nodes(databasePath)).toEqual({ count: 1 });
   });
 
   it('replaces the v1 tables and opens Knowledge when Knowledge is on', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '1');
     const { directory, databasePath } = createV1Database();
 
-    const code = await start(directory, databasePath);
+    const code = await start(directory, databasePath, true);
 
     expect(code.knowledge).toBeDefined();
     expect(code.knowledgeInspector).toBeDefined();
@@ -110,10 +109,9 @@ describe('createMastraCode on a database with v1 Knowledge rows', () => {
   });
 
   it('starts and explains the reset when the Knowledge layout is not one Mastra published', async () => {
-    vi.stubEnv('MASTRACODE_EXPERIMENTAL_KNOWLEDGE', '1');
     const { directory, databasePath } = createV1Database({ customIndex: true });
 
-    const code = await start(directory, databasePath);
+    const code = await start(directory, databasePath, true);
 
     expect(code.knowledge).toBeDefined();
     expect(code.knowledgeInspector).toBeUndefined();

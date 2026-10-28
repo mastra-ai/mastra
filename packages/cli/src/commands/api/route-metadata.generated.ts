@@ -6824,8 +6824,7 @@ export const API_ROUTE_METADATA = {
     "bodyParams": [
       "files",
       "message",
-      "requestContext",
-      "scopes"
+      "requestContext"
     ],
     "hasQuery": true,
     "hasBody": true,

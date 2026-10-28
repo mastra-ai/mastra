@@ -15,6 +15,11 @@ export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
  */
 export const MASTRA_SCOPES_KEY = 'mastra__scopes';
 
+/**
+ * Which agent scopes the run holds read-only. Set beside `mastra__scopes`, never from a request body.
+ */
+export const MASTRA_SCOPE_ACCESS_KEY = 'mastra__scopeAccess';
+
 export const MASTRA_USER_KEY = 'mastra__user';
 
 export const MASTRA_USER_PERMISSIONS_KEY = 'mastra__userPermissions';
@@ -74,6 +79,7 @@ export const RESERVED_REQUEST_CONTEXT_KEYS = [
   MASTRA_SCOPES_KEY,
   // The scope bound to a caller for Knowledge reads; a body-supplied value would widen it.
   MASTRA_KNOWLEDGE_SCOPE_KEY,
+  MASTRA_SCOPE_ACCESS_KEY,
   MASTRA_USER_KEY,
   MASTRA_USER_PERMISSIONS_KEY,
   MASTRA_USER_ROLES_KEY,

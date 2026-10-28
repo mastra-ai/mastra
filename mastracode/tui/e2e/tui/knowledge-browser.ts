@@ -1,3 +1,6 @@
+import { readFileSync, writeFileSync } from 'node:fs';
+import { join } from 'node:path';
+
 import { LOCAL_KNOWLEDGE_ORG_ID } from '@mastra/code-sdk';
 import { expect } from './expect.js';
 
@@ -12,7 +15,13 @@ export const knowledgeBrowserScenario: McE2eScenario = {
   description: 'Seed scoped knowledge and traverse scopes, nodes, relations, content, activity, and a thread switch.',
   testName: 'browses scoped knowledge through the real TUI',
   disableMemory: false,
-  env: () => ({ MASTRACODE_EXPERIMENTAL_KNOWLEDGE: '1' }),
+  prepare({ appDataDir }) {
+    // Knowledge is the /settings toggle, read at startup.
+    const settingsPath = join(appDataDir, 'settings.json');
+    const settings = JSON.parse(readFileSync(settingsPath, 'utf8'));
+    settings.signals = { ...settings.signals, experimentalKnowledge: true };
+    writeFileSync(settingsPath, JSON.stringify(settings));
+  },
   async inProcessApp({ startMastraCodeApp }) {
     const app = await startMastraCodeApp({
       config: {

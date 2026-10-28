@@ -58,15 +58,25 @@ function toolResults(result: Awaited<ReturnType<Agent['generate']>>): any[] {
 function companyKnowledge(id: string, role: 'owner' | 'edit' | 'append' | 'readonly' = 'owner') {
   return new Knowledge({
     storage: new InMemoryStore({ id }),
-    tools: { write: true },
+    tools: true,
     scopes: {
       'team:$orgId:$teamId': { access: [{ principal: 'org:$orgId', role }] },
     },
   });
 }
 
+// Plain tags here are held writable; read-only cases name `{ scope, access: 'read' }`.
+const writable = (scopes: any[]) => scopes.map(s => (typeof s === 'string' ? { scope: s, access: 'write' } : s));
+
 async function run(knowledge: Knowledge, scopes: any[], calls: Call[], thread = 't-1') {
-  const agent = new Agent({ id: 'a', name: 'a', instructions: 'x', model: scriptedModel(calls), knowledge, scopes });
+  const agent = new Agent({
+    id: 'a',
+    name: 'a',
+    instructions: 'x',
+    model: scriptedModel(calls),
+    knowledge,
+    scopes: writable(scopes),
+  });
   return agent.generate('go', { maxSteps: calls.length + 1, memory: { thread, resource: 'r' } });
 }
 
@@ -79,12 +89,12 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme'],
       [
         {
-          toolName: 'knowledge_create',
-          input: { name: 'Plan', kind: 'doc', text: 'ship it', scope: ['team:acme:director'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Plan', kind: 'doc', text: 'ship it', scope: ['team:acme:director'] },
         },
         {
-          toolName: 'knowledge_create',
-          input: { name: 'Theirs', kind: 'doc', text: 'x', scope: ['team:other:director'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Theirs', kind: 'doc', text: 'x', scope: ['team:other:director'] },
         },
       ],
     );
@@ -106,13 +116,13 @@ describe('Knowledge ownership computed from the structure', () => {
     const knowledge = companyKnowledge('own-director');
     await run(
       knowledge,
-      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
+      [{ scope: 'org:acme', access: 'read' }, 'team:acme:x', 'agent:alex'],
       [
         {
-          toolName: 'knowledge_create',
-          input: { name: 'Team fact', kind: 'doc', text: 'shared fact', scope: ['team:acme:x'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Team fact', kind: 'doc', text: 'shared fact', scope: ['team:acme:x'] },
         },
-        { toolName: 'knowledge_create', input: { name: 'Private fact', kind: 'doc', text: 'private fact' } },
+        { toolName: 'knowledge_record', input: { op: 'add', node: 'Private fact', kind: 'doc', text: 'private fact' } },
       ],
       'member-thread',
     );
@@ -134,18 +144,21 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme'],
       [
         {
-          toolName: 'knowledge_create',
-          input: { name: 'Other team', kind: 'doc', text: 'secret', scope: ['team:acme:other'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Other team', kind: 'doc', text: 'secret', scope: ['team:acme:other'] },
         },
       ],
     );
 
     const member = await run(
       knowledge,
-      [{ tag: 'org:acme', access: 'read' }, 'team:acme:x'],
+      [{ scope: 'org:acme', access: 'read' }, 'team:acme:x'],
       [
         { toolName: 'knowledge_search', input: { query: 'secret', scope: ['team:acme:other'] } },
-        { toolName: 'knowledge_create', input: { name: 'Sneak', kind: 'doc', text: 'x', scope: ['team:acme:other'] } },
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Sneak', kind: 'doc', text: 'x', scope: ['team:acme:other'] },
+        },
       ],
     );
     expect(toolErrors(member)).toEqual([
@@ -161,7 +174,10 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme'],
       [
         { toolName: 'knowledge_search', input: { query: 'x', scope: ['team:acme:p'] } },
-        { toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } },
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] },
+        },
       ],
     );
     expect(toolResults(refused)[0].results).toEqual([]);
@@ -171,13 +187,18 @@ describe('Knowledge ownership computed from the structure', () => {
     const created = await run(
       append,
       ['org:acme'],
-      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } }],
+      [
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] },
+        },
+      ],
     );
     const recordId = toolResults(created)[0].record.id;
     const noEdit = await run(
       append,
       ['org:acme'],
-      [{ toolName: 'knowledge_rescope', input: { recordId, scope: ['org:acme'] } }],
+      [{ toolName: 'knowledge_record', input: { op: 'rescope', recordId, scope: ['org:acme'] } }],
     );
     expect(toolErrors(noEdit)).toEqual(['This run reaches "team:acme:p" with role append; this needs edit.']);
 
@@ -185,15 +206,20 @@ describe('Knowledge ownership computed from the structure', () => {
     const createdEdit = await run(
       edit,
       ['org:acme'],
-      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] } }],
+      [
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['team:acme:p'] },
+        },
+      ],
     );
     const rescoped = await run(
       edit,
       ['org:acme'],
       [
         {
-          toolName: 'knowledge_rescope',
-          input: { recordId: toolResults(createdEdit)[0].record.id, scope: ['org:acme'] },
+          toolName: 'knowledge_record',
+          input: { op: 'rescope', recordId: toolResults(createdEdit)[0].record.id, scope: ['org:acme'] },
         },
       ],
     );
@@ -205,7 +231,12 @@ describe('Knowledge ownership computed from the structure', () => {
     const result = await run(
       knowledge,
       ['org:acme'],
-      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['request:r25'] } }],
+      [
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['request:r25'] },
+        },
+      ],
     );
     expect(toolErrors(result)).toEqual(['This run does not hold scope "request:r25".']);
   });
@@ -213,7 +244,7 @@ describe('Knowledge ownership computed from the structure', () => {
   it('grants nothing through unbound $param, self, parent or mirror principals', async () => {
     const knowledge = new Knowledge({
       storage: new InMemoryStore({ id: 'own-ignored-principals' }),
-      tools: { write: true },
+      tools: true,
       scopes: {
         'team:$orgId:$teamId': {
           access: [
@@ -227,7 +258,12 @@ describe('Knowledge ownership computed from the structure', () => {
     const result = await run(
       knowledge,
       ['org:acme', 'org:xtenantId'],
-      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] } }],
+      [
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] },
+        },
+      ],
     );
     expect(toolErrors(result)).toEqual(['This run does not hold scope "team:acme:x".']);
   });
@@ -235,7 +271,7 @@ describe('Knowledge ownership computed from the structure', () => {
   it('uses the strongest role across principals and names held and needed roles when short', async () => {
     const knowledge = new Knowledge({
       storage: new InMemoryStore({ id: 'own-strongest' }),
-      tools: { write: true },
+      tools: true,
       scopes: {
         'team:$orgId:$teamId': {
           access: [
@@ -248,13 +284,18 @@ describe('Knowledge ownership computed from the structure', () => {
     const created = await run(
       knowledge,
       ['org:acme', 'admin:acme'],
-      [{ toolName: 'knowledge_create', input: { name: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] } }],
+      [
+        {
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'N', kind: 'doc', text: 'x', scope: ['team:acme:x'] },
+        },
+      ],
     );
     expect(toolErrors(created)).toEqual([]);
     const removed = await run(
       knowledge,
       ['org:acme', 'admin:acme'],
-      [{ toolName: 'knowledge_remove', input: { recordId: toolResults(created)[0].record.id } }],
+      [{ toolName: 'knowledge_record', input: { op: 'remove', recordId: toolResults(created)[0].record.id } }],
     );
     expect(toolErrors(removed)).toEqual(['This run reaches "team:acme:x" with role append; this needs edit.']);
   });
@@ -266,8 +307,8 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme', 'project:p'],
       [
         {
-          toolName: 'knowledge_create',
-          input: { name: 'Mixed', kind: 'doc', text: 'x', scope: ['team:acme:x', 'project:p'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'Mixed', kind: 'doc', text: 'x', scope: ['team:acme:x', 'project:p'] },
         },
       ],
     );
@@ -278,10 +319,10 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme'],
       [
         {
-          toolName: 'knowledge_create',
-          input: { name: 'M2', kind: 'doc', text: 'y', scope: ['team:acme:x', 'project:p'] },
+          toolName: 'knowledge_record',
+          input: { op: 'add', node: 'M2', kind: 'doc', text: 'y', scope: ['team:acme:x', 'project:p'] },
         },
-        { toolName: 'knowledge_remove', input: { recordId } },
+        { toolName: 'knowledge_record', input: { op: 'remove', recordId } },
       ],
     );
     expect(toolErrors(outsider)).toEqual([
@@ -295,7 +336,7 @@ describe('Knowledge ownership computed from the structure', () => {
     // org:acme + seven more held tags + resource:/thread: from Memory = 10 tags.
     const held = ['org:acme', ...Array.from({ length: 7 }, (_, index) => `agent:a${index}`)];
     const result = await run(knowledge, held, [
-      { toolName: 'knowledge_create', input: { name: 'Too wide', kind: 'doc', text: 'x' } },
+      { toolName: 'knowledge_record', input: { op: 'add', node: 'Too wide', kind: 'doc', text: 'x' } },
       { toolName: 'knowledge_search', input: { query: 'x', scope: ['team:acme:support'] } },
     ]);
     const errors = toolErrors(result);
@@ -309,7 +350,7 @@ describe('Knowledge ownership computed from the structure', () => {
     const created = await run(
       knowledge,
       ['org:acme'],
-      [{ toolName: 'knowledge_write_node_content', input: { name: 'Doc', content: 'v1', scope: ['team:acme:x'] } }],
+      [{ toolName: 'knowledge_node', input: { op: 'write', name: 'Doc', content: 'v1', scope: ['team:acme:x'] } }],
     );
     expect(toolErrors(created)).toEqual([]);
     const overwrite = await run(
@@ -317,11 +358,11 @@ describe('Knowledge ownership computed from the structure', () => {
       ['org:acme'],
       [
         {
-          toolName: 'knowledge_write_node_content',
+          toolName: 'knowledge_node',
           input: {
-            name: 'Doc',
+            op: 'update',
+            node: toolResults(created)[0].id,
             content: 'v2',
-            scope: ['team:acme:x'],
             expectedVersion: toolResults(created)[0].version,
           },
         },

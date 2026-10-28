@@ -1,15 +1,19 @@
-import { afterEach, describe, it, expect } from 'vitest';
+import { afterEach, describe, it, expect, vi } from 'vitest';
+
+const flags = vi.hoisted(() => ({ knowledgeOn: false }));
+vi.mock('../../utils/experimental-features.js', () => ({ isKnowledgeEnabled: () => flags.knowledgeOn }));
+
 import { buildHelpText } from '../help-overlay.js';
 
 describe('buildHelpText', () => {
   const baseOpts = { modes: 1, customSlashCommands: [] };
 
   afterEach(() => {
-    delete process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE;
+    flags.knowledgeOn = false;
   });
 
   it('includes experimental knowledge help when Knowledge is enabled', () => {
-    process.env.MASTRACODE_EXPERIMENTAL_KNOWLEDGE = '1';
+    flags.knowledgeOn = true;
     const text = buildHelpText(baseOpts);
     expect(text).toContain('/new');
     expect(text).toMatch(/\/clone\s+Clone the current thread/);
