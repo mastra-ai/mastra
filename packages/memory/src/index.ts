@@ -1201,6 +1201,7 @@ export class Memory extends MastraMemory {
     }
 
     await memoryStore.deleteThread({ threadId });
+    await this.clearThreadStream(threadId, resourceId);
     if (resourceId && memoryStore.supportsObservationalMemory) {
       await memoryStore.clearObservationalMemory(threadId, resourceId);
     }
