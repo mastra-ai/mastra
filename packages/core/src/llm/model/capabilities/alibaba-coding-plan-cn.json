@@ -19,7 +19,7 @@
         "type": "toggle"
       }
     ],
-    "kimi-k2.5": [
+    "qwen3.6-plus": [
       {
         "type": "toggle"
       }
@@ -34,12 +34,12 @@
         "type": "toggle"
       }
     ],
-    "qwen3.6-plus": [
+    "glm-4.7": [
       {
         "type": "toggle"
       }
     ],
-    "glm-4.7": [
+    "kimi-k2.5": [
       {
         "type": "toggle"
       }
