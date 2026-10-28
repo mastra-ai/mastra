@@ -332,6 +332,7 @@ export function withDropped(
     dropped.push({
       key,
       ...(projectAt >= 0 ? { projectId: values[projectAt] ?? '' } : {}),
+      ...(providerAt >= 0 ? { provider: values[providerAt] ?? '' } : {}),
       name: values[values.length - 1] ?? '',
       count: 0,
       ...(usage ? { tokens: 0 } : {}),

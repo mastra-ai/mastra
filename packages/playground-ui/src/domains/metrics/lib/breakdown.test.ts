@@ -331,4 +331,17 @@ describe('withDropped', () => {
       expect(rowChange(rows[1], previous.get('p2|gone'), 'count').change).toBe(-1);
     });
   });
+
+  describe('when a model was used before but not now', () => {
+    it('keeps its provider, so it shows the same mark and name as the other models', () => {
+      const modelsBy = ['provider', 'model'];
+      const before = previousFigures({
+        tab: 'models',
+        groupBy: modelsBy,
+        spanGroups: [{ dimensions: { provider: 'openai', model: 'gpt-5-mini' }, value: 12 }],
+      });
+      const rows = withDropped([], before, modelsBy, false);
+      expect(rows).toMatchObject([{ provider: 'openai', name: 'gpt-5-mini', count: 0 }]);
+    });
+  });
 });
