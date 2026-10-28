@@ -2,7 +2,11 @@ import { mkdtempSync, rmSync } from 'node:fs';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
+import { Mastra } from '@mastra/core';
+import { SpanType } from '@mastra/core/observability';
+import { MastraCompositeStore } from '@mastra/core/storage';
 import { DuckDBStore } from '@mastra/duckdb';
+import { MastraStorageExporter, Observability } from '@mastra/observability';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { openLocalObservabilityStore } from './local-observability.js';
@@ -132,6 +136,32 @@ describe('openLocalObservabilityStore', () => {
     stores.push(reopened.store);
     await reopened.pruned;
     await reopened.store.close();
+  });
+
+  it('persists a completed span when Mastra shuts down before its exporter batch flushes', async () => {
+    const dir = mkdtempSync(join(tmpdir(), 'mc-local-obs-'));
+    dirs.push(dir);
+    const path = join(dir, 'observability.duckdb');
+    const duck = new DuckDBStore({ path });
+    stores.push(duck);
+    const storage = new MastraCompositeStore({ id: 'composite', domains: { observability: duck.observability } });
+    const observability = new Observability({
+      configs: {
+        default: { serviceName: 'shutdown-flush', exporters: [new MastraStorageExporter()] },
+      },
+    });
+    const mastra = new Mastra({ storage, observability, logger: false });
+    await storage.init();
+
+    const span = observability.getDefaultInstance()!.startSpan({ type: SpanType.GENERIC, name: 'final span' });
+    span.end();
+    await mastra.shutdown();
+
+    const reopened = new DuckDBStore({ path });
+    stores.push(reopened);
+    await reopened.init();
+    const stored = await reopened.observability.getSpan({ traceId: span.traceId, spanId: span.id });
+    expect(stored?.span?.endedAt).toBeInstanceOf(Date);
   });
 
   it('opens a brand-new file without logging a prune error', async () => {

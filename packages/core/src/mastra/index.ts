@@ -7937,13 +7937,14 @@ export class Mastra<
       }
     }
 
+    // Flush observability exporters while their storage is still open.
+    await this.#observability.shutdown();
+
     // Close storage to release OS file handles (critical on Windows: open WAL/shm
     // handles cause EBUSY when callers try to fs.rm the storage dir after shutdown).
     if (this.#storage?.close) {
       await this.#storage.close();
     }
-    // Shutdown observability registry, exporters, etc...
-    await this.#observability.shutdown();
 
     this.#logger?.info('Mastra shutdown completed');
   }
