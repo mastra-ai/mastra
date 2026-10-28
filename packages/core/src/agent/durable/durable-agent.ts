@@ -9,9 +9,11 @@ import type { PubSub } from '../../events/pubsub';
 import { isRunLocalTopic } from '../../events/topics';
 import { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 import type { MastraModelConfig } from '../../llm/model/shared.types';
+import { LOCAL_MODEL_REQUEST_KEY } from '../../loop/run-scope-keys';
 import { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-until-idle-helpers';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '../../loop/timeout';
 import type { Mastra } from '../../mastra';
+import { createRunScope } from '../../mastra/run-scope';
 import { DEFAULT_RESTART_CONCURRENCY, runWithConcurrency } from '../../mastra/run-with-concurrency';
 import type { MemoryConfig } from '../../memory';
 import { createObservabilityContext, getOrCreateSpan, SpanType, EntityType } from '../../observability';
@@ -114,6 +116,17 @@ import { normalizeResumeGenerateArgs } from './utils/resume-generate-args';
 import { createDurableAgenticWorkflow } from './workflows';
 import { MAP_FINAL_OUTPUT_STEP_ID } from './workflows/durable-loop-builder';
 import { hydrateMessageListState, loadMessageListStateForResume } from './workflows/shared/message-list-state';
+
+function createLocalRequestReader(runId: string, entry: RunRegistryEntry, mastra: Mastra | undefined) {
+  const scope = (entry.runScope ??= createRunScope());
+  scope.delete(LOCAL_MODEL_REQUEST_KEY);
+  const fence = entry.executionFence;
+  return () => {
+    const current = getRunRegistryEntry(runId, mastra);
+    if (current?.runScope !== scope || current.executionFence !== fence || fence?.isLost()) return undefined;
+    return scope.get(LOCAL_MODEL_REQUEST_KEY);
+  };
+}
 
 const RESOLVED_EXECUTION_OPTIONS = Symbol('mastra.durable.resolvedExecutionOptions');
 /** Marks `prepare()` options whose scopes the caller applies itself (a resume rebuilt from storage). */
@@ -3142,6 +3155,9 @@ export class DurableAgent<
     }
     this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
+    // Share the scope before either registry copies the entry.
+    const readLocalRequest = createLocalRequestReader(runId, registryEntry, this.#mastra);
+
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
@@ -3213,6 +3229,7 @@ export class DurableAgent<
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
+      readLocalRequest,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,
@@ -4765,6 +4782,9 @@ export class DurableAgent<
     }
     this.#installAbortWithTotalTimeout(registryEntry, abortController, executionFence);
 
+    // Share the scope before either registry copies the entry.
+    const readLocalRequest = createLocalRequestReader(runId, registryEntry, this.#mastra);
+
     // 2. Register non-serializable state (both local and global registries)
     registryEntry.agentId = this.id;
     this.#runRegistry.registerWithMessageList(runId, registryEntry, messageList, { threadId, resourceId });
@@ -4809,6 +4829,7 @@ export class DurableAgent<
       pubsub: this.pubsub,
       runId,
       minGeneration: executionFence.generation,
+      readLocalRequest,
       messageId,
       model: {
         modelId: workflowInput.modelConfig.modelId,

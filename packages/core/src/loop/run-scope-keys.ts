@@ -14,7 +14,7 @@
  * directly without going through `loop()`.
  */
 
-import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
+import type { IdGenerator, LanguageModelRequestMetadata, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -55,6 +55,8 @@ export const TOOL_APPROVAL_VERDICTS_KEY = createRunScopeKey<Map<string, boolean>
  */
 export const STEP_USAGE_KEY = createRunScopeKey<LanguageModelUsage | undefined>('loop:stepUsage');
 export const STEP_MODEL_MESSAGES_KEY = createRunScopeKey<ModelMessage[]>('loop:stepModelMessages');
+/** Latest provider request for local durable callers only; never serialized with a step. */
+export const LOCAL_MODEL_REQUEST_KEY = createRunScopeKey<LanguageModelRequestMetadata>('loop:localModelRequest');
 export const EAGER_TOOL_EXECUTION_KEY = createRunScopeKey<EagerToolExecutionCoordinator>('loop:eagerToolExecution');
 
 // --- Delegation / bail flags -----------------------------------------------

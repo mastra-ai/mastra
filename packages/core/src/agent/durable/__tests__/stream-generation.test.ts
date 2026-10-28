@@ -81,6 +81,71 @@ describe('durable run stream claim generations', () => {
       ...extra,
     }) as DurableAgentStreamResult<any>;
 
+  it('snapshots private request metadata before callbacks and queued chunks, without publishing it', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const runId = 'private-request';
+    const request = { body: { marker: 'PRIVATE_PROVIDER_REQUEST' } };
+    let liveRequest: typeof request | undefined = request;
+    const events: unknown[] = [];
+    await pubsub.subscribe(AGENT_STREAM_TOPIC(runId), event => {
+      events.push(event);
+    });
+    const onFinish = vi.fn(() => {
+      liveRequest = undefined;
+    });
+    const { output, cleanup, ready, waitForEventDelivery } = makeStream(pubsub, runId, {
+      readLocalRequest: () => liveRequest,
+      onFinish,
+    });
+    await ready;
+    await emitChunkEvent(pubsub, runId, {
+      type: 'step-finish',
+      runId,
+      from: 'AGENT',
+      payload: { ...finishData, metadata: { request: {} } },
+    });
+    await emitFinishEvent(pubsub, runId, finishData);
+    await waitForEventDelivery();
+    // Callbacks run even before the caller drains queued step-finish chunks.
+    expect(onFinish).toHaveBeenCalledWith(expect.objectContaining({ request }));
+    expect(liveRequest).toBeUndefined();
+    cleanup();
+    await output.consumeStream();
+    expect(await output.request).toEqual(request);
+    expect(JSON.stringify(events)).not.toContain('PRIVATE_PROVIDER_REQUEST');
+    await pubsub.close();
+  });
+
+  it.each(['observer', 'takeover', 'suspension', 'error', 'abort', 'tripwire'] as const)(
+    'does not expose an earlier local request after %s',
+    async mode => {
+      const pubsub = new EventEmitterPubSub();
+      const runId = `private-request-${mode}`;
+      const readLocalRequest = vi.fn(() => ({ body: 'stale request' }));
+      const { output, cleanup, ready } = makeStream(pubsub, runId, {
+        minGeneration: 1,
+        ...(mode !== 'observer' && { readLocalRequest }),
+      });
+      await ready;
+      if (mode === 'takeover') await emitOwnershipClaimedEvent(pubsub, runId, 2);
+      if (mode === 'suspension') await emitSuspendedEvent(pubsub, runId, { suspendPayload: {} });
+      await runInRunFenceScope(scopeAt(runId, mode === 'takeover' ? 2 : 1), () =>
+        emitFinishEvent(pubsub, runId, {
+          ...finishData,
+          stepResult: {
+            ...finishData.stepResult,
+            reason: mode === 'error' || mode === 'abort' || mode === 'tripwire' ? mode : 'stop',
+          },
+        }),
+      );
+      await output.consumeStream();
+      expect((await output.request).body).toBeUndefined();
+      expect(readLocalRequest).not.toHaveBeenCalled();
+      cleanup();
+      await pubsub.close();
+    },
+  );
+
   it('tags the events an execution publishes with the generation its fence scope holds for the run', async () => {
     const pubsub = new EventEmitterPubSub();
     const runId = 'tagged-run';

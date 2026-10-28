@@ -11,7 +11,7 @@ import { mergeProviderOptions } from '../../../../llm/model/provider-options';
 import { resolveApiProviderId } from '../../../../llm/model/router';
 import type { SharedProviderOptions } from '../../../../llm/model/shared.types';
 import { ConsoleLogger } from '../../../../logger';
-import { STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
+import { LOCAL_MODEL_REQUEST_KEY, STEP_MODEL_MESSAGES_KEY } from '../../../../loop/run-scope-keys';
 import { applyAutoResumeSystemMessage } from '../../../../loop/shared/auto-resume-system-message';
 import { buildLlmPromptArgs } from '../../../../loop/shared/build-llm-prompt-args';
 import { composeStepInput } from '../../../../loop/shared/compose-step-input';
@@ -2038,6 +2038,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 // Set when output processors ran on this chunk: the processed chunk
                 // (what the client received), or null when a processor dropped it.
                 let processedChunk: typeof clientChunk | null | undefined;
+                if (rawChunk.type === 'step-finish') {
+                  registryEntry?.runScope?.set(LOCAL_MODEL_REQUEST_KEY, request);
+                }
                 if (pubsub && rawChunk.type !== 'error' && rawChunk.type !== 'response-metadata') {
                   if (rawChunk.type === 'step-finish') {
                     // The rewritten provider 'finish' chunk carries no response metadata;
@@ -2844,7 +2847,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 isContinued: shouldRetry || (!processOutputStepTripwire && isContinued),
                 totalUsage: usage,
                 headers: rawResponse?.headers,
-                request,
                 tripwire: stepTripwire,
                 // The id may have rotated in this step (retry feedback, signals, processors);
                 // the next iteration must continue and roll back that message, not the old one.
@@ -2856,7 +2858,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 timestamp: responseMetadata.timestamp || new Date().toISOString(),
                 providerMetadata: responseMetadata,
                 headers: rawResponse?.headers,
-                request,
               },
               state: typedInput.state,
               // Pass span data so tool calls can be children of model_step
