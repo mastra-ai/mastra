@@ -5,6 +5,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
+import { MASTRA_RESOURCE_ID_KEY } from '../constants';
 import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE, LIST_AGENTS_ROUTE } from '../handlers/agents';
 import { EXECUTE_TOOL_ROUTE, GET_TOOL_BY_ID_ROUTE, LIST_TOOLS_ROUTE } from '../handlers/tools';
 import {
@@ -241,7 +242,10 @@ export async function buildBuiltinMCPTools(
     });
     const callAgent = async (agentId: string, args: Args, signal?: AbortSignal) => {
       requireSelected('agents', agentId, 'Agent');
-      const { message, resourceId } = args;
+      const { message } = args;
+      // The generate route decides the effective resource (auth-derived ids win); a new thread is minted
+      // whenever there is one, so memory-backed agents work without the client managing thread ids.
+      const resourceId = args.resourceId ?? requestContext.get(MASTRA_RESOURCE_ID_KEY);
       const threadId = args.threadId ?? (resourceId ? crypto.randomUUID() : undefined);
       const body: Args = { messages: [{ role: 'user', content: message }] };
       if (threadId || resourceId) body.memory = { thread: threadId, resource: resourceId };
