@@ -24,6 +24,7 @@ export type {
 export { MastraFactory } from './factory.js';
 export { waitForPendingFilesystemCapture } from './session/filesystem-capture.js';
 export type {
+  FactoryTools,
   MastraArgs,
   MastraFactoryConfig,
   MastraFactorySandboxConfig,

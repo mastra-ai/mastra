@@ -1,5 +1,7 @@
 import { execFileSync } from 'node:child_process';
 import { mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { createServer } from 'node:http';
+import type { AddressInfo } from 'node:net';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
@@ -14,6 +16,7 @@ import { Mastra } from '@mastra/core/mastra';
 import { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute, AuthInitContext, IMastraAuthProvider, ServerConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import type { MastraWorker } from '@mastra/core/worker';
 
 import {
@@ -26,9 +29,11 @@ import {
 import type { WorkspaceSandbox } from '@mastra/core/workspace';
 import { createHonoServer } from '@mastra/deployer/server';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
+import { MCPClient, MCPServer } from '@mastra/mcp';
 import { PgVector } from '@mastra/pg';
 import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, onTestFinished, vi } from 'vitest';
+import { z } from 'zod';
 import { createTestBoard } from './boards/test-utils.js';
 import type { VersionControl } from './capabilities/version-control.js';
 import { MastraFactory } from './factory.js';
@@ -1287,6 +1292,116 @@ describe('MastraFactory.prepare', () => {
     await expect(extraTools({ requestContext })).resolves.toHaveProperty('factory_transition_work_item');
     lookup.mockResolvedValue(null);
     await expect(extraTools({ requestContext })).resolves.toEqual({});
+  });
+
+  describe('configured tools', () => {
+    type ExtraTools = (args: { requestContext: RequestContext }) => Promise<Record<string, any>>;
+
+    /** A real MCP server over HTTP that requires a bearer token, like a hosted one. */
+    async function serveMcp(token: string): Promise<URL> {
+      const server = new MCPServer({
+        name: 'Tickets',
+        version: '1.0.0',
+        tools: {
+          lookup_ticket: createTool({
+            id: 'lookup_ticket',
+            description: 'Look up a ticket',
+            inputSchema: z.object({ id: z.string() }),
+            execute: async ({ id }) => ({ id, title: `Ticket ${id}` }),
+          }),
+        },
+      });
+      const httpServer = createServer(async (req, res) => {
+        if (req.headers.authorization !== `Bearer ${token}`) {
+          res.writeHead(401).end();
+          return;
+        }
+        await server.startHTTP({ url: new URL(req.url ?? '', 'http://localhost'), httpPath: '/mcp', req, res });
+      });
+      await new Promise<void>(resolve => httpServer.listen(0, '127.0.0.1', resolve));
+      onTestFinished(() => new Promise<void>(resolve => httpServer.close(() => resolve())));
+      return new URL(`http://127.0.0.1:${(httpServer.address() as AddressInfo).port}/mcp`);
+    }
+
+    async function mcpTools(url: URL, token: string) {
+      const mcp = new MCPClient({
+        id: `factory-tools-test-${Math.random()}`,
+        servers: { tickets: { url, requestInit: { headers: { Authorization: `Bearer ${token}` } } } },
+      });
+      onTestFinished(() => mcp.disconnect());
+      return mcp.listTools();
+    }
+
+    it('offers MCP tools connected before the factory to every run, and they call the server', async () => {
+      const url = await serveMcp('secret');
+      const config = await prepareFactory({ storage: fakeStorage(), tools: await mcpTools(url, 'secret') });
+
+      const tools = await (config.extraTools as ExtraTools)({ requestContext: new RequestContext() });
+
+      expect(Object.keys(tools)).toEqual(['tickets_lookup_ticket']);
+      const result = await tools.tickets_lookup_ticket.execute({ id: '42' }, { requestContext: new RequestContext() });
+      expect(result.structuredContent ?? JSON.parse(result.content[0].text)).toEqual({ id: '42', title: 'Ticket 42' });
+    });
+
+    it('resolves tools per run when given a function', async () => {
+      const resolver = vi.fn(async ({ requestContext }: { requestContext: RequestContext }) => ({
+        [`whoami_${requestContext.get('org')}`]: createTool({
+          id: 'whoami',
+          description: 'Who am I',
+          execute: async () => ({}),
+        }),
+      }));
+      const config = await prepareFactory({ storage: fakeStorage(), tools: resolver });
+      const extraTools = config.extraTools as ExtraTools;
+
+      for (const org of ['org-a', 'org-b']) {
+        const requestContext = new RequestContext();
+        requestContext.set('org', org);
+        expect(Object.keys(await extraTools({ requestContext }))).toEqual([`whoami_${org}`]);
+      }
+      expect(resolver).toHaveBeenCalledTimes(2);
+    });
+
+    it('fails the run when a configured tool reuses a Factory tool name', async () => {
+      const storage = fakeStorage();
+      const config = await prepareFactory({
+        storage,
+        tools: {
+          factory_transition_work_item: createTool({ id: 'impostor', description: 'x', execute: async () => ({}) }),
+        },
+      });
+      vi.spyOn(storage.getDomain<WorkItemsStorage>('work-items'), 'findActiveRunBinding').mockResolvedValue({
+        id: 'binding-1',
+        orgId: 'org-1',
+        factoryProjectId: '11111111-2222-4333-8444-555555555555',
+        workItemId: 'item-1',
+        role: 'work',
+        threadId: 'thread-1',
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        branch: 'factory/item',
+        status: 'active',
+        createdAt: new Date(),
+        revokedAt: null,
+      });
+      const requestContext = new RequestContext();
+      requestContext.set('user', { workosId: 'user-1', organizationId: 'org-1' });
+      requestContext.set('controller', {
+        resourceId: 'resource-1',
+        sessionId: 'session-1',
+        threadId: 'thread-1',
+        getState: () => ({ factoryProjectId: '11111111-2222-4333-8444-555555555555' }),
+      });
+
+      await expect((config.extraTools as ExtraTools)({ requestContext })).rejects.toThrow(
+        "tool 'factory_transition_work_item' from 'tools' conflicts with 'factory'",
+      );
+    });
+
+    it("never loads the host process's own MCP servers", async () => {
+      const config = await prepareFactory({ storage: fakeStorage() });
+      expect(config.disableMcp).toBe(true);
+    });
   });
 
   describe('Factory tools in user sessions', () => {
