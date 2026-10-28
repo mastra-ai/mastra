@@ -359,6 +359,8 @@ export interface RunLoopScenarioOptions {
    * assert transform/redact behavior over the loop output.
    */
   outputProcessors?: any;
+  /** Output processors set on the Agent constructor (static array or a `({ requestContext }) => processors` function). */
+  agentOutputProcessors?: any;
   /** Forwarded to `agent.stream({ maxProcessorRetries })`. */
   maxProcessorRetries?: number;
   /**

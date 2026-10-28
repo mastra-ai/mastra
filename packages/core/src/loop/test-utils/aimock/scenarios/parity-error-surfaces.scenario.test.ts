@@ -24,6 +24,7 @@ import { z } from 'zod/v4';
 import { Agent } from '../../../../agent';
 import { MockMemory } from '../../../../memory/mock';
 import { MessageHistory } from '../../../../processors/memory';
+import type { RequestContext } from '../../../../request-context';
 import { createTool } from '../../../../tools';
 import { createSharedAgent, describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 import {
@@ -197,11 +198,14 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     { savePerStep: false, readOnly: true },
     // History disabled in config, but the agent saves through an explicitly configured MessageHistory.
     { savePerStep: false, readOnly: false, explicitHistory: true },
+    // Same, but the agent picks MessageHistory from requestContext, and a tool changes that context
+    // mid-run. The deadline save must use the processors the run started with.
+    { savePerStep: false, readOnly: false, dynamicHistory: true },
   ])(
-    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory)',
-    async ({ savePerStep, readOnly, explicitHistory }) => {
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory)',
+    async ({ savePerStep, readOnly, explicitHistory, dynamicHistory }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}`;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}-${!!dynamicHistory}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -220,6 +224,13 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           memoryOptions: { lastMessages: false },
           outputProcessors: [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
         }),
+        ...(dynamicHistory && {
+          memoryOptions: { lastMessages: false },
+          agentOutputProcessors: async ({ requestContext }: { requestContext: RequestContext }) =>
+            requestContext.get('history') === 'off'
+              ? []
+              : [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
+        }),
         modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
@@ -227,7 +238,8 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
             id: 'lookup',
             description: 'Look up an order.',
             inputSchema: z.object({}),
-            execute: async () => {
+            execute: async (_input, context) => {
+              context?.requestContext?.set('history', 'off');
               completedTool = true;
               return { status: 'shipped' };
             },

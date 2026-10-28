@@ -12,6 +12,7 @@ import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
+import type { OutputProcessorOrWorkflow } from '../../../processors';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
 import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
@@ -108,6 +109,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
       }
     };
 
+    // Configured output processors as resolved for this run, captured before execution so the
+    // total-timeout save sees the same selection the run used.
+    let configuredOutputProcessors: OutputProcessorOrWorkflow[] = [];
+
     const saveInputAfterTotalTimeout = async () => {
       if (!memory || !memoryData.thread?.id) return;
       // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
@@ -115,10 +120,8 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // memory does not own the writes (see Memory.getOutputProcessors).
       const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
       if (effectiveConfig.readOnly) return;
-      const configuredProcessors =
-        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
       const hasConfiguredProcessor = (id: string) =>
-        configuredProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+        configuredOutputProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
       const memoryAddsMessageHistory =
         normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
         !hasConfiguredProcessor('observational-memory') &&
@@ -263,6 +266,11 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
+
+    if (memory && memoryData.thread?.id && options.modelSettings?.timeout?.totalMs) {
+      configuredOutputProcessors =
+        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
+    }
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
