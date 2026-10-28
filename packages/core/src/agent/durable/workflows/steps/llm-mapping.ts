@@ -62,6 +62,7 @@ const durableLLMMappingOutputSchema = z.object({
   releasedToolResultIds: z.array(z.string()).optional(),
   deferredStepFinishChunk: z.any().optional(),
   completionStartTime: z.coerce.date().optional(),
+  inferenceStartTime: z.coerce.date().optional(),
 });
 
 /**
@@ -413,6 +414,7 @@ export function createDurableLLMMappingStep() {
         delegationBailed,
         deferredStepFinishChunk,
         completionStartTime: llmOutput.completionStartTime,
+        inferenceStartTime: llmOutput.inferenceStartTime,
       };
 
       // Close the MODEL_STEP span for tool-calling iterations: the LLM step defers it so

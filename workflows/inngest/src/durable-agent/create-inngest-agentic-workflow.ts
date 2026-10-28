@@ -204,6 +204,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // First-chunk clock carried from earlier iterations (first write wins)
           completionStartTime: state.completionStartTime,
+          inferenceStartTime: state.inferenceStartTime,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -221,6 +222,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          inferenceStartTime: llmOutput.inferenceStartTime,
           stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
@@ -539,9 +541,12 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
-          // Rebuilt spans end from snapshots taken at run start, so the clock the
-          // steps carried through the loop state is applied here.
-          const completionStartTime = state.completionStartTime ? new Date(state.completionStartTime) : undefined;
+          // Rebuilt spans end from snapshots taken at run start, so the clocks the
+          // steps carried through the loop state are applied here.
+          const clocks = {
+            ...(state.completionStartTime ? { completionStartTime: new Date(state.completionStartTime) } : {}),
+            ...(state.inferenceStartTime ? { inferenceStartTime: new Date(state.inferenceStartTime) } : {}),
+          };
           if (state.modelSpanData) {
             const modelSpan = observability?.rebuildSpan(
               state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
@@ -557,7 +562,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
-                ...(completionStartTime ? { completionStartTime } : {}),
+                ...clocks,
               },
               usage: state.accumulatedUsage,
             });
@@ -568,7 +573,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             const agentSpan = observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
               output: { text: finalText },
-              ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
           }
 

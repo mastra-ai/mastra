@@ -1,6 +1,32 @@
 import type { LanguageModelUsage, StepTripwireData } from '../../../../stream/types';
-import type { DurableAgenticExecutionOutput } from '../../types';
+import type { DurableAgenticExecutionOutput, RunRegistryEntry } from '../../types';
 import type { AccumulatedUsage, BaseIterationState } from './schemas';
+
+interface SpanClocks {
+  completionStartTime?: Date | string;
+  inferenceStartTime?: Date | string;
+}
+
+/**
+ * The first-inference clocks for spans rebuilt from a run-start snapshot. A
+ * resumed segment keeps them on the run registry beside its fresh spans; the
+ * originals keep them in the loop state. Undefined when none was captured yet.
+ */
+export function carriedSpanClocks(
+  registry:
+    | Pick<RunRegistryEntry, 'resumeModelSpanData' | 'resumeCompletionStartTime' | 'resumeInferenceStartTime'>
+    | undefined,
+  state: SpanClocks,
+): { completionStartTime?: Date; inferenceStartTime?: Date } | undefined {
+  const clocks: SpanClocks = registry?.resumeModelSpanData
+    ? { completionStartTime: registry.resumeCompletionStartTime, inferenceStartTime: registry.resumeInferenceStartTime }
+    : state;
+  const attributes = {
+    ...(clocks.completionStartTime ? { completionStartTime: new Date(clocks.completionStartTime) } : {}),
+    ...(clocks.inferenceStartTime ? { inferenceStartTime: new Date(clocks.inferenceStartTime) } : {}),
+  };
+  return Object.keys(attributes).length ? attributes : undefined;
+}
 
 /**
  * Input for creating iteration state update
@@ -192,5 +218,6 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     modelSpanData: currentState.modelSpanData,
     // First inference wins; later iterations never overwrite it.
     completionStartTime: currentState.completionStartTime ?? executionOutput.completionStartTime,
+    inferenceStartTime: currentState.inferenceStartTime ?? executionOutput.inferenceStartTime,
   };
 }

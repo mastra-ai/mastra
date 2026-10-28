@@ -89,7 +89,7 @@ const clockOf = (s: AnyExportedSpan | undefined) => {
   return value ? new Date(value).getTime() : undefined;
 };
 
-/** The first inference, generation and agent_run of the named agent must share one first-chunk clock. */
+/** The first inference, generation and agent_run of the named agent must share its clocks and time to first token. */
 async function expectSharedClock(agentName: string) {
   await vi.waitFor(() => {
     expect(ended.some(s => s.type === 'agent_run' && s.entityName === agentName)).toBe(true);
@@ -100,8 +100,14 @@ async function expectSharedClock(agentName: string) {
     .filter(s => s.type === 'model_inference')
     .sort((a, b) => a.startTime.getTime() - b.startTime.getTime())[0];
   expect(clockOf(inference)).toBeTypeOf('number');
-  expect(clockOf(inTrace.find(s => s.type === 'model_generation'))).toBe(clockOf(inference));
-  expect(clockOf(agentRun)).toBe(clockOf(inference));
+  expect(inference!.timeToFirstTokenMs).toBeTypeOf('number');
+  for (const span of [inTrace.find(s => s.type === 'model_generation'), agentRun]) {
+    const inferenceStartTime = (span?.attributes as { inferenceStartTime?: Date | string } | undefined)
+      ?.inferenceStartTime;
+    expect(clockOf(span)).toBe(clockOf(inference));
+    expect(inferenceStartTime && new Date(inferenceStartTime).getTime()).toBe(inference!.startTime.getTime());
+    expect(span?.timeToFirstTokenMs).toBe(inference!.timeToFirstTokenMs);
+  }
 }
 
 describe('Inngest client tool span parent', () => {
