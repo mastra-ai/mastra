@@ -98,14 +98,14 @@ describe('workflow finish publication failure', () => {
     }
   });
 
-  it('resolves a successful run after temporary publisher saturation', async () => {
+  it('resolves a successful run after sustained temporary publisher saturation', async () => {
     const pubsub = new EventEmitterPubSub();
     const publish = pubsub.publish.bind(pubsub);
-    let rejected = false;
+    let rejected = 0;
     const notifications: string[] = [];
     pubsub.publish = async (topic, event, options) => {
-      if (topic === 'workflows-finish' && event.type === 'workflow.end' && !rejected) {
-        rejected = true;
+      if (topic === 'workflows-finish' && event.type === 'workflow.end' && rejected < 4) {
+        rejected++;
         throw new PublisherQueueLimitError(undefined, async () => {});
       }
       if (topic === 'workflows-finish' && event.type === 'workflow.publish-failed') {
@@ -140,7 +140,7 @@ describe('workflow finish publication failure', () => {
         run.start({ inputData: {} }),
         new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
       ]);
-      expect(rejected).toBe(true);
+      expect(rejected).toBe(4);
       expect(notifications).toEqual([]);
       expect(result).toMatchObject({ status: 'success', result: { ok: true } });
     } finally {
@@ -277,6 +277,86 @@ describe('workflow finish publication failure', () => {
       expect(terminalAttempts).toBe(1);
     } finally {
       releaseCapacity();
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('advances the parent once when a nested finish waits for publisher capacity', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const publish = pubsub.publish.bind(pubsub);
+    let rejected = 0;
+    let parentHandoffs = 0;
+    let parentAdvances = 0;
+    pubsub.publish = async (topic, event, options) => {
+      if (
+        topic === 'workflows' &&
+        event.type === 'workflow.step.end' &&
+        event.data.workflowId === 'parent-saturation' &&
+        event.data.nestedRunId
+      ) {
+        parentHandoffs++;
+      }
+      if (
+        topic === 'workflows-finish' &&
+        event.type === 'workflow.end' &&
+        event.data.workflowId === 'child-saturation' &&
+        rejected < 4
+      ) {
+        rejected++;
+        throw new PublisherQueueLimitError(undefined, async () => {});
+      }
+      return publish(topic, event, options);
+    };
+    const child = createWorkflow({
+      id: 'child-saturation',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(
+        createStep({
+          id: 'child-work',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async () => ({ ok: true }),
+        }),
+      )
+      .commit();
+    const parent = createWorkflow({
+      id: 'parent-saturation',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(child)
+      .then(
+        createStep({
+          id: 'parent-work',
+          inputSchema: z.object({ ok: z.boolean() }),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async ({ inputData }) => {
+            parentAdvances++;
+            return inputData;
+          },
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({
+      workflows: { [parent.id]: parent, [child.id]: child },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await parent.createRun();
+      const result = await Promise.race([
+        run.start({ inputData: {} }),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      expect(rejected).toBe(4);
+      expect(result).toMatchObject({ status: 'success', result: { ok: true } });
+      expect(parentHandoffs).toBe(1);
+      expect(parentAdvances).toBe(1);
+    } finally {
       await mastra.stopWorkers();
     }
   });

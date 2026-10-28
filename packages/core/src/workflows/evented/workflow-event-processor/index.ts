@@ -1235,34 +1235,40 @@ export class WorkflowEventProcessor extends EventProcessor {
   }
 
   private async publishFinishEvent(event: Pick<Event, 'type' | 'runId' | 'data'>) {
-    try {
-      await this.mastra.pubsub.publish('workflows-finish', event);
-    } catch (error) {
-      if (!(error instanceof PublisherQueueLimitError) || error.waitForCapacity) {
-        throw error;
-      }
-      // Only permanently oversized results need a compact notification. A
-      // temporarily full queue uses normal redelivery instead. If the broker
-      // stays stalled, even this notification cannot be delivered.
-      const notification = {
-        type: 'workflow.publish-failed',
-        runId: event.runId,
-        data: {
-          message: error.message,
-          workflowId: event.data.workflowId,
+    for (;;) {
+      try {
+        await this.mastra.pubsub.publish('workflows-finish', event);
+        return;
+      } catch (error) {
+        if (!(error instanceof PublisherQueueLimitError)) {
+          throw error;
+        }
+        if (error.waitForCapacity) {
+          await error.waitForCapacity();
+          continue;
+        }
+        // Only permanently oversized results need a compact notification. If
+        // the broker stays stalled, even this notification cannot be delivered.
+        const notification = {
+          type: 'workflow.publish-failed',
           runId: event.runId,
-          requestContext: event.data.requestContext,
-        },
-      };
-      for (;;) {
-        try {
-          await this.mastra.pubsub.publish('workflows-finish', notification);
-          return;
-        } catch (notificationError) {
-          if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
-            throw notificationError;
+          data: {
+            message: error.message,
+            workflowId: event.data.workflowId,
+            runId: event.runId,
+            requestContext: event.data.requestContext,
+          },
+        };
+        for (;;) {
+          try {
+            await this.mastra.pubsub.publish('workflows-finish', notification);
+            return;
+          } catch (notificationError) {
+            if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
+              throw notificationError;
+            }
+            await notificationError.waitForCapacity();
           }
-          await notificationError.waitForCapacity();
         }
       }
     }
