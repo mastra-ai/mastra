@@ -11,8 +11,7 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { lazy, Suspense } from 'react';
-import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
+import { createBrowserRouter, Navigate, Outlet, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
@@ -28,25 +27,9 @@ import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreate
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
 
-// Keep the boards eager. These secondary pages load after their route guards
-// allow them; the loading boundary sits inside the app shell so the sidebar stays.
-const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })));
-const CreateFactoryPage = lazy(() =>
-  import('./pages/CreateFactoryPage').then(module => ({ default: module.CreateFactoryPage })),
-);
-const OnboardingPage = lazy(() =>
-  import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
-);
-const SettingsPage = lazy(() => import('./pages/SettingsPage').then(module => ({ default: module.SettingsPage })));
-const SlackConnectionPage = lazy(() =>
-  import('./pages/SlackConnectionPage').then(module => ({ default: module.SlackConnectionPage })),
-);
-const RulesPage = lazy(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
-const SignInPage = lazy(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
-
-// Resolve chat modules before committing navigation so the session providers
-// and page mount together. Mounting the page later can re-fetch failed queries
-// that the shared provider has already resolved (for example, a private session).
+// Boards stay eager. Every other page loads through route-level `lazy`: the
+// router resolves the module before committing, so providers and page mount
+// together (a private session is read once) and AppLayout shows the wait.
 async function loadNewPage() {
   const { NewPage } = await import('./pages/NewPage');
   return { Component: NewPage };
@@ -136,7 +119,7 @@ function KnowledgeRoute() {
 
   if (features.isPending || !factoryId) return null;
   if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
-  return <KnowledgePage />;
+  return <Outlet />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -151,7 +134,10 @@ export function createAppRoutes(): RouteObject[] {
       errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <RootLanding /> },
-        { path: 'onboarding', element: <OnboardingPage /> },
+        {
+          path: 'onboarding',
+          lazy: async () => ({ Component: (await import('./pages/OnboardingPage')).OnboardingPage }),
+        },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,
@@ -169,7 +155,10 @@ export function createAppRoutes(): RouteObject[] {
                     { path: 'user/new/:draftSessionId', lazy: loadNewPage },
                     { path: 'user/threads/:threadId', lazy: loadThreadPage },
                     { path: 'new', lazy: loadNewPage },
-                    { path: 'new-factory', element: <CreateFactoryPage /> },
+                    {
+                      path: 'new-factory',
+                      lazy: async () => ({ Component: (await import('./pages/CreateFactoryPage')).CreateFactoryPage }),
+                    },
                     { path: 'work', element: <WorkBoardPage /> },
                     { path: 'review', element: <ReviewBoardPage /> },
                     { path: 'boards/:boardId', element: <CustomBoardPage /> },
@@ -178,14 +167,31 @@ export function createAppRoutes(): RouteObject[] {
                     { path: 'attention', element: <FactoryHomeRedirect /> },
                     { path: 'metrics', element: <FactoryHomeRedirect /> },
                     { path: 'audit', element: <FactoryHomeRedirect /> },
-                    { path: 'rules', element: <RulesPage /> },
-                    { path: 'knowledge', element: <KnowledgeRoute /> },
+                    { path: 'rules', lazy: async () => ({ Component: (await import('./pages/RulesPage')).RulesPage }) },
+                    {
+                      path: 'knowledge',
+                      element: <KnowledgeRoute />,
+                      children: [
+                        {
+                          index: true,
+                          lazy: async () => ({ Component: (await import('./pages/KnowledgePage')).KnowledgePage }),
+                        },
+                      ],
+                    },
                     {
                       path: 'settings',
                       children: [
                         { index: true, element: <Navigate to="preferences" replace /> },
-                        { path: 'connections/slack', element: <SlackConnectionPage /> },
-                        { path: ':section', element: <SettingsPage /> },
+                        {
+                          path: 'connections/slack',
+                          lazy: async () => ({
+                            Component: (await import('./pages/SlackConnectionPage')).SlackConnectionPage,
+                          }),
+                        },
+                        {
+                          path: ':section',
+                          lazy: async () => ({ Component: (await import('./pages/SettingsPage')).SettingsPage }),
+                        },
                       ],
                     },
                   ],
@@ -203,11 +209,8 @@ export function createAppRoutes(): RouteObject[] {
     },
     {
       path: '/signin',
-      element: (
-        <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
-          <SignInPage />
-        </Suspense>
-      ),
+      lazy: async () => ({ Component: (await import('./pages/SignInPage')).SignInPage }),
+      hydrateFallbackElement: <AuthPendingSkeleton label="Loading page" />,
       errorElement: <RouteErrorPage />,
     },
   ];

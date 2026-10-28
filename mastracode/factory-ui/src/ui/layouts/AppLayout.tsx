@@ -1,9 +1,8 @@
+import { BrandLoader } from '@mastra/playground-ui/components/BrandLoader';
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
-import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
-import { Suspense } from 'react';
-import { Outlet } from 'react-router';
+import { Outlet, useNavigation } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
@@ -36,6 +35,17 @@ function SidebarShortcuts() {
   return null;
 }
 
+// The delay keeps fast navigations from flashing the loader.
+function PageLoading() {
+  if (useNavigation().state !== 'loading') return null;
+
+  return (
+    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity delay-150 starting:opacity-0">
+      <BrandLoader size="lg" aria-label="Loading page" />
+    </div>
+  );
+}
+
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
@@ -43,15 +53,8 @@ function AppFrame() {
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Suspense
-          fallback={
-            <div className="flex flex-1 items-center justify-center p-6">
-              <Spinner aria-label="Loading page" />
-            </div>
-          }
-        >
-          <Outlet />
-        </Suspense>
+        <Outlet />
+        <PageLoading />
       </MainCard>
     </AppShell>
   );
