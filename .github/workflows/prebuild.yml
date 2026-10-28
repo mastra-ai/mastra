@@ -42,8 +42,9 @@ jobs:
           BASE_SHA: ${{ github.event.pull_request.base.sha }}
           HEAD_SHA: ${{ github.event.pull_request.head.sha || github.sha }}
           # A workflow_call (e.g. the alpha cron) and the Changesets release PR run the full
-          # suite. Every other PR runs only the tests affected by its diff. A fork can pick any
-          # branch name, so the release PR head must also live in this repository.
+          # suite. Other PRs start with affected tests; shared lint migrations select the full
+          # suite below. A fork can pick any branch name, so the release PR head must also
+          # live in this repository.
           FULL_SUITE: ${{ github.event_name != 'pull_request' || (github.event.pull_request.head.repo.full_name == github.repository && startsWith(github.head_ref, 'changeset-release/')) }}
         run: |
           echo "head_sha=$HEAD_SHA" >> "$GITHUB_OUTPUT"
@@ -64,6 +65,12 @@ jobs:
           code_files=$(printf '%s\n' "$changed_files" \
             | grep -vE '^(docs/|examples/|\.changeset/|explorations/)' \
             | grep -v '^$' || true)
+
+          # Shared lint migrations can touch every package; use the existing test shards.
+          if grep -Fxq 'oxlint.config.ts' <<< "$changed_files"; then
+            echo "full_suite=true" >> "$GITHUB_OUTPUT"
+          fi
+
           if [ -n "$code_files" ]; then
             echo "Code changes found; running affected tests."
             echo "has_code=true" >> "$GITHUB_OUTPUT"
