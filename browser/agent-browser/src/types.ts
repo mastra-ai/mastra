@@ -44,6 +44,98 @@ export interface AgentBrowserConfigExtensions {
    * ```
    */
   excludeTools?: BrowserToolName[];
+
+  /**
+   * Beta: configure WebMCP tool discovery and invocation.
+   *
+   * WebMCP is opt-in: pass `{ enabled: true }` to have AgentBrowser inject
+   * an in-page bridge that captures tools exposed by the current page and
+   * add a `browser_webmcp` tool for the agent. Without it, no bridge is
+   * injected and the tool is not added.
+   *
+   * @example
+   * ```ts
+   * // Enable, listening for every supported protocol
+   * new AgentBrowser({ webmcp: { enabled: true } })
+   *
+   * // Only the W3C navigator.modelContext draft
+   * new AgentBrowser({ webmcp: { enabled: true, protocols: ['w3c'] } })
+   *
+   * // Lock down to specific origins
+   * new AgentBrowser({ webmcp: { enabled: true, allowedOrigins: ['https://shop.example.com'] } })
+   * ```
+   */
+  webmcp?: WebmcpOptions;
+}
+
+/**
+ * A WebMCP protocol the in-page bridge can listen for.
+ *
+ * - `mcpb`: pages that run an in-page MCP server over the `@mcp-b/transports`
+ *   Tab transport (`McpServer` + `TabServerTransport`). The bridge connects as
+ *   a real MCP client over `window.postMessage`.
+ * - `w3c`: the W3C `navigator.modelContext` draft. The bridge provides a
+ *   polyfill and mirrors registrations into a native implementation when one
+ *   exists. Pages built on `@mcp-b/webmcp-polyfill` register through this
+ *   same API.
+ */
+export type WebmcpProtocol = 'mcpb' | 'w3c';
+
+/**
+ * How WebMCP page tools are surfaced to the agent during a run.
+ *
+ * - `auto` (default): every step, the agent's toolset is extended with the
+ *   current page's WebMCP tools. The agent can call them directly as
+ *   `page_<tool>`. No discovery call is needed.
+ * - `manual`: page tools are only attached after the agent calls the
+ *   `browser_webmcp_discover` tool. The agent lists what's available first,
+ *   then opts in to the tools it wants. Keeps the toolset (and prompt-cache
+ *   footprint) small on pages with lots of tools.
+ */
+export type WebmcpToolDiscovery = 'auto' | 'manual';
+
+/**
+ * Beta configuration for WebMCP tool discovery. Opt-in via `enabled: true`.
+ */
+export interface WebmcpOptions {
+  /**
+   * Turn WebMCP support on. Must be `true` for the in-page bridge to be
+   * injected and the `browser_webmcp` tool to be added to the agent.
+   * Defaults to `false`.
+   */
+  enabled?: boolean;
+  /**
+   * Which WebMCP protocols to listen for. When omitted (or empty), all
+   * supported protocols are enabled and auto-detected per page. W3C
+   * registrations win when a page exposes the same tool name under both
+   * surfaces.
+   */
+  protocols?: WebmcpProtocol[];
+  /**
+   * Restrict which page origins can expose callable WebMCP tools to the agent.
+   *
+   * When omitted, tools from any origin are allowed. When provided, only
+   * pages whose current URL has an exact origin match (scheme + host + port)
+   * can list or call tools. `file://` pages must be listed as `file://` and
+   * `about:blank` is never callable.
+   */
+  allowedOrigins?: string[];
+  /**
+   * How page WebMCP tools become visible to the agent during a run. The
+   * browser contributes its step hook as an input processor (via
+   * {@link AgentBrowser.getInputProcessors}) when the browser is passed to
+   * `new Agent({ browser })`, so it runs automatically each step; a
+   * user-supplied `prepareStep` runs after it and can override the merged
+   * toolset. Defaults to `'auto'`.
+   */
+  toolDiscovery?: WebmcpToolDiscovery;
+  /**
+   * Prefix prepended to every page tool name when it is merged into the
+   * agent's toolset. Defaults to `'page_'`. Pass `''` to use the page's
+   * raw tool names (collisions with base `browser_*` tools are still
+   * resolved in favor of the base tool).
+   */
+  toolPrefix?: string;
 }
 
 /**
