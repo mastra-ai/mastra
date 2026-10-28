@@ -231,6 +231,13 @@ export const screenshotInputSchema = z.object({
     .boolean()
     .optional()
     .describe('Capture the full scrollable page instead of just the viewport (default: false)'),
+  path: z
+    .string()
+    .min(1)
+    .optional()
+    .describe(
+      'Also save the PNG to this path in your workspace, so you can treat it as a normal file (attach, commit, view). Missing folders are created.',
+    ),
 });
 export type ScreenshotInput = z.output<typeof screenshotInputSchema>;
 
