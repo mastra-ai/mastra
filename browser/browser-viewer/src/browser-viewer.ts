@@ -11,7 +11,7 @@
  * - Thread-scoped browser isolation
  */
 
-import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
+import { DEFAULT_THREAD_ID, MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
   BrowserCookie,
   BrowserState,
@@ -88,10 +88,24 @@ export class BrowserViewer extends MastraBrowser {
       onSessionCreated: session => {
         // Add waiting cookies first, so a ready listener that navigates is already signed in.
         // Then notify listeners so screencast can start for this thread.
-        // If they can't be added, launch() rejects with the error and listeners aren't told it's ready.
-        void this.addPendingCookies(session.threadId).then(
-          () => this.notifyBrowserReady(session.threadId),
-          error => this.logger?.warn?.(`Couldn't add cookies for thread ${session.threadId}: ${error}`),
+        // Until then hasThreadSession() is false, so listeners registered meanwhile wait too.
+        // If they can't be added, launch() rejects and the browser closes without being reported ready.
+        const { threadId } = session;
+        this.cookiesNotAdded.add(threadId);
+        void this.addPendingCookies(threadId).then(
+          () => {
+            this.cookiesNotAdded.delete(threadId);
+            this.notifyBrowserReady(threadId);
+          },
+          async error => {
+            this.logger?.warn?.(`Couldn't add cookies for thread ${threadId}: ${error}`);
+            await (
+              threadId === DEFAULT_THREAD_ID
+                ? this.threadManager.closeSharedBrowser()
+                : this.threadManager.closeThreadBrowser(threadId)
+            ).catch(() => {});
+            this.cookiesNotAdded.delete(threadId);
+          },
         );
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {
@@ -103,6 +117,15 @@ export class BrowserViewer extends MastraBrowser {
         this.notifyBrowserClosed(threadId);
       },
     });
+  }
+
+  /** Threads whose browser is open but whose waiting cookies aren't added yet. */
+  private readonly cookiesNotAdded = new Set<string>();
+
+  /** A thread's browser isn't ready for listeners until its waiting cookies are added. */
+  override hasThreadSession(threadId: string): boolean {
+    const key = this.threadManager.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
+    return !this.cookiesNotAdded.has(key) && super.hasThreadSession(threadId);
   }
 
   // ---------------------------------------------------------------------------
