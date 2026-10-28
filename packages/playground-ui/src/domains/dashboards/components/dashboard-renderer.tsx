@@ -1,5 +1,5 @@
 import type { DashboardDefinition } from '@mastra/client-js';
-import { dashboardDefinitionEnvelopeSchema, migrateDashboardDefinition } from '@mastra/core/storage';
+import { dashboardDefinitionEnvelopeSchema, migrateDashboardDefinition } from '@mastra/core/storage/dashboards';
 import { useMetricsScope } from '../../metrics/hooks/use-metrics-scope';
 import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';

@@ -1,5 +1,5 @@
 import type { DashboardDefinitionEnvelope, DashboardWidget } from '@mastra/client-js';
-import { dashboardWidgetSchema } from '@mastra/core/storage';
+import { dashboardWidgetSchema } from '@mastra/core/storage/dashboards';
 import type { AnyWidgetKind, ResolvedView } from '../widget-kind';
 import { inScope } from './definition';
 import type { DashboardScope } from './definition';
