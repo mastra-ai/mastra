@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/span-previews';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
 import {
@@ -150,6 +151,33 @@ export const spanRecordSchema = z
       .nullish()
       .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
 
+    // Native span fields. Copied from the exported span as supplied; a value the producer did not
+    // set is stored as null, never derived on write. On read, `getSpan` / `getTrace` fall back to
+    // the `attributes` strings for `model` and `provider` when the column is null, so rows written
+    // before the columns agree with the trace and span queries. `outcome` / `stopReason` values
+    // follow the shared outcome contract and are not validated here.
+    externalParentSpanId: z
+      .string()
+      .nullish()
+      .describe('Immediate parent span owned by an external tracing system; null when Mastra owns the parent'),
+    resumedFromSpanId: z
+      .string()
+      .nullish()
+      .describe('Span id of the initial invocation a resumed execution continues; null on the initial execution'),
+    model: z.string().nullish().describe('Model identity for this span, where applicable'),
+    provider: z.string().nullish().describe('Provider paired with model'),
+    outcome: z.string().nullish().describe('How this execution ended; null while it is still running'),
+    stopReason: z.string().nullish().describe('Machine-readable cause of stopping, when known'),
+    stopReasonContext: z
+      .record(z.string(), z.unknown())
+      .nullish()
+      .describe('Structured details behind stopReason, such as the limit that was hit; null when unknown'),
+    timeToFirstTokenMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from the model call to the first token received; null when unknown'),
+    errorCount: z.number().int().nullish().describe('Errors in this span and all nested spans; null when unknown'),
+
     // Database timestamps
     ...dbTimestamps,
   })
@@ -199,6 +227,17 @@ export function computeTraceStatus(span: { error?: unknown; endedAt?: Date | str
   if (span.error != null) return TraceStatus.ERROR;
   if (span.endedAt == null) return TraceStatus.RUNNING;
   return TraceStatus.SUCCESS;
+}
+
+/**
+ * A string attribute of a span, or null when unset or not a string.
+ * Model-call spans keep `model` and `provider` in `attributes`; the native
+ * columns of the same name fall back to it for rows written before the
+ * columns existed, since those rows are never backfilled.
+ */
+export function getStringAttribute(attributes: unknown, key: string): string | null {
+  const value = (attributes as Record<string, unknown> | null | undefined)?.[key];
+  return typeof value === 'string' ? value : null;
 }
 
 /** Schema for a trace span (root span with computed status) */
@@ -471,8 +510,7 @@ export function extractBranchSpans<
 // Lightweight Span & Trace Schemas (for timeline rendering)
 // ============================================================================
 
-/** Maximum generated preview length, before the trailing `…`. Supplied previews have no cap. */
-export const PREVIEW_MAX_LENGTH = 100;
+export { PREVIEW_MAX_LENGTH } from '../../../observability/span-previews';
 
 /** @deprecated Use {@link PREVIEW_MAX_LENGTH}. */
 export const INPUT_PREVIEW_MAX_LENGTH = PREVIEW_MAX_LENGTH;
@@ -482,15 +520,6 @@ const outputPreviewField = z.string().describe('Short text preview of the span o
 const errorPreviewField = z.string().describe('Short text preview of the span error');
 
 type PreviewMessage = { role?: unknown; content?: unknown };
-
-function truncatePreview(text: string, maxLength = PREVIEW_MAX_LENGTH): string | null {
-  const trimmed = text.trim();
-  if (!trimmed) return null;
-  if (trimmed.length <= maxLength) return trimmed;
-  // Never end on half of a surrogate pair.
-  const end = maxLength > 0 && /[\uD800-\uDBFF]/.test(trimmed[maxLength - 1]!) ? maxLength - 1 : maxLength;
-  return `${trimmed.slice(0, end)}…`;
-}
 
 function isMessage(value: unknown): value is PreviewMessage {
   return value != null && typeof value === 'object' && typeof (value as PreviewMessage).role === 'string';
@@ -620,7 +649,7 @@ function previewOfJson(json: string | null | undefined, maxLength: number): stri
 
 /**
  * The preview a store writes for one payload: an upstream preview when the span record carries
- * a nonblank one, otherwise one built from the payload. Both are capped the same way, at
+ * a string (including an intentionally empty one), otherwise one built from the payload. Both are capped the same way, at
  * {@link PREVIEW_MAX_LENGTH} characters plus `…`, so an exporter can't store an unbounded preview.
  * `''` means there is nothing to preview.
  */
@@ -629,7 +658,8 @@ export function buildStoredPreview(
   value: unknown,
   serialized?: string | null,
 ): string {
-  return (upstream ? truncatePreview(upstream) : null) ?? buildPreview(value, serialized) ?? '';
+  if (upstream != null) return truncatePreview(upstream) ?? '';
+  return buildPreview(value, serialized) ?? '';
 }
 
 /**
@@ -1018,6 +1048,11 @@ export const batchUpdateSpansArgsSchema = z
 
 /** Arguments for batch updating multiple spans */
 export type BatchUpdateSpansArgs = z.infer<typeof batchUpdateSpansArgsSchema>;
+
+/** Result of a conditional batch span update: the spans whose rows were changed. */
+export interface BatchUpdateUnendedSpansResponse {
+  updated: Array<{ traceId: string; spanId: string }>;
+}
 
 /** Maximum number of trace IDs accepted by a single batch delete request. */
 export const BATCH_DELETE_TRACES_MAX_IDS = 1000;

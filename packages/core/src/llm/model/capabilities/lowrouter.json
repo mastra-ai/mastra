@@ -25,6 +25,7 @@
     "auto/openai/gpt-6-luna",
     "auto/openai/gpt-6-sol",
     "auto/openai/gpt-6.1-sol",
+    "auto/openai/gpt-6.1-terra",
     "auto/openai/o3"
   ],
   "temperature": [
@@ -73,6 +74,7 @@
     "auto/openai/gpt-6-luna",
     "auto/openai/gpt-6-sol",
     "auto/openai/gpt-6.1-sol",
+    "auto/openai/gpt-6.1-terra",
     "auto/openai/gpt-oss-120b",
     "auto/openai/gpt-oss-20b",
     "auto/openai/gpt-oss-safeguard-120b",
@@ -98,16 +100,16 @@
         "values": ["none", "high"]
       }
     ],
-    "auto/openai/gpt-5.6-luna": [
+    "auto/openai/gpt-5.6-terra": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "auto/openai/o3": [
+    "auto/openai/gpt-5.5": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "auto/openai/gpt-5-nano": [
@@ -116,31 +118,13 @@
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "auto/openai/gpt-6-sol": [
+    "auto/openai/gpt-5-mini": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "auto/openai/gpt-6-luna": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "auto/openai/gpt-5.4-mini": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-oss-20b": [
+    "auto/openai/o3": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
@@ -150,36 +134,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-5.5": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-6.1-sol": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
-      }
-    ],
-    "auto/openai/gpt-5.4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
     "auto/openai/gpt-5": [
@@ -194,10 +148,64 @@
         "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ],
-    "auto/openai/gpt-5-mini": [
+    "auto/openai/gpt-6.1-terra": [
       {
         "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-5.4": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.4-mini": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-6.1-sol": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh"]
+      }
+    ],
+    "auto/openai/gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "auto/openai/gpt-5.6-luna": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh"]
       }
     ]
   }

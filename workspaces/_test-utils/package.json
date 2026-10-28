@@ -25,7 +25,7 @@
     "@mastra/core": "workspace:*",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "pyright": "^1.1.408",
+    "pyright": "^1.1.414",
     "typescript": "catalog:",
     "typescript-language-server": "^5.3.0",
     "vitest": "catalog:",

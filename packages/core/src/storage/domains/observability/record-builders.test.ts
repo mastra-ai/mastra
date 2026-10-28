@@ -47,6 +47,38 @@ describe('record-builders', () => {
       expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
     });
 
+    it('stores the version of the span own entity, not an inherited metadata version', () => {
+      const inherited: AnyExportedSpan = { ...span(), metadata: { entityVersionId: 'agent-v1' } };
+      expect(buildCreateSpanRecord(inherited).entityVersionId).toBeNull();
+      expect(buildCreateSpanRecord({ ...inherited, entityVersionId: 'tool-v2' }).entityVersionId).toBe('tool-v2');
+    });
+
+    it('stores native span fields as supplied, null when the span has none, and off updates when unset', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'span-0',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const absent = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+
+      expect(buildCreateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildUpdateSpanRecord({ ...span(), ...fields })).toMatchObject(fields);
+      expect(buildCreateSpanRecord(span())).toMatchObject(absent);
+
+      // An ended span that only learned its outcome must not clear the model written at start.
+      const update = buildUpdateSpanRecord({ ...span(), outcome: 'error' });
+      expect(update.outcome).toBe('error');
+      for (const key of Object.keys(fields).filter(key => key !== 'outcome')) {
+        expect(update).not.toHaveProperty(key);
+      }
+    });
+
     it('stores the parent and root entity carried on the exported span, null when absent', () => {
       const nested: AnyExportedSpan = {
         ...span(),

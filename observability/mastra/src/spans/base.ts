@@ -58,11 +58,11 @@ const LINEAGE_KEYS = [
   'rootEntityVersionId',
 ] as const satisfies readonly (keyof SpanEntityLineage)[];
 
-/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function ownEntityVersionId(span: AnySpan): string | undefined {
   return span instanceof BaseSpan ? span.ownEntityVersionId : undefined;
 }
 
+/** Copy only the lineage fields that have values, so spans don't carry undefined keys */
 function definedLineage(source: SpanEntityLineage): SpanEntityLineage {
   const lineage: SpanEntityLineage = {};
   for (const key of LINEAGE_KEYS) {
@@ -169,6 +169,20 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   return parent.id;
 }
 
+/**
+ * Vercel AI Gateway reports which provider served a step, and any provider
+ * attempts that failed first, only in `providerMetadata.gateway.routing`.
+ * Read it defensively so a throwing getter never skips the strip below.
+ */
+function readGatewayRouting(providerMetadata: unknown): unknown {
+  try {
+    const gateway = isPlainRecord(providerMetadata) ? providerMetadata.gateway : undefined;
+    return isPlainRecord(gateway) ? gateway.routing : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
@@ -209,6 +223,11 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   protected parentSpanId?: string;
   /** Parent from an external tracing system (ambient OTel / dd-trace span) that Mastra did not create; carried for external correlation, not part of Mastra's own parent/child linkage */
   public externalParentSpanId?: string;
+  /** Native span fields (see `SpanData`); carried as supplied and exported only when set */
+  public resumedFromSpanId?: string;
+  public outcome?: string;
+  public stopReason?: string;
+  public stopReasonContext?: Record<string, unknown>;
   /** Deep clean options for serialization */
   protected deepCleanOptions: DeepCleanOptions;
   /**
@@ -302,6 +321,12 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Tags are only set for root spans (spans without a parent)
     this.tags = !options.parent && options.tags?.length ? options.tags : undefined;
     this.links = validLinks(options.links);
+    this.resumedFromSpanId = options.resumedFromSpanId;
+    this.outcome = options.outcome;
+    this.stopReason = options.stopReason;
+    // Cleaned like metadata: the context is serialized by every exporter, so an
+    // Error or BigInt inside it must not turn into {} or throw mid-batch.
+    this.stopReasonContext = deepClean(options.stopReasonContext, this.deepCleanOptions);
     // Entity identification - inherit from closest non-internal parent if not explicitly provided
     const entityParent = this.getParentSpan(false);
     this.entityType = options.entityType ?? entityParent?.entityType;
@@ -368,9 +393,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     try {
-      const prepared = { ...value };
+      const prepared: Record<string, unknown> = { ...value };
+      const gatewayRouting = readGatewayRouting(prepared.providerMetadata);
       delete prepared.providerMetadata;
       delete prepared.experimental_providerMetadata;
+      if (gatewayRouting !== undefined) {
+        prepared.providerMetadata = { gateway: { routing: gatewayRouting } };
+      }
       return prepared as T;
     } catch {
       return value;
@@ -632,7 +661,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       entityType: this.entityType,
       entityId: this.entityId,
       entityName: this.entityName,
-      entityVersionId: getMetadataString('entityVersionId'),
+      entityVersionId: this.ownEntityVersionId,
       ...parentLineage,
       ...rootLineage,
       userId: getMetadataString('userId'),
@@ -680,9 +709,14 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       isEvent: this.isEvent,
       isRootSpan: this.isRootSpan,
       ...(this.isInternal ? { isInternal: true } : {}),
+      ...(correlation.entityVersionId ? { entityVersionId: correlation.entityVersionId } : {}),
       ...definedLineage(correlation),
       parentSpanId: this.getParentSpanId(includeInternalSpans),
       externalParentSpanId: this.getExportedExternalParentSpanId(includeInternalSpans),
+      ...(this.resumedFromSpanId !== undefined ? { resumedFromSpanId: this.resumedFromSpanId } : {}),
+      ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
+      ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
+      ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace

@@ -25,7 +25,7 @@ import { sessionDefaultsAnchor, settingsSectionPath } from '../../settings/setti
 import type { SlashCommand, SlashCommandOption } from '../services/commands';
 import { findCommand, parseSlashCommand } from '../services/commands';
 import { AGENT_CONTROLLER_ID } from '../services/constants';
-import { THINKING_DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
+import { DEFAULT_SOURCE_LABELS, THINKING_LEVEL_LABELS } from '../services/thinkingLevels';
 import type { ThinkingDefault } from '../services/thinkingLevels';
 import { useChatModels } from './useChatModels';
 import { useChatModelScope } from './useChatModelScope';
@@ -38,7 +38,7 @@ import { useChatTranscript } from './useChatTranscript';
 const TOOL_CATEGORIES: ToolCategory[] = ['read', 'edit', 'execute', 'mcp', 'other'];
 
 function describeThinkingDefault({ level, origin }: ThinkingDefault): string {
-  return `${level} (${THINKING_DEFAULT_SOURCE_LABELS[origin]})`;
+  return `${level} (${DEFAULT_SOURCE_LABELS[origin]})`;
 }
 
 export function useChatCommandRegistry(prefillComposer: (draft: string) => void) {
@@ -85,7 +85,7 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
     {
       value: 'default',
       label: 'Default',
-      ...(thinkingDefault ? { description: THINKING_DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
+      ...(thinkingDefault ? { description: DEFAULT_SOURCE_LABELS[thinkingDefault.origin] } : {}),
       active: settingsQuery.data !== undefined && currentThinkingLevel === undefined,
     },
     ...availableThinkingLevels.map(level => ({

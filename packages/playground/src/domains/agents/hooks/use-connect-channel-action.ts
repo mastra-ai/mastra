@@ -98,7 +98,7 @@ export const useConnectChannelAction = (platform: string, opts: { onClose?: () =
             case 'immediate':
               if (tab && !tab.closed) tab.close();
               onClose?.();
-              return;
+              break;
           }
         })
         .catch((err: Error & { body?: { error?: string } }) => {

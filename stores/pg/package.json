@@ -1,6 +1,6 @@
 {
   "name": "@mastra/pg",
-  "version": "1.33.0-alpha.1",
+  "version": "1.33.0-alpha.3",
   "description": "Postgres provider for Mastra - includes both vector and db storage capabilities",
   "type": "module",
   "main": "dist/index.js",
@@ -44,8 +44,8 @@
   "license": "Apache-2.0",
   "dependencies": {
     "async-mutex": "^0.5.0",
-    "pg": "^8.22.0",
-    "pg-connection-string": "^2.12.0",
+    "pg": "^8.23.1",
+    "pg-connection-string": "^2.14.1",
     "xxhash-wasm": "^1.1.0"
   },
   "devDependencies": {
@@ -54,8 +54,8 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.5",
-    "@types/pg": "^8.20.0",
+    "@types/node": "22.19.15",
+    "@types/pg": "^8.23.1",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "tsdown": "0.23.1",

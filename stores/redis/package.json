@@ -1,6 +1,6 @@
 {
   "name": "@mastra/redis",
-  "version": "1.4.12-alpha.0",
+  "version": "1.4.12-alpha.1",
   "description": "Redis storage provider for Mastra - provides storage capabilities for direct Redis connections",
   "type": "module",
   "main": "dist/index.js",
@@ -39,7 +39,7 @@
     "@internal/storage-test-utils": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.5",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",

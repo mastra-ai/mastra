@@ -62,7 +62,9 @@ export function useCompleteFactorySetup({ local }: { local: boolean }) {
       ]);
       for (const [index, { scope, choice }] of plan.checks.entries()) {
         const account = scope === 'org' ? 'the company account' : 'your account';
-        if (!catalogs[index].some(model => model.id === choice.modelId && model.provider === choice.providerId)) {
+        if (
+          !catalogs[index].models.some(model => model.id === choice.modelId && model.provider === choice.providerId)
+        ) {
           throw new Error(`${choice.modelId} is no longer available for ${account}. Choose another model.`);
         }
         const provider = providers.providers.find(item => item.provider === choice.providerId);

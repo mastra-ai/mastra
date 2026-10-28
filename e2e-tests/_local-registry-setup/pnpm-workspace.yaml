@@ -3,6 +3,8 @@ packages:
 
 # Security floors for Dependabot alerts on transitive deps.
 overrides:
+  # Vanta 2026-10-26: CVE-2026-111181 (body-parser <1.20.9), via verdaccio -> express 4
+  body-parser@<1.20.9: 1.20.9
   adm-zip@<=0.6.0: 0.6.1
   image-size@<=2.0.2: 2.0.4
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
@@ -11,7 +13,7 @@ overrides:
   qs@>=6.7.0 <6.16.0: 6.16.0
   uuid@<11.1.1: 11.1.1
   proxy-addr: 2.0.8
-  fast-uri: 3.1.8
+  fast-uri: 3.1.9
   compression@<=1.8.1: 1.8.2
   '@grpc/grpc-js@<1.14.5': 1.14.5
   cookies@<=0.9.1: 0.9.2
@@ -37,4 +39,4 @@ overrides:
   # Vanta 2026-10-09: GHSA-8r5x-fm3f-whwj, GHSA-p8wg-vrv2-v86f (critical), GHSA-xw65-4hp5-5hc7 / AIKIDO-2026-258160, -970464, -869467; @verdaccio/hooks pins handlebars 4.7.9
   'handlebars@<4.7.10': 4.7.10
 patchedDependencies:
-  'body-parser@1.20.6': patches/body-parser@1.20.6.patch
+  'body-parser@1.20.9': patches/body-parser@1.20.9.patch

@@ -17,7 +17,14 @@ import { useState } from 'react';
 import type { OAuthStartResponse, ProviderInfo } from '../../../../../../api/types';
 import { useStartProviderOAuth } from '../../../../../../hooks/use-providers';
 import { ProviderBrandIcon } from '../../../../workspaces/components/ProviderBrandIcon';
-import { CREDENTIAL_LABEL, SHARED_SOURCE, credentialAt } from '../../provider-credential';
+import {
+  CREDENTIAL_LABEL,
+  SHARED_SOURCE,
+  SIGN_IN_EXPIRED_LABEL,
+  credentialAt,
+  signInExpiredAt,
+  signInRequest,
+} from '../../provider-credential';
 import type { CredentialScope } from '../../provider-credential';
 
 const AUDIENCE: Record<CredentialScope, string> = {
@@ -32,16 +39,12 @@ function matchesSearch(provider: ProviderInfo, query: string): boolean {
   );
 }
 
-function soleOAuthMode(provider: ProviderInfo): string | undefined {
-  const modes = provider.oauth?.modes ?? [];
-  return modes.length === 1 ? modes[0] : undefined;
-}
-
 function takesApiKey(provider: ProviderInfo): boolean {
   return provider.source !== 'deployment';
 }
 
 function connectionLabel(provider: ProviderInfo, scope: CredentialScope): string | undefined {
+  if (signInExpiredAt(provider, scope)) return SIGN_IN_EXPIRED_LABEL;
   const credential = credentialAt(provider, scope);
   if (credential) return CREDENTIAL_LABEL[credential];
   return SHARED_SOURCE[provider.source]?.label;
@@ -80,10 +83,9 @@ export function AddProviderDrawer({
   const startingProvider = startOAuthMutation.isPending ? startOAuthMutation.variables.provider : undefined;
 
   const signIn = (provider: ProviderInfo) => {
-    startOAuthMutation.mutate(
-      { provider: provider.provider, mode: soleOAuthMode(provider), scope: requestScope },
-      { onSuccess: session => onOAuthStarted(provider.provider, session) },
-    );
+    startOAuthMutation.mutate(signInRequest(provider, requestScope), {
+      onSuccess: session => onOAuthStarted(provider.provider, session),
+    });
   };
 
   const closeUnlessStarting = (nextOpen: boolean) => {
