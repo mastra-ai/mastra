@@ -12,8 +12,8 @@
  *
  *  3. Neither extension    → pre-create a rolling window of daily partitions
  *                            (yesterday + today + N future days) at init, and
- *                            create a missing day partition on demand when a
- *                            write hits it.
+ *                            create a missing day partition inside that same
+ *                            window on demand when a write hits it.
  *
  * This module deliberately does not implement retention deletes / drops.
  * The goal here is to leave the schema in a shape that a follow-up
@@ -111,21 +111,36 @@ export async function ensureNativePartitions(
   schema: string,
   options: PartitioningOptions = {},
 ): Promise<void> {
-  const futureDays = options.futureDays ?? DEFAULT_FUTURE_DAYS;
-  const includeYesterday = options.includeYesterday ?? true;
-  const start = includeYesterday ? -1 : 0;
   // Freeze the base UTC day before the loop. If we recomputed `Date.now()`
   // inside the loop, a run that crossed midnight UTC could skip one expected
   // day for later tables and create an extra far-future partition for them.
-  const baseNowMs = Date.now();
-  const windowDays: Date[] = [];
-  for (let i = start; i <= futureDays; i++) {
-    windowDays.push(new Date(baseNowMs + i * 86_400_000));
-  }
+  const windowDays = partitionWindow(options);
 
   for (const table of ALL_SIGNAL_TABLES) {
     await ensureDayPartitions(client, schema, table, windowDays);
   }
+}
+
+/** The UTC days init() pre-creates: yesterday (optional) through today + futureDays. */
+export function partitionWindow(options: PartitioningOptions = {}, nowMs = Date.now()): Date[] {
+  const futureDays = options.futureDays ?? DEFAULT_FUTURE_DAYS;
+  const start = (options.includeYesterday ?? true) ? -1 : 0;
+  const days: Date[] = [];
+  for (let i = start; i <= futureDays; i++) {
+    days.push(new Date(nowMs + i * 86_400_000));
+  }
+  return days;
+}
+
+/**
+ * Keeps only the days inside the current partition window. The write path
+ * creates partitions on demand within that window only, so a row with a
+ * client-supplied timestamp far in the past or future cannot make the
+ * database grow a table per day it names.
+ */
+export function withinPartitionWindow(days: Date[], options: PartitioningOptions = {}): Date[] {
+  const allowed = new Set(partitionWindow(options).map(d => dayBounds(d).suffix));
+  return days.filter(d => allowed.has(dayBounds(d).suffix));
 }
 
 export async function ensureDayPartitions(

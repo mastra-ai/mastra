@@ -451,16 +451,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async createSpan(args: CreateSpanArgs): Promise<void> {
-    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args), {
+    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args, this.#partitioning), {
       traceId: args.span.traceId,
       spanId: args.span.spanId,
     });
   }
 
   override async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SPANS', () => tracingOps.batchCreateSpans(this.#client, this.#schema, args), {
-      count: args.records.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SPANS',
+      () => tracingOps.batchCreateSpans(this.#client, this.#schema, args, this.#partitioning),
+      {
+        count: args.records.length,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------
@@ -568,35 +572,53 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_LOGS', () => logsOps.batchCreateLogs(this.#client, this.#schema, args), {
-      count: args.logs.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_LOGS',
+      () => logsOps.batchCreateLogs(this.#client, this.#schema, args, this.#partitioning),
+      {
+        count: args.logs.length,
+      },
+    );
   }
 
   override async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_METRICS', () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args), {
-      count: args.metrics.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_METRICS',
+      () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args, this.#partitioning),
+      {
+        count: args.metrics.length,
+      },
+    );
   }
 
   override async createScore(args: CreateScoreArgs): Promise<void> {
-    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args));
+    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args, this.#partitioning));
   }
 
   override async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_SCORES', () => scoresOps.batchCreateScores(this.#client, this.#schema, args), {
-      count: args.scores.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_SCORES',
+      () => scoresOps.batchCreateScores(this.#client, this.#schema, args, this.#partitioning),
+      {
+        count: args.scores.length,
+      },
+    );
   }
 
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
-    await this.#run('CREATE_FEEDBACK', () => feedbackOps.createFeedback(this.#client, this.#schema, args));
+    await this.#run('CREATE_FEEDBACK', () =>
+      feedbackOps.createFeedback(this.#client, this.#schema, args, this.#partitioning),
+    );
   }
 
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
-    await this.#run('BATCH_CREATE_FEEDBACK', () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args), {
-      count: args.feedbacks.length,
-    });
+    await this.#run(
+      'BATCH_CREATE_FEEDBACK',
+      () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args, this.#partitioning),
+      {
+        count: args.feedbacks.length,
+      },
+    );
   }
 
   // -------------------------------------------------------------------------

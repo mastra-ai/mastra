@@ -48,6 +48,7 @@ import {
   shiftRange,
   validatePercentiles,
 } from './olap';
+import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { METRIC_TYPED_COLUMNS } from './signal-schema';
 import { insertRows, METRIC_SELECT_COLUMNS } from './sql';
@@ -89,10 +90,11 @@ export async function batchCreateMetrics(
   client: DbClient,
   schema: string,
   args: BatchCreateMetricsArgs,
+  partitioning: PartitioningOptions,
 ): Promise<void> {
   if (args.metrics.length === 0) return;
   const rows = args.metrics.map(metricRecordToRow);
-  await insertRows(client, schema, TABLE_METRIC_EVENTS, rows);
+  await insertRows(client, schema, TABLE_METRIC_EVENTS, rows, partitioning);
 }
 
 // ---------------------------------------------------------------------------

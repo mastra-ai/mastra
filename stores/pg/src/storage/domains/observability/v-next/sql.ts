@@ -11,7 +11,8 @@ import type { DbClient } from '../../../client';
 import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, SIGNAL_TIME_COLUMN, TABLE_SPAN_EVENTS } from './ddl';
 import type { SignalTable } from './ddl';
-import { ensureDayPartitions, isMissingPartitionError, isPartmanManaged } from './partitioning';
+import { ensureDayPartitions, isMissingPartitionError, isPartmanManaged, withinPartitionWindow } from './partitioning';
+import type { PartitioningOptions } from './partitioning';
 import {
   buildNamedSelectColumns,
   buildSelectColumns,
@@ -105,12 +106,13 @@ ${onConflict}`;
   return { text, values };
 }
 
-/** Insert into a signal table. A row whose day has no partition yet gets one created, then the insert runs once more. */
+/** Insert into a signal table. A row whose day is inside the partition window but has no partition yet gets one created, then the insert runs once more. */
 export async function insertRows(
   client: DbClient,
   schema: string,
   table: SignalTable,
   records: Record<string, unknown>[],
+  partitioning: PartitioningOptions,
   onConflict?: string,
 ): Promise<void> {
   const insert = buildInsert(schema, table, records, onConflict);
@@ -118,8 +120,10 @@ export async function insertRows(
   try {
     await client.query(insert.text, insert.values);
   } catch (error) {
-    if (!isMissingPartitionError(error) || (await isPartmanManaged(client, schema, table))) throw error;
-    await ensureDayPartitions(client, schema, table, recordDays(records, SIGNAL_TIME_COLUMN[table]));
+    if (!isMissingPartitionError(error)) throw error;
+    const days = withinPartitionWindow(recordDays(records, SIGNAL_TIME_COLUMN[table]), partitioning);
+    if (days.length === 0 || (await isPartmanManaged(client, schema, table))) throw error;
+    await ensureDayPartitions(client, schema, table, days);
     await client.query(insert.text, insert.values);
   }
 }

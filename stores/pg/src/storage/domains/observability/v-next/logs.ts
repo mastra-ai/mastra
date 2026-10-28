@@ -11,6 +11,7 @@ import { applyCommonFilters, applySingleOrArrayFilter } from './filters';
 import type { FilterAccumulator } from './filters';
 import { logRecordToRow, rowToLogRecord } from './helpers';
 import { listSignalDelta, listSignalPage } from './listing';
+import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { insertRows, LOG_SELECT_COLUMNS } from './sql';
 
@@ -19,10 +20,15 @@ function applyLogFilters(acc: FilterAccumulator, filters: ListLogsArgs['filters'
   applySingleOrArrayFilter(acc, 'level', filters?.level);
 }
 
-export async function batchCreateLogs(client: DbClient, schema: string, args: BatchCreateLogsArgs): Promise<void> {
+export async function batchCreateLogs(
+  client: DbClient,
+  schema: string,
+  args: BatchCreateLogsArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
   if (args.logs.length === 0) return;
   const rows = args.logs.map(logRecordToRow);
-  await insertRows(client, schema, TABLE_LOG_EVENTS, rows);
+  await insertRows(client, schema, TABLE_LOG_EVENTS, rows, partitioning);
 }
 
 export async function listLogs(client: DbClient, schema: string, args: ListLogsArgs): Promise<ListLogsResponse> {

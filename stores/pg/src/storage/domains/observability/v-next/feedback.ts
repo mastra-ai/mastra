@@ -46,6 +46,7 @@ import {
   shiftRange,
   validatePercentiles,
 } from './olap';
+import type { PartitioningOptions } from './partitioning';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
@@ -105,20 +106,26 @@ function pushFeedbackIdentity(
 // Writes
 // ---------------------------------------------------------------------------
 
-export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
+export async function createFeedback(
+  client: DbClient,
+  schema: string,
+  args: CreateFeedbackArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
+  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, [row], partitioning, FEEDBACK_UPSERT_CLAUSE);
 }
 
 export async function batchCreateFeedback(
   client: DbClient,
   schema: string,
   args: BatchCreateFeedbackArgs,
+  partitioning: PartitioningOptions,
 ): Promise<void> {
   if (args.feedbacks.length === 0) return;
   const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
   const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
-  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
+  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, rows, partitioning, FEEDBACK_UPSERT_CLAUSE);
 }
 
 export async function updateFeedbackReviewStatus(

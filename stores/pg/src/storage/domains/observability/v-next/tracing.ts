@@ -30,6 +30,7 @@ import {
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
+import type { PartitioningOptions } from './partitioning';
 import {
   insertRows,
   spanConflictClause,
@@ -42,9 +43,21 @@ import {
 // Writes
 // ---------------------------------------------------------------------------
 
-async function writeSpanRows(client: DbClient, schema: string, rows: Record<string, unknown>[]): Promise<void> {
+async function writeSpanRows(
+  client: DbClient,
+  schema: string,
+  rows: Record<string, unknown>[],
+  partitioning: PartitioningOptions,
+): Promise<void> {
   const deduped = dedupeSpanRows(rows);
-  await insertRows(client, schema, TABLE_SPAN_EVENTS, deduped, spanConflictClause(Object.keys(deduped[0] ?? {})));
+  await insertRows(
+    client,
+    schema,
+    TABLE_SPAN_EVENTS,
+    deduped,
+    partitioning,
+    spanConflictClause(Object.keys(deduped[0] ?? {})),
+  );
 }
 
 /**
@@ -66,13 +79,23 @@ function dedupeSpanRows(rows: Record<string, unknown>[]): Record<string, unknown
   return [...byKey.values()];
 }
 
-export async function createSpan(client: DbClient, schema: string, args: CreateSpanArgs): Promise<void> {
-  await writeSpanRows(client, schema, [spanRecordToRow(args.span)]);
+export async function createSpan(
+  client: DbClient,
+  schema: string,
+  args: CreateSpanArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
+  await writeSpanRows(client, schema, [spanRecordToRow(args.span)], partitioning);
 }
 
-export async function batchCreateSpans(client: DbClient, schema: string, args: BatchCreateSpansArgs): Promise<void> {
+export async function batchCreateSpans(
+  client: DbClient,
+  schema: string,
+  args: BatchCreateSpansArgs,
+  partitioning: PartitioningOptions,
+): Promise<void> {
   if (args.records.length === 0) return;
-  await writeSpanRows(client, schema, args.records.map(spanRecordToRow));
+  await writeSpanRows(client, schema, args.records.map(spanRecordToRow), partitioning);
 }
 
 // ---------------------------------------------------------------------------
