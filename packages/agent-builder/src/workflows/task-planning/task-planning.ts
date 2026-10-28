@@ -242,15 +242,14 @@ ${tasks.map((task, i) => `${i + 1}. [${task.priority.toUpperCase()}] ${task.cont
         tasks,
         message: 'Task list approved, ready for execution',
       };
-    } else {
-      console.info('Task list rejected by user');
-      return {
-        approved: false,
-        tasks,
-        message: 'Task list rejected',
-        userFeedback: resumeData.modifications,
-      };
     }
+    console.info('Task list rejected by user');
+    return {
+      approved: false,
+      tasks,
+      message: 'Task list rejected',
+      userFeedback: resumeData.modifications,
+    };
   },
 });
 
