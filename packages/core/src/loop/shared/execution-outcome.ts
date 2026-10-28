@@ -37,18 +37,18 @@ export function agentLoopTermination(input: {
     case 'max_steps':
       return { outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps } };
     case 'stop_condition':
-      return { outcome: 'abort', stopReason: 'stop_condition' };
+      return { outcome: 'success', stopReason: 'stop_condition' };
     case 'iteration_hook':
     case 'feedback_complete':
       return {
-        outcome: 'abort',
+        outcome: 'success',
         stopReason: 'iteration_hook',
         stopReasonContext: {
           feedbackCompleted: stopCause === 'feedback_complete',
         },
       };
     case 'delegation':
-      return { outcome: 'abort', stopReason: 'delegation_bail' };
+      return { outcome: 'success', stopReason: 'delegation_bail' };
     case 'model_finished':
       // Unknown/unrecognized provider endings do not prove normal completion.
       if (finishReason === 'stop' || finishReason === 'tool-calls') {
