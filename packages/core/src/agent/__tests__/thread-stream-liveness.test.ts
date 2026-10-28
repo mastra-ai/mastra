@@ -14,6 +14,49 @@ describe('thread stream remote-run liveness', () => {
     vi.useRealTimers();
   });
 
+  it.each(['', '\u0000retake\u000042', '\u0000retake\u0000execution:worker'])(
+    'keeps a remote stream alive while its qualified lease owner remains valid (%j)',
+    async suffix => {
+      vi.useFakeTimers();
+      const harness = createHarness('liveness-qualified');
+      const { runtime, pubsub, emit, streamPart } = setupRuntime(harness);
+      const key = [harness.resourceId, harness.threadId].join(AGENT_THREAD_KEY_SEPARATOR);
+      pubsub.owners.set(key, `${harness.runId}${suffix}`);
+      const subscription = await runtime.subscribeToThread(
+        harness.agent,
+        { threadId: harness.threadId, resourceId: harness.resourceId },
+        pubsub,
+      );
+      const collected: any[] = [];
+      const consumed = (async () => {
+        for await (const part of subscription.stream) collected.push(part);
+      })();
+      await emit({ type: 'run-registered', runId: harness.runId, streamId: harness.streamId, streamSeq: 1 });
+      await streamPart({ type: 'start', payload: {} });
+      let admitted = false;
+      const waiting = runtime
+        .waitForCrossAgentThreadRun(
+          harness.agent,
+          { memory: { thread: harness.threadId, resource: harness.resourceId } },
+          pubsub,
+        )
+        .then(() => {
+          admitted = true;
+        });
+      await vi.advanceTimersByTimeAsync(LEASE_TTL_MS * 2);
+      await streamPart({ type: 'text-delta', payload: { text: 'still running' } });
+      await flush();
+      expect(collected.map(part => part.type)).toEqual(['start', 'text-delta']);
+      expect(subscription.activeRunId()).toBe(harness.runId);
+      expect(admitted).toBe(false);
+      await emit({ type: 'run-completed', runId: harness.runId, streamId: harness.streamId });
+      await waiting;
+      expect(admitted).toBe(true);
+      subscription.unsubscribe();
+      await consumed;
+    },
+  );
+
   it('terminates a live remote stream when its producer loses the thread lease', async () => {
     vi.useFakeTimers();
     const harness = createHarness('liveness-lost');

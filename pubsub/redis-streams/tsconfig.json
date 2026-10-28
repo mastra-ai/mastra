@@ -2,11 +2,8 @@
   "extends": "../../tsconfig.node.json",
   "compilerOptions": {
     "moduleResolution": "bundler",
-    "lib": ["ES2023", "DOM", "DOM.Iterable"],
-    "paths": {
-      "@mastra/core/*": ["../../packages/core/src/*"]
-    }
+    "lib": ["ES2023", "DOM", "DOM.Iterable"]
   },
-  "include": ["src/**/*", "test-fixtures/**/*", "tsdown.config.ts"],
-  "exclude": ["node_modules", "**/*.test.ts", "test-fixtures/cli-project/**"]
+  "include": ["src/**/*", "tsdown.config.ts"],
+  "exclude": ["node_modules", "**/*.test.ts"]
 }

@@ -5445,8 +5445,8 @@ export class AgentThreadStreamRuntime {
             const owner = await this.#getLeaseProvider(this.#getPubSub(pubsub))
               .getLeaseOwner(key)
               .catch(() => undefined);
-            if (owner && this.#isSweptLeaseOwner(state, owner)) {
-              await this.#waitForRemoteRunToFinish(pubsub, key, owner);
+            if (owner && !isRetakeLeaseOwner(owner) && this.#isSweptLeaseOwner(state, threadLeaseRunId(owner))) {
+              await this.#waitForRemoteRunToFinish(pubsub, key, threadLeaseRunId(owner));
               continue;
             }
           }
@@ -5612,7 +5612,7 @@ export class AgentThreadStreamRuntime {
       if (isFallback) return;
       const owner = await provider.getLeaseOwner(key).catch(() => undefined);
       if (settled) return;
-      if (owner !== runId) {
+      if (!owner || threadLeaseRunId(owner) !== runId || isRetakeLeaseOwner(owner)) {
         clearRemoteActive();
         finish();
         return;
@@ -5951,7 +5951,7 @@ export class AgentThreadStreamRuntime {
         ) {
           return;
         }
-        if (owner === runId) {
+        if (owner && threadLeaseRunId(owner) === runId && !isRetakeLeaseOwner(owner)) {
           scheduleCheck();
           return;
         }
