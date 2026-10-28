@@ -78,13 +78,12 @@ const createNumericOperator = (symbol: string) => {
         sql: `(CASE WHEN jsonb_typeof(${jsonExtract}) = 'number' THEN (${textExtract})::numeric ${symbol} $${paramIndex}::numeric ELSE NULL END)`,
         needsValue: true,
       };
-    } else {
-      // Use text comparison for strings (including ISO 8601 dates which sort correctly)
-      return {
-        sql: `${textExtract} ${symbol} $${paramIndex}::text`,
-        needsValue: true,
-      };
     }
+    // Use text comparison for strings (including ISO 8601 dates which sort correctly)
+    return {
+      sql: `${textExtract} ${symbol} $${paramIndex}::text`,
+      needsValue: true,
+    };
   };
 };
 
@@ -218,17 +217,13 @@ const FILTER_OPERATORS: Record<OperatorType, OperatorFn> = {
   },
   // Element Operators
   $exists: (key, paramIndex, value) => {
-    const jsonPathKey = parseJsonPathKey(key);
-    // If value is false, check that the key does NOT exist
-    if (value === false) {
-      return {
-        sql: `NOT (metadata ? '${jsonPathKey}')`,
-        needsValue: false,
-      };
-    }
-    // Otherwise (true or truthy), check that the key exists
+    // `?` only checks top-level keys. Nested paths use `#>`, which yields SQL NULL only when the path is missing
+    // (a JSON null value still counts as existing, matching `?` semantics).
+    const existsSql = key.includes('.')
+      ? `${getJsonExtractExpr(key)} IS NOT NULL`
+      : `metadata ? '${parseJsonPathKey(key)}'`;
     return {
-      sql: `metadata ? '${jsonPathKey}'`,
+      sql: value === false ? `NOT (${existsSql})` : existsSql,
       needsValue: false,
     };
   },
@@ -445,11 +440,9 @@ export function buildDeleteFilterQuery(filter: PGVectorFilter): FilterResult {
       const entries = Object.entries(f || {});
       if (entries.length === 0) return '';
 
-      const [firstKey, firstValue] = entries[0] || [];
-      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-        return buildCondition(firstKey as string, firstValue, parentPath);
-      }
-      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
+      // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.
+      const branchConditions = entries.map(([k, v]) => buildCondition(k, v, parentPath));
+      return branchConditions.length === 1 ? branchConditions[0]! : `(${branchConditions.join(' AND ')})`;
     });
 
     const joined = conditions.join(` ${joinOperator} `);
@@ -604,11 +597,9 @@ export function buildFilterQuery(filter: PGVectorFilter, minScore: number, topK:
       const entries = Object.entries(f || {});
       if (entries.length === 0) return '';
 
-      const [firstKey, firstValue] = entries[0] || [];
-      if (['$and', '$or', '$not', '$nor'].includes(firstKey as string)) {
-        return buildCondition(firstKey as string, firstValue, parentPath);
-      }
-      return entries.map(([k, v]) => buildCondition(k, v, parentPath)).join(` ${joinOperator} `);
+      // The keys of one branch are an implicit AND: `{ a: 1, b: 2 }` matches only when both hold.
+      const branchConditions = entries.map(([k, v]) => buildCondition(k, v, parentPath));
+      return branchConditions.length === 1 ? branchConditions[0]! : `(${branchConditions.join(' AND ')})`;
     });
 
     const joined = conditions.join(` ${joinOperator} `);

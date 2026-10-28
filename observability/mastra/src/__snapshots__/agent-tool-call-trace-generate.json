@@ -3,11 +3,15 @@
     "agent_run: \"agent run: 'test-agent'\"",
     "└── model_generation: \"llm: 'mock-model-id'\"",
     "    ├── model_step: \"step: 0\"",
+    "    │   ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "    │   ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "    │   ├── model_inference: \"inference: 0\"",
     "    │   │   ├── model_chunk: \"chunk: 'tool-call'\"",
     "    │   │   └── model_chunk: \"chunk: 'tool-result'\"",
     "    │   └── tool_call: \"tool: 'calculator'\"",
     "    └── model_step: \"step: 1\"",
+    "        ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "        ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "        └── model_inference: \"inference: 1\"",
     "            └── model_chunk: \"chunk: 'text'\""
   ],
@@ -26,7 +30,10 @@
         "attributes": {
           "conversationId": "test-thread-id",
           "instructions": "You are a test agent",
-          "availableTools": ["calculator", "apiCall", "workflowExecutor"]
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -115,6 +122,17 @@
                       "input": {
                         "type": ["string", "number", "integer", "boolean", "object", "null"]
                       },
+                      "suspendedToolCallId": {
+                        "anyOf": [
+                          {
+                            "type": "string",
+                            "description": "The toolCallId of the suspended tool to resume"
+                          },
+                          {
+                            "type": "null"
+                          }
+                        ]
+                      },
                       "suspendedToolRunId": {
                         "anyOf": [
                           {
@@ -136,10 +154,10 @@
                   }
                 }
               ],
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-1>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 30,
                 "outputTokens": 35,
@@ -179,7 +197,18 @@
               "reasoning": [],
               "sources": [],
               "text": "Mock V2 generate response",
-              "warnings": []
+              "warnings": [],
+              "toolCalls": [
+                {
+                  "toolCallId": "call-calc-1",
+                  "toolName": "calculator",
+                  "args": {
+                    "operation": "add",
+                    "a": 5,
+                    "b": 3
+                  }
+                }
+              ]
             }
           },
           "children": [
@@ -197,7 +226,10 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 10,
@@ -253,6 +285,100 @@
                   "span": {
                     "id": "<span-4>",
                     "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a test agent"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Calculate 5 + 3"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-5>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-3>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a test agent"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Calculate 5 + 3"
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-6>",
+                    "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
@@ -266,8 +392,99 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "calculator",
+                          "description": "Performs calculations",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "operation": {
+                                "type": "string"
+                              },
+                              "a": {
+                                "type": "number"
+                              },
+                              "b": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["operation", "a", "b"],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "function",
+                          "name": "apiCall",
+                          "description": "Makes API calls",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "endpoint": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "default": "GET",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["endpoint"],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "function",
+                          "name": "workflowExecutor",
+                          "description": "Executes a workflow",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "workflowId": {
+                                "type": "string"
+                              },
+                              "input": {
+                                "type": ["string", "number", "integer", "boolean", "object", "null"]
+                              },
+                              "suspendedToolCallId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "description": "The toolCallId of the suspended tool to resume"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "suspendedToolRunId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "description": "The runId of the suspended tool"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "resumeData": {
+                                "description": "The resumeData object created from the resumeSchema of suspended tool",
+                                "type": ["string", "number", "integer", "boolean", "object", "null"]
+                              }
+                            },
+                            "required": ["workflowId", "input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
@@ -290,6 +507,16 @@
                       "threadId": "test-thread-id",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Calculate 5 + 3"
+                      }
+                    ],
                     "output": {
                       "text": "",
                       "toolCalls": [
@@ -308,14 +535,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-5>",
+                        "id": "<span-7>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-call'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -341,14 +568,14 @@
                     },
                     {
                       "span": {
-                        "id": "<span-6>",
+                        "id": "<span-8>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'tool-result'",
                         "type": "model_chunk",
-                        "completed": false,
+                        "completed": true,
                         "isEvent": true,
                         "isRootSpan": false,
-                        "parentId": "<span-4>",
+                        "parentId": "<span-6>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -369,7 +596,7 @@
                 },
                 {
                   "span": {
-                    "id": "<span-7>",
+                    "id": "<span-9>",
                     "traceId": "<trace-1>",
                     "name": "tool: 'calculator'",
                     "type": "tool_call",
@@ -405,7 +632,7 @@
             },
             {
               "span": {
-                "id": "<span-8>",
+                "id": "<span-10>",
                 "traceId": "<trace-1>",
                 "name": "step: 1",
                 "type": "model_step",
@@ -417,7 +644,10 @@
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 1,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-1>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -469,14 +699,180 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-9>",
+                    "id": "<span-11>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-10>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 0
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a test agent"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Calculate 5 + 3"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "input": {
+                                "operation": "add",
+                                "a": 5,
+                                "b": 3
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "result": 8
+                                }
+                              },
+                              "input": {
+                                "operation": "add",
+                                "a": 5,
+                                "b": 3
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-12>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-10>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 2
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "resourceId": "test-resource-id",
+                      "threadId": "test-thread-id",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a test agent"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "Calculate 5 + 3"
+                            }
+                          ]
+                        },
+                        {
+                          "role": "assistant",
+                          "content": [
+                            {
+                              "type": "tool-call",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "input": {
+                                "operation": "add",
+                                "a": 5,
+                                "b": 3
+                              }
+                            }
+                          ]
+                        },
+                        {
+                          "role": "tool",
+                          "content": [
+                            {
+                              "type": "tool-result",
+                              "toolCallId": "call-calc-1",
+                              "toolName": "calculator",
+                              "output": {
+                                "type": "json",
+                                "value": {
+                                  "result": 8
+                                }
+                              },
+                              "input": {
+                                "operation": "add",
+                                "a": 5,
+                                "b": 3
+                              }
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 1,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-13>",
                     "traceId": "<trace-1>",
                     "name": "inference: 1",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-8>",
+                    "parentId": "<span-10>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
@@ -484,8 +880,99 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": ["calculator", "apiCall", "workflowExecutor"],
+                      "tools": [
+                        {
+                          "type": "function",
+                          "name": "calculator",
+                          "description": "Performs calculations",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "operation": {
+                                "type": "string"
+                              },
+                              "a": {
+                                "type": "number"
+                              },
+                              "b": {
+                                "type": "number"
+                              }
+                            },
+                            "required": ["operation", "a", "b"],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "function",
+                          "name": "apiCall",
+                          "description": "Makes API calls",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "endpoint": {
+                                "type": "string"
+                              },
+                              "method": {
+                                "default": "GET",
+                                "type": "string"
+                              }
+                            },
+                            "required": ["endpoint"],
+                            "additionalProperties": false
+                          }
+                        },
+                        {
+                          "type": "function",
+                          "name": "workflowExecutor",
+                          "description": "Executes a workflow",
+                          "parameters": {
+                            "$schema": "http://json-schema.org/draft-07/schema#",
+                            "type": "object",
+                            "properties": {
+                              "workflowId": {
+                                "type": "string"
+                              },
+                              "input": {
+                                "type": ["string", "number", "integer", "boolean", "object", "null"]
+                              },
+                              "suspendedToolCallId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "description": "The toolCallId of the suspended tool to resume"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "suspendedToolRunId": {
+                                "anyOf": [
+                                  {
+                                    "type": "string",
+                                    "description": "The runId of the suspended tool"
+                                  },
+                                  {
+                                    "type": "null"
+                                  }
+                                ]
+                              },
+                              "resumeData": {
+                                "description": "The resumeData object created from the resumeSchema of suspended tool",
+                                "type": ["string", "number", "integer", "boolean", "object", "null"]
+                              }
+                            },
+                            "required": ["workflowId", "input"],
+                            "additionalProperties": false
+                          }
+                        }
+                      ],
                       "toolChoice": "auto",
                       "usage": {
                         "inputTokens": 15,
@@ -508,6 +995,24 @@
                       "threadId": "test-thread-id",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a test agent"
+                      },
+                      {
+                        "role": "user",
+                        "content": "Calculate 5 + 3"
+                      },
+                      {
+                        "role": "assistant",
+                        "content": "[tool: calculator]"
+                      },
+                      {
+                        "role": "tool",
+                        "content": "[tool-result: calculator]"
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 generate response",
                       "toolCalls": []
@@ -516,14 +1021,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-10>",
+                        "id": "<span-14>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-9>",
+                        "parentId": "<span-13>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {

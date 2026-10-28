@@ -1,17 +1,28 @@
 import { APICallError } from '@internal/ai-sdk-v5';
+import { MastraFGAPermissions } from '../../../auth/ee';
+import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
+import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
+import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
+import type { OutputProcessorOrWorkflow } from '../../../processors';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
+import type { MessageHistory } from '../../../processors/memory/message-history';
 import type { RequestContext } from '../../../request-context';
+import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
-import type { MessageList } from '../../message-list';
+import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
+import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
+import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
 import { getModelOutputForTripwire } from '../../trip-wire';
 import type { AgentMethodType } from '../../types';
 import { isSupportedLanguageModel } from '../../utils';
@@ -38,8 +49,10 @@ interface MapResultsStepOptions<OUTPUT = undefined> {
   agentSpan?: Span<SpanType.AGENT_RUN>;
   agentId: string;
   agentVersionId?: string;
+  resolvedScopes?: string[];
   methodType: AgentMethodType;
   saveQueueManager?: SaveQueueManager;
+  authorizeMemory: (permission: MastraFGAPermissionInput, threadId: string) => Promise<void>;
   runScope: PrepareStreamRunScope<OUTPUT>;
 }
 
@@ -55,8 +68,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
   agentSpan,
   agentId,
   agentVersionId,
+  resolvedScopes,
   methodType,
   saveQueueManager,
+  authorizeMemory,
   runScope,
 }: MapResultsStepOptions<OUTPUT>): Step<
   string,
@@ -67,7 +82,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
   },
   ModelLoopStreamArgs<any, OUTPUT>
 >['execute'] {
-  return async ({ inputData, bail, ..._observabilityContext }) => {
+  return async ({ inputData, bail }) => {
     const memoryData = inputData['prepare-memory-step'];
 
     // Class instances written to runScope by upstream steps. These never travel
@@ -77,10 +92,68 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
     let threadCreatedByStep = false;
 
+    // Output only ever merges into the latest message, so that is the only earlier-turn message
+    // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
+    let earlierTurnSnapshot: MastraDBMessage | undefined;
+
+    const ensureThreadExists = async () => {
+      if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
+        await memory.createThread({
+          threadId: memoryData.thread?.id,
+          title: memoryData.thread?.title,
+          metadata: memoryData.thread?.metadata,
+          resourceId: memoryData.thread?.resourceId,
+          memoryConfig,
+        });
+
+        threadCreatedByStep = true;
+      }
+    };
+
+    // Configured output processors as resolved for this run, captured before execution so the
+    // total-timeout save sees the same selection the run used.
+    let configuredOutputProcessors: OutputProcessorOrWorkflow[] = [];
+
+    const saveInputAfterTotalTimeout = async () => {
+      if (!memory || !memoryData.thread?.id) return;
+      // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
+      // configured one always runs; memory adds one only when history is enabled and observational
+      // memory does not own the writes (see Memory.getOutputProcessors).
+      const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
+      if (effectiveConfig.readOnly) return;
+      const hasConfiguredProcessor = (id: string) =>
+        configuredOutputProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+      const configuredHistory = configuredOutputProcessors.find(
+        p => !isProcessorWorkflow(p) && p.id === 'message-history',
+      ) as Partial<Pick<MessageHistory, 'persistMessages'>> | undefined;
+      const memoryAddsMessageHistory =
+        normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
+        !hasConfiguredProcessor('observational-memory') &&
+        !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+      if (!configuredHistory && !memoryAddsMessageHistory) return;
+      // A custom processor using the message-history id replaces the built-in one, and the finish path
+      // only saves through it. Without persistMessages there is nothing equivalent to call here.
+      if (configuredHistory && typeof configuredHistory.persistMessages !== 'function') return;
+      const input = filterMessagesForPersistence(messageList.get.input.db());
+      if (input.length === 0) return;
+
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+      const messages = messageList.transformMessagesForTranscript(input);
+      // A configured MessageHistory may use its own storage and creates its own thread there; save
+      // where the finish path would.
+      if (configuredHistory?.persistMessages) {
+        await configuredHistory.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
+        return;
+      }
+      await ensureThreadExists();
+      await memory.saveMessages({ messages, memoryConfig });
+    };
+
     const result = {
       ...options,
       agentId,
       agentVersionId,
+      resolvedScopes,
       tools: convertedTools,
       runId,
       temperature: options.modelSettings?.temperature,
@@ -94,17 +167,10 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // When OM is enabled saving per step corrupts things because OM handles its own saving
         const shouldSavePerStep = options.savePerStep && !memoryConfig?.observationalMemory;
         if (shouldSavePerStep && !memoryConfig?.readOnly) {
-          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
-            await memory.createThread({
-              threadId: memoryData.thread?.id,
-              title: memoryData.thread?.title,
-              metadata: memoryData.thread?.metadata,
-              resourceId: memoryData.thread?.resourceId,
-              memoryConfig,
-            });
-
-            threadCreatedByStep = true;
+          if (memoryData.thread?.id) {
+            await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
           }
+          await ensureThreadExists();
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
@@ -212,12 +278,24 @@ export function createMapResultsStep<OUTPUT = undefined>({
       logger: capabilities.logger,
     });
 
+    const latestMessage = messageList.get.all.db().at(-1);
+    earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
+
+    // The total-timeout save needs the configured processors. Resolve them once
+    // and pass them on as overrides so a function-form resolver runs only once.
+    let outputProcessorOverrides = options.outputProcessors;
+    if (memory && memoryData.thread?.id && options.modelSettings?.timeout?.totalMs) {
+      configuredOutputProcessors =
+        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
+      outputProcessorOverrides = configuredOutputProcessors;
+    }
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
         ? await capabilities.outputProcessors({
             requestContext: result.requestContext!,
-            overrides: options.outputProcessors,
+            overrides: outputProcessorOverrides,
           })
         : options.outputProcessors || capabilities.outputProcessors
       : options.outputProcessors || [];
@@ -250,24 +328,36 @@ export function createMapResultsStep<OUTPUT = undefined>({
         : options.inputProcessors || capabilities.inputProcessors
       : options.inputProcessors || [];
 
-    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
-      ? typeof capabilities.llmRequestInputProcessors === 'function'
-        ? await capabilities.llmRequestInputProcessors({
-            requestContext: result.requestContext!,
-            overrides: options.inputProcessors,
-          })
-        : options.inputProcessors || capabilities.llmRequestInputProcessors
-      : effectiveInputProcessors;
-
-    // Resolve error processors
-    const effectiveErrorProcessors = capabilities.errorProcessors
+    // Resolve error processors once per run. The request lane below reuses this list, so a
+    // dynamic resolver runs a single time and both lanes share the same instances.
+    // `hasConfiguredErrorProcessors` reports whether the caller configured error processors
+    // themselves (constructor or call-time), excluding the framework's default stability
+    // processors. It gates the implicit retry-cap warning in resolveMaxProcessorRetries — the
+    // defaults self-limit, so warning about them is noise on every bare agent.
+    const { errorProcessors: effectiveErrorProcessors, hasConfiguredErrorProcessors } = capabilities.errorProcessors
       ? typeof capabilities.errorProcessors === 'function'
         ? await capabilities.errorProcessors({
             requestContext: result.requestContext!,
             overrides: options.errorProcessors,
           })
-        : options.errorProcessors || capabilities.errorProcessors
-      : options.errorProcessors || [];
+        : {
+            errorProcessors: options.errorProcessors || capabilities.errorProcessors,
+            hasConfiguredErrorProcessors: (options.errorProcessors || capabilities.errorProcessors).length > 0,
+          }
+      : {
+          errorProcessors: options.errorProcessors || [],
+          hasConfiguredErrorProcessors: !!options.errorProcessors?.length,
+        };
+
+    const effectiveLLMRequestInputProcessors = capabilities.llmRequestInputProcessors
+      ? typeof capabilities.llmRequestInputProcessors === 'function'
+        ? await capabilities.llmRequestInputProcessors({
+            requestContext: result.requestContext!,
+            overrides: options.inputProcessors,
+            errorOverrides: effectiveErrorProcessors,
+          })
+        : options.inputProcessors || capabilities.llmRequestInputProcessors
+      : effectiveInputProcessors;
 
     const modelMethodType: ModelMethodType = getModelMethodFromAgentMethod(methodType);
 
@@ -275,10 +365,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
       methodType: modelMethodType,
       agentId,
       agentVersionId,
+      resolvedScopes,
       requestContext: result.requestContext!,
       actor: options.actor,
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
+      agentRunSpan: agentSpan,
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -292,7 +384,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       hideSignals: options.hideSignals,
       options: {
         ...(options.prepareStep && { prepareStep: options.prepareStep }),
-        onFinish: async (payload: any) => {
+        onFinish: async (payload: any, context?: MastraOnFinishCallbackContext) => {
           if (payload.finishReason === 'error') {
             const provider = payload.model?.provider;
             const modelId = payload.model?.modelId;
@@ -342,6 +434,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           }
 
           if (payload.finishReason === 'suspended') {
+            capabilities.onRunSuspended?.();
             agentSpan?.end({
               endTree: true,
               output: {
@@ -365,12 +458,28 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
             agentSpan?.end({ endTree: true });
           } else {
+            if (context?.outputResultTripwire) {
+              await undoSavedResponseMessages({
+                memory,
+                threadId: memoryData.thread?.id ?? threadIdFromArgs,
+                memoryConfig,
+                messageList,
+                saveQueueManager,
+                earlierTurnSnapshot,
+                logger: capabilities.logger,
+                runId,
+              });
+            }
+
             try {
               const outputText =
                 options.structuredOutput?.schema && payload.object != null
                   ? JSON.stringify(payload.object)
                   : payload.text || '';
 
+              if (!memoryConfig?.readOnly && result.threadId) {
+                await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
+              }
               await capabilities.executeOnFinish({
                 result: payload,
                 outputText,
@@ -386,6 +495,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 threadExists: memoryData.threadExists || threadCreatedByStep,
                 structuredOutput: !!options.structuredOutput?.schema,
                 overrideScorers: options.scorers,
+                // Only streaming runs can deliver a `data-thread-title` chunk; `generate()` returns JSON.
+                writer: modelMethodType === 'stream' ? context?.writer : undefined,
+                abortSignal: options.abortSignal,
                 onTitleGenerated: options.memory?.onTitleGenerated,
                 waitUntil: options.serverless?.waitUntil,
               });
@@ -422,7 +534,20 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async ({ error }: { error: Error | string }) => {
+          // A run that hits `timeout.totalMs` ends without a `finish` chunk, so the output
+          // processors that normally persist the turn never run. Save the accepted user
+          // message; completed steps are only saved by `savePerStep`, and the unfinished
+          // step is never saved after the deadline.
+          if (isMastraTimeoutError(error) && error.timeoutType === 'total') {
+            try {
+              await saveInputAfterTotalTimeout();
+            } catch (e) {
+              capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
+            }
+          }
+          await options.onError?.({ error });
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
       },
@@ -432,6 +557,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       llmRequestInputProcessors: effectiveLLMRequestInputProcessors,
       outputProcessors: effectiveOutputProcessors,
       errorProcessors: effectiveErrorProcessors,
+      hasConfiguredErrorProcessors,
       modelSettings: {
         ...(options.modelSettings || {}),
       },
@@ -446,6 +572,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // Iteration hook for supervisor patterns
       onIterationComplete: options.onIterationComplete,
       processorStates: runScope.get(PROCESSOR_STATES_KEY),
+      agent: capabilities.agent,
     };
 
     // Park the assembled (class-instance- and closure-laden) options on the

@@ -7,6 +7,7 @@ import type {
   LogicalOperatorValueMap,
   BlacklistedRootOperators,
   VectorFieldValue,
+  OperatorCondition,
 } from '@mastra/core/vector/filter';
 
 type MongoDBOperatorValueMap = Omit<OperatorValueMap, '$options'> & {
@@ -21,6 +22,15 @@ export type MongoDBVectorFilter = VectorFilter<
   MongoDBBlacklisted,
   VectorFieldValue | RegExp
 >;
+
+/**
+ * Condition applied to a single field: an operator object such as `{ $eq: 'text' }` or
+ * `{ $regex: /text/ }`, or a plain value for an equality match.
+ */
+export type MongoDBFieldCondition =
+  | OperatorCondition<keyof MongoDBOperatorValueMap, MongoDBOperatorValueMap>
+  | VectorFieldValue
+  | RegExp;
 
 /**
  * Translator for MongoDB filter queries.
@@ -76,12 +86,11 @@ export class MongoDBFilterTranslator extends BaseFilterTranslator<MongoDBVectorF
           throw new Error('$not operator cannot be empty');
         }
         return this.translateNode(value);
-      } else {
-        if (!Array.isArray(value)) {
-          throw new Error(`Value for logical operator ${operator} must be an array`);
-        }
-        return value.map(item => this.translateNode(item));
       }
+      if (!Array.isArray(value)) {
+        throw new Error(`Value for logical operator ${operator} must be an array`);
+      }
+      return value.map(item => this.translateNode(item));
     }
 
     // Handle basic and numeric operators

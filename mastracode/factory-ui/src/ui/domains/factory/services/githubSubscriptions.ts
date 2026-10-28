@@ -1,3 +1,6 @@
+/** Which source-control provider serves the subscriptions route. */
+export type ChangeRequestProvider = 'github' | 'gitlab';
+
 export interface PullRequestSubscription {
   id: string;
   repoFullName: string;
@@ -7,11 +10,11 @@ export interface PullRequestSubscription {
 }
 
 export function pullRequestSubscriptionsQueryKey(
-  resourceId: string,
+  sessionId: string,
   threadId: string | undefined,
-  projectPath?: string,
+  provider: ChangeRequestProvider = 'github',
 ) {
-  return ['github', 'subscriptions', resourceId, threadId, projectPath] as const;
+  return [provider, 'subscriptions', sessionId, threadId] as const;
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -35,15 +38,18 @@ function isPullRequestSubscription(value: unknown): value is PullRequestSubscrip
   );
 }
 
+/**
+ * Change-request subscriptions for a thread. GitHub and GitLab serve the same
+ * wire shape from their own routes, so the provider only picks the route.
+ */
 export async function listPullRequestSubscriptions(
   baseUrl: string,
-  resourceId: string,
+  sessionId: string,
   threadId: string,
-  projectPath?: string,
+  provider: ChangeRequestProvider = 'github',
 ): Promise<PullRequestSubscription[]> {
-  const params = new URLSearchParams({ resourceId, threadId });
-  if (projectPath) params.set('scope', projectPath);
-  const response = await fetch(`${baseUrl}/web/github/subscriptions?${params}`, { credentials: 'include' });
+  const params = new URLSearchParams({ sessionId, threadId });
+  const response = await fetch(`${baseUrl}/web/${provider}/subscriptions?${params}`, { credentials: 'include' });
   if (!response.ok) throw new Error(`Failed to load pull request subscriptions (${response.status}).`);
 
   const body: unknown = await response.json();

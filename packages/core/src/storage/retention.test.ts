@@ -1,6 +1,7 @@
 import { describe, it, expect, vi } from 'vitest';
 import { MastraCompositeStore } from './base';
 import type { StorageDomains } from './base';
+import { executeRetentionPrune, resolveRetentionTargets, retentionCutoffMs, runRetentionBatches } from './retention';
 import type { PruneOptions, PruneResult, TableRetentionPolicy } from './retention';
 
 /**
@@ -195,5 +196,54 @@ describe('MastraCompositeStore.prune()', () => {
     await composite.prune(options);
 
     expect(memory.calls[0]!.options).toBe(options);
+  });
+});
+
+describe('retention adapter helpers', () => {
+  it('resolves configured targets in dependency order', () => {
+    const targets = resolveRetentionTargets({
+      policies: { parent: { maxAge: '30d' }, child: { maxAge: '7d' } },
+      descriptor: {
+        parent: { table: 'parents', column: 'createdAt', indexed: true },
+        child: { table: 'children', column: 'createdAt', indexed: false },
+      },
+      order: ['child', 'missing', 'parent'],
+    });
+
+    expect(targets).toEqual([
+      { table: 'children', column: 'createdAt', indexed: false, policy: { maxAge: '7d' } },
+      { table: 'parents', column: 'createdAt', indexed: true, policy: { maxAge: '30d' } },
+    ]);
+  });
+
+  it('runs bounded batches and reports resumable work', async () => {
+    const deleteBatch = vi.fn(async (limit: number) => limit);
+
+    await expect(runRetentionBatches({ deleteBatch, batchSize: 3, options: { maxRows: 5 } })).resolves.toEqual({
+      deleted: 5,
+      done: false,
+    });
+    expect(deleteBatch).toHaveBeenNthCalledWith(1, 3);
+    expect(deleteBatch).toHaveBeenNthCalledWith(2, 2);
+  });
+
+  it('delegates cutoff encoding and deletion while preserving one cutoff instant', async () => {
+    const targets = resolveRetentionTargets({
+      policies: { first: { maxAge: '1d' }, second: { maxAge: '2d' } },
+      descriptor: {
+        first: { table: 'first_table', column: 'createdAt', indexed: true },
+        second: { table: 'second_table', column: 'createdAt', indexed: true },
+      },
+      order: ['first', 'second'],
+    });
+    const cutoffFor = vi.fn((target, now: number) => retentionCutoffMs(target.policy, now));
+    const deleteBatch = vi.fn(async () => 0);
+
+    await expect(executeRetentionPrune({ domain: 'test', targets, cutoffFor, deleteBatch })).resolves.toEqual([
+      { domain: 'test', table: 'first_table', deleted: 0, done: true },
+      { domain: 'test', table: 'second_table', deleted: 0, done: true },
+    ]);
+    expect(cutoffFor).toHaveBeenCalledTimes(2);
+    expect(cutoffFor.mock.calls[0]![1]).toBe(cutoffFor.mock.calls[1]![1]);
   });
 });

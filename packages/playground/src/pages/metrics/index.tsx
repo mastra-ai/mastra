@@ -1,55 +1,52 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { EntityType } from '@mastra/core/observability';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { ErrorState } from '@mastra/playground-ui/components/ErrorState';
-import { MetricsFlexGrid } from '@mastra/playground-ui/components/MetricsFlexGrid';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { NoDataPageLayout, PageLayout } from '@mastra/playground-ui/components/PageLayout';
-import { PermissionDenied } from '@mastra/playground-ui/components/PermissionDenied';
-import { PropertyFilterCreator } from '@mastra/playground-ui/components/PropertyFilter';
+import { PageLayout } from '@mastra/playground-ui/components/PageLayout';
 import type { PropertyFilterToken } from '@mastra/playground-ui/components/PropertyFilter';
-import { SessionExpired } from '@mastra/playground-ui/components/SessionExpired';
-import { DateRangeSelector } from '@mastra/playground-ui/domains/metrics/components/date-range-selector';
-import { useAgentRunsKpiMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-agent-runs-kpi-metrics';
-import { MetricsProvider, isValidPreset, useMetrics } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import { PermissionDenied } from '@mastra/playground-ui/domains/auth/components/permission-denied';
+import { SessionExpired } from '@mastra/playground-ui/domains/auth/components/session-expired';
+import {
+  AgentRunsCard,
+  DistinctIdsCard,
+  FailureRateCard,
+  LatencyCard,
+  MetricsGrid,
+  MetricsKpis,
+  ScoresCard,
+  TokenUsageCard,
+  TraceVolumeCard,
+  BreakdownCard,
+  UsageCard,
+} from '@mastra/playground-ui/domains/metrics/components';
+import { MetricsProvider, isValidPreset } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
 import type { DatePreset, DateRange } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics';
+import { useMetricsFilters } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-filters';
+import { useMetricsLayout } from '@mastra/playground-ui/domains/metrics/hooks/use-metrics-layout';
 import {
   applyMetricsPropertyFilterTokens,
-  clearSavedMetricsFilters,
-  createMetricsPropertyFilterFields,
+  createMetricsFilterBarFields,
   getMetricsPropertyFilterTokens,
   hasAnyMetricsFilterParams,
   loadMetricsFiltersFromStorage,
   saveMetricsFiltersToStorage,
 } from '@mastra/playground-ui/domains/metrics/metrics-filters';
-import { useEntityNames } from '@mastra/playground-ui/domains/traces/hooks/use-entity-names';
-import { useEnvironments } from '@mastra/playground-ui/domains/traces/hooks/use-environments';
-import { useServiceNames } from '@mastra/playground-ui/domains/traces/hooks/use-service-names';
-import { useTags } from '@mastra/playground-ui/domains/traces/hooks/use-tags';
 import { is401UnauthorizedError, is403ForbiddenError } from '@mastra/playground-ui/utils/errors';
-import { toast } from '@mastra/playground-ui/utils/toast';
-import { CircleSlashIcon, ExternalLinkIcon } from 'lucide-react';
-import { useCallback, useEffect, useMemo, useRef, useState } from 'react';
+import { useAgentRunsKpiMetrics } from '@mastra/react/hooks/metrics';
+import { useEntityNames, useEnvironments, useServiceNames, useTags } from '@mastra/react/hooks/traces';
+import { useCallback, useEffect, useMemo, useRef } from 'react';
 import { useSearchParams } from 'react-router';
+import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
 import { useObservabilityStorageCapabilities } from '@/domains/configuration/hooks/use-observability-storage-capabilities';
-import { LatencyCard } from '@/domains/metrics/components/latency-card';
-import { MemoryCard } from '@/domains/metrics/components/memory-card';
-import {
-  ActiveResourcesKpiCard,
-  ActiveThreadsKpiCard,
-  AgentRunsKpiCard,
-  ModelCostKpiCard,
-  TotalTokensKpiCard,
-} from '@/domains/metrics/components/metrics-kpi-cards';
-import { MetricsToolbar } from '@/domains/metrics/components/metrics-toolbar';
-import { ModelUsageCostCard } from '@/domains/metrics/components/model-usage-cost-card';
-import { TokenUsageByAgentCard } from '@/domains/metrics/components/token-usage-by-agent-card';
-import { TokenUsageTimelineCard } from '@/domains/metrics/components/token-usage-timeline-card';
-import { TracesVolumeCard } from '@/domains/metrics/components/traces-volume-card';
+import { MetricsPageLayout } from '@/domains/metrics/components/metrics-page-layout';
+import { MetricsStorageGate } from '@/domains/metrics/components/metrics-storage-gate';
+import { useMetricsDrilldownNavigation } from '@/domains/metrics/hooks/use-metrics-drilldown-navigation';
+import { metricsCrumbs } from '@/domains/metrics/metrics-crumbs';
 
 const PERIOD_PARAM = 'period';
 const DATE_FROM_PARAM = 'dateFrom';
 const DATE_TO_PARAM = 'dateTo';
 
+/** Keeps date and filter state in the URL and gates dashboard access on storage capabilities. */
 export default function Metrics() {
   const [searchParams, setSearchParams] = useSearchParams();
 
@@ -133,6 +130,8 @@ export default function Metrics() {
         prev => {
           const params = new URLSearchParams(prev);
           applyMetricsPropertyFilterTokens(params, nextTokens);
+          // Every filter change is remembered for the next visit, as on Traces.
+          saveMetricsFiltersToStorage(params);
           return params;
         },
         { replace: true },
@@ -171,184 +170,142 @@ export default function Metrics() {
       customRange={customRange}
       onCustomRangeChange={handleCustomRangeChange}
     >
-      <MetricsContent />
+      <MetricsStorageGate>
+        <MetricsContent />
+      </MetricsStorageGate>
     </MetricsProvider>
   );
 }
 
+/** Fetches and renders dashboard data only after the storage gate confirms metrics support. */
 function MetricsContent() {
-  const [searchParams] = useSearchParams();
-  const { error, isLoading: isMetricsLoading } = useAgentRunsKpiMetrics();
-  const { filterTokens, setFilterTokens } = useMetrics();
-  const [autoFocusFilterFieldId, setAutoFocusFilterFieldId] = useState<string | undefined>();
+  const { error } = useAgentRunsKpiMetrics(useMetricsFilters());
 
-  const { supportsMetrics, isInMemory, isLoading: isPackagesLoading } = useObservabilityStorageCapabilities();
+  const { isInMemory } = useObservabilityStorageCapabilities();
 
-  const { data: tagsData, isLoading: isTagsLoading } = useTags();
-  const { data: entityNamesData, isLoading: isEntityNamesLoading } = useEntityNames();
-  const { data: serviceNamesData, isLoading: isServiceNamesLoading } = useServiceNames();
-  const { data: environmentsData, isLoading: isEnvironmentsLoading } = useEnvironments();
+  const { data: tagsData } = useTags();
+  const { data: entityNamesData } = useEntityNames();
+  const { data: serviceNamesData } = useServiceNames();
+  const { data: environmentsData } = useEnvironments();
 
-  const filterFields = useMemo(
-    () =>
-      createMetricsPropertyFilterFields({
-        availableTags: tagsData ?? [],
-        availableEntityNames: entityNamesData ?? [],
-        availableServiceNames: serviceNamesData ?? [],
-        availableEnvironments: environmentsData ?? [],
-        loading: {
-          tags: isTagsLoading,
-          entityNames: isEntityNamesLoading,
-          serviceNames: isServiceNamesLoading,
-          environments: isEnvironmentsLoading,
-        },
-      }),
-    [
-      tagsData,
-      entityNamesData,
-      serviceNamesData,
-      environmentsData,
-      isTagsLoading,
-      isEntityNamesLoading,
-      isServiceNamesLoading,
-      isEnvironmentsLoading,
-    ],
-  );
-
-  const [hasSavedFilters, setHasSavedFilters] = useState(() => loadMetricsFiltersFromStorage() !== null);
-
-  const handleSave = useCallback(() => {
-    saveMetricsFiltersToStorage(searchParams);
-    setHasSavedFilters(true);
-    toast.success('Filters setting for Metrics saved');
-  }, [searchParams]);
-
-  const handleRemoveSaved = useCallback(() => {
-    clearSavedMetricsFilters();
-    setHasSavedFilters(false);
-    toast.success('Filters setting for Metrics cleared up');
-  }, []);
-
-  const handleRemoveAll = useCallback(() => {
-    setFilterTokens([]);
-  }, [setFilterTokens]);
-
-  const handleClear = useCallback(() => {
-    const neutralTokens: PropertyFilterToken[] = filterTokens.map(token => {
-      const field = filterFields.find(f => f.id === token.fieldId);
-      if (!field) return token;
-      if (field.kind === 'text') return { fieldId: token.fieldId, value: '' };
-      if (field.kind === 'pick-multi') {
-        return field.multi ? { fieldId: token.fieldId, value: [] } : { fieldId: token.fieldId, value: 'Any' };
-      }
-      if (field.kind === 'multi-select') return { fieldId: token.fieldId, value: [] };
-      return token;
-    });
-    setFilterTokens(neutralTokens);
-  }, [filterFields, filterTokens, setFilterTokens]);
+  const filterFields = createMetricsFilterBarFields({
+    availableTags: tagsData ?? [],
+    availableEntityNames: entityNamesData ?? [],
+    availableServiceNames: serviceNamesData ?? [],
+    availableEnvironments: environmentsData ?? [],
+  });
 
   if (error && is401UnauthorizedError(error)) {
     return (
-      <NoDataPageLayout>
-        <SessionExpired />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <SessionExpired variant="fill" />
+      </PageLayout>
     );
   }
 
   if (error && is403ForbiddenError(error)) {
     return (
-      <NoDataPageLayout>
-        <PermissionDenied resource="metrics" />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <PermissionDenied variant="fill" resource="metrics" />
+      </PageLayout>
     );
   }
 
   if (error) {
     return (
-      <NoDataPageLayout>
-        <ErrorState title="Failed to load metrics" message={error.message} />
-      </NoDataPageLayout>
+      <PageLayout breadcrumbs={<PageBreadcrumbs crumbs={metricsCrumbs} />}>
+        <h1 className="sr-only">Metrics</h1>
+        <EmptyState tone="error" variant="fill" titleSlot="Failed to load metrics" descriptionSlot={error.message} />
+      </PageLayout>
     );
   }
 
   return (
-    <PageLayout width="wide" height="full">
-      <PageLayout.TopArea>
-        <PageLayout.Row>
-          <PageLayout.Column className="flex flex-wrap items-start justify-start gap-2">
-            <DateRangeSelector />
-            <PropertyFilterCreator
-              fields={filterFields}
-              tokens={filterTokens}
-              onTokensChange={setFilterTokens}
-              disabled={isMetricsLoading}
-              onStartTextFilter={setAutoFocusFilterFieldId}
-            />
-          </PageLayout.Column>
-        </PageLayout.Row>
+    <MetricsPageLayout filterFields={filterFields}>
+      <div className="grid content-start gap-4">
+        {isInMemory && (
+          <Notice variant="info" title="Metrics are not persisted">
+            <Notice.Message>
+              This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
+              persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
+            </Notice.Message>
+          </Notice>
+        )}
 
-        <MetricsToolbar
-          isLoading={isMetricsLoading}
-          filterFields={filterFields}
-          filterTokens={filterTokens}
-          onFilterTokensChange={setFilterTokens}
-          onClear={handleClear}
-          onRemoveAll={handleRemoveAll}
-          onSave={handleSave}
-          onRemoveSaved={hasSavedFilters ? handleRemoveSaved : undefined}
-          autoFocusFilterFieldId={autoFocusFilterFieldId}
-        />
-      </PageLayout.TopArea>
+        <MetricsCards />
+      </div>
+    </MetricsPageLayout>
+  );
+}
 
-      {isPackagesLoading ? null : !supportsMetrics ? (
-        <div className="flex h-full items-center justify-center">
-          <EmptyState
-            iconSlot={<CircleSlashIcon />}
-            titleSlot="Metrics are not available with your current storage"
-            descriptionSlot="Metrics require ClickHouse, DuckDB, Postgres v-next, Spanner, or in-memory storage for observability. Other relational databases (LibSQL, MSSQL) and document stores (MongoDB) do not support metrics collection. To enable metrics on an existing project, switch the observability storage in the Mastra configuration."
-            actionSlot={
-              <Button
-                variant="ghost"
-                as="a"
-                href="https://mastra.ai/docs/observability/metrics/overview"
-                target="_blank"
-                rel="noopener noreferrer"
-                icon={<ExternalLinkIcon />}
-              >
-                Metrics Documentation
-              </Button>
-            }
-          />
-        </div>
+function MetricsCards() {
+  const { openTraces, openLogs } = useMetricsDrilldownNavigation();
+  const agent = EntityType.AGENT;
+  const layout = useMetricsLayout();
+
+  const agentRuns = <AgentRunsCard onTimeRangeClick={range => openTraces({ rootEntityType: agent, window: range })} />;
+  const failureRate = (
+    <FailureRateCard
+      onViewErrors={() => openLogs({ rootEntityType: agent, status: 'error' })}
+      onTimeRangeClick={range => openTraces({ rootEntityType: agent, status: 'error', window: range })}
+    />
+  );
+  const latency = (
+    <LatencyCard
+      onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+      onTimeRangeClick={range => openTraces({ window: range })}
+    />
+  );
+  // Breakdown replaces Usage in the unified layout: it has the same tokens and cost, sortable.
+  const usage = (
+    <UsageCard
+      onViewTraces={() => openTraces()}
+      onAgentClick={entityName => openTraces({ rootEntityType: agent, entityName })}
+      onModelClick={model => openTraces({ model })}
+      onThreadClick={threadId => openTraces({ threadId })}
+    />
+  );
+
+  return (
+    <div className="grid content-start gap-4 pb-6">
+      <MetricsKpis />
+      {layout === 'unified' && <BreakdownCard onRowClick={openTraces} />}
+      <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
+      {layout === 'unified' ? (
+        <>
+          <MetricsGrid columns={2}>
+            <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+            <MetricsGrid.Item>{failureRate}</MetricsGrid.Item>
+            <MetricsGrid.Item>{latency}</MetricsGrid.Item>
+            <MetricsGrid.Item>
+              <DistinctIdsCard onTimeRangeClick={openTraces} />
+            </MetricsGrid.Item>
+          </MetricsGrid>
+        </>
       ) : (
-        <div className="grid content-start gap-4 pb-6">
-          {isInMemory && (
-            <Notice variant="info" title="Metrics are not persisted">
-              <Notice.Message>
-                This project uses in-memory storage for observability. Metrics will be lost on every server restart. For
-                persistent metrics, switch the observability storage to ClickHouse, DuckDB, Postgres v-next, or Spanner.
-              </Notice.Message>
-            </Notice>
-          )}
-
-          <MetricsFlexGrid>
-            <AgentRunsKpiCard />
-            <ModelCostKpiCard />
-            <TotalTokensKpiCard />
-            <ActiveThreadsKpiCard />
-            <ActiveResourcesKpiCard />
-          </MetricsFlexGrid>
-
-          <MetricsFlexGrid>
-            <ModelUsageCostCard />
-            <TokenUsageByAgentCard />
-            <TokenUsageTimelineCard />
-            <MemoryCard />
-            <TracesVolumeCard />
-            <LatencyCard />
-          </MetricsFlexGrid>
-        </div>
+        <>
+          <MetricsGrid columns={3}>
+            <MetricsGrid.Item>{agentRuns}</MetricsGrid.Item>
+            <MetricsGrid.Item>{failureRate}</MetricsGrid.Item>
+            <MetricsGrid.Item span={2} className="@7xl:col-span-1">
+              {latency}
+            </MetricsGrid.Item>
+          </MetricsGrid>
+          <MetricsGrid columns={2}>
+            <MetricsGrid.Item>
+              <TraceVolumeCard
+                onViewTraces={rootEntityType => openTraces({ rootEntityType })}
+                onViewErrors={rootEntityType => openLogs({ rootEntityType, status: 'error' })}
+                onEntityClick={(rootEntityType, entityName) => openTraces({ rootEntityType, entityName })}
+              />
+            </MetricsGrid.Item>
+            <MetricsGrid.Item>{usage}</MetricsGrid.Item>
+          </MetricsGrid>
+        </>
       )}
-    </PageLayout>
+      <ScoresCard />
+    </div>
   );
 }

@@ -1,4 +1,5 @@
 import { readFileSync } from 'node:fs';
+import { builtinModules } from 'node:module';
 import { basename, join } from 'node:path';
 import { generate } from '@babel/generator';
 import { parse } from '@babel/parser';
@@ -107,16 +108,28 @@ function getTemporalWorkflowRuntimeOptions(program: t.Program): t.ObjectExpressi
         continue;
       }
 
-      for (const property of temporalParams.properties) {
-        if (
-          t.isObjectProperty(property) &&
-          getObjectPropertyName(property) === 'startToCloseTimeout' &&
-          t.isExpression(property.value)
-        ) {
-          return t.objectExpression([
-            t.objectProperty(t.identifier('startToCloseTimeout'), t.cloneNode(property.value, true)),
-          ]);
+      const runtimeProperties = new Map<string, t.ObjectProperty>();
+      const collectRuntimeProperties = (params: t.ObjectExpression): void => {
+        for (const property of params.properties) {
+          if (t.isSpreadElement(property)) {
+            if (!t.isObjectExpression(property.argument)) {
+              continue;
+            }
+            collectRuntimeProperties(property.argument);
+            continue;
+          }
+          if (!t.isObjectProperty(property) || !t.isExpression(property.value)) {
+            continue;
+          }
+          const name = getObjectPropertyName(property);
+          if (name === 'startToCloseTimeout' || name === 'retry') {
+            runtimeProperties.set(name, t.objectProperty(t.identifier(name), t.cloneNode(property.value, true)));
+          }
         }
+      };
+      collectRuntimeProperties(temporalParams);
+      if (runtimeProperties.size > 0) {
+        return t.objectExpression([...runtimeProperties.values()]);
       }
     }
   }
@@ -201,8 +214,11 @@ function collectStepBindings(program: t.Program): Map<string, string> {
   return stepBindings;
 }
 
-function collectWorkflowBindings(program: t.Program, filePath: string): Map<string, string> {
-  const workflowBindings = new Map<string, string>();
+// The Temporal workflow type the child runs as, and the Mastra workflow id its step records use.
+type WorkflowBinding = { workflowType: string; workflowId: string };
+
+function collectWorkflowBindings(program: t.Program, filePath: string): Map<string, WorkflowBinding> {
+  const workflowBindings = new Map<string, WorkflowBinding>();
 
   for (const statement of program.body) {
     if (
@@ -228,7 +244,7 @@ function collectWorkflowBindings(program: t.Program, filePath: string): Map<stri
       }
 
       const { workflowId } = getWorkflowIdMetadata(workflowConfig, declaration.id.name, filePath);
-      workflowBindings.set(declaration.id.name, toWorkflowType(workflowId));
+      workflowBindings.set(declaration.id.name, { workflowType: toWorkflowType(workflowId), workflowId });
     }
   }
 
@@ -269,8 +285,10 @@ function rewriteChainMethod(
   method: { name: string; args: t.Node[] },
   filePath: string,
   workflowName: string,
+  workflowId: string,
+  mappingOrdinal: number,
   stepBindings: Map<string, string>,
-  workflowBindings: Map<string, string>,
+  workflowBindings: Map<string, WorkflowBinding>,
 ): { name: string; args: t.Expression[] } {
   const argNode = (index: number): t.Node | undefined => method.args[index];
   const rewritten = (args: t.Expression[], name = method.name) => ({ name, args });
@@ -281,9 +299,12 @@ function rewriteChainMethod(
     case 'then': {
       const arg = argNode(0);
       if (t.isIdentifier(arg)) {
-        const workflowType = workflowBindings.get(arg.name);
-        if (workflowType) {
-          return rewritten([t.stringLiteral(workflowType)], 'thenWorkflow');
+        const binding = workflowBindings.get(arg.name);
+        if (binding) {
+          return rewritten(
+            [t.stringLiteral(binding.workflowType), t.stringLiteral(binding.workflowId)],
+            'thenWorkflow',
+          );
         }
       }
 
@@ -330,11 +351,32 @@ function rewriteChainMethod(
       if (!t.isArrayExpression(arg)) {
         throw new Error(`.parallel() in ${workflowName} (${filePath}) requires an array literal argument`);
       }
-      const names = arg.elements.map(el => getWorkflowStepName(el, stepBindings));
-      if (names.some(n => !n)) {
-        throw new Error(`Unable to determine step names inside .parallel() in ${workflowName} (${filePath})`);
-      }
-      return rewritten([t.arrayExpression(names.map(n => t.stringLiteral(n!)))]);
+      const entries = arg.elements.map(element => {
+        if (t.isIdentifier(element)) {
+          const binding = workflowBindings.get(element.name);
+          if (binding) {
+            return t.objectExpression([
+              t.objectProperty(t.identifier('type'), t.stringLiteral('childWorkflow')),
+              t.objectProperty(t.identifier('workflowType'), t.stringLiteral(binding.workflowType)),
+              t.objectProperty(t.identifier('id'), t.stringLiteral(binding.workflowId)),
+            ]);
+          }
+        }
+
+        const stepId = getWorkflowStepName(element, stepBindings);
+        if (!stepId) {
+          throw new Error(`Unable to determine step names inside .parallel() in ${workflowName} (${filePath})`);
+        }
+
+        return t.objectExpression([
+          t.objectProperty(t.identifier('type'), t.stringLiteral('step')),
+          t.objectProperty(
+            t.identifier('step'),
+            t.objectExpression([t.objectProperty(t.identifier('id'), t.stringLiteral(stepId))]),
+          ),
+        ]);
+      });
+      return rewritten([t.arrayExpression(entries)]);
     }
 
     case 'branch': {
@@ -383,6 +425,26 @@ function rewriteChainMethod(
       return rewritten(args);
     }
 
+    case 'map': {
+      const callback = argNode(0);
+      if (t.isObjectExpression(callback)) {
+        throw new Error(
+          `.map() in ${workflowName} (${filePath}) does not yet support declarative object mappings; use a callback mapping`,
+        );
+      }
+      if (!t.isArrowFunctionExpression(callback) && !t.isFunctionExpression(callback) && !t.isIdentifier(callback)) {
+        throw new Error(
+          `.map() in ${workflowName} (${filePath}) requires an inline function or a statically declared function identifier`,
+        );
+      }
+      const args: t.Expression[] = [t.stringLiteral(`mapping_${workflowId}_${mappingOrdinal}`)];
+      const optsArg = method.args[1];
+      if (optsArg && t.isExpression(optsArg)) {
+        args.push(t.cloneNode(optsArg, true));
+      }
+      return rewritten(args);
+    }
+
     case 'commit':
       return rewritten([]);
 
@@ -405,11 +467,12 @@ function getExportedName(node: t.Identifier | t.StringLiteral): string {
 function createTemporalWorkflowStatements(
   exportName: string,
   workflowId: t.Expression,
+  workflowIdValue: string,
   methods: { name: string; args: t.Node[] }[],
   filePath: string,
   includeCommit: boolean,
   stepBindings: Map<string, string>,
-  workflowBindings: Map<string, string>,
+  workflowBindings: Map<string, WorkflowBinding>,
   runtimeOptions?: t.ObjectExpression,
 ): t.Statement[] {
   // Start from `createWorkflow(<static id>)` and rebuild the chain one call at a time
@@ -420,9 +483,21 @@ function createTemporalWorkflowStatements(
   }
 
   let expression: t.Expression = t.callExpression(t.identifier('createWorkflow'), createWorkflowArgs);
+  let mappingOrdinal = 0;
 
   for (const method of methods) {
-    const rewrittenMethod = rewriteChainMethod(method, filePath, exportName, stepBindings, workflowBindings);
+    const rewrittenMethod = rewriteChainMethod(
+      method,
+      filePath,
+      exportName,
+      workflowIdValue,
+      mappingOrdinal,
+      stepBindings,
+      workflowBindings,
+    );
+    if (method.name === 'map') {
+      mappingOrdinal += 1;
+    }
     expression = t.callExpression(
       t.memberExpression(expression, t.identifier(rewrittenMethod.name)),
       rewrittenMethod.args,
@@ -516,6 +591,12 @@ function getCommittedWorkflowName(statement: t.Statement): string | null {
   return expression.callee.object.name;
 }
 
+const nodeBuiltinModules = new Set(builtinModules.flatMap(moduleName => [moduleName, `node:${moduleName}`]));
+
+function isNodeBuiltinModule(moduleId: string): boolean {
+  return nodeBuiltinModules.has(moduleId);
+}
+
 interface WorkflowTransformState {
   statements: t.Statement[];
   workflowNames: Set<string>;
@@ -523,7 +604,7 @@ interface WorkflowTransformState {
   inlineExportedWorkflowNames: Set<string>;
   strippedNames: Set<string>;
   stepBindings: Map<string, string>;
-  workflowBindings: Map<string, string>;
+  workflowBindings: Map<string, WorkflowBinding>;
   workflowExports: TemporalWorkflowExport[];
   runtimeOptions?: t.ObjectExpression;
 }
@@ -627,7 +708,7 @@ function getNormalizedWorkflowBindingName(name: string, state: WorkflowTransform
     return null;
   }
 
-  return state.workflowBindings.get(name) ?? name;
+  return state.workflowBindings.get(name)?.workflowType ?? name;
 }
 
 function rewriteWorkflowNamedExport(statement: t.ExportNamedDeclaration, state: WorkflowTransformState): void {
@@ -699,7 +780,11 @@ function rewriteWorkflowVariableDeclaration(
       throw new Error(`Unable to determine workflow config for ${declaration.id.name} in ${filePath}`);
     }
 
-    const { expression: workflowId } = getWorkflowIdMetadata(workflowConfig, declaration.id.name, filePath);
+    const { expression: workflowId, workflowId: workflowIdValue } = getWorkflowIdMetadata(
+      workflowConfig,
+      declaration.id.name,
+      filePath,
+    );
     const workflowExport = getTemporalWorkflowExportFromDeclaration(declaration, filePath);
     if (!workflowExport) {
       throw new Error(`Unable to determine workflow export for ${declaration.id.name} in ${filePath}`);
@@ -714,6 +799,7 @@ function rewriteWorkflowVariableDeclaration(
       ...createTemporalWorkflowStatements(
         exportName,
         workflowId,
+        workflowIdValue,
         workflowChain.methods,
         filePath,
         state.committedWorkflowNames.has(declaration.id.name),
@@ -818,13 +904,27 @@ export async function buildTemporalWorkflowModule(
 
   try {
     const baseName = basename(outputFileName);
-    const { output } = await bundle.write({
+    const outputOptions = {
       dir: outputDirectory,
       entryFileNames: outputFileName,
       chunkFileNames: `${baseName}-[hash].mjs`,
-      format: 'esm',
-      sourcemap: 'inline',
-    });
+      format: 'esm' as const,
+      sourcemap: 'inline' as const,
+    };
+    const generated = await bundle.generate(outputOptions);
+    const forbiddenImport = generated.output
+      .filter(output => output.type === 'chunk')
+      .flatMap(chunk => [...chunk.imports, ...chunk.dynamicImports])
+      .find(isNodeBuiltinModule);
+
+    if (forbiddenImport) {
+      throw new Error(
+        `Temporal workflow bundle cannot depend on Node.js builtin '${forbiddenImport}'. ` +
+          'Move the dependency into an activity or remove it from workflow initialization.',
+      );
+    }
+
+    const { output } = await bundle.write(outputOptions);
 
     return {
       outputPath: join(outputDirectory, output.find(chunk => chunk.type === 'chunk' && chunk.isEntry)!.fileName),

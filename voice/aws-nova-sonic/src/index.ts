@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import { PassThrough } from 'node:stream';
 import { BedrockRuntimeClient, InvokeModelWithBidirectionalStreamCommand } from '@aws-sdk/client-bedrock-runtime';
 import { MastraVoice } from '@internal/voice';
@@ -436,7 +435,6 @@ export class NovaSonicVoice extends MastraVoice<
                           pendingResolvers.splice(index, 1);
                           resolve();
                         }
-                        return;
                       }
                       // Otherwise, Promise stays pending until signalQueue() is called
                       // This allows SDK to establish connection while waiting
@@ -570,7 +568,7 @@ export class NovaSonicVoice extends MastraVoice<
     this.log('Pre-populating queue with sessionStart and promptStart events...');
 
     // Generate promptName for this session
-    const promptName = randomUUID();
+    const promptName = globalThis.crypto.randomUUID();
     this._promptName = promptName;
 
     // 1. Session start event
@@ -728,7 +726,7 @@ export class NovaSonicVoice extends MastraVoice<
     // 3. System prompt events
     // AWS requires that the FIRST content after promptStart must have SYSTEM role
     // We always send a SYSTEM content, even if instructions are empty
-    const systemContentName = randomUUID();
+    const systemContentName = globalThis.crypto.randomUUID();
     // Content start
     eventQueue.push({
       event: {
@@ -1106,10 +1104,8 @@ export class NovaSonicVoice extends MastraVoice<
             this.streamRestartAttempted = false; // Reset if conditions changed
           }
         });
-      } else {
-        if (this.streamRestartAttempted) {
-          this.log('[Stream] Stream restart already attempted, skipping');
-        }
+      } else if (this.streamRestartAttempted) {
+        this.log('[Stream] Stream restart already attempted, skipping');
       }
     }
   }
@@ -1205,10 +1201,9 @@ export class NovaSonicVoice extends MastraVoice<
         isInterrupted = true;
       }
     } catch {
-      // Not valid JSON — fall back to substring check
-      if (/interrupted/i.test(text)) {
-        isInterrupted = true;
-      }
+      // Not JSON: ordinary transcript text. Real barge-ins also arrive as
+      // contentEnd with stopReason INTERRUPTED, so plain text that merely
+      // contains the word "interrupted" must not be treated as one.
     }
 
     if (isInterrupted) {
@@ -1378,7 +1373,7 @@ export class NovaSonicVoice extends MastraVoice<
             this.turnCompleteTimeout = undefined;
           }, 1000); // Short timeout just for logging
         }
-      } else {
+      } else if (this.isReceivingAssistantAudio && contentEnd.stopReason === 'PARTIAL_TURN') {
         // This is user audio input ending (stopReason might be undefined or PARTIAL_TURN)
         // OR assistant audio output ending with PARTIAL_TURN
         // Following AWS sample: contentStart (AUDIO) is sent ONCE at the beginning
@@ -1389,46 +1384,45 @@ export class NovaSonicVoice extends MastraVoice<
         // If this is assistant audio output ending (we were receiving assistant audio),
         // and stopReason is PARTIAL_TURN, we should wait for completionEnd
         // But if completionEnd doesn't arrive, we'll use a fallback timeout
-        if (this.isReceivingAssistantAudio && contentEnd.stopReason === 'PARTIAL_TURN') {
-          // This is assistant output ending - wait for completionEnd
-          // Set a fallback timeout to emit turnComplete if completionEnd doesn't arrive
-          this.isReceivingAssistantAudio = false; // Reset flag
-          if (!this.turnCompleteTimeout && !this.turnCompleted) {
-            this.log(
-              `[Event] contentEnd (AUDIO) with PARTIAL_TURN for assistant output - waiting for completionEnd, setting fallback timeout`,
-            );
-            this.turnCompleteTimeout = setTimeout(() => {
-              if (!this.turnCompleted) {
-                this.log(
-                  `[Event] Fallback: completionEnd not received after contentEnd (AUDIO) with PARTIAL_TURN, signaling turn complete`,
-                );
-                this.turnCompleted = true;
-                this.emit('turnComplete', { timestamp: Date.now() });
 
-                if (this.currentResponseId) {
-                  const stream = this.speakerStreams.get(this.currentResponseId);
-                  if (stream) {
-                    stream.end();
-                  }
-                  this.speakerStreams.delete(this.currentResponseId);
-                  this.currentResponseId = undefined;
-                }
-
-                this.hasSentContentEnd = false;
-                this.turnCompleteTimeout = undefined;
-              }
-            }, 2000); // 2 second timeout (reduced from 3)
-          }
-        } else {
-          // This is user audio input ending
-          // Reset hasSentContentEnd flag to allow sending contentEnd for the next turn
-          // Also reset turnCompleted flag to allow new user input
-          this.hasSentContentEnd = false;
-          this.turnCompleted = false; // Reset for next turn
+        // This is assistant output ending - wait for completionEnd
+        // Set a fallback timeout to emit turnComplete if completionEnd doesn't arrive
+        this.isReceivingAssistantAudio = false; // Reset flag
+        if (!this.turnCompleteTimeout && !this.turnCompleted) {
           this.log(
-            `[Event] contentEnd (AUDIO) - user input ended, stopReason: ${contentEnd.stopReason}. Keeping audioContentStarted=true for next turn. Reset hasSentContentEnd=false, turnCompleted=false.`,
+            `[Event] contentEnd (AUDIO) with PARTIAL_TURN for assistant output - waiting for completionEnd, setting fallback timeout`,
           );
+          this.turnCompleteTimeout = setTimeout(() => {
+            if (!this.turnCompleted) {
+              this.log(
+                `[Event] Fallback: completionEnd not received after contentEnd (AUDIO) with PARTIAL_TURN, signaling turn complete`,
+              );
+              this.turnCompleted = true;
+              this.emit('turnComplete', { timestamp: Date.now() });
+
+              if (this.currentResponseId) {
+                const stream = this.speakerStreams.get(this.currentResponseId);
+                if (stream) {
+                  stream.end();
+                }
+                this.speakerStreams.delete(this.currentResponseId);
+                this.currentResponseId = undefined;
+              }
+
+              this.hasSentContentEnd = false;
+              this.turnCompleteTimeout = undefined;
+            }
+          }, 2000); // 2 second timeout (reduced from 3)
         }
+      } else {
+        // This is user audio input ending
+        // Reset hasSentContentEnd flag to allow sending contentEnd for the next turn
+        // Also reset turnCompleted flag to allow new user input
+        this.hasSentContentEnd = false;
+        this.turnCompleted = false; // Reset for next turn
+        this.log(
+          `[Event] contentEnd (AUDIO) - user input ended, stopReason: ${contentEnd.stopReason}. Keeping audioContentStarted=true for next turn. Reset hasSentContentEnd=false, turnCompleted=false.`,
+        );
       }
     } else if (contentEnd.type === 'TEXT') {
       // Text content ended — clear generationStage tracking
@@ -1726,7 +1720,7 @@ export class NovaSonicVoice extends MastraVoice<
       );
     }
 
-    const contentName = randomUUID();
+    const contentName = globalThis.crypto.randomUUID();
     // Content start
     await this.sendClientEvent({
       contentStart: {
@@ -1838,7 +1832,7 @@ export class NovaSonicVoice extends MastraVoice<
     }
     if (!this.audioContentStarted) {
       // First time sending audio - need to send contentStart first
-      const audioContentId = randomUUID();
+      const audioContentId = globalThis.crypto.randomUUID();
       this.audioContentName = audioContentId;
 
       this.log(`[send] First audio send - sending AUDIO contentStart with contentName: ${audioContentId}`);

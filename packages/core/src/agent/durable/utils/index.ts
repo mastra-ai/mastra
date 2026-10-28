@@ -10,8 +10,6 @@ export {
   deserializeDate,
 } from './serialize-state';
 
-export { applyToolPayloadTransformToChunk } from './apply-tool-payload-transform';
-
 export { createRunMessageList } from './run-message-list';
 
 export {

@@ -1,10 +1,14 @@
 import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
+import type { MessageListInput } from '../../../agent/message-list';
+import type { MastraServerCache } from '../../../cache';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
+import type { MemoryConfigInternal } from '../../../memory/types';
 import type { RequestContext } from '../../../request-context';
 import type { MastraModelOutput } from '../../../stream/base/output';
 import type { ChunkType } from '../../../stream/types';
+import type { ToolHooks } from '../../../tools/types';
 import type { AnyWorkspace } from '../../../workspace/workspace';
 
 /**
@@ -50,6 +54,12 @@ export interface LoopScenarioResult {
    * `mastra.backgroundTaskManager` for background task assertions or shutdown.
    */
   mastra?: any;
+  /**
+   * The error thrown while {@link runLoopScenario} drained `fullStream`. Only
+   * returned when {@link RunLoopScenarioOptions.expectStreamError} is set;
+   * otherwise the harness rethrows it.
+   */
+  streamError?: unknown;
 }
 
 /**
@@ -62,6 +72,11 @@ export interface LoopScenarioResult {
  *
  * - `'normal'` — default direct engine (regular `new Agent(...)`).
  * - `'durable'` — durable execution via `createDurableAgent` wrapper.
+ * - `'evented'` — durable execution on the evented engine via
+ *   `createEventedAgent` wrapper (fire-and-forget run driven by events on the
+ *   Mastra host's pubsub). Behaves like `'durable'` from the caller's
+ *   perspective — same stream shape, same option restrictions — so scenarios
+ *   that skip `'durable'` should skip `'evented'` too.
  * - `'fs'` — agent assembled from file-system routing (`assembleAgentFromFsEntry`,
  *   `instructions.md` body + discovered `tools/*`) and registered through
  *   `Mastra.__registerFsAgents`, then run on the normal engine. `agents`
@@ -70,11 +85,38 @@ export interface LoopScenarioResult {
  *   whose inputs the file-routing path cannot model (dynamic-function
  *   instructions, `sharedAgent`, `workflows`-as-tool, durable resume/suspension)
  *   skip this variant via `{ skip: ['fs'] }`.
+ * - `'inngest'` — durable execution on Inngest via `createInngestAgent`. Core
+ *   cannot depend on `@mastra/inngest`, so this variant only runs when the
+ *   Inngest package registers a {@link ScenarioEngineHost} (see
+ *   `setScenarioEngineHost`); the host then replaces the four in-repo variants.
+ *   Skipping `'durable'` also skips `'inngest'`.
  */
-export type EngineVariant = 'normal' | 'durable' | 'fs';
+export type EngineVariant = 'normal' | 'durable' | 'evented' | 'fs' | 'inngest';
+
+/**
+ * An engine provided from outside core (e.g. `@mastra/inngest`). When set, scenarios run only on
+ * this engine; the host wraps each scenario agent and owns the Mastra instance that serves it.
+ */
+export interface ScenarioEngineHost {
+  engine: EngineVariant;
+  /** Mastra instance the engine's worker resolves agents from. Scenario agents are added to it. */
+  getMastra(): any;
+  /** Wrap a plain scenario `Agent` for this engine. */
+  wrapAgent(agent: any): any;
+}
 
 /** All supported engine variants for parameterised test runs. */
-export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'fs'] as const;
+export const ALL_ENGINE_VARIANTS: readonly EngineVariant[] = ['normal', 'durable', 'evented', 'fs'] as const;
+
+/**
+ * `true` for variants that run through the durable execution path
+ * (`createDurableAgent` / `createEventedAgent`). Use this instead of
+ * `engine === 'durable'` in scenarios so durable-conditional behavior
+ * automatically covers the evented variant too.
+ */
+export function isDurableEngineVariant(engine: EngineVariant | undefined): boolean {
+  return engine === 'durable' || engine === 'evented' || engine === 'inngest';
+}
 
 export interface RunLoopScenarioOptions {
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
@@ -90,15 +132,19 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
-  /** The user prompt that kicks off the loop. */
-  prompt: string;
+  /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
+  prompt: string | MessageListInput;
   /**
    * Default options for the agent (e.g. `autoResumeSuspendedTools`).
    * Applied to the Agent constructor via `defaultOptions` config.
    */
   defaultOptions?: {
     autoResumeSuspendedTools?: boolean;
+    inputProcessors?: any;
+    hooks?: ToolHooks;
   };
+  /** Per-call tool hooks forwarded to agent.stream(). */
+  hooks?: ToolHooks;
   /** Tools available to the loop. Tool ids must match the scripted tool-call names. */
   tools?: ToolsInput;
   /** Signal providers registered on the Agent constructor. */
@@ -134,6 +180,13 @@ export interface RunLoopScenarioOptions {
    */
   requestContext?: RequestContext<any>;
   /**
+   * Forwarded to `agent.stream({ requireToolApproval })`. `runApprovalScenario` defaults it to `true`;
+   * pass `false` to test tool-level `requireApproval`, or a function to decide per tool call.
+   */
+  requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
+  /** Close a durable stream on approval suspension so its output promises settle. */
+  closeOnSuspend?: boolean;
+  /**
    * Stop condition for the loop. Forwarded to `agent.stream({ stopWhen })`.
    * Use this to bound long/looping tool scenarios.
    */
@@ -156,6 +209,11 @@ export interface RunLoopScenarioOptions {
    * request body.
    */
   modelSettings?: any;
+  /**
+   * Agent-level model-call retry count set on the Agent constructor. An explicit
+   * value (including 0) takes precedence over call-time `modelSettings.maxRetries`.
+   */
+  maxRetries?: number;
   /**
    * Client-side tools to merge with agent-level tools. Forwarded to `agent.stream({ clientTools })`.
    * Useful for testing tool merging scenarios where tools are defined at the call site rather than
@@ -234,6 +292,13 @@ export interface RunLoopScenarioOptions {
    */
   backgroundTasks?: any;
   /**
+   * Whether to start the Mastra background workers when `backgroundTasks` is
+   * enabled (default: true). Set to `false` to keep dispatched tasks pending —
+   * e.g. to deterministically pin the placeholder tool-result content a
+   * backgrounded delegation hands to the supervisor's continuation turn.
+   */
+  startWorkers?: boolean;
+  /**
    * When set, uses `agent.streamUntilIdle()` instead of `agent.stream()`. The
    * stream stays open until all background tasks complete, and the agent is
    * re-invoked so it can process the results. Requires `backgroundTasks` to be
@@ -294,6 +359,10 @@ export interface RunLoopScenarioOptions {
    * assert transform/redact behavior over the loop output.
    */
   outputProcessors?: any;
+  /** Output processors set on the Agent constructor (static array or a `({ requestContext }) => processors` function). */
+  agentOutputProcessors?: any;
+  /** Forwarded to `agent.stream({ maxProcessorRetries })`. */
+  maxProcessorRetries?: number;
   /**
    * Input processors forwarded to `agent.stream({ inputProcessors })`. Run before
    * the user message reaches the model request — assert on `requests[0]`.
@@ -304,6 +373,8 @@ export interface RunLoopScenarioOptions {
    * activeTools/messages per step and assert the change lands in the request.
    */
   prepareStep?: any;
+  /** Tool payload transform policy forwarded to `agent.stream({ transform })`. */
+  transform?: any;
   /**
    * Memory instance attached to the agent. Combine with `threadId`/`resourceId`
    * to exercise conversation-history recall and working memory across turns.
@@ -318,7 +389,9 @@ export interface RunLoopScenarioOptions {
    * Controls recall behavior like `lastMessages` (number of messages to recall)
    * or `semanticRecall` (enable/disable semantic recall).
    */
-  memoryOptions?: { lastMessages?: number | false; semanticRecall?: boolean };
+  memoryOptions?: Pick<MemoryConfigInternal, 'lastMessages' | 'semanticRecall' | 'observationalMemory' | 'readOnly'>;
+  /** Forwarded to `agent.stream({ memory: { onTitleGenerated } })`. */
+  onTitleGenerated?: (title: string) => void | Promise<void>;
   /**
    * Workspace attached to the agent. Passed into tool execution context so tools
    * can read `workspace.filesystem` / `workspace.sandbox` mid-loop.
@@ -330,6 +403,8 @@ export interface RunLoopScenarioOptions {
    * Use for testing the signal integration (subscribe → sendMessage → receive response).
    */
   pubsub?: PubSub;
+  /** Shared cache for durable/evented pubsub scenarios. */
+  cache?: MastraServerCache;
   /**
    * When set, {@link runLoopScenario} iterates `output.fullStream` itself
    * (instead of the default `consumeStream` drain) and returns every emitted
@@ -337,6 +412,13 @@ export interface RunLoopScenarioOptions {
    * fidelity assertions (text-delta ordering, reasoning chunks, etc.).
    */
   collectChunks?: boolean;
+  /**
+   * The scenario deliberately makes the stream throw (provider error, tripwire,
+   * abort, …). When set, a drain error is returned on
+   * {@link LoopScenarioResult.streamError}; when unset, {@link runLoopScenario}
+   * rethrows it with the original error as `cause`.
+   */
+  expectStreamError?: boolean;
   /**
    * When set, {@link runLoopScenario} returns the output WITHOUT consuming the
    * stream. The test must manually drain `output.fullStream` after publishing
@@ -364,22 +446,19 @@ export interface RunLoopScenarioOptions {
 }
 
 /**
- * Options for {@link runApprovalScenario}. Extends {@link RunLoopScenarioOptions}
- * with a per-approval decision callback. The loop runs with
- * `requireToolApproval: true`; each suspended tool call is approved or declined
- * based on `decision`.
+ * Options for {@link runApprovalScenario}: the subset of
+ * {@link RunLoopScenarioOptions} it forwards, plus a per-approval decision
+ * callback. The loop runs with `requireToolApproval: true` unless overridden;
+ * each suspended tool call is approved or declined based on `decision`.
  */
-export interface RunApprovalScenarioOptions extends RunLoopScenarioOptions {
+export interface RunApprovalScenarioOptions extends Pick<
+  RunLoopScenarioOptions,
+  'llm' | 'fixtures' | 'prompt' | 'tools' | 'instructions' | 'stopWhen' | 'requireToolApproval' | 'engine'
+> {
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool
    * call. Called once per approval, in order. `approvalIndex` is the 0-based
    * count of approvals resolved so far.
    */
   decision: (context: { toolCallId: string; approvalIndex: number }) => boolean;
-  /**
-   * Whether to set stream-level `requireToolApproval: true`. Defaults to `true`.
-   * Set to `false` to test tool-level `requireApproval: true` on specific tools.
-   * Can also be a function that decides per-tool-call: `({ toolName }) => boolean`.
-   */
-  requireToolApproval?: boolean | ((context: { toolName: string; args?: unknown }) => boolean);
 }

@@ -1,18 +1,17 @@
 import { createContext, useContext } from 'react';
 
-export type DialogVariant = 'default' | 'new';
 export type DialogIntent = 'default' | 'destructive';
 
 export type DialogContextValue = {
-  variant: DialogVariant;
   intent: DialogIntent;
   pending: boolean;
+  isDrawer: boolean;
 };
 
 export const DialogContext = createContext<DialogContextValue>({
-  variant: 'default',
   intent: 'default',
   pending: false,
+  isDrawer: false,
 });
 
 export function useDialogContext() {
@@ -20,10 +19,9 @@ export function useDialogContext() {
 }
 
 export const dialogActionSizeClasses = {
-  xs: 'min-h-form-xs leading-ui-xs',
-  sm: 'min-h-form-sm leading-ui-sm',
-  md: 'min-h-form-md leading-ui-md',
-  lg: 'min-h-form-lg leading-ui-md',
+  sm: 'min-h-control-sm',
+  md: 'min-h-control-md',
+  lg: 'min-h-control-lg',
 } as const;
 
 export const dialogActionLayoutClasses = 'h-auto min-w-0 max-w-full whitespace-normal wrap-anywhere max-[22rem]:w-full';

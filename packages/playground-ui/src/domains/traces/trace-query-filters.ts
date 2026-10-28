@@ -1,0 +1,326 @@
+import type { QueryTracesInput } from '@mastra/client-js';
+import type { TraceQueryPredicate, TraceQueryScalarPredicate } from '@mastra/core/storage';
+import { isLegacyAnyValue } from './trace-filters';
+import type { buildTraceListFilters, TraceStatusFilter } from './trace-filters';
+import type { PropertyFilterToken } from '@/ds/components/PropertyFilter/types';
+
+export const TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS = new Set([
+  'runId',
+  'sessionId',
+  'requestId',
+  'userId',
+  'organizationId',
+  'serviceName',
+  'experimentId',
+]);
+
+export const TRACE_FILTER_OPERATOR_IDS = [
+  'is',
+  'isNot',
+  'in',
+  'notIn',
+  'exists',
+  'notExists',
+  'gt',
+  'gte',
+  'lt',
+  'lte',
+  'matches',
+  'notMatches',
+] as const;
+export type TraceFilterOperatorId = (typeof TRACE_FILTER_OPERATOR_IDS)[number];
+
+export const isTraceFilterOperatorId = (value: string): value is TraceFilterOperatorId =>
+  (TRACE_FILTER_OPERATOR_IDS as readonly string[]).includes(value);
+
+/** A trace filter chip: `operatorId` defaults to `is` (equality / set membership). */
+export type TraceFilterToken = PropertyFilterToken & {
+  operatorId?: TraceFilterOperatorId;
+  /** Only set for tokens inside a group: a group may hold several tokens on the same field. */
+  id?: string;
+};
+
+export type TraceFilterLogic = 'and' | 'or';
+
+/** An advanced filter: a nested boolean combination of tokens. */
+export type TraceFilterGroup = { id: string; logic: TraceFilterLogic; nodes: TraceFilterNode[] };
+export type TraceFilterNode = TraceFilterToken | TraceFilterGroup;
+
+export const isTraceFilterGroup = (node: TraceFilterNode): node is TraceFilterGroup => 'nodes' in node;
+
+const TRACE_FILTER_OPERATOR_TO_QUERY_OP = {
+  is: 'eq',
+  isNot: 'ne',
+  in: 'in',
+  notIn: 'notIn',
+  exists: 'exists',
+  notExists: 'notExists',
+  gt: 'gt',
+  gte: 'gte',
+  lt: 'lt',
+  lte: 'lte',
+  matches: 'matches',
+  notMatches: 'notMatches',
+} as const satisfies Record<TraceFilterOperatorId, TraceQueryScalarPredicate['op']>;
+
+/** Fields whose values must be sent as numbers. Non-numeric input is dropped. */
+export const TRACE_QUERY_NUMERIC_FIELD_IDS = new Set([
+  'durationMs',
+  'spans.durationMs',
+  'scores.score',
+  'feedback.value',
+]);
+
+const TRACE_QUERY_TRACE_FIELD_IDS = new Set([
+  'entityType',
+  'status',
+  'entityName',
+  'environment',
+  'traceId',
+  'threadId',
+  'resourceId',
+  'durationMs',
+]);
+
+/** Trace-level fields that may be unset. "is not X" on these must also keep traces
+ *  where the field is missing, so the predicate is `or[ne, notExists]`. */
+export const TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS = new Set(['threadId', 'resourceId', 'environment', 'durationMs']);
+
+/** Negative operators are expressed as `none(<positive>)` on related collections. */
+const NEGATIVE_TO_POSITIVE = {
+  isNot: 'is',
+  notIn: 'in',
+  notExists: 'exists',
+  notMatches: 'matches',
+} as const satisfies Partial<Record<TraceFilterOperatorId, TraceFilterOperatorId>>;
+type NegativeOperatorId = keyof typeof NEGATIVE_TO_POSITIVE;
+const isNegativeOperator = (op: TraceFilterOperatorId): op is NegativeOperatorId => op in NEGATIVE_TO_POSITIVE;
+
+const TRACE_QUERY_RELATED_SCOPES = ['spans', 'scores', 'feedback'] as const;
+export type TraceQueryRelatedScope = (typeof TRACE_QUERY_RELATED_SCOPES)[number];
+
+/** Split a field id into its related scope (`spans.` / `scores.` / `feedback.`) and
+ *  the path inside that scope. Trace-level fields have no scope. `entityId` is the
+ *  legacy id for `spans.entityId`. */
+function resolveTraceQueryPath(fieldId: string): { scope?: TraceQueryRelatedScope; path: string } {
+  if (fieldId === 'entityId') return { scope: 'spans', path: 'entityId' };
+  for (const scope of TRACE_QUERY_RELATED_SCOPES) {
+    if (fieldId.startsWith(`${scope}.`) && fieldId.length > scope.length + 1) {
+      return { scope, path: fieldId.slice(scope.length + 1) };
+    }
+  }
+  return { path: fieldId };
+}
+
+export function scalarPredicate(
+  op: TraceFilterOperatorId,
+  path: string,
+  values: (string | number)[],
+): TraceQueryScalarPredicate | undefined {
+  const queryOp = TRACE_FILTER_OPERATOR_TO_QUERY_OP[op];
+  switch (queryOp) {
+    case 'exists':
+    case 'notExists':
+      return { op: queryOp, path };
+    case 'in':
+    case 'notIn':
+      return values.length ? { op: queryOp, value: { path }, set: values } : undefined;
+    case 'matches':
+    case 'notMatches': {
+      const [literal] = values;
+      return typeof literal === 'string' ? { op: queryOp, left: { path }, right: { literal } } : undefined;
+    }
+    default: {
+      if (!values.length) return undefined;
+      // `is` with several values is set membership; `isNot` with several is exclusion.
+      if (values.length > 1) {
+        if (queryOp === 'eq') return { op: 'in', value: { path }, set: values };
+        if (queryOp === 'ne') return { op: 'notIn', value: { path }, set: values };
+      }
+      const [literal] = values;
+      return literal === undefined ? undefined : { op: queryOp, left: { path }, right: { literal } };
+    }
+  }
+}
+
+type TokenPredicate =
+  | { predicate: TraceQueryPredicate }
+  /** A positive predicate on a related row; the caller decides how to wrap it in `some`. */
+  | { scope: TraceQueryRelatedScope; predicate: TraceQueryScalarPredicate };
+
+/** `tags` is a string array: membership is `includes` per tag; "in" any of
+ *  several tags is an `or`, "not in" all of them is an `and`. `notIncludes`
+ *  does not match traces without tags, so exclusion also keeps untagged traces. */
+function tagsPredicate(operatorId: TraceFilterOperatorId, tags: string[]): TraceQueryPredicate | undefined {
+  if (operatorId === 'exists' || operatorId === 'notExists') return { op: operatorId, path: 'tags' };
+  const negative = operatorId === 'notIn' || operatorId === 'isNot';
+  const args: TraceQueryPredicate[] = tags.map(value => ({
+    op: negative ? 'notIncludes' : 'includes',
+    path: 'tags',
+    value,
+  }));
+  const combined = args.length <= 1 ? args[0] : { op: negative ? ('and' as const) : ('or' as const), args };
+  if (!combined || !negative) return combined;
+  return { op: 'or', args: [combined, { op: 'notExists', path: 'tags' }] };
+}
+
+/** Fields the query API can only test for presence; any other operator is rejected with a 422. */
+const TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS = new Set<string>(['spans.error']);
+
+function tokenToTraceQueryPredicate(
+  token: TraceFilterToken,
+  excludedFieldIds: ReadonlySet<string>,
+): TokenPredicate | undefined {
+  if (TRACE_QUERY_UNSUPPORTED_FILTER_FIELDS.has(token.fieldId) || excludedFieldIds.has(token.fieldId)) return undefined;
+  const operatorId = token.operatorId ?? (token.fieldId === 'tags' ? 'in' : 'is');
+  const isPresence = operatorId === 'exists' || operatorId === 'notExists';
+  // Hand-edited URLs can pair these fields with value operators; drop them rather than fail the page.
+  if (TRACE_QUERY_PRESENCE_ONLY_FIELD_IDS.has(token.fieldId) && !isPresence) return undefined;
+
+  const rawValues = (Array.isArray(token.value) ? token.value : [token.value]).filter(
+    (value): value is string =>
+      typeof value === 'string' && Boolean(value.trim()) && !isLegacyAnyValue(value, operatorId),
+  );
+  if (!rawValues.length && !isPresence) return undefined;
+
+  if (token.fieldId === 'tags') {
+    const predicate = tagsPredicate(operatorId, rawValues);
+    return predicate ? { predicate } : undefined;
+  }
+
+  let fieldId = token.fieldId;
+  let values: (string | number)[] = rawValues;
+  // Discovered metadata fields: the field id is already the predicate path (`metadata.<key>`).
+  if (fieldId.startsWith('metadata.')) {
+    if (fieldId.length === 'metadata.'.length) return undefined;
+  } else if (fieldId === 'rootEntityType' || fieldId === 'entityType') {
+    fieldId = 'entityType';
+  } else if (fieldId === 'status') {
+    values = rawValues.filter(value => value !== 'running');
+    if (!values.length && !isPresence) return undefined;
+  } else if (TRACE_QUERY_NUMERIC_FIELD_IDS.has(fieldId)) {
+    values = rawValues.map(Number).filter(value => !Number.isNaN(value));
+    if (!values.length && !isPresence) return undefined;
+  }
+  if (operatorId === 'matches' || operatorId === 'notMatches') {
+    // The query rejects a text literal with no letters or digits; drop it like non-numeric input.
+    values = values.filter(value => /[\p{L}\p{M}\p{N}]/u.test(String(value)));
+    if (!values.length) return undefined;
+  }
+
+  const { scope, path } = resolveTraceQueryPath(fieldId);
+  const isMetadata = fieldId.startsWith('metadata.');
+  if (!scope && !isMetadata && !TRACE_QUERY_TRACE_FIELD_IDS.has(fieldId)) return undefined;
+
+  if (scope && isNegativeOperator(operatorId)) {
+    // `some(model ne X)` matches any trace with one span that differs; the user
+    // means "no span with model X", which is `none(model eq X)`.
+    const positive = scalarPredicate(NEGATIVE_TO_POSITIVE[operatorId], path, values);
+    return positive ? { predicate: { [scope]: { none: positive } } as TraceQueryPredicate } : undefined;
+  }
+
+  const predicate = scalarPredicate(operatorId, path, values);
+  if (!predicate) return undefined;
+  if (scope) return { scope, predicate };
+  if (
+    (operatorId === 'isNot' || operatorId === 'notIn') &&
+    (isMetadata || TRACE_QUERY_OPTIONAL_TRACE_FIELD_IDS.has(fieldId))
+  ) {
+    return { predicate: { op: 'or', args: [predicate, { op: 'notExists', path }] } };
+  }
+  return { predicate };
+}
+
+/** Convert tokens to predicates. With `mergeRelated`, tokens on the same related
+ *  collection must match the same row (e.g. scorer X AND score < 0.6), so they are
+ *  merged into a single `some`. Inside an `or` group each token stands alone. */
+function predicatesForTokens(
+  tokens: TraceFilterToken[],
+  { mergeRelated, excludedFieldIds }: { mergeRelated: boolean; excludedFieldIds: ReadonlySet<string> },
+) {
+  const args: TraceQueryPredicate[] = [];
+  const related: Record<TraceQueryRelatedScope, TraceQueryScalarPredicate[]> = { spans: [], scores: [], feedback: [] };
+
+  for (const token of tokens) {
+    const result = tokenToTraceQueryPredicate(token, excludedFieldIds);
+    if (!result) continue;
+    if (!('scope' in result)) {
+      args.push(result.predicate);
+    } else if (mergeRelated) {
+      related[result.scope].push(result.predicate);
+    } else {
+      args.push({ [result.scope]: { some: result.predicate } } as TraceQueryPredicate);
+    }
+  }
+
+  for (const scope of TRACE_QUERY_RELATED_SCOPES) {
+    const [first, ...rest] = related[scope];
+    if (!first) continue;
+    const some = rest.length ? { op: 'and' as const, args: [first, ...rest] } : first;
+    args.push({ [scope]: { some } } as TraceQueryPredicate);
+  }
+
+  return args;
+}
+
+function groupToTraceQueryPredicate(
+  group: TraceFilterGroup,
+  excludedFieldIds: ReadonlySet<string>,
+): TraceQueryPredicate | undefined {
+  const tokens = group.nodes.filter((node): node is TraceFilterToken => !isTraceFilterGroup(node));
+  const args = predicatesForTokens(tokens, { mergeRelated: group.logic === 'and', excludedFieldIds });
+  for (const node of group.nodes) {
+    if (!isTraceFilterGroup(node)) continue;
+    const predicate = groupToTraceQueryPredicate(node, excludedFieldIds);
+    if (predicate) args.push(predicate);
+  }
+  if (args.length === 0) return undefined;
+  return args.length === 1 ? args[0] : { op: group.logic, args };
+}
+
+export function buildTraceQueryRequest({
+  rootEntityType,
+  status,
+  dateFrom,
+  dateTo,
+  tokens,
+  groups = [],
+  excludedFieldIds = new Set(),
+  now,
+}: Omit<Parameters<typeof buildTraceListFilters>[0], 'tokens' | 'status'> & {
+  status?: TraceStatusFilter;
+  tokens: TraceFilterToken[];
+  groups?: TraceFilterGroup[];
+  /** Fields the server cannot query (e.g. `durationMs` without `traceQueryRootDuration`); dropped from tokens and groups. */
+  excludedFieldIds?: ReadonlySet<string>;
+  now: Date;
+}): Pick<QueryTracesInput, 'timeRange' | 'where'> {
+  const args: TraceQueryPredicate[] = [];
+
+  if (rootEntityType) args.push({ op: 'eq', left: { path: 'entityType' }, right: { literal: rootEntityType } });
+  if (status && status !== 'running') args.push({ op: 'eq', left: { path: 'status' }, right: { literal: status } });
+
+  args.push(...predicatesForTokens(tokens, { mergeRelated: true, excludedFieldIds }));
+
+  for (const group of groups) {
+    const predicate = groupToTraceQueryPredicate(group, excludedFieldIds);
+    if (predicate) args.push(predicate);
+  }
+
+  return {
+    timeRange: resolveTraceQueryTimeRange(dateFrom, dateTo, now),
+    ...(args.length ? { where: { op: 'and' as const, args } } : {}),
+  };
+}
+
+/** The query window for a date range: open ends fall back to the last seven days up to `now`. */
+export function resolveTraceQueryTimeRange(
+  dateFrom: Date | undefined,
+  dateTo: Date | undefined,
+  now: Date,
+): QueryTracesInput['timeRange'] {
+  return {
+    from: (dateFrom ?? new Date(now.getTime() - 7 * 24 * 60 * 60 * 1000)).toISOString(),
+    to: (dateTo ?? now).toISOString(),
+  };
+}

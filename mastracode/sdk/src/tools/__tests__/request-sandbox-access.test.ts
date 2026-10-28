@@ -52,6 +52,40 @@ function resumePass(answer: string, agentControllerCtx: any, fs?: any) {
 }
 
 describe('request_access', () => {
+  it('uses the session project root instead of the server startup directory', async () => {
+    const ctx = createAgentControllerCtx({ projectPath: '/acp-session/project' });
+    const { context, suspend } = suspendPass(ctx);
+    const requestedPath = path.join(process.cwd(), 'server-private');
+    await (requestSandboxAccessTool as any).execute({ path: requestedPath, reason: 'read a file' }, context);
+    expect(suspend.mock.calls[0]?.[0]).toEqual({
+      kind: 'sandbox_access_request',
+      path: requestedPath,
+      reason: 'read a file',
+    });
+  });
+
+  it('recognizes paths inside the session project as already permitted', async () => {
+    const ctx = createAgentControllerCtx({ projectPath: '/acp-session/project' });
+    const { context, suspend } = suspendPass(ctx);
+    const result = await (requestSandboxAccessTool as any).execute(
+      { path: '/acp-session/project/src', reason: 'read source' },
+      context,
+    );
+    expect(result).toMatchObject({ isError: false });
+    expect(suspend).not.toHaveBeenCalled();
+  });
+
+  it('resolves relative access requests from the session directory', async () => {
+    const ctx = createAgentControllerCtx({ projectPath: '/acp-session/project' });
+    const { context, suspend } = suspendPass(ctx);
+    await (requestSandboxAccessTool as any).execute({ path: '../outside', reason: 'read config' }, context);
+    expect(suspend.mock.calls[0]?.[0]).toEqual({
+      kind: 'sandbox_access_request',
+      path: '/acp-session/outside',
+      reason: 'read config',
+    });
+  });
+
   it('suspends with the request payload on the first pass', async () => {
     const agentControllerCtx = createAgentControllerCtx();
     const { context, suspend } = suspendPass(agentControllerCtx);

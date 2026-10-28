@@ -1,5 +1,5 @@
 import { describe, it, expect } from 'vitest';
-import { MASTRA_AUTH_TOKEN_KEY, RequestContext } from './index';
+import { MASTRA_AUTH_TOKEN_KEY, MASTRA_INHERITED_MEMORY_KEY, MASTRA_THREAD_ID_KEY, RequestContext } from './index';
 
 describe('RequestContext', () => {
   describe('constructor', () => {
@@ -338,6 +338,31 @@ describe('RequestContext', () => {
       expect(json).toHaveProperty('smallBuffer');
     });
 
+    it('should skip primitive BigInts so JSON.stringify(context) does not throw', () => {
+      const ctx = new RequestContext();
+      ctx.set('locale', 'en');
+      ctx.set('databaseId', 42n);
+
+      expect(ctx.toJSON()).toEqual({ locale: 'en' });
+      expect(JSON.stringify(ctx)).toBe('{"locale":"en"}');
+      expect(ctx.get('databaseId')).toBe(42n);
+    });
+
+    it('should keep primitive BigInts when BigInt.prototype.toJSON is defined', () => {
+      const proto = BigInt.prototype as unknown as { toJSON?: () => string };
+      proto.toJSON = function (this: bigint) {
+        return this.toString();
+      };
+      try {
+        const ctx = new RequestContext();
+        ctx.set('databaseId', 42n);
+
+        expect(JSON.stringify(ctx)).toBe('{"databaseId":"42"}');
+      } finally {
+        delete proto.toJSON;
+      }
+    });
+
     it('should still skip BigInt-element typed arrays like the unbudgeted probe did', () => {
       const ctx = new RequestContext();
       ctx.set('bigIntArray', new BigInt64Array([1n]));
@@ -497,15 +522,41 @@ describe('RequestContext', () => {
   });
 
   describe('serializeForSpan', () => {
-    it('should redact the auth token key', () => {
+    it('should omit the auth token key', () => {
       const ctx = new RequestContext();
       ctx.set(MASTRA_AUTH_TOKEN_KEY, 'eyJhbGciOiJSUzI1NiIsInR5cCI6IkpXVCJ9.secret');
       ctx.set('userId', 'user-123');
 
       const result = ctx.serializeForSpan();
 
-      expect(result[MASTRA_AUTH_TOKEN_KEY]).toBe('[REDACTED]');
-      expect(result['userId']).toBe('user-123');
+      expect(result).toEqual({ userId: 'user-123' });
+    });
+
+    it('should omit reserved mastra__ and __mastra_ keys', () => {
+      class TelegramAdapter {
+        staticBotToken = '123456789:FAKEtelegramTOKEN';
+      }
+      class MastraMemory {
+        connectionString = 'postgres://user:FAKEpassword@db/mastra';
+      }
+      const ctx = new RequestContext();
+      // Plain wrappers around live instances, as core sets them for channel and delegated runs.
+      ctx.set('__mastra_chat_channel_render', { adapter: new TelegramAdapter(), platform: 'telegram' });
+      ctx.set(MASTRA_INHERITED_MEMORY_KEY, { agentId: 'sub-agent', memory: new MastraMemory() });
+      ctx.set(MASTRA_THREAD_ID_KEY, 'thread-1');
+      ctx.set('userId', 'user-123');
+
+      const result = ctx.serializeForSpan();
+
+      expect(result).toEqual({ userId: 'user-123' });
+    });
+
+    it('should keep user keys that only contain a reserved prefix in the middle', () => {
+      const ctx = new RequestContext();
+      ctx.set('my_mastra__key', 'a');
+      ctx.set('x__mastra_y', 'b');
+
+      expect(ctx.serializeForSpan()).toEqual({ my_mastra__key: 'a', x__mastra_y: 'b' });
     });
 
     it('should include primitive values as-is', () => {

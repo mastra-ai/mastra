@@ -28,6 +28,10 @@ Use channels when an agent needs to:
 - Support multiplayer agents where several people interact with the same agent in a shared channel or thread.
 - Integrate with collaboration workflows like GitHub issues, pull request threads, and Linear comments.
 
+## Configure channels faster with Mastra Connect
+
+If you don't want to configure a bot or app for each channel and maintain the credentials yourself, you can use [Mastra Connect](/docs/mastra-platform/connect/channels). It manages credentials for you, simplifying channel setup and maintenance.
+
 ## Configure an agent
 
 Channels use Chat SDK adapters and follow the same Mastra-side pattern: create a channel adapter and add it to the agent.
@@ -105,14 +109,18 @@ Tunnel URLs are for local development. After you deploy the Mastra server, updat
 
 ## Thread context
 
-When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. By default, Mastra fetches the last 10 messages from the platform on the first mention.
+When a user mentions the agent mid-conversation in a channel thread, the agent may not have prior context. On the first mention, Mastra fetches earlier messages from the platform and saves them into the agent's memory thread before the mention runs.
 
-1. On the first mention in a thread, the agent fetches recent messages from the platform.
-1. These messages are prepended to the user's message as conversation context.
+1. On the first mention in a thread, the agent fetches the thread's first message and the most recent messages before the mention. `maxMessages` (default `10`) sets the window: the first message plus up to `maxMessages - 1` recent messages. When messages fall between the two, a `[… N earlier Slack messages omitted]` marker (the platform name matches the channel) is saved in their place.
+1. Each fetched message is saved to memory as its own user message, attributed to its author and platform message id and carrying its attachments, with a `source: 'thread-history'` attribute. The mention itself then dispatches as a normal message.
 1. After responding, the agent subscribes to the thread and has full history through Mastra memory.
 1. Subsequent messages in that thread don't re-fetch from the platform.
 
 Set `threadContext: { maxMessages: 0 }` to disable this behavior. This only applies to non-direct message threads.
+
+Agents without memory can't save the rows, so they receive the same history as context text inside the mention instead. The same fallback applies when the write to memory fails.
+
+Memory's `lastMessages` option limits how many messages reach the prompt. Its default of `10` trims the first message and the omitted marker when `maxMessages` is `10`, so set `lastMessages` to at least `maxMessages + 1`.
 
 Mastra also adds a short system message that tells the agent which channel and platform the request came from, such as whether the message came from a direct message or public channel. Set `threadContext: { addSystemMessage: false }` to skip it.
 
@@ -141,6 +149,21 @@ export const deleteFile = createTool({
 
 When the agent calls this tool, users see a card with the tool name, arguments, and Approve and Deny actions. The tool only executes after approval.
 
+By default, only the user who requested a tool call can approve or deny it. For a shared channel where another member should be able to respond, set `toolApprovers: 'anyone'` on that adapter:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: {
+      adapter: createSlackAdapter(),
+      toolApprovers: 'anyone',
+    },
+  },
+},
+```
+
+This bypasses only the requester check: actions still need a pending tool approval and a mapped thread. The default isn't a strict identity guarantee when a run has no recorded requester (for example, a scheduled run); in that case, another channel member may be able to respond. If stored messages identify multiple possible requesters after a restart, requester-only mode instead rejects their clicks.
+
 Set `toolDisplay: 'text'` on an adapter to render tool calls as plain text instead of interactive cards. In `'hidden'` mode, `autoResumeSuspendedTools` can resume data-bearing `suspend()` flows when a later user message arrives on the same thread. This requires memory. Hidden mode only suppresses approval buttons. It doesn't turn a message into consent. Tools that require approval remain suspended until an explicit approval or decline is submitted through a UI or API action.
 
 ### Custom action handling
@@ -164,7 +187,7 @@ channels: {
 },
 ```
 
-Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.channels.sdk`.
+Setting `onAction: false` disables action handling entirely, including the built-in tool approval buttons. To register more Chat SDK handlers after the channels start, use `agent.getChannels()?.sdk`.
 
 ## Reply formatting
 
@@ -184,6 +207,33 @@ channels: {
 ```
 
 Use this escape hatch if your agent is prompted to emit a platform-specific dialect, such as Slack mrkdwn, instead of standard markdown. If you added such prompt instructions to work around markdown rendering literally, remove them instead. The default now renders standard markdown natively. `textFormat` affects final reply text only. Tool cards, error messages, and natively streamed text are unaffected.
+
+### Reply only through a tool
+
+Set `textDisplay: 'hidden'` to stop posting the agent's reply text. The agent's own messages then reach the thread only through tools you give it, for example a tool that posts to the thread. This keeps intermediate narration such as "Running the tests now" out of the thread, and lets the agent decide when to post:
+
+```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
+channels: {
+  adapters: {
+    slack: {
+      adapter: createSlackAdapter(),
+      textDisplay: 'hidden',
+    },
+  },
+},
+```
+
+Tool display, approval prompts, error messages, and typing status are unaffected. The reply text still reaches the agent's stream and memory.
+
+The channel instructions Mastra adds to the agent's prompt follow this setting: with text hidden, the agent is told that only what it posts with tools reaches the conversation, and that it can skip a message by not posting anything.
+
+## Runs that don't start from a message
+
+A thread that started in a channel can also run from elsewhere, such as a schedule, a Studio prompt, or a signal waking the agent. Those runs get the same channel instructions as a run started by a message. The agent knows its identity in the channel and whether its text replies are posted there. Because the system prompt is identical for both kinds of run, it stays cached.
+
+Messages that come in over a channel carry a `platform` attribute (for example `platform="slack"`), so the agent can tell them apart from a prompt sent from somewhere else.
+
+Replies on those runs go through the same adapter path as replies to a message. Mastra remembers the last person who wrote in the thread, so adapters that need a recipient, like Slack's native streaming, work the same way.
 
 ## Multi-user awareness
 
@@ -229,7 +279,7 @@ Use `requestContext` for run-scoped configuration, such as credentials for a mes
 
 ## Error handling and delivery
 
-A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws is only logged by Chat SDK, so nothing is posted or retried. Catch failures in custom handlers yourself:
+A channel webhook acknowledges the platform before the agent finishes, so a `200` response means "received", not "answered". Before that acknowledgment, the adapter rejects bad requests synchronously (`401` for failed verification, `400` for an unparseable body, `503` for transient state failures) and the platform redelivers on non-`2xx` responses per its own policy. After the `200`, the platform never retries and Mastra owns errors. The default handler catches agent-run failures and posts an error message to the thread (customize it with `formatError`, which defaults to `❌ Error: {message}`). A custom handler that throws for a single message is only logged by Chat SDK, so nothing is posted or retried (see [Batched messages](#batched-messages) for multi-sender batches). Catch failures in custom handlers yourself:
 
 ```typescript title="src/mastra/agents/your-agent.ts" oxfmt:false
 channels: {
@@ -252,6 +302,10 @@ channels: {
 ```
 
 Platform retries sometimes deliver an event more than once. Adapters use channel state for deduplication, which [storage](/docs/storage) can preserve across restarts. Because this protection is best effort, custom-handler side effects should be idempotent so duplicate delivery can't repeat work such as ticket creation.
+
+### Batched messages
+
+When a `chatOptions.concurrency` strategy (`burst`, `debounce`, or `queue`) batches several messages into one dispatch, Mastra splits the batch into one turn per sender: consecutive messages from the same sender form one turn, oldest first. Your handler runs once per turn with its own `ctx.requestContext`, `ctx.signalMetadata`, and `ctx.skipped` (that turn's earlier messages), so authorization and context apply to every sender. Await `defaultHandler` inside your handler, otherwise senders' turns can overlap. A handler that throws for one turn is logged, the remaining turns still run, and the first error is re-thrown afterwards. In a batch routed to `onMention` because one message mentions the bot, other senders' non-mention messages also reach `onMention` with `message.isMention` set to `false`.
 
 ## Multimodal content
 
@@ -322,7 +376,7 @@ Vercel and AWS Lambda require `waitUntil`, since they freeze the function as soo
 
 ### Coordinate instances with a shared pub/sub
 
-Channels route messages through the agent's [signal pipeline](/docs/harness/signals), and each run acquires a lease on its thread so one run owns the conversation at a time.
+Channels route messages through the agent's [signal pipeline](/docs/signals/overview), and each run acquires a lease on its thread so one run owns the conversation at a time.
 
 The default in-memory pub/sub can't cross instance boundaries, so on serverless a follow-up message can be routed to a different instance than the one running the agent.
 

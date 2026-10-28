@@ -93,6 +93,37 @@ describe('createTimeoutAbortSignal', () => {
     expect(signal?.aborted).toBe(false);
     expect(removeSpy).toHaveBeenCalled();
   });
+
+  it('after default cleanup, a parent abort no longer reaches the signal', () => {
+    const parent = new AbortController();
+    const { signal, cleanup } = createTimeoutAbortSignal({
+      parentSignal: parent.signal,
+      timeoutMs: 10_000,
+      timeoutType: 'step',
+    });
+    cleanup();
+    parent.abort(new Error('stop'));
+
+    expect(signal?.aborted).toBe(false);
+  });
+
+  it('with detachParentOnCleanup: false, cleanup only clears the timer and keeps the parent link', async () => {
+    const parent = new AbortController();
+    const { signal, cleanup } = createTimeoutAbortSignal({
+      parentSignal: parent.signal,
+      timeoutMs: 10,
+      timeoutType: 'total',
+      detachParentOnCleanup: false,
+    });
+    cleanup();
+    await tick(30);
+    expect(signal?.aborted).toBe(false);
+
+    const reason = new Error('stop');
+    parent.abort(reason);
+    expect(signal?.aborted).toBe(true);
+    expect(signal?.reason).toBe(reason);
+  });
 });
 
 describe('raceAgainstAbort', () => {

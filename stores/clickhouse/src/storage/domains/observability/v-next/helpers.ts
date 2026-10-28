@@ -19,7 +19,9 @@ import type {
   FeedbackRecord,
   CreateFeedbackRecord,
 } from '@mastra/core/storage';
-import { buildInputPreview, computeTraceStatus, EntityType } from '@mastra/core/storage';
+import { computeTraceStatus, EntityType, getStringAttribute } from '@mastra/core/storage';
+import { storedPreview as buildStoredPreview } from './preview-compat';
+import { resolveStoredPreviews } from './previews';
 import { coerceFeedbackReviewStatus } from './review-status';
 
 // ---------------------------------------------------------------------------
@@ -58,6 +60,12 @@ const PROMOTED_KEYS = new Set([
   'executionSource',
   'serviceName',
 ]);
+
+function nullableNumber(value: unknown): number | null {
+  if (value == null || value === '') return null;
+  const n = Number(value);
+  return Number.isNaN(n) ? null : n;
+}
 
 function nullableString(value: unknown): string | null {
   return typeof value === 'string' ? (value === '' ? null : value) : value == null ? null : String(value);
@@ -151,6 +159,7 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
   const startedAt = toDate(row.startedAt);
   const endedAt = row.isEvent ? startedAt : toDateOrNull(row.endedAt);
   const error = parseJson(row.error);
+  const attributes = parseJson(row.attributes) as Record<string, unknown> | null;
 
   return {
     traceId: row.traceId,
@@ -187,12 +196,21 @@ export function rowToSpanRecord(row: Record<string, any>): SpanRecord {
     tags: normalizeTags(row.tags),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
     scope: (parseJson(row.scope) as Record<string, unknown> | null) ?? undefined,
-    attributes: (parseJson(row.attributes) as Record<string, unknown> | null) ?? undefined,
+    attributes: attributes ?? undefined,
     links: (parseJson(row.links) as Record<string, unknown>[] | null) ?? undefined,
     input: parseJson(row.input) ?? undefined,
     output: parseJson(row.output) ?? undefined,
     error: error ?? undefined,
     requestContext: (parseJson(row.requestContext) as Record<string, unknown> | null) ?? undefined,
+    externalParentSpanId: nullableString(row.externalParentSpanId),
+    resumedFromSpanId: nullableString(row.resumedFromSpanId),
+    model: nullableString(row.model) ?? getStringAttribute(attributes, 'model'),
+    provider: nullableString(row.provider) ?? getStringAttribute(attributes, 'provider'),
+    outcome: nullableString(row.outcome),
+    stopReason: nullableString(row.stopReason),
+    stopReasonContext: (parseJson(row.stopReasonContext) as Record<string, unknown> | null) ?? null,
+    timeToFirstTokenMs: nullableNumber(row.timeToFirstTokenMs),
+    errorCount: nullableNumber(row.errorCount),
     createdAt: startedAt,
     updatedAt: null,
   };
@@ -219,20 +237,26 @@ export function rowToLightSpanRecord(row: Record<string, any>): LightSpanRecord 
     entityType: nullableEntityType(row.entityType),
     entityId: nullableString(row.entityId),
     entityName: nullableString(row.entityName),
+    threadId: nullableString(row.threadId),
+    resourceId: nullableString(row.resourceId),
     error,
     status: computeTraceStatus({ error, endedAt }),
     metadata: (parseJson(row.metadataRaw) as Record<string, unknown> | null) ?? undefined,
-    // Derived at read time from the raw `input` column; buildInputPreview parses
-    // internally and previews an unparseable document as empty.
-    inputPreview: buildInputPreview(row.input ?? null),
+    // Stored previews; rows written before they were stored carry the payload columns instead.
+    ...resolveStoredPreviews(row),
     createdAt: startedAt,
     updatedAt: null,
   };
 }
 
 export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown> {
+  // Re-emitted copies and retries of a span must preserve startedAt. querySpans applies
+  // its start-time window before selecting the latest completed copy of each identity.
   const endedAt = span.isEvent ? span.startedAt : (span.endedAt ?? span.startedAt);
   const metadata = span.metadata ?? null;
+  const input = jsonEncode(span.input);
+  const output = jsonEncode(span.output);
+  const error = jsonEncode(span.error);
 
   return {
     dedupeKey: buildDedupeKey(span.traceId, span.spanId),
@@ -267,16 +291,31 @@ export function spanRecordToRow(span: CreateSpanRecord): Record<string, unknown>
     isEvent: span.isEvent,
     startedAt: toISOString(span.startedAt),
     endedAt: toISOString(endedAt),
+    timeToFirstChunkMs: span.timeToFirstChunkMs ?? null,
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: jsonEncode(span.stopReasonContext),
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
     tags: normalizeTags(span.tags),
     metadataSearch: buildMetadataSearch(metadata),
     metadataRaw: jsonEncode(metadata),
     scope: jsonEncode(span.scope),
     attributes: jsonEncode(span.attributes),
     links: jsonEncode(span.links),
-    input: jsonEncode(span.input),
-    output: jsonEncode(span.output),
-    error: jsonEncode(span.error),
+    input,
+    output,
+    error,
     requestContext: jsonEncode(span.requestContext),
+    // Upstream previews win; otherwise built from the stored value and its JSON text, so they
+    // match a preview built from the column at read time. '' means nothing to preview.
+    inputPreview: buildStoredPreview(span.inputPreview, span.input, input),
+    outputPreview: buildStoredPreview(span.outputPreview, span.output, output),
+    errorPreview: buildStoredPreview(span.errorPreview, span.error, error),
   };
 }
 

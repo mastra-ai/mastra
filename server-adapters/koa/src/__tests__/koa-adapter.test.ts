@@ -1,10 +1,8 @@
 import type { Server } from 'node:http';
-import type {
-  AdapterTestContext,
-  AdapterSetupOptions,
-  HttpRequest,
-  HttpResponse,
-} from '@internal/server-adapter-test-utils';
+import { Mastra } from '@mastra/core';
+import { registerApiRoute } from '@mastra/core/server';
+import { createRoute } from '@mastra/server/server-adapter';
+import type { ServerRoute } from '@mastra/server/server-adapter';
 import {
   createRouteAdapterTestSuite,
   createDefaultTestContext,
@@ -13,11 +11,13 @@ import {
   expectSerializedStreamChunks,
   consumeSSEStream,
   createMultipartTestSuite,
-} from '@internal/server-adapter-test-utils';
-import { Mastra } from '@mastra/core';
-import { registerApiRoute } from '@mastra/core/server';
-import { createRoute } from '@mastra/server/server-adapter';
-import type { ServerRoute } from '@mastra/server/server-adapter';
+} from '@mastra/server-adapters-test-suite';
+import type {
+  AdapterTestContext,
+  AdapterSetupOptions,
+  HttpRequest,
+  HttpResponse,
+} from '@mastra/server-adapters-test-suite';
 import Koa from 'koa';
 import bodyParser from 'koa-bodyparser';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
@@ -135,30 +135,29 @@ describe('Koa Server Adapter', () => {
             stream: response.body,
             headers,
           };
-        } else {
-          // JSON response - check content type to decide how to parse
-          let data: unknown;
-          const responseContentType = response.headers.get('content-type') || '';
-
-          if (responseContentType.includes('application/json')) {
-            try {
-              data = await response.json();
-            } catch {
-              // If JSON parsing fails, return empty object
-              data = {};
-            }
-          } else {
-            // Not JSON content type, read as text
-            data = await response.text();
-          }
-
-          return {
-            status: response.status,
-            type: 'json',
-            data,
-            headers,
-          };
         }
+        // JSON response - check content type to decide how to parse
+        let data: unknown;
+        const responseContentType = response.headers.get('content-type') || '';
+
+        if (responseContentType.includes('application/json')) {
+          try {
+            data = await response.json();
+          } catch {
+            // If JSON parsing fails, return empty object
+            data = {};
+          }
+        } else {
+          // Not JSON content type, read as text
+          data = await response.text();
+        }
+
+        return {
+          status: response.status,
+          type: 'json',
+          data,
+          headers,
+        };
       } finally {
         // Always close server
         await new Promise<void>((resolve, reject) => {
@@ -251,6 +250,40 @@ describe('Koa Server Adapter', () => {
       const paramResponse = await fetch(`http://localhost:${port}/items/42`);
       expect(paramResponse.status).toBe(200);
       await expect(paramResponse.json()).resolves.toEqual({ route: 'param', id: '42' });
+    });
+
+    it('decodes percent-encoded route parameters', async () => {
+      const app = new Koa();
+      app.use(bodyParser());
+
+      const adapter = new MastraServer({
+        app,
+        mastra: new Mastra({}),
+      });
+
+      adapter.registerContextMiddleware();
+
+      await adapter.registerRoute(
+        app,
+        {
+          method: 'GET',
+          path: '/items/:id',
+          responseType: 'json',
+          handler: async ({ id }) => ({ id }),
+        },
+        { prefix: '' },
+      );
+
+      server = await new Promise(resolve => {
+        const s = app.listen(0, () => resolve(s));
+      });
+
+      const address = server.address();
+      const port = typeof address === 'object' && address ? address.port : 0;
+      const response = await fetch(`http://localhost:${port}/items/a%2520b`);
+
+      expect(response.status).toBe(200);
+      await expect(response.json()).resolves.toEqual({ id: 'a%20b' });
     });
 
     it('preserves middleware ordering when routes are registered around app.use calls', async () => {

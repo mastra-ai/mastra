@@ -31,7 +31,7 @@ describe('DatasetItems empty state', () => {
 
     expect(screen.getByText('No items yet')).not.toBeNull();
 
-    const link = screen.getByRole('link', { name: /Datasets Documentation/ });
+    const link = screen.getByRole('link', { name: /Datasets documentation/ });
     expect(link.getAttribute('href')).toBe('https://mastra.ai/docs/evals/datasets');
     expect(link.getAttribute('target')).toBe('_blank');
   });
@@ -39,13 +39,13 @@ describe('DatasetItems empty state', () => {
   it('does not render the search field when the dataset has no items', () => {
     renderEmpty();
 
-    expect(screen.queryByRole('textbox', { name: 'Search items' })).toBeNull();
+    expect(screen.queryByRole('searchbox', { name: 'Search items' })).toBeNull();
   });
 
   it('keeps the search field when a search matches no items', () => {
     renderEmpty({ searchQuery: 'nothing', onSearchChange: () => {} });
 
-    expect(screen.getByRole('textbox', { name: 'Search items' })).not.toBeNull();
+    expect(screen.getByRole('searchbox', { name: 'Search items' })).not.toBeNull();
   });
 
   it('wires the add and import actions', () => {

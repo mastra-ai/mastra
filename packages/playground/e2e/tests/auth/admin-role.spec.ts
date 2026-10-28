@@ -22,20 +22,6 @@ test.describe('Admin Role', () => {
   });
 
   test.describe('when an admin user navigates the studio', () => {
-    test('admin sees all navigation items', async ({ page }) => {
-      await setupAdminAuth(page);
-      await page.goto('/agents');
-
-      // Wait for page to load
-      await expectCurrentBreadcrumb(page, 'Agents');
-
-      // Verify all main navigation links are visible
-      await expect(page.getByRole('link', { name: /^Agents$/i })).toBeVisible();
-      await expect(page.getByRole('link', { name: /^Workflows$/i })).toBeVisible();
-      await expect(page.getByRole('link', { name: /^Tools$/i })).toBeVisible();
-      await expect(page.getByRole('link', { name: /^MCP Servers$/i })).toBeVisible();
-    });
-
     test('admin can navigate to all main sections', async ({ page }) => {
       await setupAdminAuth(page);
 
@@ -102,11 +88,12 @@ test.describe('Admin Role', () => {
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+        // The chip opens the tool drawer over the agent page you're on.
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=weatherInfo$/,
       );
       await expect(page.getByRole('link', { name: 'simpleMcpTool' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/simpleMcpTool$/,
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=simpleMcpTool$/,
       );
     });
   });
@@ -147,8 +134,8 @@ test.describe('Admin Role', () => {
 
       // Admin should see the trigger/run workflow controls
       // The workflow trigger should be visible and enabled
-      const triggerButton = page.getByRole('button', { name: /run|trigger|execute/i });
-      await expect(triggerButton.first()).toBeVisible();
+      const triggerButton = page.getByRole('button', { name: 'Run', exact: true });
+      await expect(triggerButton).toBeVisible();
     });
 
     test('admin workflow execution button is not disabled', async ({ page }) => {
@@ -156,7 +143,7 @@ test.describe('Admin Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Look for any run/execute button
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
 
       // Wait for button to be visible
       await expect(runButton).toBeVisible();
@@ -190,20 +177,21 @@ test.describe('Admin Role', () => {
         .click();
 
       // Should be on tool details page
-      await expect(page).toHaveURL(/\/tools\/weatherInfo/);
+      await expect(page).toHaveURL(/\/tools\?tool=weatherInfo/);
     });
 
     test('admin can see tool execution panel', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
-      // Should see the tool execution form/panel
+      // The execution form lives on the Playground tab
+      await page.getByRole('tab', { name: 'Playground' }).click();
       await expect(page.locator('[name="location"]')).toBeVisible();
     });
 
     test('admin does not see permission denied for tool execution', async ({ page }) => {
       await setupAdminAuth(page);
-      await page.goto('/tools/weatherInfo');
+      await page.goto('/tools?tool=weatherInfo');
 
       // Admin should NOT see permission denied message
       const permissionDenied = page.getByText(/permission denied|not authorized|don't have permission/i);
@@ -315,7 +303,7 @@ test.describe('Admin Role', () => {
       await page.goto('/workflows/lessComplexWorkflow');
 
       // Admin should see run button enabled
-      const runButton = page.getByRole('button', { name: /run|trigger|execute/i }).first();
+      const runButton = page.getByRole('button', { name: 'Run', exact: true });
       await expect(runButton).toBeVisible();
       await expect(runButton).not.toBeDisabled();
 

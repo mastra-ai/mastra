@@ -9,7 +9,10 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import { queryKeys } from '../../../../../api/keys';
 import type { FactoryUserSession } from '../../services/user-sessions';
-import { UserSessionsSection } from '../UserSessionsSection';
+import { ChatSessionContext } from '../../../chat/context/ChatSessionContext';
+import { SessionsSection } from '../SessionsSection';
+import { SidebarNewSessionButton } from '../SidebarNewSessionButton';
+import { testChatSession } from './fixtures/sessionsSection';
 
 const projectRepositoryId = 'ghp-1';
 const sessionId = '00000000-0000-4000-8000-000000000001';
@@ -56,9 +59,7 @@ function stubFactoryWithRepository(sessions: FactoryUserSession[] = []) {
         ],
       }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
-      HttpResponse.json({ sessions }),
-    ),
+    http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () => HttpResponse.json({ sessions })),
     http.get(`${TEST_BASE_URL}/web/user-sessions/:sessionId`, ({ params }) => {
       const session = sessions.find(candidate => candidate.sessionId === params.sessionId);
       return session
@@ -87,15 +88,26 @@ function LocationProbe() {
   return <output data-testid="pathname">{useLocation().pathname}</output>;
 }
 
+function SidebarSessions() {
+  return (
+    <>
+      <SidebarNewSessionButton />
+      <SessionsSection />
+    </>
+  );
+}
+
 function renderSection() {
   return renderWithProviders(
     <MemoryRouter initialEntries={['/factories/fp-1']}>
-      <Routes>
-        <Route path="/factories/:factoryId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<UserSessionsSection />} />
-        <Route path="/factories/:factoryId/user/threads/:threadId" element={<UserSessionsSection />} />
-        <Route path="*" element={<UserSessionsSection />} />
-      </Routes>
+      <ChatSessionContext.Provider value={testChatSession('fp-1', projectRepositoryId)}>
+        <Routes>
+          <Route path="/factories/:factoryId" element={<SidebarSessions />} />
+          <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<SidebarSessions />} />
+          <Route path="/factories/:factoryId/user/threads/:threadId" element={<SidebarSessions />} />
+          <Route path="*" element={<SidebarSessions />} />
+        </Routes>
+      </ChatSessionContext.Provider>
       <LocationProbe />
       <Toaster position="bottom-right" />
     </MemoryRouter>,
@@ -109,7 +121,7 @@ describe('User sessions creation', () => {
     const controller = trackControllerRequests();
     let sessionPosts = 0;
     server.use(
-      http.post(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () => {
+      http.post(`${TEST_BASE_URL}/web/source-control/projects/${projectRepositoryId}/sessions`, () => {
         sessionPosts += 1;
         return HttpResponse.json({ session: userSession() });
       }),
@@ -119,22 +131,20 @@ describe('User sessions creation', () => {
     const { client } = renderSection();
     expect(await screen.findByText('No sessions yet')).toBeInTheDocument();
 
-    await user.click(screen.getByRole('button', { name: 'New user session' }));
+    await user.click(await screen.findByRole('button', { name: 'New session' }));
 
     await waitFor(() =>
       expect(screen.getByTestId('pathname')).toHaveTextContent(
         /^\/factories\/fp-1\/user\/new\/[0-9a-f]{8}-[0-9a-f]{4}-4[0-9a-f]{3}-[89ab][0-9a-f]{3}-[0-9a-f]{12}$/i,
       ),
     );
-    // The session only exists once the first prompt creates it, so the sidebar
-    // has nothing to list yet.
-    expect(screen.queryByRole('button', { name: 'New session' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'New session' })).not.toBeInTheDocument();
     expect(screen.getByText('No sessions yet')).toBeInTheDocument();
     await waitForMutationsIdle(client);
     expect(sessionPosts).toBe(0);
     expect(controller).toEqual({ createSession: 0, renameThread: 0 });
     expect(sessions).toEqual([]);
-    expect(client.getQueryData(queryKeys.sessions(projectRepositoryId))).toEqual({
+    expect(client.getQueryData(queryKeys.sessions('fp-1'))).toEqual({
       workspaces: [],
       userSessions: [],
     });
@@ -158,16 +168,16 @@ describe('User sessions creation', () => {
 
     renderSection();
 
-    expect(await screen.findByRole('button', { name: 'Fix login' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'feature-readable' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
+    expect(await screen.findByRole('link', { name: 'Fix login' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'feature-readable' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'New session' })).toBeInTheDocument();
     expect(screen.queryByText(opaqueSessionId)).not.toBeInTheDocument();
   });
 
   it('says the session list failed instead of claiming there are none', async () => {
     stubFactoryWithRepository();
     server.use(
-      http.get(`${TEST_BASE_URL}/web/github/projects/${projectRepositoryId}/sessions`, () =>
+      http.get(`${TEST_BASE_URL}/web/factory/projects/:factoryId/sessions`, () =>
         HttpResponse.json({ message: 'Nope' }, { status: 500 }),
       ),
     );
@@ -176,7 +186,7 @@ describe('User sessions creation', () => {
 
     expect(await screen.findByText('Couldn’t load sessions')).toBeInTheDocument();
     expect(screen.queryByText('No sessions yet')).not.toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New user session' })).toBeEnabled();
+    expect(await screen.findByRole('button', { name: 'New session' })).toBeEnabled();
   });
 
   it('deletes the session row and leaves its controller thread in place', async () => {
@@ -208,7 +218,7 @@ describe('User sessions creation', () => {
     expect(deletedSessions).toBe(1);
     expect(client.getQueryData(queryKeys.userSession(sessionId))).toBeUndefined();
     expect(await screen.findByText('Session deleted')).toBeInTheDocument();
-    expect(screen.queryByRole('button', { name: 'session-1' })).not.toBeInTheDocument();
+    expect(screen.queryByRole('link', { name: 'session-1' })).not.toBeInTheDocument();
   });
 
   it('surfaces a failed delete and keeps the session listed', async () => {
@@ -228,6 +238,6 @@ describe('User sessions creation', () => {
     await waitForMutationsIdle(client);
 
     expect(await screen.findByText(/Failed to delete session \(500\)/)).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'session-1' })).toBeInTheDocument();
+    expect(screen.getByRole('link', { name: 'session-1' })).toBeInTheDocument();
   });
 });

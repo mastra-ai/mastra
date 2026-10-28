@@ -8,8 +8,8 @@
  * 2. The server should NOT become unresponsive
  * 3. Subsequent requests should continue to work normally
  */
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MastraServer } from '../index';

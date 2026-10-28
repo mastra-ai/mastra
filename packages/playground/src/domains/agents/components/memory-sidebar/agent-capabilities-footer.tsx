@@ -1,16 +1,19 @@
 import type { GetAgentResponse, GetMemoryStatusResponse } from '@mastra/client-js';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@mastra/playground-ui/components/Collapsible';
+import { DisclosureChevron } from '@mastra/playground-ui/components/DisclosureChevron';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { useEntityRequestContext } from '@mastra/playground-ui/domains/request-context/hooks/use-entity-request-context';
 import { MemoryIcon } from '@mastra/playground-ui/icons/MemoryIcon';
+import { controlStateColorTransition, focusRing, focusRingInset } from '@mastra/playground-ui/primitives/transitions';
+import { quietTextHover } from '@mastra/playground-ui/primitives/typography';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { Bot, ChevronRight, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
+import { useAgent, useAgentVersions } from '@mastra/react/hooks/agents';
+import { useMemory } from '@mastra/react/hooks/memory';
+import { Bot, ExternalLink, Pencil, SlidersHorizontal, WorkflowIcon, Wrench } from 'lucide-react';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
-import { useAgent } from '@/domains/agents/hooks/use-agent';
-import { useAgentVersions } from '@/domains/agents/hooks/use-agent-versions';
 import { useIsCmsAvailable } from '@/domains/cms/hooks/use-is-cms-available';
-import { useMemory } from '@/domains/memory/hooks/use-memory';
 
 type CapabilityTone = 'purple' | 'amber' | 'emerald' | 'sky' | 'cyan' | 'orange';
 
@@ -21,22 +24,22 @@ type CapabilityCollection =
 
 const toneClassName: Record<CapabilityTone, { icon: string }> = {
   purple: {
-    icon: 'text-purple-700 dark:text-purple-300',
+    icon: 'text-badge-purple-indicator',
   },
   amber: {
-    icon: 'text-amber-700 dark:text-amber-300',
+    icon: 'text-badge-amber-indicator',
   },
   emerald: {
-    icon: 'text-emerald-700 dark:text-emerald-300',
+    icon: 'text-badge-green-indicator',
   },
   sky: {
-    icon: 'text-sky-700 dark:text-sky-300',
+    icon: 'text-badge-blue-indicator',
   },
   cyan: {
-    icon: 'text-cyan-700 dark:text-cyan-300',
+    icon: 'text-badge-cyan-indicator',
   },
   orange: {
-    icon: 'text-orange-700 dark:text-orange-300',
+    icon: 'text-badge-orange-indicator',
   },
 };
 
@@ -83,7 +86,7 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       <span
         aria-label={`${label}: ${status}`}
         className={cn(
-          'pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-neutral3',
+          'pointer-events-none inline-flex h-5 min-w-5 items-center justify-center rounded-full px-1 text-muted-foreground',
           enabled ? toneIcon : undefined,
         )}
       >
@@ -99,28 +102,41 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
       target="_blank"
       rel="noopener noreferrer"
       className={cn(
-        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5 text-ui-xs text-neutral4 transition-colors duration-normal',
-        'hover:bg-surface4/60 hover:text-neutral6 focus-visible:outline-none focus-visible:ring-1 focus-visible:ring-border2',
+        'group/capability-row flex min-w-0 items-start gap-2 rounded-md px-2 py-1.5',
+        'hover:bg-fill-subtle',
+        focusRing,
+        quietTextHover,
+        controlStateColorTransition,
       )}
     >
       <span
         className={cn(
-          'mt-0.5 size-3.5 shrink-0 text-neutral3 transition-colors duration-normal [&>svg]:size-3.5',
-          enabled ? toneIcon : 'group-hover/capability-row:text-neutral5',
+          'mt-0.5 size-3.5 shrink-0 text-muted-foreground [&>svg]:size-3.5',
+          controlStateColorTransition,
+          enabled ? toneIcon : 'group-hover/capability-row:text-foreground',
         )}
       >
         {icon}
       </span>
       <span className="min-w-0 flex-1">
         <span className="flex min-w-0 items-center gap-2">
-          <span className="text-neutral5 min-w-0 truncate font-medium">{label}</span>
-          <span className="text-neutral3 shrink-0 tabular-nums">{status}</span>
+          <Txt as="span" variant="meta" tone="ink" className="min-w-0 truncate">
+            {label}
+          </Txt>
+          <Txt as="span" variant="meta" tone="muted" className="shrink-0 tabular-nums">
+            {status}
+          </Txt>
         </span>
-        <span className="text-neutral3 duration-normal group-hover/capability-row:text-neutral4 mt-0.5 block transition-colors">
+        <Txt as="span" variant="meta" tone="muted" className="mt-0.5 block">
           {description}
-        </span>
+        </Txt>
       </span>
-      <ExternalLink className="text-neutral3 duration-normal group-hover/capability-row:text-neutral5 mt-0.5 size-3 shrink-0 transition-colors" />
+      <ExternalLink
+        className={cn(
+          'mt-0.5 size-3 shrink-0 text-muted-foreground group-hover/capability-row:text-foreground',
+          controlStateColorTransition,
+        )}
+      />
     </a>
   );
 }
@@ -128,7 +144,11 @@ function CapabilityItem({ view, label, status, description, docsHref, enabled, t
 // Each capability component owns its data and loading state; React Query
 // dedupes the underlying requests across instances — see client-request-dedupe.
 function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: memory, isLoading } = useMemory(agentId);
+  const { data: memory, isLoading } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const enabled = hasConfiguredMemory(memory);
 
   const settledStatus = enabled ? (memory?.memoryType === 'gateway' ? 'Gateway' : 'On') : 'Off';
@@ -153,14 +173,18 @@ function MemoryCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function EditorCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading: isAgentLoading } = useAgent(agentId);
+  const { data: agent, isLoading: isAgentLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable, isLoading: isCmsAvailabilityLoading } = useIsCmsAvailable();
   const enabled = isEditorAvailable(agent, isCmsAvailable);
   const locked = agent?.editor === false;
   const versionsQuery = useAgentVersions({
-    agentId,
+    agentId: agentId,
     params: { orderBy: { field: 'createdAt', direction: 'DESC' } },
-    enabled,
+    queryOptions: { enabled: Boolean(agentId) && enabled },
   });
   const versionCount = versionsQuery.data?.total ?? versionsQuery.data?.versions.length ?? 0;
   const isLoading = isAgentLoading || isCmsAvailabilityLoading || (enabled && versionsQuery.isLoading);
@@ -189,7 +213,11 @@ function EditorCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.tools);
 
   return (
@@ -207,7 +235,11 @@ function ToolsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.workflows);
 
   return (
@@ -227,7 +259,11 @@ function WorkflowsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getRecordCount(agent?.agents);
 
   return (
@@ -249,7 +285,11 @@ function SubAgentsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
-  const { data: agent, isLoading } = useAgent(agentId);
+  const { data: agent, isLoading } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const count = getProcessorCount(agent);
 
   return (
@@ -271,8 +311,16 @@ function ProcessorsCapability({ agentId, view }: AgentCapabilityProps) {
 }
 
 function CapabilitiesSummary({ agentId }: { agentId: string }) {
-  const { data: memory } = useMemory(agentId);
-  const { data: agent } = useAgent(agentId);
+  const { data: memory } = useMemory({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
+  const { data: agent } = useAgent({
+    agentId: agentId,
+    requestContext: useEntityRequestContext('agent', agentId)[0],
+    queryOptions: { enabled: Boolean(agentId) },
+  });
   const { isCmsAvailable } = useIsCmsAvailable();
 
   const enabledFlags = [
@@ -286,7 +334,7 @@ function CapabilitiesSummary({ agentId }: { agentId: string }) {
   const enabledCount = enabledFlags.filter(Boolean).length;
 
   return (
-    <Txt as="span" variant="ui-xs" className="text-neutral3 shrink-0">
+    <Txt as="span" variant="meta" tone="muted" className="shrink-0">
       {enabledCount}/{enabledFlags.length}
     </Txt>
   );
@@ -297,12 +345,17 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
 
   return (
     <Collapsible open={isExpanded} onOpenChange={setIsExpanded}>
-      <div className="border-border1/50 shrink-0 border-t">
+      <div className="shrink-0 border-t border-border">
         <CollapsibleTrigger asChild aria-label={isExpanded ? 'Hide capability details' : 'Show capability details'}>
           <button
             type="button"
             data-testid="agent-capabilities-footer"
-            className="text-neutral4 duration-normal hover:!text-neutral4 hover:bg-surface4 focus-visible:!text-neutral4 focus-visible:bg-surface4 focus-visible:ring-border2 active:bg-surface5/80 aria-expanded:bg-surface4/70 data-[panel-open]:bg-surface4/70 flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left transition-colors focus-visible:ring-1 focus-visible:outline-none focus-visible:ring-inset"
+            className={cn(
+              'flex w-full cursor-pointer items-center gap-1.5 px-2 py-2 text-left hover:bg-fill-subtle focus-visible:bg-fill-subtle active:bg-fill aria-expanded:bg-fill-hover data-[panel-open]:bg-fill-hover',
+              focusRingInset,
+              quietTextHover,
+              controlStateColorTransition,
+            )}
           >
             <div className="flex min-w-0 flex-1 items-center gap-1.5 overflow-hidden">
               <MemoryCapability agentId={agentId} view="chip" />
@@ -313,12 +366,7 @@ export function AgentCapabilitiesFooter({ agentId }: { agentId: string }) {
               <ProcessorsCapability agentId={agentId} view="chip" />
             </div>
             <CapabilitiesSummary agentId={agentId} />
-            <ChevronRight
-              className={cn(
-                'size-3.5 shrink-0 text-neutral3 transition-transform duration-normal ease-out-custom',
-                isExpanded ? 'rotate-90' : undefined,
-              )}
-            />
+            <DisclosureChevron direction="right" className="size-3.5 text-muted-foreground" />
           </button>
         </CollapsibleTrigger>
 

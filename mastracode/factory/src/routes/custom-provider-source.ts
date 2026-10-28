@@ -17,8 +17,10 @@
  * `invalidateCustomProvidersSnapshots` so changes are visible immediately.
  */
 
+import { resolveTenantFromRequestContext } from '@mastra/code-sdk/agents/credential-resolver';
 import { setCustomProvidersSource } from '@mastra/code-sdk/agents/custom-provider-source';
 import type { MastraCodeCustomProvider } from '@mastra/code-sdk/agents/mastracode-gateway';
+import type { RequestContext } from '@mastra/core/request-context';
 import type { MiddlewareHandler } from 'hono';
 
 import type { CustomProvidersStorage } from '../storage/domains/custom-providers/base.js';
@@ -78,6 +80,8 @@ class OrgCustomProvidersSnapshot {
 
 const orgSnapshots = new Map<string, OrgCustomProvidersSnapshot>();
 
+let registered: { storage: CustomProvidersStorage; authEnabled: boolean } | undefined;
+
 function snapshotFor(orgId: string, storage: CustomProvidersStorage): OrgCustomProvidersSnapshot {
   let snapshot = orgSnapshots.get(orgId);
   if (!snapshot) {
@@ -113,6 +117,7 @@ export function registerCustomProvidersSource({
   storage: CustomProvidersStorage;
   authEnabled: boolean;
 }): void {
+  registered = { storage, authEnabled };
   setCustomProvidersSource(tenant => {
     const orgId = orgForTenant(tenant, authEnabled);
     if (!orgId) return [];
@@ -131,6 +136,7 @@ export function invalidateCustomProvidersSnapshots(tenant: { orgId: string }): v
 /** Test hook: clear registration and cached org snapshots. */
 export function resetCustomProvidersSourceForTests(): void {
   setCustomProvidersSource(undefined);
+  registered = undefined;
   orgSnapshots.clear();
 }
 
@@ -160,4 +166,21 @@ export function createCustomProvidersPrimer({
     }
     await next();
   };
+}
+
+/**
+ * Prime the org snapshot for a run that has no inbound request (a notification
+ * or peer-signal wake), so its first model call can resolve a custom-provider
+ * model. Best-effort like the request primer: a failed hydrate serves the last
+ * snapshot.
+ */
+export async function primeCustomProvidersForRequestContext(requestContext: RequestContext): Promise<void> {
+  if (!registered) return;
+  const orgId = orgForTenant(resolveTenantFromRequestContext(requestContext), registered.authEnabled);
+  if (!orgId) return;
+  try {
+    await snapshotFor(orgId, registered.storage).ensureFresh();
+  } catch {
+    // Fail open: model calls serve the last snapshot (or none).
+  }
 }

@@ -3,7 +3,7 @@ import { MastraReactProvider } from '@mastra/react';
 import { act, renderHook } from '@testing-library/react';
 import type { ReactNode } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
-import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '../../trace-list-columns';
+import { DEFAULT_TRACE_COLUMN_PREFERENCES, TRACE_COLUMN_CATALOGS } from '../../trace-list-columns';
 import { useTraceColumnPreferences } from '../use-trace-column-preferences';
 
 function createMemoryStorage(): Storage {
@@ -54,16 +54,51 @@ describe('useTraceColumnPreferences', () => {
 
       const returnVisit = renderHook(() => useTraceColumnPreferences(), { wrapper: projectA });
       expect(returnVisit.result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity', 'duration'],
+        visibleColumns: ['type', 'input', 'output', 'estimatedCost'],
+        customColumns: [],
         metadataKeys: ['tenantId'],
       });
 
       const projectB = makeWrapper('http://project-b.test');
       const otherProject = renderHook(() => useTraceColumnPreferences(), { wrapper: projectB });
       expect(otherProject.result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity'],
+        visibleColumns: ['type', 'input', 'output', 'duration', 'estimatedCost'],
+        customColumns: [],
         metadataKeys: [],
       });
+    });
+
+    it('keeps the spans selection apart from the traces selection', () => {
+      const wrapper = makeWrapper('http://project-a.test');
+      const spans = renderHook(() => useTraceColumnPreferences({ scope: 'spans' }), { wrapper });
+
+      act(() => {
+        spans.result.current.addCustomColumn('threadId');
+      });
+      spans.unmount();
+
+      const traces = renderHook(() => useTraceColumnPreferences(), { wrapper });
+      expect(traces.result.current.preferences.customColumns).toEqual([]);
+
+      const spansAgain = renderHook(() => useTraceColumnPreferences({ scope: 'spans' }), { wrapper });
+      expect(spansAgain.result.current.preferences.customColumns).toEqual(['threadId']);
+    });
+
+    it('starts spans from their own defaults and resets back to them', () => {
+      const { result } = renderHook(() => useTraceColumnPreferences({ scope: 'spans' }), {
+        wrapper: makeWrapper('http://project-a.test'),
+      });
+      expect(result.current.preferences).toEqual(TRACE_COLUMN_CATALOGS.spans.defaults);
+
+      act(() => {
+        result.current.toggleColumn('model');
+      });
+      expect(result.current.preferences.visibleColumns).toContain('model');
+
+      act(() => {
+        result.current.resetColumns();
+      });
+      expect(result.current.preferences).toEqual(TRACE_COLUMN_CATALOGS.spans.defaults);
     });
 
     it('keeps back-to-back updates made before React rerenders', () => {
@@ -77,7 +112,8 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences).toEqual({
-        visibleColumns: ['input', 'entity', 'duration'],
+        visibleColumns: ['type', 'input', 'output', 'estimatedCost'],
+        customColumns: [],
         metadataKeys: ['tenantId'],
       });
     });
@@ -133,19 +169,32 @@ describe('useTraceColumnPreferences', () => {
       const { result } = renderPreferences();
 
       act(() => {
-        result.current.toggleColumn('duration');
+        result.current.toggleColumn('inputTokens');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'output',
+        'duration',
+        'estimatedCost',
+        'inputTokens',
+      ]);
 
       act(() => {
-        result.current.toggleColumn('duration');
+        result.current.toggleColumn('inputTokens');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'output',
+        'duration',
+        'estimatedCost',
+      ]);
 
       act(() => {
         result.current.toggleColumn('input');
       });
-      expect(result.current.preferences.visibleColumns).toEqual(['entity']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'output', 'duration', 'estimatedCost']);
     });
 
     it('removes a metadata column without touching the others', () => {
@@ -166,6 +215,34 @@ describe('useTraceColumnPreferences', () => {
         result.current.removeMetadataColumn('not-there');
       });
       expect(result.current.preferences.metadataKeys).toEqual(['requestKind']);
+    });
+
+    describe('when a custom column is added', () => {
+      it('persists it across remounts and ignores duplicates', () => {
+        const wrapper = makeWrapper('http://project-a.test');
+        const firstVisit = renderHook(() => useTraceColumnPreferences(), { wrapper });
+
+        act(() => {
+          firstVisit.result.current.addCustomColumn('threadId');
+          firstVisit.result.current.addCustomColumn('threadId');
+          firstVisit.result.current.addCustomColumn('resourceId');
+        });
+        expect(firstVisit.result.current.preferences.customColumns).toEqual(['threadId', 'resourceId']);
+        firstVisit.unmount();
+
+        const returnVisit = renderHook(() => useTraceColumnPreferences(), { wrapper });
+        expect(returnVisit.result.current.preferences.customColumns).toEqual(['threadId', 'resourceId']);
+
+        act(() => {
+          returnVisit.result.current.removeCustomColumn('threadId');
+        });
+        expect(returnVisit.result.current.preferences.customColumns).toEqual(['resourceId']);
+
+        act(() => {
+          returnVisit.result.current.resetColumns();
+        });
+        expect(returnVisit.result.current.preferences.customColumns).toEqual([]);
+      });
     });
 
     it('trims a metadata key and ignores a blank or duplicate one', () => {
@@ -197,6 +274,25 @@ describe('useTraceColumnPreferences', () => {
       });
 
       expect(result.current.preferences).toEqual(DEFAULT_TRACE_COLUMN_PREFERENCES);
+    });
+
+    it('replaces the whole selection and persists it across remounts', () => {
+      const wrapper = makeWrapper('http://project-a.test');
+      const firstVisit = renderHook(() => useTraceColumnPreferences(), { wrapper });
+      const next = {
+        visibleColumns: ['duration'] as const,
+        customColumns: ['traceId'] as const,
+        metadataKeys: ['region'],
+      };
+
+      act(() => {
+        firstVisit.result.current.setPreferences(next);
+      });
+      expect(firstVisit.result.current.preferences).toEqual(next);
+      firstVisit.unmount();
+
+      const returnVisit = renderHook(() => useTraceColumnPreferences(), { wrapper });
+      expect(returnVisit.result.current.preferences).toEqual(next);
     });
   });
 
@@ -241,7 +337,14 @@ describe('useTraceColumnPreferences', () => {
         result.current.toggleColumn('inputTokens');
       });
 
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'inputTokens']);
+      expect(result.current.preferences.visibleColumns).toEqual([
+        'type',
+        'input',
+        'output',
+        'duration',
+        'estimatedCost',
+        'inputTokens',
+      ]);
     });
 
     it('falls back to the default columns when storage cannot be read', () => {
@@ -269,7 +372,7 @@ describe('useTraceColumnPreferences', () => {
         result.current.toggleColumn('duration');
       });
 
-      expect(result.current.preferences.visibleColumns).toEqual(['input', 'entity', 'duration']);
+      expect(result.current.preferences.visibleColumns).toEqual(['type', 'input', 'output', 'estimatedCost']);
     });
   });
 });

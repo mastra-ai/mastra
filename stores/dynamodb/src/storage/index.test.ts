@@ -256,6 +256,7 @@ describe('DynamoDBStore', () => {
         credentials: { accessKeyId: 'test', secretAccessKey: 'test' },
       },
     }),
+    { workflowResultsNoopWhenRunMissing: false },
   );
 
   // Pre-configured client acceptance tests

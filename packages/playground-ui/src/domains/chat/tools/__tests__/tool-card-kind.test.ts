@@ -2,7 +2,7 @@ import { describe, expect, it } from 'vitest';
 
 import type { MessageMetadata } from '../../messages/message-metadata';
 import type { ToolPartFields } from '../../messages/renderers/tool-part';
-import { badgeStatus, toolCardKind, toolInteraction } from '../tool-card-kind';
+import { badgeStatus, isHiddenTool, toolCardKind, toolInteraction } from '../tool-card-kind';
 import { WORKSPACE_TOOLS } from '../workspace-tool-constants';
 
 const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPartFields => ({
@@ -16,6 +16,15 @@ const fields = (toolName: string, extra: Partial<ToolPartFields> = {}): ToolPart
 const network = (from: string): MessageMetadata => ({ mode: 'network', from });
 
 const approval = (toolCallId: string) => ({ toolCallId, toolName: 'view', args: {} });
+
+describe('isHiddenTool', () => {
+  it('hides task tools and working memory updates, not regular tools', () => {
+    for (const name of ['task_write', 'task_update', 'task_complete', 'task_check', 'updateWorkingMemory']) {
+      expect(isHiddenTool(name)).toBe(true);
+    }
+    expect(isHiddenTool('view')).toBe(false);
+  });
+});
 
 describe('toolCardKind', () => {
   describe('when the tool draws nothing on its own', () => {
@@ -32,6 +41,14 @@ describe('toolCardKind', () => {
   describe('when the tool waits on the reader', () => {
     it('keeps a question as ask_user even once answered', () => {
       expect(toolCardKind(fields('ask_user', { output: { answer: 'yes' } }), {})).toBe('ask_user');
+    });
+
+    it('detects a settled request_connection call as a connect prompt, and leaves a running one plain', () => {
+      const payload = { type: 'connect-prompt', providers: [] };
+      expect(toolCardKind(fields('request_connection', { output: payload }), {})).toBe('connect_prompt');
+      // No output yet (still running) or an unexpected shape: fall back to the plain badge.
+      expect(toolCardKind(fields('request_connection'), {})).toBe('plain');
+      expect(toolCardKind(fields('request_connection', { output: 'oops' }), {})).toBe('plain');
     });
 
     it('detects submit_plan by tool name', () => {
@@ -113,11 +130,11 @@ describe('toolInteraction', () => {
   describe('when metadata keys by tool name', () => {
     it('returns the approval and suspension for that name', () => {
       const metadata: MessageMetadata = {
-        requireApprovalMetadata: { view: approval('x') },
+        requireApprovalMetadata: { view: approval('call-1') },
         suspendedTools: { view: { suspendPayload: { q: 1 } } },
       };
       expect(toolInteraction(metadata, 'view', 'call-1')).toEqual({
-        approval: approval('x'),
+        approval: approval('call-1'),
         suspended: { suspendPayload: { q: 1 } },
       });
     });
@@ -133,6 +150,72 @@ describe('toolInteraction', () => {
         approval: approval('call-1'),
         suspended: { suspendPayload: {} },
       });
+    });
+  });
+
+  describe('when a same-name approval belongs to a different call', () => {
+    it('does not offer that approval on this card', () => {
+      expect(
+        toolInteraction({ requireApprovalMetadata: { view: approval('other-call') } }, 'view', 'call-1').approval,
+      ).toBeUndefined();
+    });
+  });
+
+  describe('when an ID entry and a legacy name entry coexist', () => {
+    it('selects this call rather than the same-named call', () => {
+      expect(
+        toolInteraction(
+          {
+            requireApprovalMetadata: {
+              view: approval('other-call'),
+              'call-1': approval('call-1'),
+            },
+          },
+          'view',
+          'call-1',
+        ).approval,
+      ).toEqual(approval('call-1'));
+    });
+  });
+
+  describe('when legacy delegation metadata is keyed by its inner tool name', () => {
+    it('finds the owning delegation by its approval ID', () => {
+      expect(
+        toolInteraction({ requireApprovalMetadata: { view: approval('outer-call') } }, 'agent-child', 'outer-call')
+          .approval,
+      ).toEqual(approval('outer-call'));
+    });
+  });
+
+  describe('when network metadata keys approvals by tool name', () => {
+    it('accepts an approval belonging to this call', () => {
+      expect(
+        toolInteraction({ mode: 'network', requireApprovalMetadata: { view: approval('call-1') } }, 'view', 'call-1')
+          .approval,
+      ).toEqual(approval('call-1'));
+    });
+
+    it('ignores an approval belonging to another call', () => {
+      expect(
+        toolInteraction(
+          { mode: 'network', requireApprovalMetadata: { view: approval('other-call') } },
+          'view',
+          'call-1',
+        ).approval,
+      ).toBeUndefined();
+    });
+
+    it('falls back to the call ID when the name entry belongs to another call', () => {
+      expect(
+        toolInteraction(
+          {
+            mode: 'network',
+            requireApprovalMetadata: { view: approval('other-call'), 'call-1': approval('call-1') },
+          },
+          'view',
+          'call-1',
+        ).approval,
+      ).toEqual(approval('call-1'));
     });
   });
 

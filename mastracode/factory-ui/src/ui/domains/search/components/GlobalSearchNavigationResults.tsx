@@ -1,7 +1,8 @@
 import { CommandGroup } from '@mastra/playground-ui/components/Command';
 import { CommandPaletteItem } from '@mastra/playground-ui/components/CommandPalette';
-import { Brain, Gauge, GitPullRequest, ListChecks, ScrollText, Settings, SquareKanban } from 'lucide-react';
+import { Brain, GitPullRequest, ListChecks, Settings, SquareKanban } from 'lucide-react';
 
+import { rememberedBoardPath } from '../../factory/services/boardViews';
 import type { GlobalSearchSelectHandler } from '../services/searchNavigation';
 import { SETTINGS_SECTION_LABELS, settingsSectionPath } from '../../settings/settingsSections';
 
@@ -15,25 +16,18 @@ export function GlobalSearchNavigationResults({
   return (
     <CommandGroup heading="Navigation">
       <CommandPaletteItem
-        icon={<Gauge />}
-        title="Overview"
-        subtitle="Factory navigation"
-        value={`Overview Factory navigation /factories/${factoryId}/overview`}
-        onSelect={() => onSelect(`/factories/${factoryId}/overview`, false)}
-      />
-      <CommandPaletteItem
         icon={<SquareKanban />}
         title="Work"
         subtitle="Factory navigation"
         value={`Work Factory navigation /factories/${factoryId}/work`}
-        onSelect={() => onSelect(`/factories/${factoryId}/work`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'work'), false)}
       />
       <CommandPaletteItem
         icon={<GitPullRequest />}
         title="Review"
         subtitle="Factory navigation"
         value={`Review Factory navigation /factories/${factoryId}/review`}
-        onSelect={() => onSelect(`/factories/${factoryId}/review`, false)}
+        onSelect={() => onSelect(rememberedBoardPath(factoryId, 'review'), false)}
       />
       <CommandPaletteItem
         icon={<ListChecks />}
@@ -41,13 +35,6 @@ export function GlobalSearchNavigationResults({
         subtitle="Factory navigation"
         value={`Rules Factory navigation /factories/${factoryId}/rules`}
         onSelect={() => onSelect(`/factories/${factoryId}/rules`, false)}
-      />
-      <CommandPaletteItem
-        icon={<ScrollText />}
-        title="Audit log"
-        subtitle="Factory navigation"
-        value={`Audit log Factory navigation /factories/${factoryId}/audit`}
-        onSelect={() => onSelect(`/factories/${factoryId}/audit`, false)}
       />
       <CommandPaletteItem
         icon={<Brain />}
@@ -95,14 +82,14 @@ export function GlobalSearchNavigationResults({
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.models}
         subtitle="Settings"
-        value={`Models Settings models ${settingsSectionPath(factoryId, 'models')}`}
+        value={`Models Settings models personal factory defaults providers ${settingsSectionPath(factoryId, 'models')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'models'), true)}
       />
       <CommandPaletteItem
         icon={<Settings />}
         title={SETTINGS_SECTION_LABELS.memory}
         subtitle="Settings"
-        value={`Memory Settings memory observational ${settingsSectionPath(factoryId, 'memory')}`}
+        value={`Memory Settings memory personal factory shared observational ${settingsSectionPath(factoryId, 'memory')}`}
         onSelect={() => onSelect(settingsSectionPath(factoryId, 'memory'), true)}
       />
       <CommandPaletteItem

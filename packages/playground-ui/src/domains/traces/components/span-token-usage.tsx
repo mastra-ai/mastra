@@ -1,111 +1,77 @@
-import type { InputTokenDetails, OutputTokenDetails, UsageStats } from '@mastra/core/observability';
-import { Fragment } from 'react';
-import { getTokenUsageView } from './span-token-usage.utils';
+import type { UsageStats } from '@mastra/core/observability';
+import type { ReactNode } from 'react';
+import { getModelFacts, getTokenUsageRows } from './span-token-usage.utils';
+import { ProviderLogo } from '@/domains/llm';
 import { DataKeysAndValues } from '@/ds/components/DataKeysAndValues';
-import { cn } from '@/lib/utils';
+import { Txt } from '@/ds/components/Txt';
 
 export type TokenUsage = UsageStats;
-
-type TokenDetailsObject = InputTokenDetails | OutputTokenDetails;
-
-const detailKeyLabels: Record<string, string> = {
-  text: 'Text',
-  cacheRead: 'Cache read',
-  cacheWrite: 'Cache write',
-  audio: 'Audio',
-  image: 'Image',
-  reasoning: 'Reasoning',
-};
 
 type SpanTokenUsageProps = {
   usage: UsageStats;
   className?: string;
 };
 
-const INPUT_COLOR = 'oklch(0.78 0.16 320)';
-const OUTPUT_COLOR = 'oklch(0.55 0.18 320)';
-
+/** Input and output token counts, each followed by its breakdown. */
 export function SpanTokenUsage({ usage, className }: SpanTokenUsageProps) {
-  const view = getTokenUsageView(usage);
-  if (!view) return null;
-
-  const { inputValue, outputValue, total, showSplit, inputPct, outputPct, inputDetails, outputDetails } = view;
-
+  const rows = getTokenUsageRows(usage);
+  if (!rows) return null;
   return (
-    <div
-      className={cn('mt-2 mb-8 grid grid-cols-1 border-b border-border1 pb-3 4xl:grid-cols-2 4xl:gap-12', className)}
-    >
-      {showSplit && (
-        <div className="mb-2">
-          <div className="text-neutral2 flex items-baseline gap-3">
-            <span className="text-ui-md">Tokens Used</span>
-            <span className="text-ui-md text-neutral4 font-semibold">{total.toLocaleString()}</span>
-            <span className="text-ui-sm ml-auto">
-              {Math.round(inputPct)}% Input vs {Math.round(outputPct)}% Output
-            </span>
-          </div>
-          <div className="bg-surface4 mt-2 rounded-md p-1.5">
-            <div className="relative h-1.5 w-full overflow-hidden rounded-sm">
-              <div
-                className="absolute top-0 left-0 h-1.5"
-                style={{ width: `${inputPct}%`, backgroundColor: INPUT_COLOR }}
-              />
-              <div
-                className="absolute top-0 h-1.5"
-                style={{ left: `${inputPct}%`, width: `${outputPct}%`, backgroundColor: OUTPUT_COLOR }}
-              />
-            </div>
-          </div>
-        </div>
+    <DataKeysAndValues className={className}>
+      <TokenUsageRows usage={usage} />
+    </DataKeysAndValues>
+  );
+}
+
+function TokenUsageRows({ usage }: { usage: UsageStats | undefined }) {
+  return getTokenUsageRows(usage)?.map(({ label, total, breakdown }) => (
+    <Row key={label} label={`${label} tokens`}>
+      {total.toLocaleString()}
+      {breakdown && (
+        <Txt as="span" variant="caption" tone="muted">
+          {` (${breakdown})`}
+        </Txt>
       )}
+    </Row>
+  ));
+}
 
-      <div className="grid grid-cols-2 gap-6">
-        <UsageColumn label="Input" color={INPUT_COLOR} value={inputValue} details={inputDetails} />
-        <UsageColumn label="Output" color={OUTPUT_COLOR} value={outputValue} details={outputDetails} />
-      </div>
-    </div>
+function Row({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <>
+      <DataKeysAndValues.Key>{label}</DataKeysAndValues.Key>
+      <DataKeysAndValues.Value>{children}</DataKeysAndValues.Value>
+    </>
   );
 }
 
-function UsageColumn({
-  label,
-  color,
-  value,
-  details,
-}: {
-  label: string;
-  color: string;
-  value?: number;
-  details?: TokenDetailsObject;
-}) {
+type SpanModelSummaryProps = {
+  span: Parameters<typeof getModelFacts>[0];
+  className?: string;
+};
+
+/** What a model span ran on, how it ended, how fast it answered and the tokens it used. */
+export function SpanModelSummary({ span, className }: SpanModelSummaryProps) {
+  const { model, provider, finishReason, firstToken, speed } = getModelFacts(span);
+  // oxlint-disable-next-line typescript/no-unnecessary-type-assertion -- Built SDK declarations type attributes.usage as unknown.
+  const usage = span.attributes?.usage as UsageStats | undefined;
+  const hasTokens = getTokenUsageRows(usage) !== null;
+  if (!model && !finishReason && !firstToken && !speed && !hasTokens) return null;
+
   return (
-    <div>
-      <div className="text-neutral2 mb-2 flex items-baseline gap-3">
-        <span className="text-ui-md">{label}</span>
-        {typeof value === 'number' && (
-          <span className="flex items-baseline gap-1.5">
-            <span className="text-ui-md text-neutral4 font-semibold">{value.toLocaleString()}</span>
-            <span className="size-2 self-center rounded-full" style={{ backgroundColor: color }} />
+    <DataKeysAndValues className={className}>
+      {model && (
+        <Row label="Model">
+          <span className="flex min-w-0 items-center gap-1.5">
+            {provider && <ProviderLogo providerId={provider} size="xs" />}
+            <span className="truncate">{provider ? `${provider}/${model}` : model}</span>
           </span>
-        )}
-      </div>
-      {details && <DetailsList details={details} />}
-    </div>
-  );
-}
-
-function DetailsList({ details }: { details: TokenDetailsObject }) {
-  return (
-    <DataKeysAndValues density="dense">
-      {Object.entries(details).map(([detailKey, detailValue]) => {
-        if (typeof detailValue !== 'number') return null;
-        return (
-          <Fragment key={detailKey}>
-            <DataKeysAndValues.Key>{detailKeyLabels[detailKey] || detailKey}</DataKeysAndValues.Key>
-            <DataKeysAndValues.Value className="text-right">{detailValue.toLocaleString()}</DataKeysAndValues.Value>
-          </Fragment>
-        );
-      })}
+        </Row>
+      )}
+      {finishReason && <Row label="Finish reason">{finishReason}</Row>}
+      {firstToken && <Row label="First token">{firstToken}</Row>}
+      {speed && <Row label="Speed">{speed}</Row>}
+      <TokenUsageRows usage={usage} />
     </DataKeysAndValues>
   );
 }

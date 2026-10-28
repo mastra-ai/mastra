@@ -1,75 +1,48 @@
-import { CalendarClockIcon, FlagIcon, HashIcon, TimerIcon } from 'lucide-react';
-import type { ReactNode } from 'react';
-import { formatSpanDurationSeconds, formatSpanTimestamp, formatSpanTimestampExact } from '../utils/span-utils';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@/ds/components/Tooltip';
-import { truncateString } from '@/lib/truncate-string';
+import { CalendarClockIcon, TimerIcon } from 'lucide-react';
+import { getSpanDurationMs } from '../utils/span-utils';
+import { DataPanel } from '@/ds/components/DataPanel';
+import { controlSizeClasses } from '@/ds/primitives/control-size';
 import { cn } from '@/lib/utils';
+import { formatDate, formatTimestampPrecise } from '@/utils/date-format';
+import { formatDuration, formatDurationPrecise } from '@/utils/duration';
 
 export interface SpanSummaryDescriptionProps {
   span: {
     startedAt: Date | string;
     endedAt?: Date | string | null;
-    runId?: string | null;
   };
-  className?: string;
 }
 
-function SummaryItem({ label, children }: { label: string; children: ReactNode }) {
+/** Compact span timing shown under the span side-panel heading. */
+export function SpanSummaryDescription({ span }: SpanSummaryDescriptionProps) {
+  const startedAt = formatDate(span.startedAt, 'time');
+  const exactStartedAt = formatTimestampPrecise(span.startedAt);
+  const durationMs = getSpanDurationMs(span.startedAt, span.endedAt);
+  const duration = formatDuration(durationMs);
+  const exactDuration = formatDurationPrecise(durationMs);
+
   return (
-    <Tooltip>
-      <TooltipTrigger asChild>
-        <span
-          tabIndex={0}
-          className="flex shrink-0 cursor-help items-center gap-1 whitespace-nowrap"
-          aria-label={label}
-        >
-          {children}
-        </span>
-      </TooltipTrigger>
-      <TooltipContent>{label}</TooltipContent>
-    </Tooltip>
+    <DataPanel.Metadata>
+      {startedAt && exactStartedAt && (
+        <DataPanel.Meta icon={<CalendarClockIcon />} tooltip={`Started at ${exactStartedAt}`}>
+          {startedAt}
+        </DataPanel.Meta>
+      )}
+      {duration && exactDuration && (
+        <DataPanel.Meta icon={<TimerIcon />} tooltip={`Duration ${exactDuration}`}>
+          {duration}
+        </DataPanel.Meta>
+      )}
+    </DataPanel.Metadata>
   );
 }
 
-/** Compact span timing + run metadata shown under the span side-panel heading. */
-export function SpanSummaryDescription({ span, className }: SpanSummaryDescriptionProps) {
-  const startedAt = formatSpanTimestamp(span.startedAt);
-  const exactStartedAt = formatSpanTimestampExact(span.startedAt);
-  const endedAt = formatSpanTimestamp(span.endedAt);
-  const exactEndedAt = formatSpanTimestampExact(span.endedAt);
-  const duration = formatSpanDurationSeconds(span.startedAt, span.endedAt);
-
+/** The run a span belongs to, labelled and copyable like the span id next to it. */
+export function SpanRunId({ runId }: { runId: string }) {
   return (
-    <div
-      className={cn(
-        'flex min-w-0 flex-wrap items-center gap-x-3 gap-y-1 text-ui-xs leading-ui-xs text-neutral3',
-        className,
-      )}
-    >
-      {startedAt && exactStartedAt && (
-        <SummaryItem label={`Started at ${exactStartedAt}`}>
-          <CalendarClockIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{startedAt}</span>
-        </SummaryItem>
-      )}
-      {endedAt && exactEndedAt && (
-        <SummaryItem label={`Ended at ${exactEndedAt}`}>
-          <FlagIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{endedAt}</span>
-        </SummaryItem>
-      )}
-      {duration && (
-        <SummaryItem label={`Duration ${duration}`}>
-          <TimerIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{duration}</span>
-        </SummaryItem>
-      )}
-      {span.runId && (
-        <SummaryItem label={`Run Id ${span.runId}`}>
-          <HashIcon className="size-3.5 shrink-0" aria-hidden="true" />
-          <span>{truncateString(span.runId, 8)}</span>
-        </SummaryItem>
-      )}
+    <div className={cn('inline-flex shrink-0 items-center gap-1 px-1 text-foreground', controlSizeClasses.sm)}>
+      Run id
+      <DataPanel.CopyId id={runId} maxLength={6} ellipsis={false} />
     </div>
   );
 }

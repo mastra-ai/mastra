@@ -28,7 +28,7 @@ import {
   TokenCounter,
   optimizeObservationsForContext,
   OBSERVATION_CONTINUATION_HINT,
-  OBSERVATION_CONTEXT_PROMPT,
+  getObservationContextPrompt,
   OBSERVATION_CONTEXT_INSTRUCTIONS,
 } from '@mastra/memory/processors';
 import type { Plugin } from '@opencode-ai/plugin';
@@ -341,7 +341,7 @@ export const MastraPlugin: Plugin = async ctx => {
 
         const optimized = optimizeObservationsForContext(observations);
         output.system.push(
-          `${OBSERVATION_CONTEXT_PROMPT}\n\n<observations>\n${optimized}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}\n\n${OBSERVATION_CONTINUATION_HINT}`,
+          `${getObservationContextPrompt(config.scope)}\n\n<observations>\n${optimized}\n</observations>\n\n${OBSERVATION_CONTEXT_INSTRUCTIONS}\n\n${OBSERVATION_CONTINUATION_HINT}`,
         );
       } catch {
         // Non-fatal — model proceeds without observations

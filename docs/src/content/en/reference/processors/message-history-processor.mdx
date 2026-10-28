@@ -42,8 +42,9 @@ const processor = new MessageHistory({
           },
           {
             name: 'lastMessages',
-            type: 'number',
-            description: 'Maximum number of historical messages to retrieve. If not specified, retrieves all messages',
+            type: 'number | false',
+            description:
+              "Maximum number of historical messages to retrieve. Set to false to retrieve all messages. If omitted, the storage adapter's default page size applies (40 messages for built-in adapters)",
             isOptional: true,
           },
         ],
@@ -89,9 +90,10 @@ const processor = new MessageHistory({
 ```typescript title="src/mastra/agents/memory-agent.ts"
 import { Agent } from '@mastra/core/agent'
 import { MessageHistory } from '@mastra/core/processors'
-import { PostgresStorage } from '@mastra/pg'
+import { PostgresStore } from '@mastra/pg'
 
-const storage = new PostgresStorage({
+const storage = new PostgresStore({
+  id: 'pg-storage',
   connectionString: process.env.DATABASE_URL,
 })
 

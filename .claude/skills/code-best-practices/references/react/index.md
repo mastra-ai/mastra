@@ -39,6 +39,7 @@
 | `structure-component-naming`             | JSX-Returning Helpers Must Be Components              | MEDIUM      | Name reusable JSX-returning helpers as PascalCase components and call them with JSX.                                       | [structure-component-naming](structure/structure-component-naming.md)                         |
 | `structure-early-return-render-branches` | Branch the Body, Keep One Wrapper                     | MEDIUM      | Pick the view with early `if` guards but keep the layout shell in one place — don't ternary it or duplicate it per branch. | [structure-early-return-render-branches](structure/structure-early-return-render-branches.md) |
 | `structure-composition-over-config`      | Compose Components, Don't Map Config Objects          | MEDIUM      | For a fixed set of items, one component per item with explicit props owning its data — no config array remapped to JSX.    | [structure-composition-over-config](structure/structure-composition-over-config.md)           |
+| `structure-data-fetching-layout`         | Data-Fetching Domain Components Render Through a Layout Component | MEDIUM-HIGH | A pure layout component positions slots; the fetching domain component fills them with skeletons OR resolved sub-domain components.                                                                                                                                       | [structure-data-fetching-layout](structure/structure-data-fetching-layout.md)         |
 
 ## Testing
 

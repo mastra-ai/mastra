@@ -2,6 +2,7 @@ import type { RequestContext } from '@mastra/core/request-context';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type { MastraWorker } from '@mastra/core/worker';
+import { Octokit } from '@octokit/rest';
 import type { Context } from 'hono';
 
 import type { IntegrationConnection } from '../../../capabilities/connection.js';
@@ -13,6 +14,7 @@ import type {
   UpdateIntakeIssueInput,
 } from '../../../capabilities/intake.js';
 import type {
+  CommitCheck,
   CreatePullRequestCommentInput,
   CreatePullRequestInput,
   CreateReviewCommentInput,
@@ -26,6 +28,7 @@ import type {
   MergePullRequestInput,
   PullRequest,
   PullRequestComment,
+  PublishCommitCheckInput,
   PullRequestRef,
   RepositoryAccess,
   Review,
@@ -59,6 +62,7 @@ import { reconcileInterval, reconciliationEnabled } from '../../github/reconcili
 import { buildGithubRoutes } from '../../github/routes.js';
 import { attachGithubReconciler, attachGithubRules } from '../../github/rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from '../../github/rules.js';
+import type { GitIdentity } from '../../github/sandbox.js';
 import {
   createGithubSubscriptionTools,
   parseCreatedPullRequest,
@@ -154,7 +158,12 @@ type GithubReviewComment = GithubComment & {
 };
 
 const PAGE_SIZE = 30;
+// Open issues list newest-first; missed opens are recent, so a bounded scan
+// keeps each sweep's API cost flat on repositories with a large backlog.
+const OPEN_ISSUE_DISCOVERY_MAX_PAGES = 5;
 const API_PREFIX = '/v1/server';
+const CHECK_TITLE_LIMIT = 255;
+const CHECK_TEXT_LIMIT = 65_535;
 /**
  * Slug of the GitHub App this integration posts as. Platform credentials do not
  * carry their own identity, so Factory cannot otherwise recognise its own
@@ -206,6 +215,9 @@ const REPOSITORY_TOKEN_PERMISSIONS = {
   issues: 'write',
   pull_requests: 'write',
 } as const;
+
+/** The Platform mints one installation token for at most this many named repositories. */
+const MAX_REPOSITORIES_PER_TOKEN = 10;
 
 function loose(c: unknown): Context {
   return c as Context;
@@ -404,6 +416,18 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           }),
         ),
       ),
+    getRepositoryTarget: async ({ orgId, repositoryId }) => {
+      const repository = await this.storage.repositories.get({ orgId, id: repositoryId });
+      if (!repository) throw new Error('Version-control repository not found.');
+      const installation = await this.storage.installations.get({ orgId, id: repository.installationId });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = parsePositiveInteger(installation.externalId);
+      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+      return {
+        connection: { type: 'app-installation', installationId },
+        sourceId: repository.slug,
+      };
+    },
     getRepositoryAccess: async ({ orgId, repositoryId }) => {
       // Every session materialization requests access; reuse a recent grant
       // instead of re-minting through the Platform each time. The TTL keeps
@@ -474,6 +498,44 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         return access;
       }
     },
+    getRepositoriesAccess: async ({ orgId, repositoryIds }) => {
+      const ids = [...new Set(repositoryIds)];
+      if (ids.length === 0 || ids.length > MAX_REPOSITORIES_PER_TOKEN) return undefined;
+      const cacheKey = `${orgId}:${[...ids].sort().join(',')}`;
+      const cached = this.#repositoryAccessCache.get(cacheKey);
+      if (cached && cached.expiresAt > Date.now()) return cached.access;
+      this.#repositoryAccessCache.delete(cacheKey);
+
+      const repositories = await Promise.all(ids.map(id => this.storage.repositories.get({ orgId, id })));
+      if (repositories.some(repository => !repository)) throw new Error('Version-control repository not found.');
+      const found = repositories as NonNullable<(typeof repositories)[number]>[];
+      // One token covers one installation; an environment spanning several
+      // cannot be served by a single credential.
+      const installationIds = new Set(found.map(repository => repository.installationId));
+      if (installationIds.size !== 1) return undefined;
+      const installation = await this.storage.installations.get({ orgId, id: found[0]!.installationId });
+      if (!installation) throw new Error('Version-control installation not found.');
+      const installationId = parsePositiveInteger(installation.externalId);
+      if (installationId === null) throw new Error('GitHub installation id is invalid.');
+
+      const token = await this.#client.request<{ token: string }>(
+        'POST',
+        `${API_PREFIX}/github-app/installations/${installationId}/token`,
+        {
+          repositories: found.map(repository => splitRepository(repository.slug).repo),
+          permissions: REPOSITORY_TOKEN_PERMISSIONS,
+        },
+      );
+      const access: RepositoryAccess = {
+        cloneUrl: `https://github.com/${found[0]!.slug}.git`,
+        authorization: { scheme: 'bearer', token: token.token },
+      };
+      setBounded(this.#repositoryAccessCache, cacheKey, {
+        access,
+        expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+      });
+      return access;
+    },
     listPullRequests: input => this.#listPullRequests(input),
     getPullRequest: input => this.#getPullRequest(input),
     createPullRequest: input => this.#createPullRequest(input),
@@ -498,6 +560,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     listRequestedReviewers: input => this.#requestedReviewers('GET', input),
     requestReviewers: input => this.#requestedReviewers('POST', input),
     removeRequestedReviewers: input => this.#requestedReviewers('DELETE', input),
+    publishCommitCheck: input => this.#publishCommitCheck(input),
   };
 
   constructor(
@@ -540,6 +603,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     this.#issueReconcileIntervalMs =
       reconcileInterval(process.env.MASTRACODE_PLATFORM_GITHUB_ISSUE_RECONCILE_INTERVAL_MS) ??
       legacyReconcileIntervalMs;
+  }
+
+  /** Commit authorship follows the Platform App's authoritative writer identity. */
+  get gitIdentity(): GitIdentity | undefined {
+    const login = this.identity.login;
+    return login ? { login } : undefined;
   }
 
   /** GitHub App slug when the deployment explicitly provides it. */
@@ -792,7 +861,12 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           ? attachGithubReconciler(this, ctx, input => this.fetchPullRequestState(input))
           : undefined,
         reconcileIssuesFactoryState: this.#issueReconcileEnabled
-          ? attachGithubIssueReconciler(this, ctx, input => this.fetchIssueState(input))
+          ? attachGithubIssueReconciler(
+              this,
+              ctx,
+              input => this.fetchIssueState(input),
+              input => this.listOpenIssueStates(input),
+            )
           : undefined,
         pollEventsEnabled: this.#pollingEnabled,
         intervalMs: this.#pollingIntervalMs,
@@ -924,6 +998,35 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     }
   }
 
+  async listOpenIssueStates(input: {
+    installationId: number;
+    repository: string;
+  }): Promise<Array<ReconcileIssueState & { number: number }>> {
+    const issues: Array<ReconcileIssueState & { number: number }> = [];
+    for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
+      const query = new URLSearchParams({ state: 'open', page: String(page), per_page: String(PAGE_SIZE) });
+      const result = await this.#client.request<{ issues: GithubIssue[] }>(
+        'GET',
+        `${repositoryPath(input.repository, 'issues')}?${query}`,
+      );
+      for (const issue of result.issues) {
+        issues.push({
+          number: issue.number,
+          title: issue.title,
+          url: issue.htmlUrl,
+          state: 'open',
+          assignees: issue.assignees,
+          labels: issue.labels,
+          ...(issue.user?.login ? { author: issue.user.login } : {}),
+          createdAt: issue.createdAt,
+          updatedAt: issue.updatedAt,
+        });
+      }
+      if (result.issues.length < PAGE_SIZE) break;
+    }
+    return issues;
+  }
+
   async upsertFactoryTriageComment(input: GithubTriageCommentUpsertInput): Promise<GithubTriageCommentUpsertResult> {
     const comments: GithubComment[] = [];
     for (let page = 1; ; page += 1) {
@@ -1043,12 +1146,13 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return settleOrAbort(lookup, signal, undefined);
   }
 
-  async listInstallationRepos(installationId: number): Promise<RepoSummary[]> {
+  async listInstallationRepos(installationId: number, options?: { fresh?: boolean }): Promise<RepoSummary[]> {
     // Hot in two places — the repos route and token minting (which re-lists
     // only to validate the 1–10 repo rule). A short TTL collapses repeat
-    // Platform round trips within one UI interaction.
+    // Platform round trips within one UI interaction; `fresh` skips it so an
+    // explicit refresh picks up repositories just granted on GitHub.
     const cached = this.#installationReposCache.get(installationId);
-    if (cached && cached.expiresAt > Date.now()) return cached.repos;
+    if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
     const result = await this.#client.request<{
@@ -1071,7 +1175,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async mintInstallationToken(installationId: number): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
-    if (repositories.length === 0 || repositories.length > 10) {
+    if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
     const result = await this.#client.request<{ token: string }>(
@@ -1113,7 +1217,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
             'GET',
             repositoryPath(`${owner}/${repo}`, `pulls/${pull_number}`),
           );
-          return { data: { base: { repo: { id: data.base.repo.id } } } };
+          return { data: { base: { repo: { id: data.base.repo.id } }, head: { ref: data.head.ref } } };
         },
       },
     } as unknown as ReturnType<GithubIntegration['getInstallationOctokit']>;
@@ -1265,7 +1369,39 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       },
       { actingUserId: input.actingUserId },
     );
-    return parsePullRequest(result);
+    const created = parsePullRequest(result);
+    if (input.actingUserId && input.connection.type === 'app-installation') {
+      try {
+        const user = await this.#fetchUserConnection(input.actingUserId);
+        const login = user.githubUsername;
+        if (user.connected && login) {
+          const { owner, repo } = splitRepository(input.sourceId);
+          const { token } = await this.#client.request<{ token: string }>(
+            'POST',
+            `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
+            { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
+          );
+          const octokit = new Octokit({ auth: token, request: { timeout: 15_000 } });
+          const { data } = await octokit.issues.addAssignees({
+            owner,
+            repo,
+            issue_number: result.number,
+            assignees: [login],
+          });
+          if (!data.assignees?.some(assignee => assignee.login?.toLowerCase() === login.toLowerCase())) {
+            logPlatformWarn('GitHub did not assign the PR opener', { url: created.url, login });
+          } else {
+            created.assignees = data.assignees.flatMap(assignee => (assignee.login ? [assignee.login] : []));
+          }
+        }
+      } catch (error) {
+        logPlatformWarn('Failed to assign the PR opener', {
+          url: created.url,
+          error: error instanceof Error ? error.message : String(error),
+        });
+      }
+    }
+    return created;
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
@@ -1370,6 +1506,29 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       { actingUserId: input.actingUserId },
     );
     return parseReview(review);
+  }
+
+  async #publishCommitCheck(input: PublishCommitCheckInput): Promise<CommitCheck> {
+    requireGithubConnection(input.connection);
+    // Every call creates a new run; GitHub shows the latest run per app and name.
+    const run = await this.#client.request<{ id: number; htmlUrl: string }>(
+      'POST',
+      repositoryPath(input.sourceId, 'check-runs'),
+      {
+        name: input.name,
+        headSha: input.headSha,
+        ...(input.status === 'in-progress'
+          ? { status: 'in_progress' }
+          : { status: 'completed', conclusion: input.status }),
+        output: {
+          title: input.title.slice(0, CHECK_TITLE_LIMIT),
+          summary: input.summary.slice(0, CHECK_TEXT_LIMIT),
+          ...(input.details ? { text: input.details.slice(0, CHECK_TEXT_LIMIT) } : {}),
+        },
+      },
+      { actingUserId: input.actingUserId },
+    );
+    return { id: String(run.id), name: input.name, headSha: input.headSha, status: input.status, url: run.htmlUrl };
   }
 
   async #updateReview(input: UpdateReviewInput) {

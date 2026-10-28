@@ -11,6 +11,7 @@ const EMPTY_ISSUE_SUMMARY: GithubIssueReconcileSummary = {
   checked: 0,
   updated: 0,
   closed: 0,
+  relabeled: 0,
   failed: 0,
   errors: [],
 };

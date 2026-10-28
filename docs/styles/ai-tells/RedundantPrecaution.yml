@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI cliché: '%s'. Name the specific safeguard or cut the phrase."
+message: "AI cliché: '%s'. State the specific safeguard or cut the phrase."
 level: error
 ignorecase: true
 tokens:

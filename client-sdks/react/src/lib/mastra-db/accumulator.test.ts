@@ -1,8 +1,10 @@
 import type { MastraDBMessage, MastraToolInvocationPart } from '@mastra/core/agent/message-list';
 import { MessageList } from '@mastra/core/agent/message-list';
+import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import type { ChunkType } from '@mastra/core/stream';
+import { ChunkFrom } from '@mastra/core/stream';
 import { describe, expect, it } from 'vitest';
-import { accumulateChunk, finishStreamingAssistantMessage } from './accumulator';
+import { accumulateChunk, finishStreamingAssistantMessage, mapWorkflowStreamChunkToWatchResult } from './accumulator';
 import { CLIENT_MESSAGE_ID_KEY } from './types';
 import type { BackgroundTaskEntry, MastraDBMessageMetadata, MastraReasoningPart, MastraTextPart } from './types';
 
@@ -117,20 +119,25 @@ const redactedReasoningChunk = (data: string, providerMetadata?: Record<string, 
     payload: { data, ...(providerMetadata ? { providerMetadata } : {}) },
   }) as unknown as ChunkType;
 
-const toolCallChunk = (toolCallId: string, toolName: string, args: Record<string, unknown>): ChunkType =>
+const toolCallChunk = (
+  toolCallId: string,
+  toolName: string,
+  args: Record<string, unknown>,
+  title?: string,
+): ChunkType =>
   ({
     type: 'tool-call',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName, args },
+    payload: { toolCallId, toolName, args, title },
   }) as unknown as ChunkType;
 
-const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string): ChunkType =>
+const toolCallInputStreamingStartChunk = (toolCallId: string, toolName: string, title?: string): ChunkType =>
   ({
     type: 'tool-call-input-streaming-start',
     runId: RUN_ID,
     from: 'AGENT',
-    payload: { toolCallId, toolName },
+    payload: { toolCallId, toolName, title },
   }) as unknown as ChunkType;
 
 const toolCallDeltaChunk = (toolCallId: string, argsTextDelta: string): ChunkType =>
@@ -157,7 +164,7 @@ const toolResultChunk = (toolCallId: string, result: unknown): ChunkType =>
     payload: { toolCallId, result },
   }) as unknown as ChunkType;
 
-const toolErrorChunk = (toolCallId: string, error: string): ChunkType =>
+const toolErrorChunk = (toolCallId: string, error: unknown): ChunkType =>
   ({
     type: 'tool-error',
     runId: RUN_ID,
@@ -211,6 +218,13 @@ const toolOutputChunk = (toolCallId: string, output: unknown): ChunkType =>
     from: 'AGENT',
     payload: { toolCallId, output },
   }) as unknown as ChunkType;
+
+const nestedToolOutput = (toolCallId: string, toolName: string, output: unknown): Record<string, unknown> => ({
+  type: 'tool-output',
+  runId: RUN_ID,
+  from: 'USER',
+  payload: { toolCallId, toolName, output },
+});
 
 const bgTaskStartedChunk = (toolCallId: string, taskId: string): ChunkType =>
   ({
@@ -530,6 +544,37 @@ describe('accumulateChunk - lifecycle', () => {
     const initial = reduce([startChunk('asst-1')]);
     const out = reduce([stepStartChunk('asst-1')], streamMeta(), initial);
     expect(out).toEqual(initial);
+  });
+
+  it('step-start uses the persisted assistant id after a user signal removes the pending message', () => {
+    const out = reduce([
+      startChunk('asst-1'),
+      dataUserMessageChunk('sig-1', 'hello'),
+      stepStartChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello back'),
+      textEndChunk('t1'),
+    ]);
+
+    expect(out).toHaveLength(2);
+    expect(out[0]).toMatchObject({ id: 'sig-1', role: 'user' });
+    expect(out[1]).toMatchObject({
+      id: 'persisted-1',
+      role: 'assistant',
+      content: { parts: [{ type: 'text', text: 'hello back' }] },
+    });
+  });
+
+  it('step-start does not duplicate an existing assistant message after a user signal', () => {
+    const initial = reduce([
+      startChunk('persisted-1'),
+      textStartChunk('t1'),
+      textDeltaChunk('t1', 'hello'),
+      textEndChunk('t1'),
+      dataUserMessageChunk('sig-1', 'hello back'),
+    ]);
+
+    expect(reduce([stepStartChunk('persisted-1')], streamMeta(), initial)).toEqual(initial);
   });
 
   it('step-start with a rotated message id re-keys the empty pending assistant message', () => {
@@ -861,6 +906,27 @@ describe('accumulateChunk - tool calls', () => {
     });
   });
 
+  it('copies the tool title onto the part from both tool-call and streaming-start', () => {
+    const direct = reduce([startChunk(), toolCallChunk('tc-1', 'search', { q: 'x' }, 'Search the web')]);
+    expect(direct[0].content.parts[0]).toMatchObject({ type: 'tool-invocation', title: 'Search the web' });
+
+    const streamed = reduce([
+      startChunk(),
+      toolCallInputStreamingStartChunk('tc-2', 'search', 'Search the web'),
+      toolCallDeltaChunk('tc-2', '{"q":"x"}'),
+      toolCallInputStreamingEndChunk('tc-2'),
+      toolCallChunk('tc-2', 'search', { q: 'x' }),
+    ]);
+    expect(streamed[0].content.parts[0]).toMatchObject({
+      type: 'tool-invocation',
+      title: 'Search the web',
+      toolInvocation: { state: 'call', args: { q: 'x' } },
+    });
+
+    const untitled = reduce([startChunk(), toolCallChunk('tc-3', 'plain', {})]);
+    expect((untitled[0].content.parts[0] as MastraToolInvocationPart).title).toBeUndefined();
+  });
+
   it('tool-call without prior assistant creates one', () => {
     const out = reduce([toolCallChunk('tc-1', 'search', { q: 'x' })]);
     expect(out).toHaveLength(1);
@@ -892,6 +958,96 @@ describe('accumulateChunk - tool calls', () => {
       toolCallId: 'tc-1',
       errorText: 'boom',
     });
+  });
+
+  it('records a tool error when the stored invocation has no tool name', () => {
+    const initial = reduce([startChunk(), toolCallChunk('tc-1', 'search', {})]);
+    const part = initial[0].content.parts.find(p => p.type === 'tool-invocation');
+    if (!part || part.type !== 'tool-invocation') throw new Error('Missing tool invocation');
+    Reflect.deleteProperty(part.toolInvocation, 'toolName');
+
+    const out = reduce([toolErrorChunk('tc-1', 'boom')], streamMeta(), initial);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'output-error', toolCallId: 'tc-1', errorText: 'boom' }),
+      }),
+    );
+  });
+
+  it('retains partial child output when a delegation fails', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'agent-head', {}),
+      toolOutputChunk('tc-1', { type: 'text-delta', from: 'AGENT', payload: { text: 'Partial enrichment' } }),
+      toolErrorChunk('tc-1', 'Provider failed'),
+    ]);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({
+          state: 'output-error',
+          errorText: 'Provider failed',
+          result: { childMessages: [{ type: 'text', content: 'Partial enrichment' }] },
+        }),
+      }),
+    );
+  });
+
+  it.each(['Failed agent tool execution for head', 'The delegated service is unavailable', ''])(
+    'reads the serialized delegation wrapper message %j without exposing the provider cause',
+    message => {
+      // Native Error.message is non-enumerable; the delegation wrapper's cause
+      // survives JSON transport with the readable MastraError message inside it.
+      const error = JSON.parse(
+        JSON.stringify(
+          Object.assign(new Error(message), {
+            cause: new MastraError(
+              {
+                id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED',
+                domain: ErrorDomain.AGENT,
+                category: ErrorCategory.USER,
+                text: message,
+              },
+              new Error('Private provider diagnostic'),
+            ),
+          }),
+        ),
+      );
+      const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
+      expect(out[0].content.parts).toContainEqual(
+        expect.objectContaining({
+          toolInvocation: expect.objectContaining({ state: 'output-error', errorText: message }),
+        }),
+      );
+    },
+  );
+
+  it.each([
+    { error: new Error('outer'), expected: 'outer' },
+    { error: { message: 'outer', cause: { message: 'inner' } }, expected: 'outer' },
+    { error: { message: '', cause: { message: 'inner' } }, expected: '' },
+    {
+      error: { cause: { id: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', message: '', cause: { message: 'inner' } } },
+      expected: '',
+    },
+    { error: { cause: { message: 'Private provider diagnostic' } }, expected: '[object Object]' },
+    {
+      error: { cause: { code: 'PROVIDER_ERROR', message: 'Private provider diagnostic' } },
+      expected: '[object Object]',
+    },
+    {
+      error: {
+        cause: { code: 'AGENT_AGENT_TOOL_EXECUTION_FAILED', cause: { message: 'Private provider diagnostic' } },
+      },
+      expected: '[object Object]',
+    },
+    { error: { cause: null }, expected: '[object Object]' },
+  ])('keeps existing error text behavior for $error', ({ error, expected }) => {
+    const out = reduce([startChunk(), toolCallChunk('tc-1', 'agent-head', {}), toolErrorChunk('tc-1', error)]);
+    expect(out[0].content.parts).toContainEqual(
+      expect.objectContaining({
+        toolInvocation: expect.objectContaining({ state: 'output-error', errorText: expected }),
+      }),
+    );
   });
 
   it('tool-output-denied transitions to output-denied with approval details', () => {
@@ -996,8 +1152,22 @@ describe('accumulateChunk - tool calls', () => {
     expect(out[0].content.metadata).toMatchObject({
       mode: 'stream',
       requireApprovalMetadata: {
-        sendMail: { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'x' } },
+        'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'x' } },
       },
+    });
+  });
+
+  it('keeps same-named approvals independently addressable by call ID', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'sendMail', { to: 'first' }),
+      toolCallChunk('tc-2', 'sendMail', { to: 'second' }),
+      toolCallApprovalChunk('tc-1', 'sendMail', { to: 'first' }),
+      toolCallApprovalChunk('tc-2', 'sendMail', { to: 'second' }),
+    ]);
+    expect(out[0].content.metadata?.requireApprovalMetadata).toEqual({
+      'tc-1': { toolCallId: 'tc-1', toolName: 'sendMail', args: { to: 'first' } },
+      'tc-2': { toolCallId: 'tc-2', toolName: 'sendMail', args: { to: 'second' } },
     });
   });
 
@@ -1018,6 +1188,40 @@ describe('accumulateChunk - tool calls', () => {
         },
       },
     });
+  });
+
+  it('tool-call-resumed clears the matching suspendedTools entry (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'longRun', { x: 1 }),
+      toolCallChunk('tc-2', 'other', {}),
+      toolCallSuspendedChunk('tc-1', 'longRun', { x: 1 }, { reason: 'wait' }),
+      toolCallSuspendedChunk('tc-2', 'other', {}, { reason: 'wait' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'longRun', kind: 'suspension' },
+      } as unknown as ChunkType,
+    ]);
+    const suspendedTools = (out[0].content.metadata as { suspendedTools: Record<string, unknown> }).suspendedTools;
+    expect(Object.keys(suspendedTools)).toEqual(['other']);
+  });
+
+  it('tool-call-resumed clears a live approval from requireApprovalMetadata (#24280)', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('tc-1', 'deploy', { env: 'prod' }),
+      toolCallApprovalChunk('tc-1', 'deploy', { env: 'prod' }),
+      {
+        type: 'tool-call-resumed',
+        runId: RUN_ID,
+        from: 'AGENT',
+        payload: { toolCallId: 'tc-1', toolName: 'deploy', kind: 'approval' },
+      } as unknown as ChunkType,
+    ]);
+    const meta = out[0].content.metadata as { requireApprovalMetadata?: Record<string, unknown> };
+    expect(meta.requireApprovalMetadata).toEqual({});
   });
 
   it('tool-output appends non-workflow output onto a partial-call result array', () => {
@@ -1275,6 +1479,141 @@ describe('accumulateChunk - signal echo (data-user-message)', () => {
     expect(userMessages[0].id).toBe('sig-1');
   });
 
+  describe('accept-time pending steer chunk', () => {
+    const pendingSteerChunk = (id: string, contents: string, clientMessageId?: string): ChunkType => ({
+      type: 'data-user-message-pending',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: {
+        type: 'user',
+        id,
+        contents,
+        createdAt: new Date(0).toISOString(),
+        metadata: { status: 'pending', ...(clientMessageId ? { [CLIENT_MESSAGE_ID_KEY]: clientMessageId } : {}) },
+      },
+    });
+
+    it('shows a pending bubble without closing the streaming assistant, then the drain echo settles it as one bubble', () => {
+      const running = reduce([startChunk('asst-1'), toolCallChunk('call-1', 'slowResearch', {})]);
+
+      const afterPending = reduce([pendingSteerChunk('sig-1', 'also include pricing')], streamMeta(), running);
+      expect(afterPending.map(message => message.role)).toEqual(['assistant', 'user']);
+      expect(afterPending[1]).toMatchObject({
+        id: 'sig-1',
+        content: { parts: [{ type: 'text', text: 'also include pricing' }], metadata: { status: 'pending' } },
+      });
+
+      // The tool returns while the bubble is pending: the result still lands on its assistant message.
+      const afterResult = reduce([toolResultChunk('call-1', { ok: true })], streamMeta(), afterPending);
+      const toolPart = afterResult[0].content.parts.find(part => part.type === 'tool-invocation') as any;
+      expect(toolPart.toolInvocation.state).toBe('result');
+
+      const afterEcho = reduce([dataUserMessageChunk('sig-1', 'also include pricing')], streamMeta(), afterResult);
+      const users = afterEcho.filter(message => message.role === 'user');
+      expect(users).toHaveLength(1);
+      expect(users[0].id).toBe('sig-1');
+      expect(users[0].content.metadata?.status).toBeUndefined();
+
+      // The reply after the steer goes into a new assistant message, below the bubble.
+      const afterReply = reduce(
+        [stepStartChunk('asst-2'), textStartChunk('t1'), textDeltaChunk('t1', 'ok')],
+        streamMeta(),
+        afterEcho,
+      );
+      expect(afterReply.map(message => message.role)).toEqual(['assistant', 'user', 'assistant']);
+    });
+
+    it('ignores a pending chunk for a bubble that is already shown', () => {
+      const shown = reduce([pendingSteerChunk('sig-1', 'hi')]);
+      expect(reduce([pendingSteerChunk('sig-1', 'hi')], streamMeta(), shown)).toHaveLength(1);
+
+      const optimistic = pendingUserMessage('client-1', 'hi', 'corr-1');
+      const out = reduce([pendingSteerChunk('sig-2', 'hi', 'corr-1')], streamMeta(), [optimistic]);
+      expect(out).toHaveLength(1);
+      expect(out[0]).toMatchObject({
+        id: 'sig-2',
+        content: { metadata: { status: 'pending', clientMessageId: 'corr-1' } },
+      });
+    });
+
+    it('never downgrades a delivered bubble when acceptance is delayed', () => {
+      const delivered = reduce([dataUserMessageChunk('sig-1', 'hi')]);
+      expect(reduce([pendingSteerChunk('sig-1', 'hi')], streamMeta(), delivered)).toEqual(delivered);
+    });
+  });
+
+  describe('queued follow-up chunks', () => {
+    const queuedChunk = (id: string, contents: string): ChunkType => ({
+      type: 'data-user-message-pending',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { type: 'user', id, contents, createdAt: new Date(0).toISOString(), metadata: { status: 'queued' } },
+    });
+    const cancelledChunk = (id: string): ChunkType => ({
+      type: 'data-user-message-cancelled',
+      runId: RUN_ID,
+      from: ChunkFrom.AGENT,
+      transient: true,
+      data: { id },
+    });
+    const texts = (messages: MastraDBMessage[]) =>
+      messages.map(message => `${message.role}:${message.id}:${(message.content.parts[0] as any)?.text ?? ''}`);
+
+    it('shows queued bubbles below the active run output, which keeps streaming above them', () => {
+      const running = reduce([startChunk('asst-1'), textStartChunk('t1'), textDeltaChunk('t1', 'one')]);
+      const queued = reduce(
+        [queuedChunk('q-1', 'then translate'), queuedChunk('q-2', 'then summarise')],
+        streamMeta(),
+        running,
+      );
+      expect(queued.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      expect(queued[1].content.metadata).toMatchObject({ status: 'pending', queued: true });
+
+      // The first run is still writing its answer: it lands on its own message, above the queue.
+      const streamed = reduce([textDeltaChunk('t1', ' two')], streamMeta(), queued);
+      expect(streamed.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      expect((streamed[0].content.parts[0] as any).text).toBe('one two');
+      expect(reduce([queuedChunk('q-1', 'then translate')], streamMeta(), streamed)).toHaveLength(3);
+    });
+
+    it('keeps working when something is sent after the queued bubbles (queued bubbles no longer at the tail)', () => {
+      const queued = reduce([startChunk('asst-1'), queuedChunk('q-1', 'then translate')]);
+      const withSteer = [...queued, pendingUserMessage('client-1', 'also include pricing', 'corr-1')];
+      expect(withSteer.map(message => message.role)).toEqual(['assistant', 'user', 'user']);
+      const out = reduce([textStartChunk('t1'), textDeltaChunk('t1', 'ok')], streamMeta(), withSteer);
+      expect(out.some(message => message.id === 'q-1')).toBe(true);
+    });
+
+    it('drops a queued bubble when it is cancelled and leaves the others', () => {
+      const queued = reduce([
+        startChunk('asst-1'),
+        queuedChunk('q-1', 'then translate'),
+        queuedChunk('q-2', 'then summarise'),
+      ]);
+      const out = reduce([cancelledChunk('q-2')], streamMeta(), queued);
+      expect(texts(out)).toEqual(['assistant:asst-1:', 'user:q-1:then translate']);
+      expect(reduce([cancelledChunk('missing')], streamMeta(), out)).toEqual(out);
+    });
+
+    it('settles a queued bubble in place when its run echoes it, once, with the other queued bubble still last', () => {
+      const queued = reduce([
+        startChunk('asst-1'),
+        textStartChunk('t1'),
+        textDeltaChunk('t1', 'answer'),
+        queuedChunk('q-1', 'then translate'),
+        queuedChunk('q-2', 'then summarise'),
+      ]);
+      // Run 2 starts: its start chunk, then the echo of q-1.
+      const out = reduce([startChunk('asst-2'), dataUserMessageChunk('q-1', 'then translate')], streamMeta(), queued);
+      expect(texts(out)).toEqual(['assistant:asst-1:answer', 'user:q-1:then translate', 'user:q-2:then summarise']);
+      expect(out.filter(message => message.id === 'q-1')).toHaveLength(1);
+      expect(out.find(message => message.id === 'q-1')?.content.metadata?.status).toBeUndefined();
+      expect(out.find(message => message.id === 'q-2')?.content.metadata?.queued).toBe(true);
+    });
+  });
+
   it('reconciles the optimistic message by clientMessageId even when the echoed id differs', () => {
     // Production reality: the optimistic bubble carries a client-generated id
     // (`client-1`), but the server mints and echoes its own signal id
@@ -1475,12 +1814,6 @@ describe('accumulateChunk - tripwire', () => {
 // =============================================================================
 
 describe('accumulateChunk - finish / abort finalization', () => {
-  it('finish marks streaming text parts done', () => {
-    const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), finishChunk('stop')]);
-    const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
-    expect(text.state).toBe('done');
-  });
-
   it('abort marks streaming text parts done', () => {
     const out = reduce([startChunk(), textStartChunk('t1'), textDeltaChunk('t1', 'hi'), abortChunk()]);
     const text = out[0].content.parts.find(p => p.type === 'text') as MastraTextPart;
@@ -1579,6 +1912,324 @@ describe('finishStreamingAssistantMessage', () => {
 });
 
 // =============================================================================
+// DEEPLY NESTED AGENT STREAMING
+// =============================================================================
+
+describe('accumulateChunk - deeply nested agent streaming', () => {
+  const agentLeaf = (type: string, payload: Record<string, unknown>): Record<string, unknown> => ({
+    type,
+    runId: RUN_ID,
+    from: 'AGENT',
+    payload,
+  });
+
+  const rootAgentResult = (messages: MastraDBMessage[]) => {
+    const toolPart = messages
+      .flatMap(message => message.content.parts)
+      .find(part => part.type === 'tool-invocation') as MastraToolInvocationPart;
+    return (toolPart.toolInvocation as { result?: { childMessages?: Array<Record<string, unknown>> } }).result;
+  };
+
+  it('preserves direct agent progress', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk('application-call', agentLeaf('text-delta', { text: 'Working' })),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([{ type: 'text', content: 'Working' }]);
+  });
+
+  it('preserves agent progress streamed through a custom tool', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('nested-call', 'nested-agent-stream', {}),
+      toolOutputChunk('nested-call', agentLeaf('text-delta', { text: 'Working' })),
+      toolResultChunk('nested-call', { text: 'Complete' }),
+    ]);
+
+    expect(rootAgentResult(out)).toMatchObject({
+      text: 'Complete',
+      childMessages: [{ type: 'text', content: 'Working' }],
+    });
+  });
+
+  it('upserts a delayed nested tool call without losing earlier progress', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'Early progress' })),
+      ),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', {
+          toolCallId: 'resume-call',
+          toolName: 'agent-resumeAgent',
+          args: { candidate: 'Ada' },
+        }),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'resume-call',
+        toolName: 'agent-resumeAgent',
+        args: { candidate: 'Ada' },
+        toolOutput: { childMessages: [{ type: 'text', content: 'Early progress' }] },
+      },
+    ]);
+  });
+
+  it('routes three-level progress into the matching nested agent tool', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', {
+          toolCallId: 'resume-call',
+          toolName: 'agent-resumeAgent',
+          args: { candidate: 'Ada' },
+        }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'Draft ' })),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'ready.' })),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          agentLeaf('tool-call', { toolCallId: 'generate-call', toolName: 'generate-resume', args: { length: 1 } }),
+        ),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          agentLeaf('tool-result', {
+            toolCallId: 'generate-call',
+            toolName: 'generate-resume',
+            result: { resume: 'Ada' },
+          }),
+        ),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'resume-call',
+        toolName: 'agent-resumeAgent',
+        args: { candidate: 'Ada' },
+        toolOutput: {
+          childMessages: [
+            { type: 'text', content: 'Draft ready.' },
+            {
+              type: 'tool',
+              toolCallId: 'generate-call',
+              toolName: 'generate-resume',
+              args: { length: 1 },
+              toolOutput: { resume: 'Ada' },
+            },
+          ],
+        },
+      },
+    ]);
+  });
+
+  it('routes four-level progress without corrupting sibling agent calls', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call', toolName: 'agent-resumeAgent', args: {} }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'sibling-call', toolName: 'agent-siblingAgent', args: { keep: true } }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          agentLeaf('tool-call', { toolCallId: 'writer-call', toolName: 'agent-writerAgent', args: {} }),
+        ),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          nestedToolOutput('writer-call', 'agent-writerAgent', agentLeaf('text-delta', { text: 'Deep progress' })),
+        ),
+      ),
+    ]);
+
+    const children = rootAgentResult(out)?.childMessages ?? [];
+    expect(children[1]).toEqual({
+      type: 'tool',
+      toolCallId: 'sibling-call',
+      toolName: 'agent-siblingAgent',
+      args: { keep: true },
+    });
+    expect(children[0]).toMatchObject({
+      toolCallId: 'resume-call',
+      toolOutput: {
+        childMessages: [
+          {
+            toolCallId: 'writer-call',
+            toolOutput: { childMessages: [{ type: 'text', content: 'Deep progress' }] },
+          },
+        ],
+      },
+    });
+  });
+
+  it('routes delayed progress by tool call id when sibling agents share a name', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call-1', toolName: 'agent-resumeAgent', args: { attempt: 1 } }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call-2', toolName: 'agent-resumeAgent', args: { attempt: 2 } }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call-1', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'First' })),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages).toEqual([
+      {
+        type: 'tool',
+        toolCallId: 'resume-call-1',
+        toolName: 'agent-resumeAgent',
+        args: { attempt: 1 },
+        toolOutput: { childMessages: [{ type: 'text', content: 'First' }] },
+      },
+      {
+        type: 'tool',
+        toolCallId: 'resume-call-2',
+        toolName: 'agent-resumeAgent',
+        args: { attempt: 2 },
+      },
+    ]);
+  });
+
+  it('preserves nested progress when the outer agent tool finishes', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call', toolName: 'agent-resumeAgent', args: {} }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput('resume-call', 'agent-resumeAgent', agentLeaf('text-delta', { text: 'Ready' })),
+      ),
+      toolResultChunk('application-call', { text: 'Complete', subAgentThreadId: 'thread-1' }),
+    ]);
+
+    expect(rootAgentResult(out)).toMatchObject({
+      text: 'Complete',
+      subAgentThreadId: 'thread-1',
+      childMessages: [
+        {
+          toolCallId: 'resume-call',
+          toolOutput: { childMessages: [{ type: 'text', content: 'Ready' }] },
+        },
+      ],
+    });
+  });
+
+  it('accumulates a nested workflow under the correct inner agent', () => {
+    const out = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk(
+        'application-call',
+        agentLeaf('tool-call', { toolCallId: 'resume-call', toolName: 'agent-resumeAgent', args: {} }),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          agentLeaf('tool-call', { toolCallId: 'workflow-call', toolName: 'workflow-draftResume', args: {} }),
+        ),
+      ),
+      toolOutputChunk(
+        'application-call',
+        nestedToolOutput(
+          'resume-call',
+          'agent-resumeAgent',
+          nestedToolOutput('workflow-call', 'workflow-draftResume', {
+            type: 'workflow-start',
+            runId: 'workflow-run',
+            from: 'WORKFLOW',
+            payload: { runId: 'workflow-run' },
+          }),
+        ),
+      ),
+    ]);
+
+    expect(rootAgentResult(out)?.childMessages?.[0]).toMatchObject({
+      toolCallId: 'resume-call',
+      toolOutput: {
+        childMessages: [
+          {
+            toolCallId: 'workflow-call',
+            toolName: 'workflow-draftResume',
+            toolOutput: { runId: 'workflow-run' },
+          },
+        ],
+      },
+    });
+  });
+
+  it('ignores malformed, cyclic, and ordinary agent writer outputs without mutating prior messages', () => {
+    const initial = reduce([
+      startChunk(),
+      toolCallChunk('application-call', 'agent-applicationAgent', {}),
+      toolOutputChunk('application-call', agentLeaf('text-delta', { text: 'Existing' })),
+    ]);
+    const snapshot = structuredClone(initial);
+    const cyclic = nestedToolOutput('resume-call', 'agent-resumeAgent', undefined);
+    (cyclic.payload as Record<string, unknown>).output = cyclic;
+
+    const out = reduce(
+      [
+        toolOutputChunk('application-call', { type: 'tool-output', from: 'USER', payload: {} }),
+        toolOutputChunk('application-call', cyclic),
+        toolOutputChunk('application-call', 'plain writer value'),
+      ],
+      streamMeta(),
+      initial,
+    );
+
+    expect(out).toEqual(snapshot);
+    expect(initial).toEqual(snapshot);
+  });
+});
+
+// =============================================================================
 // WORKFLOW TOOL FINISH — REGRESSION
 // =============================================================================
 //
@@ -1626,6 +2277,35 @@ describe('accumulateChunk - workflow tool finish', () => {
     expect(result.status).toBe('success');
     // Terminal scalar payload is still surfaced for downstream renderers
     expect(result.output).toEqual({ result: 'suh', runId: RUN_ID });
+  });
+
+  it('rebuilds workflow steps when chunks are replayed onto a finished tool result', () => {
+    const run = () =>
+      reduce([
+        startChunk(),
+        toolCallChunk('wf-1', 'workflow-myWorkflow', { foo: 'bar' }),
+        toolResultChunk('wf-1', { result: 'suh', runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-start', { runId: RUN_ID }),
+        workflowOutputChunk('wf-1', 'workflow-step-start', { id: 'step-a' }),
+        workflowOutputChunk('wf-1', 'workflow-step-result', { id: 'step-a', status: 'success', output: { value: 1 } }),
+        workflowOutputChunk('wf-1', 'workflow-finish', { runId: RUN_ID, workflowStatus: 'success' }),
+      ]);
+
+    expect(run).not.toThrow();
+    const toolPart = run()
+      .flatMap(m => m.content.parts)
+      .find(p => p.type === 'tool-invocation') as MastraToolInvocationPart;
+    const result = (toolPart.toolInvocation as { result: Record<string, any> }).result;
+    expect(result.steps['step-a'].status).toBe('success');
+    expect(result.status).toBe('success');
+  });
+
+  it('mapWorkflowStreamChunkToWatchResult ignores a previous value without steps', () => {
+    const chunk = { type: 'workflow-step-start', runId: RUN_ID, from: 'WORKFLOW', payload: { id: 'step-a' } } as any;
+    for (const prev of [{ result: 'suh', runId: RUN_ID }, {}]) {
+      const next = mapWorkflowStreamChunkToWatchResult(prev as any, chunk);
+      expect(next.steps['step-a']).toEqual({ id: 'step-a' });
+    }
   });
 
   it('detects workflow tools by toolName prefix even with no prior tool-output', () => {

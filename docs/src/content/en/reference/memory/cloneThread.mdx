@@ -9,7 +9,7 @@ packages:
 
 The `.cloneThread()` method creates a copy of an existing conversation thread, including all its messages. It supports creating divergent conversation paths from a specific point in a conversation. When semantic recall is enabled, the method also creates vector embeddings for the cloned messages.
 
-`cloneThread()` loads the cloned messages to return them. If you only need the new thread ID, use [`copyThread()`](/reference/memory/copyThread), which copies the thread without loading message content into memory.
+`cloneThread()` loads the cloned messages to return them. If you only need the new thread ID, use [`copyThread()`](/reference/memory/copyThread), which copies the thread without loading the whole conversation into memory at once. With semantic recall enabled, the copied messages are still embedded. When the storage adapter reports a message ID map, they're read back and embedded in batches of 100, while an adapter without one falls back to reading the destination thread once before it embeds that content in slices.
 
 ## Usage example
 
@@ -60,7 +60,8 @@ const { thread, clonedMessages } = await memory.cloneThread({
   {
     name: 'metadata',
     type: 'Record<string, unknown>',
-    description: "Optional metadata to merge with the source thread's metadata. Clone metadata is automatically added.",
+    description:
+      "Optional metadata for the new thread. The new thread's metadata contains only the supplied metadata plus an automatically added `clone` record with `sourceThreadId`, `clonedAt`, and optional `lastMessageId`. Source-thread metadata isn't copied.",
     isOptional: true,
   },
   {
@@ -158,7 +159,8 @@ The cloned thread's metadata includes a `clone` property with:
   {
     name: 'lastMessageId',
     type: 'string',
-    description: 'The ID of the last message in the source thread at the time of cloning.',
+    description:
+      'The ID of the last message included in the clone. After filtering or limiting, this can differ from the last message in the source thread.',
     isOptional: true,
   },
 ]}
@@ -268,7 +270,7 @@ When working memory is enabled, `cloneThread()` copies or shares working memory 
 When [Observational Memory](/docs/memory/observational-memory) is enabled, `cloneThread()` automatically clones the OM records associated with the source thread. The behavior depends on the OM scope:
 
 - **Thread-scoped OM**: The OM record is cloned to the new thread. All internal message ID references are remapped to point to the cloned messages.
-- **Resource-scoped OM (same `resourceId`)**: The OM record is shared between the source and cloned threads since they belong to the same resource. No duplication occurs.
-- **Resource-scoped OM (different `resourceId`)**: The OM record is cloned to the new resource. Message IDs are remapped and any thread-identifying tags within observations are updated to reference the cloned thread.
+- **Resource-scoped OM (deprecated, same `resourceId`)**: The OM record is shared between the source and cloned threads since they belong to the same resource. No duplication occurs.
+- **Resource-scoped OM (deprecated, different `resourceId`)**: The OM record is cloned to the new resource. Message IDs are remapped and any thread-identifying tags within observations are updated to reference the cloned thread.
 
 Only the current (most recent) OM generation is cloned. Older history generations aren't copied. Transient processing state (observation/reflection in-progress flags) is reset on the cloned record.

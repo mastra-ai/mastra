@@ -24,12 +24,14 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     requestContext,
     suspend,
     resumeData,
+    suspendData,
     runId,
     workflowId,
     state,
     setState,
     abortSignal,
     actor,
+    writer,
     ...rest
   } = ctx;
   const observabilityContext = resolveObservabilityContext(rest);
@@ -39,11 +41,14 @@ export async function runToolEntry(entry: ToolStepEntry, ctx: EntryExecuteContex
     actor: resolveEntryActor(entry.options as Record<string, unknown> | undefined, actor),
     ...observabilityContext,
     abortSignal,
+    writer,
     resumeData,
+    suspendPayload: suspendData,
     workflow: {
       runId,
       suspend,
       resumeData,
+      suspendPayload: suspendData,
       workflowId,
       state,
       setState,

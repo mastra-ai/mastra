@@ -1,12 +1,12 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
 export const assignOrganizationRolePermissionInputSchema = z.object({
-  organization_role_id: z.string(),
-  permission_id: z.string(),
+  organization_role_id: z.string().min(1),
+  permission_id: z.string().min(1),
 });
 
 const ResourceSchema = z

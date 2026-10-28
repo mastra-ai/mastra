@@ -209,6 +209,9 @@ Open [Studio](/docs/studio/overview) and select a workflow from the **Workflows*
 Workflow state lets you share values across steps without passing them through every step's inputSchema and outputSchema. Use state for tracking progress or accumulating results, or alternatively sharing configuration across the entire workflow.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+import { z } from 'zod'
+
 const step1 = createStep({
   id: 'step-1',
   inputSchema: z.object({ message: z.string() }),
@@ -232,7 +235,10 @@ Visit [Workflow State](/docs/workflows/workflow-state) for complete documentatio
 
 Use a workflow as a step to reuse its logic within a larger composition. Input and output follow the same schema rules described in [Core principles](/docs/workflows/control-flow).
 
-```typescript {26} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+```typescript {29} title="src/mastra/workflows/test-workflow.ts" oxfmt:false
+import { createWorkflow, createStep } from '@mastra/core/workflows';
+import { z } from 'zod';
+
 const step1 = createStep({...});
 const step2 = createStep({...});
 
@@ -267,7 +273,7 @@ export const testWorkflow = createWorkflow({
 Clone a workflow using `cloneWorkflow()` when you want to reuse its logic but track it separately under a new ID. Each clone runs independently and shows up as a distinct workflow in logs and observability tools.
 
 ```typescript oxfmt:false {6} title="src/mastra/workflows/test-workflow.ts"
-import { cloneWorkflow } from "@mastra/core/workflows";
+import { cloneWorkflow, createWorkflow, createStep } from "@mastra/core/workflows";
 
 const step1 = createStep({...});
 
@@ -307,7 +313,7 @@ const testWorkflow = mastra.getWorkflow('testWorkflow')
 1. It provides access to the Mastra instance configuration (logger, telemetry, storage, registered agents, and vector stores)
 1. It provides full TypeScript type inference for workflow input and output schemas
 
-Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). While `getWorkflowById()` is available for retrieving workflows by their `id` property, it doesn't provide the same level of type inference.
+Use `getWorkflow()` with the workflow's **registration key** (the key used when adding it to Mastra). `getWorkflowById()` retrieves workflows by their `id` property, but it doesn't provide the same level of type inference.
 :::
 
 ## Running workflows
@@ -506,7 +512,11 @@ Use `restartAllActiveWorkflowRuns()` to restart all active workflow runs of a wo
 workflow.restartAllActiveWorkflowRuns()
 ```
 
+Runs restart concurrently, up to `recovery.workflowConcurrency` at a time (default `5`). Set it to `1` in the Mastra config if your runs share side effects that must not run in parallel.
+
 To exclude a workflow from automatic boot-time restarts triggered by `Mastra.restartAllActiveWorkflowRuns()`, set `autoRestartActiveRuns: false` in the workflow's `options`. This is useful for workflows with side effects that must not be re-driven by a blanket restart. Durable agent workflows set this automatically because their recovery is owned by the opt-in `recovery.durableAgents: 'auto'` path.
+
+While a run executes, Mastra holds a storage lease on it and renews it in the background. `restart()` refuses to take over a run whose lease hasn't expired: it throws a `WORKFLOW_RESTART_RUN_OWNED` error and the sweep skips the run. The lease is advisory and doesn't fence writes. If a process stops renewing its lease but keeps executing a step, for example because its event loop is blocked for longer than the lease TTL, recovery can run that step a second time. The boot-time sweep, `mastra.restartAllActiveWorkflowRuns()`, rechecks a skipped run once its lease could have expired, so a run whose process crashed is still recovered. `workflow.restartAllActiveWorkflowRuns()` skips the run without a recheck, so call it after the lease expires if you need to recover that run. Storage adapters without run-ownership support keep the previous behavior and restart every active run.
 
 ### Restarting an active workflow run with `restart()`
 
@@ -542,6 +552,8 @@ When running the local mastra server, all active workflow runs will be restarted
 Use [RequestContext](/docs/server/request-context) to access request-specific values. This lets you conditionally adjust behavior based on the context of the request.
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createStep } from '@mastra/core/workflows'
+
 export type UserTier = {
   'user-tier': 'enterprise' | 'pro'
 }

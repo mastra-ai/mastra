@@ -1,5 +1,11 @@
 import type { ObservabilityExporter, TracingEvent } from '@mastra/core/observability';
-import { SpanType, SamplingStrategyType, InternalSpans, TracingEventType } from '@mastra/core/observability';
+import {
+  EntityType,
+  SpanType,
+  SamplingStrategyType,
+  InternalSpans,
+  TracingEventType,
+} from '@mastra/core/observability';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { DefaultObservabilityInstance } from '../instances';
@@ -263,6 +269,137 @@ describe('Span', () => {
     });
   });
 
+  describe('entity lineage versions', () => {
+    it('does not report an ancestor version as the parent entity version', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const supervisor = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'supervisor',
+        entityType: EntityType.AGENT,
+        entityId: 'supervisor',
+        entityName: 'Supervisor',
+        metadata: { entityVersionId: 'supervisor-v1' },
+      });
+      const step = tracing.startSpan({ type: SpanType.WORKFLOW_STEP, name: 'step', parent: supervisor });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'sub-agent',
+        parent: step,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+      });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        parent: subAgent,
+        entityType: EntityType.TOOL,
+        entityId: 'search',
+        entityName: 'search',
+      });
+
+      // The step inherits the supervisor entity, so it carries the supervisor's version
+      expect(subAgent.exportSpan()).toMatchObject({
+        parentEntityId: 'supervisor',
+        parentEntityVersionId: 'supervisor-v1',
+        rootEntityVersionId: 'supervisor-v1',
+      });
+      const exportedTool = tool.exportSpan();
+      expect(exportedTool).toMatchObject({ parentEntityId: 'researcher', rootEntityVersionId: 'supervisor-v1' });
+      expect(exportedTool?.parentEntityVersionId).toBeUndefined();
+    });
+
+    it('keeps a version a distinct entity declares, even when it matches its parent version', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const supervisor = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'supervisor',
+        entityType: EntityType.AGENT,
+        entityId: 'supervisor',
+        entityName: 'Supervisor',
+        metadata: { entityVersionId: 'v1' },
+      });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'sub-agent',
+        parent: supervisor,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+        metadata: { entityVersionId: 'v1' },
+      });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'tool',
+        parent: subAgent,
+        entityType: EntityType.TOOL,
+        entityId: 'search',
+        entityName: 'search',
+      });
+
+      expect(tool.exportSpan()).toMatchObject({ parentEntityId: 'researcher', parentEntityVersionId: 'v1' });
+    });
+
+    it('reports a version only for the span own entity', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const agent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'support',
+        entityType: EntityType.AGENT,
+        entityId: 'support',
+        entityName: 'Support',
+        metadata: { entityVersionId: 'v3' },
+      });
+      // No entity args, so it inherits the agent entity and its version
+      const sameEntityChild = tracing.startSpan({ type: SpanType.GENERIC, name: 'step', parent: agent });
+      const tool = tracing.startSpan({
+        type: SpanType.TOOL_CALL,
+        name: 'lookup',
+        parent: sameEntityChild,
+        entityType: EntityType.TOOL,
+        entityId: 'lookup',
+        entityName: 'lookup',
+      });
+      const subAgent = tracing.startSpan({
+        type: SpanType.AGENT_RUN,
+        name: 'researcher',
+        parent: tool,
+        entityType: EntityType.AGENT,
+        entityId: 'researcher',
+        entityName: 'Researcher',
+        metadata: { entityVersionId: 'researcher-v2' },
+      });
+
+      expect(agent.getCorrelationContext().entityVersionId).toBe('v3');
+      expect(agent.exportSpan().entityVersionId).toBe('v3');
+      expect(sameEntityChild.getCorrelationContext().entityVersionId).toBe('v3');
+      expect(sameEntityChild.exportSpan().entityVersionId).toBe('v3');
+
+      expect(tool.getCorrelationContext().entityVersionId).toBeUndefined();
+      expect(tool.exportSpan()).not.toHaveProperty('entityVersionId');
+      // Metadata is still inherited unchanged
+      expect(tool.metadata?.entityVersionId).toBe('v3');
+
+      expect(subAgent.getCorrelationContext().entityVersionId).toBe('researcher-v2');
+      expect(subAgent.exportSpan().entityVersionId).toBe('researcher-v2');
+    });
+  });
+
   describe('metadata inheritance', () => {
     it('should inherit metadata from parent span when not explicitly provided', () => {
       const tracing = new DefaultObservabilityInstance({
@@ -377,6 +514,112 @@ describe('Span', () => {
       expect(llmSpan.metadata).toEqual({ userId: 'user-123' });
 
       agentSpan.end();
+    });
+  });
+
+  describe('links', () => {
+    const tracing = () =>
+      new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+    const callerSpan = { traceId: '0af7651916cd43dd8448eb211c80319c', spanId: 'b7ad6b7169203331' };
+
+    it('exports links to spans in other traces without joining them', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'served-request', links: [callerSpan] });
+
+      const exported = span.exportSpan();
+      expect(exported.links).toEqual([callerSpan]);
+      expect(exported.traceId).not.toBe(callerSpan.traceId);
+      expect(exported.isRootSpan).toBe(true);
+      expect(exported.externalParentSpanId).toBeUndefined();
+    });
+
+    it('drops links with invalid IDs and omits the field when none remain', () => {
+      const instance = tracing();
+      const mixed = instance.startSpan({
+        type: SpanType.GENERIC,
+        name: 'mixed',
+        links: [
+          callerSpan,
+          { traceId: 'not-hex', spanId: callerSpan.spanId },
+          { traceId: callerSpan.traceId, spanId: '' },
+          { traceId: 'abc', spanId: '1' },
+          { traceId: '0'.repeat(32), spanId: callerSpan.spanId },
+          { traceId: callerSpan.traceId, spanId: '0'.repeat(16) },
+        ],
+      });
+      const invalidOnly = instance.startSpan({
+        type: SpanType.GENERIC,
+        name: 'invalid-only',
+        links: [{ traceId: 'zz', spanId: 'zz' }],
+      });
+
+      expect(mixed.exportSpan().links).toEqual([callerSpan]);
+      expect(invalidOnly.exportSpan()).not.toHaveProperty('links');
+    });
+
+    it('exports links set on the span before it ends, without changing earlier exports', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
+      const started = span.exportSpan();
+      const serverSpan = { traceId: '11111111111111111111111111111111', spanId: '2222222222222222' };
+
+      span.links = [...(span.links ?? []), serverSpan];
+      span.end();
+
+      const ended = testExporter.events.find(e => e.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan, serverSpan]);
+      expect(started.links).toEqual([callerSpan]);
+    });
+
+    it('drops links with invalid IDs set on the span after it starts', () => {
+      const span = tracing().startSpan({ type: SpanType.GENERIC, name: 'tool-call', links: [callerSpan] });
+
+      span.links = [...(span.links ?? []), { traceId: 'abc', spanId: '1' }, { traceId: '0'.repeat(32), spanId: '1' }];
+      span.end();
+
+      const ended = testExporter.events.find(
+        e => e.type === TracingEventType.SPAN_ENDED && e.exportedSpan.id === span.id,
+      )!.exportedSpan;
+      expect(ended.links).toEqual([callerSpan]);
+    });
+
+    it('keeps links when a span is rebuilt from its exported form', () => {
+      const instance = tracing();
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'served-request', links: [callerSpan] });
+
+      expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
+    });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
+
+    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+      const instance = tracing();
+      const context = { error: new Error('limit hit'), steps: 10n };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
+      const exported = span.exportSpan();
+
+      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
+      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
+      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
     });
   });
 
@@ -1403,6 +1646,81 @@ describe('Span', () => {
         providerMetadata: { provider: { useful: true } },
         keep: 'chunk',
       });
+    });
+
+    it('keeps Vercel AI Gateway routing on model step metadata while stripping the rest of provider metadata', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const routing = {
+        finalProvider: 'anthropic',
+        resolvedProvider: 'bedrock',
+        modelAttempts: [
+          {
+            providerAttempts: [
+              { provider: 'bedrock', success: false, statusCode: 429 },
+              { provider: 'anthropic', success: true, statusCode: 200 },
+            ],
+          },
+        ],
+      };
+      const providerMetadata = {
+        gateway: { routing, cost: '0.0045', generationId: 'gen_1' },
+        anthropic: { cacheCreationInputTokens: 0 },
+      };
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: providerMetadata, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, headers: { 'x-vercel-id': 'req_1' } } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-gateway');
+
+      expect(stepSpan?.metadata).toEqual({
+        keep: 'metadata',
+        headers: { 'x-vercel-id': 'req_1' },
+        providerMetadata: { gateway: { routing } },
+      });
+    });
+
+    it('still strips model step provider metadata when reading gateway routing throws', () => {
+      const tracing = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const providerMetadata: Record<string, unknown> = { openai: { secretish: true } };
+      Object.defineProperty(providerMetadata, 'gateway', {
+        enumerable: true,
+        get() {
+          throw new Error('gateway getter failed');
+        },
+      });
+
+      const modelStep = tracing.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'model-step-throwing-gateway',
+        attributes: { stepIndex: 0 },
+        metadata: { providerMetadata, experimental_providerMetadata: { legacy: true }, keep: 'metadata' },
+      });
+      modelStep.end({ metadata: { providerMetadata, endKeep: 'metadata' } });
+
+      const stepSpan = testExporter.events
+        .filter(event => event.type === TracingEventType.SPAN_ENDED)
+        .map(event => event.exportedSpan)
+        .find(span => span.name === 'model-step-throwing-gateway');
+
+      expect(stepSpan?.metadata).toEqual({ keep: 'metadata', endKeep: 'metadata' });
     });
 
     it('does not throw when model step metadata has throwing getters during construction', () => {

@@ -1,7 +1,8 @@
 // @vitest-environment jsdom
+import type { BuilderSettingsResponse, DatasetRecord, GetScoresScorers_Response } from '@mastra/client-js';
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import { cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { toast } from 'sonner';
 import { afterEach, describe, expect, it, vi } from 'vitest';
@@ -9,14 +10,17 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { datasetVersionsResponse } from '../../__tests__/fixtures/dataset-versions';
 import { buildDataset, buildListDatasetsResponse } from '../../__tests__/fixtures/datasets';
 import { itemScorers } from '../../__tests__/fixtures/item-scorers';
+import {
+  lockedModelPolicySettings,
+  modelProviders,
+  openModelPolicySettings,
+} from '../../__tests__/fixtures/model-providers';
+import { targetAgents } from '../../__tests__/fixtures/target-agents';
 import { ExperimentTriggerDialog } from '../experiment-trigger-dialog';
 import type { ExperimentTriggerDialogProps } from '../experiment-trigger-dialog';
-import { getMultiSelectValues, setMultiSelectValues } from '@/test/mock-combobox-helpers';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
-
-vi.mock('@mastra/playground-ui/components/Combobox', () => import('@/test/mock-combobox'));
 
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
   CodeEditor: ({ value, onChange }: { value: string; onChange?: (value: string) => void }) => (
@@ -29,24 +33,27 @@ afterEach(() => {
   vi.clearAllMocks();
 });
 
-const datasets = [
+// Newest first, as the API lists them: the dialog opens on the first one.
+const defaultDatasets = [
   buildDataset(),
   buildDataset({
     id: 'dataset-2',
     name: 'Dataset 2',
-    requestContextSchema: {
-      type: 'object',
-      properties: { tenant: { type: 'string' } },
-    },
+    requestContextSchema: { type: 'object', properties: { tenant: { type: 'string' } } },
   }),
 ];
 
-const emptyVersionsResponse = {
-  versions: [],
-  pagination: { total: 0, page: 0, perPage: 10, hasMore: false },
-};
+const emptyVersionsResponse = { versions: [], pagination: { total: 0, page: 0, perPage: 10, hasMore: false } };
 
-function setupHandlers() {
+function setupHandlers({
+  datasets = defaultDatasets,
+  scorers = {},
+  builderSettings = openModelPolicySettings,
+}: {
+  datasets?: DatasetRecord[];
+  scorers?: GetScoresScorers_Response;
+  builderSettings?: BuilderSettingsResponse;
+} = {}) {
   const triggerCalls: Array<{ datasetId: string; body: Record<string, unknown> }> = [];
 
   server.use(
@@ -61,27 +68,28 @@ function setupHandlers() {
     http.get(`${BASE_URL}/api/datasets/:datasetId/versions`, ({ params }) =>
       HttpResponse.json(params.datasetId === 'dataset-1' ? datasetVersionsResponse : emptyVersionsResponse),
     ),
-    http.get(`${BASE_URL}/api/agents`, () =>
-      HttpResponse.json({ 'agent-1': { name: 'Agent One', instructions: '', tools: {}, workflows: {} } }),
-    ),
+    http.get(`${BASE_URL}/api/agents`, () => HttpResponse.json(targetAgents)),
     http.get(`${BASE_URL}/api/workflows`, () => HttpResponse.json({})),
-    http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json({})),
-    http.post(`${BASE_URL}/api/datasets/:datasetId/experiments`, async ({ params, request }) => {
-      triggerCalls.push({
-        datasetId: String(params.datasetId),
-        body: (await request.json()) as Record<string, unknown>,
-      });
-      return HttpResponse.json({
-        experimentId: 'exp-1',
-        status: 'pending',
-        totalItems: 0,
-        succeededCount: 0,
-        failedCount: 0,
-        startedAt: new Date().toISOString(),
-        completedAt: null,
-        results: [],
-      });
-    }),
+    http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(scorers)),
+    http.get(`${BASE_URL}/api/agents/providers`, () => HttpResponse.json(modelProviders)),
+    http.get(`${BASE_URL}/api/editor/builder/settings`, () => HttpResponse.json(builderSettings)),
+    http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json({ providers: [] })),
+    http.post<{ datasetId: string }, Record<string, unknown>>(
+      `${BASE_URL}/api/datasets/:datasetId/experiments`,
+      async ({ params, request }) => {
+        triggerCalls.push({ datasetId: params.datasetId, body: await request.json() });
+        return HttpResponse.json({
+          experimentId: 'exp-1',
+          status: 'pending',
+          totalItems: 0,
+          succeededCount: 0,
+          failedCount: 0,
+          startedAt: new Date().toISOString(),
+          completedAt: null,
+          results: [],
+        });
+      },
+    ),
   );
 
   return { triggerCalls };
@@ -92,101 +100,152 @@ function renderDialog(props: Partial<ExperimentTriggerDialogProps> = {}) {
   const onOpenChange = vi.fn();
   const queryClient = new QueryClient({ defaultOptions: { queries: { retry: false } } });
 
-  render(
+  const dialog = (open: boolean) => (
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
-        <ExperimentTriggerDialog open onOpenChange={onOpenChange} onSuccess={onSuccess} {...props} />
+        <ExperimentTriggerDialog open={open} onOpenChange={onOpenChange} onSuccess={onSuccess} {...props} />
       </QueryClientProvider>
-    </MastraReactProvider>,
+    </MastraReactProvider>
   );
+  const { rerender } = render(dialog(true));
 
-  return { onSuccess, onOpenChange };
+  /** Closes the dialog like its caller would, waits for it to leave, and opens it again. */
+  async function reopen() {
+    rerender(dialog(false));
+    await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+    rerender(dialog(true));
+  }
+
+  return { onSuccess, onOpenChange, reopen };
 }
 
-const selectOption = (label: string, value: string) =>
-  fireEvent.change(screen.getByRole('combobox', { name: label }), { target: { value } });
+const targetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Target/ });
+const datasetField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Dataset(?! version)/ });
+const scorersField = () => screen.getByRole<HTMLInputElement>('combobox', { name: /^Scorers/ });
+const runButton = () => screen.getByRole<HTMLButtonElement>('button', { name: 'Run experiment' });
+const advancedToggle = () => screen.getByRole('button', { name: 'Advanced' });
+const nameInput = () => screen.getByLabelText<HTMLInputElement>('Experiment name');
+const descriptionInput = () => screen.getByLabelText<HTMLTextAreaElement>('Description');
+const chipLabels = () =>
+  Array.from(document.querySelectorAll('[data-slot=combobox-chip]'), chip => chip.textContent?.trim());
 
-const scorersListbox = () => screen.getByRole('listbox', { name: 'Select scorers...' });
-const selectedScorerValues = () => getMultiSelectValues('Select scorers...');
-const selectScorers = (values: string[]) => setMultiSelectValues('Select scorers...', values);
+/** Opens a combobox field's list and picks the option. */
+async function choose(field: HTMLInputElement, option: string) {
+  fireEvent.keyDown(field, { key: 'ArrowDown' });
+  fireEvent.click(await screen.findByRole('option', { name: option }));
+}
 
-const runButton = () => screen.getByRole('button', { name: 'Run' });
+async function pickAgentOne() {
+  await waitFor(() => expect(targetField().disabled).toBe(false));
+  await choose(targetField(), 'Agent One');
+  await waitFor(() => expect(targetField().value).toBe('Agent One'));
+}
 
-const nameInput = () => screen.getByLabelText('Name *') as HTMLInputElement;
-const descriptionInput = () => screen.getByLabelText('Description') as HTMLInputElement;
-const typeName = (value: string) => fireEvent.change(nameInput(), { target: { value } });
-
-async function pickAgentTarget() {
-  selectOption('Select target type', 'agent');
-  await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
-  selectOption('Select agent', 'agent-1');
+async function openAdvanced() {
+  fireEvent.click(advancedToggle());
+  return screen.findByLabelText<HTMLTextAreaElement>('Description');
 }
 
 describe('ExperimentTriggerDialog', () => {
-  describe('when opened without an initial dataset', () => {
-    it('starts with an empty dataset combobox and a disabled Run button', async () => {
+  describe('the three fields', () => {
+    it('opens on the newest dataset with Run disabled until a target is picked', async () => {
       setupHandlers();
       renderDialog();
 
-      const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      expect((datasetCombobox as HTMLSelectElement).value).toBe('');
-      expect(screen.getByText('Scorers (Optional)')).toBeDefined();
-      expect(scorersListbox()).toBeDefined();
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(await screen.findByText('3 items · latest')).toBeDefined();
+      expect(runButton().disabled).toBe(true);
+
+      await pickAgentOne();
+      expect(runButton().disabled).toBe(false);
     });
 
-    it('runs against the selected dataset and reports the experiment id', async () => {
+    it('runs the picked target on the picked dataset and reports the experiment id', async () => {
       const { triggerCalls } = setupHandlers();
       const toastSuccess = vi.spyOn(toast, 'success');
-      const { onSuccess } = renderDialog();
+      const { onSuccess, onOpenChange } = renderDialog();
 
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-1');
-      typeName('Baseline run');
-      await pickAgentTarget();
-
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      await choose(datasetField(), 'Dataset 2');
+      await pickAgentOne();
       fireEvent.click(runButton());
 
       await waitFor(() => expect(onSuccess).toHaveBeenCalledWith('exp-1'));
-      expect(toastSuccess).toHaveBeenCalledWith('Experiment triggered successfully');
+      expect(toastSuccess).toHaveBeenCalledWith('Experiment started');
+      expect(onOpenChange).toHaveBeenCalledWith(false);
       expect(triggerCalls).toHaveLength(1);
-      expect(triggerCalls[0].datasetId).toBe('dataset-1');
-      expect(triggerCalls[0].body.targetType).toBe('agent');
-      expect(triggerCalls[0].body.targetId).toBe('agent-1');
+      expect(triggerCalls[0].datasetId).toBe('dataset-2');
+      expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-1' });
       expect(triggerCalls[0].body.version).toBeUndefined();
+      expect(triggerCalls[0].body).not.toHaveProperty('scorerIds');
+    });
+
+    it('submits on Ctrl+Enter only once a target is picked', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+
+      fireEvent.keyDown(datasetField(), { key: 'Enter', ctrlKey: true });
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(triggerCalls).toHaveLength(0);
+
+      await pickAgentOne();
+      fireEvent.keyDown(targetField(), { key: 'Enter', ctrlKey: true });
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
     });
   });
 
-  describe('when opened with an initial dataset and version', () => {
-    it('pre-fills the comboboxes and sends the initial version', async () => {
-      const { triggerCalls } = setupHandlers();
-      renderDialog({ initialDatasetId: 'dataset-1', initialDatasetVersion: 11 });
+  describe('when opened from a rerun', () => {
+    it('pre-fills target, dataset, version and scorers and sends them', async () => {
+      const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+      renderDialog({
+        initialDatasetId: 'dataset-1',
+        initialDatasetVersion: 11,
+        initialTargetType: 'agent',
+        initialTargetId: 'agent-1',
+        initialScorerIds: ['quality'],
+      });
 
-      const datasetCombobox = await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect((datasetCombobox as HTMLSelectElement).value).toBe('dataset-1'));
-      await waitFor(() => expect(screen.getByRole('option', { name: 'v11' })).toBeDefined());
-      expect((screen.getByRole('combobox', { name: 'Select version' }) as HTMLSelectElement).value).toBe('11');
+      await waitFor(() => expect(targetField().value).toBe('Agent One'));
+      expect(datasetField().value).toBe('Dataset 1');
+      expect(await screen.findByText('3 items · v11')).toBeDefined();
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
+      // The pinned version shows in the dataset hint; Advanced stays closed.
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(screen.queryByText('Dataset version')).toBeNull();
 
-      typeName('Baseline run');
-      await pickAgentTarget();
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].datasetId).toBe('dataset-1');
+      expect(triggerCalls[0].body).toMatchObject({
+        targetType: 'agent',
+        targetId: 'agent-1',
+        version: 11,
+        scorerIds: ['quality'],
+      });
+    });
+
+    it("drops the rerun's scorers when the dataset changes", async () => {
+      const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+      renderDialog({ initialDatasetId: 'dataset-1', initialScorerIds: ['quality'] });
+
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
+      await choose(datasetField(), 'Dataset 2');
+      await waitFor(() => expect(chipLabels()).toEqual([]));
+      await pickAgentOne();
       fireEvent.click(runButton());
 
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].datasetId).toBe('dataset-1');
-      expect(triggerCalls[0].body.version).toBe(11);
+      expect(triggerCalls[0].body).not.toHaveProperty('scorerIds');
     });
 
-    it('resets the version when the dataset changes', async () => {
+    it('forgets the pinned version when the dataset changes', async () => {
       const { triggerCalls } = setupHandlers();
       renderDialog({ initialDatasetId: 'dataset-1', initialDatasetVersion: 11 });
 
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 2' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-2');
-
-      typeName('Baseline run');
-      await pickAgentTarget();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      await choose(datasetField(), 'Dataset 2');
+      await pickAgentOne();
       fireEvent.click(runButton());
 
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
@@ -195,299 +254,443 @@ describe('ExperimentTriggerDialog', () => {
     });
   });
 
-  describe('when opened with initial scorer ids', () => {
-    it('sends the initial scorers with the run request', async () => {
-      const { triggerCalls } = setupHandlers();
-      renderDialog({ initialScorerIds: ['answer-relevancy'] });
+  describe('Advanced', () => {
+    it('stays closed by default, with its toggle in the body above the footer', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-1');
-      typeName('Baseline run');
-      await pickAgentTarget();
+      expect(screen.queryByLabelText('Description')).toBeNull();
+      expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
 
-      fireEvent.click(runButton());
+      await openAdvanced();
+      expect(advancedToggle().closest('[data-slot=dialog-footer]')).toBeNull();
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('true');
+    });
 
-      await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].body.scorerIds).toEqual(['answer-relevancy']);
+    it('only offers a dataset version when the dataset has older versions', async () => {
+      setupHandlers({
+        datasets: [buildDataset({ version: 1 }), buildDataset({ id: 'dataset-2', name: 'Dataset 2', version: 3 })],
+      });
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      await openAdvanced();
+
+      expect(screen.queryByText('Dataset version')).toBeNull();
+      await choose(datasetField(), 'Dataset 2');
+      expect(await screen.findByText('Dataset version')).toBeDefined();
     });
   });
 
-  describe('when opened with an initial target (rerun)', () => {
-    it('pre-fills the target and sends it with the run request', async () => {
-      const { triggerCalls } = setupHandlers();
-      renderDialog({
-        initialDatasetId: 'dataset-1',
-        initialDatasetVersion: 11,
-        initialTargetType: 'agent',
-        initialTargetId: 'agent-1',
-        initialScorerIds: ['answer-relevancy'],
+  describe('model override', () => {
+    const providerField = () => screen.getByRole('combobox', { name: 'Model provider' });
+    const modelField = () => screen.getByRole('combobox', { name: 'Model' });
+
+    /**
+     * The model pickers are buttons, not text inputs, so a click opens them. A provider option's name starts
+     * with its logo and connection status, so options are matched on how their name ends.
+     */
+    async function pick(field: HTMLElement, option: string) {
+      fireEvent.click(field);
+      await pickOpenOption(option);
+    }
+
+    async function pickOpenOption(option: string) {
+      fireEvent.click(await screen.findByRole('option', { name: name => name.endsWith(option) }));
+    }
+
+    /** Picking a provider opens the model list straight away, as in the composer. */
+    async function pickModel(provider: string, model: string) {
+      await pick(providerField(), provider);
+      await pickOpenOption(model);
+      await waitFor(() => expect(modelField().textContent).toContain(model));
+    }
+
+    async function openModelOverride() {
+      await pickAgentOne();
+      await screen.findByRole('combobox', { name: 'Model provider' });
+    }
+
+    describe('when an agent is the target', () => {
+      it("shows the agent's own provider and model without opening Advanced", async () => {
+        setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
       });
 
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
-      expect((screen.getByRole('combobox', { name: 'Select target type' }) as HTMLSelectElement).value).toBe('agent');
-      expect((screen.getByRole('combobox', { name: 'Select agent' }) as HTMLSelectElement).value).toBe('agent-1');
+      it('runs the agent on the picked provider and model', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
 
-      typeName('Rerun');
-      await waitFor(() => expect(runButton().hasAttribute('disabled')).toBe(false));
-      fireEvent.click(runButton());
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        fireEvent.click(runButton());
 
-      await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].datasetId).toBe('dataset-1');
-      expect(triggerCalls[0].body).toMatchObject({
-        targetType: 'agent',
-        targetId: 'agent-1',
-        version: 11,
-        scorerIds: ['answer-relevancy'],
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'anthropic', modelId: 'claude-haiku-4-5' });
       });
+
+      it('names the run after the agent and the picked model, so runs on different models can be told apart', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+
+        await waitFor(() => expect(nameInput().placeholder).toMatch(/^agent-one-claude-haiku-4-5-[0-9a-f]{4}$/));
+        fireEvent.click(runButton());
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.name).toBe(nameInput().placeholder);
+      });
+
+      it("keeps a gateway provider's prefix", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Acme Gateway', 'acme-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body.agentModel).toEqual({ provider: 'acme/gateway', modelId: 'acme-mini' });
+      });
+
+      it("uses the agent's own model when nothing is picked", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it('sends no override when only a provider is picked', async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pick(providerField(), 'Anthropic');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("drops the picked model when the provider changes, so it never pairs with another provider's model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('OpenAI', 'gpt-4o');
+        await pick(providerField(), 'Anthropic');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("goes back to the agent's own model on reset", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('OpenAI', 'gpt-4o');
+        fireEvent.click(screen.getByRole('button', { name: "Use the agent's model" }));
+        await waitFor(() => expect(modelField().textContent).toContain('gpt-4o-mini'));
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+
+      it("sends no override when the agent's own model is picked back", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await pickModel('OpenAI', 'gpt-4o-mini');
+        expect(screen.queryByRole('button', { name: "Use the agent's model" })).toBeNull();
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^agent-one-[0-9a-f]{4}$/);
+      });
+
+      it("drops the picked model when another agent is picked, so it runs on that agent's own model", async () => {
+        const { triggerCalls } = setupHandlers();
+        renderDialog();
+        await openModelOverride();
+
+        await pickModel('Anthropic', 'claude-haiku-4-5');
+        await choose(targetField(), 'Agent Two');
+        await waitFor(() => expect(providerField().textContent).toContain('OpenAI'));
+        expect(modelField().textContent).toContain('gpt-4o-mini');
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'agent', targetId: 'agent-2' });
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+    });
+
+    describe('when the target is not an agent', () => {
+      it('offers no model and sends none', async () => {
+        const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+        renderDialog();
+        await openModelOverride();
+        await pickModel('OpenAI', 'gpt-4o');
+
+        await choose(targetField(), 'Quality scorer');
+        await waitFor(() => expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull());
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).toMatchObject({ targetType: 'scorer', targetId: 'quality' });
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+        expect(triggerCalls[0].body.name).toMatch(/^quality-scorer-[0-9a-f]{4}$/);
+      });
+    });
+
+    describe('when an admin has hidden the model picker', () => {
+      it('shows the model as locked and sends no override', async () => {
+        const { triggerCalls } = setupHandlers({ builderSettings: lockedModelPolicySettings });
+        renderDialog();
+        await pickAgentOne();
+
+        expect(await screen.findByText('Locked by admin')).toBeDefined();
+        expect(screen.queryByRole('combobox', { name: 'Model provider' })).toBeNull();
+        fireEvent.click(runButton());
+
+        await waitFor(() => expect(triggerCalls).toHaveLength(1));
+        expect(triggerCalls[0].body).not.toHaveProperty('agentModel');
+      });
+    });
+  });
+
+  describe('when reopened', () => {
+    it('starts from a fresh form', async () => {
+      setupHandlers();
+      const { reopen } = renderDialog();
+      await pickAgentOne();
+      await openAdvanced();
+      fireEvent.change(nameInput(), { target: { value: 'Prompt v2' } });
+
+      await reopen();
+
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(targetField().value).toBe('');
+      expect(nameInput().value).toBe('');
+      expect(screen.queryByLabelText('Description')).toBeNull();
     });
   });
 
   describe('experiment name and description', () => {
-    it('should disable Run until a name is entered', async () => {
-      // Given a dataset and a target are selected
+    it('shows the name first, above the target, without opening Advanced', async () => {
       setupHandlers();
       renderDialog();
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-1');
-      await pickAgentTarget();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
-      // When the name is empty
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      expect(nameInput().compareDocumentPosition(targetField()) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it('shows the target name plus a short id as the placeholder and runs with it', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+
       expect(nameInput().value).toBe('');
-      // Then Run is disabled
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
+      expect(nameInput().placeholder).toMatch(/^agent-one-[0-9a-f]{4}$/);
 
-      // When a name is typed
-      typeName('Prompt v2');
-      // Then Run is enabled
-      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.name).toBe(nameInput().placeholder);
     });
 
-    it('should send name and description when running', async () => {
-      // Given a filled-in dialog
+    it('follows the target until a name is typed', async () => {
+      setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      const suffix = nameInput().placeholder.slice(-4);
+
+      await choose(targetField(), 'Agent Two');
+      await waitFor(() => expect(nameInput().placeholder).toBe(`agent-two-${suffix}`));
+    });
+
+    it('names the run after the target id when the target has no display name', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(targetField().disabled).toBe(false));
+      await choose(targetField(), 'agent-unnamed');
+
+      expect(nameInput().placeholder).toMatch(/^agent-unnamed-[0-9a-f]{4}$/);
+    });
+
+    it('sends a typed name and description, and omits a blank description', async () => {
       const { triggerCalls } = setupHandlers();
-      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
+      renderDialog();
+      await pickAgentOne();
+      await openAdvanced();
 
-      // When the user names and describes the run
-      typeName('  Prompt v2  ');
-      fireEvent.change(descriptionInput(), { target: { value: 'Testing the new system prompt' } });
+      fireEvent.change(nameInput(), { target: { value: 'Prompt v2' } });
+      fireEvent.change(descriptionInput(), { target: { value: '  ' } });
       fireEvent.click(runButton());
-
-      // Then the trigger request carries both fields (name trimmed)
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body.name).toBe('Prompt v2');
-      expect(triggerCalls[0].body.description).toBe('Testing the new system prompt');
+      expect(triggerCalls[0].body).not.toHaveProperty('description');
     });
 
-    it('should omit description when left blank', async () => {
-      // Given a filled-in dialog with only a name
+    it('pre-fills name, and description behind a closed Advanced, from a rerun', async () => {
       const { triggerCalls } = setupHandlers();
-      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
-      typeName('Prompt v2');
+      renderDialog({ initialName: 'Baseline', initialDescription: 'First pass' });
 
-      // When the run is triggered
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      expect(nameInput().value).toBe('Baseline');
+      expect(advancedToggle().getAttribute('aria-expanded')).toBe('false');
+      await openAdvanced();
+      expect(descriptionInput().value).toBe('First pass');
+
+      await pickAgentOne();
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body).toMatchObject({ name: 'Baseline', description: 'First pass' });
+    });
+  });
+
+  describe('request context', () => {
+    it('uses a JSON editor and rejects JSON that is not an object', async () => {
+      const { triggerCalls } = setupHandlers();
+      const toastError = vi.spyOn(toast, 'error');
+      renderDialog();
+      await pickAgentOne();
+      await openAdvanced();
+
+      fireEvent.change(screen.getByLabelText('Request context JSON'), { target: { value: '[1, 2]' } });
       fireEvent.click(runButton());
 
-      // Then no description is sent
-      await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].body.description).toBeUndefined();
-    });
-
-    it('should prefill name and description from initial props', async () => {
-      // Given initial name/description (e.g. a rerun)
-      setupHandlers();
-      renderDialog({ initialName: 'Original run', initialDescription: 'Original description' });
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-
-      // Then the inputs are prefilled
-      expect(nameInput().value).toBe('Original run');
-      expect(descriptionInput().value).toBe('Original description');
-    });
-  });
-
-  describe('request context form', () => {
-    it('uses the selected dataset requestContextSchema to drive the form', async () => {
-      setupHandlers();
-      renderDialog();
-
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      // No dataset selected: raw JSON editor
-      expect(screen.getByText('Request Context (JSON, optional)')).toBeDefined();
-
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 2' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-2');
-
-      // dataset-2 has a requestContextSchema: disclosure switches to the schema-driven form, still collapsed
-      expect(screen.queryByText('Request Context')).toBeNull();
-
-      fireEvent.click(screen.getByRole('button', { name: /Request Context \(JSON, optional\)/ }));
-      expect(await screen.findByText('Request Context')).toBeDefined();
-      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
-    });
-
-    it('keeps the raw JSON editor collapsed until the disclosure is opened', async () => {
-      setupHandlers();
-      renderDialog();
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-
-      // Collapsed by default
-      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
-
-      // When the disclosure is opened
-      fireEvent.click(screen.getByRole('button', { name: /Request Context \(JSON, optional\)/ }));
-
-      // Then the editor is revealed
-      expect(await screen.findByLabelText('Request context JSON')).toBeDefined();
-    });
-  });
-
-  describe('readiness status', () => {
-    const status = () => screen.getByTestId('experiment-run-status');
-
-    it('should list the missing fields and enable Run once name, dataset and target are set', async () => {
-      setupHandlers();
-      renderDialog();
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-
-      expect(status().textContent).toContain('Missing name, dataset, target');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(true);
-
-      typeName('Prompt v2');
-      expect(status().textContent).toContain('Missing dataset, target');
-
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Dataset 1' })).toBeDefined());
-      selectOption('Select a dataset...', 'dataset-1');
-      expect(status().textContent).toContain('Missing target');
-
-      await pickAgentTarget();
-      expect(status().textContent).toContain('Ready');
-      expect((runButton() as HTMLButtonElement).disabled).toBe(false);
-    });
-
-    it('should submit on Ctrl+Enter only when the form is ready', async () => {
-      const { triggerCalls } = setupHandlers();
-      renderDialog({ initialDatasetId: 'dataset-1', initialTargetType: 'agent', initialTargetId: 'agent-1' });
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Agent One' })).toBeDefined());
-
-      // Not ready (no name): shortcut is ignored
-      fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
-      await new Promise(resolve => setTimeout(resolve, 20));
+      await waitFor(() => expect(toastError).toHaveBeenCalledWith('Request context must be a JSON object'));
       expect(triggerCalls).toHaveLength(0);
+    });
 
-      // Ready: shortcut submits
-      typeName('Prompt v2');
-      fireEvent.keyDown(nameInput(), { key: 'Enter', ctrlKey: true });
+    it('sends parsed JSON', async () => {
+      const { triggerCalls } = setupHandlers();
+      renderDialog();
+      await pickAgentOne();
+      await openAdvanced();
+
+      fireEvent.change(screen.getByLabelText('Request context JSON'), { target: { value: '{"userId":"u1"}' } });
+      fireEvent.click(runButton());
+
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
-      expect(triggerCalls[0].body.name).toBe('Prompt v2');
+      expect(triggerCalls[0].body.requestContext).toEqual({ userId: 'u1' });
+    });
+
+    it('switches to a form when the dataset has a request context schema', async () => {
+      setupHandlers();
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
+      await openAdvanced();
+      expect(screen.getByLabelText('Request context JSON')).toBeDefined();
+
+      await choose(datasetField(), 'Dataset 2');
+      expect(await screen.findByText('Request context')).toBeDefined();
+      expect(screen.queryByLabelText('Request context JSON')).toBeNull();
     });
   });
-  describe('given the selected dataset has default scorers', () => {
+
+  describe('scorers', () => {
     const datasetsWithDefaults = [
       buildDataset({ id: 'dataset-1', name: 'Dataset 1', scorerIds: ['quality'] }),
       buildDataset({ id: 'dataset-2', name: 'Dataset 2', scorerIds: ['stored-judge'] }),
       buildDataset({ id: 'dataset-3', name: 'Dataset 3' }),
     ];
 
-    function setupWithDefaults() {
-      const handlers = setupHandlers();
-      server.use(
-        http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json(buildListDatasetsResponse(datasetsWithDefaults))),
-        http.get(`${BASE_URL}/api/datasets/:datasetId`, ({ params }) => {
-          const dataset = datasetsWithDefaults.find(d => d.id === params.datasetId);
-          return dataset ? HttpResponse.json(dataset) : HttpResponse.json({ error: 'not found' }, { status: 404 });
-        }),
-        http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)),
-      );
-      return handlers;
-    }
+    it("starts on the dataset's default scorers and says so", async () => {
+      const { triggerCalls } = setupHandlers({ datasets: datasetsWithDefaults, scorers: itemScorers });
+      renderDialog();
 
-    async function openWithDataset(datasetId: string, props: Partial<ExperimentTriggerDialogProps> = {}) {
-      const rendered = renderDialog({ initialDatasetId: datasetId, ...props });
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Quality scorer' })).toBeDefined());
-      return rendered;
-    }
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
+      expect(screen.getByText("The dataset's default scorers.")).toBeDefined();
 
-    it('pre-selects the dataset scorers and sends them in the payload', async () => {
-      const { triggerCalls } = setupWithDefaults();
-      await openWithDataset('dataset-1');
-
-      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
-
-      typeName('Defaults run');
-      await pickAgentTarget();
+      await pickAgentOne();
       fireEvent.click(runButton());
-
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body.scorerIds).toEqual(['quality']);
     });
 
-    it('shows that the scorers come from the dataset defaults', async () => {
-      setupWithDefaults();
-      await openWithDataset('dataset-1');
+    it('shows a chip for a default scorer the list does not offer, and sends it', async () => {
+      const { triggerCalls } = setupHandlers({
+        datasets: [buildDataset({ scorerIds: ['retired-scorer'] })],
+        scorers: itemScorers,
+      });
+      renderDialog();
 
-      await waitFor(() => expect(screen.getByText("Pre-filled from the dataset's default scorers.")).toBeDefined());
+      await waitFor(() => expect(chipLabels()).toEqual(['retired-scorer']));
+      await pickAgentOne();
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['retired-scorer']);
     });
 
-    it('lets the user clear them and then sends no scorerIds', async () => {
-      const { triggerCalls } = setupWithDefaults();
-      await openWithDataset('dataset-1');
-      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
+    it('sends no scorers once the defaults are removed', async () => {
+      const { triggerCalls } = setupHandlers({ datasets: datasetsWithDefaults, scorers: itemScorers });
+      renderDialog();
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
 
-      selectScorers([]);
-      expect(selectedScorerValues()).toEqual([]);
+      const chip = document.querySelector<HTMLElement>('[data-slot=combobox-chip]')!;
+      fireEvent.click(within(chip).getByRole('button'));
+      await waitFor(() => expect(chipLabels()).toEqual([]));
 
-      typeName('No scorers');
-      await pickAgentTarget();
+      await pickAgentOne();
       fireEvent.click(runButton());
-
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body).not.toHaveProperty('scorerIds');
     });
 
-    it('re-applies the defaults of the newly selected dataset when switching dataset', async () => {
-      setupWithDefaults();
-      await openWithDataset('dataset-1');
-      await waitFor(() => expect(selectedScorerValues()).toEqual(['quality']));
+    it('adds a scorer picked from the list', async () => {
+      const { triggerCalls } = setupHandlers({ scorers: itemScorers });
+      renderDialog();
+      await waitFor(() => expect(datasetField().value).toBe('Dataset 1'));
 
-      selectScorers([]);
-      selectOption('Select a dataset...', 'dataset-2');
-      await waitFor(() => expect(selectedScorerValues()).toEqual(['stored-judge']));
+      await choose(scorersField(), 'Stored judge');
+      await waitFor(() => expect(chipLabels()).toEqual(['Stored judge']));
+      // A multi-select stays open for more picks; close it like a user would.
+      fireEvent.keyDown(scorersField(), { key: 'Escape' });
 
-      selectOption('Select a dataset...', 'dataset-3');
-      await waitFor(() => expect(selectedScorerValues()).toEqual([]));
+      await pickAgentOne();
+      fireEvent.click(runButton());
+      await waitFor(() => expect(triggerCalls).toHaveLength(1));
+      expect(triggerCalls[0].body.scorerIds).toEqual(['stored-judge']);
     });
-  });
 
-  describe('given the dialog is opened with explicit initial scorer ids (rerun)', () => {
-    it('keeps the explicit scorers instead of the dataset defaults', async () => {
-      const { triggerCalls } = setupHandlers();
-      server.use(
-        http.get(`${BASE_URL}/api/datasets`, () =>
-          HttpResponse.json(buildListDatasetsResponse([buildDataset({ id: 'dataset-1', scorerIds: ['quality'] })])),
-        ),
-        http.get(`${BASE_URL}/api/datasets/:datasetId`, () =>
-          HttpResponse.json(buildDataset({ id: 'dataset-1', scorerIds: ['quality'] })),
-        ),
-        http.get(`${BASE_URL}/api/scores/scorers`, () => HttpResponse.json(itemScorers)),
-      );
+    it("re-applies the new dataset's defaults when the dataset changes", async () => {
+      setupHandlers({ datasets: datasetsWithDefaults, scorers: itemScorers });
+      renderDialog();
+      await waitFor(() => expect(chipLabels()).toEqual(['Quality scorer']));
+
+      await choose(datasetField(), 'Dataset 2');
+      await waitFor(() => expect(chipLabels()).toEqual(['Stored judge']));
+
+      await choose(datasetField(), 'Dataset 3');
+      await waitFor(() => expect(chipLabels()).toEqual([]));
+    });
+
+    it("keeps a rerun's scorers instead of the dataset defaults", async () => {
+      const { triggerCalls } = setupHandlers({ datasets: datasetsWithDefaults, scorers: itemScorers });
       renderDialog({ initialDatasetId: 'dataset-1', initialScorerIds: ['stored-judge'] });
 
-      await screen.findByRole('combobox', { name: 'Select a dataset...' });
-      await waitFor(() => expect(screen.getByRole('option', { name: 'Stored judge' })).toBeDefined());
-      expect(selectedScorerValues()).toEqual(['stored-judge']);
-
-      typeName('Rerun');
-      await pickAgentTarget();
+      await waitFor(() => expect(chipLabels()).toEqual(['Stored judge']));
+      await pickAgentOne();
       fireEvent.click(runButton());
-
       await waitFor(() => expect(triggerCalls).toHaveLength(1));
       expect(triggerCalls[0].body.scorerIds).toEqual(['stored-judge']);
     });

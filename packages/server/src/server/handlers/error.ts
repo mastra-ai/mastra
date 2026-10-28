@@ -44,10 +44,56 @@ function isWorkflowSchemaValidationError(error: unknown): error is Error {
   return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_SCHEMA_VALIDATION_FAILED_CODE;
 }
 
-const WORKFLOW_RESUME_ALREADY_CLAIMED_CODE = 'WORKFLOW_RESUME_ALREADY_CLAIMED';
+// A resume or time travel the run can't accept: another caller claimed it, it is still running,
+// or it isn't waiting to be resumed.
+const RUN_CLAIM_CONFLICT_CODES = new Set([
+  'WORKFLOW_RESUME_ALREADY_CLAIMED',
+  'AGENT_RESUME_ALREADY_CLAIMED',
+  'WORKFLOW_RUN_NOT_SUSPENDED',
+  'AGENT_RESUME_RUN_NOT_SUSPENDED',
+  'WORKFLOW_TIME_TRAVEL_ALREADY_CLAIMED',
+  'WORKFLOW_TIME_TRAVEL_RUN_RUNNING',
+]);
 
-function isWorkflowResumeAlreadyClaimedError(error: unknown): error is Error {
-  return error instanceof Error && (error as { id?: unknown }).id === WORKFLOW_RESUME_ALREADY_CLAIMED_CODE;
+function isRunClaimConflictError(error: unknown): error is Error & { id: string } {
+  return error instanceof Error && RUN_CLAIM_CONFLICT_CODES.has((error as { id?: unknown }).id as string);
+}
+
+/**
+ * Durable agent errors for a request that conflicts with the run's state:
+ * another execution owns the run, it is already being recovered, it lost a
+ * concurrent claim, or it is suspended (recover). Matched by id, like the
+ * other checks here, so the server doesn't depend on core exporting them.
+ */
+const DURABLE_RUN_CONFLICT_CODES = new Set([
+  'DURABLE_AGENT_RUN_ACTIVE',
+  'DURABLE_AGENT_RECOVER_RUN_ACTIVE_LOCALLY',
+  'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS',
+  'DURABLE_AGENT_RECOVER_RUN_SUSPENDED',
+  'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE',
+  'DURABLE_AGENT_EXECUTION_CONFLICT',
+]);
+
+function isDurableRunConflictError(error: unknown): error is Error {
+  const id = (error as { id?: unknown } | undefined)?.id;
+  return error instanceof Error && typeof id === 'string' && DURABLE_RUN_CONFLICT_CODES.has(id);
+}
+
+const FEEDBACK_REVIEW_STATUS_CONFLICT_CODE = 'OBSERVABILITY_UPDATE_FEEDBACK_REVIEW_STATUS_CONFLICT';
+
+function isFeedbackReviewStatusConflictError(error: unknown): error is Error {
+  return error instanceof Error && (error as { id?: unknown }).id === FEEDBACK_REVIEW_STATUS_CONFLICT_CODE;
+}
+
+/**
+ * Matches the `OBSERVABILITY_STORAGE_*_NOT_IMPLEMENTED` MastraError the base
+ * observability store throws for every optional method a store doesn't
+ * implement. Checked by id (not `instanceof`) so it holds across duplicated
+ * `@mastra/core` installs.
+ */
+function isObservabilityStorageNotImplementedError(error: unknown): error is Error {
+  const id = error && typeof error === 'object' && 'id' in error ? error.id : undefined;
+  return typeof id === 'string' && id.startsWith('OBSERVABILITY_STORAGE_') && id.endsWith('_NOT_IMPLEMENTED');
 }
 
 /**
@@ -111,9 +157,27 @@ export function handleError(error: unknown, defaultMessage: string): never {
     });
   }
 
-  // A losing concurrent resume is a conflict on run state, not a malformed request, so it maps
-  // to 409 and clients can distinguish it from a 400/500 and re-read the run.
-  if (isWorkflowResumeAlreadyClaimedError(error)) {
+  // A losing concurrent resume or time travel, or a recover of a run that is live or suspended, is
+  // a conflict on run state, not a malformed request, so it maps to 409 and clients can
+  // distinguish it from a 400/500 and re-read the run.
+  if (isRunClaimConflictError(error) || isDurableRunConflictError(error)) {
+    const res = isRunClaimConflictError(error)
+      ? new Response(JSON.stringify({ error: error.message, code: error.id }), {
+          status: 409,
+          headers: { 'content-type': 'application/json' },
+        })
+      : undefined;
+    throw new HTTPException(409, {
+      res,
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // The feedback row changed under a review-status update, so the caller re-reads and retries;
+  // that is a conflict, not a broken store.
+  if (isFeedbackReviewStatusConflictError(error)) {
     throw new HTTPException(409, {
       message: error.message,
       stack: error.stack,
@@ -123,6 +187,20 @@ export function handleError(error: unknown, defaultMessage: string): never {
 
   if (isWorkflowSchemaValidationError(error)) {
     throw new HTTPException(400, {
+      message: error.message,
+      stack: error.stack,
+      cause: error,
+    });
+  }
+
+  // Optional observability APIs (feedback, metrics, logs, scores, ...) throw
+  // `*_NOT_IMPLEMENTED` on stores that don't support them. That's a missing
+  // capability, not a server fault, so it maps to 501 — which server adapters
+  // log as a warning instead of an error. The message is preserved because
+  // clients match on it to detect unsupported operations. Clients should check
+  // `GET /observability/capabilities` before calling optional routes.
+  if (isObservabilityStorageNotImplementedError(error)) {
+    throw new HTTPException(501, {
       message: error.message,
       stack: error.stack,
       cause: error,

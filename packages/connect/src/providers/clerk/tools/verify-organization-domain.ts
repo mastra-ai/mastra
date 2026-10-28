@@ -1,10 +1,17 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const verifyOrganizationDomainInputSchema = z.object({ organization_id: z.string(), domain_id: z.string() });
+const EnrollmentModeSchema = z
+  .enum(['manual_invitation', 'automatic_invitation', 'automatic_suggestion', 'enterprise_sso'])
+  .or(z.string());
+
+export const verifyOrganizationDomainInputSchema = z.object({
+  organization_id: z.string().min(1),
+  domain_id: z.string().min(1),
+});
 
 const ResourceSchema = z
   .object({
@@ -12,12 +19,17 @@ const ResourceSchema = z
     object: z.string().optional(),
     organization_id: z.string().optional(),
     name: z.string(),
-    enrollment_mode: z.string().optional(),
+    enrollment_mode: EnrollmentModeSchema.optional(),
     affiliation_verification: z
       .object({ attempts: z.number().optional(), status: z.string().optional() })
       .passthrough()
+      .nullable()
       .optional(),
-    verification: z.object({ attempts: z.number().optional(), status: z.string().optional() }).passthrough().optional(),
+    verification: z
+      .object({ attempts: z.number().optional(), status: z.string().optional() })
+      .passthrough()
+      .nullable()
+      .optional(),
     verified: z.boolean().optional(),
     created_at: z.number().optional(),
     updated_at: z.number().optional(),

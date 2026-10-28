@@ -1,5 +1,117 @@
 # @mastra/fastembed
 
+## 1.3.5
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@huggingface/hub@^2.17.9` ↗︎](https://www.npmjs.com/package/@huggingface/hub/v/2.17.9) (from `^2.12.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+- Fixed FastEmbed silently returning empty embeddings for invalid setups. `FlagEmbedding.init()` and `SparseTextEmbedding.init()` now throw a `RangeError` when `maxLength` is not a positive integer (for example `0`, `0.5` or `NaN`), and embedding now throws a clear error when a custom ONNX model's output does not have the expected `[batch, sequence, features]` shape, instead of returning empty vectors. ([#28454](https://github.com/mastra-ai/mastra/pull/28454))
+
+- Use attention-mask-aware mean pooling for MiniLM and multilingual E5 embeddings while preserving BGE CLS pooling. Publish sparse model caches only after complete downloads so failed downloads can be retried safely. ([#28091](https://github.com/mastra-ai/mastra/pull/28091))
+
+- Report missing model outputs and reject invalid numeric values from custom FastEmbed models instead of returning invalid embeddings. ([#28613](https://github.com/mastra-ai/mastra/pull/28613))
+
+- Fixed sparse model initialization when the cache directory has missing parent directories ([#28237](https://github.com/mastra-ai/mastra/issues/28237)). ([#28277](https://github.com/mastra-ai/mastra/pull/28277))
+
+- Fixed empty dense and sparse embeddings when custom tokenizer metadata omits model_max_length or sets it to null ([#28236](https://github.com/mastra-ai/mastra/issues/28236)). The requested limit or default 512-token limit is preserved. ([#28279](https://github.com/mastra-ai/mastra/pull/28279))
+
+## 1.3.5-alpha.3
+
+### Patch Changes
+
+- Report missing model outputs and reject invalid numeric values from custom FastEmbed models instead of returning invalid embeddings. ([#28613](https://github.com/mastra-ai/mastra/pull/28613))
+
+## 1.3.5-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@huggingface/hub@^2.17.9` ↗︎](https://www.npmjs.com/package/@huggingface/hub/v/2.17.9) (from `^2.12.0`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+- Fixed FastEmbed silently returning empty embeddings for invalid setups. `FlagEmbedding.init()` and `SparseTextEmbedding.init()` now throw a `RangeError` when `maxLength` is not a positive integer (for example `0`, `0.5` or `NaN`), and embedding now throws a clear error when a custom ONNX model's output does not have the expected `[batch, sequence, features]` shape, instead of returning empty vectors. ([#28454](https://github.com/mastra-ai/mastra/pull/28454))
+
+## 1.3.5-alpha.1
+
+### Patch Changes
+
+- Fixed sparse model initialization when the cache directory has missing parent directories ([#28237](https://github.com/mastra-ai/mastra/issues/28237)). ([#28277](https://github.com/mastra-ai/mastra/pull/28277))
+
+- Fixed empty dense and sparse embeddings when custom tokenizer metadata omits model_max_length or sets it to null ([#28236](https://github.com/mastra-ai/mastra/issues/28236)). The requested limit or default 512-token limit is preserved. ([#28279](https://github.com/mastra-ai/mastra/pull/28279))
+
+## 1.3.5-alpha.0
+
+### Patch Changes
+
+- Use attention-mask-aware mean pooling for MiniLM and multilingual E5 embeddings while preserving BGE CLS pooling. Publish sparse model caches only after complete downloads so failed downloads can be retried safely. ([#28091](https://github.com/mastra-ai/mastra/pull/28091))
+
+## 1.3.4
+
+### Patch Changes
+
+- FastEmbed embedding models now throw an error when the model returns a different number of embeddings than input texts, instead of returning a result where embeddings can't be matched to their inputs. The error reports the expected and received counts. ([#27767](https://github.com/mastra-ai/mastra/pull/27767))
+
+- Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent. ([#26882](https://github.com/mastra-ai/mastra/pull/26882))
+
+- Added a truncation warning to the FastEmbed AI SDK v3 models. ([#27315](https://github.com/mastra-ai/mastra/pull/27315))
+
+  The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
+
+- Fixed FastEmbed accepting invalid batch sizes. `embed`, `passageEmbed`, and `countTruncated` now reject a `batchSize` that is not a positive whole number with a clear `RangeError` before any text is processed. Previously `batchSize: 0` caused an unrelated `TypeError` while embedding and could make `countTruncated` loop forever. ([#27766](https://github.com/mastra-ai/mastra/pull/27766))
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.4-alpha.2
+
+### Patch Changes
+
+- FastEmbed embedding models now throw an error when the model returns a different number of embeddings than input texts, instead of returning a result where embeddings can't be matched to their inputs. The error reports the expected and received counts. ([#27767](https://github.com/mastra-ai/mastra/pull/27767))
+
+- Fixed FastEmbed accepting invalid batch sizes. `embed`, `passageEmbed`, and `countTruncated` now reject a `batchSize` that is not a positive whole number with a clear `RangeError` before any text is processed. Previously `batchSize: 0` caused an unrelated `TypeError` while embedding and could make `countTruncated` loop forever. ([#27766](https://github.com/mastra-ai/mastra/pull/27766))
+
+## 1.3.4-alpha.1
+
+### Patch Changes
+
+- Fixed model downloads contaminating standard output, including Hugging Face download messages for dense and sparse models. Download notices use standard error, and quiet downloads remain silent. ([#26882](https://github.com/mastra-ai/mastra/pull/26882))
+
+- Added a truncation warning to the FastEmbed AI SDK v3 models. ([#27315](https://github.com/mastra-ai/mastra/pull/27315))
+
+  The models now warn when an input exceeds the 512-token window. Before, FastEmbed dropped the extra text without notice. Split long text into smaller chunks to embed all of it.
+
+## 1.3.4-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.3.3
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+## 1.3.3-alpha.0
+
+### Patch Changes
+
+- Fixed embeddings failing with "Config file not found" when the model cache folder is removed, or the home directory changes, while a process is running. The cache folder is now looked up each time a model loads instead of once per process. ([#22078](https://github.com/mastra-ai/mastra/pull/22078))
+
+## 1.3.2
+
+### Patch Changes
+
+- Built-in FastEmbed models now download from Hugging Face (Qdrant organization) instead of the legacy Qdrant Google Cloud Storage bucket, which is being shut down. Existing local model caches keep working. ([#25026](https://github.com/mastra-ai/mastra/pull/25026))
+
+## 1.3.2-alpha.0
+
+### Patch Changes
+
+- Built-in FastEmbed models now download from Hugging Face (Qdrant organization) instead of the legacy Qdrant Google Cloud Storage bucket, which is being shut down. Existing local model caches keep working. ([#25026](https://github.com/mastra-ai/mastra/pull/25026))
+
 ## 1.3.1
 
 ### Patch Changes

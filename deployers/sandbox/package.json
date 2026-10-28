@@ -1,6 +1,6 @@
 {
   "name": "@mastra/deployer-sandbox",
-  "version": "0.3.12-alpha.0",
+  "version": "0.3.24",
   "description": "Deploy a Mastra server into any workspace sandbox that supports networking and get a live public URL",
   "type": "module",
   "files": [
@@ -37,15 +37,15 @@
     "build:watch": "tsdown --watch --silent --config tsdown.config.ts",
     "test": "vitest run",
     "test:integration": "vitest run --config vitest.integration.config.ts",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "keywords": [],
   "author": "",
   "license": "Apache-2.0",
   "dependencies": {
     "@mastra/deployer": "workspace:^",
-    "fs-extra": "^11.3.5"
+    "fs-extra": "^11.4.1"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -53,11 +53,10 @@
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
     "@types/fs-extra": "^11.0.4",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
-    "eslint": "^10.4.1",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
@@ -71,7 +70,7 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.52.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.13.0"

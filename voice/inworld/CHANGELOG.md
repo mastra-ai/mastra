@@ -1,5 +1,61 @@
 # @mastra/voice-inworld
 
+## 0.4.6
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.25.2` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.25.2) (from `^3.25.1`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+
+## 0.4.6-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`zod-to-json-schema@^3.25.2` ↗︎](https://www.npmjs.com/package/zod-to-json-schema/v/3.25.2) (from `^3.25.1`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+
+## 0.4.5
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.4.5-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.4.4
+
+### Patch Changes
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
+## 0.4.4-alpha.0
+
+### Patch Changes
+
+- Tools that return nothing no longer produce an invalid `function_call_output`. The result is now serialised as `null` instead of being dropped, so the item always carries the required `output` string, matching the xAI realtime provider. The same fix is applied to the Inworld realtime provider, which uses the same `function_call_output` shape. Fixes [#26505](https://github.com/mastra-ai/mastra/issues/26505). ([#26624](https://github.com/mastra-ai/mastra/pull/26624))
+
+## 0.4.3
+
+### Patch Changes
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 0.4.3-alpha.0
+
+### Patch Changes
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 0.4.2
 
 ### Patch Changes

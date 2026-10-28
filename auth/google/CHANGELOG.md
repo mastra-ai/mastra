@@ -1,5 +1,65 @@
 # @mastra/auth-google
 
+## 0.1.7
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`jose@^6.2.12` ↗︎](https://www.npmjs.com/package/jose/v/6.2.12) (from `^6.2.11`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.1.7-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`jose@^6.2.12` ↗︎](https://www.npmjs.com/package/jose/v/6.2.12) (from `^6.2.11`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.1.6
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.1.6-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.1.5
+
+### Patch Changes
+
+- Fixed Google SSO users being signed out after about an hour. Sessions now last for the configured `session.cookieMaxAge` (24 hours by default) instead of expiring with the short-lived Google ID token. ([#25043](https://github.com/mastra-ai/mastra/pull/25043))
+
+## 0.1.4
+
+### Patch Changes
+
+- Improved Google authentication portability by signing service account tokens with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 0.1.4-alpha.0
+
+### Patch Changes
+
+- Improved Google authentication portability by signing service account tokens with Web Crypto. ([#24583](https://github.com/mastra-ai/mastra/pull/24583))
+
+## 0.1.3
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 0.1.3-alpha.0
+
+### Patch Changes
+
+- Fixed a jose security advisory by updating jose to 6.2.11. Auth token verification APIs are unchanged. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 0.1.2
 
 ### Patch Changes

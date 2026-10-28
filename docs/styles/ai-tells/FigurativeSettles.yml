@@ -1,6 +1,6 @@
 ---
 extends: existence
-message: "AI settlement metaphor: '%s'. State the conclusion and the evidence, or name the stable state. Disable this rule for legal or geology prose."
+message: "AI settlement metaphor: '%s'. State the conclusion and the evidence, or say what the stable state is. Disable this rule for legal or geology prose."
 level: error
 nonword: true
 ignorecase: true

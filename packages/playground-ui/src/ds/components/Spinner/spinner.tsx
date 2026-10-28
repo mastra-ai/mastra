@@ -6,11 +6,12 @@ import { cn } from '@/lib/utils';
 
 import './spinner.css';
 
-const spinnerVariants = cva('spinner inline-block text-neutral6', {
+const spinnerVariants = cva('spinner inline-block text-foreground', {
   variants: {
     size: {
       sm: 'size-4',
       md: 'size-6',
+      lg: 'size-8',
     },
     variant: {
       default: '',
@@ -27,12 +28,17 @@ type SpinnerVariantsProps = VariantProps<typeof spinnerVariants>;
 export type SpinnerVariant = NonNullable<SpinnerVariantsProps['variant']>;
 export type SpinnerSize = NonNullable<SpinnerVariantsProps['size']>;
 
-export type SpinnerProps = Omit<ComponentPropsWithoutRef<'svg'>, 'color' | 'size'> & SpinnerVariantsProps;
+export type SpinnerProps = Omit<ComponentPropsWithoutRef<'svg'>, 'color' | 'size' | 'fill'> &
+  SpinnerVariantsProps & {
+    /** Center the spinner in the full height of its parent — the parent must have a definite height. */
+    fill?: boolean;
+  };
 
 function Spinner({
   className,
   size = 'md',
   variant = 'default',
+  fill = false,
   'aria-label': ariaLabel = 'Loading',
   role = 'status',
   ...props
@@ -40,7 +46,7 @@ function Spinner({
   const resolvedSize = size ?? 'md';
   const resolvedVariant = variant ?? 'default';
 
-  return (
+  const svg = (
     <svg
       {...props}
       role={role}
@@ -61,6 +67,16 @@ function Spinner({
       )}
     </svg>
   );
+
+  if (fill) {
+    return (
+      <div data-slot="spinner-fill" className="flex h-full items-center-safe justify-center-safe">
+        {svg}
+      </div>
+    );
+  }
+
+  return svg;
 }
 
 export { Spinner };

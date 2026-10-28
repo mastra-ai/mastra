@@ -80,6 +80,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   CreateSpanRecord,
   GetRootSpanArgs,
@@ -136,10 +137,31 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
   override getFeatures() {
     if (!this.deltaPollingFeatureEnabled()) {
-      return undefined;
+      return [
+        'metrics',
+        'logs',
+        'entity-type-discovery',
+        'entity-name-discovery',
+        'service-name-discovery',
+        'environment-discovery',
+        'tag-discovery',
+        'metric-discovery',
+        'feedback',
+      ] as const;
     }
 
-    return ['delta-polling'] as const;
+    return [
+      'metrics',
+      'logs',
+      'entity-type-discovery',
+      'entity-name-discovery',
+      'service-name-discovery',
+      'environment-discovery',
+      'tag-discovery',
+      'metric-discovery',
+      'delta-polling',
+      'feedback',
+    ] as const;
   }
 
   async dangerouslyClearAll(): Promise<void> {
@@ -708,11 +730,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
 
         const diff = aVal.getTime() - bVal.getTime();
         return sortDirection === 'DESC' ? -diff : diff;
-      } else {
-        // startedAt is never null (required field)
-        const diff = a.startedAt.getTime() - b.startedAt.getTime();
-        return sortDirection === 'DESC' ? -diff : diff;
       }
+      // startedAt is never null (required field)
+      const diff = a.startedAt.getTime() - b.startedAt.getTime();
+      return sortDirection === 'DESC' ? -diff : diff;
     });
 
     // Apply pagination
@@ -1154,21 +1175,45 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     }
   }
 
+  async batchUpdateUnendedSpans(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse> {
+    const updated: BatchUpdateUnendedSpansResponse['updated'] = [];
+    for (const record of args.records) {
+      const span = this.db.traces.get(record.traceId)?.spans[record.spanId];
+      if (!span || span.endedAt != null) continue;
+      await this.updateSpan(record);
+      updated.push({ traceId: record.traceId, spanId: record.spanId });
+    }
+    return { updated };
+  }
+
   async batchDeleteTraces(args: BatchDeleteTracesArgs): Promise<void> {
     const traceIds = new Set<string>(args.traceIds);
     for (const traceId of args.traceIds) {
       const traceEntry = this.db.traces.get(traceId);
-      if (traceEntry) {
-        const scopeReference = traceEntry.rootSpan ?? Object.values(traceEntry.spans)[0];
-        if (!this.matchesDeleteScope(scopeReference, args)) {
-          continue;
-        }
-        this.db.traceCursorIds.delete(traceId);
-        for (const spanId of Object.keys(traceEntry.spans)) {
-          this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
-        }
+      if (!traceEntry) continue;
+
+      // Tenant scope applies per span, like the row-level deletes in SQL adapters,
+      // so spans from other tenants in the same trace are kept.
+      for (const [spanId, span] of Object.entries(traceEntry.spans)) {
+        if (!this.matchesDeleteScope(span, args)) continue;
+        delete traceEntry.spans[spanId];
+        this.db.branchCursorIds.delete(this.createBranchCursorKey(traceId, spanId));
       }
-      this.db.traces.delete(traceId);
+
+      const remainingSpans = Object.values(traceEntry.spans);
+      if (remainingSpans.length === 0) {
+        this.db.traces.delete(traceId);
+        this.db.traceCursorIds.delete(traceId);
+        continue;
+      }
+
+      if (traceEntry.rootSpan && !traceEntry.spans[traceEntry.rootSpan.spanId]) {
+        traceEntry.rootSpan = remainingSpans.find(span => span.parentSpanId == null) ?? null;
+      }
+      if (!traceEntry.rootSpan) {
+        this.db.traceCursorIds.delete(traceId);
+      }
+      this.recomputeTraceProperties(traceEntry);
     }
 
     // Cascade: remove trace-linked signal events. Records without a traceId are untouched.
@@ -1289,6 +1334,7 @@ export class ObservabilityInMemory extends ObservabilityStorage {
     if (filters.threadId !== undefined && m.threadId !== filters.threadId) return false;
     if (filters.requestId !== undefined && m.requestId !== filters.requestId) return false;
     if (filters.experimentId !== undefined && m.experimentId !== filters.experimentId) return false;
+    if (Array.isArray(filters.experimentIds) && !filters.experimentIds.includes(m.experimentId)) return false;
     if (filters.serviceName !== undefined && m.serviceName !== filters.serviceName) return false;
     if (filters.environment !== undefined && m.environment !== filters.environment) return false;
     const metricExecutionSource = m.executionSource ?? m.source ?? null;

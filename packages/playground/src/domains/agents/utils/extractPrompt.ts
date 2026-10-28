@@ -1,27 +1,31 @@
 import type { AgentInstructions } from '@mastra/core/agent';
 
-const resolveInstructionPart = (part: any) => {
+const resolveInstructionPart = (part: unknown) => {
   if (typeof part === 'string') {
-    return part.trim();
+    return part;
   }
-  return part.text?.trim() || '';
+  if (typeof part !== 'object' || part === null) return '';
+  if ('text' in part && typeof part.text === 'string') {
+    return part.text;
+  }
+  return '';
 };
 
 export const extractPrompt = (instructions?: AgentInstructions): string => {
   if (typeof instructions === 'string') {
-    return instructions.trim();
+    return instructions;
   }
 
   if (typeof instructions === 'object' && 'content' in instructions) {
     if (Array.isArray(instructions.content)) {
-      return instructions.content.map(resolveInstructionPart).join('\n\n').trim();
+      return instructions.content.map(resolveInstructionPart).join('\n\n');
     }
 
-    return instructions.content.trim();
+    return instructions.content;
   }
 
   if (Array.isArray(instructions)) {
-    return instructions.map(extractPrompt).join('\n\n').trim();
+    return instructions.map(extractPrompt).join('\n\n');
   }
 
   return '';

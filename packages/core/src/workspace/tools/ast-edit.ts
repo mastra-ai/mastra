@@ -198,9 +198,8 @@ function buildImportStatement(defaultName: string | null, namedImports: string[]
     return `import ${defaultName}, { ${namedImports.join(', ')} } from ${moduleStr};`;
   } else if (defaultName) {
     return `import ${defaultName} from ${moduleStr};`;
-  } else {
-    return `import { ${namedImports.join(', ')} } from ${moduleStr};`;
   }
+  return `import { ${namedImports.join(', ')} } from ${moduleStr};`;
 }
 
 /**
@@ -304,9 +303,8 @@ export function addImport(content: string, root: SgNode, importSpec: ImportSpec)
   if (lastImport) {
     const pos = lastImport.range().end.index;
     return content.slice(0, pos) + '\n' + importStatement + content.slice(pos);
-  } else {
-    return importStatement + '\n\n' + content;
   }
+  return importStatement + '\n\n' + content;
 }
 
 /**

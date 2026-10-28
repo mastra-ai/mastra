@@ -56,7 +56,7 @@ await voice.connect()
     name: 'instructions',
     type: 'string',
     description: "Instructions to guide the voice model's behavior",
-    isOptional: false,
+    isOptional: true,
   },
 ]}
 />
@@ -69,7 +69,7 @@ This method doesn't return a value.
 
 - Instructions are most effective when they're clear, specific, and relevant to the voice interaction
 - This method is primarily used with real-time voice providers that maintain conversation context
-- If called on a voice provider that doesn't support instructions, it will log a warning and do nothing
+- If called on a voice provider that doesn't support instructions, it will do nothing
 - Instructions added with this method are typically combined with any instructions provided by an associated Agent
 - For best results, add instructions before starting a conversation (before calling `connect()`)
 - Multiple calls to `addInstructions()` may either replace or append to existing instructions, depending on the provider implementation

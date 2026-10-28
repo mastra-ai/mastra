@@ -32,17 +32,14 @@ export interface SubscribeToPullRequestInput {
   ownerId: string;
   resourceId: string;
   threadId: string;
-  sessionScope?: string;
   source: GithubSignalSubscriptionSource;
   subscribedByUserId?: string;
 }
 
-export interface ThreadSubscriptionTarget {
-  orgId: string;
-  resourceId: string;
-  threadId: string;
-  sessionScope?: string;
-}
+/** A thread's subscriptions, found by the session that owns it or (for older callers) by its resource. */
+export type ThreadSubscriptionTarget =
+  | { orgId: string; sessionId: string; threadId: string }
+  | { orgId: string; resourceId: string; threadId: string };
 
 export interface PullRequestSubscriptionTarget {
   orgId: string;
@@ -62,8 +59,7 @@ function sameSession(row: GithubSignalSubscriptionRow, input: SubscribeToPullReq
     row.orgId === input.orgId &&
     row.sessionId === input.sessionId &&
     row.resourceId === input.resourceId &&
-    row.threadId === input.threadId &&
-    (row.sessionScope ?? '') === (input.sessionScope ?? '')
+    row.threadId === input.threadId
   );
 }
 
@@ -84,7 +80,6 @@ export async function subscribeToPullRequest(
     sessionId: input.sessionId,
     resourceId: input.resourceId,
     threadId: input.threadId,
-    sessionScope: input.sessionScope ?? '',
     status: 'open',
     data: {
       installationExternalId: input.installationExternalId,
@@ -111,14 +106,23 @@ export async function listPullRequestSubscriptionsForThread(
   input: ThreadSubscriptionTarget,
   storage: GithubSubscriptionStorage,
 ): Promise<GithubSignalSubscriptionRow[]> {
+  if ('sessionId' in input) {
+    const owned = await storage.subscriptions.listBySession(input.sessionId);
+    return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
+  }
   const rows = await storage.subscriptions.listByThread(input.resourceId, input.threadId);
-  return rows.filter(
+  const matching = rows.filter(
     row =>
       row.orgId === input.orgId &&
       row.resourceId === input.resourceId &&
-      row.threadId === input.threadId &&
-      (row.sessionScope ?? '') === (input.sessionScope ?? ''),
+      row.threadId === input.threadId,
   );
+  if (matching.length > 0) return matching;
+  // A user session is addressed by its own id (its thread is its session), but
+  // its subscriptions were recorded under the Factory project that owns the
+  // repository. Answer those rows for the session that created them.
+  const owned = await storage.subscriptions.listBySession(input.resourceId);
+  return owned.filter(row => row.orgId === input.orgId && row.threadId === input.threadId);
 }
 
 export async function listPullRequestSubscriptions(

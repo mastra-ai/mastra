@@ -11,6 +11,32 @@ import type { CorrelationContext } from './core';
 export type MetricType = 'counter' | 'gauge' | 'histogram';
 
 // ============================================================================
+// Token Metric Names
+// ============================================================================
+
+/**
+ * Names of the token usage metrics auto-extracted from model generations.
+ * Emitted by `@mastra/observability` and read by storage aggregation.
+ */
+export const TokenMetrics = {
+  TOTAL_INPUT: 'mastra_model_total_input_tokens',
+  TOTAL_OUTPUT: 'mastra_model_total_output_tokens',
+  INPUT_TEXT: 'mastra_model_input_text_tokens',
+  INPUT_CACHE_READ: 'mastra_model_input_cache_read_tokens',
+  INPUT_CACHE_WRITE: 'mastra_model_input_cache_write_tokens',
+  INPUT_CACHE_WRITE_5M: 'mastra_model_input_cache_write_5m_tokens',
+  INPUT_CACHE_WRITE_1H: 'mastra_model_input_cache_write_1h_tokens',
+  INPUT_AUDIO: 'mastra_model_input_audio_tokens',
+  INPUT_IMAGE: 'mastra_model_input_image_tokens',
+  OUTPUT_TEXT: 'mastra_model_output_text_tokens',
+  OUTPUT_REASONING: 'mastra_model_output_reasoning_tokens',
+  OUTPUT_AUDIO: 'mastra_model_output_audio_tokens',
+  OUTPUT_IMAGE: 'mastra_model_output_image_tokens',
+} as const;
+
+export type TokenMetrics = (typeof TokenMetrics)[keyof typeof TokenMetrics];
+
+// ============================================================================
 // MetricsContext (API Interface)
 // ============================================================================
 
@@ -21,6 +47,8 @@ export type MetricType = 'counter' | 'gauge' | 'histogram';
 export interface MetricEmitOptions {
   /** Canonical model/cost context for this specific metric row */
   costContext?: CostContext;
+  /** Shared by every token/cost row emitted from the same model usage observation */
+  usageId?: string;
 }
 
 export interface MetricsContext {
@@ -101,6 +129,15 @@ export interface ExportedMetric {
 
   /** Context for cost estimation */
   costContext?: CostContext;
+
+  /**
+   * Identifies one model usage observation. Every token/cost metric row emitted
+   * from the same usage (one model call, or one hidden call rolled up onto a
+   * visible ancestor) shares this id; separate observations get distinct ids,
+   * even when they share a span. Retries resend the same id. Undefined for
+   * non-usage metrics.
+   */
+  usageId?: string;
 
   /**
    * User-defined metadata.

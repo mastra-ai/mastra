@@ -19,8 +19,9 @@ Input processors run before user messages reach the language model. They handle 
 
 The `UnicodeNormalizer()` cleans and normalizes user input by unifying Unicode characters and standardizing whitespace. It also removes problematic symbols.
 
-```typescript {7-10} title="src/mastra/agents/normalized-agent.ts"
+```typescript {8-11} title="src/mastra/agents/normalized-agent.ts"
 import { UnicodeNormalizer } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const normalizedAgent = new Agent({
   id: 'normalized-agent',
@@ -40,8 +41,9 @@ Visit [`UnicodeNormalizer()`](/reference/processors/unicode-normalizer) referenc
 
 The `PromptInjectionDetector()` scans user messages for prompt injection, jailbreak attempts, and system override patterns. It uses an LLM to classify risky input and can block or rewrite it before it reaches the model.
 
-```typescript {7-13} title="src/mastra/agents/secure-agent.ts"
+```typescript {8-14} title="src/mastra/agents/secure-agent.ts"
 import { PromptInjectionDetector } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const secureAgent = new Agent({
   id: 'secure-agent',
@@ -58,7 +60,7 @@ export const secureAgent = new Agent({
 })
 ```
 
-Model-backed guardrail processors default to `errorStrategy: 'warn'`, which logs internal model failures and continues with the processor's fallback. Use `errorStrategy: 'strict'` when unchecked content must not proceed if the guardrail model is unavailable or returns invalid output. Strict mode stops processing with a tripwire.
+Model-backed guardrail processors other than `ClassifierProcessor` default to `errorStrategy: 'warn'`, which logs internal model failures and continues with the processor's fallback. Use `errorStrategy: 'strict'` when unchecked content must not proceed if the guardrail model is unavailable or returns invalid output. Strict mode stops processing with a tripwire.
 
 Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detector) reference for a full list of configuration options.
 
@@ -66,8 +68,9 @@ Visit [`PromptInjectionDetector()`](/reference/processors/prompt-injection-detec
 
 The `LanguageDetector()` detects and translates user messages into a target language, enabling multilingual support. It uses an LLM to identify the language and perform the translation.
 
-```typescript {7-12} title="src/mastra/agents/multilingual-agent.ts"
+```typescript {8-13} title="src/mastra/agents/multilingual-agent.ts"
 import { LanguageDetector } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const multilingualAgent = new Agent({
   id: 'multilingual-agent',
@@ -93,8 +96,9 @@ Output processors run after the language model generates a response, but before 
 
 The `BatchPartsProcessor()` combines multiple stream parts before emitting them to the client. This reduces network overhead by consolidating small chunks into larger batches.
 
-```typescript {7-11} title="src/mastra/agents/batched-agent.ts"
+```typescript {8-12} title="src/mastra/agents/batched-agent.ts"
 import { BatchPartsProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const batchedAgent = new Agent({
   id: 'batched-agent',
@@ -115,8 +119,9 @@ Visit [`BatchPartsProcessor()`](/reference/processors/batch-parts-processor) ref
 
 The `SystemPromptScrubber()` detects and redacts system prompts or internal instructions from model responses. It prevents unintended disclosure of prompt content or configuration details. It uses an LLM to identify and redact sensitive content based on configured detection types.
 
-```typescript {7-16} title="src/mastra/agents/scrubbed-agent.ts"
+```typescript {8-17} title="src/mastra/agents/scrubbed-agent.ts"
 import { SystemPromptScrubber } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 const scrubbedAgent = new Agent({
   id: 'scrubbed-agent',
@@ -150,8 +155,9 @@ Hybrid processors can run on either input or output. Place them in `inputProcess
 
 The `ModerationProcessor()` detects inappropriate or harmful content across categories like hate, harassment, and violence. It uses an LLM to classify the message and can block or rewrite it based on your configuration.
 
-```typescript {7-12,14} title="src/mastra/agents/moderated-agent.ts"
+```typescript {8-13,15} title="src/mastra/agents/moderated-agent.ts"
 import { ModerationProcessor } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const moderatedAgent = new Agent({
   id: 'moderated-agent',
@@ -174,8 +180,9 @@ Visit [`ModerationProcessor()`](/reference/processors/moderation-processor) refe
 
 The `PIIDetector()` detects and removes personally identifiable information such as emails, phone numbers, and credit cards. It uses an LLM to identify sensitive content based on configured detection types.
 
-```typescript {7-14,16} title="src/mastra/agents/private-agent.ts"
+```typescript {8-15,17} title="src/mastra/agents/private-agent.ts"
 import { PIIDetector } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const privateAgent = new Agent({
   id: 'private-agent',
@@ -200,8 +207,9 @@ Visit [`PIIDetector()`](/reference/processors/pii-detector) reference for a full
 
 The `TokenCostControl()` monitors cumulative estimated cost across the agentic loop, blocking or warning when a monetary limit is exceeded. It queries cost data from observability storage before each LLM call. Cost checks are approximate, metrics are persisted asynchronously, so fast-running agents may briefly exceed the configured limit before the guard triggers.
 
-```typescript {7-11} title="src/mastra/agents/budgeted-agent.ts"
+```typescript {8-12} title="src/mastra/agents/budgeted-agent.ts"
 import { TokenCostControl } from '@mastra/core/processors'
+import { Agent } from '@mastra/core/agent'
 
 export const budgetedAgent = new Agent({
   id: 'budgeted-agent',
@@ -237,7 +245,7 @@ inputProcessors: [
 
 ## Violation callbacks
 
-All processors support an `onViolation` callback that fires when a policy violation is detected, regardless of strategy. Use it for side effects like alerting, logging to external systems, or sending notifications.
+Processors support an `onViolation` callback that fires when a policy violation aborts the run, for example with the `block` strategy. Aborts from `processToolResult`, and from processor workflows while streaming output, don't call it. Some processors also call it directly: `RegexFilterProcessor` when it redacts content, and `TokenCostControl` when it warns. Strategies that only log, such as `ModerationProcessor`'s `warn`, don't call it. Use it for side effects like alerting, logging to external systems, or sending notifications.
 
 The callback receives a `ProcessorViolation` object with `processorId`, `message`, and `detail` (processor-specific metadata).
 
@@ -259,7 +267,7 @@ tokenCostControl.onViolation = ({ processorId, message, detail }) => {
 
 // Log moderation violations
 const moderation = new ModerationProcessor({
-  model: '__GATEWAY_OPENAI_MODEL_NANO__',
+  model: '__GATEWAY_OPENAI_MODEL_LUNA__',
   strategy: 'block',
 })
 
@@ -268,7 +276,7 @@ moderation.onViolation = ({ processorId, message, detail }) => {
 }
 ```
 
-The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when any processor calls `abort()`. For processors using a `warn` strategy (like `TokenCostControl`), the callback also fires on warnings without blocking the request.
+The `onViolation` property is part of the base [`Processor` interface](/reference/processors/processor-interface), so any processor, including custom ones, can use it. The runner automatically invokes `onViolation` when a processor calls `abort()`, except on the paths noted above. For processors using a `warn` strategy (like `TokenCostControl`), the callback also fires on warnings without blocking the request.
 
 Errors thrown by runner-invoked callbacks after `abort()` are silently caught to prevent interfering with the processor's main logic. On the `TokenCostControl` warning path, callback errors are caught and logged through the Mastra logger.
 
@@ -341,11 +349,13 @@ export const outputGuardrails = createWorkflow({
   .parallel([
     createStep(
       new PIIDetector({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
       }),
     ),
     createStep(
       new ModerationProcessor({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'block',
       }),
     ),
@@ -358,6 +368,7 @@ export const outputGuardrails = createWorkflow({
   .then(
     createStep(
       new SystemPromptScrubber({
+        model: '__GATEWAY_OPENAI_MODEL_LUNA__',
         strategy: 'redact',
         placeholderText: '[REDACTED]',
       }),
@@ -373,7 +384,7 @@ See [workflows as processors](/docs/agents/processors#use-workflows-as-processor
 Guardrail processors don't need your primary model. Use a small, fast model for classification tasks:
 
 ```typescript
-const GUARDRAIL_MODEL = '__GATEWAY_OPENAI_MODEL_NANO__'
+const GUARDRAIL_MODEL = '__GATEWAY_OPENAI_MODEL_LUNA__'
 
 new ModerationProcessor({ model: GUARDRAIL_MODEL })
 new PIIDetector({ model: GUARDRAIL_MODEL })

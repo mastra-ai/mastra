@@ -1,8 +1,10 @@
 import type { MastraDBMessage } from '@mastra/core/agent/message-list';
 import { useChatMessages, useChatRunning, useChatSend } from '@mastra/playground-ui/domains/chat/context/chat-context';
-import { useMemoryThreadMessages } from '@mastra/playground-ui/domains/memory/hooks/use-memory-thread-messages';
-import { useObservationalMemory } from '@mastra/playground-ui/domains/memory/hooks/use-observational-memory';
+import { useToolCall } from '@mastra/playground-ui/domains/chat/context/tool-call-context';
+import { MessageRow } from '@mastra/playground-ui/domains/chat/messages/message-row';
 import { MastraReactProvider } from '@mastra/react';
+import { useAgentMessages } from '@mastra/react/hooks/agents';
+import { useMemoryThreadMessages, useObservationalMemory, useMemoryConfig } from '@mastra/react/hooks/memory';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { act, cleanup, fireEvent, render, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -11,8 +13,13 @@ import type { ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
-import { MessageRow } from '../../messages/message-row';
 import { ChatProvider } from '../chat-provider';
+import {
+  approvalChunks,
+  approvalHistory,
+  emptyApprovalHistory,
+  generatedApprovalResponse,
+} from './fixtures/nested-approval';
 import {
   acceptedToolRun,
   emptyMcpServers,
@@ -23,7 +30,6 @@ import {
 import { workingMemoryFixture } from './fixtures/working-memory';
 import { WorkingMemoryProvider, useWorkingMemory } from '@/domains/agents/context/agent-working-memory-context';
 import { PlaygroundModelProvider, usePlaygroundModel } from '@/domains/agents/context/playground-model-context';
-import { useMemoryConfig } from '@/domains/memory/hooks';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -196,8 +202,8 @@ const ModelSelectionHarness = () => {
  * hooks) so the test can observe whether OM stream events trigger a refetch.
  */
 const PanelQueriesConsumer = ({ agentId, threadId }: { agentId: string; threadId: string }) => {
-  useObservationalMemory(agentId, threadId);
-  useMemoryThreadMessages(threadId);
+  useObservationalMemory({ agentId: agentId, threadId: threadId });
+  useMemoryThreadMessages({ threadId: threadId });
   return null;
 };
 
@@ -211,6 +217,159 @@ describe('ChatProvider', () => {
     // Default tests target the legacy stream-until-idle route, not signals.
     (window as Window & { MASTRA_AGENT_SIGNALS?: string }).MASTRA_AGENT_SIGNALS = 'false';
     server.resetHandlers();
+  });
+
+  describe.each(['nested', 'ordinary'] as const)('when same-named %s calls need approval', kind => {
+    // Live tool rows go through the transcript's reveal, which lays down one word per
+    // animation frame. Under a loaded CI runner those frames stretch past any timeout,
+    // so these routing tests read the transcript the way a reduced-motion reader does.
+    beforeEach(() => {
+      const matchMedia = window.matchMedia;
+      vi.spyOn(window, 'matchMedia').mockImplementation(query => ({
+        ...matchMedia(query),
+        matches: query === '(prefers-reduced-motion: reduce)',
+      }));
+    });
+
+    afterEach(() => {
+      vi.mocked(window.matchMedia).mockRestore();
+    });
+
+    describe.each(['signals-live', 'legacy-live', 'signals-history', 'legacy-history', 'generate-history'])(
+      'when the transcript uses %s',
+      scenario => {
+        it.each(['Approve', 'Decline'])(
+          'routes %s independently and keeps the decision after the run resumes',
+          async action => {
+            const signals = scenario.startsWith('signals');
+            const generate = scenario.startsWith('generate');
+            const live = scenario.endsWith('live');
+            Object.assign(window, { MASTRA_AGENT_SIGNALS: signals ? 'true' : 'false' });
+            const requests: Captured[] = [];
+            const gates = [createDeferred(), createDeferred()];
+            let stream: ReadableStreamDefaultController<Uint8Array> | undefined;
+            let subscribed = false;
+            let sent = false;
+            const response = () =>
+              new HttpResponse(
+                new ReadableStream<Uint8Array>({
+                  start(controller) {
+                    stream = controller;
+                  },
+                }),
+                { headers: { 'content-type': 'text/event-stream' } },
+              );
+            const toolName = kind === 'nested' ? 'agent-child' : 'approvedLookup';
+            const decision = action === 'Approve' ? 'approve' : 'decline';
+            const endpoint = signals ? 'send-tool-approval' : `${decision}-tool-call${generate ? '-generate' : ''}`;
+            server.use(
+              http.get(`${BASE_URL}/api/memory/threads/thread-1/messages`, () =>
+                HttpResponse.json(
+                  live ? emptyApprovalHistory : approvalHistory(kind, generate ? 'generate' : 'stream'),
+                ),
+              ),
+              http.post(`${BASE_URL}/api/agents/agent-1/threads/subscribe`, () => {
+                subscribed = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/stream`, () => {
+                sent = true;
+                return response();
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/send-message`, () => {
+                sent = true;
+                return HttpResponse.json(acceptedToolRun('parent-run'));
+              }),
+              http.post(`${BASE_URL}/api/agents/agent-1/${endpoint}`, async ({ request }) => {
+                const index = requests.length;
+                requests.push({ url: request.url, body: await captureBody(request) });
+                await gates[index].promise;
+                if (signals) return HttpResponse.json(acceptedToolRun('parent-run'));
+                return generate ? HttpResponse.json(generatedApprovalResponse) : sseResponse();
+              }),
+              http.get(`${BASE_URL}/api/mcp/v0/servers`, () => HttpResponse.json(emptyMcpServers)),
+              ...baseHandlers([]),
+            );
+            const Transcript = () => {
+              const messages = useChatMessages();
+              const send = useChatSend();
+              const { isRunning } = useToolCall();
+              return (
+                <>
+                  <button onClick={() => send({ message: 'Look up both companies' })}>Start approval run</button>
+                  <output data-testid="approval-request-state">{isRunning ? 'running' : 'idle'}</output>
+                  {messages.map(message => (
+                    <MessageRow key={message.id} message={message} />
+                  ))}
+                </>
+              );
+            };
+            const LoadedChat = () => {
+              const { data } = useAgentMessages({ threadId: 'thread-1', agentId: 'agent-1', memory: true });
+              if (!data) return null;
+              return (
+                <ChatProvider agentId="agent-1" threadId="thread-1" initialMessages={data.messages}>
+                  <Transcript />
+                </ChatProvider>
+              );
+            };
+            const rendered = render(
+              <Wrapper>
+                <LoadedChat />
+              </Wrapper>,
+            );
+            await screen.findByRole('button', { name: 'Start approval run' });
+            if (signals) await waitFor(() => expect(subscribed).toBe(true));
+            if (live) {
+              fireEvent.click(screen.getByRole('button', { name: 'Start approval run' }));
+              await waitFor(() => expect(sent).toBe(true));
+              await act(async () => {
+                for (const chunk of approvalChunks(kind))
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(chunk)}\n\n`));
+              });
+            }
+            await waitFor(() => expect(screen.getAllByRole('button', { name: `Approve ${toolName}` })).toHaveLength(2));
+            const cards = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge');
+            expect(cards).toHaveLength(2);
+            for (const [index, id] of ['first', 'second'].entries()) {
+              fireEvent.click(within(cards[index]).getByRole('button', { name: `${action} ${toolName}` }));
+              await waitFor(() => expect(requests).toHaveLength(index + 1));
+              expect(requests[index].body).toMatchObject({ toolCallId: id });
+              if (signals)
+                expect(requests[index].body).toMatchObject({ approved: action === 'Approve', threadId: 'thread-1' });
+              else expect(requests[index].body).toMatchObject({ runId: 'parent-run' });
+              expect(screen.getByTestId('approval-request-state').textContent).toBe('running');
+              await act(async () => gates[index].resolve());
+              await waitFor(() => expect(screen.getByTestId('approval-request-state').textContent).toBe('idle'));
+              expect(within(cards[index]).getByRole('status').textContent).toBe(`${action}d`);
+              expect(within(cards[index]).queryByRole('button', { name: /^(Approve|Decline) / })).toBeNull();
+              if (live) {
+                const resumed = {
+                  type: 'tool-call-resumed',
+                  runId: 'parent-run',
+                  from: 'AGENT',
+                  payload: { toolCallId: id, toolName, kind: 'approval' },
+                };
+                await act(async () =>
+                  stream?.enqueue(new TextEncoder().encode(`data: ${JSON.stringify(resumed)}\n\n`)),
+                );
+                const cardAfterResume = screen.getAllByTestId(kind === 'nested' ? 'agent-badge' : 'tool-badge')[index];
+                expect(cardAfterResume).toBe(cards[index]);
+                expect(within(cardAfterResume).getByRole('status').textContent).toBe(`${action}d`);
+              }
+              if (index === 0)
+                expect(
+                  within(cards[1])
+                    .getByRole('button', { name: `${action} ${toolName}` })
+                    .hasAttribute('disabled'),
+                ).toBe(false);
+            }
+            stream?.close();
+            rendered.unmount();
+          },
+        );
+      },
+    );
   });
 
   describe('when a later run starts after an interrupted run', () => {
@@ -841,8 +1000,8 @@ describe('ChatProvider', () => {
     );
 
     const SendAfterPanelLoads = () => {
-      const om = useObservationalMemory('agent-1', 'thread-1');
-      const messages = useMemoryThreadMessages('thread-1');
+      const om = useObservationalMemory({ agentId: 'agent-1', threadId: 'thread-1' });
+      const messages = useMemoryThreadMessages({ threadId: 'thread-1' });
       const send = useChatSend();
       return (
         <button disabled={!om.isSuccess || !messages.isSuccess} onClick={() => send({ message: 'just finish' })}>
@@ -887,7 +1046,7 @@ describe('ChatProvider', () => {
       });
       const Probe = () => {
         const { workingMemoryData } = useWorkingMemory();
-        const { data } = useMemoryConfig('agent-1');
+        const { data } = useMemoryConfig({ agentId: 'agent-1' });
         return (
           <>
             <div data-testid="wm-value">{workingMemoryData}</div>
@@ -969,7 +1128,7 @@ describe('ChatProvider', () => {
     const Probe = () => {
       const send = useChatSend();
       const { workingMemoryData } = useWorkingMemory();
-      const { data } = useMemoryConfig('agent-1');
+      const { data } = useMemoryConfig({ agentId: 'agent-1' });
       return (
         <>
           <div>{workingMemoryData}</div>

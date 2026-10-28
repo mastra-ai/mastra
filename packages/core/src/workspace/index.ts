@@ -1,6 +1,22 @@
 // Workspace
 export * from './workspace';
 
+// Factory host contract
+export {
+  FACTORY_SANDBOX_BRAND,
+  FactorySandbox,
+  isFactorySandbox,
+  describeFactorySandbox,
+  normalizeFactorySandboxSettings,
+  type FactorySandboxContext,
+  type FactoryRepositoryAccess,
+  type FactorySandboxBuilds,
+  type FactorySandboxBuild,
+  type FactorySandboxBuildStart,
+  type FactorySandboxBuildStatus,
+  type FactorySandboxDescription,
+} from './factory-sandbox';
+
 // LSP
 export type { CustomLSPServer, LSPConfig, LSPDiagnostic, DiagnosticSeverity, LSPServerDef } from './lsp/types';
 
@@ -11,6 +27,7 @@ export { LocalSandbox, type LocalSandboxOptions } from './sandbox';
 
 // Base Classes for External Providers
 export { MastraFilesystem, type FilesystemLifecycleHook, type MastraFilesystemOptions } from './filesystem';
+export { getMimeType } from './filesystem';
 export { MastraSandbox, SandboxProcessManager, ProcessHandle, UnsupportedStdinCloseError } from './sandbox';
 
 // Errors
@@ -52,6 +69,7 @@ export {
   readFileTool,
   writeFileTool,
   editFileTool,
+  applyPatchTool,
   listFilesTool,
   deleteFileTool,
   fileStatTool,
@@ -118,6 +136,7 @@ export type {
   SandboxInfo,
   SandboxLifecycleHook,
   SandboxStartHook,
+  SandboxStartOptions,
   MastraSandboxOptions,
   // Process management types
   ProcessInfo,

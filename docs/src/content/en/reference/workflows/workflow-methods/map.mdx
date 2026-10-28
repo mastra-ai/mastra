@@ -34,8 +34,9 @@ workflow.map(async ({ inputData }) => `${inputData.value} - map`)
     properties: [
       {
         name: 'id',
-        type: 'string',
-        description: 'Stable entry id. Overrides the generated mapping id.',
+        type: 'string | null',
+        description:
+          'Stable entry id. A non-empty string overrides the generated mapping id. Pass null or an empty string to use the generated id.',
         isOptional: true,
       },
       {
@@ -129,7 +130,9 @@ In this example, the `value` field from `step1`'s output is extracted and mapped
 Use `mapVariable()` with `initData` to extract a specific field from the workflow's initial input data. This is useful when you need to pass the original workflow input to a later step.
 In this example, the `value` field from the workflow's input is extracted and mapped to a field called `details`:
 
-```typescript oxfmt:false {6-9} filename="src/mastra/workflows/test-workflow.ts"
+```typescript oxfmt:false {8-11} filename="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow } from '@mastra/core/workflows';
+
 export const testWorkflow = createWorkflow({...});
 
 testWorkflow

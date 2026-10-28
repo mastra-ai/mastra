@@ -36,7 +36,7 @@ describe('Drawer', () => {
             <DrawerBody>Body content</DrawerBody>
             <DrawerFooter>
               <DrawerClose asChild>
-                <Button variant="outline">Cancel</Button>
+                <Button>Cancel</Button>
               </DrawerClose>
             </DrawerFooter>
           </DrawerContent>
@@ -89,7 +89,7 @@ describe('Drawer', () => {
           <DrawerTitle>Title</DrawerTitle>
           <DrawerFooter>
             <DrawerClose asChild>
-              <Button variant="outline">Cancel</Button>
+              <Button>Cancel</Button>
             </DrawerClose>
           </DrawerFooter>
         </DrawerContent>
@@ -125,7 +125,6 @@ describe('Drawer', () => {
     const backdrop = document.querySelector('[data-slot="drawer-backdrop"]');
     expect(backdrop).toBeDefined();
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(true);
     expect(document.querySelector('[data-slot="drawer-viewport"]')).toBeDefined();
     expect(document.querySelector('[data-slot="drawer-popup"]')).toBeDefined();
@@ -269,8 +268,6 @@ describe('Drawer', () => {
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(backdrop?.getAttribute('data-overlay')).toBe('transparent');
     expect(overlayDismissLayer).toBeNull();
-    expect(backdrop?.classList.contains('bg-transparent')).toBe(true);
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(false);
     expect(backdrop?.classList.contains('backdrop-blur-xs')).toBe(false);
     expect(viewport?.getAttribute('data-variant')).toBe('floating');
     expect(viewport?.classList.contains('inset-0')).toBe(true);
@@ -293,7 +290,6 @@ describe('Drawer', () => {
     const popup = document.querySelector('[data-slot="drawer-popup"]');
     expect(backdrop?.getAttribute('data-overlay')).toBe('visible');
     expect(overlayDismissLayer).toBeNull();
-    expect(backdrop?.classList.contains('bg-overlay')).toBe(true);
     expect(viewport?.classList.contains('pointer-events-none')).toBe(false);
     expect(viewport?.classList.contains('inset-0')).toBe(true);
     expect(viewport?.classList.contains('right-0')).toBe(false);
@@ -357,6 +353,71 @@ describe('Drawer', () => {
     expect(viewport?.classList.contains('inset-0')).toBe(true);
     expect(viewport?.classList.contains('right-0')).toBe(false);
     expect(popup?.getAttribute('data-variant')).toBe('floating');
+  });
+
+  it('widens a floating side drawer and its viewport together with `size`', () => {
+    render(
+      <Drawer side="right" variant="floating" size="lg" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Wide floating drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(popup?.getAttribute('data-size')).toBe('lg');
+    expect(popup?.classList.contains('w-2xl')).toBe(true);
+    expect(popup?.classList.contains('w-[32rem]')).toBe(false);
+    expect(viewport?.classList.contains('w-[calc(42rem+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('sm:w-[calc(42rem+2rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(32rem+1.5rem)]')).toBe(false);
+  });
+
+  it('lets DrawerContent override the root size, including on default side drawers', () => {
+    render(
+      <Drawer side="left" size="lg" defaultOpen>
+        <DrawerContent size="xl">
+          <DrawerTitle>Extra wide drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(popup?.getAttribute('data-size')).toBe('xl');
+    expect(popup?.classList.contains('w-4xl')).toBe(true);
+    expect(popup?.classList.contains('w-2xl')).toBe(false);
+    expect(popup?.classList.contains('w-[20rem]')).toBe(false);
+    expect(popup?.classList.contains('max-w-[85vw]')).toBe(true);
+  });
+
+  it('applies a DrawerContent size override to a floating viewport', () => {
+    render(
+      <Drawer side="left" variant="floating" size="lg" defaultOpen>
+        <DrawerContent size="xl">
+          <DrawerTitle>Extra wide floating drawer</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const viewport = document.querySelector('[data-slot="drawer-viewport"]');
+    expect(viewport?.classList.contains('w-[calc(56rem+1.5rem)]')).toBe(true);
+    expect(viewport?.classList.contains('sm:w-[calc(56rem+2rem)]')).toBe(true);
+    expect(viewport?.classList.contains('w-[calc(42rem+1.5rem)]')).toBe(false);
+  });
+
+  it('keeps top and bottom drawers full width regardless of `size`', () => {
+    render(
+      <Drawer size="xl" defaultOpen>
+        <DrawerContent>
+          <DrawerTitle>Bottom sheet</DrawerTitle>
+        </DrawerContent>
+      </Drawer>,
+    );
+
+    const popup = document.querySelector('[data-slot="drawer-popup"]');
+    expect(popup?.classList.contains('w-full')).toBe(true);
+    expect(popup?.classList.contains('w-4xl')).toBe(false);
   });
 
   // Non-modal escape hatch: viewport opts out of pointer events, popup opts back in, no backdrop.

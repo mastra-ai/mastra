@@ -61,6 +61,7 @@ export class AgentsDSQL extends AgentsStorage {
    */
   async createDefaultIndexes(): Promise<void> {
     if (this.#skipDefaultIndexes) {
+      // oxlint-disable-next-line no-useless-return -- Preserve the explicit skip-index guard and its property read.
       return;
     }
     // No default indexes for agents domain
@@ -165,6 +166,7 @@ export class AgentsDSQL extends AgentsStorage {
     const tableName = getTableName({ indexName: TABLE_AGENTS, schemaName: getSchemaName(this.#schema) });
     const now = new Date();
     const nowIso = now.toISOString();
+    let draftInserted = false;
 
     try {
       // 1. Create the thin agent record with status='draft' and activeVersionId=null
@@ -188,6 +190,7 @@ export class AgentsDSQL extends AgentsStorage {
           ],
         ),
       );
+      draftInserted = true;
 
       // 2. Extract config fields from the flat input
       const { id: _id, authorId: _authorId, metadata: _metadata, ...snapshotConfig } = agent;
@@ -214,17 +217,20 @@ export class AgentsDSQL extends AgentsStorage {
         updatedAt: now,
       };
     } catch (error) {
-      if (error instanceof MastraError) throw error;
-      // Best-effort cleanup to prevent orphaned draft records
-      try {
-        await this.#db.client.none(
-          `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
-          [agent.id],
-        );
-      } catch {
-        // Ignore cleanup errors
+      // Best-effort cleanup, only for a draft this call inserted. If our INSERT failed
+      // (e.g. duplicate id), the row belongs to a concurrent creator and must be kept.
+      if (draftInserted) {
+        try {
+          await this.#db.client.none(
+            `DELETE FROM ${tableName} WHERE id = $1 AND status = 'draft' AND "activeVersionId" IS NULL`,
+            [agent.id],
+          );
+        } catch {
+          // Ignore cleanup errors
+        }
       }
 
+      if (error instanceof MastraError) throw error;
       throw new MastraError(
         {
           id: createStorageErrorId('DSQL', 'CREATE_AGENT', 'FAILED'),

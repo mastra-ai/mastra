@@ -1,11 +1,15 @@
 import { Badge } from '@mastra/playground-ui/components/Badge';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { surfaceRimFocus } from '@mastra/playground-ui/primitives/form-element';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { useChannelInstallations, useChannelPlatforms } from '@mastra/react/hooks/agents';
+import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@mastra/react/hooks/agents';
 import { useEditPage } from '@/domains/agent-builder/contexts/edit-page-context';
 import { usePublishAndConnectChannel } from '@/domains/agent-builder/hooks/use-publish-and-connect-channel';
 import { PlatformIcon } from '@/domains/agents/components/agent-channels/platform-icons';
-import { useChannelInstallations, useChannelPlatforms } from '@/domains/agents/hooks/use-channels';
-import type { ChannelInstallationInfo, ChannelPlatformInfo } from '@/domains/agents/hooks/use-channels';
+import { useReconcilePendingInstallOnFocus } from '@/domains/agents/hooks/use-reconcile-pending-install-on-focus';
 
 export interface IntegrationsProps {
   agentId: string;
@@ -31,7 +35,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
           </div>
 
           <div className="flex flex-wrap items-stretch justify-center gap-4">
-            <div className="border-border1 bg-surface3 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4">
+            <div className={cn(raisedSurfaceStyle, 'flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4')}>
               <Skeleton className="size-14 rounded-xl" />
               <div className="flex flex-col items-center gap-1">
                 <Skeleton className="h-4 w-24" />
@@ -39,7 +43,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
               </div>
               <Skeleton className="h-badge-default w-20 rounded-full" />
             </div>
-            <div className="border-border1 bg-surface3 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4">
+            <div className={cn(raisedSurfaceStyle, 'flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4')}>
               <Skeleton className="size-14 rounded-xl" />
               <div className="flex flex-col items-center gap-1">
                 <Skeleton className="h-4 w-24" />
@@ -56,7 +60,7 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
   if (platforms.length === 0) {
     return (
       <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
-        <Txt variant="ui-md" className="text-neutral3">
+        <Txt variant="body" tone="muted">
           No integrations configured for this project
         </Txt>
       </div>
@@ -67,10 +71,10 @@ export const Integrations = ({ agentId, editable = true }: IntegrationsProps) =>
     <div className="flex justify-center px-4 py-5" data-testid="integrations-detail-picker">
       <div className="flex w-full max-w-[48rem] flex-col items-center gap-4 text-center">
         <div className="flex flex-col gap-2">
-          <Txt variant="header-sm" className="text-neutral6 font-semibold">
+          <Txt variant="heading" tone="ink">
             Channel integrations
           </Txt>
-          <Txt variant="ui-md" className="text-neutral3">
+          <Txt variant="body" tone="muted">
             Publish this agent to external platforms. Each connection installs a bot in the platform that runs this
             agent.
           </Txt>
@@ -105,8 +109,14 @@ interface IntegrationCardProps {
 }
 
 const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelect }: IntegrationCardProps) => {
-  const { data: installations = [] } = useChannelInstallations(platform.id, agentId);
+  const { data: installations = [] } = useChannelInstallations({
+    platform: platform.id,
+    agentId: agentId,
+    queryOptions: { enabled: Boolean(platform.id && agentId) },
+  });
   const installation = installations.find(i => i.status === 'active');
+  const hasPendingInstall = installations.some(i => i.status === 'pending');
+  useReconcilePendingInstallOnFocus({ platform: platform.id, agentId, hasPendingInstall });
 
   const description = PLATFORM_DESCRIPTION[platform.id];
 
@@ -121,29 +131,33 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       onClick={() => onSelect(installation)}
       disabled={disabled}
       data-testid={`integration-card-${platform.id}`}
-      className="border-border1 bg-surface3 hover:bg-surface4 focus-visible:ring-accent1 flex w-48 flex-col items-center gap-3 rounded-xl border px-4 py-4 text-center transition-colors focus-visible:ring-2 focus-visible:outline-none disabled:cursor-not-allowed disabled:opacity-60"
+      className={cn(
+        raisedSurfaceStyle,
+        'state-layer flex w-48 flex-col items-center gap-3 rounded-xl px-4 py-4 text-center disabled:cursor-not-allowed disabled:opacity-60',
+        surfaceRimFocus,
+      )}
     >
-      <div className="bg-surface4 grid size-14 place-items-center rounded-xl">
+      <div className="grid size-14 place-items-center rounded-xl bg-muted">
         <PlatformIcon platform={platform.id} className="h-7 w-7" />
       </div>
 
       <div className="flex flex-col items-center gap-1">
-        <Txt variant="ui-md" className="text-neutral6 font-semibold">
+        <Txt variant="subheading" tone="ink">
           {platform.name}
         </Txt>
         {description ? (
-          <Txt variant="ui-xs" className="text-neutral3">
+          <Txt variant="meta" tone="muted">
             {description}
           </Txt>
         ) : null}
       </div>
 
       {!platform.isConfigured ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Not configured
         </Badge>
       ) : installation ? (
-        <Badge variant="green" size="sm" indicator="dot">
+        <Badge variant="success" size="sm" indicator="dot">
           Connected
         </Badge>
       ) : (
@@ -153,7 +167,7 @@ const IntegrationCard = ({ platform, agentId, disabled, requiresLibrary, onSelec
       )}
 
       {showLibraryBadge ? (
-        <Badge variant="yellow" size="sm" indicator="dot">
+        <Badge variant="warning" size="sm" indicator="dot">
           Add to library to connect
         </Badge>
       ) : null}

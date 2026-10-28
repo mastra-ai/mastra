@@ -18,7 +18,7 @@ Primary interface for observability.
 ```typescript
 interface ObservabilityInstance {
   /** Get current configuration */
-  getConfig(): Readonly<Required<ObservabilityInstanceConfig>>
+  getConfig(): Readonly<ObservabilityInstanceConfig>
 
   /** Get all exporters */
   getExporters(): readonly ObservabilityExporter[]
@@ -42,7 +42,7 @@ interface ObservabilityInstance {
 
 ### `BatchDeleteTracesArgs`
 
-Arguments for `ObservabilityStorage.batchDeleteTraces()`. The method deletes matching traces and spans, then cascades to metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved.
+Arguments for `ObservabilityStorage.batchDeleteTraces()` from `@mastra/core/storage`. The method deletes matching traces and spans, then cascades to metrics, logs, scores, and feedback linked by trace ID. Signals without a trace ID are preserved. The method accepts at most 1,000 trace IDs per call and returns `Promise<void>`.
 
 ```typescript
 interface BatchDeleteTracesArgs {
@@ -52,9 +52,9 @@ interface BatchDeleteTracesArgs {
 }
 ```
 
-When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. Storage adapters that don't support tenant-scoped trace deletion throw an error rather than applying an unscoped delete.
+When `organizationId` or `resourceId` is provided, only records matching the scope are deleted. ClickHouse vNext, PostgreSQL vNext, DuckDB, and the in-memory store support scoped deletion. Other storage adapters throw `OBSERVABILITY_STORAGE_BATCH_DELETE_TRACES_SCOPE_NOT_SUPPORTED` rather than applying an unscoped delete.
 
-For ClickHouse vNext, the method records the complete predicate and waits for lightweight delete masks to be applied. Normal reads no longer return the rows matched by that operation when the call resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and deployment-configured retention TTLs, which Mastra OSS doesn't configure by default. Deletion requests aren't purged automatically in Mastra OSS. Automatic retirement will be introduced with future database-agnostic retention configuration.
+For ClickHouse vNext, the method records the deletion predicate and waits for the lightweight delete masks to be applied before it resolves. Lightweight deletion is hide-only through ClickHouse's `_row_exists` mask. Physical removal depends on merges and the retention TTLs you configure. Each request is marked applied once every delete succeeds; if a delete fails, the request stays unapplied and you retry by calling `batchDeleteTraces()` again. Mastra OSS has no background reconciler. See [ClickHouse trace deletion and retention](/integrations/databases/clickhouse#observability-with-vnext-recommended) and [ClickHouse native TTL](/reference/storage/retention#clickhouse-native-ttl).
 
 ### `SpanTypeMap`
 
@@ -72,6 +72,7 @@ interface SpanTypeMap {
   CLIENT_TOOL_CALL: ClientToolCallAttributes
   PROVIDER_TOOL_CALL: ProviderToolCallAttributes
   MCP_TOOL_CALL: MCPToolCallAttributes
+  MCP_SERVER_REQUEST: MCPServerRequestAttributes
   PROCESSOR_RUN: ProcessorRunAttributes
   WORKFLOW_STEP: WorkflowStepAttributes
   WORKFLOW_CONDITIONAL: WorkflowConditionalAttributes
@@ -140,10 +141,10 @@ import {
 } from '@mastra/core/observability'
 
 const input = describeSpanInput(span)
-// { type: 'text' | 'messages' | 'agent-run-resume' | 'json'; value } | undefined
+// { type: 'text' | 'messages' | 'agent-run-resume' | 'processor' | 'json'; value } | undefined
 
 const output = describeSpanOutput(span)
-// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'text' | 'json'; value } | undefined
+// { type: 'interrupted' | 'agent-run-result' | 'model-generation-result' | 'model-step-result' | 'processor' | 'text' | 'json'; value } | undefined
 
 switch (output?.type) {
   case 'interrupted':
@@ -154,6 +155,54 @@ switch (output?.type) {
 
 describeSpanError(span) // SpanErrorInfo | undefined
 ```
+
+### Processor spans
+
+A processor span records which pipeline phase produced it. A reader narrows its
+payloads on that phase instead of on the payload's shape. The recorded phase is finer
+than the one a processor declares: `outputStream` and `outputResult` are separate
+here, because they record different payloads.
+
+```typescript
+import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability'
+
+const output = describeSpanOutput(span)
+
+if (output?.type === 'processor') {
+  output.value.phase // 'input' | 'inputStep' | 'llmRequest' | 'llmResponse'
+  // | 'outputStream' | 'outputResult' | 'outputStep' | 'toolResult' | 'requestError'
+  output.value.phaseLabel // 'Tool result'
+  if (output.value.phase === 'outputStream') {
+    output.value.data.totalChunks // number
+  }
+}
+```
+
+`describeProcessorPipeline` reads the attributes Mastra owns and keeps everything else
+apart, so a reader can show the known fields without repeating them beside a raw JSON
+view:
+
+```typescript
+const pipeline = describeProcessorPipeline(span)
+
+pipeline?.executor // 'workflow' | 'legacy'
+pipeline?.processorIndex // position in the chain
+pipeline?.hookDurationMs // time spent inside the processor hook
+pipeline?.messageListMutations // 'add' | 'addSystem' | 'removeByIds' | 'clear'
+pipeline?.tripwireAbort?.reason // why the processor blocked the run
+pipeline?.rest // attributes this description does not explain
+```
+
+`PROCESSOR_RUN` is absent from `SpanInputMap` and `SpanOutputMap` on purpose: three
+executors emit processor spans and record different shapes. The payload is narrowed at
+read time instead, by the phase the span recorded, and narrowing on `phase` narrows
+`data` to that phase alone.
+
+`describeSpanInput` and `describeSpanOutput` return the JSON fallback for a span with
+no recorded phase, one written by a newer version with a phase this release doesn't
+know, or an empty payload. `describeProcessorPipeline` returns `undefined` when the
+phase is missing or unknown, and still describes the pipeline when the payload is
+empty. The stored payload and the JSON view remain unchanged.
 
 ### Span
 
@@ -183,6 +232,9 @@ interface Span<TType extends SpanType> {
 
   /** Tags for categorizing traces (only present on root spans) */
   tags?: string[]
+
+  /** Spans in other traces this span is related to */
+  links?: SpanLink[]
 
   /** End the span */
   end(options?: EndSpanOptions<TType>): void
@@ -457,7 +509,7 @@ Structured event emitted when the exporter pipeline drops observability events.
 ```typescript
 type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
 
-type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted'
+type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable'
 
 interface ObservabilityDropEvent {
   type: 'drop'
@@ -481,12 +533,14 @@ Use `onDroppedEvent` on a custom exporter or bridge to forward these events to e
 
 Interface for span output processors.
 
+`process()` must mutate the span it receives and return the same instance, or return `undefined` to drop the span. A copy of the span (for example `{ ...span }`) can't be exported because `exportSpan()` and `isValid` are instance members of the live span; if a processor returns one, Mastra logs a processor error and drops the span.
+
 ```typescript
 interface SpanOutputProcessor {
   /** Processor name */
   name: string
 
-  /** Process span before export */
+  /** Process span before export. Mutate in place and return the same span, or return undefined to drop it. */
   process(span?: AnySpan): AnySpan | undefined
 
   /** Shutdown processor */
@@ -522,6 +576,9 @@ enum SpanType {
 
   /** MCP (Model Context Protocol) tool execution */
   MCP_TOOL_CALL = 'mcp_tool_call',
+
+  /** A request served by a Mastra MCPServer (the server side of an MCP edge) */
+  MCP_SERVER_REQUEST = 'mcp_server_request',
 
   /**
    * Processor execution. This is the default; a processor can declare a
@@ -632,6 +689,19 @@ interface AgentRunAttributes {
 
   /** Maximum steps allowed */
   maxSteps?: number
+
+  /**
+   * Model the run was configured with, resolved at run preparation (call-time
+   * override, then agent config). The first enabled candidate of a fallback list.
+   * Never updated by later steps; see MODEL_STEP `model` for what each step ran.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
+  /** When the run's model streamed its first chunk, copied from the agent's own first generation */
+  completionStartTime?: Date
 }
 ```
 
@@ -650,8 +720,8 @@ interface ModelGenerationAttributes {
   /**
    * Definitions of the tools made available to the model for this generation
    * (name, description, and JSON-schema parameters), captured once per
-   * generation. Per-step tool names live on MODEL_INFERENCE spans as
-   * `availableTools`.
+   * generation. The definitions sent on each provider call live on
+   * MODEL_INFERENCE spans as `tools`.
    */
   tools?: ModelToolDefinition[]
 
@@ -718,6 +788,16 @@ interface ModelStepAttributes {
   /** Index of this step in the generation (0, 1, 2, ...) */
   stepIndex?: number
 
+  /**
+   * Model actually invoked for this step, after per-step overrides (input
+   * processors, fallback). Recorded at invocation, so a failed provider call
+   * still carries it. Absent when no model was invoked, e.g. a cached response.
+   */
+  model?: string
+
+  /** Provider of `model`, taken from the same model object */
+  provider?: string
+
   /** Token usage statistics */
   usage?: UsageStats
 
@@ -729,6 +809,69 @@ interface ModelStepAttributes {
 
   /** Result warnings */
   warnings?: Record<string, any>
+
+  /** When the step's first inference streamed its first chunk */
+  completionStartTime?: Date
+}
+```
+
+### `ModelInferenceAttributes`
+
+Model Inference attributes - for a single call to the model provider within a step. The span covers only the provider call, so it doesn't include processors or tool executions.
+
+```typescript
+interface ModelInferenceAttributes {
+  /** Model name (e.g., 'gpt-5.4', 'claude-opus-4-6') */
+  model?: string
+
+  /** Model provider (e.g., 'openai', 'anthropic') */
+  provider?: string
+
+  /** Index of the parent step in the generation (0, 1, 2, ...) */
+  stepIndex?: number
+
+  /** Token usage statistics */
+  usage?: UsageStats
+
+  /** Reason this inference finished (stop, tool-calls, length, etc.) */
+  finishReason?: string
+
+  /** Whether this was a streaming response */
+  streaming?: boolean
+
+  /** When the first token/chunk of the completion was received */
+  completionStartTime?: Date
+
+  /** Result warnings */
+  warnings?: Record<string, any>
+
+  /** Actual model used in the response (may differ from request model) */
+  responseModel?: string
+
+  /** Unique identifier for the response */
+  responseId?: string
+
+  /** Model parameters sent on the request (temperature, maxOutputTokens, topP, etc.) */
+  parameters?: Record<string, unknown>
+
+  /** Provider-specific options forwarded on the request */
+  providerOptions?: Record<string, unknown>
+
+  /** Names of tools made available to the model on this inference call */
+  availableTools?: string[]
+
+  /**
+   * Definitions of the tools sent to the provider on this inference call
+   * (name, description, and JSON-schema parameters), after per-step changes
+   * from processors, `prepareStep`, `activeTools`, and `toolChoice`.
+   */
+  tools?: ModelToolDefinition[]
+
+  /** How the model was instructed to choose tools */
+  toolChoice?: 'auto' | 'none' | 'required' | { type: 'tool'; toolName: string }
+
+  /** Requested response format */
+  responseFormat?: 'text' | 'json' | 'json_schema' | { type: string; name?: string }
 }
 ```
 
@@ -757,6 +900,8 @@ interface ToolCallAttributes {
   toolDescription?: string
   toolCallId?: string
   success?: boolean
+  /** True when a dataset experiment tool mock intercepted the call (served, mismatched, exhausted or denied) and the tool never ran */
+  mocked?: boolean
 }
 ```
 
@@ -785,6 +930,41 @@ interface MCPToolCallAttributes {
 }
 ```
 
+### `MCPServerRequestAttributes`
+
+Attributes of a request served by a Mastra `MCPServer`.
+
+```typescript
+interface MCPServerRequestAttributes {
+  /** MCP method served, e.g. 'tools/call', 'resources/list', 'prompts/get' */
+  mcpMethod: string
+
+  /** Name or URI of the tool, prompt, or resource requested. Absent on list-style calls. */
+  targetName?: string
+
+  /** Configured MCPServer name */
+  mcpServer: string
+
+  /** Configured MCPServer version */
+  serverVersion?: string
+
+  /** Negotiated MCP protocol revision for this request */
+  mcpProtocolVersion?: string
+
+  /** Client implementation name, when the client reported one */
+  clientName?: string
+
+  /** Client implementation version, when the client reported one */
+  clientVersion?: string
+
+  /** W3C `traceparent` the caller sent, when it parses */
+  callerTraceparent?: string
+
+  /** W3C `tracestate` the caller sent with a valid `traceparent`, capped at 512 characters */
+  callerTracestate?: string
+}
+```
+
 ### `ProcessorRunAttributes`
 
 Processor attributes.
@@ -800,8 +980,9 @@ interface ProcessorRunAttributes {
   /**
    * Milliseconds spent inside `processOutputStream`, summed across every
    * chunk. Only set on output stream processor spans. The span's own duration
-   * covers the whole stream, model latency included, so this is what
-   * separates a slow processor from a slow model.
+   * covers its step, from the first chunk to the step's end with model latency
+   * and tool calls included, so this is what separates a slow processor from
+   * the rest of the step.
    */
   hookDurationMs?: number
 
@@ -1002,6 +1183,23 @@ interface StartSpanOptions<TType extends SpanType> {
 
   /** Options passed when using a custom sampler strategy */
   customSamplerOptions?: CustomSamplerOptions
+
+  /** Spans in other traces this span is related to. Links with invalid IDs are ignored. */
+  links?: SpanLink[]
+}
+```
+
+### `SpanLink`
+
+A reference to a span in another trace, such as the caller's span when an `MCPServer` serves a request. Unlike a parent, a link doesn't put the two spans in the same trace.
+
+```typescript
+interface SpanLink {
+  /** Trace ID of the linked span (1-32 hexadecimal characters) */
+  traceId: string
+
+  /** Span ID of the linked span (1-16 hexadecimal characters) */
+  spanId: string
 }
 ```
 
@@ -1092,6 +1290,13 @@ Options passed when starting a new agent or workflow execution.
 
 ```typescript
 interface TracingOptions {
+  /**
+   * Display name for the root span of this trace, replacing the default
+   * `agent run: '<id>'` / `workflow run: '<id>'` name. Use it to tell runs of the
+   * same agent or workflow apart in trace lists. Only applied to the root span.
+   */
+  rootSpanName?: string
+
   /** Metadata to add to the root trace span */
   metadata?: Record<string, any>
 
@@ -1113,6 +1318,13 @@ interface TracingOptions {
    * If provided, the root span will be created as a child of this span.
    */
   parentSpanId?: string
+
+  /**
+   * Set to true together with parentSpanId to attach this run as a child of
+   * that span inside the existing trace. Exporters then keep the trace's own
+   * name, input, output, and tags. Ignored without a valid traceId and parentSpanId.
+   */
+  nestUnderParent?: boolean
 
   /**
    * Tags to apply to this trace.

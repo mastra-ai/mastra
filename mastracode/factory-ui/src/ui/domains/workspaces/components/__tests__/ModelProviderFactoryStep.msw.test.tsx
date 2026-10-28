@@ -1,12 +1,16 @@
+import { Command } from '@mastra/playground-ui/components/Command';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
+import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '../../../../../../e2e/ui/render';
 import type { ProviderInfo } from '../../../../../api/types';
+import { datedModels } from '../../../settings/components/__tests__/fixtures/models';
+import { CreateFactoryModelStep } from '../create-factory/CreateFactoryModelStep';
 import { ModelProviderFactoryStep } from '../ModelProviderFactoryStep';
+import { PersonalProviderFactoryStep } from '../PersonalProviderFactoryStep';
 
 function registerAuthHandler() {
   server.use(
@@ -24,16 +28,7 @@ function registerPersistenceHandlers(onFactoryModel: (body: unknown) => void, on
     }),
     http.post(`${TEST_BASE_URL}/web/config/om/provider-defaults`, async ({ request }) => {
       onOMDefaults(await request.json());
-      return HttpResponse.json({
-        ok: true,
-        config: {
-          observerModelId: 'openai/gpt-5.4-mini',
-          reflectorModelId: 'openai/gpt-5.4-mini',
-          observationThreshold: 30000,
-          reflectionThreshold: 40000,
-          observeAttachments: 'auto',
-        },
-      });
+      return HttpResponse.json({ error: 'Removed endpoint' }, { status: 404 });
     }),
   );
 }
@@ -49,7 +44,7 @@ describe('Model provider onboarding', () => {
         http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: [] })),
       );
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
 
       expect(await screen.findByRole('alert')).toHaveTextContent('Provider catalog unavailable');
       expect(screen.queryByText(/No providers match/)).not.toBeInTheDocument();
@@ -70,23 +65,127 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
 
-      expect(await screen.findByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      expect(await screen.findByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Groq' })).toBeInTheDocument();
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'bedrock');
 
       expect(screen.getByRole('button', { name: 'Amazon Bedrock' })).toBeInTheDocument();
       expect(screen.queryByRole('button', { name: 'Groq' })).not.toBeInTheDocument();
-      // The sign-in section is a fixed top-level section — search never hides it.
-      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeInTheDocument();
+      expect(screen.getByRole('tab', { name: 'Provider sign-in' })).toBeInTheDocument();
 
       await user.clear(screen.getByRole('searchbox', { name: 'Search model providers' }));
       await user.type(screen.getByRole('searchbox', { name: 'Search model providers' }), 'no-such-provider');
 
       expect(screen.getByText(/No providers match/)).toHaveTextContent('No providers match “no-such-provider”.');
       expect(screen.queryByRole('button', { name: 'Amazon Bedrock' })).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when creating a custom provider', () => {
+    function registerCustomProviderHandlers() {
+      let created = false;
+      const provider = {
+        id: 'my-llm',
+        name: 'my-llm',
+        url: 'https://api.example.com/v1',
+        hasApiKey: true,
+        models: ['model-a'],
+      };
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            providers: created ? [{ provider: 'my-llm', source: 'stored-org', custom: true }] : [],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: created
+              ? [{ id: 'my-llm/model-a', provider: 'my-llm', modelName: 'model-a', hasApiKey: true }]
+              : [],
+          }),
+        ),
+        http.post(`${TEST_BASE_URL}/web/config/custom-providers`, async ({ request }) => {
+          expect(await request.json()).toEqual({
+            name: 'my-llm',
+            url: 'https://api.example.com/v1',
+            apiKey: 'sk-test',
+            models: ['model-a'],
+          });
+          created = true;
+          return HttpResponse.json({ ok: true, provider });
+        }),
+      );
+    }
+
+    async function createCustomProvider() {
+      const user = userEvent.setup();
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.type(screen.getByPlaceholderText('Paste API key'), 'sk-test');
+      await user.type(screen.getByPlaceholderText('model-a, model-b'), 'model-a');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+      return user;
+    }
+
+    it('requires a model before creating a provider during setup', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+      const user = userEvent.setup();
+
+      await user.click(await screen.findByRole('tab', { name: 'Custom provider' }));
+      await user.type(screen.getByPlaceholderText('e.g. my-llm'), 'my-llm');
+      await user.type(screen.getByPlaceholderText('https://api.example.com/v1'), 'https://api.example.com/v1');
+      await user.click(screen.getByRole('button', { name: 'Add' }));
+
+      expect(await screen.findByText('At least one model is required.')).toBeVisible();
+    });
+
+    it('refreshes the catalogs and continues to organization model selection', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      const onComplete = vi.fn<() => void>();
+      const { client } = renderWithProviders(
+        <ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />,
+      );
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
+      expect(onComplete).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
+    });
+
+    it('continues to personal model selection with the stored custom provider', async () => {
+      registerAuthHandler();
+      registerCustomProviderHandlers();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+          HttpResponse.json({ modelId: null, thinkingLevel: null }),
+        ),
+      );
+      const onContinue = vi.fn<() => void>();
+      const { client } = renderWithProviders(<PersonalProviderFactoryStep onContinue={onContinue} />);
+
+      const user = await createCustomProvider();
+      await waitForMutationsIdle(client);
+
+      expect(await screen.findByRole('combobox')).toHaveValue('Model A');
+      await user.click(screen.getByRole('button', { name: 'Review setup' }));
+      expect(onContinue).toHaveBeenCalledWith({
+        providerId: 'my-llm',
+        modelId: 'my-llm/model-a',
+        method: 'api_key',
+      });
     });
   });
 
@@ -113,22 +212,29 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={vi.fn()} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
 
-      await user.click(await screen.findByRole('button', { name: 'Continue with Anthropic' }));
+      await user.click(await screen.findByRole('tab', { name: 'Provider sign-in' }));
+      await user.click(screen.getByRole('button', { name: 'Continue with Anthropic' }));
 
       expect(await screen.findByRole('dialog')).toBeInTheDocument();
-      expect(onStart).toHaveBeenCalledWith({ mode: 'paste-code' });
+      expect(onStart).toHaveBeenCalledWith({ mode: 'paste-code', scope: 'org' });
     });
   });
 
   describe('when OpenAI is already connected', () => {
-    it('persists the suggested Factory model and hidden OM defaults', async () => {
+    it('keeps the suggested Factory model in the draft without saving defaults', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
       const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
       const providers: ProviderInfo[] = [
-        { provider: 'openai', source: 'stored' },
+        {
+          provider: 'openai',
+          source: 'stored-user',
+          userCredential: 'api_key',
+          orgCredential: 'api_key',
+          orgKey: true,
+        },
         { provider: 'anthropic', source: 'none' },
       ];
       registerAuthHandler();
@@ -143,7 +249,7 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
 
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
 
@@ -152,21 +258,22 @@ describe('Model provider onboarding', () => {
       expect(screen.getByText('OpenAI')).toBeInTheDocument();
       expect(screen.getByRole('button', { name: 'Change provider' })).toBeInTheDocument();
       expect(screen.queryByRole('searchbox', { name: 'Search model providers' })).not.toBeInTheDocument();
-      expect(screen.getByText('openai/gpt-5.6-sol')).toBeInTheDocument();
-      await user.click(screen.getByRole('button', { name: 'Finish setup' }));
+      expect(screen.getByRole('combobox')).toHaveValue('GPT-5.6 Sol');
+      await user.click(screen.getByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-      expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
-      expect(onOMDefaults).toHaveBeenCalledWith({
+      expect(onFactoryModel).not.toHaveBeenCalled();
+      expect(onOMDefaults).not.toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith({
         providerId: 'openai',
-        factoryModelId: 'openai/gpt-5.6-sol',
-        factoryId: 'factory-1',
+        modelId: 'openai/gpt-5.6-sol',
+        method: 'api_key',
       });
     });
   });
 
-  describe('when OpenAI needs an API key', () => {
-    it('keeps the provider selected and persists its defaults after connection', async () => {
+  describe('when OpenAI has only a personal API key', () => {
+    it('still requires an organization credential and fixes the dialog to org scope', async () => {
       const onFactoryModel = vi.fn<(body: unknown) => void>();
       const onOMDefaults = vi.fn<(body: unknown) => void>();
       const onComplete = vi.fn<() => void>();
@@ -179,7 +286,10 @@ describe('Model provider onboarding', () => {
             providers: [
               {
                 provider: 'openai',
-                source: connected ? 'stored-user' : 'none',
+                source: connected ? 'stored-org' : 'stored-user',
+                userCredential: 'api_key',
+                orgCredential: connected ? 'api_key' : undefined,
+                orgKey: connected,
                 envVar: 'OPENAI_API_KEY',
               },
             ],
@@ -202,23 +312,202 @@ describe('Model provider onboarding', () => {
       );
       const user = userEvent.setup();
 
-      renderWithProviders(<ModelProviderFactoryStep factoryId="factory-1" onComplete={onComplete} />);
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={vi.fn()} />);
 
       // Unconnected providers are browseable without searching; picking the
       // badge opens the API key dialog directly.
       await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
       const dialog = within(screen.getByRole('dialog'));
+      expect(dialog.queryByRole('button', { name: 'Just me' })).not.toBeInTheDocument();
+      expect(dialog.queryByRole('button', { name: 'Everyone in org' })).not.toBeInTheDocument();
       await user.type(dialog.getByLabelText('API key for OpenAI'), 'sk-test');
       await user.click(dialog.getByRole('button', { name: 'Save' }));
-      await user.click(await screen.findByRole('button', { name: 'Finish setup' }));
+      await user.click(await screen.findByRole('button', { name: 'Continue' }));
 
       await waitFor(() => expect(onComplete).toHaveBeenCalledOnce());
-      expect(onFactoryModel).toHaveBeenCalledWith({ defaultModelId: 'openai/gpt-5.6-sol' });
-      expect(onOMDefaults).toHaveBeenCalledWith({
+      expect(onFactoryModel).not.toHaveBeenCalled();
+      expect(onOMDefaults).not.toHaveBeenCalled();
+      expect(onComplete).toHaveBeenCalledWith({
         providerId: 'openai',
-        factoryModelId: 'openai/gpt-5.6-sol',
-        factoryId: 'factory-1',
+        modelId: 'openai/gpt-5.6-sol',
+        method: 'api_key',
       });
+    });
+  });
+
+  describe('when the deployment provides Amazon Bedrock', () => {
+    it('lets a member pick it as connected without an API-key dialog', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'amazon-bedrock', source: 'deployment' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [
+              {
+                id: 'amazon-bedrock/anthropic.claude-sonnet-4-5',
+                provider: 'amazon-bedrock',
+                modelName: 'anthropic.claude-sonnet-4-5',
+                hasApiKey: true,
+              },
+            ],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      const bedrock = await screen.findByRole('button', { name: 'Amazon Bedrock' });
+      expect(bedrock).toBeEnabled();
+      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      await user.click(bedrock);
+      expect(screen.queryByRole('dialog')).not.toBeInTheDocument();
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+      expect(screen.getByRole('combobox')).toHaveValue('Claude Sonnet 4.5');
+    });
+  });
+
+  describe('when the user is not an organization admin', () => {
+    it('keeps shared providers selectable and disables new organization connections', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [
+              { provider: 'openai', source: 'stored-org', orgCredential: 'api_key', orgKey: true },
+              { provider: 'anthropic', source: 'none', oauth: { supported: true, modes: ['paste-code'] } },
+              { provider: 'groq', source: 'none' },
+            ],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      expect(await screen.findByRole('button', { name: 'OpenAI' })).toBeEnabled();
+      expect(screen.queryByText(/Ask an organization admin/)).not.toBeInTheDocument();
+      expect(screen.getByRole('button', { name: 'Groq' })).toBeDisabled();
+      await user.click(screen.getByRole('tab', { name: 'Provider sign-in' }));
+      expect(screen.getByRole('button', { name: 'Continue with Anthropic' })).toBeDisabled();
+      await user.click(screen.getByRole('tab', { name: 'API key' }));
+
+      await user.click(screen.getByRole('button', { name: 'OpenAI' }));
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
+    });
+
+    it('sends members back to setup when no organization provider is connected', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+      );
+
+      const onComplete = vi.fn();
+      const onChangeSetup = vi.fn();
+      const user = userEvent.setup();
+      renderWithProviders(<ModelProviderFactoryStep onComplete={onComplete} onChangeSetup={onChangeSetup} />);
+      await user.click(await screen.findByRole('button', { name: 'Change setup' }));
+      expect(onChangeSetup).toHaveBeenCalledOnce();
+      expect(onComplete).not.toHaveBeenCalled();
+      expect(screen.queryByRole('tablist')).not.toBeInTheDocument();
+    });
+  });
+
+  describe('when creating a later Factory', () => {
+    it('keeps personal credentials connected under the existing default semantics', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <Command>
+          <CreateFactoryModelStep query="" onPick={vi.fn()} />
+        </Command>,
+      );
+
+      await user.click(await screen.findByText('OpenAI'));
+
+      expect(await screen.findByText('openai/gpt-5.6-sol')).toBeInTheDocument();
+      expect(screen.queryByRole('dialog', { name: 'Connect OpenAI' })).not.toBeInTheDocument();
+    });
+
+    it('offers newer models first', async () => {
+      registerAuthHandler();
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({
+            orgKeyAdmin: false,
+            providers: [{ provider: 'openai', source: 'stored-user', userCredential: 'api_key' }],
+          }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () => HttpResponse.json({ models: datedModels })),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(
+        <Command>
+          <CreateFactoryModelStep query="" onPick={vi.fn()} />
+        </Command>,
+      );
+
+      await user.click(await screen.findByText('OpenAI'));
+      await screen.findByText('openai/gpt-5');
+
+      expect(screen.getAllByRole('option').map(option => option.getAttribute('data-value'))).toEqual([
+        'openai/gpt-5',
+        'openai/gpt-4.1',
+        'openai/gpt-4o',
+        'change-provider',
+      ]);
+    });
+  });
+
+  describe('when authentication is disabled', () => {
+    it('keeps local credentials on the existing unscoped behavior', async () => {
+      server.use(
+        http.get(`${TEST_BASE_URL}/web/config/providers`, () =>
+          HttpResponse.json({ providers: [{ provider: 'openai', source: 'stored' }] }),
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [{ id: 'openai/gpt-5.6-sol', provider: 'openai', modelName: 'gpt-5.6-sol', hasApiKey: true }],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+
+      renderWithProviders(<ModelProviderFactoryStep onComplete={vi.fn()} onChangeSetup={vi.fn()} />);
+
+      await user.click(await screen.findByRole('button', { name: 'OpenAI' }));
+      expect(await screen.findByRole('button', { name: 'Continue' })).toBeInTheDocument();
     });
   });
 });

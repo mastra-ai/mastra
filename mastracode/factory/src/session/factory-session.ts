@@ -1,33 +1,154 @@
-import { randomUUID } from 'node:crypto';
-
-import { resolveProviderOMDefault } from '@mastra/code-sdk/onboarding/packs';
 import type { MastraCodeState } from '@mastra/code-sdk/schema';
 import type { AgentController } from '@mastra/core/agent-controller';
 
-import { factoryMemorySettingsUserId } from '../storage/domains/memory-settings/base.js';
-import type { MemorySettingsStorage } from '../storage/domains/memory-settings/base.js';
-import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
-import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
-import { applyStoredMemorySettings, type OMConfigurableSession } from './memory-settings-hydration.js';
+import { resolveTenantProviderDefaultModel } from '../routes/tenant-credentials.js';
+import type { ModelDefaultsStorage } from '../storage/domains/model-defaults/base.js';
+import { effectiveModelScope } from '../storage/domains/projects/base.js';
+import type { EffectiveModelScope, FactoryProjectsStorage } from '../storage/domains/projects/base.js';
+import { SourceControlConnectionNotFoundError } from '../storage/domains/source-control/base.js';
+import type {
+  SourceControlSession,
+  SourceControlSessionVisibility,
+  SourceControlStorageHandle,
+} from '../storage/domains/source-control/base.js';
+import { legacyGithubWorkItemBranch } from '../work-item-branch.js';
+import { resolveEnvironmentRepositories } from './environment-repositories.js';
 import { seedSessionOrg } from './org-seed.js';
 
 type FactorySession = Awaited<ReturnType<AgentController<MastraCodeState>['createSession']>>;
 
-/**
- * Read the factory project's default model. Best-effort: a missing project or an
- * uninitialized storage domain means "no default", never a failed run.
- */
-export async function resolveFactoryDefaultModelId(
-  projects: FactoryProjectsStorage | undefined,
-  factoryProjectId: string | undefined,
-): Promise<string | undefined> {
-  if (!projects || !factoryProjectId) return undefined;
-  try {
-    const project = await projects.getById({ id: factoryProjectId });
-    return project?.defaultModelId ?? undefined;
-  } catch {
-    return undefined;
+export class FactorySourceControlConflictError extends Error {}
+
+/** Resolve the model and exclusive credential scope for a Factory session. */
+export async function resolveFactorySessionModel(args: {
+  projects: FactoryProjectsStorage | undefined;
+  modelDefaults: ModelDefaultsStorage | undefined;
+  factoryProjectId: string | undefined;
+  orgId: string;
+  ownerUserId: string;
+  /** A work-item run or an interactive session; a hybrid Factory resolves a different scope for each. */
+  context: 'run' | 'session';
+}): Promise<{ modelScope: EffectiveModelScope; modelId?: string }> {
+  if (!args.projects || !args.factoryProjectId) throw new Error('Factory model policy is unavailable.');
+
+  const project = await args.projects.getById({ id: args.factoryProjectId });
+  if (!project || project.orgId !== args.orgId) throw new Error('Factory model policy is unavailable.');
+  if (effectiveModelScope(project.modelScope, args.context) === 'factory') {
+    return { modelScope: 'factory', ...(project.defaultModelId ? { modelId: project.defaultModelId } : {}) };
   }
+
+  try {
+    const userDefault = await args.modelDefaults?.get({ orgId: args.orgId, userId: args.ownerUserId });
+    return { modelScope: 'user', ...(userDefault?.modelId ? { modelId: userDefault.modelId } : {}) };
+  } catch (error) {
+    console.warn('[Factory] Owner default model lookup failed; using the mode default model', {
+      orgId: args.orgId,
+      ownerUserId: args.ownerUserId,
+      error: error instanceof Error ? error.message : String(error),
+    });
+    return { modelScope: 'user' };
+  }
+}
+
+export interface SourceControlSessionLookup {
+  getBySessionId(sessionId: string): Promise<SourceControlSession | null>;
+  getSourceControlBySessionId(sessionId: string): Promise<SourceControlStorageHandle | null>;
+  /** Side sessions started by `originSessionId`, across every provider. */
+  listByOrigin(args: { orgId: string; originSessionId: string }): Promise<SourceControlSession[]>;
+  rename(args: { sessionId: string; title: string }): Promise<void>;
+  setOriginMuted(args: { sessionId: string; muted: boolean }): Promise<void>;
+  markFirstMessage(args: { sessionId: string }): Promise<void>;
+  markFirstMeaningfulExec(args: { sessionId: string }): Promise<void>;
+}
+
+/**
+ * Read or update a session across every registered source-control partition.
+ * Session ids are globally generated, so more than one match is invalid and
+ * fails closed instead of mutating an arbitrary provider.
+ */
+export function createSourceControlSessionLookup(
+  sourceControls: readonly SourceControlStorageHandle[],
+): SourceControlSessionLookup {
+  const resolve = async (
+    sessionId: string,
+  ): Promise<{ sourceControl: SourceControlStorageHandle; session: SourceControlSession } | null> => {
+    const matches = (
+      await Promise.all(
+        sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(sessionId),
+        })),
+      )
+    ).filter(
+      (match): match is { sourceControl: SourceControlStorageHandle; session: SourceControlSession } =>
+        match.session !== null,
+    );
+    if (matches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    return matches[0] ?? null;
+  };
+
+  return {
+    getBySessionId: async sessionId => (await resolve(sessionId))?.session ?? null,
+    getSourceControlBySessionId: async sessionId => (await resolve(sessionId))?.sourceControl ?? null,
+    listByOrigin: async args =>
+      (await Promise.all(sourceControls.map(sourceControl => sourceControl.sessions.listByOrigin(args)))).flat(),
+    rename: async args => (await resolve(args.sessionId))?.sourceControl.sessions.rename(args),
+    setOriginMuted: async args => (await resolve(args.sessionId))?.sourceControl.sessions.setOriginMuted(args),
+    markFirstMessage: async args => (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMessage(args),
+    markFirstMeaningfulExec: async args =>
+      (await resolve(args.sessionId))?.sourceControl.sessions.markFirstMeaningfulExec(args),
+  };
+}
+
+/**
+ * Resolve the source-control provider from durable Factory repository links,
+ * never from the issue tracker that happened to create the work item.
+ */
+export async function resolveFactorySourceControl(args: {
+  sourceControls: readonly SourceControlStorageHandle[];
+  orgId: string;
+  factoryProjectId: string;
+  sessionId?: string;
+}): Promise<SourceControlStorageHandle | undefined> {
+  if (args.sessionId) {
+    const sessionMatches = (
+      await Promise.all(
+        args.sourceControls.map(async sourceControl => ({
+          sourceControl,
+          session: await sourceControl.sessions.getBySessionId(args.sessionId!),
+        })),
+      )
+    ).filter(match => match.session !== null);
+    if (sessionMatches.length > 1) throw new Error('Factory session exists in multiple source-control providers.');
+    if (sessionMatches[0]) return sessionMatches[0].sourceControl;
+  }
+
+  const linked = [];
+  for (const sourceControl of args.sourceControls) {
+    const connections = await sourceControl.connections.list({
+      orgId: args.orgId,
+      factoryProjectId: args.factoryProjectId,
+    });
+    let hasLinkedRepository = false;
+    for (const connection of connections) {
+      try {
+        if (
+          (await sourceControl.projectRepositories.list({ orgId: args.orgId, connectionId: connection.id })).length > 0
+        ) {
+          hasLinkedRepository = true;
+          break;
+        }
+      } catch (error) {
+        if (!(error instanceof SourceControlConnectionNotFoundError)) throw error;
+      }
+    }
+    if (hasLinkedRepository) linked.push(sourceControl);
+  }
+  if (linked.length > 1)
+    throw new FactorySourceControlConflictError(
+      'Factory project has repositories linked through multiple source-control providers.',
+    );
+  return linked[0];
 }
 
 export interface EnsureFactorySourceSessionArgs {
@@ -41,13 +162,23 @@ export interface EnsureFactorySourceSessionArgs {
   orgId: string;
   factoryProjectId: string;
   branch: string;
-  /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
-  repositorySlug?: string;
+  /**
+   * The repository link the session is filed under: the one a work item
+   * targets. Defaults to the factory's position-1 environment link (D1), for
+   * callers where nothing names a repository (chat threads, user sessions).
+   */
+  projectRepositoryId?: string;
   /**
    * Attribute the run to this user instead of the repo connector. Set when the
    * run has an interactive user — e.g. the person who approved a proposed run.
    */
   attributeToUserId?: string;
+  /** A pre-generated session id, so a caller can name the branch after it. Defaults to a fresh UUID. */
+  sessionId?: string;
+  /** Defaults to 'org'. A side session copies its parent's visibility. */
+  visibility?: SourceControlSessionVisibility;
+  /** The session and thread that started this one as a side session. */
+  origin?: { sessionId: string; threadId: string };
 }
 
 export interface EnsuredFactorySourceSession {
@@ -78,95 +209,51 @@ export interface ResolvedFactorySourceRepository {
 }
 
 /**
- * Outcome of {@link resolveFactorySourceRepository}. A miss carries which step
- * failed: callers differ on whether that is an error (an autonomous run cannot
- * proceed) or a routine fallback (a chat integration drops to a chat-only
- * session), and the two steps fail for different reasons worth reporting apart.
+ * Outcome of {@link resolvePrimaryEnvironmentRepository}. A miss carries which
+ * step failed: callers differ on whether that is an error (an autonomous run
+ * cannot proceed) or a routine fallback (a chat integration drops to a
+ * chat-only session), and the two steps fail for different reasons worth
+ * reporting apart.
  */
 export type FactorySourceRepositoryResult =
   | ({ found: true } & ResolvedFactorySourceRepository)
   | { found: false; reason: 'connection' | 'repository' };
 
 /**
- * Resolve which repository a factory project's source-control runs act on: the
- * owner's connection on the project, then one of its linked repositories.
+ * The repository link a new session is filed under. By default the position-1
+ * `inEnvironment` link of the factory (decision D1); a work item that targets
+ * a repository names its link through `projectRepositoryId`, which must be an
+ * environment link of the same factory. Session start no longer picks a
+ * repository to work in, the sandbox holds every environment repository. The
+ * PR tools default to this link, and subscriptions, audit and the work item's
+ * repository check still read it; moving them to the per-repository
+ * `sessionRepositories` rows is a follow-up.
  *
  * The owner is whichever integration owns source control, matched by the
  * handle's own `integrationId` — nothing here is provider-specific.
  */
-export async function resolveFactorySourceRepository(args: {
+export async function resolvePrimaryEnvironmentRepository(args: {
   sourceControl: SourceControlStorageHandle;
   orgId: string;
   factoryProjectId: string;
-  /** Pick a specific linked repository by slug. Defaults to the first linked repository. */
-  repositorySlug?: string;
+  projectRepositoryId?: string;
 }): Promise<FactorySourceRepositoryResult> {
-  const { sourceControl, orgId, factoryProjectId, repositorySlug } = args;
-
+  const { sourceControl, orgId, factoryProjectId, projectRepositoryId } = args;
   const connections = await sourceControl.connections.list({ orgId, factoryProjectId });
-  const candidates = connections.filter(candidate => candidate.integrationId === sourceControl.integrationId);
-  if (candidates.length === 0) return { found: false, reason: 'connection' };
-
-  // A project can carry stale connections: a provider-app reinstall leaves the
-  // old connection pointing at an installation that no longer exists, and that
-  // row can sit ahead of the healthy one. Try every candidate and skip the ones
-  // that no longer resolve rather than failing on the first.
-  for (const connection of candidates) {
-    let resolved;
-    try {
-      const projectRepositories = await sourceControl.projectRepositories.list({ orgId, connectionId: connection.id });
-      const resolvedRepositories = await Promise.all(
-        projectRepositories.map(async projectRepository => ({
-          projectRepository,
-          repository: await sourceControl.repositories.get({ orgId, id: projectRepository.repositoryId }),
-        })),
-      );
-      resolved = resolvedRepositories.find(
-        candidate => candidate.repository && (!repositorySlug || candidate.repository.slug === repositorySlug),
-      );
-    } catch {
-      // The connection no longer resolves (e.g. its installation was deleted).
-      continue;
-    }
-    if (!resolved?.repository) continue;
-
-    return {
-      found: true,
-      projectRepositoryId: resolved.projectRepository.id,
-      baseBranch: resolved.projectRepository.branch ?? resolved.repository.defaultBranch,
-      connectedByUserId: connection.createdByUserId,
-    };
+  if (!connections.some(candidate => candidate.integrationId === sourceControl.integrationId)) {
+    return { found: false, reason: 'connection' };
   }
-
-  return { found: false, reason: 'repository' };
-}
-
-/**
- * Walk a Factory user-session id back to the project it belongs to.
- *
- * Repo-backed channel threads are keyed by their Factory session id, which is
- * the only handle a session-start hook gets. This turns that id back into the
- * project whose configuration the session should adopt. Durable by
- * construction — it reads the same rows the session was created from, so it
- * survives restarts without any in-memory mapping.
- */
-export async function resolveFactoryProjectForSession(args: {
-  sourceControl: SourceControlStorageHandle;
-  sessionId: string;
-}): Promise<{ factoryProjectId: string; orgId: string; userId: string } | null> {
-  const { sourceControl, sessionId } = args;
-
-  const session = await sourceControl.sessions.getBySessionId(sessionId);
-  if (!session) return null;
-  const projectRepository = await sourceControl.projectRepositories.get({
-    orgId: session.orgId,
-    id: session.projectRepositoryId,
-  });
-  if (!projectRepository) return null;
-  const connection = await sourceControl.connections.get({ orgId: session.orgId, id: projectRepository.connectionId });
-  if (!connection) return null;
-
-  return { factoryProjectId: connection.factoryProjectId, orgId: session.orgId, userId: session.userId };
+  const repositories = await resolveEnvironmentRepositories({ sourceControl, orgId, factoryProjectId });
+  const primary = repositories.find(
+    candidate => projectRepositoryId === undefined || candidate.link.id === projectRepositoryId,
+  );
+  if (!primary) return { found: false, reason: 'repository' };
+  return {
+    found: true,
+    projectRepositoryId: primary.link.id,
+    baseBranch: primary.link.branch ?? primary.repository.defaultBranch,
+    connectedByUserId: primary.connection.createdByUserId,
+  };
 }
 
 /**
@@ -175,9 +262,11 @@ export async function resolveFactoryProjectForSession(args: {
  * `FactoryStartCoordinator.prepare` requires this record to already exist —
  * `resolveSourceSession` throws `Factory session not found` otherwise — so every
  * autonomous entry point has to produce one before it can start a run. This is
- * that step, in one place: the owner's connection on the factory project, one of
- * its linked repositories, and a session on the requested branch with the
- * repository's pinned or default branch as the base.
+ * that step, in one place: the owner's connection on the factory project, the
+ * work item's repository link (else the position-1 environment link, D1) as
+ * the session's link, and a session on the requested branch with that
+ * repository's pinned or default branch as the base. The sandbox itself boots
+ * every environment repository.
  *
  * The run is attributed to `attributeToUserId` when the caller has an
  * interactive user (e.g. the approver of a proposed run), and otherwise falls
@@ -187,20 +276,35 @@ export async function resolveFactoryProjectForSession(args: {
 export async function ensureFactorySourceSession(
   args: EnsureFactorySourceSessionArgs,
 ): Promise<EnsuredFactorySourceSession> {
-  const { sourceControl, orgId, factoryProjectId, branch, repositorySlug } = args;
+  const { sourceControl, orgId, factoryProjectId, branch, projectRepositoryId } = args;
 
-  const resolved = await resolveFactorySourceRepository({ sourceControl, orgId, factoryProjectId, repositorySlug });
+  const resolved = await resolvePrimaryEnvironmentRepository({
+    sourceControl,
+    orgId,
+    factoryProjectId,
+    projectRepositoryId,
+  });
   if (!resolved.found) throw new FactorySourceSessionResolutionError(resolved.reason);
 
   const userId = args.attributeToUserId ?? resolved.connectedByUserId;
+  // Prefer an existing current branch, then the legacy branch on this exact
+  // repository and owner. Never reuse another repository's same-number card.
+  const legacyBranch = legacyGithubWorkItemBranch(branch);
+  const lookup = { projectRepositoryId: resolved.projectRepositoryId, userId };
+  const existing = legacyBranch
+    ? ((await sourceControl.sessions.getForBranch({ ...lookup, branch })) ??
+      (await sourceControl.sessions.getForBranch({ ...lookup, branch: legacyBranch })))
+    : null;
   const session = await sourceControl.sessions.create({
-    sessionId: randomUUID(),
+    sessionId: args.sessionId ?? globalThis.crypto.randomUUID(),
     projectRepositoryId: resolved.projectRepositoryId,
+    factoryProjectId,
     orgId,
     userId,
-    branch,
+    branch: existing?.branch ?? branch,
     baseBranch: resolved.baseBranch,
-    visibility: 'org',
+    visibility: args.visibility ?? 'org',
+    ...(args.origin ? { origin: args.origin } : {}),
   });
   return {
     sessionId: session.sessionId,
@@ -213,101 +317,74 @@ export async function ensureFactorySourceSession(
 
 export interface HydrateFactorySessionArgs {
   orgId: string;
+  modelScope: EffectiveModelScope;
+  ownerUserId: string;
   /**
-   * The factory project whose shared memory settings apply. Factory sessions
-   * never read an individual user's personal memory settings — the project's
-   * own row (or the built-in defaults) is what they run with.
+   * The model selected by the Factory scope. Without it the provider default of a connected
+   * provider is applied when the SDK mode default has no credential, else the mode default.
    */
-  factoryProjectId?: string;
-  /** The factory project's default model. Without it the session keeps the SDK's built-in mode default. */
   defaultModelId?: string;
-  /**
-   * When provided, the factory project's stored memory-settings row is
-   * applied. When omitted (or no row exists) the session is reset to the
-   * built-in memory defaults.
-   */
-  memorySettings?: MemorySettingsStorage;
 }
 
 /**
- * Apply a factory project's configuration to a freshly created session:
- * observational-memory settings, then the project's default model.
+ * Apply a factory project's main model to a session on every run.
  *
- * Both steps are best-effort. A retired model id or an unreachable settings row
- * must not sink a run that is otherwise ready — the session simply keeps the
- * default it was created with, and the reason is logged.
+ * The model switch is best-effort. A retired model id must not sink a run that
+ * is otherwise ready, and the reason is logged. Observational-memory settings are resolved from the
+ * authoritative row per invocation before memory processors run.
  */
-export async function hydrateFactorySession(session: FactorySession, args: HydrateFactorySessionArgs): Promise<void> {
+export async function hydrateFactorySession(
+  session: FactorySession,
+  args: HydrateFactorySessionArgs,
+): Promise<string | undefined> {
   // The org rung knowledge curation scopes on. Seeded first so it lands even if
   // a later best-effort step fails; an empty org marks the session unresolved.
   await seedSessionOrg(session, args.orgId);
+  await session.state.set({
+    factoryModelScope: args.modelScope,
+    factoryOwnerUserId: args.ownerUserId,
+  });
+
+  let selectedModelId = args.defaultModelId;
+  if (!selectedModelId) {
+    const modeModelId = session.mode.resolve().defaultModelId;
+    const providerModelId = await resolveTenantProviderDefaultModel(
+      { orgId: args.orgId, userId: args.ownerUserId, credentialScope: args.modelScope },
+      modeModelId,
+    ).catch(error => {
+      console.warn('[Factory Start] Failed to resolve a provider default model', {
+        error: error instanceof Error ? error.message : String(error),
+      });
+      return undefined;
+    });
+    selectedModelId = providerModelId ?? modeModelId;
+  }
+  if (!selectedModelId) return undefined;
+
+  let switched = true;
   try {
-    const record =
-      args.memorySettings && args.factoryProjectId
-        ? await args.memorySettings.get({
-            orgId: args.orgId,
-            userId: factoryMemorySettingsUserId(args.factoryProjectId),
-          })
-        : null;
-    // Without a stored row, fall back to the low-cost OM model of the factory
-    // default model's provider — a factory connected only to Anthropic should
-    // not observe with the (uncredentialed) built-in Google default.
-    const provider = args.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider ? resolveProviderOMDefault(provider, args.defaultModelId).modelId : undefined;
-    await applyStoredMemorySettings(session, record, fallbackOmModelId);
+    await session.model.switch(selectedModelId);
   } catch (error) {
-    console.warn('[Factory Start] Failed to apply observational-memory settings', {
+    switched = false;
+    console.warn('[Factory Start] Failed to apply scoped default model', {
+      modelId: selectedModelId,
       error: error instanceof Error ? error.message : String(error),
     });
   }
-  if (args.defaultModelId) {
+  // Subagents otherwise keep the server-wide settings (or the SDK's built-in
+  // default), which may name a provider this factory has no credentials for.
+  // Each role is independent, so one failure doesn't strand the others.
+  for (const agentType of ['explore', 'plan', 'execute']) {
     try {
-      await session.model.switch({ modelId: args.defaultModelId });
+      await session.subagents.model.set({ modelId: selectedModelId, agentType });
     } catch (error) {
-      console.warn('[Factory Start] Failed to apply factory default model', {
-        modelId: args.defaultModelId,
+      console.warn('[Factory Start] Failed to apply scoped default subagent model', {
+        agentType,
+        modelId: selectedModelId,
         error: error instanceof Error ? error.message : String(error),
       });
     }
   }
-}
-
-export interface RefreshFactorySessionMemorySettingsArgs {
-  orgId: string;
-  factoryProjectId: string;
-  projects: Pick<FactoryProjectsStorage, 'get'>;
-  memorySettings: Pick<MemorySettingsStorage, 'get'>;
-}
-
-/**
- * Re-apply a factory project's stored observational-memory settings to an
- * already-running session that automation is about to reuse. Session creation
- * hydrates these settings once (`hydrateFactorySession`), but a reused binding
- * keeps whatever observer/reflector models it was created with — so a project
- * whose OM models changed since would keep observing with the stale (and
- * possibly since-rejected) models. This reads the project's current row with the
- * same provider-aware fallback as initial hydration and applies it, mirroring
- * the `GET /web/config/om` refresh. Best-effort: a settings lookup failure must
- * never sink an otherwise-ready run, so it is logged and swallowed.
- */
-export async function refreshFactorySessionMemorySettings(
-  session: OMConfigurableSession,
-  args: RefreshFactorySessionMemorySettingsArgs,
-): Promise<void> {
-  try {
-    const record = await args.memorySettings.get({
-      orgId: args.orgId,
-      userId: factoryMemorySettingsUserId(args.factoryProjectId),
-    });
-    const project = await args.projects.get({ orgId: args.orgId, id: args.factoryProjectId });
-    const provider = project?.defaultModelId?.split('/')[0];
-    const fallbackOmModelId = provider
-      ? resolveProviderOMDefault(provider, project?.defaultModelId ?? undefined).modelId
-      : undefined;
-    await applyStoredMemorySettings(session, record, fallbackOmModelId);
-  } catch (error) {
-    console.warn('[Factory dispatch] Failed to reapply observational-memory settings on session reuse', {
-      error: error instanceof Error ? error.message : String(error),
-    });
-  }
+  // Callers pin this id to the thread, so only report a model the session actually runs on.
+  return switched ? selectedModelId : undefined;
 }

@@ -75,44 +75,6 @@ describe('Tools', () => {
     cleanup();
   });
 
-  it('paints the selected tool container and check cell with border-based HSL when an agentId is provided', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const container = getByTestId('tool-card-tool-checked-tool') as HTMLButtonElement;
-    const check = getByTestId('tool-card-check-tool-checked-tool') as HTMLSpanElement;
-
-    // jsdom normalizes inline color values from hsl() to rgb() for color properties.
-    expect(container.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-    expect(container.style.boxShadow).toBe('');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-    expect(container.className).not.toContain('border-accent1');
-    expect(container.className).not.toContain('ring-1 ring-accent1');
-    expect(container.className).not.toContain('focus-visible:ring');
-
-    expect(check.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-    expect(check.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-    expect(check.className).not.toContain('bg-accent1');
-  });
-
-  it('leaves unselected tile borders untouched while using agent color for focus when an agentId is provided', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const container = getByTestId('tool-card-tool-unchecked-tool') as HTMLButtonElement;
-    expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
-    expect(container.style.borderColor).toBe('');
-    expect(container.className).toContain('border-border1');
-    expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-    expect(container.className).not.toContain('focus-visible:ring');
-  });
-
   it('renders the "Show only selected" filter checkbox unchecked by default with both tool cards visible', () => {
     const { getByTestId } = render(
       <FormHarness>
@@ -178,9 +140,9 @@ describe('Tools', () => {
       </FormHarness>,
     );
 
-    const searchInput = getByTestId('tools-card-picker-search').querySelector('input');
+    const searchInput = getByTestId('tools-card-picker-search');
     expect(searchInput).toBeTruthy();
-    fireEvent.change(searchInput!, { target: { value: 'unchecked' } });
+    fireEvent.change(searchInput, { target: { value: 'unchecked' } });
 
     fireEvent.click(getByTestId('tools-only-selected-filter-checkbox'));
 
@@ -200,22 +162,6 @@ describe('Tools', () => {
     expect(checkbox.className).toContain('[&_svg]:h-2.5');
   });
 
-  it('paints the filter checkbox with the agent color only when the filter is checked', () => {
-    const { getByTestId } = render(
-      <FormHarness>
-        <Tools availableAgentTools={availableTools} />
-      </FormHarness>,
-    );
-
-    const checkbox = getByTestId('tools-only-selected-filter-checkbox') as HTMLButtonElement;
-    expect(checkbox.getAttribute('style')).toBeNull();
-
-    fireEvent.click(checkbox);
-
-    expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-    expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-  });
-
   it('renders the search input and the filter checkbox in the same flex row', () => {
     const { getByTestId } = render(
       <FormHarness>
@@ -223,10 +169,10 @@ describe('Tools', () => {
       </FormHarness>,
     );
 
-    const searchWrapper = getByTestId('tools-card-picker-search');
+    const searchField = getByTestId('tools-card-picker-search').closest('[data-slot="field"]');
     const filterLabel = getByTestId('tools-only-selected-filter');
 
-    expect(searchWrapper.parentElement).toBe(filterLabel.parentElement);
+    expect(searchField?.parentElement).toBe(filterLabel.parentElement);
     expect(filterLabel.parentElement?.className).toContain('flex');
     expect(filterLabel.parentElement?.className).toContain('justify-between');
   });
@@ -403,9 +349,9 @@ describe('Tools — toolkit filter pane', () => {
     );
 
     await findByTestId('tools-toolkit-filter-item-gmail');
-    const filterSearch = getByTestId('tools-toolkit-filter-search').querySelector('input');
+    const filterSearch = getByTestId('tools-toolkit-filter-search');
     expect(filterSearch).toBeTruthy();
-    fireEvent.change(filterSearch!, { target: { value: 'slack' } });
+    fireEvent.change(filterSearch, { target: { value: 'slack' } });
 
     await waitFor(() => expect(queryByTestId('tools-toolkit-filter-item-gmail')).toBeNull());
     expect(getByTestId('tools-toolkit-filter-item-slack')).toBeTruthy();
@@ -502,7 +448,7 @@ describe('Tools — integration rows without a connection', () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     // Stub window.open so useAuthorize's default opener resolves synchronously.
     const originalOpen = window.open;
-    window.open = openPopup as unknown as typeof window.open;
+    window.open = openPopup;
 
     try {
       const { findByTestId } = render(
@@ -528,7 +474,7 @@ describe('Tools — integration rows without a connection', () => {
   it('pins the new connection into the toolkit form field after successful OAuth when a tool is selected', async () => {
     const openPopup = vi.fn().mockReturnValue({ close: vi.fn() });
     const originalOpen = window.open;
-    window.open = openPopup as unknown as typeof window.open;
+    window.open = openPopup;
 
     // After OAuth completes the connections list must report the new active
     // account so the toolkit control pins it into the form.
@@ -552,11 +498,9 @@ describe('Tools — integration rows without a connection', () => {
       const { findByTestId, getByTestId } = render(
         <ConnectHarness
           onState={spy}
-          defaultToolProviders={
-            {
-              composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
-            } as AgentBuilderEditFormValues['toolProviders']
-          }
+          defaultToolProviders={{
+            composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
+          }}
         >
           <Tools availableAgentTools={[checkedAndUnconnected]} />
         </ConnectHarness>,
@@ -653,7 +597,7 @@ describe('Tools — toolkit row connection management', () => {
   // pins connections while a tool in the toolkit is selected in the form.
   const gmailToolSelected: AgentBuilderEditFormValues['toolProviders'] = {
     composio: { tools: { GMAIL_FETCH_EMAILS: { toolkit: 'gmail' } }, connections: {} },
-  } as AgentBuilderEditFormValues['toolProviders'];
+  };
 
   it('shows a skeleton while the connections query is loading, then resolves the control', async () => {
     let releaseConnections: () => void = () => {};

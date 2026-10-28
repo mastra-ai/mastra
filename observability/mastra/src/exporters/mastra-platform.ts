@@ -13,6 +13,7 @@ import { fetchWithRetry } from '@mastra/core/utils';
 import { AuthFailureCooldown, fetchWithAuthFailureHandling, isAuthFailureError } from './auth-failure-cooldown';
 import { BaseExporter } from './base';
 import type { BaseExporterConfig } from './base';
+import { withSpanPreviews } from './span-previews';
 
 export interface MastraPlatformExporterConfig extends BaseExporterConfig {
   maxBatchSize?: number; // Default: 1000 spans
@@ -21,6 +22,16 @@ export interface MastraPlatformExporterConfig extends BaseExporterConfig {
 
   accessToken?: string; // Mastra Observability access token (from env or config)
   projectId?: string; // Project ID for project-scoped collector routes
+  /**
+   * When false, `accessToken`, `projectId` and the traces endpoint are taken
+   * from config only and `MASTRA_PLATFORM_ACCESS_TOKEN` /
+   * `MASTRA_CLOUD_ACCESS_TOKEN` / `MASTRA_PROJECT_ID` /
+   * `MASTRA_CLOUD_TRACES_ENDPOINT` / `MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT`
+   * are ignored. Embedding hosts (e.g. Mastra Code) use this so a user
+   * project's `.env` cannot redirect the host's own telemetry.
+   * Default: true.
+   */
+  resolveFromEnv?: boolean;
   endpoint?: string; // Base observability endpoint
   tracesEndpoint?: string; // Explicit traces endpoint override
   logsEndpoint?: string; // Explicit logs endpoint override
@@ -278,11 +289,14 @@ export class MastraPlatformExporter extends BaseExporter {
       throw createInvalidProjectIdError(config.projectId);
     }
 
+    const resolveFromEnv = config.resolveFromEnv ?? true;
     const accessToken =
-      config.accessToken || process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN;
+      config.accessToken ||
+      (resolveFromEnv ? process.env.MASTRA_PLATFORM_ACCESS_TOKEN || process.env.MASTRA_CLOUD_ACCESS_TOKEN : undefined);
     // Treat an empty MASTRA_PROJECT_ID as unset so deployments that always
     // export the variable (e.g. CI templates) don't have to special-case it.
-    const envProjectId = process.env.MASTRA_PROJECT_ID === '' ? undefined : process.env.MASTRA_PROJECT_ID;
+    const envProjectId =
+      resolveFromEnv && process.env.MASTRA_PROJECT_ID !== '' ? process.env.MASTRA_PROJECT_ID : undefined;
     const rawProjectId = config.projectId ?? envProjectId;
     if (rawProjectId !== undefined && !VALID_PROJECT_ID.test(rawProjectId)) {
       throw createInvalidProjectIdError(rawProjectId);
@@ -297,7 +311,9 @@ export class MastraPlatformExporter extends BaseExporter {
     // `||` lets an empty legacy value fall through to the platform variable.
     const tracesEndpointOverride =
       config.tracesEndpoint ??
-      (process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined);
+      (resolveFromEnv
+        ? process.env.MASTRA_CLOUD_TRACES_ENDPOINT || process.env.MASTRA_PLATFORM_OBSERVABILITY_ENDPOINT || undefined
+        : undefined);
     let baseEndpoint: string | undefined;
     let tracesEndpoint: string;
 
@@ -463,7 +479,7 @@ export class MastraPlatformExporter extends BaseExporter {
 
   private formatSpan(span: AnyExportedSpan): MastraPlatformSpanRecord {
     const spanRecord: MastraPlatformSpanRecord = {
-      ...span,
+      ...withSpanPreviews(span),
       spanId: span.id,
       spanType: span.type,
       startedAt: span.startTime,

@@ -5,16 +5,22 @@
     "│   └── agent_run: \"agent run: 'validator-agent'\"",
     "│       └── model_generation: \"llm: 'mock-model-id'\"",
     "│           └── model_step: \"step: 0\"",
+    "│               ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "│               ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "│               └── model_inference: \"inference: 0\"",
     "│                   └── model_chunk: \"chunk: 'text'\"",
     "├── model_generation: \"llm: 'mock-model-id'\"",
     "│   └── model_step: \"step: 0\"",
+    "│       ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "│       ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "│       └── model_inference: \"inference: 0\"",
     "│           └── model_chunk: \"chunk: 'text'\"",
     "└── processor_run: \"output processor: summarizer\"",
     "    └── agent_run: \"agent run: 'summarizer-agent'\"",
     "        └── model_generation: \"llm: 'mock-model-id'\"",
     "            └── model_step: \"step: 0\"",
+    "                ├── processor_run: \"llm request processor: provider-history-compat\"",
+    "                ├── processor_run: \"llm request processor: unsupported-file-handler\"",
     "                └── model_inference: \"inference: 0\"",
     "                    └── model_chunk: \"chunk: 'text'\""
   ],
@@ -31,7 +37,10 @@
         "entityType": "agent",
         "entityId": "test-agent",
         "attributes": {
-          "instructions": "You are a helpful assistant"
+          "instructions": "You are a helpful assistant",
+          "model": "mock-model-id",
+          "provider": "mock-provider",
+          "completionStartTime": "<date>"
         },
         "metadata": {
           "runId": "<runId-1>",
@@ -57,6 +66,7 @@
             "entityType": "input_processor",
             "entityId": "validator",
             "attributes": {
+              "processorPhase": "input",
               "processorExecutor": "workflow",
               "processorIndex": 0
             },
@@ -107,7 +117,10 @@
                 "entityType": "agent",
                 "entityId": "validator-agent",
                 "attributes": {
-                  "instructions": "You validate input messages"
+                  "instructions": "You validate input messages",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-2>",
@@ -137,10 +150,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-1>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -196,7 +209,10 @@
                         "entityId": "validator-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-1>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -240,6 +256,96 @@
                           "span": {
                             "id": "<span-6>",
                             "traceId": "<trace-1>",
+                            "name": "llm request processor: provider-history-compat",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "input_processor",
+                            "entityId": "provider-history-compat",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You validate input messages"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Validate:   Hello! How are you?  "
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-7>",
+                            "traceId": "<trace-1>",
+                            "name": "llm request processor: unsupported-file-handler",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-5>",
+                            "entityType": "input_processor",
+                            "entityId": "unsupported-file-handler",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 2
+                            },
+                            "metadata": {
+                              "runId": "<runId-2>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You validate input messages"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Validate:   Hello! How are you?  "
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-8>",
+                            "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
@@ -253,7 +359,9 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
-                              "parameters": {},
+                              "parameters": {
+                                "maxRetries": 0
+                              },
                               "availableTools": [],
                               "toolChoice": "auto",
                               "usage": {
@@ -275,6 +383,16 @@
                               "runId": "<runId-2>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You validate input messages"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Validate:   Hello! How are you?  "
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []
@@ -283,14 +401,14 @@
                           "children": [
                             {
                               "span": {
-                                "id": "<span-7>",
+                                "id": "<span-9>",
                                 "traceId": "<trace-1>",
                                 "name": "chunk: 'text'",
                                 "type": "model_chunk",
                                 "completed": true,
                                 "isEvent": false,
                                 "isRootSpan": false,
-                                "parentId": "<span-6>",
+                                "parentId": "<span-8>",
                                 "entityType": "agent",
                                 "entityId": "validator-agent",
                                 "attributes": {
@@ -318,7 +436,7 @@
         },
         {
           "span": {
-            "id": "<span-8>",
+            "id": "<span-10>",
             "traceId": "<trace-1>",
             "name": "llm: 'mock-model-id'",
             "type": "model_generation",
@@ -333,10 +451,10 @@
               "provider": "mock-provider",
               "streaming": true,
               "parameters": {},
+              "completionStartTime": "<date>",
               "finishReason": "stop",
               "responseId": "<responseId-2>",
               "responseModel": "mock-model-id",
-              "completionStartTime": "<date>",
               "usage": {
                 "inputTokens": 15,
                 "outputTokens": 25,
@@ -380,19 +498,22 @@
           "children": [
             {
               "span": {
-                "id": "<span-9>",
+                "id": "<span-11>",
                 "traceId": "<trace-1>",
                 "name": "step: 0",
                 "type": "model_step",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-8>",
+                "parentId": "<span-10>",
                 "entityType": "agent",
                 "entityId": "test-agent",
                 "attributes": {
                   "stepIndex": 0,
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
                   "messageId": "<messageId-2>",
+                  "completionStartTime": "<date>",
                   "usage": {
                     "inputTokens": 15,
                     "outputTokens": 25,
@@ -433,14 +554,104 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-10>",
+                    "id": "<span-12>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: provider-history-compat",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "input_processor",
+                    "entityId": "provider-history-compat",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 1
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a helpful assistant"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "  Hello! How are you?  "
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-13>",
+                    "traceId": "<trace-1>",
+                    "name": "llm request processor: unsupported-file-handler",
+                    "type": "processor_run",
+                    "completed": true,
+                    "isEvent": false,
+                    "isRootSpan": false,
+                    "parentId": "<span-11>",
+                    "entityType": "input_processor",
+                    "entityId": "unsupported-file-handler",
+                    "attributes": {
+                      "processorPhase": "llmRequest",
+                      "processorExecutor": "legacy",
+                      "processorIndex": 3
+                    },
+                    "metadata": {
+                      "runId": "<runId-1>",
+                      "environment": "test"
+                    },
+                    "input": {
+                      "prompt": [
+                        {
+                          "role": "system",
+                          "content": "You are a helpful assistant"
+                        },
+                        {
+                          "role": "user",
+                          "content": [
+                            {
+                              "type": "text",
+                              "text": "  Hello! How are you?  "
+                            }
+                          ]
+                        }
+                      ],
+                      "stepNumber": 0,
+                      "retryCount": 0
+                    },
+                    "output": {
+                      "shortCircuited": false
+                    }
+                  }
+                },
+                {
+                  "span": {
+                    "id": "<span-14>",
                     "traceId": "<trace-1>",
                     "name": "inference: 0",
                     "type": "model_inference",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-9>",
+                    "parentId": "<span-11>",
                     "entityType": "agent",
                     "entityId": "test-agent",
                     "attributes": {
@@ -448,7 +659,9 @@
                       "model": "mock-model-id",
                       "provider": "mock-provider",
                       "streaming": true,
-                      "parameters": {},
+                      "parameters": {
+                        "maxRetries": 0
+                      },
                       "availableTools": [],
                       "toolChoice": "auto",
                       "usage": {
@@ -469,6 +682,16 @@
                       "runId": "<runId-1>",
                       "environment": "test"
                     },
+                    "input": [
+                      {
+                        "role": "system",
+                        "content": "You are a helpful assistant"
+                      },
+                      {
+                        "role": "user",
+                        "content": "  Hello! How are you?  "
+                      }
+                    ],
                     "output": {
                       "text": "Mock V2 stream response",
                       "toolCalls": []
@@ -477,14 +700,14 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-11>",
+                        "id": "<span-15>",
                         "traceId": "<trace-1>",
                         "name": "chunk: 'text'",
                         "type": "model_chunk",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-10>",
+                        "parentId": "<span-14>",
                         "entityType": "agent",
                         "entityId": "test-agent",
                         "attributes": {
@@ -508,7 +731,7 @@
         },
         {
           "span": {
-            "id": "<span-12>",
+            "id": "<span-16>",
             "traceId": "<trace-1>",
             "name": "output processor: summarizer",
             "type": "processor_run",
@@ -519,6 +742,7 @@
             "entityType": "output_processor",
             "entityId": "summarizer",
             "attributes": {
+              "processorPhase": "outputResult",
               "processorExecutor": "workflow",
               "processorIndex": 0
             },
@@ -562,18 +786,21 @@
           "children": [
             {
               "span": {
-                "id": "<span-13>",
+                "id": "<span-17>",
                 "traceId": "<trace-1>",
                 "name": "agent run: 'summarizer-agent'",
                 "type": "agent_run",
                 "completed": true,
                 "isEvent": false,
                 "isRootSpan": false,
-                "parentId": "<span-12>",
+                "parentId": "<span-16>",
                 "entityType": "agent",
                 "entityId": "summarizer-agent",
                 "attributes": {
-                  "instructions": "You summarize text concisely"
+                  "instructions": "You summarize text concisely",
+                  "model": "mock-model-id",
+                  "provider": "mock-provider",
+                  "completionStartTime": "<date>"
                 },
                 "metadata": {
                   "runId": "<runId-3>",
@@ -588,14 +815,14 @@
               "children": [
                 {
                   "span": {
-                    "id": "<span-14>",
+                    "id": "<span-18>",
                     "traceId": "<trace-1>",
                     "name": "llm: 'mock-model-id'",
                     "type": "model_generation",
                     "completed": true,
                     "isEvent": false,
                     "isRootSpan": false,
-                    "parentId": "<span-13>",
+                    "parentId": "<span-17>",
                     "entityType": "agent",
                     "entityId": "summarizer-agent",
                     "attributes": {
@@ -603,10 +830,10 @@
                       "provider": "mock-provider",
                       "streaming": true,
                       "parameters": {},
+                      "completionStartTime": "<date>",
                       "finishReason": "stop",
                       "responseId": "<responseId-3>",
                       "responseModel": "mock-model-id",
-                      "completionStartTime": "<date>",
                       "usage": {
                         "inputTokens": 15,
                         "outputTokens": 25,
@@ -650,19 +877,22 @@
                   "children": [
                     {
                       "span": {
-                        "id": "<span-15>",
+                        "id": "<span-19>",
                         "traceId": "<trace-1>",
                         "name": "step: 0",
                         "type": "model_step",
                         "completed": true,
                         "isEvent": false,
                         "isRootSpan": false,
-                        "parentId": "<span-14>",
+                        "parentId": "<span-18>",
                         "entityType": "agent",
                         "entityId": "summarizer-agent",
                         "attributes": {
                           "stepIndex": 0,
+                          "model": "mock-model-id",
+                          "provider": "mock-provider",
                           "messageId": "<messageId-3>",
+                          "completionStartTime": "<date>",
                           "usage": {
                             "inputTokens": 15,
                             "outputTokens": 25,
@@ -704,14 +934,104 @@
                       "children": [
                         {
                           "span": {
-                            "id": "<span-16>",
+                            "id": "<span-20>",
+                            "traceId": "<trace-1>",
+                            "name": "llm request processor: provider-history-compat",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-19>",
+                            "entityType": "input_processor",
+                            "entityId": "provider-history-compat",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 0
+                            },
+                            "metadata": {
+                              "runId": "<runId-3>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You summarize text concisely"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Summarize: Mock V2 stream response"
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-21>",
+                            "traceId": "<trace-1>",
+                            "name": "llm request processor: unsupported-file-handler",
+                            "type": "processor_run",
+                            "completed": true,
+                            "isEvent": false,
+                            "isRootSpan": false,
+                            "parentId": "<span-19>",
+                            "entityType": "input_processor",
+                            "entityId": "unsupported-file-handler",
+                            "attributes": {
+                              "processorPhase": "llmRequest",
+                              "processorExecutor": "legacy",
+                              "processorIndex": 2
+                            },
+                            "metadata": {
+                              "runId": "<runId-3>",
+                              "environment": "test"
+                            },
+                            "input": {
+                              "prompt": [
+                                {
+                                  "role": "system",
+                                  "content": "You summarize text concisely"
+                                },
+                                {
+                                  "role": "user",
+                                  "content": [
+                                    {
+                                      "type": "text",
+                                      "text": "Summarize: Mock V2 stream response"
+                                    }
+                                  ]
+                                }
+                              ],
+                              "stepNumber": 0,
+                              "retryCount": 0
+                            },
+                            "output": {
+                              "shortCircuited": false
+                            }
+                          }
+                        },
+                        {
+                          "span": {
+                            "id": "<span-22>",
                             "traceId": "<trace-1>",
                             "name": "inference: 0",
                             "type": "model_inference",
                             "completed": true,
                             "isEvent": false,
                             "isRootSpan": false,
-                            "parentId": "<span-15>",
+                            "parentId": "<span-19>",
                             "entityType": "agent",
                             "entityId": "summarizer-agent",
                             "attributes": {
@@ -719,7 +1039,9 @@
                               "model": "mock-model-id",
                               "provider": "mock-provider",
                               "streaming": true,
-                              "parameters": {},
+                              "parameters": {
+                                "maxRetries": 0
+                              },
                               "availableTools": [],
                               "toolChoice": "auto",
                               "usage": {
@@ -741,6 +1063,16 @@
                               "runId": "<runId-3>",
                               "environment": "test"
                             },
+                            "input": [
+                              {
+                                "role": "system",
+                                "content": "You summarize text concisely"
+                              },
+                              {
+                                "role": "user",
+                                "content": "Summarize: Mock V2 stream response"
+                              }
+                            ],
                             "output": {
                               "text": "Mock V2 generate response",
                               "toolCalls": []
@@ -749,14 +1081,14 @@
                           "children": [
                             {
                               "span": {
-                                "id": "<span-17>",
+                                "id": "<span-23>",
                                 "traceId": "<trace-1>",
                                 "name": "chunk: 'text'",
                                 "type": "model_chunk",
                                 "completed": true,
                                 "isEvent": false,
                                 "isRootSpan": false,
-                                "parentId": "<span-16>",
+                                "parentId": "<span-22>",
                                 "entityType": "agent",
                                 "entityId": "summarizer-agent",
                                 "attributes": {

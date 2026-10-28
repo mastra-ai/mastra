@@ -1,7 +1,8 @@
-import type { GetScoresScorers_Response, GetSystemPackagesResponse, MastraClient } from '@mastra/client-js';
+import type { GetObservabilityCapabilitiesResponse, GetScoresScorers_Response, MastraClient } from '@mastra/client-js';
 import type { ListScoresResponse, ScoreRowData } from '@mastra/core/evals';
-import { SpanType } from '@mastra/core/observability';
+import { EntityType, SpanType } from '@mastra/core/observability';
 import { TraceStatus } from '@mastra/core/storage';
+import { traceQueryCapabilities } from './trace-query';
 
 type ListTracesResponse = Awaited<ReturnType<MastraClient['listTraces']>>;
 type ListBranchesResponse = Awaited<ReturnType<MastraClient['listBranches']>>;
@@ -10,23 +11,11 @@ type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
 type GetBranchResponse = Awaited<ReturnType<MastraClient['getBranch']>>;
 type ListFeedbackResponse = Awaited<ReturnType<MastraClient['listFeedback']>>;
 
-const baseSystemPackages: GetSystemPackagesResponse = {
-  packages: [],
-  isDev: false,
-  cmsEnabled: false,
-  observabilityEnabled: true,
-};
+export const metricsCapableCapabilities: GetObservabilityCapabilitiesResponse = traceQueryCapabilities;
 
-export const metricsCapableSystemPackages: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
-  observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: true, logs: true },
-};
-
-export const metricsUnavailableSystemPackages: GetSystemPackagesResponse = {
-  ...baseSystemPackages,
-  observabilityStorageType: 'ObservabilityStoragePostgresVNext',
-  observabilityStorageCapabilities: { metrics: false, logs: true },
+export const metricsUnavailableCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, metrics: false },
 };
 
 const trace = {
@@ -34,6 +23,7 @@ const trace = {
   spanId: 'span-a',
   name: 'Studio preview agent',
   spanType: SpanType.AGENT_RUN,
+  entityType: EntityType.AGENT,
   isEvent: false,
   startedAt: new Date('2026-07-31T12:00:00.000Z'),
   endedAt: new Date('2026-07-31T12:00:01.000Z'),
@@ -76,6 +66,23 @@ export const traceUsageBreakdown: MetricBreakdownResponse = {
 export const traceSpans: GetTraceResponse = {
   traceId: 'trace-a',
   spans: [{ ...trace, parentSpanId: null }],
+};
+
+/** A trace whose child span carries a term only in its `input` payload, never in a name. */
+export const traceSpansWithPayload: GetTraceResponse = {
+  traceId: 'trace-a',
+  spans: [
+    { ...trace, parentSpanId: null },
+    {
+      ...trace,
+      spanId: 'span-tool',
+      parentSpanId: 'span-a',
+      name: 'weather tool',
+      spanType: SpanType.TOOL_CALL,
+      input: { city: 'zanzibar-payload-term' },
+    },
+    { ...trace, spanId: 'span-llm', parentSpanId: 'span-a', name: 'llm call', spanType: SpanType.MODEL_GENERATION },
+  ],
 };
 
 /** An agent trace that belongs to a memory thread: qualifies for the Messages column. */
@@ -140,3 +147,4 @@ export const emptyTags: Awaited<ReturnType<MastraClient['getTags']>> = { tags: [
 export const emptyEntityNames: Awaited<ReturnType<MastraClient['getEntityNames']>> = { entityNames: [] };
 export const emptyServiceNames: Awaited<ReturnType<MastraClient['getServiceNames']>> = { serviceNames: [] };
 export const emptyEnvironments: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: [] };
+export const environmentsWithProd: Awaited<ReturnType<MastraClient['getEnvironments']>> = { environments: ['prod'] };

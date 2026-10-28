@@ -1,5 +1,5 @@
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
 import { RequestContext } from '@mastra/core/request-context';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
 import { describe, expect, it, vi } from 'vitest';
 import { z } from 'zod';
 

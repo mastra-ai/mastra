@@ -2,8 +2,24 @@ import type { RequestContext } from '@mastra/core/di';
 import { Run } from '@mastra/core/workflows';
 import type { Step, WorkflowResult, WorkflowRunStartOptions } from '@mastra/core/workflows';
 import type { Client } from '@temporalio/client';
+import type { WorkflowExecutionResult } from './transforms/temporal-workflow-runtime';
 import type { TemporalEngineType } from './types';
 import { toWorkflowType } from './utils';
+
+// Builds Mastra step records from the Temporal result. Iterates `stepMeta` rather than `steps`
+// because a step that returned undefined has no key in `steps` once serialized. A result without
+// `stepMeta` came from a Worker that predates it, so `steps` stays empty instead of guessing times.
+function toStepResults(input: unknown, { steps, stepMeta }: WorkflowExecutionResult): Record<string, unknown> {
+  if (!stepMeta) {
+    return {};
+  }
+
+  const records: Record<string, unknown> = { input };
+  for (const [stepId, times] of Object.entries(stepMeta)) {
+    records[stepId] = { status: 'success', output: steps[stepId], ...times };
+  }
+  return records;
+}
 
 type TemporalRunStartArgs<TState, TInput, TRequestContext> = {
   inputData?: TInput;
@@ -61,17 +77,18 @@ export class TemporalRun<
             outputOptions: args.outputOptions,
             tracingOptions: args.tracingOptions,
             perStep: args.perStep,
+            recordStepMeta: true,
           },
         ],
       });
-      const result = await handle.result();
+      const result = (await handle.result()) as WorkflowExecutionResult;
 
       return {
         status: 'success',
         input: input as TInput,
-        result: result as TOutput,
+        result: result.result as TOutput,
         state: initialState,
-        steps: {},
+        steps: toStepResults(input, result),
       } as WorkflowResult<TState, TInput, TOutput, TSteps>;
     } catch (error) {
       return {
@@ -87,6 +104,48 @@ export class TemporalRun<
   async cancel() {
     await this.client.workflow.getHandle(this.runId).cancel();
     await super.cancel();
+  }
+
+  private unsupported(method: string): never {
+    throw new Error(`@mastra/temporal does not support ${method}() yet. Use start() or startAsync() instead.`);
+  }
+
+  override stream(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['stream']>
+  ): never {
+    return this.unsupported('stream');
+  }
+
+  override streamLegacy(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['streamLegacy']>
+  ): never {
+    return this.unsupported('streamLegacy');
+  }
+
+  override resumeStream(..._args: unknown[]): never {
+    return this.unsupported('resumeStream');
+  }
+
+  override resume(..._args: unknown[]): never {
+    return this.unsupported('resume');
+  }
+
+  override resumeAsync(..._args: unknown[]): never {
+    return this.unsupported('resumeAsync');
+  }
+
+  override restart(
+    ..._args: Parameters<Run<TemporalEngineType, TSteps, TState, TInput, TOutput, TRequestContext>['restart']>
+  ): never {
+    return this.unsupported('restart');
+  }
+
+  override timeTravel(..._args: unknown[]): never {
+    return this.unsupported('timeTravel');
+  }
+
+  override timeTravelStream(..._args: unknown[]): never {
+    return this.unsupported('timeTravelStream');
   }
 
   async startAsync(args: TemporalRunStartArgs<TState, TInput, TRequestContext> = {}) {

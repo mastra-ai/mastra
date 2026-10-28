@@ -1,3 +1,4 @@
+import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
@@ -76,6 +77,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
     };
     pubsub?: PubSub; // Not used - evented engine uses this.mastra.pubsub directly
     requestContext: RequestContext;
+    actor?: ActorSignal;
     retryConfig?: {
       attempts?: number;
       delay?: number;
@@ -105,8 +107,19 @@ export class EventedExecutionEngine extends ExecutionEngine {
     // subscriptions the run needs to make progress.
     const releaseTracking = this.mastra?.__trackEventedRun(resultPromise) ?? (() => {});
 
+    // Resolved up front: a finishing run unregisters its run-scoped workflow.
+    // A workflow Mastra can't resolve sets no such option.
+    let isForeignExecution: ((eventRequestContext: unknown, requestContext: RequestContext) => boolean) | undefined;
+    try {
+      isForeignExecution = this.resolveWorkflow(params.workflowId, params.runId)?.options?.isForeignExecution;
+    } catch {
+      isForeignExecution = undefined;
+    }
+
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
-      if (event.runId !== params.runId) {
+      // Another execution of this run (one that lost it to recover(), say) still
+      // publishes its finish under the same runId; it isn't this caller's result.
+      if (event.runId !== params.runId || isForeignExecution?.(event.data?.requestContext, params.requestContext)) {
         await ack?.();
         return;
       }
@@ -127,7 +140,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
 
     // AWAIT subscription first - ensures listener is registered before any events fire
     try {
-      await pubsub.subscribe('workflows-finish', finishCb);
+      // Live-tail: persistent pubsubs replay retained events from 'earliest', which
+      // would hand this waiter stale finish events (e.g. this run's own prior suspend).
+      // Safe because we subscribe before publishing the start/resume event below.
+      await pubsub.subscribe('workflows-finish', finishCb, { startFrom: 'latest' });
     } catch (err) {
       releaseTracking();
       this.mastra?.getLogger()?.error('Failed to subscribe to workflows-finish:', err);
@@ -155,6 +171,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             prevResult: { status: 'success', output: prevResult?.payload },
             resumeData: params.resume.resumePayload,
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             initialState: resumeState,
@@ -180,14 +197,23 @@ export class EventedExecutionEngine extends ExecutionEngine {
             timeTravel: params.timeTravel,
             prevResult: { status: 'success', output: prevResult?.payload },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             state: params.timeTravel.state,
           },
         });
       } else if (params.restart) {
+        // A restart publishes an event that a worker has to consume. Unlike the
+        // durable-agent recovery path (`DurableAgent.recover()` calls
+        // `ensureEngineWorkersStarted()` first) this path never started them, so
+        // a restart issued before `startWorkers()` was published to no one: the
+        // run stalled forever with no error and no rejection. Starting them here
+        // is a no-op when they are already running or are disabled.
+        await this.mastra?.__ensureExecutionWorkersStarted();
         const prevStepId = getStepId(this.resolveWorkflow(params.workflowId, params.runId), params.restart.activePaths);
-        const prevResult = params.restart.stepResults[prevStepId ?? 'input'];
+        const prevResult =
+          params.restart.stepResults[params.restart.isPreFirstStepRestart ? 'input' : (prevStepId ?? 'input')];
         await pubsub.publish('workflows', {
           type: 'workflow.start',
           runId: params.runId,
@@ -197,8 +223,12 @@ export class EventedExecutionEngine extends ExecutionEngine {
             executionPath: params.restart.activePaths,
             stepResults: params.restart.stepResults,
             restart: params.restart,
-            prevResult: { status: 'success', output: prevResult?.payload },
+            prevResult: {
+              status: 'success',
+              output: params.restart.isPreFirstStepRestart ? prevResult : prevResult?.payload,
+            },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             state: params.restart.state,
@@ -213,6 +243,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
             runId: params.runId,
             prevResult: { status: 'success', output: params.input },
             requestContext: params.requestContext.toJSON(),
+            actor: params.actor,
             format: params.format,
             perStep: params.perStep,
             initialState: params.initialState,

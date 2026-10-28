@@ -1,9 +1,3 @@
-/**
- * Regression coverage for the ThreadPage loading shell: while an uncached
- * user-session thread resolves, the app frame (sidebar + header) must stay
- * mounted with a centered spinner in the main slot only — clicking around the
- * sidebar must never blank the whole shell (the old early-return behavior).
- */
 import type { AgentControllerThreadInfo, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -11,7 +5,7 @@ import { createMemoryRouter, RouterProvider } from 'react-router';
 import { describe, expect, it, vi } from 'vitest';
 
 import { server } from '../../../../e2e/ui/msw-server';
-import { renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
+import { findPageHeader, renderWithProviders, TEST_BASE_URL } from '../../../../e2e/ui/render';
 import { createAppRoutes } from '../../router';
 import { assistantOnlyThreadMessages, threadRailMessagesWithEcho } from './fixtures/thread-rail';
 
@@ -44,11 +38,6 @@ function deferred() {
   return { promise, resolve };
 }
 
-/**
- * Stubs the whole network surface of the user-session thread route, gating
- * only `/web/user-sessions/:sessionId` (the fetch that used to unmount the
- * shell while pending).
- */
 function stubThreadRoute({
   initialThreadId = SESSION_ID,
   threads = [],
@@ -67,8 +56,8 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/auth/me`, () =>
       HttpResponse.json({ authenticated: true, authEnabled: true, user: { userId: 'user-1' } }),
     ),
-    http.get(`${TEST_BASE_URL}/web/config/model-packs`, () =>
-      HttpResponse.json({ packs: [], activePackId: null, sessionPackId: null }),
+    http.get(`${TEST_BASE_URL}/web/config/default-model`, () =>
+      HttpResponse.json({ modelId: null, thinkingLevel: null }),
     ),
     http.get(`${TEST_BASE_URL}/web/factory/projects`, () =>
       HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme Factory' }] }),
@@ -94,16 +83,14 @@ function stubThreadRoute({
     http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/work-items`, () =>
       HttpResponse.json({ workItems: [] }),
     ),
-    http.get(`${TEST_BASE_URL}/web/github/projects/${REPO_ID}/sessions`, () =>
+    http.get(`${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/sessions`, () =>
       HttpResponse.json({ sessions: [userSession] }),
     ),
     http.get(`${TEST_BASE_URL}/web/github/subscriptions`, () => HttpResponse.json({ subscriptions: [] })),
-    // The gated fetch: the user-session lookup that resolves the workspace.
     http.get(`${TEST_BASE_URL}/web/user-sessions/${SESSION_ID}`, async () => {
       await sessionGate.promise;
       return HttpResponse.json({ session: userSession });
     }),
-    // Agent-controller session surface mounted once the session resolves.
     http.post(`${AC}/sessions`, () =>
       HttpResponse.json({ controllerId: 'code', resourceId: SESSION_ID, threadId: activeThreadId }),
     ),
@@ -139,8 +126,6 @@ function stubThreadRoute({
       await messagesGate.promise;
       return HttpResponse.json({ messages });
     }),
-    http.get(`${AC}/modes`, () => HttpResponse.json({ modes: [] })),
-    // Right workspace-files panel, which appears once workspacePath resolves.
     http.get(`${TEST_BASE_URL}/web/workspace/rendered/list`, () =>
       HttpResponse.json({ workspacePath: `/ws/${SESSION_ID}`, root: '.artifacts', rootPath: '', entries: [] }),
     ),
@@ -162,20 +147,15 @@ describe('ThreadPage loading shell', () => {
     messagesGate.resolve();
     renderThreadRoute();
 
-    // Pending phase: the shell is up — sidebar navigation renders alongside
-    // the loading spinner instead of a bare full-page placeholder.
     expect(await screen.findByLabelText('Loading session')).toBeInTheDocument();
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
-    expect(screen.getByRole('button', { name: 'New user session' })).toBeInTheDocument();
-    // The thread chrome itself is not mounted yet.
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'New session' })).toBeInTheDocument();
     expect(screen.queryByRole('region', { name: 'Thread composer' })).not.toBeInTheDocument();
 
-    // Resolved phase: spinner swaps for the thread main content; the sidebar
-    // never unmounted.
     sessionGate.resolve();
     expect(await screen.findByRole('region', { name: 'Thread composer' })).toBeInTheDocument();
     await waitFor(() => expect(screen.queryByLabelText('Loading session')).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'User sessions' })).toBeInTheDocument();
+    expect(screen.getByRole('region', { name: 'Sessions' })).toBeInTheDocument();
   });
 
   it('keeps the session header and its workspace toggle mounted while thread messages load', async () => {
@@ -183,17 +163,13 @@ describe('ThreadPage loading shell', () => {
     renderThreadRoute();
     sessionGate.resolve();
 
-    const header = await screen.findByRole('region', { name: 'Factory session' });
-    // The messages-loading window is now covered by the session-prepare step
-    // loader (with "Loading messages" as its active tail step) rather than
-    // the old skeleton bars — keeps the composer's spinning ring meaningful
-    // across the whole preparing window.
+    const header = await findPageHeader();
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(within(header).getByRole('button', { name: 'Workspace files' })).toBeInTheDocument();
 
     messagesGate.resolve();
     await waitFor(() => expect(screen.queryByRole('status', { name: 'Preparing session' })).not.toBeInTheDocument());
-    expect(screen.getByRole('region', { name: 'Factory session' })).toBeInTheDocument();
+    expect(await findPageHeader()).toBeInTheDocument();
   });
 
   it('reveals loaded history without briefly rendering the empty thread state', async () => {
@@ -238,8 +214,6 @@ describe('ThreadPage loading shell', () => {
     });
     renderThreadRoute(`/factories/${FACTORY_ID}/workspaces/${SESSION_ID}/threads/${ROUTE_THREAD_ID}`);
 
-    // Thread-switch is gated on `sandboxReady`, which is session metadata
-    // resolving — so hold the session query to hold the switch.
     expect(await screen.findByRole('status', { name: 'Preparing session' })).toBeInTheDocument();
     expect(onSwitchThread).not.toHaveBeenCalled();
 

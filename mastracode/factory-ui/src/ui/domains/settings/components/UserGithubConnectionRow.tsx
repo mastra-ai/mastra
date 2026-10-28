@@ -1,12 +1,12 @@
 import { Button } from '@mastra/playground-ui/components/Button';
-import { GithubIcon } from '@mastra/playground-ui/icons/GithubIcon';
+import { Link2 } from 'lucide-react';
 
 import { useApiConfig } from '../../../../api/config';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { connectUserGithub } from '../../workspaces/services/github';
-import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
+import { SettingsRow } from '@mastra/playground-ui/new/settings';
 
-import { SettingsSubsection } from './SettingsSubsection';
+import { IntegrationLabel } from './IntegrationLabel';
 
 export function UserGithubConnectionRow() {
   const { baseUrl } = useApiConfig();
@@ -16,34 +16,23 @@ export function UserGithubConnectionRow() {
 
   if (status.userConnected) {
     return (
-      <SettingsSubsection scope="personal" title="GitHub account">
-        <SettingsContainer>
-          <SettingsRow
-            label={
-              <span className="flex items-center gap-2">
-                <GithubIcon className="text-icon3 size-4 shrink-0" />
-                {`@${status.userGithubUsername ?? 'unknown'}`}
-              </span>
-            }
-            description="Issues and PRs you create are authored as you."
-          />
-        </SettingsContainer>
-      </SettingsSubsection>
+      <SettingsRow
+        label={<IntegrationLabel provider="github" name="GitHub" />}
+        description={`@${status.userGithubUsername ?? 'unknown'}`}
+      />
     );
   }
 
   if (status.userConnected !== false) return undefined;
 
   return (
-    <SettingsSubsection scope="personal" title="GitHub account">
-      <SettingsContainer>
-        <SettingsRow label="Not connected" description="Connect it so issues and PRs you create are authored as you.">
-          <Button size="xs" variant="outline" onClick={() => connectUserGithub(baseUrl)}>
-            <GithubIcon className="size-3.5" />
-            Connect GitHub
-          </Button>
-        </SettingsRow>
-      </SettingsContainer>
-    </SettingsSubsection>
+    <SettingsRow
+      label={<IntegrationLabel provider="github" name="GitHub" />}
+      description="Connect it so issues and PRs you create are authored as you."
+    >
+      <Button size="sm" icon={<Link2 />} onClick={() => connectUserGithub(baseUrl)}>
+        Connect GitHub
+      </Button>
+    </SettingsRow>
   );
 }

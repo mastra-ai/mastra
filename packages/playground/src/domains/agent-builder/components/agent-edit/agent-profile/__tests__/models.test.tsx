@@ -18,6 +18,7 @@ import { AgentColorProvider } from '../../../../contexts/agent-color-context';
 import type { AgentBuilderEditFormValues } from '../../../../schemas';
 import { Models } from '../models';
 import { buildAvailableModels, buildBuilderSettings } from './fixtures/builder';
+import { datedModels } from '@/domains/llm/__tests__/fixtures/models';
 import { server } from '@/test/msw-server';
 
 const BASE_URL = 'http://localhost:4111';
@@ -72,58 +73,31 @@ describe('Models', () => {
     cleanup();
   });
 
-  describe('when an agentId is provided', () => {
-    it('paints the selected model container with border-based HSL and no accent classes', async () => {
+  describe('when the catalog contains release dates', () => {
+    it('shows the newest model cards first within the provider', async () => {
+      server.use(http.get(`${BASE_URL}/api/editor/builder/models/available`, () => HttpResponse.json(datedModels)));
       const { getByTestId } = await renderModels();
-
-      const container = getByTestId('model-card-openai-gpt-4o') as HTMLButtonElement;
-      expect(container.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(container.style.boxShadow).toBe('');
-      expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-      expect(container.className).not.toContain('border-accent1');
-      expect(container.className).not.toContain('ring-1 ring-accent1');
-      expect(container.className).not.toContain('focus-visible:ring');
-    });
-
-    it('paints the selected model check cell with border-based HSL', async () => {
-      const { getByTestId } = await renderModels();
-
-      const check = getByTestId('model-card-check-openai-gpt-4o') as HTMLSpanElement;
-      expect(check.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-      expect(check.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(check.className).not.toContain('bg-accent1');
-    });
-
-    it('leaves unselected model borders untouched while using agent color for focus', async () => {
-      const { getByTestId } = await renderModels();
-
-      const container = getByTestId('model-card-anthropic-claude-3-5-sonnet') as HTMLButtonElement;
-      expect(container.style.getPropertyValue('--agent-color-bg')).toMatch(/^hsl\(/);
-      expect(container.style.borderColor).toBe('');
-      expect(container.className).toContain('border-border1');
-      expect(container.className).toContain('focus-visible:!border-[var(--agent-color-bg)]');
-      expect(container.className).not.toContain('focus-visible:ring');
-    });
-
-    it('paints the checked provider checkbox with agent color', async () => {
-      const { getByTestId } = await renderModels();
-
-      const checkbox = getByTestId('models-provider-filter-checkbox-openai') as HTMLButtonElement;
-      expect(checkbox.style.backgroundColor).toMatch(/^(rgb|hsl)\(/);
-      expect(checkbox.style.borderColor).toMatch(/^(rgb|hsl)\(/);
-      expect(checkbox.className).not.toContain('bg-accent1');
+      const cards = getByTestId('model-provider-section-openai').querySelectorAll(
+        '[data-testid^="model-card-openai-"]',
+      );
+      expect(Array.from(cards, card => card.getAttribute('data-testid'))).toEqual([
+        'model-card-openai-gpt-5',
+        'model-card-openai-gpt-4.1',
+        'model-card-openai-gpt-4o',
+        'model-card-openai-custom-a',
+        'model-card-openai-custom-z',
+      ]);
     });
   });
 
   describe('when rendering the model grid', () => {
-    it('renders an uppercase text-neutral3 section title per provider', async () => {
+    it('renders an uppercase section title per provider', async () => {
       const { getByTestId } = await renderModels();
 
       const openaiTitle = getByTestId('model-provider-section-title-openai');
       expect(openaiTitle.textContent).toBe('OpenAI');
-      expect(openaiTitle.className).toContain('text-neutral3');
       expect(openaiTitle.className).toContain('uppercase');
-      expect(openaiTitle.className).toContain('text-ui-sm');
+      expect(openaiTitle.className).toContain('text-eyebrow');
 
       const anthropicTitle = getByTestId('model-provider-section-title-anthropic');
       expect(anthropicTitle.textContent).toBe('Anthropic');
@@ -202,9 +176,9 @@ describe('Models', () => {
     it('the left-pane search filters the provider checklist without affecting the model grid', async () => {
       const { getByTestId, queryByTestId } = await renderModels();
 
-      const filterSearch = getByTestId('models-provider-filter-search').querySelector('input');
+      const filterSearch = getByTestId('models-provider-filter-search');
       expect(filterSearch).toBeTruthy();
-      fireEvent.change(filterSearch!, { target: { value: 'anthropic' } });
+      fireEvent.change(filterSearch, { target: { value: 'anthropic' } });
 
       await waitFor(() => expect(queryByTestId('models-provider-filter-item-openai')).toBeNull());
       expect(queryByTestId('models-provider-filter-item-anthropic')).toBeTruthy();
@@ -219,9 +193,9 @@ describe('Models', () => {
 
       fireEvent.click(getByTestId('models-provider-filter-checkbox-anthropic'));
 
-      const searchInput = getByTestId('model-card-picker-search').querySelector('input');
+      const searchInput = getByTestId('model-card-picker-search');
       expect(searchInput).toBeTruthy();
-      fireEvent.change(searchInput!, { target: { value: 'claude' } });
+      fireEvent.change(searchInput, { target: { value: 'claude' } });
 
       await findByText('No models match "claude"');
     });

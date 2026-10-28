@@ -1,6 +1,6 @@
 import * as matchers from '@testing-library/jest-dom/matchers';
 
-import { cleanup } from '@testing-library/react';
+import { cleanup, configure } from '@testing-library/react';
 import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 
 // Extend Vitest's `expect` with jest-dom matchers explicitly. We avoid the
@@ -8,6 +8,10 @@ import { expect, afterAll, afterEach, beforeAll } from 'vitest';
 // nested store layout, that module re-imports `vitest` from its own install
 // path and fails to resolve it.
 expect.extend(matchers);
+
+// Match the other UI suites: cold route imports and MSW round-trips can exceed
+// Testing Library's default one-second DOM wait.
+configure({ asyncUtilTimeout: 3_000 });
 
 import { server } from './msw-server';
 
@@ -25,6 +29,9 @@ afterEach(async () => {
   cleanup();
   await new Promise(resolve => setTimeout(resolve, 0));
   server.resetHandlers();
+  // Remembered UI state (e.g. board filters) must not carry into the next case.
+  localStorage.clear();
+  sessionStorage.clear();
 });
 
 afterAll(() => server.close());
@@ -40,7 +47,7 @@ if (!globalThis.localStorage) {
     key: index => Array.from(store.keys())[index] ?? null,
     removeItem: key => store.delete(key),
     setItem: (key, value) => store.set(key, value),
-  } as Storage;
+  };
 }
 
 // jsdom polyfills used by the settings UI.
@@ -85,6 +92,10 @@ if (!globalThis.IntersectionObserver) {
 
 if (!Element.prototype.scrollTo) {
   Element.prototype.scrollTo = () => {};
+}
+
+if (!Element.prototype.scrollIntoView) {
+  Element.prototype.scrollIntoView = () => {};
 }
 
 // jsdom's window.scrollTo only logs "Not implemented"; <ScrollRestoration /> calls it on every navigation.

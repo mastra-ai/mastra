@@ -1,5 +1,5 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent/message-list';
-import { act, cleanup, render } from '@testing-library/react';
+import { act, cleanup, fireEvent, render } from '@testing-library/react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { MessageList } from '../message-list';
@@ -15,9 +15,9 @@ const buildAssistantMessage = (parts: MastraMessagePart[]): MastraDBMessage =>
     },
   }) as unknown as MastraDBMessage;
 
-const buildUserMessage = (text: string): MastraDBMessage =>
+const buildUserMessage = (text: string, id = 'user-1'): MastraDBMessage =>
   ({
-    id: 'user-1',
+    id,
     role: 'user',
     createdAt: new Date(),
     content: {
@@ -32,7 +32,7 @@ describe('MessageList pending indicator', () => {
   });
 
   it('shows the pending indicator while running with no messages', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={[]} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -51,18 +51,18 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
   it('shows the pending indicator after a user message while waiting for the assistant', () => {
     const messages: MastraDBMessage[] = [buildUserMessage('hello')];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
   it('does not show the pending indicator while the initial skeleton is rendered', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isRunning={true} isLoading={true} />);
+    const { queryByTestId } = render(<MessageList messages={[]} isRunning isLoading />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 
@@ -82,7 +82,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -102,7 +102,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).not.toBeNull();
   });
 
@@ -118,7 +118,7 @@ describe('MessageList pending indicator', () => {
         } as unknown as MastraMessagePart,
       ]),
     ];
-    const { queryByTestId } = render(<MessageList messages={messages} isRunning={true} />);
+    const { queryByTestId } = render(<MessageList messages={messages} isRunning />);
     expect(queryByTestId('agent-builder-chat-pending')).toBeNull();
   });
 });
@@ -134,7 +134,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('does not render the skeleton during the 300ms grace period', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
     expect(queryByTestId('msg-skeleton')).toBeNull();
 
     act(() => {
@@ -144,7 +144,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('renders the skeleton after the 300ms grace period elapses', () => {
-    const { queryByTestId } = render(<MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />);
+    const { queryByTestId } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
 
     act(() => {
       vi.advanceTimersByTime(300);
@@ -153,9 +153,7 @@ describe('MessageList deferred skeleton', () => {
   });
 
   it('never shows the skeleton if data resolves within the grace period', () => {
-    const { queryByTestId, rerender } = render(
-      <MessageList messages={[]} isLoading={true} skeletonTestId="msg-skeleton" />,
-    );
+    const { queryByTestId, rerender } = render(<MessageList messages={[]} isLoading skeletonTestId="msg-skeleton" />);
 
     act(() => {
       vi.advanceTimersByTime(150);
@@ -168,5 +166,152 @@ describe('MessageList deferred skeleton', () => {
       vi.advanceTimersByTime(500);
     });
     expect(queryByTestId('msg-skeleton')).toBeNull();
+  });
+});
+
+describe('MessageList history pagination', () => {
+  afterEach(() => {
+    cleanup();
+  });
+
+  const mockViewport = (el: HTMLElement, scrollHeight: number) => {
+    Object.defineProperty(el, 'scrollHeight', { configurable: true, value: scrollHeight });
+    el.scrollTo = vi.fn();
+  };
+
+  describe('when the list settles at the top on mount without the reader scrolling up', () => {
+    it('does not request the older page', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      list.scrollTop = 20;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the older page request settles without changing the first message', () => {
+    it('resumes following the tail on the next appended message', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId, rerender } = render(
+        <MessageList
+          messages={[buildUserMessage('a', 'a')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      rerender(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} isLoadingPrevious />,
+      );
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+      (list.scrollTo as ReturnType<typeof vi.fn>).mockClear();
+
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]}
+          onLoadPrevious={onLoadPrevious}
+          isLoadingPrevious={false}
+        />,
+      );
+
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' });
+    });
+  });
+
+  describe('when the reader scrolls to the top', () => {
+    it('calls onLoadPrevious once per trip to the top', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      list.scrollTop = 10;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+
+      expect(onLoadPrevious).toHaveBeenCalledTimes(2);
+    });
+
+    it('renders the loading indicator above the messages while the older page is in flight', () => {
+      const { getByTestId } = render(
+        <MessageList messages={[buildUserMessage('a', 'a')]} onLoadPrevious={vi.fn()} isLoadingPrevious />,
+      );
+      expect(getByTestId('agent-builder-chat-loading-previous')).toBeTruthy();
+    });
+  });
+
+  describe('when an older page is prepended after scrolling to the top', () => {
+    it('keeps the reader anchored on the previously visible message instead of jumping to the bottom', () => {
+      const onLoadPrevious = vi.fn();
+      const { getByTestId, rerender } = render(
+        <MessageList messages={[buildUserMessage('b', 'b')]} onLoadPrevious={onLoadPrevious} />,
+      );
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+      (list.scrollTo as ReturnType<typeof vi.fn>).mockClear();
+
+      list.scrollTop = 300;
+      fireEvent.scroll(list);
+      list.scrollTop = 0;
+      fireEvent.scroll(list);
+      expect(onLoadPrevious).toHaveBeenCalledTimes(1);
+
+      mockViewport(list, 1600);
+      rerender(
+        <MessageList
+          messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]}
+          onLoadPrevious={onLoadPrevious}
+        />,
+      );
+
+      expect(list.scrollTop).toBe(600);
+      expect(list.scrollTo).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when a new message is appended at the tail', () => {
+    it('scrolls to the bottom', () => {
+      const { getByTestId, rerender } = render(<MessageList messages={[buildUserMessage('a', 'a')]} />);
+      const list = getByTestId('agent-builder-message-list');
+      mockViewport(list, 1000);
+
+      rerender(<MessageList messages={[buildUserMessage('a', 'a'), buildUserMessage('b', 'b')]} />);
+
+      expect(list.scrollTo).toHaveBeenCalledWith({ top: 1000, behavior: 'smooth' });
+    });
   });
 });

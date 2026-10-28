@@ -1,5 +1,7 @@
 // @vitest-environment jsdom
-import { cleanup, fireEvent, render, screen } from '@testing-library/react';
+import { act, cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
+import userEvent from '@testing-library/user-event';
+import type { UserEvent } from '@testing-library/user-event';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { DropdownMenu } from './dropdown-menu';
@@ -25,7 +27,7 @@ describe('DropdownMenu.Trigger', () => {
   it('forwards variant and size to the Button', () => {
     render(
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" size="xs" className="tabular-nums">
+        <DropdownMenu.Trigger variant="ghost" size="sm" className="tabular-nums">
           Open
         </DropdownMenu.Trigger>
       </DropdownMenu>,
@@ -39,25 +41,25 @@ describe('DropdownMenu.Trigger', () => {
   it('lets a custom render element own the look', () => {
     render(
       <DropdownMenu>
-        <DropdownMenu.Trigger variant="ghost" render={<Button variant="outline">Open</Button>} />
+        <DropdownMenu.Trigger variant="ghost" render={<Button variant="primary">Open</Button>} />
       </DropdownMenu>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('still supports the legacy asChild prop', () => {
     render(
       <DropdownMenu>
         <DropdownMenu.Trigger asChild>
-          <Button variant="outline">Open</Button>
+          <Button variant="primary">Open</Button>
         </DropdownMenu.Trigger>
       </DropdownMenu>,
     );
 
     expect(screen.getAllByRole('button')).toHaveLength(1);
-    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('outline');
+    expect(screen.getByRole('button', { name: 'Open' }).getAttribute('data-variant')).toBe('primary');
   });
 
   it('uses tooltip as the accessible name of an icon-only trigger', () => {
@@ -199,4 +201,113 @@ describe('DropdownMenu', () => {
     fireEvent.click(screen.getByRole('menuitem', { name: 'Run action' }));
     expect(onClick).toHaveBeenCalledTimes(1);
   });
+
+  it('names a RadioSub row after its selected option and checks it in the submenu', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: 'mine' | 'all') => void>();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioSub label="Owner" options={ownerOptions} value="mine" onValueChange={onValueChange} />
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    await openSubmenuByKeyboard(user, /^Owner\s*Mine$/);
+    expect((await screen.findByRole('menuitemradio', { name: 'Mine' })).getAttribute('aria-checked')).toBe('true');
+    expect(screen.getByRole('menuitemradio', { name: 'Everyone' }).getAttribute('aria-checked')).toBe('false');
+
+    await user.click(screen.getByRole('menuitemradio', { name: 'Everyone' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('all');
+  });
+
+  it('shows no hint for an unknown RadioSub value and still reports the picked option', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: string) => void>();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioSub
+            label="Owner"
+            options={ownerOptions}
+            value="former-member"
+            onValueChange={onValueChange}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    await openSubmenuByKeyboard(user, 'Owner');
+    await user.click(await screen.findByRole('menuitemradio', { name: 'Everyone' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('all');
+  });
+
+  it('checks the selected RadioOptions item and reports a pick with the option value', async () => {
+    const user = userEvent.setup();
+    const onValueChange = vi.fn<(value: 'newest' | 'oldest') => void>();
+    render(
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioOptions
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+            ]}
+            value="newest"
+            onValueChange={onValueChange}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>,
+    );
+
+    expect(screen.getByRole('menuitemradio', { name: 'Newest' }).getAttribute('aria-checked')).toBe('true');
+
+    await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
+
+    expect(onValueChange).toHaveBeenCalledWith('oldest');
+  });
+
+  it('closes the menu on a pick with closeOnSelect, and stays open without it', async () => {
+    const user = userEvent.setup();
+    const menu = (closeOnSelect?: boolean) => (
+      <DropdownMenu defaultOpen>
+        <DropdownMenu.Trigger>Open</DropdownMenu.Trigger>
+        <DropdownMenu.Content>
+          <DropdownMenu.RadioOptions
+            options={[
+              { value: 'newest', label: 'Newest' },
+              { value: 'oldest', label: 'Oldest' },
+            ]}
+            value="newest"
+            onValueChange={() => {}}
+            closeOnSelect={closeOnSelect}
+          />
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    );
+
+    const { unmount } = render(menu());
+    await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
+    expect(screen.queryByRole('menu')).not.toBeNull();
+    unmount();
+
+    render(menu(true));
+    await user.click(screen.getByRole('menuitemradio', { name: 'Oldest' }));
+    await waitFor(() => expect(screen.queryByRole('menu')).toBeNull());
+  });
 });
+
+const ownerOptions = [
+  { value: 'mine', label: 'Mine' },
+  { value: 'all', label: 'Everyone' },
+] as const;
+
+async function openSubmenuByKeyboard(user: UserEvent, subTriggerName: string | RegExp) {
+  act(() => screen.getByRole('menuitem', { name: subTriggerName }).focus());
+  await user.keyboard('{ArrowRight}');
+}

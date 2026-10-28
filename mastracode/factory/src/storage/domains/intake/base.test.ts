@@ -55,6 +55,23 @@ describe('IntakeStorage', () => {
     expect([a, b]).toContainEqual(await storage.getConfig({ orgId: 'org1' }));
   });
 
+  it('merges a partial config over the stored selections', async () => {
+    const storage = await makeStorage();
+    expect(
+      await storage.mergeConfig({ orgId: 'org1', config: { github: { enabled: true, sourceIds: ['a'] } } }),
+    ).toEqual({
+      github: { enabled: true, sourceIds: ['a'] },
+    });
+    await storage.mergeConfig({ orgId: 'org1', config: { custom: { enabled: false, sourceIds: ['x'] } } });
+    await storage.mergeConfig({ orgId: 'org1', config: { github: { enabled: false, sourceIds: null } } });
+
+    expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+      github: { enabled: false, sourceIds: null },
+      custom: { enabled: false, sourceIds: ['x'] },
+    });
+    expect(await storage.getConfig({ orgId: 'org2' })).toEqual(DEFAULT_INTAKE_CONFIG);
+  });
+
   describe('legacy per-member selections', () => {
     // File-backed so a per-member deployment can write rows, close, and a later boot folds them.
     function tempDatabaseUrl(): string {
@@ -211,6 +228,70 @@ describe('IntakeStorage', () => {
       const rows = await storage.listBindings({ orgId: 'org1' });
       expect(rows).toHaveLength(1);
       expect(['proj-1', 'proj-2']).toContain(rows[0]!.factoryProjectId);
+    });
+
+    it('atomically migrates and deduplicates equivalent source selections and bindings', async () => {
+      const storage = await makeStorage();
+      await storage.saveConfig({
+        orgId: 'org1',
+        config: { gitlab: { enabled: true, sourceIds: ['legacy-a', 'legacy-b', 'canonical'] } },
+      });
+      for (const sourceId of ['legacy-a', 'legacy-b']) {
+        await storage.setBinding({
+          orgId: 'org1',
+          integrationId: 'gitlab',
+          sourceId,
+          factoryProjectId: 'proj-1',
+          board: 'work',
+        });
+      }
+
+      await expect(
+        storage.migrateSourceIds({
+          orgId: 'org1',
+          integrationId: 'gitlab',
+          migrations: [
+            { from: 'legacy-a', to: 'canonical' },
+            { from: 'legacy-b', to: 'canonical' },
+          ],
+        }),
+      ).resolves.toMatchObject({ conflicts: [] });
+      expect(await storage.getConfig({ orgId: 'org1' })).toEqual({
+        gitlab: { enabled: true, sourceIds: ['canonical'] },
+      });
+      expect(await storage.listBindings({ orgId: 'org1', integrationId: 'gitlab' })).toEqual([
+        { integrationId: 'gitlab', sourceId: 'canonical', factoryProjectId: 'proj-1', board: 'work' },
+      ]);
+    });
+
+    it('rejects conflicting canonical routes without changing selection or bindings', async () => {
+      const storage = await makeStorage();
+      const config = { gitlab: { enabled: true, sourceIds: ['legacy', 'canonical'] } };
+      await storage.saveConfig({ orgId: 'org1', config });
+      await storage.setBinding({
+        orgId: 'org1',
+        integrationId: 'gitlab',
+        sourceId: 'legacy',
+        factoryProjectId: 'proj-1',
+        board: 'work',
+      });
+      await storage.setBinding({
+        orgId: 'org1',
+        integrationId: 'gitlab',
+        sourceId: 'canonical',
+        factoryProjectId: 'proj-2',
+        board: 'review',
+      });
+
+      await expect(
+        storage.migrateSourceIds({
+          orgId: 'org1',
+          integrationId: 'gitlab',
+          migrations: [{ from: 'legacy', to: 'canonical' }],
+        }),
+      ).resolves.toEqual({ migrations: [], conflicts: [{ from: 'legacy', to: 'canonical' }] });
+      expect(await storage.getConfig({ orgId: 'org1' })).toEqual(config);
+      expect(await storage.listBindings({ orgId: 'org1', integrationId: 'gitlab' })).toHaveLength(2);
     });
   });
 

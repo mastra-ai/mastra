@@ -5,7 +5,9 @@ import { isTaskTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { memo } from 'react';
 import type { ReactNode } from 'react';
 
-import { SkillMessage } from './SkillMessage';
+import { SkillMessage } from '@mastra/playground-ui/domains/chat/messages/skill-message';
+import { ChannelReplyMessage, REPLY_IN_THREAD_TOOL, replyText } from './ChannelReplyMessage';
+import type { ReplyFooter } from './ChannelReplyMessage';
 import { SubmitPlanCard } from './SubmitPlanCard';
 
 type ToolStatus = 'running' | 'done' | 'error';
@@ -16,6 +18,10 @@ export interface ToolFactoryProps {
   toolName: string;
   toolCallId: string;
   input?: unknown;
+  /** The args JSON streamed so far, before `input` is parsed. */
+  argsText?: string;
+  /** Model, copy and time under a finished `reply_in_thread` post, copying `text`. */
+  replyFooter?: (text: string) => ReplyFooter;
   output?: unknown;
   status: ToolStatus;
   isSubmitting?: boolean;
@@ -69,6 +75,8 @@ function ToolFactoryComponent({
   toolName,
   toolCallId,
   input,
+  argsText,
+  replyFooter,
   output,
   status,
   isSubmitting = false,
@@ -96,6 +104,21 @@ function ToolFactoryComponent({
 
   if (isTaskTool(toolName)) return null;
 
+  if (toolName === REPLY_IN_THREAD_TOOL) {
+    const text = replyText(input, argsText);
+    // A call core rejected (too long, blank, extra keys) also ends as a result, so only the tool's own
+    // `posted` flag says the text reached the thread.
+    const replyStatus = status === 'done' && record(output)?.posted !== true ? 'error' : status;
+    if (text)
+      return (
+        <ChannelReplyMessage
+          text={text}
+          status={replyStatus}
+          footer={replyStatus === 'done' ? replyFooter?.(text) : undefined}
+        />
+      );
+  }
+
   if (toolName === 'skill') {
     const name = stringValue(record(input)?.name);
     const instructions = stringValue(output);
@@ -110,6 +133,22 @@ function ToolFactoryComponent({
         output={output}
         isSubmitting={isSubmitting}
         onRespond={onRespond}
+      />
+    );
+  }
+
+  // Any other tool paused with a question (a role's stage move asking for approval)
+  // is answered on its own row, as the standalone suspension card would.
+  const pausedQuestion = status === 'running' && onRespond ? askUserPayload(input) : undefined;
+  if (pausedQuestion) {
+    return (
+      <AskUser
+        role="group"
+        aria-label="Question from the agent"
+        payload={pausedQuestion}
+        isSubmitting={isSubmitting}
+        onSubmit={answer => onRespond?.(answer)}
+        className="w-full max-w-full"
       />
     );
   }

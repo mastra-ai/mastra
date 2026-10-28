@@ -1,17 +1,29 @@
+import { Button } from '@mastra/playground-ui/components/Button';
 import { CopyButton } from '@mastra/playground-ui/components/CopyButton';
 import { Spinner } from '@mastra/playground-ui/components/Spinner';
-import { Tooltip, TooltipContent, TooltipTrigger } from '@mastra/playground-ui/components/Tooltip';
-import { ClockIcon } from 'lucide-react';
-import type { ComparisonRow, ComparisonSide } from './build-comparison-rows';
-import { ComparisonScoreRow } from './comparison-score-row';
-import { ComparisonSection } from './comparison-section';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { TraceIcon } from '@mastra/playground-ui/icons/TraceIcon';
+import { getResultErrorMessage, getResultOutputText } from '../../utils/result-output';
+import { sideAverageScore, sideDurationMs } from './build-comparison-rows';
+import type { ComparisonColumn } from './build-comparison-rows';
+import { ComparisonMetricList } from './comparison-metric-list';
+import type { ComparisonMetric } from './comparison-metric-list';
+import { ComparisonPayload } from './comparison-payload';
+import { ComparisonSection, sectionStackClass } from './comparison-section';
+import { itemMetrics } from './item-metrics';
+import { useCompareMetricPreferences } from './use-compare-metric-preferences';
 
 export interface ComparisonSideCellProps {
-  side: 'baseline' | 'contender';
-  row: ComparisonRow;
-  /** Only the contender renders deltas, so a difference is stated once. */
-  showDeltas?: boolean;
+  /** One experiment's side of the row. Contenders carry their deltas against the baseline. */
+  column: ComparisonColumn;
   isLoading?: boolean;
+  /** Shows the cost and tokens lines. False when the observability storage cannot serve metrics. */
+  showUsage?: boolean;
+  /** Shared by every output of the row, so expanding one expands them all. */
+  outputExpanded?: boolean;
+  onOutputExpandedChange?: (expanded: boolean) => void;
+  /** Opens the trace of this side's run. The button only shows when the run has a trace. */
+  onShowTrace?: (traceId: string) => void;
 }
 
 function formatValue(value: unknown): string {
@@ -20,22 +32,37 @@ function formatValue(value: unknown): string {
   return JSON.stringify(value, null, 2);
 }
 
-function formatDuration(side: ComparisonSide): string | null {
-  if (!side.startedAt || !side.completedAt) return null;
-  const ms = new Date(side.completedAt).getTime() - new Date(side.startedAt).getTime();
-  return Number.isFinite(ms) ? `${(ms / 1000).toFixed(2)}s` : null;
+function sideMetrics(side: ComparisonColumn, showUsage: boolean): ComparisonMetric[] {
+  return itemMetrics({
+    usage: side.usage,
+    showUsage,
+    durationMs: sideDurationMs(side),
+    costDelta: side.costDelta,
+    tokenDelta: side.tokenDelta,
+    durationDeltaMs: side.durationDeltaMs,
+    averageScore: side.scores.length > 0 ? { value: sideAverageScore(side), delta: side.averageScoreDelta } : undefined,
+    scores: side.scores.map(score => ({
+      scorerId: score.scorerId,
+      value: score.value,
+      reason: score.reason,
+      delta: side.deltas?.[score.scorerId] ?? null,
+    })),
+  });
 }
 
-const codeBoxClass =
-  'border-border1 bg-surface3 text-ui-md text-neutral4 max-h-[30vh] overflow-y-auto rounded-xl border p-4 font-mono break-all whitespace-pre-wrap dark:border-white/10 dark:bg-black/20';
-
 /**
- * One side of a single item row. Baseline and contender render the exact same
+ * One experiment's side of a single item row. Every column renders the exact same
  * sections in the same order so the row can be read as a visual diff.
  */
-export function ComparisonSideCell({ side, row, showDeltas, isLoading }: ComparisonSideCellProps) {
-  const data = row[side];
-  const duration = formatDuration(data);
+export function ComparisonSideCell({
+  column: data,
+  isLoading,
+  showUsage = false,
+  outputExpanded,
+  onOutputExpandedChange,
+  onShowTrace,
+}: ComparisonSideCellProps) {
+  const { isMetricVisible } = useCompareMetricPreferences();
 
   if (isLoading) {
     return (
@@ -46,71 +73,78 @@ export function ComparisonSideCell({ side, row, showDeltas, isLoading }: Compari
   }
 
   if (!data.present) {
-    return <p className="text-neutral3 text-ui-md py-5 text-center">Not present in this experiment</p>;
+    return (
+      <Txt tone="muted" className="py-5 text-center">
+        Not present in this experiment
+      </Txt>
+    );
   }
 
   const outputStr = formatValue(data.output);
+  const outputText = getResultOutputText(data);
+  const errorMessage = getResultErrorMessage(data);
+  const metrics = sideMetrics(data, showUsage).filter(metric => isMetricVisible(metric.id));
+  const { traceId } = data;
+  const traceAction =
+    traceId && onShowTrace ? (
+      <Button
+        size="icon-sm"
+        variant="ghost"
+        tooltip="View trace"
+        aria-label="View trace"
+        onClick={() => onShowTrace(traceId)}
+      >
+        <TraceIcon />
+      </Button>
+    ) : undefined;
+  const hasMetrics = metrics.length > 0;
+  // With every metric hidden the Metrics section goes away, so the trace action joins Copy.
+  const resultActions = (content: string) => (
+    <>
+      {!hasMetrics && traceAction}
+      <CopyButton content={content} variant="ghost" />
+    </>
+  );
 
   return (
-    <div className="grid content-start gap-5">
-      {duration && (
-        <Tooltip>
-          <TooltipTrigger
-            render={
-              <p className="text-neutral3 text-ui-md flex items-center justify-end gap-1.5 [&>svg]:size-3.5">
-                <ClockIcon />
-                {duration}
-              </p>
-            }
-          />
-          <TooltipContent>Run duration</TooltipContent>
-        </Tooltip>
+    <div className={sectionStackClass}>
+      {hasMetrics && (
+        <ComparisonSection title="Metrics" collapsible={false} actions={traceAction}>
+          <ComparisonMetricList metrics={metrics} />
+        </ComparisonSection>
       )}
 
-      {data.error ? (
-        <ComparisonSection title="Error" tone="negative" actions={<CopyButton content={data.error.message} />}>
-          <p className="border-negative1/40 bg-negative1/5 text-ui-md text-neutral4 rounded-xl border p-4 break-words">
-            {data.error.message}
-          </p>
+      {errorMessage ? (
+        <ComparisonSection title="Error" tone="negative" framed actions={resultActions(errorMessage)}>
+          <Txt tone="muted" className="p-3 break-words">
+            {errorMessage}
+          </Txt>
         </ComparisonSection>
       ) : (
-        <ComparisonSection title="Output" actions={<CopyButton content={outputStr} />}>
-          <pre className={codeBoxClass}>{outputStr}</pre>
-        </ComparisonSection>
-      )}
-
-      {data.scores.length > 0 && (
-        <ComparisonSection title="Scores">
-          <div className="grid gap-2">
-            {data.scores.map(score => (
-              <ComparisonScoreRow
-                key={score.scorerId}
-                scorerId={score.scorerId}
-                value={score.value}
-                delta={showDeltas ? row.deltas[score.scorerId] : null}
-                reason={score.reason}
-              />
-            ))}
-          </div>
+        <ComparisonSection
+          title="Output"
+          framed
+          actions={resultActions(outputStr)}
+          expanded={outputExpanded}
+          onExpandedChange={onOutputExpandedChange}
+        >
+          <ComparisonPayload value={outputText ?? data.output} />
         </ComparisonSection>
       )}
 
       {data.comment && (
-        <ComparisonSection title="Comment" defaultOpen={false}>
-          <p className="text-neutral3 text-ui-md">{data.comment}</p>
+        <ComparisonSection title="Comment" framed>
+          <ComparisonPayload value={data.comment} />
         </ComparisonSection>
       )}
 
       {data.metadata && Object.keys(data.metadata).length > 0 && (
-        <ComparisonSection title="Metadata" defaultOpen={false}>
-          <dl className="grid gap-1">
-            {Object.entries(data.metadata).map(([key, value]) => (
-              <div key={key} className="text-ui-md flex items-start justify-between gap-4">
-                <dt className="text-neutral3">{key}</dt>
-                <dd className="text-neutral5 font-mono break-all">{formatValue(value)}</dd>
-              </div>
-            ))}
-          </dl>
+        <ComparisonSection
+          title="Metadata"
+          framed
+          actions={<CopyButton content={formatValue(data.metadata)} variant="ghost" />}
+        >
+          <ComparisonPayload value={data.metadata} />
         </ComparisonSection>
       )}
     </div>

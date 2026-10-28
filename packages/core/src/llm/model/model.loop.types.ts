@@ -10,7 +10,7 @@ import type {
 import type { JSONSchema7 } from 'json-schema';
 import type { MessageList } from '../../agent';
 import type { LoopOptions } from '../../loop/types';
-import type { ObservabilityContext } from '../../observability';
+import type { ObservabilityContext, Span, SpanType } from '../../observability';
 import type { OutputProcessorOrWorkflow } from '../../processors';
 import type { RequestContext } from '../../request-context';
 import type { StandardSchemaWithJSON, ZodSchema } from '../../schema';
@@ -35,6 +35,8 @@ export type StreamTextOnStepFinishCallback<Tools extends ToolSet> = (
 
 export type ModelLoopStreamArgs<TOOLS extends ToolSet, OUTPUT = undefined> = {
   methodType: ModelMethodType;
+  /** Set only by the agent's main loop so its first chunk stamps `completionStartTime` on this run. */
+  agentRunSpan?: Span<SpanType.AGENT_RUN>;
   messages?: UIMessage[] | ModelMessage[];
   outputProcessors?: OutputProcessorOrWorkflow[];
   requestContext: RequestContext;

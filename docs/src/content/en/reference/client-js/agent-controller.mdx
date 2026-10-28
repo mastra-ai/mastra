@@ -1,8 +1,8 @@
 ---
-title: "Reference: Agent Controller API | Client SDK"
-description: "The Agent Controller API connects a UI in another process to an agent controller session over HTTP, streaming its events and sending messages, approvals, and suspension responses."
+title: 'Reference: Agent Controller API | Client SDK'
+description: 'The Agent Controller API connects a UI in another process to an agent controller session over HTTP, streaming its events and sending messages, approvals, and suspension responses.'
 packages:
-  - "@mastra/client-js"
+  - '@mastra/client-js'
 ---
 
 # Agent Controller API
@@ -42,12 +42,25 @@ Retrieve the agent controllers hosted on the connected Mastra instance:
 const controllers = await client.listAgentControllers()
 ```
 
+Each entry's `id` is the key the controller is registered under in `new Mastra({ agentControllers })`, not the controller's own `id`.
+
 ## Working with a specific agent controller
 
-Get an instance of an agent controller by the ID it's registered under:
+Get an instance of an agent controller by the key it's registered under in `new Mastra({ agentControllers })`. The key can differ from the controller's `id`. In this example, pass `'coding'`, not `'coding-controller'`:
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { AgentController } from '@mastra/core/agent-controller'
+
+const codingController = new AgentController({ id: 'coding-controller', agent, modes })
+
+export const mastra = new Mastra({
+  agentControllers: { coding: codingController },
+})
+```
 
 ```typescript
-const controller = client.getAgentController('coding-controller')
+const controller = client.getAgentController('coding')
 ```
 
 ### `listModes()`
@@ -74,11 +87,19 @@ Returns the controller's workspace status.
 
 Returns: `Promise<AgentControllerWorkspaceStatus>`
 
-### `session(resourceId, scope?)`
+### `session(sessionId)`
 
-Returns an `AgentControllerSession` bound to one resource. Sessions are get-or-create on the server, so calling `create()` on the same `resourceId` and `scope` resumes the existing conversation instead of forking it.
+Returns an `AgentControllerSession` addressed by its session id. Every request goes to `/agent-controller/:controllerId/sessions/:sessionId/...`. Sessions are get-or-create on the server, so calling `create()` with the same `sessionId` resumes the existing conversation instead of forking it.
 
-Pass `scope` to address an independent session over the same `resourceId`. Sessions that share a `resourceId` but use different scopes each get their own run loop, thread binding, mode, model, and state. A common pattern is one session per git worktree with the worktree path as the scope. The scope travels on every request as a `sessionScope` query parameter.
+Sessions that share a resource but use different session ids each get their own run loop, thread binding, mode, model, and state. Their stored threads and resource-scoped memory belong to the shared resource. Pass the resource to `create()`:
+
+```typescript
+const runA = client.getAgentController('code').session('run-a')
+await runA.create({ resourceId: 'factory-1' })
+
+const runB = client.getAgentController('code').session('run-b')
+await runB.create({ resourceId: 'factory-1' })
+```
 
 ## Session methods
 
@@ -88,6 +109,13 @@ Creates or resumes the session.
 
 <PropertiesTable
   content={[
+  {
+    name: 'resourceId',
+    type: 'string',
+    isOptional: true,
+    description:
+      "Memory resource that owns the session's threads. Defaults to the session id, so a session created with only an id keeps one resource of its own.",
+  },
   {
     name: 'tags',
     type: 'Record<string, string>',
@@ -108,7 +136,7 @@ Returns: `Promise<CreateAgentControllerSessionResponse>`
 
 ### `subscribe(options)`
 
-Subscribes to the session's event stream over SSE. The promise resolves once the stream is established and rejects when it can't connect, so a rejected call leaves nothing running in the background. `reconnect` only governs re-establishing a stream that drops after it was established. To retry the initial connection, loop around `subscribe()`.
+Subscribes to the session's event stream over SSE. The promise resolves once the stream is established and rejects when it can't connect. A rejected call leaves nothing running in the background. `reconnect` only governs re-establishing a stream that drops after it was established. To retry the initial connection, loop around `subscribe()`.
 
 <PropertiesTable
   content={[
@@ -136,7 +164,15 @@ Subscribes to the session's event stream over SSE. The promise resolves once the
     type: 'boolean | { maxRetries?: number; delayMs?: number; maxDelayMs?: number }',
     isOptional: true,
     description:
-      'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires.',
+      'Re-establishes the stream after an established stream drops. Retries back off exponentially from `delayMs` (default `1000`) up to `maxDelayMs` (default `30000`). `maxRetries` (default `Infinity`) bounds the attempts per outage and resets once a connection is re-established. When retries are exhausted, `onError` fires. A reconnect request that fails with a 4xx (other than `408` and `429`) or `501` stops reconnecting immediately and passes that `MastraClientError` to `onError`.',
+  },
+  {
+    name: 'idleTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description:
+      'Treats the stream as dropped after this many milliseconds without receiving any data. Server heartbeats, sent every 25 seconds, reset the timer, so only a silent connection, such as one left half-open by laptop sleep or a proxy timeout, trips it. A timeout is handled like any other drop: it triggers `reconnect` and `onReconnect` when reconnect is enabled, otherwise `onError`. Also bounds opening the stream: `subscribe()` rejects, and a reconnect attempt counts as failed, when no response arrives in time. Set to `0` to disable.',
   },
 ]}
 />
@@ -151,11 +187,11 @@ Pass `options.requestContext` to merge custom context into the run's request con
 
 ### `steer(message, options?)`
 
-Injects a message into the in-flight run without starting a new turn.
+Aborts the in-flight run, then sends the message as a new turn. Pass a string, or `{ content, files }` to attach files in the same shape as `sendMessage()`.
 
 ### `followUp(message, options?)`
 
-Queues a follow-up message. If the session is idle it sends immediately. If a run is active it queues for after the run completes.
+Queues a follow-up message. If the session is idle it sends immediately. If a run is active it queues for after the run completes. Pass a string, or `{ content, files }` to attach files in the same shape as `sendMessage()`.
 
 ### `abort()`
 
@@ -195,7 +231,13 @@ Switches the active mode.
 
 ### `switchModel(modelId, options?)`
 
-Switches the model. `options.scope` is `'thread'` (default) or `'global'`. `options.modeId` targets a specific mode.
+Switches the session's active model and persists it as the current model for the active thread, independently of mode changes. Pass `{ thinkingLevel }` as the second argument to apply and persist a thinking level with the model.
+
+```typescript
+await session.switchModel('__GATEWAY_ANTHROPIC_MODEL_SONNET__', {
+  thinkingLevel: 'high',
+})
+```
 
 ### `listThreads(options?)`
 
@@ -268,22 +310,83 @@ Returns: `Promise<SendNotificationResult>`
 | Subagents | `subagent_start`, `subagent_text_delta`, `subagent_tool_start`, `subagent_tool_end`, `subagent_end`, `subagent_model_changed` |
 | Memory | `om_observation_start`, `om_observation_end`, `om_observation_failed`, `om_reflection_start`, `om_reflection_end`, `om_reflection_failed`, `om_buffering_start`, `om_buffering_end`, `om_buffering_failed`, `om_model_changed`, `om_activation`, `om_status`, `om_thread_title_updated` |
 | Workspace | `workspace_ready`, `workspace_error`, `workspace_status_changed` |
-| Notification | `notification`, `notification_summary`, `info`, `error` |
+| Diagnostics | `info`, `error` |
 
-`message_*` events carry a `MastraDBMessage` and `thread_created` carries a thread, with timestamps hydrated to `Date`.
+Notifications are delivered as agent signals carried on messages rather than as `notification` or `notification_summary` controller events.
 
-A controller can also emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first:
+A message lifecycle uses three event shapes:
+
+- `message_start` carries the initial `MastraDBMessage`, with `createdAt` hydrated to `Date`.
+- `message_update` carries the message `id` and a compact text, reasoning, or part update.
+- `message_end` carries the `id` of the completed message.
+
+`thread_created` also carries a thread with timestamps hydrated to `Date`.
+
+A controller can emit events the SDK doesn't type. `AgentControllerEvent` is the union of `KnownAgentControllerEvent` and `OtherAgentControllerEvent`. Because `OtherAgentControllerEvent.type` is `string`, comparing `event.type` to a literal doesn't narrow the union. Narrow with `isKnownAgentControllerEvent(event)` first, then reconstruct messages by ID:
 
 ```typescript
-import { isKnownAgentControllerEvent } from '@mastra/client-js'
+import {
+  isKnownAgentControllerEvent,
+  type AgentControllerEvent,
+  type KnownAgentControllerEvent,
+  type MastraDBMessage,
+} from '@mastra/client-js'
+
+type MessageUpdate = Extract<KnownAgentControllerEvent, { type: 'message_update' }>['event']
+
+const activeMessages = new Map<string, MastraDBMessage>()
+
+function applyUpdate(message: MastraDBMessage, update: MessageUpdate): MastraDBMessage {
+  const parts = [...message.content.parts]
+
+  if (update.type === 'text-delta') {
+    const index = parts.findLastIndex(part => part.type === 'text')
+    const part = parts[index]
+
+    if (part?.type === 'text') {
+      parts[index] = { ...part, text: part.text + update.delta }
+    } else {
+      parts.push({ type: 'text', text: update.delta })
+    }
+  } else if (update.type === 'reasoning-delta') {
+    const part = parts[update.index]
+    const reasoning = part?.type === 'reasoning' ? part.reasoning + update.delta : update.delta
+    parts[update.index] = {
+      ...(part?.type === 'reasoning' ? part : { type: 'reasoning' as const }),
+      reasoning,
+      details: [{ type: 'text', text: reasoning }],
+    }
+  } else {
+    parts[update.index] = update.part
+  }
+
+  return { ...message, content: { ...message.content, parts } }
+}
 
 function handleEvent(event: AgentControllerEvent) {
   if (!isKnownAgentControllerEvent(event)) return
 
   switch (event.type) {
-    case 'message_update':
-      render(event.message)
+    case 'message_start':
+      activeMessages.set(event.message.id, structuredClone(event.message))
       break
+    case 'message_update': {
+      const message = activeMessages.get(event.id)
+      if (!message) break
+
+      const updated = applyUpdate(message, event.event)
+      activeMessages.set(event.id, updated)
+      render(updated)
+      break
+    }
+    case 'message_end': {
+      const message = activeMessages.get(event.id)
+      if (!message) break
+
+      renderComplete(message)
+      activeMessages.delete(event.id)
+      break
+    }
     case 'tool_approval_required':
       showApproval(event.toolCallId)
       break
@@ -291,7 +394,7 @@ function handleEvent(event: AgentControllerEvent) {
 }
 ```
 
-Use `agentControllerMessageText(message)` to pull the plain text out of a message's nested content parts.
+Use `agentControllerMessageText(message)` to pull the plain text out of a reconstructed message's nested content parts.
 
 ## Related
 

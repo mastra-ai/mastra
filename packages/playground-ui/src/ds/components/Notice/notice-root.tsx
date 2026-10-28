@@ -1,87 +1,88 @@
-import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon } from 'lucide-react';
-import React from 'react';
+import { FileTextIcon, InfoIcon, LightbulbIcon, OctagonAlertIcon, TriangleAlertIcon, XIcon } from 'lucide-react';
+import { Children } from 'react';
+import type { ComponentProps, ReactNode } from 'react';
+import { Button } from '../Button/Button';
+import './notice.css';
 import { cn } from '@/lib/utils';
 
 export type NoticeVariant = 'warning' | 'destructive' | 'success' | 'info' | 'note';
 
-const variantConfig: Record<NoticeVariant, { icon: React.ReactNode; classes: string }> = {
-  success: {
-    icon: <LightbulbIcon />,
-    classes: 'bg-notice-success/20 border-notice-success/20 text-notice-success-fg',
-  },
-  destructive: {
-    icon: <OctagonAlertIcon />,
-    classes: 'bg-notice-destructive/20 border-notice-destructive/20 text-notice-destructive-fg',
-  },
-  warning: {
-    icon: <TriangleAlertIcon />,
-    classes: 'bg-notice-warning/20 border-notice-warning/20 text-notice-warning-fg',
-  },
-  info: {
-    icon: <InfoIcon />,
-    classes: 'bg-notice-info/20 border-notice-info/20 text-notice-info-fg',
-  },
-  note: {
-    icon: <FileTextIcon />,
-    classes: 'bg-notice-note border-border1 text-notice-note-fg',
-  },
+const variantConfig: Record<NoticeVariant, { icon: ReactNode; iconClass: string }> = {
+  success: { icon: <LightbulbIcon />, iconClass: 'text-success-indicator' },
+  destructive: { icon: <OctagonAlertIcon />, iconClass: 'text-destructive-indicator' },
+  warning: { icon: <TriangleAlertIcon />, iconClass: 'text-warning-foreground' },
+  info: { icon: <InfoIcon />, iconClass: 'text-info-indicator' },
+  note: { icon: <FileTextIcon />, iconClass: 'text-muted-foreground' },
 };
 
-export interface NoticeRootProps {
-  variant: NoticeVariant;
-  title?: React.ReactNode;
-  icon?: React.ReactNode;
-  action?: React.ReactNode;
-  children?: React.ReactNode;
-  className?: string;
+function hasContent(content: ReactNode) {
+  return Children.toArray(content).some(child => child !== '');
 }
 
-export function NoticeRoot({ variant, title, icon, action, children, className }: NoticeRootProps) {
-  const { icon: defaultIcon, classes } = variantConfig[variant];
-  const resolvedIcon = icon ?? defaultIcon;
+export interface NoticeRootProps extends Omit<ComponentProps<'div'>, 'title'> {
+  variant: NoticeVariant;
+  title?: ReactNode;
+  icon?: ReactNode;
+  action?: ReactNode;
+  actionPlacement?: 'below' | 'end';
+  onDismiss?: () => void;
+}
 
-  if (!title) {
-    return (
-      <div
-        className={cn(
-          '@container relative rounded-2xl border p-3 text-ui-md leading-ui-md',
-          'animate-in duration-200 fade-in-0 slide-in-from-top-2',
-          classes,
-          className,
-        )}
-      >
-        <div className="flex flex-col gap-3 @md:flex-row @md:items-start @md:gap-2">
-          <div className="flex min-w-0 flex-1 items-start gap-2 [&>svg]:size-4">
-            <span className="flex h-[1lh] shrink-0 items-center [&>svg]:size-4">{resolvedIcon}</span>
-            {/* wrap-anywhere — messages carry URLs and tokens with no break opportunity */}
-            {children && <div className="min-w-0 flex-1 wrap-anywhere">{children}</div>}
-          </div>
-          {action && <div className="@md:-my-1 [&>button]:w-full @md:[&>button]:w-auto">{action}</div>}
-        </div>
-      </div>
-    );
-  }
+export function NoticeRoot({
+  variant,
+  title,
+  icon,
+  action,
+  actionPlacement = 'below',
+  onDismiss,
+  children,
+  className,
+  ...props
+}: NoticeRootProps) {
+  const { icon: defaultIcon, iconClass } = variantConfig[variant];
+  const hasTitle = hasContent(title);
+  const hasMessage = hasContent(children);
+  const hasAction = hasContent(action);
 
   return (
     <div
-      className={cn(
-        '@container relative flex flex-col gap-3 rounded-2xl border p-3',
-        'animate-in duration-200 fade-in-0 slide-in-from-top-2',
-        classes,
-        className,
-      )}
+      {...props}
+      data-slot="notice"
+      data-tone={variant}
+      data-action-placement={actionPlacement}
+      className={cn('relative grid min-w-0 gap-x-3 rounded-lg p-3 text-body-sm', onDismiss && 'pe-11', className)}
     >
-      <div className="flex h-4 min-w-0 items-center gap-2 [&>svg]:size-4">
-        {resolvedIcon}
-        {/* truncate, not wrap — the row is 1rem tall, a wrapped title would spill out of it */}
-        <span className="text-ui-sm truncate leading-none font-medium tracking-wide uppercase">{title}</span>
-      </div>
-      {action && <div className="absolute top-2 right-2 hidden @md:block">{action}</div>}
-      {(children || action) && (
-        <div className="flex min-w-0 flex-col gap-3 wrap-anywhere">
-          {children}
-          {action && <div className="self-start @md:hidden">{action}</div>}
+      {(hasTitle || hasMessage || hasAction) && (
+        <span
+          data-slot="notice-icon"
+          aria-hidden
+          className={cn('flex size-5 shrink-0 items-center justify-center [&>svg]:size-icon-sm', iconClass)}
+        >
+          {icon ?? defaultIcon}
+        </span>
+      )}
+      {(hasTitle || hasMessage) && (
+        <div data-slot="notice-content" className="flex min-w-0 flex-col gap-1 wrap-anywhere">
+          {hasTitle && <div className="text-subheading">{title}</div>}
+          {hasMessage && <div className="flex min-w-0 flex-col gap-2">{children}</div>}
         </div>
+      )}
+      {hasAction && (
+        <div data-slot="notice-action" className="flex min-w-0 flex-wrap items-center gap-x-4 gap-y-2">
+          {action}
+        </div>
+      )}
+      {onDismiss && (
+        <Button
+          type="button"
+          variant="ghost"
+          size="icon-sm"
+          className="absolute end-2 top-2 before:absolute before:-inset-2"
+          tooltip="Dismiss notice"
+          onClick={onDismiss}
+        >
+          <XIcon />
+        </Button>
       )}
     </div>
   );

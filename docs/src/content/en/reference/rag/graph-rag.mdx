@@ -87,12 +87,14 @@ query({
   query,
   topK = 10,
   randomWalkSteps = 100,
-  restartProb = 0.15
+  restartProb = 0.15,
+  filter
 }: {
   query: number[];
   topK?: number;
   randomWalkSteps?: number;
   restartProb?: number;
+  filter?: Partial<Record<string, any>>;
 }): RankedNode[]
 ```
 
@@ -127,6 +129,13 @@ query({
     isOptional: true,
     defaultValue: '0.15',
   },
+  {
+    name: 'filter',
+    type: 'Partial<Record<string, any>>',
+    description:
+      'Restricts the search to nodes whose metadata matches every given key/value pair. Similarity search and the random walk both stay within matching nodes.',
+    isOptional: true,
+  },
 ]}
 />
 
@@ -149,7 +158,8 @@ Returns an array of `RankedNode` objects, where each node contains:
   {
     name: 'metadata',
     type: 'Record<string, any>',
-    description: 'Additional metadata associated with the chunk',
+    isOptional: true,
+    description: 'Additional metadata associated with the chunk, when present',
   },
   {
     name: 'score',
@@ -227,7 +237,7 @@ Throws if the snapshot version is unsupported, if a node embedding doesn't match
 
 ## Persisting a graph
 
-Building a graph is O(n²) in the number of chunks, so rebuilding it on every process start is wasteful. Serialize the graph once and store the snapshot wherever you already keep state. A snapshot is plain JSON, so any store works (a file, a blob column, a key-value cache), and `GraphRAG` doesn't depend on a storage backend.
+Building a graph is O(n²) in the number of chunks, so rebuilding it on every process start is wasteful. Serialize the graph once and store the snapshot wherever you already keep state. A snapshot is plain JSON. Any store works (a file, a blob column, a key-value cache), and `GraphRAG` doesn't depend on a storage backend.
 
 ```typescript
 import { readFile, writeFile } from 'node:fs/promises'

@@ -5,6 +5,7 @@
  * The worker reads newline-delimited JSON commands on stdin and emits
  * newline-delimited JSON events on stdout. Commands:
  *   {"cmd":"send","sigId":"s1","text":"hello","runMs":300}
+ *   {"cmd":"finish-run","sigId":"s1"}  (ends a run held open via HOLD_SIG_IDS)
  *   {"cmd":"exit"}
  *
  * Events:
@@ -32,6 +33,8 @@ const REDIS_URL = process.env.REDIS_URL ?? 'redis://localhost:6381';
 const RESOURCE_ID = process.env.RESOURCE_ID ?? 'rapid-fire-resource';
 const THREAD_ID = process.env.THREAD_ID ?? 'rapid-fire-thread';
 const WORKER_ID = process.env.WORKER_ID ?? 'worker';
+// Workers that model replicas of one deployed agent share an id via AGENT_ID.
+const AGENT_ID = process.env.AGENT_ID ?? `${WORKER_ID}-agent`;
 const AGENT_THREAD_KEY_SEPARATOR = '\u0000';
 
 function threadTopic() {
@@ -50,9 +53,12 @@ function emit(event: Record<string, unknown>) {
  */
 const runEnds = new Map<string, () => void>();
 
+/** Runs for these sigIds stay in flight until a `finish-run` command ends them. */
+const HELD_SIG_IDS = new Set((process.env.HOLD_SIG_IDS ?? '').split(',').filter(Boolean));
+
 function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub: RedisStreamsPubSub) {
   const agent: any = {
-    id: `${WORKER_ID}-agent`,
+    id: AGENT_ID,
     name: `${WORKER_ID} Stub Agent`,
     getMemory: async () => ({ saveMessages: async () => {} }),
     stream: async (input: any, options: any) => {
@@ -60,11 +66,13 @@ function makeStubAgent(runMs: number, runtime: AgentThreadStreamRuntime, pubsub:
       const sigId: string = typeof input === 'string' ? input : (input?.contents ?? input?.text ?? '');
       const runId = options?.runId ?? randomUUID();
       const finished = new Promise<void>(resolve => {
-        const timer = setTimeout(() => {
-          runEnds.delete(sigId);
-          resolve();
-        }, runMs);
-        timer.unref();
+        const timer = HELD_SIG_IDS.has(sigId)
+          ? undefined
+          : setTimeout(() => {
+              runEnds.delete(sigId);
+              resolve();
+            }, runMs);
+        timer?.unref();
         runEnds.set(sigId, () => {
           clearTimeout(timer);
           runEnds.delete(sigId);
@@ -146,11 +154,16 @@ async function main() {
 
   // Keep a thread subscription open so this worker receives signal-enqueued
   // events from other workers and updates its local activeThreadRunIds map.
-  const defaultSubscription = await runtime.subscribeToThread(
-    agent as any,
-    { resourceId: RESOURCE_ID, threadId: THREAD_ID },
-    pubsub,
-  );
+  // NO_DEFAULT_SUBSCRIPTION=1 models a pod that owns runs without any
+  // client subscription, so the owner must drain follow-ups on its own.
+  const defaultSubscription =
+    process.env.NO_DEFAULT_SUBSCRIPTION === '1'
+      ? undefined
+      : await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub);
+  function requireDefaultSubscription() {
+    if (!defaultSubscription) throw new Error('worker started with NO_DEFAULT_SUBSCRIPTION=1');
+    return defaultSubscription;
+  }
 
   emit({ type: 'ready' });
 
@@ -202,11 +215,18 @@ async function main() {
     }
 
     if (cmd.cmd === 'exit') {
-      defaultSubscription.unsubscribe();
+      defaultSubscription?.unsubscribe();
       try {
         await pubsub.close();
       } catch {}
       process.exit(0);
+    }
+
+    if (cmd.cmd === 'finish-run') {
+      const end = runEnds.get(cmd.sigId);
+      if (end) end();
+      else emit({ type: 'command-error', cmd: cmd.cmd, error: `no in-flight run for ${cmd.sigId}` });
+      return;
     }
 
     if (cmd.cmd === 'persist') {
@@ -233,9 +253,15 @@ async function main() {
 
     if (cmd.cmd === 'collect-default' || cmd.cmd === 'collect-fresh') {
       const fresh = cmd.cmd === 'collect-fresh';
-      const subscription = fresh
-        ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
-        : defaultSubscription;
+      let subscription;
+      try {
+        subscription = fresh
+          ? await runtime.subscribeToThread(agent as any, { resourceId: RESOURCE_ID, threadId: THREAD_ID }, pubsub)
+          : requireDefaultSubscription();
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+        return;
+      }
       if (fresh) emit({ type: 'fresh-subscription-created' });
       try {
         const parts = await collectRun(subscription, cmd.mode === 'converted');
@@ -297,13 +323,22 @@ async function main() {
     }
 
     if (cmd.cmd === 'abort-active') {
-      const runId = defaultSubscription.activeRunId();
-      emit({ type: 'abort-result', runId, aborted: defaultSubscription.abort() });
+      try {
+        const subscription = requireDefaultSubscription();
+        const runId = subscription.activeRunId();
+        emit({ type: 'abort-result', runId, aborted: subscription.abort() });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
       return;
     }
 
     if (cmd.cmd === 'active-run') {
-      emit({ type: 'active-run', runId: defaultSubscription.activeRunId() });
+      try {
+        emit({ type: 'active-run', runId: requireDefaultSubscription().activeRunId() });
+      } catch (err) {
+        emit({ type: 'command-error', cmd: cmd.cmd, error: String(err) });
+      }
       return;
     }
 

@@ -9,6 +9,20 @@ import { RequestContext } from '../../request-context';
 import type { WorkspaceFilesystem } from '../filesystem/filesystem';
 import { IsolationUnavailableError } from './errors';
 import { LocalSandbox, getMarkerDir } from './local-sandbox';
+
+const cpHook = vi.hoisted(() => ({
+  afterCopy: undefined as ((src: unknown, dest: unknown) => Promise<void>) | undefined,
+}));
+vi.mock('node:fs/promises', async importOriginal => {
+  const actual = await importOriginal<typeof import('node:fs/promises')>();
+  return {
+    ...actual,
+    cp: async (...args: Parameters<typeof actual.cp>) => {
+      await actual.cp(...args);
+      await cpHook.afterCopy?.(args[0], args[1]);
+    },
+  };
+});
 import type { MastraSandbox } from './mastra-sandbox';
 import {
   detectIsolation,
@@ -108,6 +122,70 @@ describe('LocalSandbox explicit sh argv', () => {
       await sandbox._destroy();
       await fs.rm(workingDirectory, { recursive: true, force: true });
     }
+  });
+});
+
+describe('LocalSandbox outputEncoding', () => {
+  let tempDir: string;
+  const sandboxes: LocalSandbox[] = [];
+
+  beforeEach(async () => {
+    tempDir = await fs.mkdtemp(path.join(os.tmpdir(), 'mastra-local-sandbox-enc-'));
+  });
+
+  afterEach(async () => {
+    await Promise.all(sandboxes.splice(0).map(s => s._destroy().catch(() => {})));
+    await fs.rm(tempDir, { recursive: true, force: true });
+  });
+
+  const create = (outputEncoding?: string) => {
+    const s = new LocalSandbox({ workingDirectory: tempDir, env: process.env, outputEncoding });
+    sandboxes.push(s);
+    return s;
+  };
+
+  // GBK bytes for "中文" on stdout and "中" on stderr
+  const gbkScript =
+    'process.stdout.write(Buffer.from([0xd6,0xd0,0xce,0xc4]));process.stderr.write(Buffer.from([0xd6,0xd0]))';
+
+  it('decodes GBK output from executeCommand', async () => {
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes GBK output from background processes', async () => {
+    const sandbox = create('gbk');
+    await sandbox._start();
+    const handle = await sandbox.processes!.spawn(`"${process.execPath}" -e "${gbkScript}"`);
+    const result = await handle.wait();
+    expect(result.stdout).toBe('中文');
+    expect(result.stderr).toBe('中');
+  });
+
+  it('decodes multi-byte characters split across chunks', async () => {
+    const script =
+      'process.stdout.write(Buffer.from([0xd6]));setTimeout(()=>process.stdout.write(Buffer.from([0xd0])),50)';
+    const result = await create('gbk').executeCommand(process.execPath, ['-e', script]);
+    expect(result.stdout).toBe('中');
+  });
+
+  it('preserves outputEncoding when cloned', async () => {
+    const clone = create('gbk').clone();
+    sandboxes.push(clone);
+    const result = await clone.executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).toBe('中文');
+  });
+
+  it('defaults to UTF-8', async () => {
+    const result = await create().executeCommand(process.execPath, ['-e', gbkScript]);
+    expect(result.stdout).not.toBe('中文');
+    const utf8 = await create().executeCommand(process.execPath, ['-e', 'process.stdout.write("中文")']);
+    expect(utf8.stdout).toBe('中文');
+  });
+
+  it('rejects unsupported encodings at construction', () => {
+    expect(() => new LocalSandbox({ workingDirectory: tempDir, outputEncoding: 'not-an-encoding' })).toThrow();
   });
 });
 
@@ -346,21 +424,6 @@ describe('LocalSandbox', () => {
   });
 
   // ===========================================================================
-  // env overlay (setEnv)
-  // ===========================================================================
-  describe('env overlay (setEnv)', () => {
-    it('makes setEnv values visible to real processes and supports rotation', async () => {
-      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_first' }));
-      const first = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
-      expect(first.stdout.trim()).toBe('tok_first');
-
-      sandbox.setEnv(env => ({ ...env, DEMO_TOKEN: 'tok_rotated' }));
-      const rotated = await sandbox.executeCommand('printenv', ['DEMO_TOKEN']);
-      expect(rotated.stdout.trim()).toBe('tok_rotated');
-    });
-  });
-
-  // ===========================================================================
   // getInfo
   // ===========================================================================
   describe('getInfo', () => {
@@ -463,6 +526,36 @@ describe('LocalSandbox', () => {
       expect(result.stdout.trim()).toBe('released');
       await expect(sandbox.processes!.list()).resolves.toEqual([]);
     });
+
+    it('should not hang when the command reads stdin', async () => {
+      if (os.platform() === 'win32') return; // Uses POSIX commands
+
+      // `cat` with no file arguments copies stdin, so it only exits once stdin
+      // reaches EOF. Commands run through executeCommand have nothing feeding
+      // their stdin, so if it were left as an open pipe this would block until
+      // the timeout instead of returning. A command that reads stdin — `rg` or
+      // `grep` with no path argument, a bare `read` — must exit, not hang.
+      const result = await sandbox.executeCommand('cat', [], { timeout: 10_000 });
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.stdout).toBe('');
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
+
+    it('should not hang when a Node process reads stdin', async () => {
+      // Cross-platform variant: `node -e` reading stdin until EOF. Runs on
+      // Windows too since it doesn't depend on POSIX commands.
+      const result = await sandbox.executeCommand(
+        'node',
+        ['-e', 'process.stdin.resume(); process.stdin.on("end", () => process.exit(0));'],
+        { timeout: 10_000 },
+      );
+
+      expect(result.timedOut).not.toBe(true);
+      expect(result.exitCode).toBe(0);
+      expect(result.executionTimeMs).toBeLessThan(5_000);
+    }, 15_000);
 
     it('should handle command failure', async () => {
       if (os.platform() === 'win32') return; // Uses POSIX commands
@@ -829,6 +922,29 @@ describe('LocalSandbox', () => {
       ).toThrow(IsolationUnavailableError);
     });
 
+    it('should throw a clear error when seatbelt is requested on Windows', () => {
+      const platformSpy = vi.spyOn(process, 'platform', 'get').mockReturnValue('win32');
+
+      try {
+        expect(
+          () =>
+            new LocalSandbox({
+              workingDirectory: tempDir,
+              isolation: 'seatbelt',
+            }),
+        ).toThrowError(
+          expect.objectContaining({
+            name: 'IsolationUnavailableError',
+            code: 'ISOLATION_UNAVAILABLE',
+            backend: 'seatbelt',
+            reason: 'Seatbelt isolation is only supported on macOS, not Windows.',
+          }),
+        );
+      } finally {
+        platformSpy.mockRestore();
+      }
+    });
+
     it('should include isolation in getInfo', async () => {
       await sandbox._start();
       const info = await sandbox.getInfo();
@@ -967,6 +1083,7 @@ describe('LocalSandbox', () => {
   describe('seatbelt isolation (macOS)', () => {
     beforeEach(async () => {
       if (os.platform() !== 'darwin' || !isSeatbeltAvailable()) {
+        // oxlint-disable-next-line no-useless-return -- Keep the platform availability probe in the shared setup.
         return;
       }
     });
@@ -2195,6 +2312,38 @@ describe('LocalSandbox', () => {
       await restore;
 
       expect(await fs.readFile(path.join(otherDir, 'data.txt'), 'utf-8')).toBe('v2');
+    });
+
+    it('re-seeds when the checkpoint is replaced while it is being copied', async () => {
+      const sb = makeSandbox({ checkpointName: 'repo-abc' });
+      await sb.start();
+      await fs.writeFile(path.join(workDir, 'a.txt'), 'v1-a');
+      await fs.writeFile(path.join(workDir, 'b.txt'), 'v1-b');
+      await sb.snapshot();
+
+      // Swap in v2 right after the reader's first copy completes, as a
+      // concurrent snapshot() finishing mid-seed would. Content mixing depends
+      // on fs.cp's internal timing, so the swap-after-copy is what's asserted.
+      await fs.writeFile(path.join(workDir, 'b.txt'), 'v2-b');
+      await fs.writeFile(path.join(workDir, 'c.txt'), 'v2-c');
+      let swapped = false;
+      cpHook.afterCopy = async (src, dest) => {
+        if (swapped || !String(src).endsWith(path.join('.checkpoints', 'repo-abc'))) return;
+        swapped = true;
+        await fs.writeFile(path.join(String(dest), 'b.txt'), 'v2-b'); // mixed state
+        await sb.snapshot();
+      };
+
+      const otherDir = path.join(tempDir, 'work-mid-copy');
+      const reader = makeSandbox({ checkpointName: 'repo-abc', workingDirectory: otherDir });
+      try {
+        await reader.start();
+      } finally {
+        cpHook.afterCopy = undefined;
+      }
+
+      expect((await fs.readdir(otherDir)).sort()).toEqual(['a.txt', 'b.txt', 'c.txt']);
+      expect(await fs.readFile(path.join(otherDir, 'b.txt'), 'utf-8')).toBe('v2-b');
     });
 
     it('re-snapshot atomically replaces the previous checkpoint', async () => {

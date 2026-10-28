@@ -1,5 +1,209 @@
 # @mastra/voice-google-gemini-live
 
+## 0.14.18
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/schema-compat@1.3.17
+
+## 0.14.18-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`ws@^8.22.0` ↗︎](https://www.npmjs.com/package/ws/v/8.22.0) (from `^8.21.3`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Updated dependency [`@types/ws@^8.18.2` ↗︎](https://www.npmjs.com/package/@types/ws/v/8.18.2) (from `^8.18.1`, in `devDependencies`)
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed)]:
+  - @mastra/schema-compat@1.3.17-alpha.0
+
+## 0.14.17
+
+### Patch Changes
+
+- Added `inputAudioTranscription` and `outputAudioTranscription` options to `GeminiLiveVoice` so you can pass BCP-47 language hints to Gemini Live transcription. Without hints, the server auto-detects the language and can transcribe short or accented speech in the wrong language. ([#27583](https://github.com/mastra-ai/mastra/pull/27583))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    inputAudioTranscription: { languageCodes: ['es-ES'] },
+  });
+  ```
+
+  Leaving the options out keeps the current behavior.
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16
+
+## 0.14.17-alpha.1
+
+### Patch Changes
+
+- Added `inputAudioTranscription` and `outputAudioTranscription` options to `GeminiLiveVoice` so you can pass BCP-47 language hints to Gemini Live transcription. Without hints, the server auto-detects the language and can transcribe short or accented speech in the wrong language. ([#27583](https://github.com/mastra-ai/mastra/pull/27583))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    inputAudioTranscription: { languageCodes: ['es-ES'] },
+  });
+  ```
+
+  Leaving the options out keeps the current behavior.
+
+## 0.14.17-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+- Updated dependencies [[`fae54c5`](https://github.com/mastra-ai/mastra/commit/fae54c57917cd1f527937ca42b5ab7dfe1d55a2a)]:
+  - @mastra/schema-compat@1.3.16-alpha.0
+
+## 0.14.16
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3)]:
+  - @mastra/schema-compat@1.3.15
+
+## 0.14.16-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`c6230e3`](https://github.com/mastra-ai/mastra/commit/c6230e30f76b4b912bad68f426d730da1cb67d83), [`cb015a1`](https://github.com/mastra-ai/mastra/commit/cb015a1be6560cbaf4deaef219cb02e63b263bc3)]:
+  - @mastra/schema-compat@1.3.15-alpha.0
+
+## 0.14.15
+
+### Patch Changes
+
+- Updated dependencies [[`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452)]:
+  - @mastra/schema-compat@1.3.14
+
+## 0.14.15-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`ca92c02`](https://github.com/mastra-ai/mastra/commit/ca92c02696427baad81dd7a61b049ef37c332452)]:
+  - @mastra/schema-compat@1.3.14-alpha.0
+
+## 0.14.14
+
+### Patch Changes
+
+- Fixed cleanup when the Gemini Live server closes the socket. A close from the server side (1011, goAway, a network drop) only changed state and emitted events, and the app's later `disconnect()` returned early with "Already disconnected". So the open `speaker` stream for the current reply never ended, leaving anything piping or awaiting it hung, and the `maxDuration` timer (up to 24h) kept the process alive and later called `disconnect()` on whatever session was current. The close and error handlers now end speaker streams and clear the session timers, including the `sessionExpiring` warning timer, which was never stored and so could not be cleared before. The events emitted on close are unchanged. ([#26698](https://github.com/mastra-ai/mastra/pull/26698))
+
+  Fixes [#26694](https://github.com/mastra-ai/mastra/issues/26694).
+
+## 0.14.14-alpha.0
+
+### Patch Changes
+
+- Fixed cleanup when the Gemini Live server closes the socket. A close from the server side (1011, goAway, a network drop) only changed state and emitted events, and the app's later `disconnect()` returned early with "Already disconnected". So the open `speaker` stream for the current reply never ended, leaving anything piping or awaiting it hung, and the `maxDuration` timer (up to 24h) kept the process alive and later called `disconnect()` on whatever session was current. The close and error handlers now end speaker streams and clear the session timers, including the `sessionExpiring` warning timer, which was never stored and so could not be cleared before. The events emitted on close are unchanged. ([#26698](https://github.com/mastra-ai/mastra/pull/26698))
+
+  Fixes [#26694](https://github.com/mastra-ai/mastra/issues/26694).
+
+## 0.14.13
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+- Updated dependencies [[`4ac8bc7`](https://github.com/mastra-ai/mastra/commit/4ac8bc76e97278370f4ee0efabe71e9295f8f03f)]:
+  - @mastra/schema-compat@1.3.13
+
+## 0.14.13-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`4ac8bc7`](https://github.com/mastra-ai/mastra/commit/4ac8bc76e97278370f4ee0efabe71e9295f8f03f)]:
+  - @mastra/schema-compat@1.3.13-alpha.0
+
+## 0.14.13-alpha.0
+
+### Patch Changes
+
+- Generate workspace, integration, channel, and voice identifiers with Web Crypto without changing synchronous APIs. ([#25462](https://github.com/mastra-ai/mastra/pull/25462))
+
+## 0.14.12
+
+### Patch Changes
+
+- Updated dependencies [[`3f50f2a`](https://github.com/mastra-ai/mastra/commit/3f50f2a59068fc91ef7ccc513e5d93845faa298e), [`3913a33`](https://github.com/mastra-ai/mastra/commit/3913a33fd5b13dc226b1ed6253c9357cb392dd04), [`08a0aea`](https://github.com/mastra-ai/mastra/commit/08a0aea2f2af12276e333c62aaf368a9240ff68f)]:
+  - @mastra/schema-compat@1.3.12
+
+## 0.14.12-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`3f50f2a`](https://github.com/mastra-ai/mastra/commit/3f50f2a59068fc91ef7ccc513e5d93845faa298e)]:
+  - @mastra/schema-compat@1.3.12-alpha.1
+
+## 0.14.12-alpha.0
+
+### Patch Changes
+
+- Updated dependencies [[`3913a33`](https://github.com/mastra-ai/mastra/commit/3913a33fd5b13dc226b1ed6253c9357cb392dd04), [`08a0aea`](https://github.com/mastra-ai/mastra/commit/08a0aea2f2af12276e333c62aaf368a9240ff68f)]:
+  - @mastra/schema-compat@1.3.12-alpha.0
+
+## 0.14.11
+
+### Patch Changes
+
+- Add `thinkingConfig` to `GeminiLiveVoice` so callers can configure the model's thinking behavior on the Gemini Live session. It is forwarded to the setup frame as `generation_config.thinking_config` (and honored by `updateSessionConfig`). On native-audio thinking models, set `thinkingConfig.includeThoughts: false` to stop the model's reasoning from being spoken as the reply, or bound it with `thinkingBudget`. Default behavior is unchanged when the field is omitted. ([#24050](https://github.com/mastra-ai/mastra/pull/24050))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    thinkingConfig: { includeThoughts: false },
+  });
+  ```
+
+- Fix API-key (non-Vertex) Gemini Live connections being pinned to the `v1alpha` WebSocket endpoint. `v1alpha` rejects current Live models (e.g. `gemini-2.0-flash-live-001`) during setup, so the session never reached `setupComplete` and `connect()` only failed via the 30s timeout. API-key connections now use the `v1beta` Live endpoint (matching the Vertex branch already on `v1beta1`), so current Live models connect successfully. ([#24089](https://github.com/mastra-ai/mastra/pull/24089))
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed a hang when connecting the Google Gemini Live voice provider with a rejected setup (for example an unknown model id). The server closes the WebSocket with an abnormal code such as 1007, which previously was only logged, so connect() waited out the full 30s timeout and reported a generic timeout instead of the real reason. connect() now rejects immediately, carrying the close code and reason. ([#24092](https://github.com/mastra-ai/mastra/pull/24092))
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11
+
+## 0.14.11-alpha.1
+
+### Patch Changes
+
+- Updated dependencies [[`5085475`](https://github.com/mastra-ai/mastra/commit/5085475c0da226e618eb3ee2676d347788c3fb00), [`6c781fd`](https://github.com/mastra-ai/mastra/commit/6c781fda62eb0b0b74d016f188ed0b2db5cfdceb)]:
+  - @mastra/schema-compat@1.3.11-alpha.1
+
+## 0.14.11-alpha.0
+
+### Patch Changes
+
+- Add `thinkingConfig` to `GeminiLiveVoice` so callers can configure the model's thinking behavior on the Gemini Live session. It is forwarded to the setup frame as `generation_config.thinking_config` (and honored by `updateSessionConfig`). On native-audio thinking models, set `thinkingConfig.includeThoughts: false` to stop the model's reasoning from being spoken as the reply, or bound it with `thinkingBudget`. Default behavior is unchanged when the field is omitted. ([#24050](https://github.com/mastra-ai/mastra/pull/24050))
+
+  ```ts
+  const voice = new GeminiLiveVoice({
+    apiKey: process.env.GOOGLE_API_KEY,
+    thinkingConfig: { includeThoughts: false },
+  });
+  ```
+
+- Fix API-key (non-Vertex) Gemini Live connections being pinned to the `v1alpha` WebSocket endpoint. `v1alpha` rejects current Live models (e.g. `gemini-2.0-flash-live-001`) during setup, so the session never reached `setupComplete` and `connect()` only failed via the 30s timeout. API-key connections now use the `v1beta` Live endpoint (matching the Vertex branch already on `v1beta1`), so current Live models connect successfully. ([#24089](https://github.com/mastra-ai/mastra/pull/24089))
+
+- Fixed a WebSocket denial-of-service advisory by updating ws to 8.21.3. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+- Fixed a hang when connecting the Google Gemini Live voice provider with a rejected setup (for example an unknown model id). The server closes the WebSocket with an abnormal code such as 1007, which previously was only logged, so connect() waited out the full 30s timeout and reported a generic timeout instead of the real reason. connect() now rejects immediately, carrying the close code and reason. ([#24092](https://github.com/mastra-ai/mastra/pull/24092))
+
+- Updated dependencies [[`fef227a`](https://github.com/mastra-ai/mastra/commit/fef227a8b7cb0ad7f68087e26d1fd2051054a61a)]:
+  - @mastra/schema-compat@1.3.11-alpha.0
+
 ## 0.14.10
 
 ### Patch Changes

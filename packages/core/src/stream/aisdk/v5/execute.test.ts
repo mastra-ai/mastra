@@ -2,7 +2,8 @@ import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-
 import { describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { coreFeatures } from '../../../features';
-import { execute, resolveJsonPromptInjection } from './execute';
+import { ModelRouterLanguageModel } from '../../../llm/model/router';
+import { execute, hasFreeFormObject, resolveJsonPromptInjection, usesOpenAIStrictJsonSchema } from './execute';
 import { testUsage } from './test-utils';
 
 const inputMessages = [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Summarize the plan.' }] }];
@@ -250,6 +251,225 @@ describe('execute structured output prompt handling', () => {
     expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
     expect(promptJson).toContain('suggestions');
   });
+
+  it.each([
+    [false, false],
+    [true, true],
+  ])('processor mode with jsonPromptInjection: %s injects schema hint: %s', async (jsonPromptInjection, injects) => {
+    let capturedPrompt: unknown;
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        capturedPrompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: 'Main agent summary.' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    const stream = execute({
+      runId: 'test-run-24440',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput: { schema, model: model as any, jsonPromptInjection },
+    });
+
+    await readStream(stream);
+
+    const promptJson = JSON.stringify(capturedPrompt);
+    if (injects) {
+      expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
+    } else {
+      expect(capturedPrompt).toEqual(inputMessages);
+      expect(promptJson).not.toContain('suggestions');
+    }
+  });
+});
+
+describe('execute compact structuredOutput.instructions (issue #23798)', () => {
+  const INLINE_SCHEMA_PREFIX = 'Return your response as JSON matching this schema';
+  const SYSTEM_SCHEMA_PREFIX = 'JSON schema:';
+  const SENTINEL = '__mastra23798Sentinel';
+  const INSTRUCTIONS = 'FIELDS: a,b';
+  const sentinelSchema = z.object({
+    __mastra23798Sentinel: z.string(),
+  });
+
+  function makeCapturingModel() {
+    const captured: { prompt?: any } = {};
+    const model = new MockLanguageModelV2({
+      doStream: async ({ prompt }: any) => {
+        captured.prompt = prompt;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-23798', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"__mastra23798Sentinel":"ok"}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    return { model, captured };
+  }
+
+  async function run({ messages, structuredOutput, runId }: { messages: any[]; structuredOutput: any; runId: string }) {
+    const { model, captured } = makeCapturingModel();
+    const stream = execute({
+      runId,
+      model: model as any,
+      inputMessages: messages,
+      onResult: () => {},
+      methodType: 'stream',
+      structuredOutput,
+    });
+    await readStream(stream);
+    return captured.prompt as any[];
+  }
+
+  it('substitutes instructions for the schema dump in the leading system message', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-system',
+      messages: [
+        { role: 'system' as const, content: 'Keep this prefix stable.' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+      ],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: `Keep this prefix stable.\n\n${INSTRUCTIONS}` });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it("substitutes instructions when 'auto' resolves to injection on a model without native support", async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-auto',
+      messages: [
+        { role: 'system' as const, content: 'Keep this prefix stable.' },
+        { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+      ],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'auto', instructions: INSTRUCTIONS },
+    });
+
+    // 'auto' resolves to inline injection when capability data says the model has no native
+    // structured output, so the compact text lands on the latest user message.
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).toContain(INSTRUCTIONS);
+    expect(prompt[0]).toEqual({ role: 'system', content: 'Keep this prefix stable.' });
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('creates a system message carrying the instructions when none exists', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-system-none',
+      messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] }],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: true, instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: INSTRUCTIONS });
+    expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: 'Extract now.' }] });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('substitutes instructions for the schema dump in the latest user message for inline mode', async () => {
+    const messages = [
+      { role: 'system' as const, content: 'Keep this prefix stable.' },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'First request.' }] },
+      { role: 'assistant' as const, content: [{ type: 'text' as const, text: 'First response.' }] },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+    ];
+    const prompt = await run({
+      runId: 'test-run-23798-inline',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'inline', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual(messages[0]);
+    expect(prompt[3].content.at(-1)).toEqual({ type: 'text', text: INSTRUCTIONS });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('adds a user message carrying the instructions for inline mode when no user message exists', async () => {
+    const prompt = await run({
+      runId: 'test-run-23798-inline-none',
+      messages: [{ role: 'system' as const, content: 'System only.' }],
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'inline', instructions: INSTRUCTIONS },
+    });
+
+    expect(prompt[0]).toEqual({ role: 'system', content: 'System only.' });
+    expect(prompt[1]).toEqual({ role: 'user', content: [{ type: 'text', text: INSTRUCTIONS }] });
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).not.toContain(INLINE_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(promptJson).not.toContain(SENTINEL);
+  });
+
+  it('falls back to the generated schema instruction for whitespace-only instructions', async () => {
+    const messages = [
+      { role: 'system' as const, content: 'Keep this prefix stable.' },
+      { role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] },
+    ];
+    const withWhitespace = await run({
+      runId: 'test-run-23798-blank',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system', instructions: '   ' },
+    });
+    const withNone = await run({
+      runId: 'test-run-23798-none',
+      messages,
+      structuredOutput: { schema: sentinelSchema, jsonPromptInjection: 'system' },
+    });
+
+    expect(JSON.stringify(withWhitespace)).toBe(JSON.stringify(withNone));
+    expect(JSON.stringify(withWhitespace)).toContain(SYSTEM_SCHEMA_PREFIX);
+    expect(JSON.stringify(withWhitespace)).toContain(SENTINEL);
+  });
+
+  it('does not substitute instructions on the processor path', async () => {
+    const { model: structuringModel } = makeCapturingModel();
+    const prompt = await run({
+      runId: 'test-run-23798-processor',
+      messages: [{ role: 'user' as const, content: [{ type: 'text' as const, text: 'Extract now.' }] }],
+      structuredOutput: {
+        schema: sentinelSchema,
+        model: structuringModel as any,
+        jsonPromptInjection: 'system',
+        instructions: INSTRUCTIONS,
+      },
+    });
+
+    const promptJson = JSON.stringify(prompt);
+    expect(promptJson).toContain('Your response will be processed by another agent to extract structured data');
+    expect(promptJson).toContain(SENTINEL);
+    expect(promptJson).not.toContain(INSTRUCTIONS);
+  });
 });
 
 describe('execute sampling-param stripping (issue #23319)', () => {
@@ -313,5 +533,272 @@ describe('execute sampling-param stripping (issue #23319)', () => {
     expect(captured.options.temperature).toBe(0);
     expect(captured.options.topP).toBe(0.5);
     expect(captured.options.topK).toBe(10);
+  });
+});
+
+describe('execute OpenAI strict-mode schema preparation (issue #23795)', () => {
+  const strictSchema = z.object({
+    tags: z.array(z.string()).min(1).max(3),
+    nested: z.object({ subject: z.string(), note: z.string().optional() }),
+  });
+
+  function makeCapturingModel(provider: string, supportsStructuredOutputs?: boolean) {
+    const captured: { options?: any } = {};
+    const model = new MockLanguageModelV2({
+      provider,
+      modelId: 'gpt-4o',
+      doStream: async (options: any) => {
+        captured.options = options;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-strict', modelId: 'gpt-4o', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"tags":["a"],"nested":{"subject":"s","note":null}}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+    if (supportsStructuredOutputs !== undefined) {
+      Object.assign(model, { supportsStructuredOutputs });
+    }
+    return { model, captured };
+  }
+
+  async function run(
+    model: MockLanguageModelV2,
+    options: { providerOptions?: Record<string, any>; jsonPromptInjection?: boolean; schema?: any } = {},
+  ) {
+    const stream = execute({
+      runId: 'test-run-id-strict',
+      model: model as any,
+      inputMessages,
+      onResult: () => {},
+      methodType: 'stream',
+      providerOptions: options.providerOptions,
+      structuredOutput: { schema: options.schema ?? strictSchema, jsonPromptInjection: options.jsonPromptInjection },
+    });
+    await readStream(stream);
+  }
+
+  function expectPreparedSchema(responseFormat: any) {
+    expect(responseFormat.type).toBe('json');
+    const sentSchema = responseFormat.schema;
+    expect(sentSchema.additionalProperties).toBe(false);
+    expect(sentSchema.required).toEqual(['tags', 'nested']);
+    expect(sentSchema.properties.tags.minItems).toBeUndefined();
+    expect(sentSchema.properties.tags.maxItems).toBeUndefined();
+    expect(sentSchema.properties.nested.required).toEqual(['subject', 'note']);
+    expect(sentSchema.properties.nested.additionalProperties).toBe(false);
+  }
+
+  function expectUnpreparedSchema(responseFormat: any) {
+    expect(responseFormat.type).toBe('json');
+    const sentSchema = responseFormat.schema;
+    expect(sentSchema.properties.tags.minItems).toBe(1);
+    expect(sentSchema.properties.tags.maxItems).toBe(3);
+    expect(sentSchema.properties.nested.required).toEqual(['subject']);
+  }
+
+  it('prepares the schema and opts into strict mode for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.chat');
+    await run(model);
+    expectPreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
+  });
+
+  // OpenAI strict mode cannot express free-form keys, so a z.record() field is sent non-strict (#25235).
+  it('sends schemas with a record field non-strict and unprepared for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, { schema: z.object({ summary: z.string(), labels: z.record(z.string(), z.string()) }) });
+    const sent = captured.options.responseFormat.schema;
+    expect(sent.properties.labels.additionalProperties).toEqual({ type: 'string' });
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(false);
+  });
+
+  it('keeps strict mode for record schemas when the user opts in explicitly', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, {
+      schema: z.object({ labels: z.record(z.string(), z.string()) }),
+      providerOptions: { openai: { strictJsonSchema: true } },
+    });
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(true);
+  });
+
+  it('honors openaiCompatible.strictJsonSchema: false for openai-compatible record schemas', async () => {
+    const { model, captured } = makeCapturingModel('openai-compatible.chat', true);
+    await run(model, {
+      schema: z.object({ labels: z.record(z.string(), z.string()) }),
+      providerOptions: { openaiCompatible: { strictJsonSchema: false } },
+    });
+    expect(captured.options.responseFormat.schema.properties.labels.additionalProperties).toEqual({ type: 'string' });
+    expect(captured.options.providerOptions?.openai).toBeUndefined();
+  });
+
+  // openai-compatible sends strict by default, so the schema must be prepared to match.
+  it('prepares record schemas for openai-compatible models that keep the strict default', async () => {
+    const { model, captured } = makeCapturingModel('openai-compatible.chat', true);
+    await run(model, { schema: z.object({ labels: z.record(z.string(), z.string()) }) });
+    expect(captured.options.responseFormat.schema.properties.labels.additionalProperties).toBe(false);
+    expect(captured.options.providerOptions?.openai).toBeUndefined();
+  });
+
+  it('sends schemas with a record inside a tuple non-strict for OpenAI models', async () => {
+    const { model, captured } = makeCapturingModel('openai.responses');
+    await run(model, { schema: z.object({ pair: z.tuple([z.string(), z.record(z.string(), z.string())]) }) });
+    expect(captured.options.providerOptions?.openai?.strictJsonSchema).toBe(false);
+  });
+
+  describe('hasFreeFormObject', () => {
+    it('ignores a property that is named like a schema keyword', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: { additionalProperties: { type: 'boolean' }, propertyNames: { type: 'string' } },
+      };
+      expect(hasFreeFormObject(schema)).toBe(false);
+    });
+
+    it('ignores data keywords that contain schema-like values', () => {
+      const schema = {
+        type: 'object',
+        additionalProperties: false,
+        properties: {
+          config: {
+            type: 'string',
+            default: { propertyNames: {} },
+            examples: [{ additionalProperties: true }],
+            enum: [{ patternProperties: {} }],
+          },
+        },
+      };
+      expect(hasFreeFormObject(schema)).toBe(false);
+    });
+
+    it('finds free-form objects nested in subschemas', () => {
+      const record = { type: 'object', additionalProperties: { type: 'string' } };
+      expect(hasFreeFormObject({ type: 'object', properties: { labels: record } })).toBe(true);
+      expect(hasFreeFormObject({ type: 'array', items: record })).toBe(true);
+      expect(hasFreeFormObject({ anyOf: [{ type: 'null' }, record] })).toBe(true);
+      expect(hasFreeFormObject({ $defs: { Labels: record } })).toBe(true);
+      expect(hasFreeFormObject({ type: 'array', prefixItems: [{ type: 'string' }, record] })).toBe(true);
+    });
+  });
+
+  it('prepares the schema for OpenAI-compatible models that send strict json_schema by default', async () => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', true);
+    await run(model);
+    expectPreparedSchema(captured.options.responseFormat);
+    expect(captured.options.providerOptions?.openai).toBeUndefined();
+  });
+
+  it.each([
+    ['provider name', { 'azure-foundry': { strictJsonSchema: false } }],
+    ['camelCase provider name', { azureFoundry: { strictJsonSchema: false } }],
+    ['openaiCompatible', { openaiCompatible: { strictJsonSchema: false } }],
+  ])('leaves the schema alone when strict mode is disabled through %s provider options', async (_, providerOptions) => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', true);
+    await run(model, { providerOptions });
+    expectUnpreparedSchema(captured.options.responseFormat);
+  });
+
+  it('uses the camelCase provider options when they conflict with the raw provider name', async () => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', true);
+    await run(model, {
+      providerOptions: { 'azure-foundry': { strictJsonSchema: false }, azureFoundry: { strictJsonSchema: true } },
+    });
+    expectPreparedSchema(captured.options.responseFormat);
+  });
+
+  it('leaves the schema alone for models that do not send a strict json_schema', async () => {
+    for (const supportsStructuredOutputs of [undefined, false]) {
+      const { model, captured } = makeCapturingModel('azure-foundry.chat', supportsStructuredOutputs);
+      await run(model);
+      expectUnpreparedSchema(captured.options.responseFormat);
+    }
+  });
+
+  it('does not prepare the schema when JSON prompt injection replaces the native response format', async () => {
+    const { model, captured } = makeCapturingModel('azure-foundry.chat', true);
+    await run(model, { jsonPromptInjection: true });
+    expect(captured.options.responseFormat).toBeUndefined();
+    expect(captured.options.prompt[0].content).toContain('"minItems":1');
+  });
+
+  it('decides model-router models by provider id', () => {
+    expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('anthropic/claude-sonnet-4-5'))).toBe(false);
+    expect(usesOpenAIStrictJsonSchema(new ModelRouterLanguageModel('openai/gpt-4o'))).toBe(true);
+  });
+});
+
+describe("execute toolChoice 'none' (issue #25908)", () => {
+  const tools = {
+    lookup: {
+      type: 'function',
+      description: 'Look something up',
+      inputSchema: z.object({ q: z.string() }),
+    } as any,
+  };
+
+  async function captureCallOptions(structuredOutput?: Parameters<typeof execute>[0]['structuredOutput']) {
+    let captured: any;
+    const model = new MockLanguageModelV2({
+      doStream: async (options: any) => {
+        captured = options;
+        return {
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: '{"suggestions":["ship"]}' },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: testUsage, providerMetadata: undefined },
+          ]),
+          request: { body: '' },
+          response: { headers: {} },
+          warnings: [] as any[],
+        };
+      },
+    });
+
+    await readStream(
+      execute({
+        runId: 'test-run-id',
+        model: model as any,
+        inputMessages,
+        tools,
+        toolChoice: 'none',
+        onResult: () => {},
+        methodType: 'stream',
+        structuredOutput,
+      }),
+    );
+    return captured;
+  }
+
+  it('keeps tool definitions so providers retain tool history', async () => {
+    const options = await captureCallOptions();
+
+    expect(options.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
+
+  it('strips tools when a structured-output schema is sent with the request (#14459)', async () => {
+    const options = await captureCallOptions({ schema });
+
+    expect(options.tools).toBeUndefined();
+    expect(options.toolChoice).toEqual({ type: 'none' });
+  });
+
+  it('keeps tools when the schema is injected into the prompt instead of sent as a response format', async () => {
+    const options = await captureCallOptions({ schema, jsonPromptInjection: true });
+
+    expect(options.responseFormat).toBeUndefined();
+    expect(options.tools?.map((tool: any) => tool.name)).toEqual(['lookup']);
+    expect(options.toolChoice).toEqual({ type: 'none' });
   });
 });

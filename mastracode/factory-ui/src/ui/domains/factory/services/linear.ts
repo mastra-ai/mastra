@@ -7,12 +7,15 @@
  * talks to Linear's GraphQL API on the org's behalf.
  */
 
+import { RequestError } from './request';
+
 export type LinearStatusReason =
   | 'missing_config'
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -35,8 +38,10 @@ export interface LinearIssue {
   assignee: string | null;
   creator?: string | null;
   team: string | null;
-  /** Linear project the issue was read from; matches an intake binding's `sourceId`. */
+  /** Selected intake source (project or team); matches an intake binding's `sourceId`. */
   sourceId?: string | null;
+  /** Actual Linear project, even when the issue was routed through a team. */
+  projectId?: string | null;
   labels: string[];
   createdAt: string;
   updatedAt: string;
@@ -85,10 +90,11 @@ export async function fetchLinearStatus(baseUrl: string): Promise<LinearStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, workspace: null, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, workspace: null };
+    if (res.status === 404) return { enabled: false, connected: false, workspace: null };
+    if (!res.ok) return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
     return (await res.json()) as LinearStatus;
   } catch {
-    return { enabled: false, connected: false, workspace: null };
+    return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
   }
 }
 
@@ -114,8 +120,8 @@ async function getLinearResource<T>(baseUrl: string, path: string): Promise<T> {
     } catch {
       /* ignore non-JSON */
     }
-    const err = new Error(message);
-    (err as { code?: string }).code = code;
+    const err = new RequestError(message, res.status);
+    (err as RequestError & { code?: string }).code = code;
     throw err;
   }
   return (await res.json()) as T;

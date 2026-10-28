@@ -28,6 +28,9 @@ describeForAllEngines('AIMock loop scenario: structured output validation surfac
     const { chunks, requests } = await runLoopScenario({
       engine,
       llm: getMock(),
+      // Agents now resolve the shared stability error processors, whose retry would change the
+      // request/step counts this case asserts. Opt out to keep its subject under test.
+      errorProcessors: [],
       prompt: 'Extract user data.',
       stopWhen: stepCountIs(1),
       structuredOutput: { schema },
@@ -57,6 +60,9 @@ describeForAllEngines('AIMock loop scenario: structured output validation surfac
     const { chunks, requests } = await runLoopScenario({
       engine,
       llm: getMock(),
+      // Agents now resolve the shared stability error processors, whose retry would change the
+      // request/step counts this case asserts. Opt out to keep its subject under test.
+      errorProcessors: [],
       prompt: 'Get a count.',
       stopWhen: stepCountIs(2),
       structuredOutput: { schema },

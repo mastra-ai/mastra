@@ -44,7 +44,7 @@ On your first deploy, the CLI prompts you to create a new project or select an e
 
 The `mastra deploy` command builds your project and compiles `src/mastra/` into `.mastra/output`. It packages that output as an artifact ZIP, then uploads and deploys it to a cloud sandbox.
 
-A deploy transitions through **queued → uploading → starting → running** or **failed** if something goes wrong. If a sandbox is already running for your project, the platform updates it in place with no downtime. Otherwise, it creates a fresh sandbox. Your instance URL is assigned per project slug and remains stable across deploys.
+A deploy transitions through **queued → uploading → starting → deploying → running** or **failed** if something goes wrong. If a sandbox is already running for your project, the platform updates it in place with no downtime. Otherwise, it creates a fresh sandbox. Your instance URL is assigned per environment and remains stable across deploys to that environment.
 
 See the [`mastra deploy` CLI reference](/reference/cli/mastra#mastra-deploy) for the full list of flags and CI/CD usage.
 

@@ -1,21 +1,22 @@
-import admin from 'firebase-admin';
+import { applicationDefault, cert, initializeApp } from 'firebase-admin/app';
+import { getAuth } from 'firebase-admin/auth';
+import type { DecodedIdToken } from 'firebase-admin/auth';
 import { getFirestore } from 'firebase-admin/firestore';
 import { describe, it, expect, vi, beforeEach } from 'vitest';
 import { MastraAuthFirebase } from './index';
 
-// Mock Firebase Admin
-vi.mock('firebase-admin', () => ({
-  default: {
-    apps: [],
-    initializeApp: vi.fn(),
-    auth: vi.fn(() => ({
-      verifyIdToken: vi.fn(),
-    })),
-    credential: {
-      cert: vi.fn(() => 'mock-credential'),
-      applicationDefault: vi.fn(() => 'mock-default-credential'),
-    },
-  },
+// Mock Firebase Admin (modular API)
+vi.mock('firebase-admin/app', () => ({
+  getApps: vi.fn(() => []),
+  initializeApp: vi.fn(),
+  cert: vi.fn(() => 'mock-credential'),
+  applicationDefault: vi.fn(() => 'mock-default-credential'),
+}));
+
+vi.mock('firebase-admin/auth', () => ({
+  getAuth: vi.fn(() => ({
+    verifyIdToken: vi.fn(),
+  })),
 }));
 
 // Mock Firestore
@@ -45,10 +46,10 @@ describe('MastraAuthFirebase', () => {
       });
 
       expect(auth).toBeInstanceOf(MastraAuthFirebase);
-      expect(admin.initializeApp).toHaveBeenCalledWith({
+      expect(initializeApp).toHaveBeenCalledWith({
         credential: 'mock-credential',
       });
-      expect(admin.credential.cert).toHaveBeenCalledWith(mockServiceAccount);
+      expect(cert).toHaveBeenCalledWith(mockServiceAccount);
     });
 
     it('should initialize with environment variables', () => {
@@ -58,13 +59,25 @@ describe('MastraAuthFirebase', () => {
       const auth = new MastraAuthFirebase();
 
       expect(auth).toBeInstanceOf(MastraAuthFirebase);
-      expect(admin.initializeApp).toHaveBeenCalledWith({
+      expect(initializeApp).toHaveBeenCalledWith({
         credential: 'mock-credential',
       });
-      expect(admin.credential.cert).toHaveBeenCalledWith(mockServiceAccount);
+      expect(cert).toHaveBeenCalledWith(mockServiceAccount);
 
       delete process.env.FIREBASE_SERVICE_ACCOUNT;
       delete process.env.FIRESTORE_DATABASE_ID;
+    });
+
+    it('should fall back to application default credentials without a service account', () => {
+      delete process.env.FIREBASE_SERVICE_ACCOUNT;
+
+      new MastraAuthFirebase();
+
+      expect(applicationDefault).toHaveBeenCalled();
+      expect(cert).not.toHaveBeenCalled();
+      expect(initializeApp).toHaveBeenCalledWith({
+        credential: 'mock-default-credential',
+      });
     });
   });
 
@@ -73,7 +86,7 @@ describe('MastraAuthFirebase', () => {
       const mockDecodedToken = { uid: mockUserId };
       const mockVerifyIdToken = vi.fn().mockResolvedValue(mockDecodedToken);
 
-      (admin.auth as any).mockReturnValue({
+      (getAuth as any).mockReturnValue({
         verifyIdToken: mockVerifyIdToken,
       });
 
@@ -87,7 +100,7 @@ describe('MastraAuthFirebase', () => {
     it('should return null when token verification fails', async () => {
       const mockVerifyIdToken = vi.fn().mockRejectedValue(new Error('Invalid token'));
 
-      (admin.auth as any).mockReturnValue({
+      (getAuth as any).mockReturnValue({
         verifyIdToken: mockVerifyIdToken,
       });
 

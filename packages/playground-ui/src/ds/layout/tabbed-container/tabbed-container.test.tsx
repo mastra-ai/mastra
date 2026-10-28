@@ -95,21 +95,31 @@ describe('TabbedContainer', () => {
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(runsSearch);
     expect(runsToolbar?.hasAttribute('data-active')).toBe(true);
-    expect(runsToolbar?.hasAttribute('inert')).toBe(false);
     expect(scoresToolbar?.hasAttribute('data-active')).toBe(false);
-    expect(scoresToolbar?.getAttribute('aria-hidden')).toBe('true');
-    expect(scoresToolbar?.hasAttribute('inert')).toBe(true);
     fireEvent.click(screen.getByRole('tab', { name: 'Scores' }));
     expect(screen.getByText('answer-relevancy')).toBeTruthy();
     expect(runsToolbar?.hasAttribute('data-active')).toBe(false);
-    expect(runsToolbar?.getAttribute('aria-hidden')).toBe('true');
-    expect(runsToolbar?.hasAttribute('inert')).toBe(true);
     expect(scoresToolbar?.hasAttribute('data-active')).toBe(true);
-    expect(scoresToolbar?.hasAttribute('inert')).toBe(false);
     fireEvent.keyDown(window, { key: 'f', ctrlKey: true, shiftKey: true });
     expect(document.activeElement).toBe(screen.getByLabelText('Search scores'));
     fireEvent.click(screen.getByRole('tab', { name: 'Runs' }));
     expect(screen.getByLabelText<HTMLInputElement>('Search runs').value).toBe('weather');
+  });
+
+  it('swaps the search controls with the table, so two tabs never show their controls at once', () => {
+    renderTables();
+    const runsControls = screen
+      .getByLabelText('Search runs')
+      .closest<HTMLElement>('[data-slot="tabbed-container-controls"]');
+    const scoresControls = screen
+      .getByLabelText('Search scores')
+      .closest<HTMLElement>('[data-slot="tabbed-container-controls"]');
+    expect(runsControls?.hidden).toBe(false);
+    expect(scoresControls?.hidden).toBe(true);
+
+    fireEvent.click(screen.getByRole('tab', { name: 'Scores' }));
+    expect(runsControls?.hidden).toBe(true);
+    expect(scoresControls?.hidden).toBe(false);
   });
 
   it('keeps an empty multi-filter inactive', () => {
@@ -170,33 +180,6 @@ describe('TabbedContainer', () => {
     fireEvent.click(screen.getByRole('tab', { name: 'Overview' }));
     expect(controls?.hasAttribute('data-active')).toBe(false);
     expect(screen.getByText('run_1')).toBeTruthy();
-  });
-
-  it('uses the inset frame by default and honors an explicit frame', () => {
-    const { rerender } = render(
-      <TabbedContainer defaultTab="runs" className="custom-root">
-        <TabbedContainer.DataList value="runs" label="Runs" columns="auto">
-          <DataList.RowStatic>
-            <DataList.Cell>run_1</DataList.Cell>
-          </DataList.RowStatic>
-        </TabbedContainer.DataList>
-      </TabbedContainer>,
-    );
-    const root = () => screen.getByRole('tab', { name: 'Runs' }).closest('[data-slot="tabs"]');
-    expect(root()?.getAttribute('data-frame')).toBe('inset');
-    expect(root()?.getAttribute('data-appearance')).toBe('contained');
-    expect(root()?.classList.contains('tabbed-container')).toBe(true);
-    expect(root()?.classList.contains('custom-root')).toBe(true);
-    rerender(
-      <TabbedContainer defaultTab="runs" frame="stroke" className="custom-root">
-        <TabbedContainer.DataList value="runs" label="Runs" columns="auto">
-          <DataList.RowStatic>
-            <DataList.Cell>run_1</DataList.Cell>
-          </DataList.RowStatic>
-        </TabbedContainer.DataList>
-      </TabbedContainer>,
-    );
-    expect(root()?.getAttribute('data-frame')).toBe('stroke');
   });
 
   it('mixes arbitrary panels with DataLists and ignores unrelated children', () => {

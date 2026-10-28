@@ -14,31 +14,39 @@
 import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
-import Chat from './domains/chat/Chat';
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
-import { RootGuards } from './domains/auth/components/RootGuards';
-import { AuditPage } from './pages/AuditPage';
-import { ActivityPage } from './pages/ActivityPage';
-import { AttentionPage } from './pages/AttentionPage';
-import { KnowledgePage } from './pages/KnowledgePage';
+import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
-import { CreateFactoryPage } from './pages/CreateFactoryPage';
-import { NewPage } from './pages/NewPage';
-import { OnboardingPage } from './pages/OnboardingPage';
-import { OverviewPage } from './pages/OverviewPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { SlackConnectionPage } from './pages/SlackConnectionPage';
-import { RulesPage } from './pages/RulesPage';
-import { SignInPage } from './pages/SignInPage';
-import { SupervisorPage } from './pages/SupervisorPage';
-import { ThreadPage } from './pages/ThreadPage';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
+import { AppLayout } from './layouts/AppLayout';
+import { lazyPage } from './layouts/PageSuspense';
+import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
+
+// Only the boards ship in the startup bundle; every other page loads on first
+// visit behind its own loader (see `lazyPage`).
+const NewPage = lazyPage(() => import('./pages/NewPage').then(module => module.NewPage));
+const ThreadPage = lazyPage(() => import('./pages/ThreadPage').then(module => module.ThreadPage));
+const KnowledgePage = lazyPage(() => import('./pages/KnowledgePage').then(module => module.KnowledgePage));
+const SettingsPage = lazyPage(() => import('./pages/SettingsPage').then(module => module.SettingsPage));
+const SlackConnectionPage = lazyPage(() =>
+  import('./pages/SlackConnectionPage').then(module => module.SlackConnectionPage),
+);
+const CreateFactoryPage = lazyPage(() => import('./pages/CreateFactoryPage').then(module => module.CreateFactoryPage));
+const RulesPage = lazyPage(() => import('./pages/RulesPage').then(module => module.RulesPage));
+const OnboardingPage = lazyPage(
+  () => import('./pages/OnboardingPage').then(module => module.OnboardingPage),
+  <AuthPendingSkeleton label="Loading page" />,
+);
+const SignInPage = lazyPage(
+  () => import('./pages/SignInPage').then(module => module.SignInPage),
+  <AuthPendingSkeleton label="Loading page" />,
+);
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -70,18 +78,12 @@ function FactoryHomeRedirect() {
   return <FactoryBoardLanding factoryId={factoryId} />;
 }
 
-/** `/metrics` shipped before the page became the Overview — keep old links alive. */
-function MetricsRedirect() {
-  const { factoryId } = useParams<{ factoryId: string }>();
-  return <Navigate to={`/factories/${factoryId}/overview`} replace />;
-}
-
 /**
  * Factory-agnostic thread deep link, used by server-built links that don't
  * know a factory id (e.g. the Slack "View Session" card, whose channel
  * sessions are controller-scoped). Forwards to the first factory's workspaces
- * thread route, preserving the query string — the `?resourceId=` override
- * binds the chat surface to the channel session's resource there.
+ * thread route, preserving the query string — the `?sessionId=` override
+ * (`?resourceId=` in older links) binds the chat surface to the channel session there.
  */
 function ChannelThreadRedirect() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -124,7 +126,7 @@ function KnowledgeRoute() {
   const features = useServerFeatures();
 
   if (features.isPending || !factoryId) return null;
-  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}/overview`} replace />;
+  if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
   return <KnowledgePage />;
 }
 
@@ -136,6 +138,7 @@ export function createAppRoutes(): RouteObject[] {
     {
       path: '/',
       element: <RootGuards />,
+      errorElement: <RouteErrorPage />,
       children: [
         { index: true, element: <RootLanding /> },
         { path: 'onboarding', element: <OnboardingPage /> },
@@ -144,53 +147,37 @@ export function createAppRoutes(): RouteObject[] {
           element: <FactoryLayout />,
           children: [
             {
-              element: <Chat />,
-              children: [{ index: true, element: <FactoryHomeRedirect /> }],
-            },
-            {
-              path: 'workspaces/:sessionId',
-              element: <Chat />,
+              element: <AppLayout />,
               children: [
-                { index: true, element: <NewPage /> },
-                { path: 'threads/:threadId', element: <ThreadPage /> },
-              ],
-            },
-            {
-              path: 'user/new/:draftSessionId',
-              element: <Chat />,
-              children: [{ index: true, element: <NewPage /> }],
-            },
-            {
-              path: 'user/threads/:threadId',
-              element: <Chat />,
-              children: [{ index: true, element: <ThreadPage /> }],
-            },
-            {
-              path: 'supervisor',
-              element: <Chat />,
-              children: [{ index: true, element: <SupervisorPage /> }],
-            },
-            {
-              element: <Chat />,
-              children: [
-                { path: 'new', element: <NewPage /> },
-                { path: 'new-factory', element: <CreateFactoryPage /> },
-                { path: 'work', element: <WorkBoardPage /> },
-                { path: 'review', element: <ReviewBoardPage /> },
-                { path: 'boards/:boardId', element: <CustomBoardPage /> },
-                { path: 'overview', element: <OverviewPage /> },
-                { path: 'attention', element: <AttentionPage /> },
-                { path: 'activity', element: <ActivityPage /> },
-                { path: 'metrics', element: <MetricsRedirect /> },
-                { path: 'rules', element: <RulesPage /> },
-                { path: 'audit', element: <AuditPage /> },
-                { path: 'knowledge', element: <KnowledgeRoute /> },
                 {
-                  path: 'settings',
+                  // Errors replace only the page, preserving the shell and its providers.
+                  errorElement: <AppRouteErrorPage />,
                   children: [
-                    { index: true, element: <Navigate to="preferences" replace /> },
-                    { path: 'connections/slack', element: <SlackConnectionPage /> },
-                    { path: ':section', element: <SettingsPage /> },
+                    { index: true, element: <FactoryHomeRedirect /> },
+                    { path: 'workspaces/:sessionId', element: <NewPage /> },
+                    { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
+                    { path: 'user/new/:draftSessionId', element: <NewPage /> },
+                    { path: 'user/threads/:threadId', element: <ThreadPage /> },
+                    { path: 'new', element: <NewPage /> },
+                    { path: 'new-factory', element: <CreateFactoryPage /> },
+                    { path: 'work', element: <WorkBoardPage /> },
+                    { path: 'review', element: <ReviewBoardPage /> },
+                    { path: 'boards/:boardId', element: <CustomBoardPage /> },
+                    { path: 'activity', element: <FactoryHomeRedirect /> },
+                    { path: 'overview', element: <FactoryHomeRedirect /> },
+                    { path: 'attention', element: <FactoryHomeRedirect /> },
+                    { path: 'metrics', element: <FactoryHomeRedirect /> },
+                    { path: 'audit', element: <FactoryHomeRedirect /> },
+                    { path: 'rules', element: <RulesPage /> },
+                    { path: 'knowledge', element: <KnowledgeRoute /> },
+                    {
+                      path: 'settings',
+                      children: [
+                        { index: true, element: <Navigate to="preferences" replace /> },
+                        { path: 'connections/slack', element: <SlackConnectionPage /> },
+                        { path: ':section', element: <SettingsPage /> },
+                      ],
+                    },
                   ],
                 },
               ],
@@ -204,7 +191,11 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
-    { path: '/signin', element: <SignInPage /> },
+    {
+      path: '/signin',
+      element: <SignInPage />,
+      errorElement: <RouteErrorPage />,
+    },
   ];
 }
 

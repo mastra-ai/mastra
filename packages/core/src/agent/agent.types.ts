@@ -6,7 +6,13 @@ import type { SystemMessage } from '../llm';
 import type { ProviderOptions } from '../llm/model/provider-options';
 import type { MastraLanguageModel, MastraModelConfig } from '../llm/model/shared.types';
 import type { CompletionConfig, CompletionRunResult } from '../loop/network/validation';
-import type { LoopConfig, LoopOptions, PrepareStepFunction, ToolCallConcurrency } from '../loop/types';
+import type {
+  AgentLoopResumeClaim,
+  LoopConfig,
+  LoopOptions,
+  PrepareStepFunction,
+  ToolCallConcurrency,
+} from '../loop/types';
 import type { VersionOverrides } from '../mastra/types';
 import type { ObservabilityContext, TracingOptions } from '../observability';
 import type { ErrorProcessorOrWorkflow, InputProcessorOrWorkflow, OutputProcessorOrWorkflow } from '../processors';
@@ -50,8 +56,8 @@ export type StreamIsTaskCompleteConfig = IsTaskCompleteConfig;
  * Contains everything needed to decide which parent messages to share with the sub-agent.
  */
 export interface MessageFilterContext {
-  /** Full unfiltered messages from the parent agent's conversation history */
-  messages: MastraDBMessage[];
+  /** Model messages the parent LLM saw (processor-adjusted, including system messages), with tool calls/results removed */
+  messages: ModelMessage[];
   /** The ID of the primitive being delegated to */
   primitiveId: string;
   /** The type of primitive being delegated to */
@@ -106,8 +112,8 @@ export interface DelegationStartContext {
   parentAgentName: string;
   /** Tool call ID from the LLM */
   toolCallId: string;
-  /** Messages accumulated so far */
-  messages: MastraDBMessage[];
+  /** Model messages the parent LLM saw, with tool calls/results removed */
+  messages: ModelMessage[];
   /**
    * The request context the delegated run will receive. Entries are shallowly
    * copied from the parent run's context, excluding `MastraMemory` and the
@@ -130,8 +136,17 @@ export interface DelegationStartResult {
   modifiedPrompt?: string;
   /** Modified instructions for the sub-agent (optional) */
   modifiedInstructions?: string;
-  /** Modified maxSteps for the sub-agent (optional) */
+  /**
+   * The sub-agent's maxSteps budget. Overrides the cap on the model-supplied
+   * `maxSteps` (capped at the sub-agent's `defaultOptions.maxSteps`), so this
+   * can raise the budget as well as lower it.
+   */
   modifiedMaxSteps?: number;
+  /**
+   * Metadata to attach to the sub-agent thread when it is created for this delegation (optional).
+   * Not applied when resuming an existing sub-agent thread.
+   */
+  threadMetadata?: Record<string, unknown>;
 }
 
 /**
@@ -174,6 +189,16 @@ export interface DelegationCompleteContext {
       result?: unknown;
       args?: unknown;
       isError?: boolean;
+    }>;
+    /**
+     * Tool calls the sub-agent made that never got a result, because the tool has
+     * no server-side `execute` (a client tool). A sub-agent cannot resolve these, so
+     * its run ends at the tool-calls step. Only present when there is at least one.
+     */
+    subAgentPendingToolCalls?: Array<{
+      toolName: string;
+      toolCallId: string;
+      args?: unknown;
     }>;
     /** Aggregate token usage from the sub-agent's execution */
     usage?: {
@@ -375,22 +400,21 @@ export interface DelegationConfig {
 
   /**
    * Callback that controls which parent messages are passed to each subagent as conversation
-   * context. Receives the full parent message history along with delegation metadata, and
-   * returns the messages that should be forwarded.
+   * context. Receives the AI SDK model messages the parent LLM saw (processor-adjusted, so they can
+   * include system messages and string content) with tool calls/results removed, along with
+   * delegation metadata, and returns the model messages that should be forwarded.
    *
    * Runs after `onDelegationStart` so the `prompt` reflects any modifications made there.
    *
    * @example
    * ```typescript
    * messageFilter: ({ messages, primitiveId, prompt }) => {
-   *   // Pass only the last 5 messages, excluding tool calls
-   *   return messages
-   *     .filter(m => !m.content?.parts?.some(p => p.type === 'tool-invocation'))
-   *     .slice(-5);
+   *   // Pass only the last 5 non-system messages
+   *   return messages.filter(m => m.role !== 'system').slice(-5);
    * }
    * ```
    */
-  messageFilter?: (context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>;
+  messageFilter?: (context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>;
 
   /**
    * How a throwing delegation hook is handled.
@@ -441,6 +465,15 @@ export type NetworkOptions<OUTPUT = undefined> = {
 
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
+  /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
 
   /** Whether to automatically resume suspended tools */
   autoResumeSuspendedTools?: boolean;
@@ -558,6 +591,22 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    */
   hideSignals?: boolean | AgentSignalType[];
 
+  /**
+   * Durable agents only: close this caller's stream when the run suspends
+   * (for example for tool approval) so `fullStream` ends at the suspension
+   * boundary. Defaults to `false`. Ignored by non-durable agents, whose streams
+   * already end on suspension.
+   */
+  closeOnSuspend?: boolean;
+
+  /**
+   * Start eligible server-side tools as soon as their complete tool-call part is streamed.
+   * Enabled by default for `Agent.stream()`; set it to `false` to restore the previous
+   * scheduling, where a tool waited for the whole model step to finish. Only `Agent.stream()`
+   * supports it, and durable agents reject it.
+   */
+  eagerToolExecution?: boolean;
+
   /** Custom instructions that override the agent's default instructions for this execution */
   instructions?: SystemMessage;
 
@@ -569,6 +618,15 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
 
   /** Memory configuration for conversation persistence and retrieval */
   memory?: AgentMemoryOption;
+
+  /**
+   * Scopes this run acts with, as `<type>:<value>` addresses such as `org:acme`, `resource:u1`,
+   * or `thread:t1`. Unioned with the Agent's `scopes` and the reserved `mastra__scopes`
+   * request-context key. `resource:` and `thread:` scopes set the Memory resource and thread;
+   * they must match `memory.resource`/`memory.thread` and the reserved ID keys when those are
+   * also set, or the call throws. Never accepted from an HTTP request body.
+   */
+  scopes?: string[];
 
   /**
    * Serverless runtime helpers. Use these when the platform freezes the
@@ -640,8 +698,9 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /**
    * Maximum number of times processors can trigger a retry for this generation.
-   * Overrides agent's default maxProcessorRetries.
-   * If not set, defaults to the agent's maxProcessorRetries (which defaults to no retries if also unset).
+   * Overrides the agent's default maxProcessorRetries. Input and output processor
+   * retries require an explicit cap; error processors default to a cap of 3 when
+   * they resolve to a non-empty list and no cap is set.
    */
   maxProcessorRetries?: number;
 
@@ -832,6 +891,13 @@ export type AgentExecutionOptionsBase<OUTPUT> = {
    * continuation from outside the loop.
    */
   _skipBgTaskWait?: boolean;
+
+  /**
+   * @internal
+   * HTTP observers detach on reader cancellation without aborting durable
+   * execution. In-process readers retain cancel-aborts behavior by default.
+   */
+  _detachObserverOnCancel?: boolean;
 } & Partial<ObservabilityContext>;
 
 /**
@@ -866,8 +932,11 @@ export type InnerAgentExecutionOptions<OUTPUT = unknown> = AgentExecutionOptions
   resumeContext?: {
     resumeData: any;
     snapshot: WorkflowRunState;
+    claim?: AgentLoopResumeClaim;
   };
   toolCallId?: string;
+  /** Internal: The run's resolved scopes, persisted in suspend snapshots for resume */
+  resolvedScopes?: string[];
 } & ([NonNullable<OUTPUT>] extends [never]
     ? { structuredOutput?: never }
     : OUTPUT extends {}

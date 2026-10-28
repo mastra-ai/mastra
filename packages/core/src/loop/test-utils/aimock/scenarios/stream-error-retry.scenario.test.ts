@@ -4,6 +4,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { createCodingAgent } from '../../../../coding-agent';
 import type { ErrorProcessor } from '../../../../processors';
+import { PrefillErrorHandler, ProviderHistoryCompat, StreamErrorRetryProcessor } from '../../../../processors';
 
 const UNMATCHED_ERROR = {
   error: {
@@ -90,7 +91,15 @@ describe('AIMock coding-agent scenario: retry unknown stream errors', () => {
       },
     };
 
-    const output = await createAgent([observer]).stream('Surface the scripted failure.');
+    // The agent adds the shared stability defaults unless their ids are present. This case asserts a
+    // single provider call, so the list names all three ids with neutral instances (no retry budget).
+    const completeList: ErrorProcessor[] = [
+      observer,
+      new ProviderHistoryCompat(),
+      new StreamErrorRetryProcessor({ maxRetries: 0 }),
+      new PrefillErrorHandler(),
+    ];
+    const output = await createAgent(completeList).stream('Surface the scripted failure.');
 
     await expect(output.finishReason).rejects.toThrow('AIMOCK_UNMATCHED_STREAM_ERROR');
     expect(processedError).toMatchObject({

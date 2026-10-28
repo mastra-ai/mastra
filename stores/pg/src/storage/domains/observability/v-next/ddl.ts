@@ -33,6 +33,7 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import { parseSchemaName } from '../../../../shared/schema-name';
 import {
   buildColumnDefinitions,
   FEEDBACK_EVENT_COLUMNS,
@@ -78,21 +79,21 @@ export const SIGNAL_TIME_COLUMN: Record<(typeof ALL_SIGNAL_TABLES)[number], stri
 
 /** Returns a fully-qualified, double-quoted table name. */
 export function qualifiedTable(schema: string, table: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   const t = parseSqlIdentifier(table, 'table name');
   return `"${s}"."${t}"`;
 }
 
 /** Returns a parsed, quoted, schema-prefixed object name (constraint, index, etc.). */
 export function qualifiedName(schema: string, name: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   const n = parseSqlIdentifier(name, 'object name');
   return `"${s}"."${n}"`;
 }
 
 /** Schema CREATE. Safe to run repeatedly before table DDL. */
 export function schemaDDL(schema: string): string {
-  const s = parseSqlIdentifier(schema, 'schema name');
+  const s = parseSchemaName(schema);
   return `CREATE SCHEMA IF NOT EXISTS "${s}"`;
 }
 
@@ -306,6 +307,11 @@ function tableIndexes(): IndexSpec[] {
       columns: '("entityType", "entityId", "timestamp" DESC)',
     },
     { name: 'mastra_score_events_tags_gin', table: TABLE_SCORE_EVENTS, columns: '("tags")', using: 'gin' },
+    {
+      name: 'mastra_score_events_scoreid_cursor_idx',
+      table: TABLE_SCORE_EVENTS,
+      columns: '("scoreId", "cursorId" DESC)',
+    },
     { name: 'mastra_score_events_cursor_idx', table: TABLE_SCORE_EVENTS, columns: '("xactId", "cursorId")' },
 
     // feedback_events
@@ -356,6 +362,27 @@ export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
 }
 
 /**
+ * Span event columns added after the table first shipped, with their types. All
+ * nullable with no default, so each ALTER is a catalog-only change; rows written
+ * before it read NULL and readers fall back to the payload or attributes.
+ */
+export const ADDED_SPAN_COLUMNS = [
+  ['inputPreview', 'text'],
+  ['outputPreview', 'text'],
+  ['errorPreview', 'text'],
+  ['timeToFirstChunkMs', 'double precision'],
+  ['externalParentSpanId', 'text'],
+  ['resumedFromSpanId', 'text'],
+  ['model', 'text'],
+  ['provider', 'text'],
+  ['outcome', 'text'],
+  ['stopReason', 'text'],
+  ['timeToFirstTokenMs', 'double precision'],
+  ['errorCount', 'integer'],
+  ['stopReasonContext', 'jsonb'],
+] as const;
+
+/**
  * Additive column migrations for tables created by an older version of this
  * schema. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so new
  * columns have to be added out of band.
@@ -372,6 +399,11 @@ export function additiveColumns(schema: string): { table: string; column: string
       column: 'isPending',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
     },
+    ...ADDED_SPAN_COLUMNS.map(([column, type]) => ({
+      table: TABLE_SPAN_EVENTS,
+      column,
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" ${type}`,
+    })),
     {
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',
@@ -379,6 +411,9 @@ export function additiveColumns(schema: string): { table: string; column: string
     },
   ];
 }
+
+/** Existence probe for the target schema. Params: schema. */
+export const schemaExistsSQL = `SELECT 1 FROM information_schema.schemata WHERE schema_name = $1`;
 
 /** Existence probe for an additive column. Params: schema, table, column. */
 export const columnExistsSQL = `SELECT 1 FROM information_schema.columns

@@ -31,6 +31,28 @@ export const MASTRA_RESOURCE_ID_KEY = 'mastra__resourceId';
 export const MASTRA_THREAD_ID_KEY = 'mastra__threadId';
 
 /**
+ * Reserved key for setting agent scopes from middleware.
+ *
+ * Holds a `string[]` of `<type>:<value>` addresses (for example `org:acme`,
+ * `resource:user-1`, `thread:t-9`). Scope types are arbitrary; `resource:` and
+ * `thread:` are the conventions Memory reads as the run's resource and thread.
+ * Middleware-set scopes are combined with the agent's `scopes` resolver and the
+ * per-call `scopes` option. Conflicting `resource:`/`thread:` values throw.
+ *
+ * During a run, the agent passes tools, processors and sub-agents a copy of the
+ * request context whose `mastra__scopes` holds only the non-identity scopes;
+ * the caller's own request context is never modified.
+ *
+ * @example
+ * ```typescript
+ * // In your auth middleware:
+ * const requestContext = c.get('requestContext');
+ * requestContext.set(MASTRA_SCOPES_KEY, [`org:${user.orgId}`, `resource:${user.id}`]);
+ * ```
+ */
+export const MASTRA_SCOPES_KEY = 'mastra__scopes';
+
+/**
  * Reserved key for storing version overrides on RequestContext.
  * When set, sub-agent delegation resolves versioned agents from these overrides.
  *
@@ -75,6 +97,19 @@ export const MASTRA_INHERITED_MEMORY_KEY = 'mastra__inheritedMemory';
  * ```
  */
 export const MASTRA_MESSAGE_AUTHOR_KEY = 'mastra__messageAuthor';
+
+/**
+ * Whether a request-context key is reserved for Mastra itself.
+ *
+ * Framework keys use the `mastra__` prefix (e.g. `mastra__threadId`,
+ * `mastra__authToken`) and internal runtime plumbing uses the `__mastra_`
+ * prefix (e.g. the channel render context, which holds live platform adapters).
+ * Reserved keys are framework state rather than caller-provided data, so they
+ * are left out of span serialization.
+ */
+export function isReservedRequestContextKey(key: string): boolean {
+  return key.startsWith('mastra__') || key.startsWith('__mastra_');
+}
 
 export type VersionSelector = { versionId: string } | { status: 'draft' | 'published' };
 
@@ -448,7 +483,7 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
     if (value === null || value === undefined) return true;
     if (typeof value === 'function') return false;
     if (typeof value === 'symbol') return false;
-    if (typeof value !== 'object') return true;
+    if (typeof value !== 'object' && typeof value !== 'bigint') return true;
 
     // The outermost probe owns the budget; nested probes (a nested
     // `RequestContext.toJSON()` invoked while this JSON.stringify runs) draw
@@ -536,7 +571,9 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
    * serialize its raw entries (including bearer tokens) into exported spans.
    *
    * Per stored value:
-   * - The framework-managed auth token is redacted by key.
+   * - Reserved Mastra keys (`mastra__*`, `__mastra_*`) are omitted. They hold
+   *   framework state such as the auth token, delegated memory, and live
+   *   channel adapters, not caller-provided data.
    * - Primitives are returned as-is.
    * - Plain objects and arrays are returned by reference so the downstream
    *   `deepClean` walks and bounds them — this keeps nested request-context
@@ -551,9 +588,10 @@ export class RequestContext<Values extends Record<string, any> | unknown = unkno
   serializeForSpan(): Record<string, unknown> {
     const safe: Record<string, unknown> = {};
     for (const [key, value] of this.registry.entries()) {
-      if (key === MASTRA_AUTH_TOKEN_KEY) {
-        safe[key] = '[REDACTED]';
-      } else if (
+      if (isReservedRequestContextKey(key)) {
+        continue;
+      }
+      if (
         value === null ||
         value === undefined ||
         typeof value === 'string' ||

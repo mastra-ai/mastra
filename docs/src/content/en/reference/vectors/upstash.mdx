@@ -17,6 +17,11 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 <PropertiesTable
   content={[
   {
+    name: 'id',
+    type: 'string',
+    description: 'Unique identifier for this vector store instance',
+  },
+  {
     name: 'url',
     type: 'string',
     description: 'Upstash Vector database URL',
@@ -33,7 +38,7 @@ The UpstashVector class provides vector search using [Upstash Vector](https://up
 
 ### `createIndex()`
 
-Note: This method is a no-op for Upstash as indexes are created automatically.
+Note: This method is a no-op for Upstash. Indexes (Upstash namespaces) are created automatically on first write, and the parameters below are ignored.
 
 <PropertiesTable
   content={[
@@ -51,8 +56,7 @@ Note: This method is a no-op for Upstash as indexes are created automatically.
     name: 'metric',
     type: "'cosine' | 'euclidean' | 'dotproduct'",
     isOptional: true,
-    defaultValue: 'cosine',
-    description: 'Distance metric for similarity search',
+    description: 'Ignored. The metric is set on the Upstash index itself.',
   },
 ]}
 />
@@ -171,7 +175,7 @@ Returns:
 interface IndexStats {
   dimension: number
   count: number
-  metric: 'cosine' | 'euclidean' | 'dotproduct'
+  metric?: 'cosine' | 'euclidean' | 'dotproduct'
 }
 ```
 
@@ -199,7 +203,15 @@ interface IndexStats {
   {
     name: 'id',
     type: 'string',
-    description: 'ID of the item to update',
+    isOptional: true,
+    description: 'ID of the item to update. Mutually exclusive with `filter`.',
+  },
+  {
+    name: 'filter',
+    type: 'Record<string, any>',
+    isOptional: true,
+    description:
+      'Metadata filter matching up to 1,000 items to update. Mutually exclusive with `id`. Must not be empty.',
   },
   {
     name: 'update',
@@ -208,6 +220,8 @@ interface IndexStats {
   },
 ]}
 />
+
+Provide exactly one of `id` or `filter`.
 
 The `update` object can have the following properties:
 
@@ -330,24 +344,28 @@ Query results are returned in this format:
 interface QueryResult {
   id: string
   score: number
-  metadata: Record<string, any>
+  metadata?: Record<string, any>
   vector?: number[] // Only included if includeVector is true
 }
 ```
 
 ## Error handling
 
-The store throws typed errors that can be caught:
+The store throws `MastraError` instances from `@mastra/core/error`:
 
 ```typescript
+import { MastraError } from '@mastra/core/error'
+
 try {
   await store.query({
     indexName: 'index_name',
     queryVector: queryVector,
   })
 } catch (error) {
-  if (error instanceof VectorStoreError) {
-    console.log(error.code) // 'connection_failed' | 'invalid_dimension' | etc
+  if (error instanceof MastraError) {
+    console.log(error.id) // 'MASTRA_VECTOR_UPSTASH_QUERY_FAILED'
+    console.log(error.domain) // 'STORAGE'
+    console.log(error.category) // 'USER' | 'THIRD_PARTY'
     console.log(error.details) // Additional error context
   }
 }

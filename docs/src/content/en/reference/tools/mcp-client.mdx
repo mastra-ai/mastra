@@ -10,6 +10,10 @@ packages:
 
 The `MCPClient` class provides a way to manage multiple MCP server connections and their tools in a Mastra application. It handles connection lifecycle and tool namespacing while providing access to tools across all configured servers.
 
+:::note
+Upgrading from `@mastra/mcp` 1.x? See the [migration guide](/reference/migrations/mcp-v2).
+:::
+
 ## Constructor
 
 Creates a new instance of the MCPClient class.
@@ -19,6 +23,9 @@ constructor({
   id?: string;
   servers: Record<string, MastraMCPServerDefinition>;
   timeout?: number;
+  typegen?: { outFile: string };
+  clientInfo?: { name?: string; version?: string };
+  registerProcessHooks?: boolean;
 }: MCPClientOptions)
 ```
 
@@ -48,15 +55,170 @@ constructor({
     defaultValue: '60000',
     description: 'Global timeout value in milliseconds for all servers unless overridden in individual server configs.',
   },
+  {
+    name: 'typegen',
+    type: '{ outFile: string }',
+    isOptional: true,
+    description:
+      'Enables optional CLI generation for this client. outFile must be a nonempty path, resolved from the command working directory. Construction stores readonly metadata and does not generate files.',
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      "Client name and version every server receives on connect and with each request, so servers can attribute traffic to your application. Defaults to the server key as `name` and `'1.0.0'` as `version`. Individual server configs can override either field with their own `clientInfo`. Doesn't change tool name prefixes, which always use the server key.",
+  },
+  {
+    name: 'registerProcessHooks',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'true',
+    description:
+      'Install process exit and signal hooks that disconnect servers and end the process. Set to false when your application handles shutdown, and call disconnect() from that handler. See [Handle shutdown yourself](#handle-shutdown-yourself).',
+  },
+  {
+    name: 'webhook',
+    type: 'MCPClientWebhookOptions',
+    isOptional: true,
+    description:
+      'Experimental. Enables webhook delivery for [MCP events](#webhook-delivery). Servers POST occurrences to `webhook.url`, which must route to `events.handleWebhook()`.',
+  },
 ]}
 />
+
+### Typed client contracts
+
+Pass an explicit server-map type to `MCPClient<TServers>` to check configured server names, discovered tool names, and direct-call arguments. `MCPClientOptions<TServers>` accepts the same map. All declared servers are required. Use `Pick<TServers, 'weather'>` to configure a subset. Without a type argument, discovery keeps its existing broad types.
+
+The map describes each server's `tools`, with `input` and `output` types for each tool. This example assumes a running weather server at `WEATHER_MCP_URL`:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+interface MCPServers {
+  weather: {
+    tools: {
+      get_weather: {
+        input: { location: string }
+        output: { temperature: number; conditions: string }
+      }
+    }
+  }
+}
+
+const mcp = new MCPClient<MCPServers>({
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+})
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+`listTools()` and `listToolsWithErrors().tools` expose exact `server_tool` keys. `listToolsets()` and `listToolsetsWithErrors().toolsets` expose server keys containing raw tool names. Both forms are partial: a server or tool can be absent. Check availability before calling a tool. Error maps, error details, and optional discovery durations keep their existing types.
+
+Execution can return the structured output, a protocol result envelope, a validation error, or `undefined`. Check the shape and property types before reading success fields. Protocol envelopes can have additional properties. Set `output: unknown` for tools without an output schema.
+
+These contracts describe a schema snapshot. Live servers can differ from that snapshot. Update them when server schemas change, using equivalent permissions. Extra live tools remain available at runtime but aren't included in the snapshot's known keys. Runtime discovery, validation, and execution are unchanged.
+
+### Generate client types
+
+Generate concrete TypeScript interfaces from live tool input and output schemas with the command included in `@mastra/mcp`. Export your existing client and set `typegen.outFile`:
+
+```typescript title="src/mcp/client.ts"
+import { MCPClient } from '@mastra/mcp'
+import type { MCPServers } from './mcp-types.generated'
+
+export const mcp = new MCPClient<MCPServers>({
+  id: 'weather-client',
+  servers: { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } },
+  typegen: { outFile: 'src/mcp/mcp-types.generated.ts' },
+})
+```
+
+Set the environment variables and authentication credentials your module needs, then run this command from your project root:
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/client.ts
+```
+
+The generated type-only import can be missing on the first run. The loader handles TypeScript and transitive imports without typechecking. Run your typecheck after generation.
+
+Use the generated names and check runtime availability and result shape. This example assumes the server publishes `get_weather` with a required string `location` and a numeric `temperature` output:
+
+```typescript title="src/mcp/call-weather.ts"
+import { mcp } from './client'
+
+try {
+  const tools = await mcp.listTools()
+  const weather = tools.weather_get_weather
+  if (weather?.execute) {
+    const result = await weather.execute({ location: 'Paris' })
+    if (result && 'temperature' in result && typeof result.temperature === 'number') {
+      console.log(result.temperature)
+    }
+  }
+} finally {
+  await mcp.disconnect()
+}
+```
+
+The command accepts one or more file paths. Both input files and `outFile` paths are relative to the command's working directory. It selects direct named and default exports of typegen-enabled clients. It doesn't scan your source tree, invoke factories, or inspect nested exported objects. Repeated files, symlink aliases, and exports of the same client are processed once. A file without an eligible client fails.
+
+For independent clients with identical server configurations, use distinct IDs and output paths:
+
+```typescript title="src/mcp/clients.ts"
+import { MCPClient } from '@mastra/mcp'
+
+const servers = { weather: { url: new URL(process.env.WEATHER_MCP_URL!) } }
+export const first = new MCPClient({
+  id: 'first',
+  servers,
+  typegen: { outFile: 'first.generated.ts' },
+})
+export const second = new MCPClient({
+  id: 'second',
+  servers,
+  typegen: { outFile: 'second.generated.ts' },
+})
+```
+
+```bash npm2yarn
+npx @mastra/mcp generate ./src/mcp/clients.ts
+```
+
+The existing instance cache still applies. Constructing a client with the same explicit ID, server configuration, and `typegen.outFile` returns the existing object. A different server configuration or `outFile` replaces the cached instance instead, so a later constructor never silently keeps an output file it wasn't given.
+
+Generation lists tool definitions without calling tools. It fails on discovery errors, missing authentication, timeouts, output collisions, outputs that overwrite supplied input files, and schemas that can't be represented at all, such as reference cycles, excessive depth, or unresolved local references. Each failure names the client file, server, or tool it concerns. It prepares all sources before replacing files and disconnects selected clients on success or failure. Discovery and preflight failures preserve existing outputs. Each replacement is atomic, but multiple replacements aren't one transaction. A filesystem failure during replacement can leave earlier files updated.
+
+Tools without output schemas use `unknown`. Constraints such as string formats, length limits, and numeric bounds retain their base TypeScript types and remain runtime validation rules. Unsupported schema portions, including conditional schemas and `prefixItems` tuples, widen to `unknown` with a warning. A keyword whose value is outside its allowed shape widens that schema to `unknown` with a warning too, so one unusable tool doesn't stop generation for other servers. Warnings name the server, tool, and schema position they concern. External schema references aren't fetched. Unresolved local references and reference cycles fail generation. Schemas nested deeper than 128 levels fail generation too, matching the protocol depth limit. A schema that exceeds the protocol node budget of 10,000 widens to `unknown` with a warning, as does any schema or catalogue that exceeds the larger budgets generation applies to raw JSON values. Generation measures those budgets before it copies or converts a schema, so a server that advertises large schemas can't stall the command.
+
+:::note Module execution and credentials
+
+The command executes the supplied modules and their imports. Use trusted modules without application startup side effects. Provide credentials before invoking the command. It doesn't load dotenv files or launch interactive authentication. Existing client timeout and discovery settings apply.
+
+Generator diagnostics omit raw schemas, transport errors, and credentials. Logs emitted by your imported application, custom log handlers, or server subprocesses remain outside that guarantee.
+
+:::
 
 ### `MastraMCPServerDefinition`
 
 Each server in the `servers` map is configured using the `MastraMCPServerDefinition` type. The transport type is detected based on the provided parameters:
 
 - If `command` is provided, it uses the Stdio transport.
-- If `url` is provided, it first attempts to use the Streamable HTTP transport and falls back to the legacy SSE transport if the initial connection fails.
+- If `url` is provided, it uses the Streamable HTTP transport.
+
+The client speaks the MCP `2026-07-28` revision. On connect it asks the server which revisions it offers (`server/discover`) and falls back to the pre-2026 `initialize` handshake for servers that haven't upgraded, so tools, resources and prompts keep working against either. Features the older revisions lack (`resources.subscribe()`, `inputRequests`) fail with an error naming the negotiated revision. `onListChanged()` handlers work against either revision, since older servers send list-changed notifications without a `subscriptions/listen` stream. Set `protocolVersion` to skip the probe.
 
 <br />
 
@@ -92,7 +254,7 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     name: 'url',
     type: 'URL',
     isOptional: true,
-    description: 'For HTTP servers (Streamable HTTP or SSE): The URL of the server.',
+    description: 'For HTTP servers: The URL of the server.',
   },
   {
     name: 'requestInit',
@@ -101,18 +263,11 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'For HTTP servers: Request configuration for the fetch API.',
   },
   {
-    name: 'eventSourceInit',
-    type: 'EventSourceInit',
-    isOptional: true,
-    description:
-      'For SSE fallback: Custom fetch configuration for SSE connections. Required when using custom headers with SSE.',
-  },
-  {
     name: 'fetch',
     type: 'MastraFetchLike',
     isOptional: true,
     description:
-      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
+      'For HTTP servers: Custom fetch implementation used for all network requests. Receives an optional third `requestContext` parameter containing request-scoped data (e.g., authentication cookies, bearer tokens) from the incoming request. When provided, this function will be used for all HTTP requests, allowing you to add dynamic authentication headers, forward request-scoped credentials to the MCP server, customize request behavior per-request, or intercept and modify requests/responses. When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.',
   },
   {
     name: 'allowedHosts',
@@ -128,16 +283,38 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     description: 'Optional additional handler for logging.',
   },
   {
+    name: 'protocolVersion',
+    type: "'2026-07-28' | 'legacy'",
+    isOptional: true,
+    description:
+      "Pins the protocol revision instead of probing for it. `'2026-07-28'` connects only to servers that offer the current revision. `'legacy'` uses the pre-2026 `initialize` handshake without probing, for servers known not to have upgraded. When omitted the client probes with `server/discover` and speaks whichever revision the server offers.",
+  },
+  {
     name: 'timeout',
     type: 'number',
     isOptional: true,
-    description: 'Server-specific timeout in milliseconds.',
+    description: 'Server-specific timeout in milliseconds. Falls back to the client-level `timeout` when omitted.',
+  },
+  {
+    name: 'clientInfo',
+    type: '{ name?: string; version?: string }',
+    isOptional: true,
+    description:
+      'Overrides the top-level `clientInfo` for this server. Fields you set replace the top-level values; fields you omit keep them.',
   },
   {
     name: 'capabilities',
-    type: 'ClientCapabilities',
+    type: 'MCPClientCapabilities',
     isOptional: true,
-    description: 'Server-specific capabilities configuration.',
+    description:
+      'Client capabilities to advertise: `elicitation` and `extensions`. `elicitation` is only accepted together with an `inputRequests` handler and defaults to form support when a handler is configured. Roots and sampling are not supported.',
+  },
+  {
+    name: 'inputRequests',
+    type: 'MCPInputRequestHandler',
+    isOptional: true,
+    description:
+      'Answers input requests from this server. When a tool, resource or prompt call ends as `input_required`, the handler is called with each embedded request and the client retries the call with the answers. Without a handler an `input_required` result surfaces as an error. See Answering input requests below.',
   },
   {
     name: 'authProvider',
@@ -151,7 +328,30 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
     type: 'boolean',
     isOptional: true,
     defaultValue: 'true',
-    description: 'Whether to enable logging for this server.',
+    description:
+      'Whether to request per-request server logs. Attaches the `io.modelcontextprotocol/logLevel` metadata key to every request so the server delivers `notifications/message` for it, and forwards delivered messages to `logger`.',
+  },
+  {
+    name: 'serverLogLevel',
+    type: 'LoggingLevel',
+    isOptional: true,
+    defaultValue: "'info'",
+    description: 'Minimum severity requested from the server for per-request logs.',
+  },
+  {
+    name: 'enableProgressTracking',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Whether to send a `progressToken` with tool calls so the server can report progress. See the `progress` property.',
+  },
+  {
+    name: 'traceContext',
+    type: '() => MCPTraceContext | undefined',
+    isOptional: true,
+    description:
+      'Returns the W3C `traceparent`, optional `tracestate` and `baggage` to send as request `_meta` on every call to this server. Called when each request is sent so it can read a request-local carrier. Without this option, a tool call made by a traced agent or workflow sends the `traceparent` of its tool call span. When the reply names the server span that handled the call, as `MCPServer` does, the tool call span links to it. Set this option to send your own trace context, or return `undefined` to send none. Explicit `_meta` keys on a tool call take precedence. Servers built with `MCPServer` link their request span to the span the `traceparent` names and expose the received values to tools as `requestContext.get("traceContext")`; they are observability data and are never used for authorization.',
   },
   {
     name: 'forwardInstructions',
@@ -176,11 +376,19 @@ Each server in the `servers` map is configured using the `MastraMCPServerDefinit
       'Require human approval before executing tools from this server. When set to `true`, all tools require approval. When set to a function, the function is called with the tool name, arguments, request context, and any tool annotations advertised by the server to dynamically decide whether approval is needed.',
   },
   {
-    name: 'protocolVersion',
-    type: "'auto' | '2026-07-28'",
+    name: 'onToolError',
+    type: "'throw' | 'return'",
+    isOptional: true,
+    defaultValue: "'throw'",
+    description:
+      "How to handle tool execution failures the server reports in-band with `isError: true`. `'throw'` raises a `MastraError` carrying the server's error text, so the failure reaches tool spans, stream chunks, scorers, and the model. Any `structuredContent` is kept on `error.details.structuredContent` as a JSON string. `'return'` resolves with the full `CallToolResult` (`isError`, `content`, and `structuredContent`) instead of throwing.",
+  },
+  {
+    name: 'jsonSchemaValidator',
+    type: 'JsonSchemaValidator',
     isOptional: true,
     description:
-      "Opt-in MCP protocol version negotiation. Omitted keeps the legacy (2025-era) connect sequence unchanged. 'auto' probes the server at connect time and uses the stateless '2026-07-28' revision when the server supports it, with a safe fallback to the legacy handshake. '2026-07-28' pins that revision exactly and fails with a typed error when the server does not offer it. Elicitation handlers work on both eras: on a '2026-07-28' connection, embedded elicitation requests from input_required results are dispatched through the same registered handler and the originating call retries automatically.",
+      'Validator used for MCP tool schemas and structured results. The default supports JSON Schema 2020-12. Provide a compatible validator such as CfWorkerJsonSchemaValidator in runtimes that disallow dynamic code generation.',
   },
 ]}
 />
@@ -253,6 +461,8 @@ Per the MCP specification: **clients MUST consider tool annotations to be untrus
 
 The same annotations are also exposed on the tools returned by `listTools()` and `listToolsets()` under `tool.mcp.annotations`, so you can inspect them when wiring tools into an agent.
 
+Each tool also carries `tool.title`, set from the server's tool `title` and falling back to `annotations.title`. When the server provides neither, `tool.title` is `undefined` and the tool name is the display fallback, matching the MCP display-name precedence.
+
 ## Server instructions
 
 When an MCP server advertises instructions during initialization, `MCPClient` stores them for that server. Forwarding those instructions into an agent's system prompt is **opt-in**: set `forwardInstructions: true` on a server to have agents that use its tools (via `listTools()` or `listToolsets()`) receive its instructions automatically.
@@ -323,7 +533,7 @@ const mcp = new MCPClient({
 Enforcement details:
 
 - On the default fetch path, requests to disallowed hosts, including every redirect hop, are blocked **before** they're sent. Redirects are followed manually (up to 5 hops) so each hop is validated, and the `Authorization` header isn't carried across hops to a different origin (any scheme, host, or port change drops it, matching standard fetch behavior).
-- When you supply a custom `fetch` (or a custom `eventSourceInit.fetch`), the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
+- When you supply a custom `fetch`, the initial URL is still checked before the request, but redirect hops are validated **after the fact** using `response.url`: the outbound hop may occur, and the response is discarded when its final URL points at a disallowed host. A hand-built `Response` with an empty `response.url` skips this post-hoc check.
 - OAuth requests made through `authProvider` (authorization server metadata discovery, token exchange, refresh) are also validated. If your authorization server runs on a different host than the MCP server, add that host to `allowedHosts` too.
 - A blocked host fails the connection with a clear error and is never retried by the reconnect logic.
 
@@ -393,7 +603,7 @@ When called without options, the method omits only `durations`; `toolsets`, `err
 
 Returns every server's tools as plain, serializable definitions, grouped by server name and keyed by the server's own tool name (without the `serverName_toolName` namespacing that `listTools()` applies).
 
-Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
+Unlike `listTools()`, the result contains no functions or references to a live client, so it can be passed through `JSON.stringify` and cached in Redis or a database, as well as a build artifact. Each definition holds the data from the MCP `tools/list` response (name, title, description, input schema, output schema, annotations, and `_meta`), plus the server name, version, and instructions captured at discovery time.
 
 ```typescript
 const definitions = await mcp.listToolDefinitions()
@@ -425,7 +635,11 @@ When called without options, the method omits only `durations`; `definitions`, `
 
 Rebuilds a single executable tool from a cached definition. No connection is opened here. The client connects lazily, the first time the tool is executed.
 
-The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior.
+The returned tool behaves exactly like one from `listTools()`, with the same strict-mode metadata, approval policy, structured content handling, tool error handling, and reconnect behavior. Successful structured results are validated against the advertised `outputSchema` on both paths. Invalid results reject the tool call. MCP error results skip output validation.
+
+MCP schemas without a `$schema` declaration use JSON Schema 2020-12. Local `$ref` and `$defs` references, composition keywords, and boolean subschemas are supported. To bound validation work from untrusted tool catalogs, input and output schemas are limited to 128 nested subschema levels and 10,000 subschema nodes.
+
+`structuredContent` can be any JSON value, including strings, numbers, booleans, and `null`. Object and array results also expose the MCP content and `_meta` envelopes through non-enumerable Mastra metadata properties. Scalar and `null` results can't carry those properties and remain unchanged rather than being wrapped.
 
 ```typescript
 const definitions = JSON.parse(await cache.get('mcp-tools'))
@@ -463,6 +677,23 @@ await mcp.listTools()
 
 const instructionsByServer = mcp.getServerInstructions()
 console.log(instructionsByServer.db)
+```
+
+### `getServerInfo()`
+
+Returns the identity each configured MCP server announced when it connected (its `serverInfo`, from the `server/discover` result or, for servers on an older revision, the `initialize` handshake): `name` and `version`, plus `title`, `description`, `websiteUrl`, and `icons` when the server provides them. A server's entry is `undefined` if it hasn't connected yet, or if it connected over the `2026-07-28` revision without announcing an identity, which that revision allows. Don't use it to check whether a server is connected. The values come from the remote server and aren't validated, so treat icon and website URLs as untrusted.
+
+```typescript oxfmt:false
+getServerInfo(): Record<string, MCPServerImplementation | undefined>
+```
+
+Example:
+
+```typescript
+await mcp.listTools()
+
+const info = mcp.getServerInfo()
+console.log(info.myServer?.title, info.myServer?.version)
 ```
 
 ### `authenticate()`
@@ -621,10 +852,12 @@ console.log('Current weather:', content.contents[0].text)
 
 #### `resources.subscribe(serverName: string, uri: string)`
 
-Subscribes to updates for a specific resource on a server.
+Subscribes to updates for a specific resource on a server. Mastra adds the URI to a single managed `subscriptions/listen` stream per server. Subscribing to the same URI more than once has no effect while the stream is active. Mastra restores the stream after a reconnect and closes it when the client disconnects.
+
+The method rejects if the server doesn't honor the requested URI. If stream restoration fails after a reconnect, the connection remains available and calling `subscribe()` again retries the stream.
 
 ```typescript oxfmt:false
-async subscribe(serverName: string, uri: string): Promise<object>
+async subscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:
@@ -635,10 +868,10 @@ await mcpClient.resources.subscribe('myWeatherServer', 'weather://current')
 
 #### `resources.unsubscribe(serverName: string, uri: string)`
 
-Unsubscribes from updates for a specific resource on a server.
+Unsubscribes from updates for a specific resource on a server. Mastra removes the URI from the managed `subscriptions/listen` filter and replaces the stream. When nothing remains to listen for, Mastra closes the stream.
 
 ```typescript oxfmt:false
-async unsubscribe(serverName: string, uri: string): Promise<object>
+async unsubscribe(serverName: string, uri: string): Promise<void>
 ```
 
 Example:
@@ -683,145 +916,6 @@ mcpClient.resources.onListChanged('myWeatherServer', () => {
 })
 ```
 
-### `elicitation` Property
-
-The `MCPClient` instance has an `elicitation` property that provides access to elicitation-related operations. Elicitation allows MCP servers to request structured information from users.
-
-```typescript
-const mcpClient = new MCPClient({/* ...servers configuration... */})
-
-// Set up elicitation handler
-mcpClient.elicitation.onRequest('serverName', async request => {
-  // Handle elicitation request from server
-  console.log('Server requests:', request.message)
-  console.log('Schema:', request.requestedSchema)
-
-  // Return user response
-  return {
-    action: 'accept',
-    content: { name: 'John Doe', email: 'john@example.com' },
-  }
-})
-```
-
-#### `elicitation.onRequest(serverName: string, handler: ElicitationHandler)`
-
-Sets up a handler function that will be called when any connected MCP server sends an elicitation request. The handler receives the request and must return a response.
-
-##### `ElicitationHandler` Function
-
-The handler function receives a request object with:
-
-- `message`: A human-readable message describing what information is needed
-- `requestedSchema`: A JSON schema defining the structure of the expected response
-
-The handler must return an `ElicitResult` with:
-
-- `action`: One of `'accept'`, `'decline'`, or `'cancel'`
-- `content`: The user's data (only when action is `'accept'`)
-
-**Example:**
-
-```typescript
-mcpClient.elicitation.onRequest('serverName', async request => {
-  console.log(`Server requests: ${request.message}`)
-
-  // Example: Simple user input collection
-  if (request.requestedSchema.properties.name) {
-    // Simulate user accepting and providing data
-    return {
-      action: 'accept',
-      content: {
-        name: 'Alice Smith',
-        email: 'alice@example.com',
-      },
-    }
-  }
-
-  // Simulate user declining the request
-  return { action: 'decline' }
-})
-```
-
-**Complete Interactive Example:**
-
-```typescript
-import { MCPClient } from '@mastra/mcp'
-import { createInterface } from 'readline'
-
-const readline = createInterface({
-  input: process.stdin,
-  output: process.stdout,
-})
-
-function askQuestion(question: string): Promise<string> {
-  return new Promise(resolve => {
-    readline.question(question, answer => resolve(answer.trim()))
-  })
-}
-
-const mcpClient = new MCPClient({
-  servers: {
-    interactiveServer: {
-      url: new URL('http://localhost:3000/mcp'),
-    },
-  },
-})
-
-// Set up interactive elicitation handler
-await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  console.log(`\n📋 Server Request: ${request.message}`)
-  console.log('Required information:')
-
-  const schema = request.requestedSchema
-  const properties = schema.properties || {}
-  const required = schema.required || []
-  const content: Record<string, any> = {}
-
-  // Collect input for each field
-  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
-
-    let prompt = `${field.title || fieldName}`
-    if (field.description) prompt += ` (${field.description})`
-    if (isRequired) prompt += ' *required*'
-    prompt += ': '
-
-    const answer = await askQuestion(prompt)
-
-    // Handle cancellation
-    if (answer.toLowerCase() === 'cancel') {
-      return { action: 'cancel' }
-    }
-
-    // Validate required fields
-    if (answer === '' && isRequired) {
-      console.log(`❌ ${fieldName} is required`)
-      return { action: 'decline' }
-    }
-
-    if (answer !== '') {
-      content[fieldName] = answer
-    }
-  }
-
-  // Confirm submission
-  console.log('\n📝 You provided:')
-  console.log(JSON.stringify(content, null, 2))
-
-  const confirm = await askQuestion('\nSubmit this information? (yes/no/cancel): ')
-
-  if (confirm.toLowerCase() === 'yes' || confirm.toLowerCase() === 'y') {
-    return { action: 'accept', content }
-  } else if (confirm.toLowerCase() === 'cancel') {
-    return { action: 'cancel' }
-  } else {
-    return { action: 'decline' }
-  }
-})
-```
-
 ### `prompts` Property
 
 The `MCPClient` instance has a `prompts` property that provides access to prompt-related operations.
@@ -863,7 +957,7 @@ const { prompts, errors, errorDetails } = await mcpClient.prompts.listWithErrors
 console.log(prompts, errors, errorDetails)
 ```
 
-#### `prompts.get({ serverName, name, args?, version? })`
+#### `prompts.get({ serverName, name, args? })`
 
 Retrieves a specific prompt and its messages from a server.
 
@@ -872,24 +966,21 @@ async get({
   serverName,
   name,
   args?,
-  version?,
 }: {
   serverName: string;
   name: string;
   args?: Record<string, any>;
-  version?: string;
-}): Promise<{ prompt: Prompt; messages: PromptMessage[] }>
+}): Promise<GetPromptResult>
 ```
 
 Example:
 
 ```typescript
-const { prompt, messages } = await mcpClient.prompts.get({
+const { messages } = await mcpClient.prompts.get({
   serverName: 'myWeatherServer',
   name: 'current',
   args: { location: 'London' },
 })
-console.log(prompt)
 console.log(messages)
 ```
 
@@ -942,7 +1033,7 @@ const mcpClient = new MCPClient({
   servers: {
     myServer: {
       url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      // Enabled by default; set to false to disable
+      // Off by default: opt in so tool calls carry a progressToken
       enableProgressTracking: true,
     },
   },
@@ -974,37 +1065,379 @@ async onUpdate(
 
 Notes:
 
-- When `enableProgressTracking` is true (default), tool calls include a `progressToken` so you can correlate updates to a specific run.
+- When `enableProgressTracking` is true, tool calls include a `progressToken` so you can correlate updates to a specific run. Servers only send progress for requests that carry a token.
 - If you pass a `runId` when executing a tool, it will be used as the `progressToken`.
 
-To disable progress tracking for a server:
+### `events` Property (experimental)
+
+The `events` property lists and subscribes to server events from servers that implement the [MCP Events extension (SEP-3415)](https://github.com/modelcontextprotocol/modelcontextprotocol/pull/3415). Use it to react to things that happen on the server, such as a push to a repository, without polling a tool. Delivery is at least once. After a reconnect or a resume, the server can resend an occurrence, and the client drops repeats by `eventId` within `dedupWindow` of recent ids.
+
+For an end-to-end walkthrough, see [MCP events](/docs/connections/mcp#mcp-events).
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
 
 ```typescript
-const mcpClient = new MCPClient({
+const events = await mcpClient.events.list('github')
+
+const subscription = await mcpClient.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+for await (const event of subscription) {
+  await handlePush(event.data)
+  // Safe to persist after each handled occurrence
+  await saveCursor(subscription.cursor)
+}
+```
+
+Servers that don't advertise the `io.modelcontextprotocol/events` extension receive no `events/*` requests. `list()` rejects with a `MastraError` whose id is `MCP_CLIENT_LIST_EVENTS_FAILED`, and `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED`. In both cases `error.cause.id` is `MCP_EVENTS_NOT_SUPPORTED`. Other `list()` and `subscribe()` failures use the same two ids, with the specific reason in `error.cause`.
+
+#### `events.list(serverName: string)`
+
+Returns every event type the server offers, following pagination. Each descriptor has a `name`, an optional `description`, the `delivery` modes the server supports, and optional `inputSchema` and `payloadSchema`.
+
+```typescript oxfmt:false
+async list(serverName: string): Promise<MCPEventDescriptor[]>
+```
+
+The client doesn't receive notifications when the server's event list changes yet. Call `list()` again to pick up new event types.
+
+#### `events.subscribe(serverName, eventName, args?, options?)`
+
+Starts a subscription and resolves once the server confirms it. Errors such as an unknown event, invalid arguments, or a forbidden subscription reject the returned promise. A new subscription starts at the point the server accepts it, so occurrences from before that point aren't delivered unless `options.cursor` resumes from an earlier position. Under webhook delivery the promise can resolve after that point: the client answers `503` for a delivery it can't route yet, and the server retries it.
+
+```typescript oxfmt:false
+async subscribe(
+  serverName: string,
+  eventName: string,
+  args?: Record<string, unknown>,
+  options?: MCPEventSubscribeOptions,
+): Promise<MCPEventSubscription>
+```
+
+The client picks the first mode the event offers in this order: `webhook` (only when the client has [`webhook` settings](#webhook-delivery)), `push` (a long-lived `events/stream` request), then `poll` (repeated `events/poll` requests). Pass `options.delivery` to force a mode.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'delivery',
+    type: "'webhook' | 'push' | 'poll'",
+    isOptional: true,
+    description:
+      "Forces a delivery mode. When the event doesn't offer it, or for `webhook` without client `webhook` settings, `subscribe()` rejects with `MCP_CLIENT_SUBSCRIBE_EVENT_FAILED` and `error.cause.id` is `MCP_EVENTS_NO_COMPATIBLE_DELIVERY_MODE` or `MCP_EVENTS_WEBHOOK_NOT_CONFIGURED`.",
+  },
+  {
+    name: 'cursor',
+    type: 'string | null',
+    isOptional: true,
+    description: 'Resumes from a cursor saved earlier. Omit or pass `null` to start from now.',
+  },
+  {
+    name: 'maxAgeMs',
+    type: 'number',
+    isOptional: true,
+    description: 'Asks the server not to replay occurrences older than this.',
+  },
+  {
+    name: 'maxEvents',
+    type: 'number',
+    isOptional: true,
+    description: 'Maximum occurrences per poll response. Poll mode only.',
+  },
+  {
+    name: 'minPollIntervalMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Lower bound for the wait between polls, applied to the server-suggested `nextPollMs`.',
+  },
+  {
+    name: 'heartbeatTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '60000',
+    description:
+      'Push mode reopens the stream from the last cursor after this long without any message from the server.',
+  },
+  {
+    name: 'streamOpenTimeoutMs',
+    type: 'number',
+    isOptional: true,
+    description: 'How long to wait for the server to confirm a push stream. Defaults to the server request timeout.',
+  },
+  {
+    name: 'dedupWindow',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Number of recent event ids remembered to drop duplicate occurrences.',
+  },
+  {
+    name: 'maxBufferedEvents',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description:
+      "Most occurrences held while your loop isn't reading. When full, the oldest unread occurrence is dropped, the next one has `truncated` set, and `onError` receives `MCP_EVENTS_BUFFER_OVERFLOW`.",
+  },
+  {
+    name: 'retry',
+    type: '{ initialDelayMs?: number; maxDelayMs?: number; factor?: number; maxAttempts?: number }',
+    isOptional: true,
+    description:
+      'Backoff with full jitter for transient failures. Defaults to 1000 ms initial delay, 30000 ms maximum, factor 2, unlimited retries.',
+  },
+  {
+    name: 'signal',
+    type: 'AbortSignal',
+    isOptional: true,
+    description: 'Aborting it cancels the subscription.',
+  },
+]}
+/>
+
+The returned `MCPEventSubscription` is an async iterable of occurrences (`eventId`, `name`, `timestamp`, `data`) with these members:
+
+- `cursor`: The latest position that's safe to persist. It never moves past an occurrence your loop hasn't received yet. It's `null` when the event type doesn't support replay.
+- `truncated`: `true` when the server reported a gap right before the occurrence your loop received last, for example because the saved cursor was older than its retention window. Read it inside the loop: it's `true` for the first occurrence after the gap and `false` for the ones after it.
+- `mode`: The delivery mode in use, `'webhook'`, `'push'`, or `'poll'`.
+- `deliveryStatus`: Webhook mode only. The server's latest report on delivery to your webhook URL (`active`, `lastDeliveryAt`, `lastError`, `failedSince`), updated on each refresh.
+- `onError(handler)`: Receives recoverable errors, such as a dropped stream that the client is reopening. Returns a function that removes the handler.
+- `cancel()`: Stops the subscription and ends the iterator. Breaking out of a `for await` loop also cancels it.
+
+The iterator throws a `MastraError` directly (not wrapped) when the subscription can't continue: `MCP_EVENTS_SUBSCRIPTION_FAILED` for a non-retryable server error, `MCP_EVENTS_SUBSCRIPTION_TERMINATED` when the server ends a push or webhook subscription, or `MCP_EVENTS_RETRIES_EXHAUSTED` after `retry.maxAttempts` failed attempts in a row. The client reopens dropped streams and resumes polling from the last cursor after a reconnect, including after `reconnectServer()`. `disconnect()` ends all subscriptions.
+
+#### `events.handleWebhook(request: Request)`
+
+Handles one webhook delivery and returns the response to send back. Mount it on the route that `webhook.url` points at.
+
+```typescript oxfmt:false
+async handleWebhook(request: Request): Promise<Response>
+```
+
+It verifies the Standard Webhooks signature on the raw body before parsing it, answers the server's verification handshake, and routes occurrences to their subscription by the `X-MCP-Subscription-Id` header. It responds with:
+
+- `200` after the occurrence is handed to its subscription, or with the echoed challenge for a verification request.
+- `401` when the signature is invalid or the timestamp is more than 5 minutes old.
+- `503` when the subscription id isn't known yet. The server retries in that case, covering deliveries that arrive before the subscribe response.
+- `400` for a signed but malformed body, and `405` for methods other than `POST`.
+- `413` for a body over 1 MiB. The body is read only up to that limit, before any other check.
+- `404` when the client has no `webhook` settings.
+
+#### Webhook delivery
+
+With `webhook` settings, the client registers each subscription with `events/subscribe` and the server POSTs occurrences to your URL. The server must authenticate the client, and the URL must be publicly reachable over `https`.
+
+```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+import { registerApiRoute } from '@mastra/core/server'
+import { MCPClient } from '@mastra/mcp'
+
+export const mcpClient = new MCPClient({
   servers: {
-    myServer: {
-      url: new URL('http://localhost:4111/api/mcp/myServer/mcp'),
-      enableProgressTracking: false,
+    github: {
+      url: new URL('https://mcp.example.com/mcp'),
+      requestInit: { headers: { Authorization: `Bearer ${process.env.GITHUB_MCP_TOKEN}` } },
     },
+  },
+  webhook: { url: 'https://agent.example.com/mcp/webhook' },
+})
+
+export const mastra = new Mastra({
+  server: {
+    apiRoutes: [
+      registerApiRoute('/mcp/webhook', {
+        method: 'POST',
+        // Deliveries are authenticated by their signature, not by Mastra auth
+        requiresAuth: false,
+        handler: c => mcpClient.events.handleWebhook(c.req.raw),
+      }),
+    ],
   },
 })
 ```
 
-## Elicitation
+<PropertiesTable
+  content={[
+  {
+    name: 'url',
+    type: 'string',
+    description: 'Public `https` URL that routes to `events.handleWebhook()`.',
+  },
+  {
+    name: 'secret',
+    type: 'string',
+    isOptional: true,
+    description:
+      "A `whsec_` signing secret used for every subscription. By default the client generates a fresh secret for each subscription, so one server can't sign deliveries for another server's subscriptions.",
+  },
+  {
+    name: 'ttlMs',
+    type: 'number | null',
+    isOptional: true,
+    description:
+      'Suggested subscription lifetime. `null` asks for no expiry, which the server may decline. Defaults to the server default.',
+  },
+  {
+    name: 'refreshMarginMs',
+    type: 'number',
+    isOptional: true,
+    description:
+      'How long before the server-granted `refreshBefore` time to refresh the subscription. Defaults to the smaller of 60 seconds and 20% of the grant.',
+  },
+]}
+/>
 
-Elicitation is a feature that allows MCP servers to request structured information from users. When a server needs additional data, it can send an elicitation request that the client handles by prompting the user. A common example is during a tool call.
+The client refreshes each subscription before it expires by repeating `events/subscribe` with the latest cursor. When the server reports failing delivery in `deliveryStatus`, for example because your endpoint timed out, `onError` receives `MCP_EVENTS_WEBHOOK_DELIVERY_FAILING` with `lastError` in its details. The `cursor` in each webhook delivery only covers occurrences your endpoint has acknowledged, so resuming from a saved cursor can deliver the last handled occurrence again. The next refresh resumes a suspended subscription. `cancel()` sends `events/unsubscribe`.
 
-### How Elicitation Works
+Webhook state lives in this process: run the receiving route in the same process as the `MCPClient` that subscribed.
 
-1. **Server Request**: An MCP server tool calls `server.elicitation.sendRequest()` with a message and schema
-1. **Client Handler**: Your elicitation handler function is called with the request
-1. **User Interaction**: Your handler collects user input (via UI, CLI, etc.)
-1. **Response**: Your handler returns the user's response (accept/decline/cancel)
-1. **Tool Continuation**: The server tool receives the response and continues execution
+Webhook delivery needs an authenticated HTTP connection to the server, because the server ties each webhook subscription to the caller. Over stdio, or over HTTP without authentication, the server rejects `events/subscribe`. It also rejects new subscriptions once its webhook subscription cap is reached (`-32025`). A subscription that didn't force a mode then falls back to `push` or `poll`, and the first `onError` handler receives `MCP_EVENTS_WEBHOOK_UNAVAILABLE` with the rejection `code` and the `fallback` mode in its details. Forcing `delivery: 'webhook'` rejects instead.
 
-### Setting Up Elicitation
+Subscriptions on one server with the same event name and arguments share a single server-side webhook subscription. Each one gets every occurrence through its own iterator, and the client sends `events/unsubscribe` only when the last of them is cancelled.
 
-You must set up an elicitation handler before tools that use elicitation are called:
+### Events in agents and workflows (experimental)
+
+`MCPEventsSignalProvider` delivers MCP server events to agent threads as notifications. Add it to an agent's `signals`, then subscribe threads to events. The agent needs a notifications storage domain, which `InMemoryStore` and the standard storage adapters provide.
+
+:::warning
+SEP-3415 is a draft. This API may change in any release.
+:::
+
+```typescript title="src/mastra/agents/repo-agent.ts"
+import { Agent } from '@mastra/core/agent'
+import { MCPClient, MCPEventsSignalProvider } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { github: { url: new URL('https://example.com/mcp') } },
+})
+
+export const repoEvents = new MCPEventsSignalProvider({
+  client: mcp,
+  subscribeOptions: { maxAgeMs: 60 * 60 * 1000 },
+})
+
+export const repoAgent = new Agent({
+  id: 'repo-agent',
+  name: 'Repo Agent',
+  instructions: 'Triage repository activity.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  signals: [repoEvents],
+})
+
+await repoEvents.subscribeThread(
+  { resourceId: 'user-1', threadId: 'thread-1' },
+  { server: 'github', event: 'repo.push', args: { repo: 'mastra-ai/mastra' } },
+)
+```
+
+Threads that subscribe to the same server, event and arguments share one MCP subscription regardless of argument key order. Each occurrence becomes a notification with `kind: 'mcp-event'` and `attributes: { server, event }`. The raw occurrence is in `payload`. The notification `summary`, which is the only part the model reads, labels the event as untrusted and wraps its data, together with the server-advertised event name, in an `<untrusted-mcp-event-data>` block that the content can't close. When the server reports a gap, `attributes.truncated` is `true` and the summary says that events may have been skipped.
+
+If the subscription ends, for example because the server terminates it, each subscribed thread receives a `high` priority notification with `kind: 'mcp-event-subscription-ended'` and the threads are unsubscribed.
+
+<PropertiesTable
+  content={[
+  {
+    name: 'client',
+    type: "Pick<MCPClient, 'events'>",
+    description: 'The client used to list and subscribe to events.',
+  },
+  {
+    name: 'id',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'mcp-events'",
+    description: 'Provider id, used as the notification `source`.',
+  },
+  {
+    name: 'name',
+    type: 'string',
+    isOptional: true,
+    defaultValue: "'MCP Events'",
+    description: 'Display name.',
+  },
+  {
+    name: 'cursorStore',
+    type: 'MCPEventCursorStore',
+    isOptional: true,
+    defaultValue: 'InMemoryMCPEventCursorStore',
+    description:
+      'Stores the resume cursor for each subscription. Implement `get(key)`, `set(key, cursor)` and `delete(key)` with durable storage so a subscription continues from its last cursor when a thread is subscribed again after a restart. Only cursors are stored, not which threads are subscribed. Only non-null cursors are stored.',
+  },
+  {
+    name: 'subscribeOptions',
+    type: "Omit<MCPEventSubscribeOptions, 'cursor' | 'signal'>",
+    isOptional: true,
+    description: 'Options for every MCP subscription, for example `maxAgeMs` to bound the backlog replayed on resume.',
+  },
+  {
+    name: 'priority',
+    type: 'NotificationPriority',
+    isOptional: true,
+    defaultValue: "'medium'",
+    description: 'Priority of event notifications.',
+  },
+  {
+    name: 'coalesce',
+    type: 'boolean',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      "Sets `coalesceKey: 'mcp-events:<key>'` on event notifications, whatever the provider `id`. Pending notifications from one subscription then merge, so a burst that arrives before the agent reads its inbox keeps only the latest occurrence. When off, every occurrence is its own notification.",
+  },
+  {
+    name: 'tools',
+    type: 'boolean | { servers: string[] }',
+    isOptional: true,
+    defaultValue: 'false',
+    description:
+      'Gives the agent the `mcp_events_list`, `mcp_events_subscribe` and `mcp_events_unsubscribe` tools, which act on the current thread and require memory. Event descriptions and error messages from the server reach the model inside the same untrusted-data block as event data. Subscriptions made through the tools are lost on restart. Pass `servers` to limit them to those servers.',
+  },
+  {
+    name: 'onError',
+    type: '(error: unknown, info: { server: string; event: string; key: string }) => void',
+    isOptional: true,
+    description: 'Receives delivery, cursor store and subscription errors.',
+  },
+]}
+/>
+
+The provider has these methods:
+
+- `subscribeThread(thread, { server, event, args? })`: Subscribes a thread and resolves once the MCP subscription is confirmed. It resumes from the stored cursor. If the server rejects the subscription, the thread isn't subscribed and the promise rejects. Thread subscriptions are kept in memory only: after a restart, call `subscribeThread()` again for each thread that should keep receiving events.
+- `unsubscribeThread(thread, { server, event, args? })`: Resolves to `true` when the thread was subscribed. When the last thread leaves, the MCP subscription is cancelled and its stored cursor is deleted.
+- `stop()`: Cancels every MCP subscription and keeps the stored cursors, so a new provider with the same `cursorStore` resumes where this one stopped.
+- `MCPEventsSignalProvider.key({ server, event, args? })`: Returns the subscription key used by the cursor store.
+
+Delivery is at least once. The provider stores the cursor after it notifies the threads, so an occurrence notified right before a crash is replayed after the restart. The notification's `dedupeKey` includes the event id: if the first notification is still pending, the replay merges into it. If it was already delivered, the thread is notified again.
+
+To start a workflow run for each occurrence, iterate a subscription directly:
+
+```typescript title="src/mastra/triggers/repo-push.ts"
+const subscription = await mcp.events.subscribe(
+  'github',
+  'repo.push',
+  { repo: 'mastra-ai/mastra' },
+  { cursor: await loadCursor() },
+)
+
+process.once('SIGTERM', () => void subscription.cancel())
+
+for await (const event of subscription) {
+  const run = await triagePushWorkflow.createRun()
+  await run.start({ inputData: { eventId: event.eventId, push: event.data } })
+  if (subscription.cursor) await saveCursor(subscription.cursor)
+}
+```
+
+## Answering input requests
+
+A server tool, resource or prompt that needs something from the user ends its call with an `input_required` result instead of a value. The result carries one or more embedded requests, each with a server-chosen `key` and either a form (`requestedSchema`) or a URL the user must visit. Configure `inputRequests` on the server definition to answer them: the client calls the handler once per embedded request, retries the original call with the answers, and resolves the tool call with the final result. Without a handler an `input_required` result surfaces as an error.
 
 ```typescript
 import { MCPClient } from '@mastra/mcp'
@@ -1013,30 +1446,33 @@ const mcpClient = new MCPClient({
   servers: {
     interactiveServer: {
       url: new URL('http://localhost:3000/mcp'),
+      inputRequests: async ({ key, params, signal }) => {
+        if (params.mode === 'url') {
+          return { action: 'decline' }
+        }
+        const content = await collectUserInput(params.message, params.requestedSchema, { signal })
+        return { action: 'accept', content }
+      },
     },
   },
 })
-
-// Set up elicitation handler
-mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  // Handle the server's request for user input
-  console.log(`Server needs: ${request.message}`)
-
-  // Your logic to collect user input
-  const userData = await collectUserInput(request.requestedSchema)
-
-  return {
-    action: 'accept',
-    content: userData,
-  }
-})
 ```
+
+### `MCPInputRequest`
+
+The handler receives:
+
+- `key`: The server-chosen key the answer is filed under. Pass it through to your UI when several requests arrive in one round.
+- `params`: The request. In form mode it has `message` and `requestedSchema`, a flat JSON Schema object of primitive fields. In url mode it has `message` and `url`.
+- `signal`: Aborts when the originating call is cancelled or times out.
+
+Configuring a handler advertises form support to the server. To accept url-mode requests as well, widen `capabilities.elicitation` on the same server definition.
 
 ### Response types
 
-Your elicitation handler must return one of three response types:
+Return an `ElicitResult`:
 
-- **Accept**: User provided data and confirmed submission
+- **Accept**: The user provided data and confirmed submission. `content` must match `requestedSchema`.
 
   ```typescript
   return {
@@ -1045,39 +1481,36 @@ Your elicitation handler must return one of three response types:
   }
   ```
 
-- **Decline**: User explicitly declined to provide the information
+- **Decline**: The user explicitly declined to provide the information.
 
   ```typescript
   return { action: 'decline' }
   ```
 
-- **Cancel**: User dismissed or cancelled the request
+- **Cancel**: The user dismissed the request.
   ```typescript
   return { action: 'cancel' }
   ```
 
-### Schema-Based Input Collection
+A declined or cancelled request ends the tool call with an error. A server can ask again after an accepted answer, so the handler may run several times for one tool call.
 
-The `requestedSchema` provides structure for the data the server needs:
+### Schema-based input collection
+
+Walk `requestedSchema` to prompt for each field:
 
 ```typescript
-await mcpClient.elicitation.onRequest('interactiveServer', async request => {
-  const { properties, required = [] } = request.requestedSchema
-  const content: Record<string, any> = {}
+inputRequests: async ({ params }) => {
+  if (params.mode === 'url') return { action: 'decline' }
 
-  for (const [fieldName, fieldSchema] of Object.entries(properties || {})) {
-    const field = fieldSchema as any
-    const isRequired = required.includes(fieldName)
+  const { properties, required = [] } = params.requestedSchema
+  const content: Record<string, string | number | boolean> = {}
 
-    // Collect input based on field type and requirements
+  for (const [fieldName, fieldSchema] of Object.entries(properties)) {
     const value = await promptUser({
       name: fieldName,
-      title: field.title,
-      description: field.description,
-      type: field.type,
-      required: isRequired,
-      format: field.format,
-      enum: field.enum,
+      title: fieldSchema.title,
+      description: fieldSchema.description,
+      required: required.includes(fieldName),
     })
 
     if (value !== null) {
@@ -1086,28 +1519,32 @@ await mcpClient.elicitation.onRequest('interactiveServer', async request => {
   }
 
   return { action: 'accept', content }
-})
+}
 ```
 
 ### Best practices
 
-- **Always handle elicitation**: Set up your handler before calling tools that might use elicitation
-- **Validate input**: Check that required fields are provided
-- **Respect user choice**: Handle decline and cancel responses gracefully
-- **Clear UI**: Make it obvious what information is being requested and why
-- **Security**: Never auto-accept requests for sensitive information
+- **Configure the handler up front**: it's part of the server definition, so a tool that asks for input never runs without one.
+- **Validate input**: Check that required fields are provided.
+- **Respect user choice**: Handle decline and cancel responses gracefully.
+- **Clear UI**: Make it obvious what information is being requested and why.
+- **Security**: Never auto-accept requests for sensitive information, and treat url-mode requests as links to untrusted sites.
 
 ## OAuth authentication
 
-For connecting to MCP servers that require OAuth authentication per the [MCP Auth Specification](https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization), use the `MCPOAuthClientProvider`:
+For connecting to MCP servers that require OAuth authentication per the [MCP 2026-07-28 authorization specification](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization), use the `MCPOAuthClientProvider`. The provider never registers a client at runtime: give it either `clientInformation` for a client pre-registered with the authorization server, or a [Client ID Metadata Document](https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization/client-registration#client-id-metadata-documents) URL as `clientMetadataUrl`:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
 // Create an OAuth provider
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://localhost:3000/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1130,18 +1567,26 @@ const client = new MCPClient({
 })
 ```
 
-Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each.
+The document served at `clientMetadataUrl` must contain the same `client_id`, `client_name`, and `redirect_uris`. For loopback callbacks, include every fallback URL returned by `getCallbackUrlCandidates()` in the hosted document. The URL is sent as the `client_id`; the provider never calls a registration endpoint, so an authorization server that accepts neither the metadata document nor a pre-registered `clientInformation` fails the flow explicitly. Configure exactly one identity: the constructor throws when both `clientInformation` and `clientMetadataUrl` are set.
+
+Tokens saved by `MCPOAuthClientProvider` are bound to the authorization server's validated `issuer`, and discovery state is persisted so the code exchange is only sent to the server that issued the redirect. The loopback callback also forwards the RFC 9207 `iss` parameter to the SDK, which rejects a mismatch before exchanging the authorization code.
+
+Give each server its own `MCPOAuthClientProvider` instance. A provider holds per-server session and credential state during authorization, so sharing one instance across multiple servers lets their flows overwrite each other. When configuring several protected servers, construct a separate provider for each. If those providers use the same persistent backend, give each provider a separate `OAuthStorage` namespace because storage mutation ordering is coordinated only within one provider instance.
 
 ### Interactive browser authentication
 
-When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and client registration at runtime. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
+When a server rejects a connection because authorization is required, the client records a `'needs-auth'` state instead of failing outright. Calling `authenticate()` completes the flow. It starts a one-shot callback server on the provider's loopback redirect URL, falling back to the next sequential ports when it's in use. The SDK then performs discovery and uses the configured client identity. `onRedirectToAuthorization` receives the authorization URL so your application can open it in the user's browser. The token exchange finishes after the browser returns the authorization code:
 
 ```typescript
 import { MCPClient, MCPOAuthClientProvider } from '@mastra/mcp'
 
+const clientMetadataUrl = 'https://app.example.com/oauth/client-metadata.json'
+
 const oauthProvider = new MCPOAuthClientProvider({
   redirectUrl: 'http://127.0.0.1:5533/oauth/callback',
+  clientMetadataUrl,
   clientMetadata: {
+    client_id: clientMetadataUrl,
     redirect_uris: ['http://127.0.0.1:5533/oauth/callback'],
     client_name: 'My MCP Client',
     grant_types: ['authorization_code', 'refresh_token'],
@@ -1178,8 +1623,8 @@ Hosts that drive the flow can capture the authorization code with the exported `
 ```typescript
 import { createOAuthCallbackServer, getCallbackUrlCandidates } from '@mastra/mcp'
 
-// getCallbackUrlCandidates() lists every URL the helper may bind, so register
-// all of them as redirect_uris during client registration to cover port fallback.
+// getCallbackUrlCandidates() lists every URL the helper may bind, so list all
+// of them as redirect_uris in your pre-registration or metadata document.
 const redirectUris = getCallbackUrlCandidates('http://127.0.0.1:5533/oauth/callback').map(url =>
   url.toString(),
 )
@@ -1191,8 +1636,8 @@ const server = await createOAuthCallbackServer({
 
 // server.url reflects the port actually bound — use it as the redirect_uri.
 try {
-  const { code } = await server.waitForCode()
-  // Exchange the code here.
+  const { code, iss } = await server.waitForCode()
+  // Exchange the code here, passing `iss` so the SDK validates the issuer.
 } finally {
   await server.close()
 }
@@ -1211,6 +1656,7 @@ const provider = createSimpleTokenProvider('your-access-token', {
     redirect_uris: ['http://localhost:3000/callback'],
     client_name: 'Test Client',
   },
+  clientInformation: { client_id: 'test-client' },
 })
 
 const client = new MCPClient({
@@ -1225,7 +1671,7 @@ const client = new MCPClient({
 
 ### Custom Token Storage
 
-For persistent token storage across sessions, implement the `OAuthStorage` interface:
+For persistent token storage across sessions, implement the `OAuthStorage` interface. The provider stores tokens (both the latest set and one entry per authorization-server issuer), discovery state, and the PKCE verifier under string keys. The backend only needs a key-value contract:
 
 ```typescript
 import { MCPOAuthClientProvider, OAuthStorage } from '@mastra/mcp'
@@ -1262,6 +1708,7 @@ class DatabaseOAuthStorage implements OAuthStorage {
 const provider = new MCPOAuthClientProvider({
   redirectUrl: 'http://localhost:3000/callback',
   clientMetadata: {/* ... */},
+  clientInformation: { client_id: 'my-registered-client' },
   storage: new DatabaseOAuthStorage(db, 'user-123'),
 })
 ```
@@ -1284,12 +1731,12 @@ const mcp = new MCPClient({
       env: {
         API_KEY: 'your-api-key',
       },
-      log: logMessage => {
+      logger: logMessage => {
         console.log(`[${logMessage.level}] ${logMessage.message}`)
       },
     },
     weather: {
-      url: new URL('http://localhost:8080/sse'),
+      url: new URL('http://localhost:8080/mcp'),
     },
   },
   timeout: 30000, // Global 30s timeout
@@ -1366,7 +1813,7 @@ const mcp = new MCPClient({
       timeout: 20000, // Server-specific timeout
     },
     weather: {
-      url: new URL('http://localhost:8080/sse'),
+      url: new URL('http://localhost:8080/mcp'),
       requestInit: {
         headers: {
           Authorization: `Bearer user-123-token`,
@@ -1426,13 +1873,38 @@ MCPClient handles server connections gracefully:
 1. Graceful server shutdown to prevent error messages during development
 1. Proper cleanup of resources when disconnecting
 
+### Handle shutdown yourself
+
+By default, a connected client installs hooks for `SIGINT`, `SIGTERM`, `SIGHUP`, and `beforeExit` that disconnect its servers and end the process. These hooks can interrupt your application's awaited cleanup, such as draining HTTP requests.
+
+Set `registerProcessHooks: false` to let your application own shutdown. Call `disconnect()` after requests that use the client have finished:
+
+```typescript
+import { MCPClient } from '@mastra/mcp'
+
+const mcp = new MCPClient({
+  servers: { weather: { url: new URL('https://example.com/mcp') } },
+  registerProcessHooks: false,
+})
+
+process.once('SIGTERM', async () => {
+  // Finish your application's cleanup before disconnecting the client.
+  await mcp.disconnect()
+  process.exit(0)
+})
+```
+
+Set the option on every `MCPClient` in the process before connecting. Once any client registers the default hooks, the global `SIGINT` and `SIGTERM` listeners remain until the process exits, even after `disconnect()`.
+
+With hooks disabled, your application is responsible for closing MCP connections. In a Mastra server, coordinate `disconnect()` with your server's shutdown lifecycle so in-flight requests can finish using the client.
+
 ## Using custom fetch for runtime-defined authentication
 
 For HTTP servers, you can provide a custom `fetch` function to handle runtime-defined authentication or request interception. It can also handle other custom behavior. This is particularly useful when you need to refresh tokens on each request or forward user credentials from the incoming request to the MCP server.
 
 The custom `fetch` function receives an optional third `requestContext` parameter, which provides access to request-scoped data (e.g., authentication cookies, bearer tokens) set by middleware or passed during agent/tool execution. The `requestContext` is `null` during the initial connection handshake.
 
-When `fetch` is provided, `requestInit`, `eventSourceInit`, and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
+When `fetch` is provided, `requestInit` and `authProvider` become optional, as you can handle these concerns within your custom fetch function.
 
 ```typescript
 const mcpClient = new MCPClient({
@@ -1468,11 +1940,7 @@ await agent.generate('Hello!', {
 
 ## Handling auth failures inside custom fetch
 
-A custom `fetch` shouldn't `throw` when authentication is unavailable. The Streamable HTTP transport in the MCP SDK opens a long-lived `GET /mcp` "standalone listener" stream in the background to receive server-pushed notifications. Errors on that stream are retried with exponential backoff, and a thrown `fetch` or a cleanly-closed stream can produce an indefinite reconnect loop at roughly one attempt per second.
-
-Return a synthetic `Response` instead. The [MCP Streamable HTTP specification](https://modelcontextprotocol.io/specification/2025-03-26/basic/transports) defines `405 Method Not Allowed` as the signal a server returns when it doesn't offer the GET SSE stream, and the SDK honors it as a terminal status that stops the listener cleanly. Use this to disable the listener when your server doesn't push notifications.
-
-The following pattern waits for an auth token on POST requests, attaches it to outgoing headers, and short-circuits the GET listener with a synthetic 405:
+A custom `fetch` shouldn't `throw` when authentication is unavailable. Every MCP request is a `POST`, and the SDK surfaces a non-2xx response as an error to the caller of `listTools()`, `tools/call` and so on, which is the behavior you want. A thrown `fetch` is reported the same way but loses the server's status and body. The only long-lived request is the `subscriptions/listen` `POST` the client opens for `resources.subscribe()`, and it's retried after a failure, so an unauthenticated stream can loop. Wait for the token, then forward the request:
 
 ```typescript
 async function waitForToken(timeoutMs = 5000): Promise<string | null> {
@@ -1485,20 +1953,9 @@ const mcpClient = new MCPClient({
     apiServer: {
       url: new URL('https://api.example.com/mcp'),
       fetch: async (url, init) => {
-        const method = (init?.method || 'GET').toUpperCase()
-
-        // The SDK opens a background GET stream for server-pushed notifications.
-        // If your server does not use it, short-circuit with 405 to stop reconnect attempts.
-        if (method === 'GET') {
-          return new Response(null, { status: 405, statusText: 'Method Not Allowed' })
-        }
-
-        // POST: wait for the token, then forward the request with an Authorization header.
         const token = await waitForToken()
         if (!token) {
           // Forward the request without a token and let the server reject it.
-          // The SDK surfaces non-2xx POST responses as errors to the caller of
-          // tools/list, tools/call, etc., which is the desired behavior here.
           return fetch(url, init)
         }
 
@@ -1511,58 +1968,29 @@ const mcpClient = new MCPClient({
 })
 ```
 
-Return `405` for the GET listener only when your server doesn't push notifications back to the client. If your server uses the standalone GET stream, attach the auth token on `GET` requests as well and let the request through.
+## Sending request headers
 
-## Using SSE request headers
-
-When using the legacy SSE MCP transport, you must configure both `requestInit` and `eventSourceInit` due to a bug in the MCP SDK. Alternatively, you can use a custom `fetch` function which will be automatically used for both POST requests and SSE connections:
+Static headers go in `requestInit`. They're sent on every request, including the `subscriptions/listen` stream:
 
 ```ts
-// Option 1: Using requestInit and eventSourceInit (required for SSE)
-const sseClient = new MCPClient({
+const client = new MCPClient({
   servers: {
     exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      // Note: requestInit alone isn't enough for SSE
+      url: new URL('https://your-mcp-server.com/mcp'),
       requestInit: {
         headers: {
           Authorization: 'Bearer your-token',
         },
-      },
-      // This is also required for SSE connections with custom headers
-      eventSourceInit: {
-        fetch(input: Request | URL | string, init?: RequestInit) {
-          const headers = new Headers(init?.headers || {})
-          headers.set('Authorization', 'Bearer your-token')
-          return fetch(input, {
-            ...init,
-            headers,
-          })
-        },
-      },
-    },
-  },
-})
-
-// Option 2: Using custom fetch (simpler, works for both Streamable HTTP and SSE)
-const sseClientWithFetch = new MCPClient({
-  servers: {
-    exampleServer: {
-      url: new URL('https://your-mcp-server.com/sse'),
-      fetch: async (url, init) => {
-        const headers = new Headers(init?.headers || {})
-        headers.set('Authorization', 'Bearer your-token')
-        return fetch(url, {
-          ...init,
-          headers,
-        })
       },
     },
   },
 })
 ```
 
+Use a custom `fetch` when the value changes per request.
+
 ## Related information
 
 - For creating MCP servers, see the [MCPServer documentation](./mcp-server).
+- Migrating from `@mastra/mcp` 1.x: [Migrate @mastra/mcp from v1 to v2](/reference/migrations/mcp-v2).
 - For more about the Model Context Protocol, see the [@modelcontextprotocol/sdk documentation](https://github.com/modelcontextprotocol/typescript-sdk).

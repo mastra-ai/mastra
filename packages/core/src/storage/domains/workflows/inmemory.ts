@@ -1,5 +1,14 @@
-import type { StepResult, WorkflowRunState } from '../../../workflows';
+import type { StepResult, WorkflowRunState, WorkflowRunStatus } from '../../../workflows';
 import { normalizePerPage } from '../../base';
+import { matchesRunFence, resolveRunFence, RunFenceConflictError } from '../../run-fencing';
+import type {
+  ClaimRunOwnershipInput,
+  ClaimRunOwnershipResult,
+  RenewRunOwnershipInput,
+  RenewRunOwnershipResult,
+  RunFence,
+  RunOwnershipRecord,
+} from '../../run-fencing';
 import type {
   StorageWorkflowRun,
   WorkflowRun,
@@ -11,6 +20,7 @@ import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
+import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 
 /**
  * Deep-clone in-memory workflow state.
@@ -180,12 +190,85 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return true;
   }
 
+  supportsGuardedSnapshotWrites(): boolean {
+    return true;
+  }
+
   async dangerouslyClearAll(): Promise<void> {
     this.db.workflows.clear();
+    this.db.runOwners.clear();
   }
 
   private getWorkflowKey(workflowName: string, runId: string): string {
     return `${workflowName}-${runId}`;
+  }
+
+  // Every ownership operation and fenced write below checks and writes without
+  // awaiting in between, which makes each one atomic on the single JS thread.
+
+  supportsRunFencing(): boolean {
+    return true;
+  }
+
+  private ownershipRecord(runId: string): RunOwnershipRecord | null {
+    const owner = this.db.runOwners.get(runId);
+    if (!owner) return null;
+    return {
+      runId,
+      generation: owner.generation,
+      ownerId: owner.ownerId,
+      leaseExpiresAt: owner.leaseExpiresAt ? new Date(owner.leaseExpiresAt) : null,
+      live: !!owner.leaseExpiresAt && owner.leaseExpiresAt.getTime() > Date.now(),
+    };
+  }
+
+  private assertFence(explicit: RunFence | undefined, runId: string, operation: string): void {
+    const fence = resolveRunFence(this, explicit, runId);
+    if (fence && !matchesRunFence(this.db.runOwners.get(fence.runId), fence)) {
+      throw new RunFenceConflictError(fence, operation);
+    }
+  }
+
+  async claimRunOwnership({
+    runId,
+    ownerId,
+    leaseMs,
+    force,
+    expectedGeneration,
+  }: ClaimRunOwnershipInput): Promise<ClaimRunOwnershipResult> {
+    const current = this.ownershipRecord(runId);
+    if (expectedGeneration !== undefined && (current?.generation ?? 0) !== expectedGeneration) {
+      return { acquired: false, record: current };
+    }
+    if (current?.live && !force) {
+      return { acquired: false, record: current };
+    }
+    this.db.runOwners.set(runId, {
+      generation: current ? current.generation + 1 : Math.max(1, Date.now()),
+      ownerId,
+      leaseExpiresAt: new Date(Date.now() + leaseMs),
+    });
+    return { acquired: true, record: this.ownershipRecord(runId)! };
+  }
+
+  async renewRunOwnership({ leaseMs, ...fence }: RenewRunOwnershipInput): Promise<RenewRunOwnershipResult> {
+    const owner = this.db.runOwners.get(fence.runId);
+    if (!owner?.leaseExpiresAt || !matchesRunFence(owner, fence)) {
+      return { renewed: false, record: this.ownershipRecord(fence.runId) };
+    }
+    owner.leaseExpiresAt = new Date(Date.now() + leaseMs);
+    return { renewed: true, record: this.ownershipRecord(fence.runId)! };
+  }
+
+  async releaseRunOwnership(fence: RunFence): Promise<boolean> {
+    const owner = this.db.runOwners.get(fence.runId);
+    if (!owner || !matchesRunFence(owner, fence)) return false;
+    owner.leaseExpiresAt = null;
+    return true;
+  }
+
+  async getRunOwnership({ runId }: { runId: string }): Promise<RunOwnershipRecord | null> {
+    return this.ownershipRecord(runId);
   }
 
   async updateWorkflowResults({
@@ -194,13 +277,18 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     stepId,
     result,
     requestContext,
+    state,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     stepId: string;
     result: StepResult<any, any, any, any>;
     requestContext: Record<string, any>;
+    state?: Record<string, any>;
+    fence?: RunFence;
   }): Promise<Record<string, StepResult<any, any, any, any>>> {
+    this.assertFence(fence, runId, 'updateWorkflowResults');
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -224,7 +312,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext });
+    const context = mergeWorkflowStepResult({ snapshot, stepId, result, requestContext, state });
 
     this.db.workflows.set(key, {
       ...run,
@@ -238,11 +326,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     workflowName,
     runId,
     opts,
+    fence,
   }: {
     workflowName: string;
     runId: string;
     opts: UpdateWorkflowStateOptions;
+    fence?: RunFence;
   }): Promise<WorkflowRunState | undefined> {
+    this.assertFence(fence, runId, 'updateWorkflowState');
     const key = this.getWorkflowKey(workflowName, runId);
     const run = this.db.workflows.get(key);
 
@@ -287,6 +378,8 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot,
     createdAt,
     updatedAt,
+    fence,
+    expectedStatus,
   }: {
     workflowName: string;
     runId: string;
@@ -294,10 +387,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     snapshot: WorkflowRunState;
     createdAt?: Date;
     updatedAt?: Date;
-  }): Promise<void> {
+    fence?: RunFence;
+    expectedStatus?: WorkflowRunStatus | WorkflowRunStatus[];
+  }): Promise<boolean> {
+    this.assertFence(fence, runId, 'persistWorkflowSnapshot');
     const key = this.getWorkflowKey(workflowName, runId);
     const now = new Date();
     const existing = this.db.workflows.get(key);
+    if (existing?.snapshot && !matchesExpectedWorkflowStatus(this.snapshotStatus(existing), expectedStatus)) {
+      return false;
+    }
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
@@ -313,6 +412,23 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     };
 
     this.db.workflows.set(key, data);
+    return true;
+  }
+
+  async loadWorkflowRunStatus({
+    workflowName,
+    runId,
+  }: {
+    workflowName: string;
+    runId: string;
+  }): Promise<WorkflowRunStatus | null> {
+    const run = this.db.workflows.get(this.getWorkflowKey(workflowName, runId));
+    return run?.snapshot ? (this.snapshotStatus(run) ?? null) : null;
+  }
+
+  private snapshotStatus(run: StorageWorkflowRun): WorkflowRunStatus | undefined {
+    const snapshot = typeof run.snapshot === 'string' ? JSON.parse(run.snapshot) : run.snapshot;
+    return snapshot?.status;
   }
 
   async loadWorkflowSnapshot({
@@ -341,6 +457,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     perPage,
     page,
     resourceId,
+    threadId,
     status,
   }: StorageListWorkflowRunsInput = {}): Promise<WorkflowRuns> {
     if (page !== undefined && page < 0) {
@@ -384,6 +501,25 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       runs = runs.filter((run: any) => new Date(run.createdAt).getTime() <= toDate.getTime());
     }
     if (resourceId) runs = runs.filter((run: any) => run.resourceId === resourceId);
+    if (threadId) {
+      runs = runs.filter((run: any) => {
+        let snapshot: WorkflowRunState | string = run?.snapshot!;
+
+        if (!snapshot) {
+          return false;
+        }
+
+        if (typeof snapshot === 'string') {
+          try {
+            snapshot = JSON.parse(snapshot) as WorkflowRunState;
+          } catch {
+            return false;
+          }
+        }
+
+        return getSnapshotMemoryInfo(snapshot)?.threadId === threadId;
+      });
+    }
 
     const total = runs.length;
 
@@ -444,7 +580,16 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return parsedRun as WorkflowRun;
   }
 
-  async deleteWorkflowRunById({ runId, workflowName }: { runId: string; workflowName: string }): Promise<void> {
+  async deleteWorkflowRunById({
+    runId,
+    workflowName,
+    fence,
+  }: {
+    runId: string;
+    workflowName: string;
+    fence?: RunFence;
+  }): Promise<void> {
+    this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
     this.db.workflows.delete(key);
   }

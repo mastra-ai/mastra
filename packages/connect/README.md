@@ -10,41 +10,80 @@ npm install @mastra/connect
 
 ## Usage
 
-Attach a connection to your Platform project using integration ID `resend` or `incident-io`. Configure the Platform project ID and access token, then pass the resolver to your agent's `tools` option:
+Attach connections to your Platform project, configure the project ID and access token, then pass the resolver to your agent's `tools` option:
 
 ```ts
-import { connect } from '@mastra/connect';
+import { tools } from '@mastra/connect';
 
-const tools = connect({
+const connectTools = tools({
   projectId: process.env.MASTRA_PROJECT_ID,
   client: { accessToken: process.env.MASTRA_PLATFORM_ACCESS_TOKEN },
-  integrations: {
-    resend: { allowTools: ['resend_send_email', 'resend_get_email'] },
-    'incident-io': { allowTools: ['incident_io_list_incidents', 'incident_io_list_follow_ups'] },
+});
+
+const agent = new Agent({
+  // ...
+  tools: connectTools,
+});
+```
+
+The resolver is live: Mastra calls it per generate/stream, so providers connected to (or disconnected from) the project are picked up without a restart.
+
+### Combining with your own tools
+
+Spread the resolver's result alongside your own tools in a dynamic `tools` callback; your tools win on key collision:
+
+```ts
+const agent = new Agent({
+  // ...
+  tools: async ctx => ({ ...(await connectTools(ctx)), weatherTool, searchTool }),
+});
+```
+
+### Choosing providers
+
+The `providers` option accepts two shapes:
+
+```ts
+// Array — an allowlist: only these providers resolve.
+tools({ providers: ['resend', 'incident-io'] });
+
+// Record — per-provider configuration. Every connected provider resolves
+// unless excluded: `true` (or `{}`) enables with defaults, `false` excludes,
+// and an object configures the provider.
+tools({
+  providers: {
+    resend: { allowTools: ['resend_send_email'] },
+    linear: { requireApproval: ['linear_delete_*'] },
+    github: false,
   },
 });
 ```
 
-The resolver discovers active project connections. Where multiple connections match, select one with `MASTRA_RESEND_CONNECTION_ID`, `MASTRA_INCIDENT_IO_CONNECTION_ID`, or the integration's `connectionId` option. The `integrations` entries configure individual providers; they do not disable other attached providers. Set `disabled: true` on providers you want to exclude.
+An id that is neither a checked-in provider nor a platform catalog integration fails with `invalid_options`, so typos never resolve to silence.
 
-| Provider    | Tool source          | Scope                                                                                                                                                     |
-| ----------- | -------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| Resend      | Generated HTTP tools | Emails and attachments, domains, templates, audiences, contacts, segments, topics, broadcasts, webhooks, and metrics                                      |
-| incident.io | Generated HTTP tools | Incidents, updates, actions, follow-ups, timelines, alerts, on-call schedules, teams, users, postmortems, catalog reads, and incident configuration reads |
+### Filtering and approval
+
+- `allowTools` / `disallowTools` (mutually exclusive per provider) restrict a provider's toolset. Entries containing `*` are globs (`'linear_get_*'`). Unknown names and globs that match nothing throw, so access-limiting typos surface immediately.
+- `requireApproval` opts tools into approval. Tools do not require approval by default, matching `@mastra/mcp`'s own default. Pass `true` for every tool on the provider, or an array of keys/globs for a selection — e.g. `neon: { requireApproval: ['neon_delete_project'] }`. Applies to discovered MCP tools and generated HTTP tools alike.
+- All three are also accepted at the top level of `tools()` as defaults for every provider. Per-provider options win wholesale, so `requireApproval: true` globally with `linear: { requireApproval: false }` gates everything except Linear. Top-level entries apply leniently (an entry that matches nothing on one provider simply doesn't apply there) and warn when they matched nothing anywhere.
+
+### Multiple connections
+
+The resolver discovers active project connections. Where multiple connections match a provider, pin one with the provider's `connectionId` option, or leave it unpinned and let the agent route each call: the provider's `<integrationId>__list_connections` tool is added, every other tool takes a required `connection_name`, and the agent uses the display names returned by `list_connections` to pick a connection per call.
 
 ### MCP integrations
 
-`connect()` also discovers any attached integration that advertises `capabilities.mcp: true` in the Platform catalog. No provider-specific registration or release of `@mastra/connect` is required. Discovered tools use the same flat dynamic-tool contract and are namespaced as `<integration-id>_<tool-name>`.
+`tools()` also discovers any attached integration that advertises `capabilities.mcp: true` in the Platform catalog. No provider-specific registration or release of `@mastra/connect` is required. Discovered tools use the same flat dynamic-tool contract and are namespaced as `<integration-id>_<tool-name>`.
 
 Every MCP provider uses `/v2/connections/:connectionId/mcp` for discovery and invocation. The adapter reuses each provider's MCP session across refreshes and closes sessions when the connection changes, is detached, or `disconnect()` is called. If an integration has both checked-in HTTP tools and an MCP capability, the MCP catalog is preferred.
 
 The application sends only its Mastra Platform token. The transport is locked to the selected Platform connection URL. Platform removes caller authentication before Nango injects the provider credential and proxies each protocol request to the MCP server configured for that Nango integration.
 
-MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset. Every discovered MCP tool requires tool approval; the server's annotations are advisory and cannot lift the requirement. List the tool keys an agent may run unattended in `autoApproveTools` for that integration, for example `neon: { autoApproveTools: ['neon_list_projects'] }`. For multiple connections, the derived environment variable is `MASTRA_<INTEGRATION_ID>_CONNECTION_ID`, with punctuation converted to underscores.
+MCP tool catalogs can change independently of this package. Use `allowTools` to give an agent the smallest useful subset.
 
 ### Generated HTTP providers
 
-Resend and incident.io use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
+Resend, incident.io, Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot use checked-in tools generated from their provider contracts. Tool inputs preserve provider field names. Mutations put their JSON request payload under `body`. The one exception is `resend_create_contact_import`, whose `body` fields are sent as a multipart form upload with the CSV text in `body.file`.
 
 ```json
 {
@@ -64,7 +103,7 @@ List tools return one provider page and preserve its response envelope. When `ne
 
 ### Template provenance
 
-Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.
+Resend and incident.io are generated from integration-template contributions [#667](https://github.com/NangoHQ/integration-templates/pull/667) and [#668](https://github.com/NangoHQ/integration-templates/pull/668). Slack, GitHub, Google Mail, Google Calendar, Fireflies, PostHog, Stripe, Discord, Twitter/X, and HubSpot are generated from contribution [#677](https://github.com/NangoHQ/integration-templates/pull/677), which adds agent-focused actions (PostHog HogQL queries, Stripe balance/dispute/coupon/account reads, GitHub tags and trees, Slack Connect invites, Twitter search and following, HubSpot form submission) on top of upstream main. Until they land upstream, each provider manifest pins the contributing repository and exact commit and records generated file checksums.
 
 ## Documentation
 

@@ -6,6 +6,7 @@ packages:
   - "@mastra/express"
   - "@mastra/hono"
   - "@mastra/server"
+  - "@mastra/server-adapters-test-suite"
   - "@mastra/fastify"
   - "@mastra/koa"
 ---
@@ -54,7 +55,7 @@ These type parameters ensure type safety throughout your adapter implementation 
 
 ## Required methods
 
-You must implement these six abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
+You must implement these seven abstract methods. Each handles a specific part of the request lifecycle, from attaching context to sending responses.
 
 ### `registerContextMiddleware()`
 
@@ -119,6 +120,53 @@ registerAuthMiddleware(): void {
 }
 ```
 
+### `registerHttpLoggingMiddleware()`
+
+Register request logging middleware. `init()` calls this after the context, auth, and user middleware. Return early when request logging isn't enabled in `this.httpLoggingConfig`, and skip paths that `this.shouldLogRequest()` excludes. Implement this method as a no-op if your framework has no way to log requests.
+
+```typescript oxfmt:false
+registerHttpLoggingMiddleware(): void {
+  if (!this.httpLoggingConfig?.enabled) return;
+
+  this.app.use((req, res, next) => {
+    if (!this.shouldLogRequest(req.path)) {
+      return next();
+    }
+
+    const start = Date.now();
+    const method = req.method;
+    const path = req.path;
+
+    res.on('finish', () => {
+      const duration = Date.now() - start;
+      const level = this.httpLoggingConfig?.level || 'info';
+      const logData: Record<string, unknown> = {
+        method,
+        path,
+        status: res.statusCode,
+        duration: `${duration}ms`,
+      };
+
+      if (this.httpLoggingConfig?.includeQueryParams) {
+        logData.query = req.query;
+      }
+
+      if (this.httpLoggingConfig?.includeHeaders) {
+        const headers = { ...req.headers };
+        for (const name of this.httpLoggingConfig.redactHeaders || []) {
+          const key = name.toLowerCase();
+          if (headers[key] !== undefined) headers[key] = '[REDACTED]';
+        }
+        logData.headers = headers;
+      }
+
+      this.logger[level](`${method} ${path} ${res.statusCode} ${duration}ms`, logData);
+    });
+    next();
+  });
+}
+```
+
 ### `registerRoute()`
 
 Register a single route with your framework. This method is called once for each Mastra route during initialization. It receives a `ServerRoute` object containing the path, HTTP method, handler function, and Zod schemas for validation. Your implementation should wire this up to your framework's routing system.
@@ -176,7 +224,7 @@ async getParams(
   request: MyRequest
 ): Promise<{
   urlParams: Record<string, string>;
-  queryParams: Record<string, string>;
+  queryParams: Record<string, string | string[]>; // repeated keys (?tag=a&tag=b) become arrays
   body: unknown;
 }> {
   return {
@@ -340,6 +388,11 @@ export class MyFrameworkServer extends MastraServer<MyApp, MyRequest, MyResponse
     // ... implement auth middleware
   }
 
+  registerHttpLoggingMiddleware(): void {
+    if (!this.httpLoggingConfig?.enabled) return
+    // ... implement request logging
+  }
+
   async registerRoute(
     app: MyApp,
     route: ServerRoute,
@@ -384,6 +437,29 @@ await server.init()
 
 app.listen(4111)
 ```
+
+## Test adapter compatibility
+
+Use `@mastra/server-adapters-test-suite` to run the same conformance tests as Mastra's official adapters. Install it with its peer dependencies in your adapter project:
+
+```bash npm2yarn
+npm install --save-dev @mastra/server-adapters-test-suite @mastra/core @mastra/mcp @mastra/server vitest zod
+```
+
+Provide framework-specific setup and request execution functions to the route suite:
+
+```typescript title="src/my-framework-adapter.test.ts"
+import { createRouteAdapterTestSuite } from '@mastra/server-adapters-test-suite'
+import { executeHttpRequest, setupAdapter } from './adapter-test-helpers'
+
+createRouteAdapterTestSuite({
+  suiteName: 'My framework adapter',
+  setupAdapter,
+  executeHttpRequest,
+})
+```
+
+The package also provides root exports for Model Context Protocol (MCP), multipart request, HTTP logging, and body limit tests. See the [package README](https://github.com/mastra-ai/mastra/tree/main/server-adapters/server-adapters-test-suite) for the supported peer dependency versions.
 
 :::tip
 

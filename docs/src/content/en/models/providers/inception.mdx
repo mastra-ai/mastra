@@ -7,9 +7,9 @@ description: "Browse Inception model IDs, capabilities, context windows, and pri
 
 # <img src="https://models.dev/logos/inception.svg" alt="Inception logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Inception
 
-Access 3 Inception models through Mastra's model router. Authentication is handled automatically using the `INCEPTION_API_KEY` environment variable.
+Access 4 Inception models through Mastra's model router. Authentication is handled automatically using the `INCEPTION_API_KEY` environment variable.
 
-Learn more in the [Inception documentation](https://platform.inceptionlabs.ai/docs).
+Learn more in the [Inception documentation](https://docs.inceptionlabs.ai/get-started/models).
 
 ```bash title=".env"
 INCEPTION_API_KEY=your-api-key
@@ -37,7 +37,7 @@ for await (const chunk of stream) {
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Inception documentation](https://platform.inceptionlabs.ai/docs) for details.
+Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Inception documentation](https://docs.inceptionlabs.ai/get-started/models) for details.
 
 :::
 
@@ -66,8 +66,20 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 260000,
     "maxOutput": 65536,
-    "inputCost": 0.04,
-    "outputCost": 0.15
+    "inputCost": 0.2,
+    "outputCost": 0.75
+  },
+  {
+    "model": "inception/mercury-3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1000000,
+    "maxOutput": 131072,
+    "inputCost": 0.1,
+    "outputCost": 0.35
   },
   {
     "model": "inception/mercury-edit-2",
@@ -75,8 +87,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "audioInput": false,
     "videoInput": false,
     "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 128000,
+    "reasoning": false,
+    "contextWindow": 32000,
     "maxOutput": 8192,
     "inputCost": 0.25,
     "outputCost": 0.75
@@ -91,6 +103,8 @@ Model availability, capabilities, context windows, and pricing are sourced from 
 ### Custom headers
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
@@ -108,6 +122,8 @@ const agent = new Agent({
 ### Dynamic model selection
 
 ```typescript title="src/mastra/agents/my-agent.ts"
+import { Agent } from "@mastra/core/agent";
+
 const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",

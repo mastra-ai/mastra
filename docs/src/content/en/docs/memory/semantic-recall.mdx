@@ -16,7 +16,11 @@ import TabItem from "@theme/TabItem";
 
 # Semantic recall
 
-If you ask your friend what they did last weekend, they will search in their memory for events associated with "last weekend" and then tell you what they did. That's sort of like how semantic recall works in Mastra.
+Semantic recall is a built-in form of Retrieval-Augmented Generation (RAG) for agent memory. When a user sends a message, Mastra searches earlier messages for ones with a similar meaning and adds the most relevant ones to the agent's context.
+
+Matching on meaning matters because people often remember the idea behind something, not the exact words they used. A user might ask "What did we decide about the refund?" after originally writing "Let's give them their money back." A keyword search misses that connection, but semantic recall finds it.
+
+Use semantic recall when your agent needs details from earlier in a long conversation, or from a user's other conversations, that are no longer in [recent message history](./message-history).
 
 :::tip[📹 Watch]
 
@@ -64,7 +68,7 @@ After getting a response from the LLM, all new messages (user, assistant, and to
 
 ## Quickstart
 
-Semantic recall is disabled by default. To enable it, set `semanticRecall: true` in `options` and provide a `vector` store and `embedder`:
+Semantic recall is disabled by default. To enable it, set `semanticRecall: true` in `options` and provide a `vector` store and an `embedder`. A store that generates embeddings itself, such as MongoDB with Automated Embedding, works without one. See [Server-side embeddings](#server-side-embeddings).
 
 <Tabs>
   <TabItem value="libsql" label="LibSQL" default>
@@ -292,6 +296,40 @@ const options = {
 }
 ```
 
+## Server-side embeddings
+
+Some vector stores generate the embeddings themselves. With one of those, semantic recall runs without an `embedder`: the database embeds each message on write and the search string on arrival. The embedding provider stays out of your application entirely.
+
+MongoDB does this through [Automated Embedding](/reference/vectors/mongodb): name a Voyage AI model on the vector store and leave the `embedder` out.
+
+```typescript title="src/mastra/agents/index.ts"
+import { Memory } from '@mastra/memory'
+import { MongoDBStore, MongoDBVector } from '@mastra/mongodb'
+
+const memory = new Memory({
+  storage: new MongoDBStore({
+    id: 'agent-storage',
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DB_NAME,
+  }),
+  vector: new MongoDBVector({
+    id: 'agent-vector',
+    uri: process.env.MONGODB_URI,
+    dbName: process.env.MONGODB_DB_NAME,
+    autoEmbed: { model: 'voyage-4' },
+  }),
+  options: {
+    semanticRecall: { topK: 3, messageRange: 2 },
+  },
+})
+```
+
+Messages are stored as text and MongoDB embeds them, so the model choice and the vector size belong to the index rather than to your application. Recall works the same way through an agent and through [`recall()`](#using-the-recall-method).
+
+MongoDB embeds newly written messages in the background. A message saved moments ago may not be recallable immediately.
+
+Every other store expects your application to supply the vectors, and keeps requiring an `embedder`. Enabling semantic recall with neither an `embedder` nor a store that embeds server-side raises an error naming both options.
+
 ## Embedder configuration
 
 Semantic recall relies on an [embedding model](/reference/memory/memory-class) to convert messages into embeddings. Mastra supports embedding models through the model router using `provider/model` strings, or you can use any [embedding model](https://sdk.vercel.ai/docs/ai-sdk-core/embeddings) compatible with the AI SDK.
@@ -399,6 +437,28 @@ Memory uses a single embedder for both storing and recalling messages, so pick o
 
 Multilingual E5 produces 1024-dimensional vectors. Your vector index must be created with matching dimensions, and E5 vectors can't be mixed with vectors from another embedder in the same index.
 
+FastEmbed models embed at most 512 tokens per input (roughly 2,000 to 2,500 characters of English text). Longer inputs are truncated, so text past the limit doesn't affect the embedding and can't be found by semantic recall. The AI SDK v3 FastEmbed models return a warning when this happens. The legacy v1 and v2 models don't. If you embed long documents with FastEmbed, chunk them to fit the window, for example with `maxSize: 1500` in `MDocument.chunk()`.
+
+### Setting the embedding dimension
+
+To name the vector index, Memory needs the embedder's output dimension. By default it finds the dimension by embedding a short probe string the first time semantic recall is set up, once per `Memory` instance. If you already know the dimension, set `embeddingDimension`. Memory then skips the probe, so startup makes no embedding call and doesn't depend on the embedding provider being reachable:
+
+```ts title="src/mastra/agents/index.ts"
+import { Memory } from '@mastra/memory'
+
+const memory = new Memory({
+  embedder: 'openai/text-embedding-3-small',
+  embeddingDimension: 1536,
+  options: {
+    semanticRecall: true,
+  },
+})
+```
+
+The index name is the same whether the dimension is configured or probed, so existing indexes keep working.
+
+The value must match the vectors the embedder returns. Memory compares it with the first real embedding, and on a mismatch it throws a `MASTRA_MEMORY_EMBEDDING_DIMENSION_MISMATCH` error naming both values before creating or querying any index. Update `embeddingDimension` whenever you change the embedding model or its output dimension.
+
 ## PostgreSQL index optimization
 
 When using PostgreSQL as your vector store, you can optimize semantic recall performance by configuring the vector index. This is particularly important for large-scale deployments with thousands of messages.
@@ -407,11 +467,11 @@ PostgreSQL supports both IVFFlat and HNSW indexes. By default, Mastra creates an
 
 ```typescript {18-23}
 import { Memory } from '@mastra/memory'
-import { PgStore, PgVector } from '@mastra/pg'
+import { PostgresStore, PgVector } from '@mastra/pg'
 
 const agent = new Agent({
   memory: new Memory({
-    storage: new PgStore({
+    storage: new PostgresStore({
       id: 'agent-storage',
       connectionString: process.env.DATABASE_URL,
     }),
@@ -426,8 +486,10 @@ const agent = new Agent({
         indexConfig: {
           type: 'hnsw', // Use HNSW for better performance
           metric: 'dotproduct', // Best for OpenAI embeddings
-          m: 16, // Number of bi-directional links (default: 16)
-          efConstruction: 64, // Size of candidate list during construction (default: 64)
+          hnsw: {
+            m: 16, // Number of bi-directional links (default: 16)
+            efConstruction: 64, // Size of candidate list during construction (default: 64)
+          },
         },
       },
     },

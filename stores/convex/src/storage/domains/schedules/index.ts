@@ -295,6 +295,7 @@ export class SchedulesConvex extends SchedulesStorage {
     newNextFireAt: number,
     lastFireAt: number,
     lastRunId: string,
+    newStatus?: ScheduleStatus,
   ): Promise<boolean> {
     return this.#db.updateScheduleNextFire({
       id,
@@ -302,6 +303,7 @@ export class SchedulesConvex extends SchedulesStorage {
       newNextFireAt,
       lastFireAt,
       lastRunId,
+      newStatus,
     });
   }
 

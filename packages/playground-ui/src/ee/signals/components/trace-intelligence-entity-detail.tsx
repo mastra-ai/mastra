@@ -1,5 +1,5 @@
-import { Radar } from 'lucide-react';
-import { useState, type ReactNode } from 'react';
+import { useState } from 'react';
+import type { ReactNode } from 'react';
 
 import { useEntityLearningProgress, useThemeEntities, useThemeSnapshots } from '../hooks';
 import { SankeySignals } from '../sankey-signals';
@@ -10,7 +10,6 @@ import { TraceIntelligenceProvider } from '../trace-intelligence-provider';
 import { useTraceIntelligence } from '../use-trace-intelligence';
 import { SignalsEmptyState } from './signals-empty-state';
 import { EmptyState } from '@/ds/components/EmptyState';
-import { NoDataPageLayout } from '@/ds/components/PageLayout';
 
 export interface TraceIntelligenceEntityDetailProps {
   entityId: string;
@@ -58,13 +57,11 @@ export function TraceIntelligenceEntityDetail({
   }
   if (!entity) {
     return (
-      <NoDataPageLayout>
-        <EmptyState
-          iconSlot={<Radar aria-hidden="true" />}
-          titleSlot="Trace Intelligence entity not found"
-          descriptionSlot="The requested entity is unavailable in this project."
-        />
-      </NoDataPageLayout>
+      <EmptyState
+        titleSlot="Trace Intelligence entity not found"
+        descriptionSlot="The requested entity is unavailable in this project."
+        variant="fill"
+      />
     );
   }
   if (signalNames.length < 2) {

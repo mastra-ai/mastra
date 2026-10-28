@@ -342,6 +342,15 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   readonly provider: string;
 
   /**
+   * The provider's physical, reattachable sandbox id, resolved after the VM is
+   * started (connected or created). Distinct from `id`, which is the logical
+   * identity: persist this to reattach deterministically to the same VM on a
+   * later resume. Undefined until the sandbox has been started, or for
+   * providers with no separate physical id (e.g. local process sandboxes).
+   */
+  readonly sandboxId?: string;
+
+  /**
    * Capture the sandbox's current state as a checkpoint when the provider
    * supports it. Terminology: *snapshot* is the act of capturing; the named,
    * persisted artifact it writes is a *checkpoint*
@@ -499,6 +508,29 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
   writeFiles?(files: SandboxFileInput[], options?: WriteFilesOptions): Promise<void>;
 
   // ---------------------------------------------------------------------------
+  // Native filesystem (Optional)
+  // ---------------------------------------------------------------------------
+
+  /**
+   * Direct access to the sandbox's own disk through the provider's file API.
+   * Optional fast path - providers with a native file API implement this so
+   * file operations don't need a shell command each. Callers should fall back
+   * to `executeCommand` when unavailable.
+   *
+   * Paths are absolute paths inside the sandbox. The provider owns containment:
+   * no workspace-root or symlink confinement is implied, so a caller that needs
+   * it must check paths itself.
+   *
+   * @example
+   * ```typescript
+   * const content = sandbox.filesystem
+   *   ? await sandbox.filesystem.readFile('/workspace/app/package.json', { encoding: 'utf-8' })
+   *   : (await sandbox.executeCommand?.('cat', ['/workspace/app/package.json']))?.stdout;
+   * ```
+   */
+  readonly filesystem?: WorkspaceFilesystem;
+
+  // ---------------------------------------------------------------------------
   // Process Management (Optional)
   // ---------------------------------------------------------------------------
 
@@ -516,6 +548,8 @@ export interface WorkspaceSandbox extends SandboxLifecycle<SandboxInfo> {
    *
    * const procs = await sandbox.processes.list();
    * const proc = await sandbox.processes.get(handle.pid);
+   * // Read without releasing an exited process, so other readers still find it
+   * const peek = await sandbox.processes.get(handle.pid, { release: false });
    * await proc?.sendStdin('hello\n');
    * await proc?.kill();
    * ```

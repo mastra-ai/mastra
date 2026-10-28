@@ -1,25 +1,31 @@
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent } from '@mastra/core/agent/durable';
+import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, createDurableAgent } from '@mastra/core/agent/durable';
 import type { DurableAgent } from '@mastra/core/agent/durable';
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
+import { EventEmitterPubSub } from '@mastra/core/events';
 import { PROVIDER_REGISTRY } from '@mastra/core/llm';
 import { Mastra } from '@mastra/core/mastra';
 import { MockMemory } from '@mastra/core/memory';
 import {
   MASTRA_RESOURCE_ID_KEY,
+  MASTRA_SCOPES_KEY,
   MASTRA_THREAD_ID_KEY,
   MASTRA_VERSIONS_KEY,
   RequestContext,
 } from '@mastra/core/request-context';
 import { InMemoryStore } from '@mastra/core/storage';
+import { createTool } from '@mastra/core/tools';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
+import { z } from 'zod';
 import { HTTPException } from '../http-exception';
 import {
   abortAgentThreadBodySchema,
+  cancelPendingAgentSignalsBodySchema,
   agentExecutionBodySchema,
   approveToolCallBodySchema,
   declineToolCallBodySchema,
   queueAgentMessageBodySchema,
+  queueAgentSignalBodySchema,
   sendAgentMessageBodySchema,
   sendAgentSignalBodySchema,
   subscribeAgentThreadBodySchema,
@@ -32,7 +38,9 @@ import {
   GET_AGENT_BY_ID_ROUTE,
   LIST_AGENTS_ROUTE,
   STREAM_GENERATE_ROUTE,
+  STREAM_UNTIL_IDLE_GENERATE_ROUTE,
   RESUME_STREAM_ROUTE,
+  RESUME_STREAM_UNTIL_IDLE_ROUTE,
   APPROVE_TOOL_CALL_ROUTE,
   DECLINE_TOOL_CALL_ROUTE,
   APPROVE_TOOL_CALL_GENERATE_ROUTE,
@@ -41,10 +49,14 @@ import {
   SEND_TOOL_APPROVAL_ROUTE,
   LIST_SUSPENDED_RUNS_ROUTE,
   QUEUE_AGENT_MESSAGE_ROUTE,
+  QUEUE_AGENT_SIGNAL_ROUTE,
   SEND_AGENT_MESSAGE_ROUTE,
   SEND_AGENT_SIGNAL_ROUTE,
   ABORT_AGENT_THREAD_ROUTE,
+  ABORT_AGENT_RUN_ROUTE,
+  CANCEL_AGENT_PENDING_SIGNALS_ROUTE,
   SUBSCRIBE_AGENT_THREAD_ROUTE,
+  OBSERVE_AGENT_STREAM_ROUTE,
   isProviderConnected,
   extractVersionOptions,
 } from './agents';
@@ -112,6 +124,23 @@ describe('getProvidersHandler', () => {
     delete (global as any).__MOCK_PROVIDER_REGISTRY__;
   });
 
+  it('includes catalog release dates for model pickers', async () => {
+    Object.assign(globalThis, {
+      __MOCK_PROVIDER_REGISTRY__: {
+        acme: {
+          name: 'ACME',
+          models: ['acme-classic', 'acme-next'],
+          modelReleaseDates: { 'acme-next': '2025-08-07' },
+          apiKeyEnvVar: 'ACME_API_KEY',
+          gateway: 'models.dev',
+        },
+      },
+    });
+    const result = await GET_PROVIDERS_ROUTE.handler({});
+    const acme = result.providers.find(provider => provider.id === 'acme');
+    expect(acme?.modelReleaseDates).toEqual({ 'acme-next': '2025-08-07' });
+  });
+
   it('should return all providers from the registry', async () => {
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -138,6 +167,7 @@ describe('getProvidersHandler', () => {
     process.env.ANTHROPIC_API_KEY = 'test-key';
     // Ensure Google is not connected
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -158,6 +188,7 @@ describe('getProvidersHandler', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
 
     const result = await GET_PROVIDERS_ROUTE.handler({});
 
@@ -260,6 +291,87 @@ describe('getProvidersHandler', () => {
     delete process.env.CUSTOM_LLM_API_KEY;
   });
 
+  it('should show a provider as connected when a registered gateway claims its models without an env var', async () => {
+    delete process.env.OPENAI_API_KEY;
+    delete process.env.ANTHROPIC_API_KEY;
+
+    const oauthGateway = {
+      id: 'oauth-gateway',
+      name: 'OAuth Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'oauth-gateway': oauthGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(true);
+    expect(result.providers.find(p => p.id === 'anthropic')?.connected).toBe(false);
+  });
+
+  it('should ignore a disabled gateway that claims a provider', async () => {
+    delete process.env.OPENAI_API_KEY;
+
+    const disabledGateway = {
+      id: 'disabled-gateway',
+      name: 'Disabled Gateway',
+      shouldEnable: () => false,
+      fetchProviders: vi.fn().mockResolvedValue({}),
+      handlesModel: (modelId: string) => modelId.startsWith('openai/'),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'disabled-gateway': disabledGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    expect(result.providers.find(p => p.id === 'openai')?.connected).toBe(false);
+  });
+
+  it('should pass through a gateway provider label and description, falling back to name and empty', async () => {
+    const describedGateway = {
+      id: 'described-gateway',
+      name: 'Described Gateway',
+      fetchProviders: vi.fn().mockResolvedValue({
+        described: {
+          name: 'Described',
+          label: 'Described LLM',
+          description: 'A provider that describes itself',
+          models: ['model-1'],
+          apiKeyEnvVar: 'DESCRIBED_API_KEY',
+          gateway: 'described-gateway',
+        },
+      }),
+      buildUrl: vi.fn(),
+      getApiKey: vi.fn(),
+      resolveLanguageModel: vi.fn(),
+    };
+    const mastra = new Mastra({ gateways: { 'described-gateway': describedGateway } });
+
+    const result = await GET_PROVIDERS_ROUTE.handler({
+      mastra,
+      requestContext: new RequestContext(),
+      abortSignal: new AbortController().signal,
+    });
+
+    const described = result.providers.find(p => p.id === 'described-gateway/described');
+    expect(described).toMatchObject({ label: 'Described LLM', description: 'A provider that describes itself' });
+    const openai = result.providers.find(p => p.id === 'openai');
+    expect(openai).toMatchObject({ label: openai?.name, description: '' });
+  });
+
   it('should hide registry and default-gateway providers when AUTO_BLOCK_EXTERNAL_PROVIDERS is set, keeping only custom gateways', async () => {
     process.env.AUTO_BLOCK_EXTERNAL_PROVIDERS = 'true';
 
@@ -355,6 +467,7 @@ describe('isProviderConnected', () => {
     delete process.env.OPENAI_API_KEY;
     delete process.env.ANTHROPIC_API_KEY;
     delete process.env.GOOGLE_GENERATIVE_AI_API_KEY;
+    delete process.env.GOOGLE_API_KEY;
   });
 
   afterEach(() => {
@@ -928,6 +1041,100 @@ describe('Agent Routes Authorization', () => {
     });
   });
 
+  describe('agent scopes at the HTTP boundary', () => {
+    const forged = ['org:victim', 'resource:victim', 'thread:victim'];
+
+    function middlewareContext() {
+      return new RequestContext([[MASTRA_SCOPES_KEY, ['org:acme']]]);
+    }
+
+    it('strips body scopes on generate and stream', async () => {
+      const captured: any[] = [];
+      vi.spyOn(mockAgent, 'generate').mockImplementation(async (_messages, options) => {
+        captured.push(options);
+        return { text: 'ok' } as any;
+      });
+      vi.spyOn(mockAgent, 'stream').mockImplementation(async (_messages, options) => {
+        captured.push(options);
+        return { toUIMessageStreamResponse: () => new Response() } as any;
+      });
+
+      for (const route of [GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE]) {
+        const handler = route.handler as any;
+        await handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: middlewareContext(),
+          abortSignal: new AbortController().signal,
+          messages: [{ role: 'user', content: 'test' }],
+          scopes: forged,
+        }).catch(() => undefined);
+      }
+
+      const forwarded = captured.filter(Boolean);
+      expect(forwarded.length).toBeGreaterThanOrEqual(2);
+      for (const options of forwarded) {
+        expect(options).not.toHaveProperty('scopes');
+        expect(options.requestContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+      }
+    });
+
+    it('strips scopes from signal and message idle stream options', async () => {
+      const targets: any[] = [];
+      const capture = vi.fn((_input, target) => {
+        targets.push(target);
+        return { accepted: Promise.resolve({ action: 'deliver', runId: 'run-id' }), signal: { id: 'signal-id' } };
+      });
+      (mockAgent as any).sendSignal = capture;
+      (mockAgent as any).sendMessage = capture;
+      (mockAgent as any).queueMessage = capture;
+
+      const ifIdle = { streamOptions: { scopes: forged, requestContext: { [MASTRA_SCOPES_KEY]: forged } } };
+      await (SEND_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: middlewareContext(),
+        signal: { type: 'user-message', contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        scopes: forged,
+        ifIdle,
+      });
+      await (SEND_AGENT_MESSAGE_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: middlewareContext(),
+        message: { contents: 'hello' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+        scopes: forged,
+        ifIdle,
+      });
+
+      expect(targets).toHaveLength(2);
+      for (const target of targets) {
+        expect(target).not.toHaveProperty('scopes');
+        expect(target.ifIdle.streamOptions).not.toHaveProperty('scopes');
+        expect(target.ifIdle.streamOptions.requestContext.get(MASTRA_SCOPES_KEY)).toEqual(['org:acme']);
+      }
+    });
+
+    it('maps a scopes conflict to HTTP 400 on generate and stream', async () => {
+      for (const route of [GENERATE_AGENT_ROUTE, STREAM_GENERATE_ROUTE]) {
+        await expect(
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: new RequestContext([[MASTRA_SCOPES_KEY, ['thread:middleware-thread']]]),
+            abortSignal: new AbortController().signal,
+            messages: [{ role: 'user', content: 'test' }],
+            memory: { thread: 'body-thread', resource: 'user-a' },
+          }),
+        ).rejects.toMatchObject({ status: 400 });
+      }
+    });
+  });
+
   describe('GENERATE_AGENT_ROUTE', () => {
     it('should return 403 when memory option specifies thread owned by different resource', async () => {
       // Create a thread owned by user-b
@@ -1186,6 +1393,115 @@ describe('Agent Routes Authorization', () => {
           status: 400,
         }),
       );
+    });
+  });
+
+  describe('memory thread object forwarding', () => {
+    const executionRoutes = [
+      { name: 'generate', route: GENERATE_AGENT_ROUTE, method: 'generate' },
+      { name: 'stream', route: STREAM_GENERATE_ROUTE, method: 'stream' },
+      { name: 'stream-until-idle', route: STREAM_UNTIL_IDLE_GENERATE_ROUTE, method: 'streamUntilIdle' },
+    ] as const;
+
+    async function callWithThread(
+      { route, method }: (typeof executionRoutes)[number],
+      thread: unknown,
+      context: { resourceId?: string; threadId?: string } = { resourceId: 'user-a' },
+    ) {
+      const execution = vi
+        .spyOn(mockAgent as any, method)
+        .mockResolvedValue({ text: 'mocked response', fullStream: new ReadableStream() });
+
+      await (route.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys(context),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: { thread, resource: 'user-a' },
+      });
+
+      return (execution.mock.calls[0] as any[])[1].memory;
+    }
+
+    it.each(executionRoutes)('$name forwards object thread metadata and title', async entry => {
+      const memory = await callWithThread(entry, { id: 't1', title: 'T', metadata: { tenant_id: 42 } });
+
+      expect(memory.thread).toEqual({ id: 't1', title: 'T', metadata: { tenant_id: 42 } });
+      expect(memory.resource).toBe('user-a');
+    });
+
+    it.each(executionRoutes)('$name applies the context thread id while keeping object fields', async entry => {
+      const memory = await callWithThread(
+        entry,
+        { id: 't1', title: 'T', metadata: { tenant_id: 42 } },
+        { resourceId: 'user-a', threadId: 'ctx-thread' },
+      );
+
+      expect(memory.thread).toEqual({ id: 'ctx-thread', title: 'T', metadata: { tenant_id: 42 } });
+    });
+
+    it.each(executionRoutes)('$name does not forward a client-supplied thread resourceId', async entry => {
+      const memory = await callWithThread(entry, { id: 't1', resourceId: 'user-b', metadata: { tenant_id: 42 } });
+
+      expect(memory.thread).toEqual({ id: 't1', metadata: { tenant_id: 42 } });
+    });
+
+    it.each(executionRoutes)('$name keeps a string thread as a string', async entry => {
+      const memory = await callWithThread(entry, 't1');
+
+      expect(memory.thread).toBe('t1');
+    });
+
+    it('creates a new thread with the client metadata through the real generate path', async () => {
+      const model = {
+        specificationVersion: 'v2' as const,
+        provider: 'test',
+        modelId: 'thread-metadata-model',
+        supportedUrls: {},
+        doGenerate: async () => ({
+          content: [{ type: 'text', text: 'ok' }],
+          finishReason: 'stop',
+          usage: { inputTokens: 1, outputTokens: 1 },
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+        doStream: async () => ({
+          stream: new ReadableStream({
+            start(controller) {
+              controller.enqueue({ type: 'stream-start', warnings: [] });
+              controller.enqueue({ type: 'text-start', id: 't' });
+              controller.enqueue({ type: 'text-delta', id: 't', delta: 'ok' });
+              controller.enqueue({ type: 'text-end', id: 't' });
+              controller.enqueue({ type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } });
+              controller.close();
+            },
+          }),
+          rawCall: { rawPrompt: null, rawSettings: {} },
+          warnings: [],
+        }),
+      };
+      const agent = new Agent({
+        id: 'metadata-agent',
+        name: 'metadata-agent',
+        instructions: 'test',
+        model: model as any,
+        memory: mockMemory,
+      });
+      const localMastra = new Mastra({ agents: { 'metadata-agent': agent }, storage, logger: false });
+
+      await GENERATE_AGENT_ROUTE.handler({
+        mastra: localMastra,
+        agentId: 'metadata-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        messages: [{ role: 'user', content: 'test' }],
+        memory: { thread: { id: 'new-thread', title: 'T', metadata: { tenant_id: 42 } }, resource: 'user-a' },
+      } as any);
+
+      const stored = await mockMemory.getThreadById({ threadId: 'new-thread' });
+      expect(stored?.resourceId).toBe('user-a');
+      expect(stored?.metadata).toEqual({ tenant_id: 42 });
     });
   });
 
@@ -1577,13 +1893,17 @@ describe('Agent Routes Authorization', () => {
     async function persistSuspendedDurableRun({
       resourceId,
       toolCallId = 'tool-call-1',
+      threadId,
+      workflowName = 'durable-agentic-loop',
     }: {
       resourceId: string;
       toolCallId?: string;
+      threadId?: string;
+      workflowName?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId: 'durable-run-1',
         snapshot: {
           runId: 'durable-run-1',
@@ -1592,7 +1912,7 @@ describe('Agent Routes Authorization', () => {
           context: {
             input: {
               agentId: 'test-agent',
-              state: { resourceId },
+              state: { resourceId, ...(threadId ? { threadId } : {}) },
               requestContextEntries: { [MASTRA_RESOURCE_ID_KEY]: resourceId },
             },
             'tool-step': {
@@ -1609,6 +1929,19 @@ describe('Agent Routes Authorization', () => {
           timestamp: Date.now(),
         } as any,
       });
+    }
+
+    // Runs a handler call that ends by exhausting the durable snapshot wait, without sleeping through it.
+    async function pastSnapshotWait<T>(call: () => Promise<T>): Promise<T> {
+      vi.useFakeTimers();
+      try {
+        const result = call();
+        result.catch(() => {});
+        await vi.advanceTimersByTimeAsync(10_000);
+        return await result;
+      } finally {
+        vi.useRealTimers();
+      }
     }
 
     it.each(approvalRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
@@ -1639,19 +1972,312 @@ describe('Agent Routes Authorization', () => {
       });
 
       await expect(
-        (route.handler as any)({
-          mastra,
-          agentId: 'test-agent',
-          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
-          abortSignal: new AbortController().signal,
-          runId: 'durable-run-1',
-          toolCallId: 'different-tool-call',
-        }),
+        pastSnapshotWait(() =>
+          (route.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'different-tool-call',
+          }),
+        ),
       ).rejects.toThrow(
         new HTTPException(403, { message: 'Access denied: tool call is not suspended on this durable run' }),
       );
       expect(execution).not.toHaveBeenCalled();
     });
+
+    it('waits for the suspended snapshot to be persisted before authorizing', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it.each([
+      { route: APPROVE_TOOL_CALL_ROUTE, method: 'approveToolCall' },
+      { route: DECLINE_TOOL_CALL_ROUTE, method: 'declineToolCall' },
+    ] as const)('$method forwards providerOptions and modelSettings', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      const providerOptions = { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } };
+      const modelSettings = { temperature: 0.2 };
+
+      await (route.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-1',
+        providerOptions,
+        modelSettings,
+      });
+      expect(execution).toHaveBeenCalledWith(expect.objectContaining({ providerOptions, modelSettings }));
+    });
+
+    it('waits for the snapshot to move to the next suspended tool call', async () => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-1' });
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+      setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a', toolCallId: 'tool-call-2' }), 100);
+
+      await (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId: 'tool-call-2',
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('waits for a snapshot persisted several seconds after the approval event', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'resumeStream').mockResolvedValue({
+        fullStream: new ReadableStream(),
+      });
+
+      await pastSnapshotWait(() => {
+        setTimeout(() => void persistSuspendedDurableRun({ resourceId: 'user-a' }), 5_000);
+        return callResume(RESUME_STREAM_ROUTE, { resourceId: 'user-a' });
+      });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it('rejects a missing durable run after the wait times out', async () => {
+      const execution = vi.spyOn(mockAgent as any, 'approveToolCall');
+      await expect(
+        pastSnapshotWait(() =>
+          (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+          }),
+        ),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it('stops waiting for a missing durable run once the request is aborted', async () => {
+      const controller = new AbortController();
+      controller.abort();
+      const started = Date.now();
+      await expect(
+        (APPROVE_TOOL_CALL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: controller.signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        }),
+      ).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(Date.now() - started).toBeLessThan(1000);
+    });
+
+    const resumeRoutes = [
+      { name: 'resume-stream', route: RESUME_STREAM_ROUTE, method: 'resumeStream' },
+      { name: 'resume-stream-until-idle', route: RESUME_STREAM_UNTIL_IDLE_ROUTE, method: 'resumeStreamUntilIdle' },
+    ] as const;
+
+    function callResume(route: any, { resourceId, toolCallId = 'tool-call-1', thread }: any) {
+      return route.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId }),
+        abortSignal: new AbortController().signal,
+        runId: 'durable-run-1',
+        toolCallId,
+        resumeData: {},
+        ...(thread ? { memory: { thread, resource: resourceId } } : {}),
+      });
+    }
+
+    it.each(resumeRoutes)('$name rejects a durable run owned by another resource', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    function withMapper(fga = false) {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        ...(fga ? { fga: {} } : {}),
+      } as any);
+    }
+
+    it.each(resumeRoutes)('$name denies a mapped caller a durable run with no owner', async ({ route, method }) => {
+      withMapper();
+      await persistSuspendedDurableRun({ resourceId: '' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a' })).rejects.toMatchObject({ status: 403 });
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)(
+      '$name denies an unscoped caller without FGA when a mapper is configured',
+      async ({ route, method }) => {
+        withMapper();
+        await persistSuspendedDurableRun({ resourceId: 'user-b' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(callResume(route, {})).rejects.toMatchObject({ status: 403 });
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)('$name lets an unscoped caller resume when FGA is configured', async ({ route, method }) => {
+      withMapper(true);
+      await persistSuspendedDurableRun({ resourceId: 'user-b' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, {});
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a missing durable run', async ({ route, method }) => {
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(pastSnapshotWait(() => callResume(route, { resourceId: 'user-a' }))).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different resource' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a durable run bound to a different thread', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name rejects a thread when the durable run has none', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await expect(callResume(route, { resourceId: 'user-a', thread: 'thread-b' })).rejects.toThrow(
+        new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+      );
+      expect(execution).not.toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name resumes a durable run owned by the caller', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, { resourceId: 'user-a' });
+      expect(execution).toHaveBeenCalled();
+    });
+
+    it.each(resumeRoutes)('$name forwards object thread fields to the agent', async ({ route, method }) => {
+      await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+      const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+      await callResume(route, {
+        resourceId: 'user-a',
+        thread: { id: 'thread-a', title: 'T', metadata: { tenant_id: 42 } },
+      });
+
+      expect((execution.mock.calls[0] as any[])[1].memory.thread).toEqual({
+        id: 'thread-a',
+        title: 'T',
+        metadata: { tenant_id: 42 },
+      });
+    });
+
+    it.each(resumeRoutes)(
+      '$name resumes a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await route.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+          resumeData: {},
+          memory: { thread: 'thread-a', resource: 'user-a' },
+        } as any);
+        expect(execution).toHaveBeenCalled();
+      },
+    );
+
+    it.each(resumeRoutes)(
+      '$name still rejects a different thread when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a', threadId: 'thread-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({ fullStream: new ReadableStream() });
+
+        await expect(
+          route.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext: createContextWithReservedKeys({}),
+            abortSignal: new AbortController().signal,
+            runId: 'durable-run-1',
+            toolCallId: 'tool-call-1',
+            resumeData: {},
+            memory: { thread: 'thread-b', resource: 'user-a' },
+          } as any),
+        ).rejects.toThrow(
+          new HTTPException(403, { message: 'Access denied: durable run belongs to a different thread' }),
+        );
+        expect(execution).not.toHaveBeenCalled();
+      },
+    );
+
+    it.each(approvalRoutes)(
+      '$name allows a durable run with a stored resource when no server-side identity is set',
+      async ({ route, method }) => {
+        await persistSuspendedDurableRun({ resourceId: 'user-a' });
+        const execution = vi.spyOn(mockAgent as any, method).mockResolvedValue({
+          fullStream: new ReadableStream(),
+        });
+
+        await (route.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({}),
+          abortSignal: new AbortController().signal,
+          runId: 'durable-run-1',
+          toolCallId: 'tool-call-1',
+        });
+        expect(execution).toHaveBeenCalled();
+      },
+    );
   });
 
   describe('RECOVER_ROUTE', () => {
@@ -1687,26 +2313,35 @@ describe('Agent Routes Authorization', () => {
       runId,
       resourceId,
       status = 'running',
+      inputCheckpointed = true,
+      workflowName = 'durable-agentic-loop',
+      threadId,
     }: {
       runId: string;
       resourceId?: string;
       status?: 'running' | 'suspended' | 'pending';
+      inputCheckpointed?: boolean;
+      workflowName?: string;
+      threadId?: string;
     }) {
       const workflowsStore = await storage.getStore('workflows');
       await workflowsStore?.persistWorkflowSnapshot({
-        workflowName: 'durable-agentic-loop',
+        workflowName,
         runId,
         resourceId,
         snapshot: {
           runId,
           status,
           value: {},
-          context: {
-            input: {
-              agentId: 'test-durable-agent',
-              __workflowKind: 'durable-agent',
-            },
-          } as any,
+          context: (inputCheckpointed
+            ? {
+                input: {
+                  agentId: 'test-durable-agent',
+                  __workflowKind: 'durable-agent',
+                  state: { threadId },
+                },
+              }
+            : {}) as any,
           activePaths: [],
           activeStepsPath: {},
           serializedStepGraph: [],
@@ -1717,6 +2352,124 @@ describe('Agent Routes Authorization', () => {
         },
       });
     }
+
+    it('returns 501 when run-scoped abort targets a non-durable agent', async () => {
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          runId: 'non-durable-run',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).rejects.toMatchObject({ status: 501 });
+    });
+
+    it('resolves request-scoped memory before authorizing run cancellation', async () => {
+      const scopedAgent = createDurableAgent({
+        id: 'test-durable-agent',
+        agent: new Agent({
+          id: 'scoped-agent',
+          name: 'Scoped agent',
+          instructions: 'Do not run.',
+          model: 'openai/gpt-4o-mini',
+          memory: ({ requestContext }) => {
+            if (requestContext.get('tenantId') !== 'tenant-a') throw new Error('Missing memory tenant');
+            return mockMemory;
+          },
+        }),
+      });
+      mastra = new Mastra({ agents: { 'test-durable-agent': scopedAgent }, storage, logger: false });
+      await mockMemory.createThread({ threadId: 'scoped-abort-thread', resourceId: 'user-a' });
+      await persistDurableAgenticLoopRun({
+        runId: 'scoped-abort',
+        resourceId: 'user-a',
+        threadId: 'scoped-abort-thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      requestContext.set('tenantId', 'tenant-a');
+      const abort = vi.spyOn(scopedAgent, 'abortRunStream').mockResolvedValue(true);
+
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({ mastra, agentId: 'test-durable-agent', runId: 'scoped-abort', requestContext }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('scoped-abort');
+    });
+
+    it.each(['user-a', 'user-b'])('checks thread ownership for an ownerless run called by %s', async caller => {
+      await mockMemory.createThread({ threadId: 'abort-thread', resourceId: 'user-a', title: 'Protected thread' });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({ runId: 'ownerless-thread-run', threadId: 'abort-thread' });
+      const cancellation = ABORT_AGENT_RUN_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId: 'ownerless-thread-run',
+        requestContext: createContextWithReservedKeys({ resourceId: caller }),
+      });
+      if (caller === 'user-a') {
+        await expect(cancellation).resolves.toEqual({ aborted: true });
+      } else {
+        await expect(cancellation).rejects.toMatchObject({ status: 403 });
+        expect(abort).not.toHaveBeenCalled();
+      }
+    });
+
+    it.each(['', 'inngest:'])('aborts an active run using its %s execution checkpoint', async prefix => {
+      Object.defineProperty(mockDurableAgent, 'durableLoopWorkflowName', { value: `${prefix}durable-agentic-loop` });
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream').mockResolvedValue(true);
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-loop`,
+        inputCheckpointed: false,
+      });
+      await persistDurableAgenticLoopRun({
+        runId: 'abort-active',
+        workflowName: `${prefix}durable-agentic-execution`,
+      });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-active',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: true });
+      expect(abort).toHaveBeenCalledWith('abort-active');
+    });
+
+    it('does not acknowledge run abort before ownership has been checkpointed', async () => {
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-registering', status: 'pending', inputCheckpointed: false });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-registering',
+          requestContext: createContextWithReservedKeys({}),
+        }),
+      ).resolves.toEqual({ aborted: false });
+      expect(abort).not.toHaveBeenCalled();
+    });
+
+    it.each([
+      ['another resource', 'user-a', 'user-b'],
+      ['an ownerless run', 'user-a', undefined],
+      ['an unscoped caller without FGA', undefined, 'user-b'],
+    ])('run-scoped abort rejects %s before cancellation', async (_case, caller, owner) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const abort = vi.spyOn(mockDurableAgent, 'abortRunStream');
+      await persistDurableAgenticLoopRun({ runId: 'abort-ownership', resourceId: owner });
+      await expect(
+        ABORT_AGENT_RUN_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          runId: 'abort-ownership',
+          requestContext: createContextWithReservedKeys({ resourceId: caller }),
+        }),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(abort).not.toHaveBeenCalled();
+    });
 
     it('should return 400 when runId is missing', async () => {
       const requestContext = createContextWithReservedKeys({});
@@ -1772,7 +2525,49 @@ describe('Agent Routes Authorization', () => {
       delete (mockAgent as any).recover;
     });
 
-    it('should call agent.recover(runId, { abortSignal }) and return fullStream', async () => {
+    it.each([
+      ['a mapped caller recovering a run with no owner', { resourceId: 'user-a' }, undefined, false],
+      ['an unscoped caller without FGA', {}, 'user-b', false],
+    ])('denies %s when a mapper is configured', async (_name, ctx, owner, _fga) => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-mapped', resourceId: owner });
+
+      await expect(
+        RECOVER_ROUTE.handler({
+          mastra,
+          agentId: 'test-durable-agent',
+          requestContext: createContextWithReservedKeys(ctx),
+          abortSignal: new AbortController().signal,
+          runId: 'recover-mapped',
+        } as any),
+      ).rejects.toMatchObject({ status: 403 });
+      expect(recoverMock).not.toHaveBeenCalled();
+    });
+
+    it('lets an unscoped caller recover when FGA is configured with a mapper', async () => {
+      vi.spyOn(mastra, 'getServer').mockReturnValue({
+        auth: { mapUserToResourceId: (user: { id: string }) => user.id },
+        fga: {},
+      } as any);
+      const recoverMock = vi.fn().mockResolvedValue({ fullStream: new ReadableStream() });
+      (mockDurableAgent as any).recover = recoverMock;
+      await persistDurableAgenticLoopRun({ runId: 'recover-fga', resourceId: 'user-b' });
+
+      await RECOVER_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        requestContext: createContextWithReservedKeys({}),
+        abortSignal: new AbortController().signal,
+        runId: 'recover-fga',
+      } as any);
+      expect(recoverMock).toHaveBeenCalled();
+    });
+
+    it('should recover without coupling durable execution to the HTTP request signal', async () => {
       const expectedStream = new ReadableStream();
       const recoverMock = vi.fn().mockResolvedValue({ fullStream: expectedStream });
       (mockDurableAgent as any).recover = recoverMock;
@@ -1790,7 +2585,7 @@ describe('Agent Routes Authorization', () => {
         runId: 'recover-run-1',
       } as any);
 
-      expect(recoverMock).toHaveBeenCalledWith('recover-run-1', { abortSignal: abortController.signal });
+      expect(recoverMock).toHaveBeenCalledWith('recover-run-1');
       expect(result).toBe(expectedStream);
 
       delete (mockAgent as any).recover;
@@ -1825,6 +2620,354 @@ describe('Agent Routes Authorization', () => {
       });
 
       delete (mockAgent as any).recover;
+    });
+  });
+
+  describe('OBSERVE_AGENT_STREAM_ROUTE', () => {
+    async function observe(runId: string, options: { offset?: number; abortSignal?: AbortSignal } = {}) {
+      return (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        ...options,
+      } as any)) as ReadableStream<any>;
+    }
+
+    async function collectWithDeadline(stream: ReadableStream<any>) {
+      const reader = stream.getReader();
+      let timer: ReturnType<typeof setTimeout> | undefined;
+      try {
+        return await Promise.race([
+          (async () => {
+            const events: any[] = [];
+            while (true) {
+              const result = await reader.read();
+              if (result.done) return events;
+              events.push(result.value);
+            }
+          })(),
+          new Promise<never>((_, reject) => {
+            timer = setTimeout(() => reject(new Error('Observation did not close within one second')), 1_000);
+          }),
+        ]);
+      } finally {
+        clearTimeout(timer);
+        await reader.cancel().catch(() => {});
+        reader.releaseLock();
+      }
+    }
+
+    beforeEach(() => {
+      mockAgent = new Agent({
+        id: 'test-agent',
+        name: 'test-agent',
+        instructions: 'test-instructions',
+        model: { specificationVersion: 'v2' } as any,
+      });
+      mockDurableAgent = createDurableAgent({ agent: mockAgent, id: 'test-durable-agent', name: 'test-durable-agent' });
+      mastra = new Mastra({ agents: { 'test-durable-agent': mockDurableAgent }, storage, logger: false });
+    });
+
+    it('drains replay before rejecting a superseded observer', async () => {
+      const runId = 'observe-reject';
+      const chunk = { type: 'text-delta', runId, from: 'AGENT', payload: { text: 'before rejection' } };
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, type: 'chunk', data: chunk });
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'error',
+        data: { delivery: 'reject', error: { name: 'Error', message: 'Run superseded' } },
+      });
+      const reader = (await observe(runId)).getReader();
+      expect((await reader.read()).value).toEqual(chunk);
+      await expect(reader.read()).rejects.toThrow('Run superseded');
+      reader.releaseLock();
+    });
+
+    it('closes an unknown run within one second', async () => {
+      expect(await collectWithDeadline(await observe(crypto.randomUUID()))).toEqual([]);
+    });
+
+    it('closes after replay even when the offset is past the terminal event', async () => {
+      const runId = 'observe-past-finish';
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'finish',
+        data: {},
+      } as any);
+      expect(await collectWithDeadline(await observe(runId, { offset: 100 }))).toEqual([]);
+    });
+
+    it.each(['finish', 'abort'])('forwards and closes on a chunk-enveloped %s event', async type => {
+      const runId = `observe-enveloped-${type}`;
+      const event = { runId, type: 'chunk', data: { type }, index: 0 };
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
+        onEvent(event);
+        return unsubscribe;
+      });
+
+      expect(await collectWithDeadline(await observe(runId))).toEqual([event.data]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('forwards and closes on a top-level abort event', async () => {
+      const type = 'abort';
+      const runId = `observe-control-${type}`;
+      const event = { runId, type, data: {} };
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, onEvent) => {
+        onEvent(event);
+        return unsubscribe;
+      });
+
+      expect(await collectWithDeadline(await observe(runId))).toEqual([
+        { type: 'abort', runId, from: 'AGENT', payload: {} },
+        {
+          type: 'finish',
+          runId,
+          from: 'AGENT',
+          payload: {
+            output: { text: undefined, steps: undefined, usage: { inputTokens: 0, outputTokens: 0, totalTokens: 0 } },
+            stepResult: { reason: 'abort', warnings: [], isContinued: false },
+          },
+        },
+      ]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it.each([
+      { name: 'top-level', suspended: { type: 'suspended', data: {} } },
+      { name: 'chunk-enveloped', suspended: { type: 'chunk', data: { type: 'suspended' } } },
+    ])('keeps a $name suspended run open until its resumed segment finishes', async ({ suspended }) => {
+      let onEvent!: (event: any) => void;
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, _options, deliver) => {
+        onEvent = deliver;
+        return unsubscribe;
+      });
+      const reader = (await observe('observe-approval-suspend')).getReader();
+      try {
+        await vi.waitFor(() => expect(onEvent).toBeDefined());
+        onEvent(suspended);
+        if (suspended.type === 'chunk') expect((await reader.read()).value).toEqual(suspended.data);
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(unsubscribe).not.toHaveBeenCalled();
+
+        const resumed = { type: 'chunk', data: { type: 'text-delta', payload: { text: 'after approval' } } };
+        const finish = { type: 'finish', data: {} };
+        onEvent(resumed);
+        onEvent(finish);
+        expect((await reader.read()).value).toEqual(resumed.data);
+        expect((await reader.read()).value).toMatchObject({ type: 'finish', payload: {} });
+        expect(await reader.read()).toEqual({ done: true, value: undefined });
+        expect(unsubscribe).toHaveBeenCalledTimes(1);
+      } finally {
+        reader.releaseLock();
+      }
+    });
+
+    it('does not end a legacy subscription on a step finish or empty replay', async () => {
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const runId = 'observe-legacy-quiet';
+      const abort = new AbortController();
+      const reader = (await observe(runId, { abortSignal: abort.signal })).getReader();
+      const next = reader.read();
+      await mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), {
+        runId,
+        type: 'chunk',
+        data: { type: 'step-finish' },
+      } as any);
+      expect((await next).value.type).toBe('step-finish');
+      abort.abort();
+      expect(await reader.read()).toEqual({ done: true, value: undefined });
+    });
+
+    it('closes and unsubscribes once when replay completes synchronously during setup', async () => {
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, options, onEvent) => {
+        options.onComplete?.();
+        onEvent({ type: 'chunk', data: { type: 'text-delta' } });
+        options.onComplete?.();
+        return unsubscribe;
+      });
+      expect(await collectWithDeadline(await observe('observe-sync-complete'))).toEqual([]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('unsubscribes once when cancellation happens during subscription setup', async () => {
+      const abort = new AbortController();
+      const unsubscribe = vi.fn(async () => {});
+      let finishSetup!: (unsubscribe: () => Promise<void>) => void;
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(
+        () => new Promise(resolve => (finishSetup = resolve)),
+      );
+      const stream = await observe('observe-setup-abort', { abortSignal: abort.signal });
+      abort.abort();
+      finishSetup(unsubscribe);
+      expect(await collectWithDeadline(stream)).toEqual([]);
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('does not subscribe when the client is already aborted', async () => {
+      const abort = new AbortController();
+      abort.abort();
+      const subscribe = vi.spyOn(mockDurableAgent, '__subscribeToRunStream');
+      expect(await collectWithDeadline(await observe('observe-pre-abort', { abortSignal: abort.signal }))).toEqual([]);
+      expect(subscribe).not.toHaveBeenCalled();
+    });
+
+    it('removes the disconnect listener when the observer completes', async () => {
+      const abort = new AbortController();
+      const removeListener = vi.spyOn(abort.signal, 'removeEventListener');
+      const unsubscribe = vi.fn(async () => {});
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(async (_runId, options) => {
+        options.onComplete?.();
+        return unsubscribe;
+      });
+      expect(
+        await collectWithDeadline(await observe('observe-remove-listener', { abortSignal: abort.signal })),
+      ).toEqual([]);
+      abort.abort();
+      expect(removeListener).toHaveBeenCalledWith('abort', expect.any(Function));
+      expect(unsubscribe).toHaveBeenCalledTimes(1);
+    });
+
+    it('ignores a subscription setup rejection after the observer has been aborted', async () => {
+      const abort = new AbortController();
+      let rejectSetup!: (error: Error) => void;
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(
+        () => new Promise((_resolve, reject) => (rejectSetup = reject)),
+      );
+      const stream = await observe('observe-aborted-error', { abortSignal: abort.signal });
+      abort.abort();
+      rejectSetup(new Error('Subscription failed after disconnect'));
+      expect(await collectWithDeadline(stream)).toEqual([]);
+    });
+
+    it('errors the observer when subscription setup throws synchronously', async () => {
+      const error = new Error('Subscription failed synchronously');
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockImplementation(() => {
+        throw error;
+      });
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(collectWithDeadline(await observe('observe-sync-error'))).rejects.toThrow(error);
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    it('errors the observer when subscription setup fails', async () => {
+      const error = new Error('Replay cache unavailable');
+      vi.spyOn(mockDurableAgent, '__subscribeToRunStream').mockRejectedValue(error);
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {});
+      try {
+        await expect(collectWithDeadline(await observe('observe-subscribe-error'))).rejects.toThrow(error);
+      } finally {
+        consoleError.mockRestore();
+      }
+    });
+
+    it('drops what a superseded execution publishes after another execution claims the run, and does not forward the claim marker', async () => {
+      const runId = 'observe-takeover-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      await text('before takeover ', 1);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: 2 });
+      await text('stale', 1);
+      await publish({ type: 'finish', data: {}, generation: 1 });
+      await text('recovered', 2);
+      await publish({ type: 'finish', data: {}, generation: 2 });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.payload?.text, event.generation])).toEqual([
+        ['text-delta', 'before takeover ', undefined],
+        ['text-delta', 'recovered', undefined],
+        ['finish', undefined, undefined],
+      ]);
+    });
+
+    it("follows the run's current claim when it resumes from an offset past the takeover marker", async () => {
+      const runId = 'observe-offset-takeover-run';
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+      const text = (value: string, generation: number) =>
+        publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: value } }, generation });
+
+      const workflows = (await storage.getStore('workflows'))!;
+      const lost = await workflows.claimRunOwnership({ runId, ownerId: 'lost', leaseMs: 30_000 });
+      const successor = await workflows.claimRunOwnership({
+        runId,
+        ownerId: 'successor',
+        leaseMs: 30_000,
+        force: true,
+      });
+      const stale = lost.record!.generation;
+      const current = successor.record!.generation;
+
+      await text('before takeover ', stale);
+      await publish({ type: AgentStreamEventTypes.OWNERSHIP_CLAIMED, generation: current });
+      await text('seen ', current);
+      // Published after the marker by the execution that lost the run.
+      await publish({ type: 'finish', data: {}, generation: stale });
+      await text('recovered', current);
+      await publish({ type: 'finish', data: {}, generation: current });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        offset: 3,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(events.map(event => [event.type, event.payload?.text, event.generation])).toEqual([
+        ['text-delta', 'recovered', undefined],
+        ['finish', undefined, undefined],
+      ]);
+    });
+
+    it('observes the topic directly for an agent that cannot subscribe for it', async () => {
+      const runId = 'observe-fallback-run';
+      // As with a durable agent from an older @mastra/core.
+      (mockDurableAgent as any).__subscribeToRunStream = undefined;
+      const subscribeWithReplay = vi.spyOn(mockDurableAgent.pubsub, 'subscribeWithReplay');
+      const publish = (event: Record<string, unknown>) =>
+        mockDurableAgent.pubsub.publish(AGENT_STREAM_TOPIC(runId), { runId, data: {}, ...event } as any);
+
+      await publish({ type: 'chunk', data: { type: 'text-delta', payload: { id: 't', text: 'answer' } } });
+      await publish({ type: 'finish', data: {} });
+
+      const stream = (await OBSERVE_AGENT_STREAM_ROUTE.handler({
+        mastra,
+        agentId: 'test-durable-agent',
+        runId,
+        abortSignal: new AbortController().signal,
+      } as any)) as ReadableStream<any>;
+
+      const events: any[] = [];
+      for await (const event of stream as any) events.push(event);
+
+      expect(subscribeWithReplay).toHaveBeenCalledWith(AGENT_STREAM_TOPIC(runId), expect.any(Function));
+      expect(events.map(event => [event.type, event.payload?.text])).toEqual([
+        ['text-delta', 'answer'],
+        ['finish', undefined],
+      ]);
     });
   });
 
@@ -2101,6 +3244,39 @@ describe('Agent Routes Authorization', () => {
       ).toBe(false);
     });
 
+    it('should validate queue signal route bodies', () => {
+      const parsed = queueAgentSignalBodySchema.parse({
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'thread-a',
+      });
+      expect(parsed.signal).toMatchObject({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+      });
+      expect(
+        queueAgentSignalBodySchema.safeParse({
+          message: 'hello',
+          resourceId: 'user-a',
+          threadId: 'thread-a',
+        }).success,
+      ).toBe(false);
+    });
+
+    it.each([undefined, false, true])(
+      'requires a nonempty abort thread ID with clearPendingSignals=%s',
+      clearPendingSignals => {
+        for (const threadId of [undefined, '', null, 123]) {
+          expect(abortAgentThreadBodySchema.safeParse({ threadId, clearPendingSignals }).success).toBe(false);
+        }
+        expect(abortAgentThreadBodySchema.parse({ threadId: 'thread-123', clearPendingSignals })).toEqual({
+          threadId: 'thread-123',
+          clearPendingSignals,
+        });
+      },
+    );
+
     it('should accept subscribe, abort, and tool approval bodies', () => {
       const body = {
         resourceId: 'resource-123',
@@ -2119,8 +3295,19 @@ describe('Agent Routes Authorization', () => {
 
       expect(subscribeAgentThreadBodySchema.safeParse(body).success).toBe(true);
       expect(abortAgentThreadBodySchema.safeParse(body).success).toBe(true);
+      expect(abortAgentThreadBodySchema.parse({ ...body, clearPendingSignals: true }).clearPendingSignals).toBe(true);
+      expect(abortAgentThreadBodySchema.safeParse({ ...body, clearPendingSignals: 'true' }).success).toBe(false);
       expect(approveToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
       expect(declineToolCallBodySchema.safeParse(toolCallBody).success).toBe(true);
+      const modelOptions = {
+        providerOptions: { anthropic: { thinking: { type: 'enabled', budgetTokens: 32000 } } },
+        modelSettings: { temperature: 0.2 },
+      };
+      expect(approveToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions })).toMatchObject(modelOptions);
+      expect(declineToolCallBodySchema.parse({ ...toolCallBody, ...modelOptions, reason: 'no' })).toMatchObject({
+        ...modelOptions,
+        reason: 'no',
+      });
       expect(sendToolApprovalBodySchema.safeParse(subscriptionToolCallBody).success).toBe(true);
       expect(sendToolApprovalBodySchema.safeParse(toolCallBody).success).toBe(false);
     });
@@ -2160,6 +3347,221 @@ describe('Agent Routes Authorization', () => {
       expect(forwardedOptions).not.toHaveProperty('actor');
       expect(forwardedOptions.requestContext.get('organizationId')).toBeUndefined();
     });
+
+    it('should process consecutive durable tool approvals through the real agent path', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const localStorage = new InMemoryStore();
+      const threadId = 'durable-handler-approval-thread';
+      const resourceId = 'durable-handler-approval-resource';
+      const chunks: any[] = [];
+      const model = {
+        specificationVersion: 'v2' as const,
+        provider: 'test',
+        modelId: 'queued-approval-model',
+        supportedUrls: {},
+        doStream: async ({ prompt }: any) => {
+          const toolResultIds = new Set<string>();
+          const visit = (value: unknown) => {
+            if (!value || typeof value !== 'object') return;
+            if (
+              'type' in value &&
+              value.type === 'tool-result' &&
+              'toolCallId' in value &&
+              typeof value.toolCallId === 'string'
+            ) {
+              toolResultIds.add(value.toolCallId);
+            }
+            for (const nested of Object.values(value)) visit(nested);
+          };
+          visit(prompt);
+          const parts =
+            toolResultIds.size >= 2
+              ? [
+                  { type: 'stream-start', warnings: [] },
+                  { type: 'text-start', id: 'final-text' },
+                  { type: 'text-delta', id: 'final-text', delta: 'Both done.' },
+                  { type: 'text-end', id: 'final-text' },
+                  { type: 'finish', finishReason: 'stop', usage: { inputTokens: 1, outputTokens: 1 } },
+                ]
+              : [
+                  { type: 'stream-start', warnings: [] },
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-a',
+                    toolName: 'suspendingTool',
+                    input: JSON.stringify({ item: 'A' }),
+                    providerExecuted: false,
+                  },
+                  {
+                    type: 'tool-call',
+                    toolCallType: 'function',
+                    toolCallId: 'call-b',
+                    toolName: 'suspendingTool',
+                    input: JSON.stringify({ item: 'B' }),
+                    providerExecuted: false,
+                  },
+                  { type: 'finish', finishReason: 'tool-calls', usage: { inputTokens: 1, outputTokens: 1 } },
+                ];
+          return {
+            stream: new ReadableStream({
+              start(controller) {
+                for (const part of parts) controller.enqueue(part);
+                controller.close();
+              },
+            }),
+            rawCall: { rawPrompt: null, rawSettings: {} },
+            warnings: [],
+          };
+        },
+      };
+      const suspendingTool = createTool({
+        id: 'suspendingTool',
+        description: 'Suspends until resumed',
+        inputSchema: z.object({ item: z.string() }),
+        execute: async ({ item }, context) => {
+          if (!context?.agent?.resumeData) return context?.agent?.suspend({ item });
+          return { item, resumed: true };
+        },
+      });
+      const baseAgent = new Agent({
+        id: 'durable-handler-agent',
+        name: 'Durable handler agent',
+        instructions: 'Run both tool calls.',
+        model: model as any,
+        memory: new MockMemory({ storage: localStorage }),
+        tools: { suspendingTool },
+      });
+      const durableAgent = createDurableAgent({ agent: baseAgent, pubsub });
+      const localMastra = new Mastra({
+        agents: { 'durable-handler-agent': durableAgent },
+        storage: localStorage,
+        logger: false,
+      });
+      const subscription = await durableAgent.subscribeToThread({ threadId, resourceId });
+      const consumeSubscription = (async () => {
+        for await (const chunk of subscription.stream) chunks.push(chunk);
+      })();
+      const initial = await durableAgent.stream('Run both tool calls.', {
+        maxSteps: 6,
+        memory: { thread: threadId, resource: resourceId },
+      });
+      const approve = async (toolCallId: string) => {
+        let timeout: ReturnType<typeof setTimeout> | undefined;
+        try {
+          return await Promise.race([
+            SEND_TOOL_APPROVAL_ROUTE.handler({
+              mastra: localMastra,
+              agentId: 'durable-handler-agent',
+              requestContext: new RequestContext(),
+              abortSignal: new AbortController().signal,
+              resourceId,
+              threadId,
+              toolCallId,
+              approved: true,
+              resumeData: { confirmed: true },
+            } as any),
+            new Promise<never>((_, reject) => {
+              timeout = setTimeout(() => reject(new Error(`approval ${toolCallId} timed out`)), 5_000);
+            }),
+          ]);
+        } finally {
+          clearTimeout(timeout);
+        }
+      };
+
+      try {
+        await vi.waitFor(() => expect(chunks.filter(chunk => chunk.type === 'tool-call-suspended')).toHaveLength(2), {
+          timeout: 10_000,
+        });
+
+        await expect(approve('call-a')).resolves.toEqual({
+          accepted: true,
+          runId: initial.runId,
+          toolCallId: 'call-a',
+        });
+        await expect(approve('call-b')).resolves.toEqual({
+          accepted: true,
+          runId: initial.runId,
+          toolCallId: 'call-b',
+        });
+
+        await vi.waitFor(
+          () => {
+            expect(
+              new Set(chunks.filter(chunk => chunk.type === 'tool-result').map(chunk => chunk.payload.toolCallId)),
+            ).toEqual(new Set(['call-a', 'call-b']));
+            expect(
+              chunks
+                .filter(chunk => chunk.type === 'text-delta')
+                .map(chunk => chunk.payload.text)
+                .join(''),
+            ).toContain('Both done.');
+            expect(chunks.some(chunk => chunk.type === 'finish')).toBe(true);
+          },
+          { timeout: 10_000 },
+        );
+      } finally {
+        initial.cleanup();
+        subscription.unsubscribe();
+        await consumeSubscription;
+        await pubsub.close();
+      }
+    }, 30_000);
+
+    it.each([true, false])(
+      'should strip nested credential headers from tool approval (approved=%s)',
+      async approved => {
+        const sendToolApproval = vi.fn(async params => ({
+          accepted: true,
+          runId: 'run-123',
+          toolCallId: params.toolCallId,
+        }));
+        (mockAgent as any).sendToolApproval = sendToolApproval;
+        const requestContext = new RequestContext();
+        const streamOptions = {
+          maxSteps: 4,
+          modelSettings: {
+            temperature: 0.3,
+            headers: {
+              aUtHoRiZaTiOn: 'Bearer client-token',
+              'Proxy-Authorization': 'Basic proxy-token',
+              'X-API-Key': 'client-key',
+              'Api-Key': 'client-key',
+              'X-Goog-Api-Key': 'client-key',
+              COOKIE: 'session=client-token',
+              'X-Trace-Id': 'trace-123',
+            },
+          },
+        };
+
+        const result = await SEND_TOOL_APPROVAL_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          ...sendToolApprovalBodySchema.parse({
+            resourceId: 'resource-123',
+            threadId: 'thread-123',
+            toolCallId: 'tool-call-123',
+            approved,
+            streamOptions,
+          }),
+        });
+
+        expect(result).toEqual({ accepted: true, runId: 'run-123', toolCallId: 'tool-call-123' });
+        expect(sendToolApproval).toHaveBeenCalledExactlyOnceWith(
+          expect.objectContaining({
+            approved,
+            streamOptions: {
+              maxSteps: 4,
+              modelSettings: { temperature: 0.3, headers: { 'X-Trace-Id': 'trace-123' } },
+              requestContext,
+            },
+          }),
+        );
+      },
+    );
 
     it('should decline a tool call for thread subscriptions with a JSON ack', async () => {
       (mockAgent as any).sendToolApproval = vi.fn(async params => ({
@@ -2504,6 +3906,19 @@ describe('Agent Routes Authorization', () => {
           attributes: { delivery: 'queued' },
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2522,6 +3937,11 @@ describe('Agent Routes Authorization', () => {
       expect(result).toEqual({ accepted: true, runId: 'queued-message-run-id' });
       expect(capturedTarget.ifIdle.attributes).toEqual({ delivery: 'queued' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
@@ -2533,6 +3953,71 @@ describe('Agent Routes Authorization', () => {
         },
         defaultStatus: 'published',
       });
+    });
+
+    it('should queue a typed signal through Agent.queueSignal', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread',
+        resourceId: 'user-a',
+        title: 'Queue Signal Thread',
+      });
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      let capturedSignal: any;
+      let capturedTarget: any;
+
+      (mockAgent as any).queueSignal = vi.fn((signal: unknown, target: unknown) => {
+        capturedSignal = signal;
+        capturedTarget = target;
+        return {
+          accepted: Promise.resolve({ action: 'deliver', runId: 'queued-signal-run-id' }),
+          signal: { id: 'queued-signal-id' },
+        };
+      });
+
+      const result = await (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        signal: { type: 'reactive', tagName: 'skill', attributes: { name: 'factory-triage' }, contents: 'Triage it.' },
+        resourceId: 'user-a',
+        threadId: 'queue-signal-thread',
+      });
+
+      expect(result).toEqual({ accepted: true, runId: 'queued-signal-run-id', signal: { id: 'queued-signal-id' } });
+      expect(capturedSignal).toEqual({
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
+        contents: 'Triage it.',
+      });
+      expect(capturedTarget).toMatchObject({ resourceId: 'user-a', threadId: 'queue-signal-thread' });
+      expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
+    });
+
+    it('should reject queueing a signal on a thread owned by another resource', async () => {
+      await mockMemory.createThread({
+        threadId: 'queue-signal-thread-owned-by-b',
+        resourceId: 'user-b',
+        title: 'Queue Signal Thread B',
+      });
+      (mockAgent as any).queueSignal = vi.fn();
+
+      await expect(
+        (QUEUE_AGENT_SIGNAL_ROUTE.handler as any)({
+          mastra,
+          agentId: 'test-agent',
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          signal: {
+            type: 'reactive',
+            tagName: 'skill',
+            attributes: { name: 'factory-triage' },
+            contents: 'Triage it.',
+          },
+          resourceId: 'user-a',
+          threadId: 'queue-signal-thread-owned-by-b',
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect((mockAgent as any).queueSignal).not.toHaveBeenCalled();
     });
 
     it('should merge idle stream request context before waking a thread with a signal', async () => {
@@ -2561,6 +4046,19 @@ describe('Agent Routes Authorization', () => {
         ifIdle: {
           streamOptions: {
             instructions: 'Use the fixture.',
+            maxSteps: 4,
+            modelSettings: {
+              temperature: 0.3,
+              headers: {
+                aUtHoRiZaTiOn: 'Bearer client-token',
+                'Proxy-Authorization': 'Basic proxy-token',
+                'X-API-Key': 'client-key',
+                'Api-Key': 'client-key',
+                'X-Goog-Api-Key': 'client-key',
+                COOKIE: 'session=client-token',
+                'X-Trace-Id': 'trace-123',
+              },
+            },
             actor: { actorKind: 'system', agentId: 'forged-agent' },
             requestContext: {
               fixture: 'text-stream',
@@ -2573,6 +4071,11 @@ describe('Agent Routes Authorization', () => {
 
       expect(result).toMatchObject({ accepted: true, runId: 'signal-run-with-context' });
       expect(capturedTarget.ifIdle.streamOptions.instructions).toBe('Use the fixture.');
+      expect(capturedTarget.ifIdle.streamOptions.maxSteps).toBe(4);
+      expect(capturedTarget.ifIdle.streamOptions.modelSettings).toEqual({
+        temperature: 0.3,
+        headers: { 'X-Trace-Id': 'trace-123' },
+      });
       expect(capturedTarget.ifIdle.streamOptions).not.toHaveProperty('actor');
       expect(capturedTarget.ifIdle.streamOptions.requestContext).toBe(requestContext);
       expect(capturedTarget.ifIdle.streamOptions.requestContext.get('fixture')).toBe('text-stream');
@@ -2767,6 +4270,68 @@ describe('Agent Routes Authorization', () => {
       }
     });
 
+    it('should forward withInitialHistory with the server request context', async () => {
+      await mockMemory.createThread({
+        threadId: 'subscribe-thread-history',
+        resourceId: 'user-a',
+        title: 'Subscribe History',
+      });
+      const subscribeToThread = vi.fn(async () => ({
+        activeRunId: () => null,
+        abort: vi.fn(),
+        unsubscribe: vi.fn(),
+        stream: (async function* () {})(),
+      }));
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+
+      const stream = (await SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        abortSignal: new AbortController().signal,
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+      } as any)) as ReadableStream;
+      await stream.cancel();
+
+      expect(subscribeToThread).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'subscribe-thread-history',
+        withInitialHistory: { perPage: 10 },
+        requestContext,
+      });
+    });
+
+    it('checks thread read access before sending initial history', async () => {
+      await mockMemory.createThread({ threadId: 'fga-history', resourceId: 'user-a', title: 'Private' });
+      const require = vi.fn().mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const subscribeToThread = vi.fn();
+      (mockAgent as any).subscribeToThread = subscribeToThread;
+      const requestContext = createContextWithReservedKeys({ resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+
+      await expect(
+        SUBSCRIBE_AGENT_THREAD_ROUTE.handler({
+          mastra,
+          agentId: 'test-agent',
+          requestContext,
+          abortSignal: new AbortController().signal,
+          threadId: 'fga-history',
+          withInitialHistory: true,
+        } as any),
+      ).rejects.toThrow('FGA denied');
+      expect(subscribeToThread).not.toHaveBeenCalled();
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-history' },
+        permission: 'memory:read',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
+    });
+
     it('should clear heartbeat timers when an idle subscription stream is aborted', async () => {
       vi.useFakeTimers();
       try {
@@ -2811,33 +4376,169 @@ describe('Agent Routes Authorization', () => {
       }
     });
 
-    it('should abort an active thread run without unsubscribing listeners', async () => {
-      await mockMemory.createThread({
-        threadId: 'abort-thread-owned-by-context',
-        resourceId: 'user-a',
-        title: 'Abort Thread',
-      });
-      const requestContext = createContextWithReservedKeys({
-        resourceId: 'user-a',
-        threadId: 'abort-thread-owned-by-context',
-      });
-      const abortThreadStream = vi.fn(() => true);
-      (mockAgent as any).abortThreadStream = abortThreadStream;
+    it.each([undefined, false, true])(
+      'should abort a thread with clearPendingSignals=%s without unsubscribing',
+      async clearPendingSignals => {
+        await mockMemory.createThread({
+          threadId: 'abort-thread-owned-by-context',
+          resourceId: 'user-a',
+          title: 'Abort Thread',
+        });
+        const requestContext = createContextWithReservedKeys({
+          resourceId: 'user-a',
+          threadId: 'abort-thread-owned-by-context',
+        });
+        const abortThreadStream = vi.fn(() => true);
+        (mockAgent as any).abortThreadStream = abortThreadStream;
 
+        await expect(
+          ABORT_AGENT_THREAD_ROUTE.handler({
+            mastra,
+            agentId: 'test-agent',
+            requestContext,
+            clearPendingSignals,
+            resourceId: 'ignored-resource',
+            threadId: 'ignored-thread',
+            expectedRunId: 'run-a',
+          } as any),
+        ).resolves.toEqual({ aborted: true });
+
+        expect(abortThreadStream).toHaveBeenCalledWith({
+          resourceId: 'user-a',
+          threadId: 'abort-thread-owned-by-context',
+          ...(clearPendingSignals === undefined ? {} : { clearPendingSignals }),
+          expectedRunId: 'run-a',
+        });
+      },
+    );
+
+    it.each(
+      (['cancel', 'abort'] as const).flatMap(operation =>
+        (['owned', 'unscoped', 'missing', 'no-memory'] as const).flatMap(scope =>
+          [false, true].map(allowed => [operation, scope, allowed] as const),
+        ),
+      ),
+    )('enforces thread write access for %s with %s scope and allowed=%s', async (operation, scope, allowed) => {
+      if (scope === 'owned' || scope === 'unscoped') {
+        await mockMemory.createThread({ threadId: 'fga-cancel', resourceId: 'user-a', title: 'Private' });
+      }
+      if (scope === 'no-memory') vi.spyOn(mockAgent, 'getMemory').mockResolvedValue(undefined);
+      const require = vi.fn();
+      if (allowed) require.mockResolvedValue(undefined);
+      else require.mockRejectedValue(Object.assign(new Error('FGA denied'), { status: 403 }));
+      vi.spyOn(mastra, 'getServer').mockReturnValue({ fga: { require } } as any);
+      const requestContext = createContextWithReservedKeys(scope === 'unscoped' ? {} : { resourceId: 'user-a' });
+      const user = { id: 'user-a' };
+      requestContext.set('user', user);
+      const cancel = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
+        .mockReturnValue({ cancelledSignalIds: ['private-input'] });
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext,
+        threadId: 'fga-cancel',
+        signalIds: ['private-input'],
+        clearPendingSignals: true,
+        abortSignal: new AbortController().signal,
+      };
+      const result =
+        operation === 'cancel'
+          ? CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)
+          : ABORT_AGENT_THREAD_ROUTE.handler(params);
+      if (allowed) {
+        await expect(result).resolves.toEqual(
+          operation === 'cancel' ? { cancelledSignalIds: ['private-input'] } : { aborted: true },
+        );
+        expect(operation === 'cancel' ? cancel : abort).toHaveBeenCalledOnce();
+      } else {
+        await expect(result).rejects.toThrow('FGA denied');
+        expect(cancel).not.toHaveBeenCalled();
+        expect(abort).not.toHaveBeenCalled();
+      }
+      expect(require).toHaveBeenCalledWith(user, {
+        resource: { type: 'thread', id: 'fga-cancel' },
+        permission: 'memory:write',
+        context: expect.objectContaining({ resourceId: 'user-a' }),
+      });
+    });
+
+    it('rejects enhanced cancellation without core support while preserving ordinary abort', async () => {
+      vi.spyOn(mockAgent, '__supportsThreadSignalCancellation', 'get').mockReturnValue(false);
+      const cancel = vi.spyOn(mockAgent, 'cancelQueuedMessages');
+      const abort = vi.spyOn(mockAgent, 'abortThreadStream').mockReturnValue(true);
+      const params = {
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+        threadId: 'legacy-core-thread',
+        signalIds: ['pending-input'],
+        abortSignal: new AbortController().signal,
+      };
+      await expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler(params)).rejects.toMatchObject({ status: 501 });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: true })).rejects.toMatchObject({
+        status: 501,
+      });
+      expect(cancel).not.toHaveBeenCalled();
+      expect(abort).not.toHaveBeenCalled();
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler(params)).resolves.toEqual({ aborted: true });
+      await expect(ABORT_AGENT_THREAD_ROUTE.handler({ ...params, clearPendingSignals: false })).resolves.toEqual({
+        aborted: true,
+      });
+      expect(abort).toHaveBeenCalledTimes(2);
+    });
+
+    it('validates bounded nonempty signal IDs before selective cancellation', () => {
+      const body = { threadId: 'thread', signalIds: ['first', 'first', 'second'] };
+      expect(cancelPendingAgentSignalsBodySchema.parse(body)).toEqual(body);
+      for (const signalIds of [undefined, [], [''], [123], 'first', Array(1001).fill('first')]) {
+        expect(cancelPendingAgentSignalsBodySchema.safeParse({ ...body, signalIds }).success).toBe(false);
+      }
+      expect(cancelPendingAgentSignalsBodySchema.safeParse({ ...body, threadId: '' }).success).toBe(false);
+      expect(cancelPendingAgentSignalsBodySchema.safeParse(undefined).success).toBe(false);
+      expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.requiresAuth).toBe(true);
+      expect(CANCEL_AGENT_PENDING_SIGNALS_ROUTE.requiresPermission).toBe('agents:execute');
+      expect(AGENTS_ROUTES).toContain(CANCEL_AGENT_PENDING_SIGNALS_ROUTE);
+    });
+
+    it('cancels selected signals using the authenticated resource and thread scope', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-owned', resourceId: 'user-a', title: 'Owned' });
+      const cancelQueuedMessages = vi
+        .spyOn(mockAgent, 'cancelQueuedMessages')
+        .mockReturnValue({ cancelledSignalIds: ['first'] });
+      const result = await CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
+        mastra,
+        agentId: 'test-agent',
+        requestContext: createContextWithReservedKeys({ resourceId: 'user-a', threadId: 'cancel-owned' }),
+        abortSignal: new AbortController().signal,
+        resourceId: 'ignored-resource',
+        threadId: 'ignored-thread',
+        signalIds: ['first', 'missing', 'first'],
+      });
+      expect(result).toEqual({ cancelledSignalIds: ['first'] });
+      expect(cancelQueuedMessages).toHaveBeenCalledWith({
+        resourceId: 'user-a',
+        threadId: 'cancel-owned',
+        signalIds: ['first', 'missing', 'first'],
+      });
+    });
+
+    it('rejects cancellation on a thread belonging to another resource without mutating the queue', async () => {
+      await mockMemory.createThread({ threadId: 'cancel-forbidden', resourceId: 'user-b', title: 'Other' });
+      const cancelQueuedMessages = vi.spyOn(mockAgent, 'cancelQueuedMessages');
       await expect(
-        ABORT_AGENT_THREAD_ROUTE.handler({
+        CANCEL_AGENT_PENDING_SIGNALS_ROUTE.handler({
           mastra,
           agentId: 'test-agent',
-          requestContext,
-          resourceId: 'ignored-resource',
-          threadId: 'ignored-thread',
-        } as any),
-      ).resolves.toEqual({ aborted: true });
-
-      expect(abortThreadStream).toHaveBeenCalledWith({
-        resourceId: 'user-a',
-        threadId: 'abort-thread-owned-by-context',
-      });
+          requestContext: createContextWithReservedKeys({ resourceId: 'user-a' }),
+          abortSignal: new AbortController().signal,
+          resourceId: 'user-b',
+          threadId: 'cancel-forbidden',
+          signalIds: ['first'],
+        }),
+      ).rejects.toThrow(new HTTPException(403, { message: 'Access denied: thread belongs to a different resource' }));
+      expect(cancelQueuedMessages).not.toHaveBeenCalled();
     });
 
     it('should reject subscribing to a thread owned by a different resource', async () => {

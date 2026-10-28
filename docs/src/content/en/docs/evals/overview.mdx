@@ -52,11 +52,11 @@ export const evaluatedAgent = new Agent({
   id: 'evaluated-agent',
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       sampling: { type: 'ratio', rate: 0.5 },
     },
     safety: {
-      scorer: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createToxicityScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       sampling: { type: 'ratio', rate: 1 },
     },
   },
@@ -122,11 +122,13 @@ When a run has no trace (observability not configured), the decision is derived 
 **Eligibility filters**: The optional `filter` parameter uses a declarative predicate over the run context to restrict scorer eligibility. Because filtering occurs before sampling, `sampling.rate` applies only to matching runs:
 
 ```typescript title="src/mastra/agents/evaluated-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
 export const myAgent = new Agent({
   // ...
   scorers: {
     relevancy: {
-      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+      scorer: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
       filter: {
         op: 'eq',
         left: { path: 'requestContext.plan' },
@@ -142,7 +144,7 @@ This scores 10% of enterprise-plan traffic and none of the rest. To score differ
 
 Predicates can reference `requestContext.*`, `entity.*`, `entityType`, `source`, `threadId`, `resourceId`, and `projectId`. They support comparisons (`eq`, `ne`, `lt`, `lte`, `gt`, `gte`), membership (`in`, `notIn`), existence (`exists`, `notExists`), truthiness (`truthy`, `falsy`), and boolean composition (`and`, `or`, `not`). A filter that references an unknown root fails at agent construction rather than silently skipping scoring at runtime. Filters are plain JSON, so they're unaffected by durable agent state serialization.
 
-Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run).
+Eligibility filters decide _whether a scorer runs_; to filter _which messages a scorer sees_ once it runs, use [`filterRun()`](/reference/evals/filter-run). Filters can't see the run's input or output. When eligibility depends on what happened in the run, such as whether a specific tool was called, return [`notScorable()`](/reference/evals/not-scorable) from a scorer step instead: the remaining steps are skipped and no score is stored.
 
 **Automatic storage**: All scoring results are automatically stored in the `mastra_scorers` table in your configured database, allowing you to analyze performance trends over time.
 
@@ -165,7 +167,7 @@ export const mastra = new Mastra({
   scorers: {
     calledTool: checks.calledTool('get_weather'),
     includes: checks.includes('Brooklyn'),
-    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_MINI__' }),
+    relevancy: createAnswerRelevancyScorer({ model: '__GATEWAY_OPENAI_MODEL_LUNA__' }),
   },
 })
 ```

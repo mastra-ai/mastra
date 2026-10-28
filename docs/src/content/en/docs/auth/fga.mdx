@@ -86,7 +86,6 @@ resourceMapping: {
 - `user`: the authenticated user
 - `resourceId`: the owning Mastra resource ID when available (for example, a thread's `resourceId`)
 - `requestContext`: the current request context for advanced tenant resolution
-- `metadata`: provider-specific metadata for the attempted action
 
 Return `undefined` from `deriveId()` to fall back to the original Mastra resource ID.
 

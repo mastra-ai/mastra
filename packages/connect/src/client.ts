@@ -1,6 +1,12 @@
 import { z } from 'zod';
 
 import { extractProblemDetail, MastraConnectError } from './errors.js';
+import {
+  describePlatformCall,
+  endPlatformCallSpan,
+  errorPlatformCallSpan,
+  startPlatformCallSpan,
+} from './instrumentation.js';
 
 /**
  * Configuration for talking to the Mastra platform integrations service.
@@ -13,6 +19,12 @@ export interface ConnectClientOptions {
   /** Organization id. Falls back to MASTRA_ORG_ID; the x-organization-id header is omitted when absent. */
   orgId?: string;
   /**
+   * Project id, sent as the x-mastra-project-id header so the platform can
+   * attribute proxy activity to this project. Falls back to MASTRA_PROJECT_ID;
+   * the header is omitted when absent.
+   */
+  projectId?: string;
+  /**
    * Integrations service base URL. Falls back to MASTRA_INTEGRATIONS_API_URL,
    * then the regional default from MASTRA_PLATFORM_REGION ('us' | 'eu'),
    * then https://integrations.mastra.ai.
@@ -20,6 +32,15 @@ export interface ConnectClientOptions {
   baseUrl?: string;
   /** Fetch implementation, for testing or custom transports. Defaults to globalThis.fetch. */
   fetch?: typeof globalThis.fetch;
+  /**
+   * End-user resource key this client acts for. When set, every platform call
+   * asserts it via the `x-mastra-resource-id` header and connection listings
+   * are scoped to global + that resource's connections. The platform rejects
+   * calls against a resource-scoped connection whose key does not match (404),
+   * and ignores the header on global connections. No env fallback on purpose:
+   * a resource scope is always an explicit, per-identity decision.
+   */
+  resourceId?: string;
 }
 
 export interface ResolvedClient {
@@ -27,6 +48,8 @@ export interface ResolvedClient {
   headers: Record<string, string>;
   fetch: typeof globalThis.fetch;
   accessToken: string;
+  /** Validated end-user resource key this client asserts, when scoped. */
+  resourceId?: string;
 }
 
 const DEFAULT_INTEGRATIONS_URL = 'https://integrations.mastra.ai';
@@ -54,6 +77,29 @@ function stripTrailingSlashes(url: string): string {
   return url.slice(0, end);
 }
 
+/** Header asserting the end-user resource key on platform data-path calls. */
+export const RESOURCE_ID_HEADER = 'x-mastra-resource-id';
+
+/**
+ * Validates an end-user resource key against the platform contract: an opaque
+ * string of 1–256 characters after trimming. Returns the trimmed key.
+ * Mirrors the platform's `resourceIdSchema` so an invalid key fails here —
+ * before any platform call — instead of as an opaque 400.
+ */
+export function validateResourceId(resourceId: string): string {
+  if (typeof resourceId !== 'string') {
+    throw new MastraConnectError('invalid_options', `Invalid resourceId: expected a string, got ${typeof resourceId}.`);
+  }
+  const trimmed = resourceId.trim();
+  if (trimmed.length < 1 || trimmed.length > 256) {
+    throw new MastraConnectError(
+      'invalid_options',
+      `Invalid resourceId: expected 1-256 characters after trimming, got ${trimmed.length}.`,
+    );
+  }
+  return trimmed;
+}
+
 export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   const accessToken =
     options?.accessToken?.trim() ||
@@ -78,8 +124,16 @@ export function resolveClient(options?: ConnectClientOptions): ResolvedClient {
   if (orgId) {
     headers['x-organization-id'] = orgId;
   }
+  const projectId = options?.projectId?.trim() || process.env.MASTRA_PROJECT_ID?.trim();
+  if (projectId) {
+    headers['x-mastra-project-id'] = projectId;
+  }
+  const resourceId = options?.resourceId !== undefined ? validateResourceId(options.resourceId) : undefined;
+  if (resourceId !== undefined) {
+    headers[RESOURCE_ID_HEADER] = resourceId;
+  }
 
-  return { baseUrl, headers, fetch: options?.fetch ?? globalThis.fetch, accessToken };
+  return { baseUrl, headers, fetch: options?.fetch ?? globalThis.fetch, accessToken, resourceId };
 }
 
 function redact(message: string, accessToken: string): string {
@@ -87,17 +141,24 @@ function redact(message: string, accessToken: string): string {
 }
 
 async function platformFetch(client: ResolvedClient, path: string, init?: RequestInit): Promise<Response> {
+  // Single choke point for outbound connect HTTP (platform API + vendor
+  // proxy), so one span here covers every external call this package makes.
+  const span = startPlatformCallSpan(describePlatformCall(init?.method ?? 'GET', path));
   try {
-    return await client.fetch(`${client.baseUrl}${path}`, {
+    const response = await client.fetch(`${client.baseUrl}${path}`, {
       ...init,
       headers: { ...client.headers, ...(init?.headers as Record<string, string> | undefined) },
     });
+    endPlatformCallSpan(span, response.status);
+    return response;
   } catch (error) {
     if (error instanceof Error && error.message.includes(client.accessToken)) {
       const redacted = new Error(redact(error.message, client.accessToken));
       redacted.name = error.name;
+      errorPlatformCallSpan(span, redacted);
       throw redacted;
     }
+    errorPlatformCallSpan(span, error);
     throw error;
   }
 }
@@ -186,6 +247,8 @@ export const connectionSchema = z.object({
   connectedAt: z.string().nullish(),
   createdAt: z.string().nullish(),
   accountLabel: z.string().nullish(),
+  /** End-user resource key the connection is scoped to; null/absent = global. */
+  resourceId: z.string().nullish(),
 });
 
 export type ProjectConnection = z.infer<typeof connectionSchema>;
@@ -194,11 +257,40 @@ const connectionListSchema = z.object({
   connections: z.array(connectionSchema),
 });
 
+/**
+ * One credential-form field from the platform catalog, as the hosted connect
+ * surface needs it. Lenient subset of the platform's `VendorAuthField`.
+ */
+export const catalogAuthFieldSchema = z.object({
+  name: z.string(),
+  /**
+   * Where the value goes in a headless auth call: `credentials` are
+   * exchanged with the provider (API keys, passwords), `params` configure
+   * the flow (e.g. an MCP server URL). Absent on older platforms; clients
+   * treat missing as `credentials`.
+   */
+  target: z.enum(['credentials', 'params']).nullish(),
+  label: z.string().nullish(),
+  description: z.string().nullish(),
+  placeholder: z.string().nullish(),
+  secret: z.boolean().nullish(),
+  required: z.boolean().nullish(),
+  order: z.number().nullish(),
+});
+
+export type CatalogAuthField = z.infer<typeof catalogAuthFieldSchema>;
+
 export const integrationCatalogEntrySchema = z.object({
   id: z.string(),
   capabilities: z.object({
     mcp: z.boolean().optional(),
   }),
+  // Display/auth fields consumed by the end-user connect surface. Nullish so
+  // an older platform catalog shape never fails tool resolution.
+  displayName: z.string().nullish(),
+  logoUrl: z.string().nullish(),
+  authType: z.string().nullish(),
+  authFields: z.array(catalogAuthFieldSchema).nullish(),
 });
 
 export type IntegrationCatalogEntry = z.infer<typeof integrationCatalogEntrySchema>;
@@ -207,9 +299,41 @@ const integrationCatalogResponseSchema = z.object({
   integrations: z.array(integrationCatalogEntrySchema),
 });
 
+const projectIntegrationSettingsResponseSchema = z.object({
+  /** Null inherits the full public catalog; an empty array explicitly disables end-user connections. */
+  endUserProviders: z.array(z.string()).nullable(),
+});
+
+export type ProjectIntegrationSettings = z.infer<typeof projectIntegrationSettingsResponseSchema>;
+
+/**
+ * Secondary access token minted by the vendor alongside the primary oauth2
+ * credential (e.g. `devPortalAccessToken` on Microsoft Teams connections).
+ * Keyed by the vendor's connection-config field name. Treat this like any
+ * other bearer credential — it authenticates second-audience API calls
+ * (Teams Dev Portal, etc.) and must not be logged or forwarded to code that
+ * shouldn't hold connection secrets.
+ */
+export const secondaryAccessTokenSchema = z.object({
+  accessToken: z.string(),
+  expiresAt: z.string().nullable(),
+});
+
+export type SecondaryAccessToken = z.infer<typeof secondaryAccessTokenSchema>;
+
 export const credentialSchema = z.discriminatedUnion('type', [
-  z.object({ type: z.literal('oauth2'), accessToken: z.string(), expiresAt: z.string().nullable() }),
+  z.object({
+    type: z.literal('oauth2'),
+    accessToken: z.string(),
+    expiresAt: z.string().nullable(),
+    secondaryAccessTokens: z.record(z.string(), secondaryAccessTokenSchema).optional(),
+  }),
   z.object({ type: z.literal('api_key'), apiKey: z.string() }),
+  z.object({
+    type: z.literal('two_step'),
+    token: z.string(),
+    expiresAt: z.string().nullable(),
+  }),
 ]);
 
 export type ConnectionCredential = z.infer<typeof credentialSchema>;
@@ -224,7 +348,14 @@ export type ConnectionContext = z.infer<typeof connectionContextSchema>;
 // —— endpoint functions ——
 
 export async function listProjectConnections(client: ResolvedClient, projectId: string): Promise<ProjectConnection[]> {
-  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/connections`);
+  // A resource-scoped client lists global + that resource's connections in one
+  // round trip; an unscoped client keeps the platform's fail-safe default
+  // (global-only), so pre-resourceId deployments never see end-user rows.
+  const query =
+    client.resourceId !== undefined
+      ? `?${new URLSearchParams({ resourceId: client.resourceId, includeGlobal: 'true' })}`
+      : '';
+  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/connections${query}`);
   if (!response.ok) {
     await throwPlatformError(response, `listing connections for project ${projectId}`);
   }
@@ -250,6 +381,31 @@ export async function listIntegrations(client: ResolvedClient): Promise<Integrat
     throw new MastraConnectError('platform_error', 'Platform returned an unexpected integration catalog shape.');
   }
   return parsed.data.integrations;
+}
+
+export async function getProjectIntegrationSettings(
+  client: ResolvedClient,
+  projectId: string,
+): Promise<ProjectIntegrationSettings> {
+  const response = await platformFetch(client, `/v2/projects/${encodeURIComponent(projectId)}/integration-settings`);
+  if (response.status === 404) {
+    throw new MastraConnectError('platform_error', `Integration settings were not found for project ${projectId}.`, {
+      status: 404,
+    });
+  }
+  if (!response.ok) {
+    await throwPlatformError(response, `retrieving integration settings for project ${projectId}`);
+  }
+  const parsed = projectIntegrationSettingsResponseSchema.safeParse(
+    await parsePlatformJson(response, `retrieving integration settings for project ${projectId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected integration settings shape for project ${projectId}.`,
+    );
+  }
+  return parsed.data;
 }
 
 export async function getConnectionContext(client: ResolvedClient, connectionId: string): Promise<ConnectionContext> {
@@ -294,6 +450,13 @@ export interface ProxyRequestOptions {
   headers?: Record<string, string>;
   baseUrlOverride?: string;
   body?: unknown;
+  /**
+   * How to decode the response body. Defaults to JSON parsing (with a raw
+   * text fallback when JSON parsing fails). Set to `'arraybuffer'` for
+   * providers that return binary payloads (file exports, downloaded assets):
+   * the response body is returned as an ArrayBuffer and never parsed.
+   */
+  responseType?: 'arraybuffer';
 }
 
 /**
@@ -395,7 +558,17 @@ export async function proxyRequestWithResponse(
   const queryString = search.size > 0 ? `?${search.toString()}` : '';
   const url = `/v2/connections/${encodeURIComponent(connectionId)}/proxy/${cleanPath}${queryString}`;
 
-  const headers: Record<string, string> = { ...options.headers };
+  // The platform authenticates proxy requests with the project token and
+  // injects the provider credential upstream (same invariant as the MCP
+  // transport). A caller-supplied authorization header would merge with the
+  // platform bearer under a different casing and corrupt platform auth, so it
+  // is dropped here rather than forwarded.
+  const headers: Record<string, string> = {};
+  for (const [name, value] of Object.entries(options.headers ?? {})) {
+    const lower = name.toLowerCase();
+    if (lower === 'authorization' || lower === 'proxy-authorization') continue;
+    headers[name] = value;
+  }
   if (options.baseUrlOverride !== undefined) {
     assertValidBaseUrlOverride(options.baseUrlOverride);
     headers['base-url-override'] = options.baseUrlOverride;
@@ -452,11 +625,117 @@ export async function proxyRequestWithResponse(
 
   const metadata = { status: response.status, headers: Object.fromEntries(response.headers.entries()) };
   if (response.status === 204) return { ...metadata, data: null };
+  if (options.responseType === 'arraybuffer') {
+    return { ...metadata, data: await response.arrayBuffer() };
+  }
   const text = await response.text();
   if (!text) return { ...metadata, data: null };
   try {
     return { ...metadata, data: JSON.parse(text) };
   } catch {
     return { ...metadata, data: text };
+  }
+}
+
+export const connectSessionSchema = z.object({
+  connectionId: z.string(),
+  integrationId: z.string(),
+  /**
+   * Vendor connect link. The platform nulls this for resource-scoped
+   * sessions: their link is a bearer capability served only by the launch
+   * gate (`getConnectUrl`) under a matching resource assertion, so it never
+   * appears in a creation response that could reach a browser.
+   */
+  connectUrl: z.string().nullish(),
+  /**
+   * Nango connect session token. Nulled by the platform for resource-scoped
+   * sessions for the same reason as `connectUrl`: the token alone can open
+   * the vendor Connect UI, so it is an equivalent launch capability.
+   */
+  sessionToken: z.string().nullish(),
+  expiresAt: z.string(),
+});
+
+export type ConnectSession = z.infer<typeof connectSessionSchema>;
+
+/**
+ * Creates a project-scoped connect session. A resource-scoped client passes
+ * its resource key in the body, so the resulting connection is owned by that
+ * end user; an unscoped client creates a global connection.
+ */
+export async function createProjectConnectSession(
+  client: ResolvedClient,
+  projectId: string,
+  integrationId: string,
+): Promise<ConnectSession> {
+  const response = await platformFetch(
+    client,
+    `/v2/projects/${encodeURIComponent(projectId)}/integrations/${encodeURIComponent(integrationId)}/connect-sessions`,
+    {
+      method: 'POST',
+      headers: { 'content-type': 'application/json' },
+      body: JSON.stringify(client.resourceId !== undefined ? { resourceId: client.resourceId } : {}),
+    },
+  );
+  if (!response.ok) {
+    await throwPlatformError(response, `creating a connect session for ${integrationId}`);
+  }
+  const parsed = connectSessionSchema.safeParse(
+    await parsePlatformJson(response, `creating a connect session for ${integrationId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected connect-session shape for ${integrationId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+export const connectUrlSchema = z.object({
+  connectUrl: z.string(),
+  expiresAt: z.string(),
+});
+
+export type ConnectUrl = z.infer<typeof connectUrlSchema>;
+
+/**
+ * Fetches the vendor connect link for a pending resource-scoped connection
+ * from the platform's launch gate. The platform serves it only while the
+ * session is pending and unexpired, and only when the client's
+ * `x-mastra-resource-id` assertion matches the row — any mismatch is a 404,
+ * which surfaces here as `connection_not_found`. This is how the browser's
+ * popup enters OAuth: the link itself never reaches browser-visible state.
+ */
+export async function getConnectUrl(client: ResolvedClient, connectionId: string): Promise<ConnectUrl> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}/connect-url`);
+  if (response.status === 404) {
+    throw new MastraConnectError(
+      'connection_not_found',
+      `No launchable connect session found for connection ${connectionId}.`,
+    );
+  }
+  if (!response.ok) {
+    await throwPlatformError(response, `fetching the connect URL for ${connectionId}`);
+  }
+  const parsed = connectUrlSchema.safeParse(
+    await parsePlatformJson(response, `fetching the connect URL for ${connectionId}`),
+  );
+  if (!parsed.success) {
+    throw new MastraConnectError(
+      'platform_error',
+      `Platform returned an unexpected connect-url shape for ${connectionId}.`,
+    );
+  }
+  return parsed.data;
+}
+
+/** Disconnects a connection. The platform tears down the vendor side asynchronously. */
+export async function disconnectConnection(client: ResolvedClient, connectionId: string): Promise<void> {
+  const response = await platformFetch(client, `/v2/connections/${encodeURIComponent(connectionId)}`, {
+    method: 'DELETE',
+  });
+  if (!response.ok) {
+    await throwPlatformError(response, `disconnecting connection ${connectionId}`);
   }
 }

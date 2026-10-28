@@ -1,3 +1,6 @@
+import { boardForWorkItem } from '../boards/index.js';
+import type { BoardRegistry } from '../boards/index.js';
+import { decisionRetryable, overtakenDecisionIds } from '../rules/decision-applicability.js';
 /**
  * Per-kind attention providers. Each kind owns its counts, its bounded page
  * scan, and its wire item shape; the route layer k-way merges provider pages
@@ -16,7 +19,6 @@ import type {
   FactoryAttentionReceiptRecord,
   FactoryDeferredDecisionRecord,
   FactoryDispatchStatus,
-  FactorySupervisorFindingRecord,
   WorkItemRow,
   WorkItemsStorage,
 } from '../storage/domains/work-items/base.js';
@@ -24,9 +26,7 @@ import {
   factoryAttentionKey,
   factoryDecisionAttentionIdentity,
   factoryMentionAttentionIdentity,
-  factorySupervisorFindingAttentionIdentity,
 } from '../storage/domains/work-items/base.js';
-import type { FactoryHealthFinding } from '../supervisor/health.js';
 
 export type FactoryAttentionView = 'open' | 'unread' | 'archived';
 
@@ -170,13 +170,8 @@ function attentionTarget(decision: FactoryDeferredDecisionRecord, item: WorkItem
   return {
     kind: 'work-item' as const,
     workItemId: item.id,
-    board: workItemBoard(item),
+    board: boardForWorkItem(item),
   };
-}
-
-export function workItemBoard(item: WorkItemRow): 'review' | 'work' {
-  const review = item.externalSource?.integrationId === 'github' && item.externalSource.type === 'pull-request';
-  return review ? 'review' : 'work';
 }
 
 /** One deferred-decision status seen as attention: failures and parked runs differ only by this. */
@@ -187,7 +182,7 @@ export interface DecisionAttentionSpec {
   occurredAt(decision: FactoryDeferredDecisionRecord): Date;
   title(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
   detail(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined): string;
-  extra?(decision: FactoryDeferredDecisionRecord): Record<string, unknown>;
+  extra?(decision: FactoryDeferredDecisionRecord, context: { overtaken: boolean }): Record<string, unknown>;
   matches(decision: FactoryDeferredDecisionRecord, item: WorkItemRow | undefined, search: string): boolean;
 }
 
@@ -195,9 +190,14 @@ export class DecisionAttentionProvider implements AttentionProvider {
   readonly kind: FactoryAttentionKind;
   readonly #workItems: WorkItemsStorage;
   readonly #spec: DecisionAttentionSpec;
+  readonly #boards: BoardRegistry;
 
-  constructor({ workItems }: { workItems: WorkItemsStorage }, spec: DecisionAttentionSpec) {
+  constructor(
+    { workItems, boards }: { workItems: WorkItemsStorage; boards: BoardRegistry },
+    spec: DecisionAttentionSpec,
+  ) {
     this.#workItems = workItems;
+    this.#boards = boards;
     this.#spec = spec;
     this.kind = spec.kind;
   }
@@ -258,9 +258,10 @@ export class DecisionAttentionProvider implements AttentionProvider {
 
   async page(scope: AttentionScope, { view, search, before, limit }: AttentionPageArgs): Promise<AttentionPageResult> {
     return collectPage(this.#scan(scope, before), limit, async decisions => {
-      const [receiptByKey, itemById] = await Promise.all([
+      const [receiptByKey, itemById, overtaken] = await Promise.all([
         this.#receiptsFor(scope, decisions),
         this.#linkedItems(scope, decisions),
+        overtakenDecisionIds(this.#workItems, this.#boards, scope, decisions),
       ]);
       const entries: AttentionEntry[] = [];
       for (const decision of decisions) {
@@ -282,7 +283,7 @@ export class DecisionAttentionProvider implements AttentionProvider {
             title: this.#spec.title(decision, item),
             detail: this.#spec.detail(decision, item),
             decisionType: factoryDecisionType(decision),
-            ...this.#spec.extra?.(decision),
+            ...this.#spec.extra?.(decision, { overtaken: overtaken.has(decision.id) }),
             occurredAt: occurredAt.toISOString(),
             read: receipt !== undefined,
             archived: receipt?.state === 'archived',
@@ -338,9 +339,9 @@ export const failedDecisionAttentionSpec: DecisionAttentionSpec = {
   occurredAt: decision => decision.completedAt ?? decision.updatedAt,
   title: (decision, item) => item?.title ?? factoryDispatchFailureMetadata(decision.failureCode).label,
   detail: decision => decision.lastError?.slice(0, 512) ?? factoryDispatchFailureMetadata(decision.failureCode).label,
-  extra: decision => ({
+  extra: (decision, { overtaken }) => ({
     failureCode: decision.failureCode,
-    canRetry: factoryDispatchFailureMetadata(decision.failureCode).canRetry,
+    canRetry: decisionRetryable(decision, overtaken),
   }),
   matches: (decision, item, search) =>
     item?.title.toLowerCase().includes(search) === true ||
@@ -354,132 +355,6 @@ interface ResolvedMention {
   item: WorkItemRow;
   identity: FactoryAttentionIdentity;
   receipt: FactoryAttentionReceiptRecord | undefined;
-}
-
-function supervisorFindingPayload(row: FactorySupervisorFindingRecord): FactoryHealthFinding {
-  return row.finding as unknown as FactoryHealthFinding;
-}
-
-export class SupervisorFindingAttentionProvider implements AttentionProvider {
-  readonly kind = 'supervisor-finding' as const;
-  readonly #workItems: WorkItemsStorage;
-
-  constructor({ workItems }: { workItems: WorkItemsStorage }) {
-    this.#workItems = workItems;
-  }
-
-  async counts(scope: AttentionScope): Promise<AttentionCounts> {
-    let open = 0;
-    let unread = 0;
-    const batches = scanBatches<FactorySupervisorFindingRecord>(
-      before =>
-        this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-      row => ({ occurredAt: row.openedAt, id: row.id }),
-    );
-    for await (const page of batches) {
-      const identities = page.rows.map(row =>
-        factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence),
-      );
-      const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
-      const byIdentity = new Map(
-        receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
-      );
-      for (const row of page.rows) {
-        const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
-        if (receipt?.state === 'archived') continue;
-        open += 1;
-        if (!receipt) unread += 1;
-      }
-    }
-    return { open, unread };
-  }
-
-  async latest(scope: AttentionScope): Promise<AttentionLatest | null> {
-    const page = await this.#workItems.listSupervisorFindingPage({ ...scope, limit: 1 });
-    const newest = page.rows[0];
-    if (!newest) return null;
-    const identity = factorySupervisorFindingAttentionIdentity(newest.findingKey, newest.occurrence);
-    const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities: [identity] });
-    return {
-      key: factoryAttentionKey(scope.factoryProjectId, identity),
-      at: newest.openedAt,
-      unread: receipts.length === 0,
-    };
-  }
-
-  page(scope: AttentionScope, args: AttentionPageArgs): Promise<AttentionPageResult> {
-    return collectPage(
-      scanBatches<FactorySupervisorFindingRecord>(
-        before =>
-          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.openedAt, id: row.id }),
-        args.before,
-      ),
-      args.limit,
-      async rows => {
-        const identities = rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence));
-        const receipts = await this.#workItems.listAttentionReceipts({ ...scope, identities });
-        const byIdentity = new Map(
-          receipts.map(receipt => [`${receipt.sourceId}\0${receipt.occurrence}`, receipt] as const),
-        );
-        return rows.flatMap(row => {
-          const finding = supervisorFindingPayload(row);
-          const receipt = byIdentity.get(`${row.findingKey}\0${row.occurrence}`);
-          if (!matchesView(args.view, receipt)) return [];
-          const text = `${finding.title} ${finding.evidence}`.toLowerCase();
-          if (args.search && !text.includes(args.search)) return [];
-          const identity = factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence);
-          return [
-            {
-              key: factoryAttentionKey(scope.factoryProjectId, identity),
-              occurredAt: row.openedAt,
-              resumeCursor: { occurredAt: row.openedAt, id: row.id },
-              receipt,
-              item: {
-                key: factoryAttentionKey(scope.factoryProjectId, identity),
-                kind: this.kind,
-                findingKey: row.findingKey,
-                occurrence: row.occurrence,
-                findingTitle: finding.title,
-                evidence: finding.evidence,
-                title: finding.title,
-                detail: finding.evidence,
-                beganAt: finding.beganAt ?? null,
-                suggestedRepair: finding.suggestedRepair,
-                workItemId: finding.workItemId,
-                occurredAt: row.openedAt.toISOString(),
-                read: Boolean(receipt),
-                archived: receipt?.state === 'archived',
-                target: finding.workItemId
-                  ? { kind: 'work-item', workItemId: finding.workItemId, board: 'work' }
-                  : { kind: 'rules' },
-              },
-            },
-          ];
-        });
-      },
-    );
-  }
-
-  markAllRead(
-    scope: AttentionScope,
-    args: { before?: AttentionStreamPosition; now: Date },
-  ): Promise<{ hasMore: boolean; continuation?: AttentionStreamPosition }> {
-    return markScanRead(
-      scanBatches<FactorySupervisorFindingRecord>(
-        before =>
-          this.#workItems.listSupervisorFindingPage({ ...scope, ...(before ? { before } : {}), limit: SCAN_PAGE_SIZE }),
-        row => ({ occurredAt: row.openedAt, id: row.id }),
-        args.before,
-      ),
-      rows =>
-        this.#workItems.markAttentionReceiptsRead({
-          ...scope,
-          identities: rows.map(row => factorySupervisorFindingAttentionIdentity(row.findingKey, row.occurrence)),
-          now: args.now,
-        }),
-    );
-  }
 }
 
 export class MentionAttentionProvider implements AttentionProvider {
@@ -635,7 +510,7 @@ function toMentionItem(scope: AttentionScope, { mention, comment, item, identity
     target: {
       kind: 'work-item' as const,
       workItemId: mention.workItemId,
-      board: workItemBoard(item),
+      board: boardForWorkItem(item),
       commentId: mention.commentId,
     },
   };

@@ -1,62 +1,102 @@
+import { Crumb } from '@mastra/playground-ui/components/Breadcrumb';
 import { buttonVariants } from '@mastra/playground-ui/components/Button';
 import { EmptyState } from '@mastra/playground-ui/components/EmptyState';
-import { LogoWithoutText } from '@mastra/playground-ui/components/Logo';
 import { Notice } from '@mastra/playground-ui/components/Notice';
-import { Bot, GitBranch } from 'lucide-react';
+import { Bot } from 'lucide-react';
+import type { ReactNode } from 'react';
 import { Link, useLocation, useParams } from 'react-router';
 
-import { Sidebar } from '../Sidebar';
-import { ChatLayout } from '../layouts/ChatLayout';
-import { FolderIcon } from '../ui/icons';
 import { useFactoryQuery } from '../../hooks/useFactories';
-import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
-import { useProvidersQuery } from '../../hooks/use-providers';
 import { useFactoryAuth } from '../../hooks/useFactoryAuth';
-import { useUserSessionQuery } from '../../hooks/useWorkspaces';
-import { providerDisplayName } from '../domains/settings/components/provider-display-name';
-import { settingsSectionPath } from '../domains/settings/settingsSections';
+import { useFactoryProjectQuery } from '../../hooks/useFactoryDefaultModel';
+import { useDefaultModelQuery } from '../../hooks/use-default-model';
+import { useFallbackModelQuery } from '../../hooks/useAvailableModels';
+import { useProvidersQuery } from '../../hooks/use-providers';
+import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { isConnectedAt } from '../domains/settings/components/provider-credential';
+import { MODEL_DEFAULTS_LABELS } from '../domains/settings/components/models/routing/model-routes';
+import {
+  MODEL_DEFAULTS_ANCHORS,
+  sessionDefaultsAnchor,
+  settingsSectionPath,
+} from '../domains/settings/settingsSections';
+import type { ModelDefaultsAnchor } from '../domains/settings/settingsSections';
 import type { FactoryProject } from '../domains/workspaces/services/github';
-import { ChatHeader } from '../domains/chat/components/ChatHeader';
+import { ChatPageLayout } from '../domains/chat/components/ChatPageLayout';
 import { ComposerPanel } from '../domains/chat/components/ComposerPanel';
+import { StarterBoard } from '../domains/chat/components/starters/StarterBoard';
 import { TranscriptEntries } from '../domains/chat/components/Transcript';
+import { newChatCatalogTarget, routedDefaultModelId } from '../domains/chat/context/chatDefaultModel';
 import { ChatSessionBoundary } from '../domains/chat/context/ChatSessionProvider';
 import { useChatTranscript } from '../domains/chat/context/useChatTranscript';
 import { useGlobalShortcuts } from '../domains/chat/hooks/useGlobalShortcuts';
+import { FactoryActivity } from '../domains/factory/components/activity/FactoryActivity';
+import { traySurface } from '../ui/tray';
+import { Txt } from '@mastra/playground-ui/components/Txt';
+import { cn } from '@mastra/playground-ui/utils/cn';
 
-const draftStartClass = 'flex w-full max-w-xl flex-col items-stretch gap-6';
+const draftStartClass = 'flex min-w-0 w-full flex-col items-stretch gap-6';
 
 export function NewPage() {
-  const { factoryId } = useParams<{ factoryId: string }>();
+  const { factoryId, draftSessionId } = useParams<{ factoryId: string; draftSessionId: string }>();
   const factoryQuery = useFactoryQuery(factoryId);
   const activeFactory = factoryQuery.data;
   const projectQuery = useFactoryProjectQuery(activeFactory?.id);
+  const personalDefaultQuery = useDefaultModelQuery();
   const providersQuery = useProvidersQuery();
-  const defaultModelId = projectQuery.data?.defaultModelId ?? undefined;
-  const missingDefaultModel = Boolean(activeFactory) && projectQuery.isSuccess && !defaultModelId;
-  const defaultModelProvider = defaultModelId
-    ? providersQuery.data?.find(entry => entry.provider === defaultModelId.split('/')[0])
+  const routedToFactory = projectQuery.data?.modelScope === 'factory';
+  const chosenModelId = routedDefaultModelId(projectQuery.data?.modelScope, {
+    factory: projectQuery.data?.defaultModelId,
+    personal: personalDefaultQuery.data?.modelId,
+  });
+  const fallbackModelQuery = useFallbackModelQuery({
+    ...newChatCatalogTarget(routedToFactory ? 'factory' : 'user', activeFactory?.id),
+    enabled: projectQuery.isSuccess,
+  });
+  const chatModelId = chosenModelId ?? fallbackModelQuery.data;
+  const chatModelSettled =
+    Boolean(activeFactory) &&
+    projectQuery.isSuccess &&
+    (routedToFactory || personalDefaultQuery.isSuccess) &&
+    (Boolean(chosenModelId) || fallbackModelQuery.isSuccess);
+  const missingModel = chatModelSettled && !chatModelId;
+  const chatModelProvider = chatModelId
+    ? providersQuery.data?.find(entry => entry.provider === chatModelId.split('/')[0])
     : undefined;
+  const chatCredentialScope = routedToFactory ? 'org' : 'user';
   const missingCredential =
-    Boolean(activeFactory) && defaultModelId && defaultModelProvider?.source === 'none'
-      ? { modelId: defaultModelId, provider: defaultModelProvider.provider }
+    chatModelSettled && chatModelId && chatModelProvider && !isConnectedAt(chatModelProvider, chatCredentialScope)
+      ? { modelId: chatModelId, provider: chatModelProvider.provider }
       : undefined;
-  const configurationError = projectQuery.error ?? providersQuery.error ?? undefined;
+  const configurationError =
+    projectQuery.error ??
+    (routedToFactory ? null : personalDefaultQuery.error) ??
+    (chosenModelId ? null : fallbackModelQuery.error) ??
+    providersQuery.error ??
+    undefined;
 
   return (
-    <ChatLayout
-      sidebar={<Sidebar />}
-      header={<ChatHeader />}
-      main={
-        <ChatSessionBoundary>
-          <NewPageContent
-            activeFactory={activeFactory}
-            missingDefaultModel={missingDefaultModel}
-            missingCredential={missingCredential}
-            configurationError={configurationError}
-          />
-        </ChatSessionBoundary>
+    <ChatPageLayout
+      crumbs={
+        <>
+          <Crumb as="span">User sessions</Crumb>
+          <Crumb as="span" isCurrent>
+            New session
+          </Crumb>
+        </>
       }
-    />
+    >
+      {/* Remount only the chat content per draft, never the app shell. */}
+      <ChatSessionBoundary key={draftSessionId}>
+        <NewPageContent
+          activeFactory={activeFactory}
+          userDraft={draftSessionId !== undefined}
+          missingModel={missingModel}
+          missingCredential={missingCredential}
+          configurationError={configurationError}
+        />
+      </ChatSessionBoundary>
+    </ChatPageLayout>
   );
 }
 
@@ -73,12 +113,14 @@ function readRouteErrorNotice(state: unknown): string | undefined {
 
 function NewPageContent({
   activeFactory,
-  missingDefaultModel,
+  userDraft,
+  missingModel,
   missingCredential,
   configurationError,
 }: {
   activeFactory: FactoryProject | undefined;
-  missingDefaultModel: boolean;
+  userDraft: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
   configurationError: Error | undefined;
 }) {
@@ -88,15 +130,17 @@ function NewPageContent({
   const routeErrorNotice = readRouteErrorNotice(location.state);
   const noticeEntries = transcript.entries.filter(entry => entry.kind === 'notice');
   const hasNotices = Boolean(routeErrorNotice) || noticeEntries.length > 0;
+  const startsFromPrompt = userDraft && activeFactory && !missingModel && !missingCredential;
 
   return (
-    <div className="grid min-h-0 flex-1 place-items-center overflow-y-auto px-4 py-10 md:px-6">
-      <div className="flex w-full max-w-xl flex-col items-center gap-4">
+    <div className="mx-auto flex w-full max-w-3xl min-w-0 flex-col gap-10 px-4 pt-[14vh] pb-16 md:px-6">
+      <div className="flex w-full min-w-0 flex-col items-center gap-4">
         <DraftStart
           activeFactory={activeFactory}
           configurationError={configurationError}
-          missingDefaultModel={missingDefaultModel}
+          missingModel={missingModel}
           missingCredential={missingCredential}
+          starters={startsFromPrompt && <StarterBoard factoryId={activeFactory.id} />}
         />
         {hasNotices && (
           <div className="flex w-full flex-col gap-4">
@@ -105,6 +149,7 @@ function NewPageContent({
           </div>
         )}
       </div>
+      {startsFromPrompt && <FactoryActivity factoryId={activeFactory.id} />}
     </div>
   );
 }
@@ -112,18 +157,22 @@ function NewPageContent({
 function DraftStart({
   activeFactory,
   configurationError,
-  missingDefaultModel,
+  missingModel,
   missingCredential,
+  starters,
 }: {
   activeFactory: FactoryProject | undefined;
   configurationError: Error | undefined;
-  missingDefaultModel: boolean;
+  missingModel: boolean;
   missingCredential: MissingCredentialGuard | undefined;
+  starters: ReactNode;
 }) {
-  if (activeFactory && missingDefaultModel) {
+  const firstName = useFactoryAuth().data?.user?.name?.trim().split(/\s+/)[0];
+
+  if (activeFactory && missingModel) {
     return (
       <section className={draftStartClass} aria-label="Model setup required">
-        <MissingDefaultModelState factoryId={activeFactory.id} />
+        <MissingModelState factoryId={activeFactory.id} />
       </section>
     );
   }
@@ -138,35 +187,43 @@ function DraftStart({
 
   return (
     <section className={draftStartClass} aria-labelledby="draft-start-heading">
-      <div className="flex flex-col items-center gap-3 text-center">
-        <BrandLockup />
-        <h1 id="draft-start-heading" className="text-icon6 m-0 text-2xl">
-          What do you want to work on?
-        </h1>
-        <FactoryContext activeFactory={activeFactory} />
-      </div>
+      <Txt as="h1" variant="title" tone="ink" id="draft-start-heading" className="m-0">
+        {firstName ? `What should we ship, ${firstName}?` : 'What should we ship?'}
+      </Txt>
       {configurationError && (
         <Notice variant="destructive">Failed to load session configuration: {configurationError.message}</Notice>
       )}
 
-      {activeFactory && <ComposerPanel composerVariant="textarea" />}
+      {activeFactory && (
+        <div className={cn(traySurface, 'flex flex-col gap-1.5 p-1.5')}>
+          <ComposerPanel composerVariant="textarea" />
+          {starters}
+        </div>
+      )}
     </section>
   );
 }
 
-function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
-  const authQuery = useFactoryAuth();
+function missingCredentialDescription(guard: MissingCredentialGuard, anchor: ModelDefaultsAnchor): string {
   const providerName = providerDisplayName(guard.provider);
-  const orgHint =
-    authQuery.data?.authEnabled === true ? ', or ask an org admin to share an org-wide key with your team' : '';
+  const requirement = `The default model (${guard.modelId}) needs a credential for ${providerName}.`;
+  if (anchor === MODEL_DEFAULTS_ANCHORS.factory) {
+    return `${requirement} Ask an org admin to add one under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`;
+  }
+  return `${requirement} Add your own key for ${providerName} under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`;
+}
+
+function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard: MissingCredentialGuard }) {
+  const projectQuery = useFactoryProjectQuery(factoryId);
+  const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-icon3" />}
-      titleSlot={`You don't have access to ${providerName}`}
-      descriptionSlot={`The Factory default model (${guard.modelId}) needs a ${providerName} credential. Add your own key in Models settings${orgHint}.`}
+      iconSlot={<Bot />}
+      titleSlot={`You don't have access to ${providerDisplayName(guard.provider)}`}
+      descriptionSlot={missingCredentialDescription(guard, anchor)}
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }
@@ -174,66 +231,24 @@ function MissingCredentialState({ factoryId, guard }: { factoryId: string; guard
   );
 }
 
-function MissingDefaultModelState({ factoryId }: { factoryId: string }) {
+function MissingModelState({ factoryId }: { factoryId: string }) {
+  const projectQuery = useFactoryProjectQuery(factoryId);
+  const anchor = sessionDefaultsAnchor(projectQuery.data?.modelScope);
   return (
     <EmptyState
       as="h2"
-      iconSlot={<Bot size={40} className="text-icon3" />}
-      titleSlot="No default model configured for this Factory"
-      descriptionSlot="Connect a model provider and choose a default model in Models settings before starting a chat."
+      iconSlot={<Bot />}
+      titleSlot="No model available"
+      descriptionSlot={
+        anchor === MODEL_DEFAULTS_ANCHORS.factory
+          ? `Chats in this Factory run on the organization's keys. Ask an org admin to connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.factory} in Models settings.`
+          : `Chats in this Factory run on your own keys. Connect a provider or choose a model under ${MODEL_DEFAULTS_LABELS.personal} in Models settings.`
+      }
       actionSlot={
-        <Link to={settingsSectionPath(factoryId, 'models')} className={buttonVariants({ variant: 'primary' })}>
+        <Link to={settingsSectionPath(factoryId, 'models', anchor)} className={buttonVariants({ variant: 'primary' })}>
           Open Models settings
         </Link>
       }
     />
-  );
-}
-
-function BrandLockup() {
-  return (
-    <div className="text-icon3 inline-flex items-center gap-2">
-      <LogoWithoutText aria-hidden className="h-4 w-auto" />
-      <span className="text-ui-sm font-medium tracking-widest uppercase">Mastra Code</span>
-    </div>
-  );
-}
-
-function FactoryContext({ activeFactory }: { activeFactory: FactoryProject | undefined }) {
-  const { sessionId } = useParams<{ sessionId: string }>();
-  const sessionQuery = useUserSessionQuery(sessionId);
-  const repository = activeFactory?.repositories.find(
-    repo => repo.projectRepositoryId === sessionQuery.data?.projectRepositoryId,
-  );
-  const projectPath = sessionQuery.data?.sessionId;
-  const gitBranch = repository?.gitBranch;
-  return (
-    <div className="text-ui-sm text-icon3 flex max-w-full items-center justify-center gap-1.5">
-      <div className="flex min-w-0 items-center gap-1.5">
-        <FolderIcon size={13} className="text-icon2 shrink-0" />
-        <span className="shrink-0 font-medium">{activeFactory?.name ?? 'Factory'}</span>
-        {projectPath && (
-          <>
-            <span className="text-icon2 shrink-0">·</span>
-            <span className="text-icon2 min-w-0 truncate" title={projectPath}>
-              {projectPath}
-            </span>
-          </>
-        )}
-      </div>
-      {gitBranch && (
-        <>
-          <span aria-hidden className="text-icon2 shrink-0">
-            ·
-          </span>
-          <div className="flex min-w-0 items-center gap-1.5">
-            <GitBranch size={13} aria-hidden className="text-icon2 shrink-0" />
-            <span className="min-w-0 truncate" title={gitBranch}>
-              {gitBranch}
-            </span>
-          </div>
-        </>
-      )}
-    </div>
   );
 }

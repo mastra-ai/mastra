@@ -31,7 +31,7 @@ export const mastra = new Mastra({
 
 ## Documentation
 
-- [@mastra/deepeval documentation](https://mastra.ai/integrations/observability/confident-ai)
+- [@mastra/deepeval documentation](https://mastra.ai/reference/observability/tracing/exporters/confident-ai)
 
 ## Changelog
 

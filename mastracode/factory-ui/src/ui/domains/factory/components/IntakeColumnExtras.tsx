@@ -1,12 +1,22 @@
 import type { IntakeFeed } from '../boardCandidates';
+import type { BoardLayout } from '../boardLayout';
+import { BoardItemsSkeleton } from './BoardItemsSkeleton';
 import { LoadMoreSentinel } from './LoadMoreSentinel';
 
 /**
- * Pagination for the browsed candidate feed. A failed feed renders nothing: the
- * sentinel auto-loads when it scrolls into view, which would retry forever.
+ * Pagination for healthy candidate feeds. A failed single feed renders nothing;
+ * combined feeds can still page their healthy providers without retrying errors.
  */
-export function IntakeColumnExtras({ feed }: { feed?: IntakeFeed }) {
-  if (!feed || feed.error) return null;
+export function IntakeColumnExtras({
+  feed,
+  currentColumnLength,
+  layout,
+}: {
+  feed?: IntakeFeed;
+  currentColumnLength: number;
+  layout: BoardLayout;
+}) {
+  if (!feed || (feed.error && !feed.retryFailed)) return null;
 
   return (
     <LoadMoreSentinel
@@ -14,6 +24,15 @@ export function IntakeColumnExtras({ feed }: { feed?: IntakeFeed }) {
       isFetchingNextPage={Boolean(feed.isFetchingNextPage)}
       onLoadMore={() => void feed.fetchNextPage()}
       label="Load more candidates"
+      loadingIndicator={
+        currentColumnLength > 0 ? (
+          <BoardItemsSkeleton label="Loading more candidates" rows={1} layout={layout} />
+        ) : (
+          <span role="status" className="sr-only">
+            Loading more candidates
+          </span>
+        )
+      }
     />
   );
 }

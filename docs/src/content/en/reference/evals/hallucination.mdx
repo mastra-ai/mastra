@@ -18,7 +18,7 @@ The `createHallucinationScorer()` function accepts a single options object with 
   content={[
   {
     name: 'model',
-    type: 'LanguageModel',
+    type: 'MastraModelConfig',
     required: true,
     description: 'Configuration for the model used to evaluate hallucination.',
   },
@@ -111,12 +111,11 @@ The scorer evaluates hallucination through contradiction detection and unsupport
 
 ### Scoring Process
 
-1. Analyzes factual content:
-   - Extracts statements from context
-   - Identifies numerical values and dates
-   - Maps statement relationships
-1. Analyzes output for hallucinations:
-   - Compares against context statements
+1. Extracts claims from the output:
+   - Breaks the agent's response into factual claims
+   - Includes numerical values and dates
+1. Checks each claim against the provided context:
+   - Compares the claim with the context
    - Marks direct conflicts as hallucinations
    - Identifies unsupported claims as hallucinations
    - Evaluates numerical accuracy
@@ -126,7 +125,7 @@ The scorer evaluates hallucination through contradiction detection and unsupport
    - Divides by total statements
    - Scales to configured range
 
-Final score: `(hallucinated_statements / total_statements) * scale`
+Final score: `min(1, hallucinated_statements / total_statements) * scale` when `total_statements > 0`, otherwise `0`.
 
 ### Important Considerations
 
@@ -142,7 +141,7 @@ Final score: `(hallucinated_statements / total_statements) * scale`
 
 ### Score interpretation
 
-A hallucination score between 0 and 1:
+A hallucination score between 0 and `scale` (0 to 1 with the default scale). The ranges below assume the default scale:
 
 - **0.0**: No hallucination, all claims match the context.
 - **0.3 to 0.4**: Low hallucination, a few contradictions.
@@ -179,7 +178,7 @@ Use `getContext` for live scoring scenarios where context comes from tool result
 
 ```typescript title="src/example-dynamic-context.ts"
 import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
-import { extractToolResults } from '@mastra/evals/scorers'
+import { extractToolResults } from '@mastra/evals/scorers/utils'
 
 const scorer = createHallucinationScorer({
   model: '__GATEWAY_OPENAI_MODEL__',
@@ -200,7 +199,7 @@ Attach the scorer to an agent for live evaluation:
 ```typescript title="src/example-live-scoring.ts"
 import { Agent } from '@mastra/core/agent'
 import { createHallucinationScorer } from '@mastra/evals/scorers/prebuilt'
-import { extractToolResults } from '@mastra/evals/scorers'
+import { extractToolResults } from '@mastra/evals/scorers/utils'
 
 const hallucinationScorer = createHallucinationScorer({
   model: '__GATEWAY_OPENAI_MODEL__',

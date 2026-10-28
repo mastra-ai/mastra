@@ -1,0 +1,78 @@
+import type { MastraClient } from '@mastra/client-js';
+import { SpanType } from '@mastra/core/observability';
+import { TraceStatus } from '@mastra/core/storage';
+
+type GetTraceResponse = Awaited<ReturnType<MastraClient['getTrace']>>;
+type GetSpanResponse = Awaited<ReturnType<MastraClient['getSpan']>>;
+
+export const TRACE_ID = 'trace-panel';
+
+const baseSpan = {
+  traceId: TRACE_ID,
+  spanType: SpanType.AGENT_RUN,
+  isEvent: false,
+  startedAt: new Date('2026-08-30T12:00:00.000Z'),
+  endedAt: new Date('2026-08-30T12:00:01.000Z'),
+  createdAt: new Date('2026-08-30T12:00:00.000Z'),
+  updatedAt: null,
+  status: TraceStatus.SUCCESS,
+};
+
+export const rootSpan = {
+  ...baseSpan,
+  spanId: 'root01',
+  name: 'Root agent run',
+  parentSpanId: null,
+  entityType: 'agent',
+  entityId: 'weather-agent',
+  entityName: 'Weather Agent',
+  threadId: 'weather-thread',
+  input: { messages: [{ role: 'user', content: 'Will it rain?' }] },
+  output: { text: 'No rain is expected.' },
+};
+export const childSpanOne = {
+  ...baseSpan,
+  spanId: 'child1',
+  name: 'First tool call',
+  spanType: SpanType.TOOL_CALL,
+  parentSpanId: 'root01',
+};
+export const childSpanTwo = {
+  ...baseSpan,
+  spanId: 'child2',
+  name: 'Second tool call',
+  spanType: SpanType.TOOL_CALL,
+  parentSpanId: 'root01',
+};
+
+/** Full trace tree: root with two children — enough to exercise prev/next span navigation. */
+export const panelTraceSpans: GetTraceResponse = {
+  traceId: TRACE_ID,
+  spans: [rootSpan, childSpanOne, childSpanTwo],
+};
+
+export const spanDetailById: Record<string, GetSpanResponse> = {
+  root01: { span: { ...rootSpan, input: { message: 'go' }, output: { text: 'done' } } },
+  child1: { span: { ...childSpanOne, sessionId: 'session-42', input: { arg: 1 }, output: { ok: true } } },
+  child2: { span: { ...childSpanTwo, input: { arg: 2 }, output: { ok: true } } },
+};
+
+const skillSignal = { id: 'signal-skill-1', type: 'reactive', tagName: 'skill', attributes: { name: 'weather-check' } };
+
+/** The root run started by a skill signal: its input is the serialized signal object. */
+export const skillSignalRootDetail: GetSpanResponse = {
+  span: {
+    ...rootSpan,
+    attributes: { signal: skillSignal },
+    input: {
+      ...skillSignal,
+      contents: 'Check the forecast before answering.\n\nARGUMENTS: Paris',
+      createdAt: '2026-08-30T12:00:00.000Z',
+      __isCreatedSignal: true,
+      toDBMessage: '[Function]',
+      toLLMMessage: '[Function]',
+      toDataPart: '[Function]',
+    },
+    output: { text: 'done' },
+  },
+};

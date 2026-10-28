@@ -6,7 +6,7 @@ import type { Intake } from '../capabilities/intake.js';
 import type { AuditEmitter } from '../storage/domains/audit/domain.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
-import { IntakeRoutes, parseIntakeConfig } from './intake.js';
+import { IntakeRoutes, parseIntakeBinding, parseIntakeConfig } from './intake.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 
 const auditEvents: Array<Record<string, unknown>> = [];
@@ -53,6 +53,14 @@ const integrations = [
   { id: 'linear', intake: linear },
 ];
 
+const githubRepositories = {
+  get: vi.fn(async ({ id }: { orgId: string; id: string }) =>
+    id === 'repo-1'
+      ? { id, installationId: 'inst-1', externalId: '10', slug: 'acme/app', defaultBranch: 'main' }
+      : null,
+  ),
+};
+
 function buildApp(user: { workosId: string; organizationId?: string } | null, intakeIntegrations = integrations) {
   const app = new Hono();
   app.use('*', async (c, next) => {
@@ -69,6 +77,7 @@ function buildApp(user: { workosId: string; organizationId?: string } | null, in
       integrations: intakeIntegrations,
       boardRegistry,
       workItems: seed.workItems,
+      githubRepositories,
     }).routes(),
   );
   return app;
@@ -85,7 +94,13 @@ const releaseBoard = defineBoard({
     shipped: { title: 'Shipped', kind: 'terminal' },
   },
 });
-const boardRegistry = createBoardRegistry({ boards: [releaseBoard] });
+const triageBoard = defineBoard({
+  id: 'triage',
+  title: 'Triage',
+  initialPhase: 'inbox',
+  phases: { inbox: { title: 'Inbox', kind: 'resting' } },
+});
+const boardRegistry = createBoardRegistry({ boards: [releaseBoard, triageBoard] });
 
 const orgUser = { workosId: 'u1', organizationId: 'org1' };
 let seed: FactoryStorageTestSeed;
@@ -613,6 +628,57 @@ describe('intake configuration', () => {
       expect(items.get(labelled.id)).toMatchObject({ board: 'work', stages: ['intake'] });
       expect(items.get(parked.id)).toMatchObject({ board: 'work', stages: ['intake'] });
     });
+
+    it.each([
+      ['internal repository id', 'repo-1'],
+      ['repository slug', 'Acme/App'],
+    ])(
+      'returns cards of a bound repository to the binding board when their route is removed (bound by %s)',
+      async (_, sourceId) => {
+        const project = await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'app' } });
+        await seed.intake.setBinding({
+          orgId: 'org1',
+          integrationId: 'github',
+          sourceId,
+          factoryProjectId: project.id,
+          board: 'triage',
+          userId: 'u1',
+        });
+        const create = (externalId: string, url: string, metadata: Record<string, unknown>) =>
+          seed.workItems.upsert({
+            orgId: 'org1',
+            userId: 'u1',
+            factoryProjectId: project.id,
+            input: {
+              board: 'work',
+              title: externalId,
+              stages: ['intake'],
+              sessions: {},
+              metadata: { labels: ['release'], ...metadata },
+              externalSource: { integrationId: 'github', type: 'issue', externalId, url },
+            },
+          });
+        const bound = (await create('github-issue:1', 'https://github.com/acme/app/issues/1', {})).item;
+        // A renamed repository leaves the old slug in the URL; the stamped external id still matches.
+        const renamed = (
+          await create('github-issue:2', 'https://github.com/acme/old-name/issues/2', { githubRepositoryId: 10 })
+        ).item;
+        const elsewhere = (await create('github-issue:3', 'https://github.com/acme/other/issues/3', {})).item;
+
+        await put({ integrationId: 'github', factoryProjectId: project.id, label: 'release', board: 'release' });
+        const removed = await put({ integrationId: 'github', factoryProjectId: project.id, label: 'release' });
+        expect(await removed.json()).toMatchObject({ routes: [], relocated: { moved: 3, skipped: 0 } });
+
+        const items = new Map(
+          (await seed.workItems.list({ orgId: 'org1', factoryProjectId: project.id })).map(i => [i.id, i]),
+        );
+        expect(items.get(bound.id)).toMatchObject({ board: 'triage', stages: ['inbox'] });
+        expect(items.get(renamed.id)).toMatchObject(
+          sourceId === 'repo-1' ? { board: 'triage', stages: ['inbox'] } : { board: 'work', stages: ['intake'] },
+        );
+        expect(items.get(elsewhere.id)).toMatchObject({ board: 'work', stages: ['intake'] });
+      },
+    );
   });
 
   it('rejects unknown integrations and invalid JSON', async () => {
@@ -629,6 +695,37 @@ describe('intake configuration', () => {
       body: 'bad-json',
     });
     expect(invalid.status).toBe(400);
+  });
+
+  it('keeps a stored custom integration selection when a save omits it', async () => {
+    const app = buildApp(orgUser, [...integrations, { id: 'custom-tracker', intake: linear }]);
+    const put = (body: unknown) =>
+      app.request('/web/intake/config', {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify(body),
+      });
+    const custom = { enabled: false, sourceIds: ['src-1'] };
+
+    expect((await put({ 'custom-tracker': custom })).status).toBe(200);
+    const response = await put({
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
+    });
+
+    const expected = {
+      github: { enabled: true, sourceIds: ['repo-1'] },
+      linear: { enabled: false, sourceIds: null },
+      'custom-tracker': custom,
+    };
+    expect(response.status).toBe(200);
+    expect(await response.json()).toEqual({ config: expected });
+    expect(await (await app.request('/web/intake/config')).json()).toEqual({ config: expected });
+
+    await put({ github: { enabled: false, sourceIds: null } });
+    expect(await (await app.request('/web/intake/config')).json()).toEqual({
+      config: { ...expected, github: { enabled: false, sourceIds: null } },
+    });
   });
 
   it('drops disabled empty entries for unregistered integrations', async () => {
@@ -798,6 +895,19 @@ describe('parseIntakeConfig', () => {
       gitlab: { enabled: true, sourceIds: null },
       jira: { enabled: false, sourceIds: ['board-1'] },
     });
+  });
+
+  it('accepts encoded source ids up to the shared selection and binding limit', () => {
+    const sourceId = 'gitlab-project:' + 'a'.repeat(900);
+    expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: [sourceId] } })?.gitlab?.sourceIds).toEqual([
+      sourceId,
+    ]);
+    expect(
+      parseIntakeBinding({ integrationId: 'gitlab', sourceId, factoryProjectId: 'factory-1', board: 'work' }),
+    ).toMatchObject({
+      sourceId,
+    });
+    expect(parseIntakeConfig({ gitlab: { enabled: true, sourceIds: ['a'.repeat(1025)] } })).toBeNull();
   });
 
   it('rejects malformed or duplicate source ids', () => {

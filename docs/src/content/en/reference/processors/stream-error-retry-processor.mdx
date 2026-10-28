@@ -9,11 +9,11 @@ packages:
 
 `StreamErrorRetryProcessor` is an **error processor** that retries transient LLM API and stream failures. It includes built-in matching for OpenAI Responses stream errors and supports additional matchers for other provider-specific error shapes.
 
-The processor isn't enabled by default in core. Add it to `errorProcessors` for agents that need bounded retry handling.
+Mastra adds this processor to every agent's `errorProcessors` by default, last, after the `ProviderHistoryCompat`, `PrefillErrorHandler`, and `UnsupportedFileHandler` defaults, so the processors that repair a request get their chance before this one retries it unchanged. The default instance uses `maxRetries: 2` with a connection-reset matcher alongside the built-in matching, and it doesn't retry unknown errors or replay bad-request (HTTP 400) responses the repair processors couldn't fix. Supply your own instance in `errorProcessors` to change its policy. Because a default is only added when its `id` is missing from your list, your instance is used and the default isn't added alongside it.
 
 ## Usage example
 
-Add `StreamErrorRetryProcessor` to `errorProcessors`:
+Configure `StreamErrorRetryProcessor`. Supplying the same `id` means the default isn't added:
 
 ```typescript title="src/mastra/agents/openai-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -24,25 +24,34 @@ export const agent = new Agent({
   name: 'openai-agent',
   instructions: 'You are a helpful assistant.',
   model: '__GATEWAY_OPENAI_MODEL_BASE__',
-  errorProcessors: [new StreamErrorRetryProcessor()],
+  errorProcessors: [new StreamErrorRetryProcessor({ maxRetries: 5 })],
+  maxProcessorRetries: 5,
 })
 ```
 
+Set `maxProcessorRetries` alongside a `maxRetries` above `3`, because the agent stops error-processor retries at `3` when it's unset. See [Retry limits](#retry-limits).
+
+To run only the processors you configure, with none of the defaults merged in, set `errorProcessorDefaults: false`. Without an `errorProcessors` list, the agent then runs only the error processors its memory contributes, if any. When memory contributes one, the retry cap of `3` applies. See [Error processors are enabled by default](/docs/agents/processors#error-processors-are-enabled-by-default). An empty agent-level `errorProcessors` list still gets the defaults. A call-time `errorProcessors: []` replaces the resolved list instead, though the agent still runs the error processors its memory contributes. Supplying your own processor for all three default ids replaces every default with your own implementation.
+
 ## How it works
 
-The processor checks the error and its cause chain for:
+The processor checks the error and its cause chain, in this order, for:
 
-- Provider retry metadata: `isRetryable === true`
-- Built-in OpenAI Responses stream error matching
 - Matcher results: Any configured matcher that returns `true`
+- Built-in OpenAI Responses stream error matching
+- Provider retry metadata: `isRetryable === true`
+
+The first match decides the retry policy, so a configured matcher's `maxRetries`, `delayMs` and `onRetry` apply even when the built-in matcher would also match.
 
 When the error is retryable, the processor returns `{ retry: true }`. It doesn't mutate messages.
+
+Unless one of your own matchers matches it, the processor never retries a credential or quota refusal, even when provider metadata marks it retryable. The AI SDK marks every `429` retryable, including an exhausted quota.
 
 When `delayMs` is set, the processor waits before signaling a retry. This is useful for transient network errors like `ECONNRESET` where immediately retrying is likely to fail again. The delay can be a fixed number of milliseconds or a function evaluated with the error args (for example, to implement exponential backoff).
 
 ### Retry limits
 
-`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `10`.
+`maxRetries` defaults to `1` and limits this processor's retry requests. The agent also limits processor retries with `maxProcessorRetries`. When error processors are configured without an agent limit, the runtime cap is `3`.
 
 Set both values explicitly to the same bounded value when you need a single retry budget. Keep model `maxRetries` at `0` for that call to avoid multiplying provider attempts.
 
@@ -54,7 +63,7 @@ For retryable errors with a `Retry-After` response header, the processor reads c
 
 ## Retry unknown errors
 
-Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known authorization failures, including HTTP `401` and `403` responses, aren't retried:
+Set `retryUnknownErrors` to retry errors that don't match provider metadata or the built-in OpenAI matcher, including a custom matcher. Unknown-error retries use the processor-level `maxRetries` and `delayMs` values. Known credential and quota refusals, including HTTP `401` and `403` responses, aren't retried:
 
 ```typescript title="src/mastra/agents/resilient-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -110,7 +119,7 @@ export const agent = new Agent({
 
 ## Default OpenAI Responses matcher
 
-`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It retries known transient OpenAI error codes. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`.
+`isRetryableOpenAIResponsesStreamError` matches OpenAI Responses stream error chunks with `type: 'error'` or `type: 'response.failed'`. It reads each chunk with the shared provider-failure reader from `@mastra/core/error` and retries chunks that report a rate limit, a provider outage, or a timeout. As a fallback, it retries errors with explicit retry guidance such as `You can retry your request`. It never retries a credential or quota refusal.
 
 `StreamErrorRetryProcessor` includes this matcher by default. You can also import it and reuse it in custom retry logic.
 
@@ -133,8 +142,9 @@ export const agent = new Agent({
       },
       {
         name: 'matchers',
-        type: 'StreamErrorRetryMatcher[]',
-        description: 'Additional functions that identify provider-specific retryable stream errors.',
+        type: 'StreamErrorRetryMatcherEntry[]',
+        description:
+          'Additional matchers that identify provider-specific retryable stream errors. Each entry is either a predicate `(error) => boolean` or a config object `{ match, maxRetries?, delayMs?, onRetry? }`. When a config entry is the first matcher to match an error, its `maxRetries` and `delayMs` replace the processor-level values (omitted fields fall back to them), and its `onRetry` callback runs before each retry.',
         isOptional: true,
         defaultValue: '[]',
       },
@@ -142,7 +152,7 @@ export const agent = new Agent({
         name: 'retryUnknownErrors',
         type: 'boolean',
         description:
-          'Whether to retry unknown errors left unmatched by provider metadata, built-in matchers, and custom matchers. Known authorization failures are excluded. Uses the processor-level maxRetries and delayMs values.',
+          'Whether to retry unknown errors left unmatched by provider metadata, built-in matchers, and custom matchers. Known credential and quota refusals are excluded. Uses the processor-level maxRetries and delayMs values.',
         isOptional: true,
         defaultValue: 'false',
       },

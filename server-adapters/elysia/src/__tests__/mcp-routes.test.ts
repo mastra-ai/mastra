@@ -1,5 +1,5 @@
-import { createMCPRouteTestSuite } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext, HttpRequest, HttpResponse } from '@internal/server-adapter-test-utils';
+import { createMCPRouteTestSuite } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext, HttpRequest, HttpResponse } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe } from 'vitest';
 import { MastraServer } from '../index';

@@ -52,9 +52,12 @@ const EXPORT_TO_SUBPATH: Record<string, string> = {
   CloudExporter: '@mastra/observability',
   MastraPlatformExporter: '@mastra/observability',
 
+  // Messages
+  MastraMessageV2: '@mastra/core/agent',
+  MastraDBMessage: '@mastra/core/agent',
+
   // Streaming
   ChunkType: '@mastra/core/stream',
-  MastraMessageV2: '@mastra/core/stream',
 
   // LLM/Models
   ModelRouterEmbeddingModel: '@mastra/core/llm',
@@ -217,10 +220,10 @@ function createNewImports(
       if (localName === importedName) {
         // import { Agent } from '@mastra/core/agent'
         return j.importSpecifier(j.identifier(importedName));
-      } else {
-        // import { Agent as MastraAgent } from '@mastra/core/agent'
-        return j.importSpecifier(j.identifier(importedName), j.identifier(localName));
       }
+      // import { Agent as MastraAgent } from '@mastra/core/agent'
+      return j.importSpecifier(j.identifier(importedName), j.identifier(localName));
+
       // Note: We don't set importKind on specifiers since we're creating
       // separate import declarations for each importKind. All specifiers in a type
       // import group will be in an "import type" declaration.

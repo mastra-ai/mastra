@@ -5,9 +5,22 @@ export type Event = {
   data: any;
   runId: string;
   createdAt: Date;
+  /** Epoch ms at which the event's payload was produced, when it differs from publish time. */
+  producedAt?: number;
   /**
-   * Sequential index for position tracking.
-   * Enables efficient resume from a specific position.
+   * Claim generation of the durable run execution that published the event.
+   * Consumers drop events from a generation older than one they have already
+   * seen: a newer execution has taken the run over.
+   */
+  generation?: number;
+  /**
+   * Position of this event in its topic's log.
+   *
+   * Allocated when the event is appended to the shared cache (see
+   * `MastraServerCache.listPushIndexed`), so a subscriber can resume from an
+   * index and, on seeing a higher one, read the gap back from the log. Absent
+   * when the event could not be cached — such events are delivered live-only
+   * and cannot be resumed by offset.
    */
   index?: number;
   /**
@@ -112,4 +125,10 @@ export type EventCallback = (
   event: Event,
   ack?: () => Promise<void>,
   nack?: () => Promise<void>,
+  /**
+   * Renews the delivery's lease/visibility so the broker does not redeliver
+   * the event while its handler is still running. Omitted by backends that
+   * cannot extend a delivery.
+   */
+  extend?: () => Promise<void>,
 ) => void | Promise<void>;

@@ -25,6 +25,7 @@ export type WorkflowBuilderSingleStepEntry = Exclude<SerializedSingleStepEntry, 
 
 export type WorkflowBuilderAgentEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'agent' }>;
 export type WorkflowBuilderToolEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'tool' }>;
+export type WorkflowBuilderClassifierEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'classifier' }>;
 export type WorkflowBuilderMappingEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'mapping' }>;
 export type WorkflowBuilderWorkflowEntry = Extract<WorkflowBuilderSingleStepEntry, { type: 'workflow' }>;
 
@@ -130,6 +131,7 @@ export type WorkflowBuilderTypeAssertions = [
 export const WORKFLOW_BUILDER_SUPPORTED_STEP_TYPES = [
   'agent',
   'tool',
+  'classifier',
   'mapping',
   'workflow',
   'parallel',
@@ -178,7 +180,7 @@ const OPTIONAL_ENTRY_KEYS = ['description', 'metadata', 'outputSchema', 'options
 // on sleep/sleepUntil/mapping it is required, so a null id there must survive to
 // fail validation instead of being silently dropped.
 const OPTIONAL_ID_ENTRY_TYPES = new Set(['parallel', 'conditional', 'foreach', 'loop']);
-const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata'] as const;
+const OPTIONAL_STEP_OPTION_KEYS = ['retries', 'metadata', 'maxRetries', 'providerOptions'] as const;
 const OPTIONAL_FOREACH_OPT_KEYS = ['concurrency'] as const;
 
 function dropNullKeys(target: WorkflowBuilderJsonObject, keys: readonly string[]): void {

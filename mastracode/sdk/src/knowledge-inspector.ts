@@ -1,6 +1,6 @@
-import { randomBytes } from 'node:crypto';
-
 import type { Session } from '@mastra/core/agent-controller';
+import type { Knowledge } from '@mastra/core/knowledge';
+import type { Mastra } from '@mastra/core/mastra';
 import { createKnowledgeNodeCursor, isKnowledgeScopeVisible, parseKnowledgeWikilinks } from '@mastra/core/storage';
 import type {
   KnowledgeActivityEvent,
@@ -193,7 +193,7 @@ const RRF_K = 60;
 const MAX_NODE_CONTENT_BYTES = 32 * 1024;
 
 function opaqueToken(): string {
-  return randomBytes(24).toString('base64url');
+  return Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(24))).toString('base64url');
 }
 
 function boundedLimit(value: number | undefined, fallback: number, maximum: number): number {
@@ -788,8 +788,23 @@ class ScopedKnowledgeInspector implements KnowledgeInspector {
 
 export async function createKnowledgeInspector(input: {
   storage: MastraCompositeStore;
+  knowledge?: Knowledge | string;
+  mastra?: Pick<Mastra, 'getKnowledge'>;
   session: Session<MastraCodeState>;
 }): Promise<KnowledgeInspector | undefined> {
-  const knowledge = await input.storage.getStore('knowledge');
+  let selected: Knowledge | undefined;
+  if (typeof input.knowledge === 'string') {
+    try {
+      selected = input.mastra?.getKnowledge(input.knowledge);
+    } catch {
+      throw new KnowledgeInspectorError('unavailable', 'The configured Knowledge runtime is unavailable.');
+    }
+    if (!selected) {
+      throw new KnowledgeInspectorError('unavailable', 'The configured Knowledge runtime is unavailable.');
+    }
+  } else {
+    selected = input.knowledge;
+  }
+  const knowledge = selected ? await selected.getStorage() : await input.storage.getStore('knowledge');
   return knowledge ? new ScopedKnowledgeInspector({ knowledge, session: input.session }) : undefined;
 }

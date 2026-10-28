@@ -1,5 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { SquareArrowRight, SquareDot, SquarePlus } from 'lucide-react';
+import { DiffStat } from '../DiffStat';
+import type { DiffStatProps } from '../DiffStat';
+import { Txt } from '../Txt';
 import { CodeDiff } from './code-diff';
+import { CodeDiffList } from './code-diff-list';
 
 const meta: Meta<typeof CodeDiff> = {
   title: 'Elements/CodeDiff',
@@ -36,6 +41,138 @@ export const Default: Story = {
   args: {
     codeA: sampleA,
     codeB: sampleB,
+    filename: 'dataset-item.json',
+  },
+};
+
+export const GitPatch: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/agent.ts b/src/agent.ts',
+      'index 2d4a3b1..b8c31d2 100644',
+      '--- a/src/agent.ts',
+      '+++ b/src/agent.ts',
+      '@@ -1,3 +1,4 @@',
+      ' export function createAgent() {',
+      '-  return { name: "helper" };',
+      '+  return { name: "researcher", tools: ["search"] };',
+      ' }',
+    ].join('\n'),
+  },
+};
+
+const agentPatch = [
+  'diff --git a/src/agent.ts b/src/agent.ts',
+  'index 2d4a3b1..b8c31d2 100644',
+  '--- a/src/agent.ts',
+  '+++ b/src/agent.ts',
+  '@@ -1,3 +1,3 @@',
+  ' export function createAgent() {',
+  '-  return { name: "helper" };',
+  '+  return { name: "researcher", tools: ["search"] };',
+  ' }',
+].join('\n');
+
+const guidePatch = [
+  'diff --git a/docs/guide.md b/docs/guide.md',
+  'new file mode 100644',
+  'index 0000000..3b18e51',
+  '--- /dev/null',
+  '+++ b/docs/guide.md',
+  '@@ -0,0 +1,3 @@',
+  '+# Guide',
+  '+',
+  '+Run the researcher agent with `pnpm dev`.',
+].join('\n');
+
+function LineCounts(counts: DiffStatProps) {
+  return (
+    <Txt as="span" variant="meta" font="mono">
+      <DiffStat {...counts} />
+    </Txt>
+  );
+}
+
+const modifiedIcon = <SquareDot role="img" aria-label="Modified" className="text-warning-indicator" />;
+
+export const WithFileHeader: Story = {
+  args: {
+    patch: agentPatch,
+    header: { path: 'src/agent.ts', icon: modifiedIcon, meta: <LineCounts additions={1} deletions={1} /> },
+  },
+};
+
+export const ScrollingLongLines: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/agent.ts b/src/agent.ts',
+      '--- a/src/agent.ts',
+      '+++ b/src/agent.ts',
+      '@@ -1,2 +1,2 @@',
+      " export const instructions = 'You are a support agent. Answer billing questions, escalate refunds over $500, and never share account details with anyone but the owner.';",
+      "-export const model = { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.2, maxOutputTokens: 1024 };",
+      "+export const model = { provider: 'openai', name: 'gpt-4o-mini', temperature: 0.4, maxOutputTokens: 2048 };",
+      '',
+    ].join('\n'),
+    layout: 'split',
+    overflow: 'scroll',
+  },
+};
+
+export const FileList: Story = {
+  render: () => (
+    <CodeDiffList className="h-[480px] rounded-md border border-border">
+      <CodeDiff
+        patch={agentPatch}
+        header={{ path: 'src/agent.ts', icon: modifiedIcon, meta: <LineCounts additions={1} deletions={1} /> }}
+      />
+      <CodeDiff
+        patch={guidePatch}
+        header={{
+          path: 'docs/guide.md',
+          icon: <SquarePlus role="img" aria-label="Added" className="text-success-indicator" />,
+          meta: <LineCounts additions={3} deletions={0} />,
+        }}
+      />
+      <CodeDiff
+        header={{
+          path: '.agents/skills/react-best-practices/rules/bundle-barrel-imports.md',
+          previousPath: '.agents/skills/react/rules/bundle-barrel-imports.md',
+          icon: <SquareArrowRight role="img" aria-label="Renamed" className="text-info-indicator" />,
+        }}
+      />
+      <CodeDiff
+        header={{
+          path: 'pnpm-lock.yaml',
+          icon: modifiedIcon,
+          meta: (
+            <Txt as="span" variant="meta" tone="muted">
+              Diff too large to show
+            </Txt>
+          ),
+        }}
+      />
+    </CodeDiffList>
+  ),
+};
+
+export const ObservationHistory: Story = {
+  args: {
+    codeA: 'The user prefers short answers.\nThe project uses TypeScript.\n',
+    codeB: 'The user prefers concise answers with examples.\nThe project uses TypeScript.\n',
+    filename: 'observations.md',
+    layout: 'unified',
+  },
+};
+
+export const RenameOnly: Story = {
+  args: {
+    patch: [
+      'diff --git a/src/old-agent.ts b/src/new-agent.ts',
+      'similarity index 100%',
+      'rename from src/old-agent.ts',
+      'rename to src/new-agent.ts',
+    ].join('\n'),
   },
 };
 

@@ -1,0 +1,71 @@
+---
+title: 'Providers | Connect'
+description: 'Providers you can connect to a Mastra platform project, what each one gives your agents, and how to troubleshoot a connection.'
+packages:
+  - '@mastra/connect'
+---
+
+import { ProviderLogo } from '@site/src/components/connect/provider-logo';
+
+# Providers
+
+A provider is a service you can connect to your project, identified by a provider ID such as `linear` or `google-mail`. Providers can supply [tools](/docs/mastra-platform/connect/tools), [channels](/docs/mastra-platform/connect/channels), or both.
+
+## Provider directory
+
+This directory covers the generated toolsets and channel setup documented here, rather than every provider in the platform catalog. Run [`mastra connect list`](/reference/cli/mastra#mastra-connect-list) to see providers available to your project and their connection status.
+
+| Provider ID | Provider | Gives you |
+| - | - | - |
+| `clerk` | <ProviderLogo slug="clerk" mono /> Clerk | [Tools](/reference/connect/providers#clerk) |
+| `discord` | <ProviderLogo slug="discord" /> Discord | [Tools](/reference/connect/providers#discord), [Channels](/docs/mastra-platform/connect/channels#discord) |
+| `fireflies` | <ProviderLogo src="https://app.nango.dev/images/template-logos/fireflies.svg" /> Fireflies.ai | [Tools](/reference/connect/providers#firefliesai) |
+| `github` | <ProviderLogo slug="github" mono /> GitHub | [Tools](/reference/connect/providers#github) |
+| `google-calendar` | <ProviderLogo slug="googlecalendar" /> Google Calendar | [Tools](/reference/connect/providers#google-calendar) |
+| `google-docs` | <ProviderLogo slug="googledocs" /> Google Docs | [Tools](/reference/connect/providers#google-docs) |
+| `google-drive` | <ProviderLogo slug="googledrive" /> Google Drive | [Tools](/reference/connect/providers#google-drive) |
+| `google-mail` | <ProviderLogo slug="gmail" /> Gmail | [Tools](/reference/connect/providers#gmail) |
+| `google-sheet` | <ProviderLogo slug="googlesheets" /> Google Sheets | [Tools](/reference/connect/providers#google-sheets) |
+| `hubspot` | <ProviderLogo slug="hubspot" /> HubSpot | [Tools](/reference/connect/providers#hubspot) |
+| `incident-io` | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> incident.io | [Tools](/reference/connect/providers#incidentio) |
+| `jira` | <ProviderLogo slug="jira" /> Jira | [Tools](/reference/connect/providers#jira) |
+| `linear` | <ProviderLogo slug="linear" /> Linear | [Tools](/reference/connect/providers#linear) |
+| `microsoft-powerpoint` | <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg" /> Microsoft PowerPoint | [Tools](/reference/connect/providers#microsoft-powerpoint) |
+| `microsoft-teams` | <ProviderLogo slug="microsoftteams" /> Microsoft Teams | [Tools](/reference/connect/providers#microsoft-teams), [Channels](/docs/mastra-platform/connect/channels#microsoft-teams) |
+| `notion` | <ProviderLogo slug="notion" mono /> Notion | [Tools](/reference/connect/providers#notion) |
+| `openai` | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> OpenAI | [Tools](/reference/connect/providers#openai) |
+| `posthog` | <ProviderLogo slug="posthog" /> PostHog | [Tools](/reference/connect/providers#posthog) |
+| `resend` | <ProviderLogo slug="resend" mono /> Resend | [Tools](/reference/connect/providers#resend) |
+| `slack` | <ProviderLogo src="https://svgl.app/library/slack.svg" /> Slack | [Tools](/reference/connect/providers#slack) |
+| `slack-channels` | <ProviderLogo src="https://svgl.app/library/slack.svg" /> Slack channels | [Channels](/docs/mastra-platform/connect/channels#slack) |
+| `snowflake` | <ProviderLogo slug="snowflake" /> Snowflake | [Tools](/reference/connect/providers#snowflake) |
+| `supabase` | <ProviderLogo slug="supabase" /> Supabase | [Tools](/reference/connect/providers#supabase) |
+| `telegram` | <ProviderLogo slug="telegram" /> Telegram | [Channels](/docs/mastra-platform/connect/channels#telegram) |
+| `workos` | <ProviderLogo src="https://svgl.app/library/workos.svg" /> WorkOS | [Tools](/reference/connect/providers#workos) |
+
+Generated toolsets are included in `@mastra/connect`. Upgrading the package gives you toolsets added in newer releases, but provider availability depends on the platform catalog. The [provider toolsets reference](/reference/connect/providers) lists the generated tools.
+
+## MCP providers
+
+These providers serve their tools from a hosted Model Context Protocol (MCP) server. The tools come from the provider at runtime, so check each provider's MCP documentation for what it offers. See the [MCP tools reference](/reference/connect/tools#mcp-providers) for tool naming and [Require approval for sensitive tools](/docs/mastra-platform/connect/tools#require-approval-for-sensitive-tools) for approval setup.
+
+| Provider ID | Provider | Provider MCP docs |
+| - | - | - |
+| `attio-mcp` | <ProviderLogo src="https://app.nango.dev/images/template-logos/attio.svg" mono /> Attio | [Attio MCP](https://docs.attio.com/mcp/overview) |
+| `canva-mcp` | <ProviderLogo src="https://svgl.app/library/canva.svg" /> Canva | [Canva MCP](https://www.canva.dev/docs/apps/mcp/) |
+| `clay-mcp` | <ProviderLogo src="https://app.nango.dev/images/template-logos/clay-mcp.svg" /> Clay | [MCP in Clay](https://university.clay.com/docs/mcp-settings) |
+| `neon-mcp` | <ProviderLogo slug="neon" /> Neon | [Neon MCP server](https://neon.com/docs/ai/neon-mcp-server) |
+| `render-mcp` | <ProviderLogo slug="render" mono /> Render | [Render MCP server](https://render.com/docs/mcp-server) |
+| `robinhood-mcp` | <ProviderLogo slug="robinhood" /> Robinhood | [Agentic Trading](https://robinhood.com/us/en/support/agentic-trading) |
+| `sanity-mcp` | <ProviderLogo slug="sanity" mono /> Sanity | [Sanity MCP server](https://www.sanity.io/docs/ai/mcp-server) |
+
+## Troubleshoot a connection
+
+Most provider call failures come from the connection's credential or configuration. A `proxy_error` carries the provider's response in its `status` and `detail` properties.
+
+- **Status `401`:** Check whether the credential has expired, been revoked, or been rotated. If it needs replacing, [reauthorize the connection](/reference/cli/mastra#replace-a-connection-that-needs-reauthorization).
+- **Status `403`:** Check the provider's response for missing scopes, resource-access restrictions, or account requirements. Grant only the access the agent needs. You can exclude unsupported operations with `allowTools`, but filtering tools doesn't change the credential's permissions.
+- **No tools from a provider:** Run `mastra connect list` to check the project and connection status. Check provider selection and tool filters, and confirm that your installed `@mastra/connect` version includes the toolset. Connection changes follow the resolver's [caching behavior](/reference/connect/tools#the-resolver). Check app logs for `[@mastra/connect] Skipping` warnings when a connection can't be resolved.
+- **Resend won't connect:** Use an API key with **Full access** permission. A **Sending access** key fails to connect because Mastra checks a new key by listing your domains, which sending access keys can't do.
+
+See [errors](/reference/connect/tools#errors) for every error code.

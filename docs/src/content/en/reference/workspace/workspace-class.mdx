@@ -1,8 +1,8 @@
 ---
-title: "Reference: Workspace class | Workspace"
-description: "The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities."
+title: 'Reference: Workspace class | Workspace'
+description: 'The Workspace class combines a filesystem and sandbox to provide agents with file storage and command execution capabilities.'
 packages:
-  - "@mastra/core"
+  - '@mastra/core'
 ---
 
 # Workspace class
@@ -46,7 +46,7 @@ const workspace = new Workspace({
     type: 'string',
     description: 'Human-readable name',
     isOptional: true,
-    defaultValue: 'workspace-{id}',
+    defaultValue: 'workspace-{first 8 characters of id}',
   },
   {
     name: 'filesystem',
@@ -108,7 +108,7 @@ const workspace = new Workspace({
     name: 'skills',
     type: 'string[] | ((context: SkillsContext) => string[] | Promise<string[]>)',
     description:
-      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery.",
+      "Paths where SKILL.md files are located. This can be a static array or an async function that resolves paths dynamically. Supports glob patterns like './**/skills' for discovery. Skills are read from `skillSource` when set, otherwise from the workspace `filesystem` — including a resolver-backed filesystem, which is resolved per request. With a resolver, use `workspace.skills.getScoped({ requestContext })` so the filesystem is chosen from the request; direct calls such as `workspace.skills.list()` resolve with an empty `RequestContext`. Only when no filesystem is configured are skills read from the local disk.",
     isOptional: true,
   },
   {
@@ -249,7 +249,8 @@ Per-tool overrides accept the following options:
   {
     name: 'requireReadBeforeWrite',
     type: 'boolean | ((context: ToolConfigWithArgsContext) => boolean | Promise<boolean>)',
-    description: 'For write tools, require the agent to read an existing file before changing it.',
+    description:
+      'For write tools, require the agent to read an existing file before changing it. See Read-before-write tracking below.',
     isOptional: true,
     defaultValue: 'false',
   },
@@ -304,9 +305,17 @@ const workspace = new Workspace({
 
 Tool names must be unique across all workspace tools. Setting a custom name that conflicts with another tool's default or custom name throws an error.
 
+### Read-before-write tracking
+
+When `requireReadBeforeWrite` is enabled, write tools reject changes to files the agent hasn't read. When the agent runs with a memory thread inside a Mastra instance, read records are kept per thread in the `threadState` storage domain, the same store that holds task lists and goal objectives. Records automatically survive suspend/resume cycles (for example, a tool awaiting approval), later turns on the same thread, and process restarts on serverless runtimes when the configured storage adapter persists thread state. No configuration is needed beyond registering the agent with a Mastra instance that has storage.
+
+If a file changes on disk after it was read, the write is still rejected until the agent re-reads it, and a successful write always clears the record so the next edit requires a fresh read. Runs without a memory thread or without Mastra storage track reads per run.
+
+Read records are scoped to the filesystem they were read from, identified by the filesystem's provider and base path. Filesystems without a base path are scoped by provider alone, so same-provider instances share read records. If a thread resolves a different filesystem between requests (for example, a dynamic workspace or filesystem that varies by request context), previously read files must be re-read on the new filesystem before writing. Filesystems with the same configuration (such as two `LocalFilesystem` instances with the same `basePath`) share read records.
+
 ### Tool hooks
 
-Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping, so the context includes both the exposed `toolName` and the original `workspaceToolName`.
+Set `tools.hooks` to run logic before and after every enabled workspace tool call. Hooks run after name remapping and receive both the exposed `toolName` and the original `workspaceToolName` in their context.
 
 ```typescript {6-14}
 import { Workspace } from '@mastra/core/workspace'
@@ -435,7 +444,7 @@ await workspace.stop()
 
 `stop()` shuts down language servers and the browser before stopping the sandbox provider. Remote providers suspend or pause the sandbox for later resumption, while `LocalSandbox` kills background processes and unmounts filesystems. Stopping isn't a teardown. The filesystem and search index remain available along with skills, and the next sandbox operation starts the sandbox again.
 
-`mastra.shutdown()` calls `stop()` for registered workspaces, so a process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
+`mastra.shutdown()` calls `stop()` for registered workspaces. A process restart suspends remote sandboxes instead of deleting them. To fully tear a workspace down, call `destroy()` or `mastra.removeWorkspace(id, { destroy: true })` explicitly.
 
 #### `destroy()`
 
@@ -483,7 +492,7 @@ const info = await workspace.getInfo()
 // { id, name, status, createdAt, lastAccessedAt, filesystem?, sandbox? }
 ```
 
-Pass `resolveDynamicProviders: false` to report resolver-backed providers as runtime-defined without invoking their resolver.
+Pass `resolveDynamicProviders: false` to skip the filesystem resolver. If the resolver-backed filesystem hasn't already been resolved for the current request, it's reported as `{ provider: 'dynamic', status: 'pending' }`. `getInfo()` never invokes a sandbox resolver, because resolving a sandbox can provision real infrastructure. A resolver-backed sandbox that hasn't been resolved for the current request is reported as `{ provider: 'dynamic', status: 'pending' }`.
 
 ```typescript
 const info = await workspace.getInfo({ resolveDynamicProviders: false })
@@ -502,14 +511,14 @@ const info = await workspace.getInfo({ resolveDynamicProviders: false })
   {
     name: 'options.requestContext',
     type: 'RequestContext',
-    description: 'Passed to dynamic provider resolvers when `resolveDynamicProviders` is enabled.',
+    description: 'Passed to the dynamic filesystem resolver when `resolveDynamicProviders` is enabled.',
     isOptional: true,
   },
   {
     name: 'options.resolveDynamicProviders',
     type: 'boolean',
     description:
-      'Whether to invoke dynamic provider resolvers. Set to `false` when you only need metadata and want resolver-backed providers reported as `dynamic`.',
+      'Whether to invoke the dynamic filesystem resolver. Set to `false` when you only need metadata. A resolver-backed filesystem that has not already been resolved is then reported as `dynamic`. Sandbox resolvers are never invoked.',
     isOptional: true,
     defaultValue: 'true',
   },
@@ -731,13 +740,14 @@ Added when a filesystem is configured:
 | `mastra_workspace_read_file` | Read file contents. Text files return as text (with optional line range). Images and PDFs return as native media parts the model can view directly. Other binaries return metadata only unless an explicit `encoding` is passed. |
 | `mastra_workspace_write_file` | Create or overwrite a file with new content. Creates parent directories automatically. |
 | `mastra_workspace_edit_file` | Edit an existing file by finding and replacing text. Useful for targeted changes without rewriting the entire file. |
-| `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default). |
+| `mastra_workspace_list_files` | List directory contents as a tree structure. Supports recursive listing with depth limits, glob patterns, and `.gitignore` filtering (enabled by default: every `.gitignore` applies relative to its own directory, and `node_modules` is skipped unless the listed path is inside it). |
 | `mastra_workspace_delete` | Delete a file or directory. Supports recursive deletion for directories. |
 | `mastra_workspace_file_stat` | Get metadata about a file or directory including size, type, and modification time. |
 | `mastra_workspace_mkdir` | Create a directory. Creates parent directories automatically if they don't exist. |
-| `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. |
+| `mastra_workspace_grep` | Search file contents using regex patterns. Supports glob filtering, context lines, and case-insensitive search. Applies `.gitignore` files the same way as `list_files` and skips `node_modules` unless the search path is inside it. When a matched line exceeds 500 characters, only its first 500 characters are shown, followed by `...` (context lines are shown in full). If the match is past that point, read the full line with `read_file`, using the reported line number as `offset`. |
+| `mastra_workspace_apply_patch` | Create, update, move, and delete several files in one call using a patch. Opt-in: only added when `tools[WORKSPACE_TOOLS.FILESYSTEM.APPLY_PATCH].enabled` is set. The top-level `tools.enabled` doesn't enable it. The tool checks every hunk before writing and leaves all files unchanged if any hunk fails to match. |
 
-With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#filesystems-per-user-or-thread), write tools are always included and read-only is enforced at runtime.
+With a static filesystem, write tools (`write_file`, `edit_file`, `delete`, `mkdir`, `apply_patch`) are excluded when the filesystem is in read-only mode. With a [runtime-defined filesystem](/docs/sandbox/filesystem#filesystems-per-user-or-thread), write tools are always included and read-only is enforced at runtime.
 
 The `read_file` tool accepts `mediaTypes` and `maxMediaBytes` options to control which mime types are surfaced to the model as native media parts and how large those files can be:
 
@@ -788,7 +798,7 @@ Added when a sandbox is configured:
 
 With a static sandbox, capability checks (`executeCommand`, `processes`) decide which tool variants are exposed. With a [runtime-defined sandbox](/docs/sandbox/overview#sandboxes-per-user-or-thread), all sandbox tools are registered and the runtime throws a clear error if the resolved sandbox doesn't implement a requested capability.
 
-The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle callbacks on background processes:
+The `execute_command` tool accepts these options:
 
 <PropertiesTable
   content={[
@@ -831,8 +841,27 @@ The `execute_command` tool accepts a `backgroundProcesses` option for lifecycle 
       },
     ],
   },
+  {
+    name: 'requireDescription',
+    type: 'boolean',
+    description:
+      'Adds a required `description` argument, listed before `command`, where the model says in a few words what the command does. Use it to show a readable label in place of the raw command. When `false`, the tool schema has no `description` argument.',
+    isOptional: true,
+    defaultValue: 'false',
+  },
 ]}
 />
+
+```typescript
+const workspace = new Workspace({
+  sandbox: new LocalSandbox({ workingDirectory: './workspace' }),
+  tools: {
+    [WORKSPACE_TOOLS.SANDBOX.EXECUTE_COMMAND]: {
+      requireDescription: true,
+    },
+  },
+})
+```
 
 See [Background processes](/docs/sandbox/overview#background-processes) for callback examples.
 

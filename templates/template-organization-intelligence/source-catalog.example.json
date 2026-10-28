@@ -1,0 +1,34 @@
+{
+  "version": 1,
+  "sources": [
+    {
+      "id": "sample",
+      "provider": "local",
+      "mountPath": "/sample",
+      "root": "./sample-documents",
+      "enabled": true,
+      "displayName": "Bundled sample"
+    },
+    {
+      "id": "policies",
+      "provider": "google-drive",
+      "mountPath": "/drive/policies",
+      "folderId": "replace-with-a-shared-folder-id",
+      "credentialRef": "organization",
+      "enabled": false,
+      "displayName": "Google Drive policies"
+    },
+    {
+      "id": "archive",
+      "provider": "s3",
+      "mountPath": "/archive",
+      "bucket": "replace-with-r2-bucket",
+      "endpoint": "https://replace-with-account-id.r2.cloudflarestorage.com",
+      "region": "auto",
+      "prefix": "organization/",
+      "credentialRef": "organization",
+      "enabled": false,
+      "displayName": "Private R2 archive"
+    }
+  ]
+}

@@ -1,0 +1,101 @@
+import type { ReactNode } from 'react';
+import { SpanPayloadTool } from './span-payload-tool';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/ds/components/Collapsible';
+import { DisclosureChevron } from '@/ds/components/DisclosureChevron';
+import { MarkdownRenderer } from '@/ds/components/MarkdownRenderer';
+import { Txt } from '@/ds/components/Txt';
+
+/** Small-caps label above a field of a rich payload. */
+export function SpanPayloadLabel({ children }: { children: ReactNode }) {
+  return (
+    <Txt as="span" variant="meta" tone="faint" className="block uppercase">
+      {children}
+    </Txt>
+  );
+}
+
+export function SpanPayloadField({ label, children }: { label: ReactNode; children: ReactNode }) {
+  return (
+    <div data-slot="span-payload-field" className="flex flex-col gap-1.5">
+      <SpanPayloadLabel>{label}</SpanPayloadLabel>
+      {children}
+    </div>
+  );
+}
+
+export function SpanPayloadMarkdown({ children }: { children: string }) {
+  return (
+    <div data-slot="span-payload-markdown" className="text-foreground">
+      <MarkdownRenderer>{children}</MarkdownRenderer>
+    </div>
+  );
+}
+
+/** A collapsed block for secondary data (reasoning, steps, warnings…). */
+export function SpanPayloadCollapsible({
+  label,
+  children,
+  defaultOpen = false,
+}: {
+  label: ReactNode;
+  children: ReactNode;
+  defaultOpen?: boolean;
+}) {
+  return (
+    <Collapsible defaultOpen={defaultOpen}>
+      <CollapsibleTrigger className="flex items-center gap-1 text-meta text-placeholder uppercase">
+        <DisclosureChevron direction="right" className="size-3" />
+        {label}
+      </CollapsibleTrigger>
+      <CollapsibleContent className="pt-1.5">{children}</CollapsibleContent>
+    </Collapsible>
+  );
+}
+
+export interface SpanPayloadListItem {
+  key: string;
+  /** The item name, a link when it has a page to open. */
+  name: ReactNode;
+  description?: string;
+}
+
+/** A scrollable list of named items with an optional description (tools, skills…). */
+export function SpanPayloadList({ items, slot }: { items: SpanPayloadListItem[]; slot: string }) {
+  return (
+    <ul data-slot={slot} className="flex max-h-48 flex-col gap-2 overflow-y-auto">
+      {items.map(item => (
+        <li key={item.key} className="flex min-w-0 flex-col">
+          {item.name}
+          {item.description && (
+            // Payload content reads in ink like the messages around it; grey is kept for the labels.
+            <Txt as="span" variant="body-sm" className="line-clamp-2" title={item.description}>
+              {item.description}
+            </Txt>
+          )}
+        </li>
+      ))}
+    </ul>
+  );
+}
+
+/** A list item name rendered as plain text. */
+export function SpanPayloadListName({ children }: { children: string }) {
+  return (
+    <Txt as="span" variant="label" tone="ink" className="truncate">
+      {children}
+    </Txt>
+  );
+}
+
+/** Tool calls as core records them: `{ toolName, args | input }` when they have that shape, JSON otherwise. */
+export function SpanPayloadToolCalls({ toolCalls }: { toolCalls: unknown[] }) {
+  return (
+    <ul data-slot="span-payload-tool-calls" className="flex flex-col gap-2">
+      {toolCalls.map((call, index) => (
+        <li key={index}>
+          <SpanPayloadTool value={call} />
+        </li>
+      ))}
+    </ul>
+  );
+}

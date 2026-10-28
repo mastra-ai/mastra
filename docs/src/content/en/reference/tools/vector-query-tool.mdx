@@ -34,8 +34,7 @@ const queryTool = createVectorQueryTool({
 **Parameter Requirements:** Most fields can be set at creation as defaults.
 Some fields can be overridden at runtime via the request context or input. If
 a required field is missing from both creation and runtime, an error will be
-thrown. Note that `model`, `id`, and `description` can only be set at creation
-time.
+thrown. Note that `id` and `description` can only be set at creation time.
 
 :::
 
@@ -45,7 +44,7 @@ time.
     name: 'id',
     type: 'string',
     description:
-      "Custom ID for the tool. By default: 'VectorQuery {vectorStoreName} {indexName} Tool'. (Set at creation only.)",
+      "Custom ID for the tool. By default: 'VectorQuery {vectorStoreName} {indexName} Tool', where {vectorStoreName} is 'DirectVectorStore' when a vectorStore instance is passed without a vectorStoreName. (Set at creation only.)",
     isOptional: true,
   },
   {
@@ -58,7 +57,8 @@ time.
   {
     name: 'model',
     type: 'EmbeddingModel',
-    description: 'Embedding model to use for vector search. (Set at creation only.)',
+    description:
+      'Embedding model to use for vector search. (Can be set at creation or overridden at runtime via the request context.)',
     isOptional: false,
   },
   {
@@ -128,10 +128,11 @@ time.
                   },
                   {
                     name: 'topK',
-                    description: 'Number of top results to return',
+                    description:
+                      "Number of top results to return after reranking. Falls back to the query's topK (from the request context, the tool input, or 10) when unset or 0.",
                     isOptional: true,
                     type: 'number',
-                    defaultValue: '3',
+                    defaultValue: 'query topK',
                   },
                 ],
               },
@@ -629,6 +630,7 @@ For multi-tenant applications where each tenant has isolated data (e.g., separat
 ```typescript title="src/index.ts"
 import { createVectorQueryTool, VectorStoreResolver } from '@mastra/rag'
 import { PgVector } from '@mastra/pg'
+import { RequestContext } from '@mastra/core/request-context'
 
 // Cache for tenant-specific vector stores
 const vectorStoreCache = new Map<string, PgVector>()

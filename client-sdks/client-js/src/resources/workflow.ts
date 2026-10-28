@@ -1,4 +1,5 @@
 import type { RequestContext } from '@mastra/core/request-context';
+import type { Body, PathParams, QueryParams, RouteResponse } from '../route-types.generated.js';
 import type {
   ClientOptions,
   GetWorkflowResponse,
@@ -17,11 +18,13 @@ import { BaseResource } from './base';
 import { Run } from './run';
 
 const RECORD_SEPARATOR = '\x1E';
+type WorkflowId = PathParams<'GET /workflows/:workflowId'>['workflowId'];
+type WorkflowRunId = PathParams<'GET /workflows/:workflowId/runs/:runId'>['runId'];
 
 export class Workflow extends BaseResource {
   constructor(
     options: ClientOptions,
-    private workflowId: string,
+    private workflowId: WorkflowId,
   ) {
     super(options);
   }
@@ -77,15 +80,17 @@ export class Workflow extends BaseResource {
     if (params?.status) {
       searchParams.set('status', params.status);
     }
+    if (params?.summary) {
+      searchParams.set('summary', 'true');
+    }
     if (requestContextParam) {
       searchParams.set('requestContext', requestContextParam);
     }
 
     if (searchParams.size) {
       return this.request(`/workflows/${this.workflowId}/runs?${searchParams}`);
-    } else {
-      return this.request(`/workflows/${this.workflowId}/runs`);
     }
+    return this.request(`/workflows/${this.workflowId}/runs`);
   }
 
   /**
@@ -98,7 +103,7 @@ export class Workflow extends BaseResource {
    * @returns Promise containing the workflow run details with metadata and processed execution state
    */
   runById(
-    runId: string,
+    runId: WorkflowRunId,
     options?: {
       requestContext?: RequestContext | Record<string, any>;
       fields?: string[];
@@ -121,7 +126,7 @@ export class Workflow extends BaseResource {
     }
 
     const queryString = searchParams.size > 0 ? `?${searchParams.toString()}` : '';
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}${queryString}`);
+    return this.request(`/workflows/${this.workflowId}/runs/${encodeURIComponent(runId)}${queryString}`);
   }
 
   /**
@@ -129,8 +134,8 @@ export class Workflow extends BaseResource {
    * @param runId - The ID of the workflow run to delete
    * @returns Promise containing a success message
    */
-  deleteRunById(runId: string): Promise<{ message: string }> {
-    return this.request(`/workflows/${this.workflowId}/runs/${runId}`, {
+  deleteRunById(runId: WorkflowRunId): Promise<RouteResponse<'DELETE /workflows/:workflowId/runs/:runId'>> {
+    return this.request(`/workflows/${this.workflowId}/runs/${encodeURIComponent(runId)}`, {
       method: 'DELETE',
     });
   }
@@ -157,14 +162,16 @@ export class Workflow extends BaseResource {
    * @param params - Optional object containing the optional runId
    * @returns Promise containing the Run instance
    */
-  async createRun(params?: { runId?: string; resourceId?: string; disableScorers?: boolean }) {
+  async createRun(
+    params?: QueryParams<'POST /workflows/:workflowId/create-run'> & Body<'POST /workflows/:workflowId/create-run'>,
+  ) {
     const searchParams = new URLSearchParams();
 
-    if (!!params?.runId) {
+    if (params?.runId) {
       searchParams.set('runId', params.runId);
     }
 
-    const res = await this.request<{ runId: string }>(
+    const res = await this.request<RouteResponse<'POST /workflows/:workflowId/create-run'>>(
       `/workflows/${this.workflowId}/create-run?${searchParams.toString()}`,
       {
         method: 'POST',

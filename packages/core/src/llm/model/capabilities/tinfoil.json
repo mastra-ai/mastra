@@ -1,21 +1,51 @@
 {
-  "attachment": ["deepseek-v4-1-flash", "gemma4-31b", "glm-5-3-flash", "kimi-k3"],
+  "attachment": ["deepseek-v4-1-flash", "gemma4-31b", "kimi-k3"],
   "temperature": [
     "deepseek-v4-1-flash",
-    "deepseek-v4-flash",
     "gemma4-31b",
-    "glm-5-3-flash",
+    "glm-5-3",
     "gpt-oss-120b",
     "gpt-oss-safeguard-120b",
     "llama3-3-70b"
   ],
   "structuredOutput": [
     "deepseek-v4-1-flash",
-    "deepseek-v4-flash",
     "gemma4-31b",
-    "glm-5-3-flash",
+    "glm-5-3",
     "gpt-oss-120b",
     "gpt-oss-safeguard-120b",
     "kimi-k3"
-  ]
+  ],
+  "reasoning": {
+    "gemma4-31b": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek-v4-1-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "kimi-k3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "glm-5-3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ]
+  }
 }

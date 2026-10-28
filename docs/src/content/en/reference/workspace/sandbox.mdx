@@ -29,6 +29,13 @@ The `WorkspaceSandbox` interface defines how workspaces execute commands and man
       "Computer-use (desktop) capability. If not implemented, computer tools won't be available. See [Computer capability](#computer-capability).",
     isOptional: true,
   },
+  {
+    name: 'filesystem',
+    type: 'WorkspaceFilesystem',
+    description:
+      "Direct access to the sandbox's disk through the provider's file API, one request per operation instead of a shell command. See [Native filesystem](#native-filesystem).",
+    isOptional: true,
+  },
 ]}
 />
 
@@ -94,7 +101,7 @@ new E2BSandbox({
 
 Semantics:
 
-- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`, so a caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
+- A thrown error is fatal: `start()` rejects with the hook's error and the sandbox is marked `error`. A caller never observes a running sandbox whose setup hook failed. Nothing is latched, and the next `start()` (including the one triggered by the next lazy command) retries the hook. `onStop` and `onDestroy` remain non-fatal observers, because teardown proceeds best-effort.
 - `outcome` distinguishes the branches: `'created'` means this start provisioned a fresh VM (run setup), `'connected'` means it reconnected or resumed (setup normally already ran, so probe when the hook must self-heal a crash between create and setup-complete). `undefined` means the provider doesn't report.
 - Keep setup work idempotent. A hook re-runs whenever a probe decides it should, and a checkpoint-recovered fresh VM reports `outcome: 'created'`.
 - The sandbox status flips to `running` before the hook executes (the hook runs commands through the sandbox's own command path), so commands issued concurrently through `ensureRunning()` can interleave with it. Callers awaiting the original `start()` always observe a sandbox whose hook finished.
@@ -304,6 +311,20 @@ const instructions = sandbox.getInstructions?.()
 />
 
 **Returns:** `string`
+
+## Native filesystem
+
+Sandboxes whose provider has a file API expose it on the optional `filesystem` property. Reads, writes, and listings take one request each, where the same work through `executeCommand()` takes a command per step. Paths are absolute inside the sandbox.
+
+The provider owns containment: `filesystem` doesn't confine paths or symlinks to a workspace root. Fall back to `executeCommand()` when the property is absent:
+
+```typescript
+const pkg = sandbox.filesystem
+  ? await sandbox.filesystem.readFile('/workspace/app/package.json', { encoding: 'utf-8' })
+  : (await sandbox.executeCommand?.('cat', ['/workspace/app/package.json']))?.stdout
+```
+
+`E2BSandbox` always exposes `filesystem`. With `PlatformSandbox`, the property is available only when the provider is `e2b` and returns `undefined` otherwise. To use it in a `Workspace`, pass it explicitly as the workspace `filesystem`, or call it directly.
 
 ## Computer capability
 

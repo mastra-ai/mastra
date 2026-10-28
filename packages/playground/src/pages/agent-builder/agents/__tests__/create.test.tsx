@@ -1,5 +1,6 @@
 import { TooltipProvider } from '@mastra/playground-ui/components/Tooltip';
 import { MastraReactProvider } from '@mastra/react';
+import type { AuthCapabilities } from '@mastra/react/hooks/auth';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { delay, http, HttpResponse } from 'msw';
@@ -17,7 +18,6 @@ import {
   settingsAllFeatures,
   settingsPartialFeatures,
 } from './fixtures/builder';
-import type { AuthCapabilities } from '@/domains/auth/types';
 import { server } from '@/test/msw-server';
 
 const { navigateSpy } = vi.hoisted(() => ({
@@ -26,10 +26,6 @@ const { navigateSpy } = vi.hoisted(() => ({
 
 vi.mock('@/domains/agent-builder/components/agent-starter/agent-builder-starter', () => ({
   AgentBuilderStarter: () => <div data-testid="agent-builder-starter" />,
-}));
-
-vi.mock('@mastra/playground-ui/store/playground-store', () => ({
-  usePlaygroundStore: () => ({ requestContext: undefined }),
 }));
 
 vi.mock('react-router', async importOriginal => {

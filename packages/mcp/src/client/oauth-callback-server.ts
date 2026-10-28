@@ -6,7 +6,7 @@
  * with MCPOAuthClientProvider to complete the authorization-code flow for
  * OAuth-protected MCP servers.
  *
- * @see https://modelcontextprotocol.io/specification/2025-06-18/basic/authorization
+ * @see https://modelcontextprotocol.io/specification/2026-07-28/basic/authorization
  */
 
 import { timingSafeEqual } from 'node:crypto';
@@ -80,6 +80,11 @@ export interface OAuthCallbackResult {
    * The state parameter echoed back by the authorization server.
    */
   state: string;
+
+  /**
+   * RFC 9207 authorization-server issuer returned with the callback, when present.
+   */
+  iss?: string;
 }
 
 /**
@@ -120,9 +125,9 @@ export interface OAuthCallbackServer {
  * its preferred port, followed by the sequential fallback-port variants that
  * createOAuthCallbackServer will try when the preferred port is in use.
  *
- * This is the single source of the candidate list: register all of these as
- * redirect_uris during dynamic client registration so a fallback-bound
- * callback URL always matches a registered URI.
+ * This is the single source of the candidate list: include all of these as
+ * redirect_uris in the pre-registered client or the hosted Client ID Metadata
+ * Document so a fallback-bound callback URL always matches a listed URI.
  */
 export function getCallbackUrlCandidates(redirectUrl: string | URL): URL[] {
   const base = new URL(redirectUrl.toString());
@@ -272,7 +277,7 @@ export async function createOAuthCallbackServer(options: OAuthCallbackServerOpti
     }
 
     respond(200, SUCCESS_HTML);
-    settle({ result: { code, state } });
+    settle({ result: { code, state, iss: url.searchParams.get('iss') ?? undefined } });
   });
 
   // Bind the hostname the redirect URL names (brackets stripped for IPv6

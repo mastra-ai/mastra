@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 56c9369bd7c6 — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ bb789a55bfcf — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -27,7 +27,7 @@ const BotUserSchema = z.object({
 const ProviderUserSchema = z.object({
   id: z.string(),
   object: z.literal('user'),
-  type: z.enum(['person', 'bot']),
+  type: z.enum(['person', 'bot']).or(z.string()),
   name: z.string().nullable(),
   avatar_url: z.string().nullable(),
 });
@@ -45,7 +45,7 @@ const ProviderListResponseSchema = z.object({
 
 const UserOutputSchema = z.object({
   id: z.string(),
-  type: z.enum(['person', 'bot']),
+  type: z.enum(['person', 'bot']).or(z.string()),
   name: z.string().optional(),
   avatar_url: z.string().optional(),
   email: z.string().optional(),

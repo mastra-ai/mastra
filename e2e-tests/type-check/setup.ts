@@ -4,11 +4,12 @@ import { glob as globby } from 'tinyglobby';
 import { dirname, join } from 'node:path';
 import { fileURLToPath } from 'node:url';
 import getPort from 'get-port';
+import { execFileSync } from 'node:child_process';
 import { copyFile, mkdtemp } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { setupPublishedRegistryFromEnv, startRegistry } from '../_local-registry-setup';
 import { publishPackages } from '../_local-registry-setup/publish';
-import { getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
+import { E2E_TAG, getSuitePublishFilters } from '../_local-registry-setup/publish-roots.js';
 import { createRequire } from 'node:module';
 
 let require = global.require;
@@ -24,7 +25,8 @@ export default async function setup(project: TestProject) {
     return publishedRegistryTeardown;
   }
 
-  const tag = 'type-check-test';
+  const tag = E2E_TAG;
+  execFileSync('pnpm', ['--filter', './packages/mcp', 'build:lib'], { cwd: rootDir, stdio: 'inherit' });
   const teardown = await prepareMonorepo(rootDir, globby, tag);
 
   const verdaccioPath = require.resolve('verdaccio/bin/verdaccio');

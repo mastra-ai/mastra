@@ -2,15 +2,18 @@ import type { Message, Thread } from 'chat';
 
 import type { Agent } from '../agent/agent';
 import type { MastraProviderMetadata } from '../agent/message-list/state/types';
-import type { AgentSignalContents } from '../agent/signals';
+import type { AgentSignalContents, AgentSignalInput } from '../agent/signals';
 import type { AgentController } from '../agent-controller/agent-controller';
 import type { Session } from '../agent-controller/session';
+import type { AgentControllerRequestContext } from '../agent-controller/types';
+import { MastraFGAPermissions } from '../auth/ee';
 import type { Mastra } from '../mastra';
 import type { StorageThreadType } from '../memory/types';
 import type { RequestContext } from '../request-context';
 
 import { AgentChannels } from './agent-channels';
 import { ChannelSessionRejectedError } from './errors';
+import type { ThreadHistoryLogContext } from './thread-history';
 import type { ChannelConfig } from './types';
 
 /** Context passed to {@link AgentControllerChannelsConfig.onSessionStart}. */
@@ -75,6 +78,11 @@ export interface ChannelSessionResolveContext {
  * `thread.resourceId` — a session can only bind threads it owns. Hosts that
  * want a different session identity choose it on both ends, by pairing this
  * with the channels `resolveResourceId` option.
+ *
+ * Create the session with `threadId: thread.id` so it binds the mapped thread
+ * directly. Without it, a session scoped by tags or `projectPath` auto-selects
+ * or creates a different thread and is only switched onto the mapped one
+ * afterwards, leaving an extra empty thread behind.
  */
 export type ChannelSessionResolve = (ctx: ChannelSessionResolveContext) => Session<any> | Promise<Session<any>>;
 
@@ -240,6 +248,7 @@ export class AgentControllerChannels extends AgentChannels {
     chatThread: Thread;
     message: Message;
     defaultResourceId: string;
+    requestContext: RequestContext;
   }): string | (() => string | Promise<string>) {
     const base = super.resolveChannelResourceId(args);
     // The base returns a thunk only when a custom resolveResourceId was
@@ -306,9 +315,46 @@ export class AgentControllerChannels extends AgentChannels {
         ...(Object.keys(signalMetadata).length > 0 ? { metadata: signalMetadata } : {}),
         providerOptions,
       },
-      { requestContext },
+      // Await the agent's real acceptance decision. Stream setup (workspace,
+      // instructions, tools, model resolution) runs before the run span opens
+      // and before the user message is persisted; without this, a throw there
+      // rejects after the next tick and the message vanishes with no trace,
+      // no log, and no reply. Rejecting here reaches handleChatMessage's
+      // error boundary, which tells the sender.
+      { requestContext, requireDelivery: true },
     );
     await result.accepted;
+  }
+
+  /**
+   * Persist first-mention thread history into the controller session's own
+   * thread. The session is resolved once, before the rows are built, and is
+   * not guarded: a `resolveSession` refusal or resource mismatch propagates
+   * out of the hook to the handler's error boundary exactly as it would from
+   * the trigger dispatch a moment later. `onSessionStart` therefore runs
+   * before the history rows rather than at trigger dispatch.
+   *
+   * Rows are written straight to the session agent's memory (see the base
+   * class for why `session.sendSignal` cannot be used). Like the base class,
+   * a session agent without memory or a failed write returns `false` so the
+   * history still reaches the agent as the legacy text block.
+   */
+  protected override async persistThreadHistorySignals(args: {
+    buildSignals: () => Promise<AgentSignalInput[]>;
+    requestContext: RequestContext;
+    thread: StorageThreadType;
+    memory: { thread: string; resource: string };
+    logContext: ThreadHistoryLogContext;
+  }): Promise<boolean> {
+    const session = await this.getSessionForThread(args.thread, args.requestContext);
+    const memory = await session.machinery.getAgent().getMemory({ requestContext: args.requestContext });
+    if (!memory) return false;
+    return this.saveThreadHistorySignals({
+      buildSignals: args.buildSignals,
+      memory,
+      target: { thread: session.thread.getId() ?? args.memory.thread, resource: session.identity.getResourceId() },
+      logContext: args.logContext,
+    });
   }
 
   /**
@@ -365,10 +411,14 @@ export class AgentControllerChannels extends AgentChannels {
     // the execution principal on every continuation, not just on the message
     // that opened the session.
     const session = await this.getSessionForThread({ id: memory.thread, resourceId: memory.resource }, requestContext);
-    if (!session.approval.isArmed() || session.approval.getToolCallId() !== toolCallId) {
+    if (!session.approval.isArmed({ toolCallId })) {
       this.log(
         'info',
-        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval for toolCallId=${toolCallId})`,
+        `Ignoring stale tool ${decision === 'approve' ? 'approval' : 'denial'} action (no matching parked approval)`,
+        {
+          threadId: memory.thread,
+          toolCallId,
+        },
       );
       // Core still refuses to execute the action. The hook only lets a durable
       // host settle the attempt the click referred to, which is otherwise
@@ -404,6 +454,13 @@ export class AgentControllerChannels extends AgentChannels {
   ): Promise<Session<any>> {
     const controller = this.requireController();
     const channelResourceId = thread.resourceId;
+    if (this.resolveSession) {
+      await controller.requireAgentControllerFGA({
+        permission: MastraFGAPermissions.AGENT_CONTROLLER_EXECUTE,
+        requestContext,
+        resourceId: channelResourceId,
+      });
+    }
     // `createSession` is get-or-create keyed by resourceId, so follow-up messages
     // on the same thread reuse the cached session bound to this thread. The
     // dispatch requestContext must flow in: a dynamic workspace factory is
@@ -421,6 +478,9 @@ export class AgentControllerChannels extends AgentChannels {
           resourceId: channelResourceId,
           id: channelResourceId,
           ownerId: controller.id,
+          // The mapped thread is authoritative: bind it at creation so a scoped
+          // session never auto-selects or creates a different thread.
+          threadId: thread.id,
           requestContext,
         });
     // A session may only bind threads it owns, and the mapped thread's owner is
@@ -434,12 +494,34 @@ export class AgentControllerChannels extends AgentChannels {
       );
     }
     // Bind the mapped thread. Guard is mandatory: `switch` aborts any active
-    // run, so never re-switch when the session is already on this thread.
+    // run, so never re-switch when the session is already on this thread. The
+    // inbound context flows in so the bind's history load resolves memory as
+    // the stamped tenant.
     if (session.thread.getId() !== thread.id) {
-      await session.thread.switch({ threadId: thread.id });
+      await session.thread.switch({ threadId: thread.id, requestContext });
     }
     await this.runSessionStartHook(session, thread, requestContext);
     return session;
+  }
+
+  /**
+   * Only render Approve/Deny controls when the session actually arms a human
+   * gate. `allow` tools auto-approve and `deny` tools auto-decline inside the
+   * session run, so a card for them would offer a decision nobody is waiting
+   * on. The session is looked up in the controller's live registry by the
+   * run's session id; when it isn't live, controls are rendered as a fallback.
+   *
+   * @internal
+   */
+  override async shouldRenderToolApproval(
+    requestContext: RequestContext | undefined,
+    toolName: string,
+  ): Promise<boolean> {
+    const ctx = requestContext?.get('controller') as AgentControllerRequestContext | undefined;
+    if (!this.controller || !ctx?.sessionId) return true;
+    const session = await this.controller.getSession(ctx.sessionId, requestContext);
+    if (!session) return true;
+    return session.resolveToolApproval(toolName) === 'ask';
   }
 
   /**
@@ -480,7 +562,7 @@ export class AgentControllerChannels extends AgentChannels {
           // Best-effort by contract: a session that couldn't be configured
           // still answers the message, on whatever defaults it was created
           // with.
-          this.log('error', `Channel session-start hook failed for resourceId=${thread.resourceId}: ${error}`);
+          this.log('error', 'Channel session-start hook failed', { resourceId: thread.resourceId, error });
         }
       })();
       this.sessionStartRuns.set(session, run);

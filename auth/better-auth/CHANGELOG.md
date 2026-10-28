@@ -1,5 +1,57 @@
 # @mastra/auth-better-auth
 
+## 1.1.9
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`better-auth@^1.7.12` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.12) (from `^1.7.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.9-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`better-auth@^1.7.12` ↗︎](https://www.npmjs.com/package/better-auth/v/1.7.12) (from `^1.7.7`, in `dependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 1.1.8
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.8-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 1.1.7
+
+### Patch Changes
+
+- security: bump better-auth to ^1.7.7 and @modelcontextprotocol/sdk to ^1.32.1 for Vanta/Aikido findings (AIKIDO-2026-373183, AIKIDO-2026-261025, AIKIDO-2026-365378/156139/344432). ([#26773](https://github.com/mastra-ai/mastra/pull/26773))
+
+## 1.1.7-alpha.0
+
+### Patch Changes
+
+- security: bump better-auth to ^1.7.7 and @modelcontextprotocol/sdk to ^1.32.1 for Vanta/Aikido findings (AIKIDO-2026-373183, AIKIDO-2026-261025, AIKIDO-2026-365378/156139/344432). ([#26773](https://github.com/mastra-ai/mastra/pull/26773))
+
+## 1.1.6
+
+### Patch Changes
+
+- Fixed Better Auth so attackers cannot tell whether an account exists or send requests as a signed-in user from another site. Updated better-auth to 1.7.4. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
+## 1.1.6-alpha.0
+
+### Patch Changes
+
+- Fixed Better Auth so attackers cannot tell whether an account exists or send requests as a signed-in user from another site. Updated better-auth to 1.7.4. ([#24027](https://github.com/mastra-ai/mastra/pull/24027))
+
 ## 1.1.5
 
 ### Patch Changes

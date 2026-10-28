@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b",
-  "version": "0.12.0",
+  "version": "0.15.1",
   "description": "E2B cloud sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -26,13 +26,13 @@
     "test:watch": "vitest watch",
     "test": "vitest run ./src/**/*.integration.test.ts",
     "test:cloud": "pnpm test",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix ."
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "e2b": "^2.36.0",
-    "esbuild": "^0.28.0"
+    "e2b": "^2.59.0",
+    "esbuild": "^0.28.2"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
@@ -42,17 +42,16 @@
     "@mastra/core": "workspace:*",
     "@mastra/gcs": "workspace:*",
     "@mastra/s3": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

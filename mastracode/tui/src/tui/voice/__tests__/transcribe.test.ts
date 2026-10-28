@@ -90,6 +90,10 @@ describe('transcribeAudio provider routing', () => {
   });
 
   it('resolveProviderApiKey falls back to stored credentials when env is unset', () => {
+    // Force the key empty so the test is deterministic regardless of the host
+    // environment (e.g. a real GROQ_API_KEY exported on a dev machine), which
+    // otherwise gets printed in the assertion diff.
+    vi.stubEnv('GROQ_API_KEY', '');
     const authStorage = { getStoredApiKey: (p: string) => (p === 'groq' ? 'stored-groq' : undefined) } as any;
     expect(resolveProviderApiKey('groq', authStorage)).toBe('stored-groq');
   });

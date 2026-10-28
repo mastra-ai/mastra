@@ -34,6 +34,8 @@ export const TABLE_TRACE_BRANCHES_DELTA = 'mastra_trace_branches_delta';
 export const TABLE_METRIC_EVENTS = 'mastra_metric_events';
 export const TABLE_LOG_EVENTS = 'mastra_log_events';
 export const TABLE_SCORE_EVENTS = 'mastra_score_events';
+export const TABLE_SCORE_EVENTS_CURRENT = 'mastra_score_events_current';
+export const TABLE_SCORE_EVENTS_CURRENT_BACKFILL = 'mastra_score_events_current_backfill';
 export const TABLE_FEEDBACK_EVENTS = 'mastra_feedback_events';
 export const TABLE_DELETION_REQUESTS = 'mastra_deletion_requests';
 export const TABLE_METRIC_EVENTS_DELTA = 'mastra_metric_events_delta';
@@ -54,6 +56,7 @@ export const MV_TRACE_BRANCHES_DELTA = 'mastra_mv_trace_branches_delta';
 export const MV_METRIC_EVENTS_DELTA = 'mastra_mv_metric_events_delta';
 export const MV_LOG_EVENTS_DELTA = 'mastra_mv_log_events_delta';
 export const MV_SCORE_EVENTS_DELTA = 'mastra_mv_score_events_delta';
+export const MV_SCORE_EVENTS_CURRENT = 'mastra_mv_score_events_current';
 export const MV_FEEDBACK_EVENTS_DELTA = 'mastra_mv_feedback_events_delta';
 export const MV_DISCOVERY_VALUES = 'mastra_mv_discovery_values';
 export const MV_DISCOVERY_PAIRS = 'mastra_mv_discovery_pairs';
@@ -167,6 +170,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -180,7 +195,14 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SPAN_EVENTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` in core's \`buildPreview\` format, written
+  -- on every span ('' when there is nothing to preview). NULL on rows written before
+  -- the columns existed; readers build those from the payload columns.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String)
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -238,6 +260,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -251,7 +285,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_ROOTS} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+
+  -- Previews of \`input\` / \`output\` / \`error\` ('' when there is nothing to preview).
+  -- NULL on rows written before the columns existed.
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
+
+  -- traceId is second in the sort key, behind startedAt, so point lookups by
+  -- traceId (getRootSpan, trace deletes, trace-query root dedupe) need a skip
+  -- index to avoid scanning every granule.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -330,6 +375,18 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   isEvent            Bool DEFAULT false,
   startedAt          DateTime64(3, 'UTC'),
   endedAt            DateTime64(3, 'UTC'),
+  timeToFirstChunkMs Nullable(Float64),
+
+  -- Native span fields, stored as supplied (NULL when the producer set none)
+  externalParentSpanId Nullable(String),
+  resumedFromSpanId  Nullable(String),
+  model              LowCardinality(Nullable(String)),
+  provider           LowCardinality(Nullable(String)),
+  outcome            LowCardinality(Nullable(String)),
+  stopReason         LowCardinality(Nullable(String)),
+  stopReasonContext  Nullable(String),
+  timeToFirstTokenMs Nullable(Float64),
+  errorCount         Nullable(UInt32),
 
   -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
@@ -343,7 +400,12 @@ CREATE TABLE IF NOT EXISTS ${TABLE_TRACE_BRANCHES} (
   output             Nullable(String),
   error              Nullable(String),
   metadataRaw        Nullable(String),
-  requestContext     Nullable(String)
+  requestContext     Nullable(String),
+  inputPreview       Nullable(String),
+  outputPreview      Nullable(String),
+  errorPreview       Nullable(String),
+
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(endedAt)
@@ -613,7 +675,19 @@ CREATE TABLE IF NOT EXISTS ${TABLE_LOG_EVENTS} (
   -- Information-only JSON payloads
   data               Nullable(String),
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- Same ID drilldown indexes as metric_events: these columns are outside
+  -- the sort key, so without them every drilldown scans the time range.
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_threadId threadId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_resourceId resourceId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_userId userId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_organizationId organizationId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_experimentId experimentId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_runId runId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_sessionId sessionId TYPE bloom_filter(0.01) GRANULARITY 2,
+  INDEX idx_requestId requestId TYPE bloom_filter(0.01) GRANULARITY 2
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -658,22 +732,57 @@ FROM (
 }
 
 // ---------------------------------------------------------------------------
-// score_events — ReplacingMergeTree with scoreId dedup
+// score_events — ReplacingMergeTree history with durable per-score write order
 // ---------------------------------------------------------------------------
 
-export const SCORE_EVENTS_DDL = `
-CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
-  -- Timestamp
-  timestamp          DateTime64(3, 'UTC'),
+export const SCORE_EVENT_COLUMN_NAMES = [
+  'timestamp',
+  'scoreId',
+  'writeVersion',
+  'traceId',
+  'spanId',
+  'experimentId',
+  'scoreTraceId',
+  'entityType',
+  'entityId',
+  'entityName',
+  'entityVersionId',
+  'parentEntityVersionId',
+  'parentEntityType',
+  'parentEntityId',
+  'parentEntityName',
+  'rootEntityVersionId',
+  'rootEntityType',
+  'rootEntityId',
+  'rootEntityName',
+  'userId',
+  'organizationId',
+  'resourceId',
+  'runId',
+  'sessionId',
+  'threadId',
+  'requestId',
+  'environment',
+  'executionSource',
+  'serviceName',
+  'scorerId',
+  'scorerVersion',
+  'scoreSource',
+  'score',
+  'reason',
+  'tags',
+  'metadata',
+  'scope',
+] as const;
 
-  -- IDs
+const SCORE_EVENT_COLUMNS_DDL = `
+  timestamp          DateTime64(3, 'UTC'),
   scoreId            String,
+  writeVersion       UInt64 DEFAULT 0,
   traceId            Nullable(String),
   spanId             Nullable(String),
   experimentId       Nullable(String),
   scoreTraceId       Nullable(String),
-
-  -- Entity hierarchy
   entityType         LowCardinality(Nullable(String)),
   entityId           Nullable(String),
   entityName         Nullable(String),
@@ -686,8 +795,6 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   rootEntityType     LowCardinality(Nullable(String)),
   rootEntityId       Nullable(String),
   rootEntityName     Nullable(String),
-
-  -- Context
   userId             Nullable(String),
   organizationId     Nullable(String),
   resourceId         Nullable(String),
@@ -698,29 +805,52 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
   environment        LowCardinality(Nullable(String)),
   executionSource    LowCardinality(Nullable(String)),
   serviceName        LowCardinality(Nullable(String)),
-
-  -- Scorer identity
   scorerId           LowCardinality(String),
   scorerVersion      LowCardinality(Nullable(String)),
   scoreSource        LowCardinality(Nullable(String)),
-
-  -- Score value
   score              Float64,
-
-  -- Information-only
   reason             Nullable(String),
-
-  -- Query-relevant flexible fields
   tags               Array(LowCardinality(String)) DEFAULT [],
-
-  -- Information-only JSON payloads
   metadata           Nullable(String),
   scope              Nullable(String)
+`;
+
+export const SCORE_EVENTS_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS} (
+${SCORE_EVENT_COLUMNS_DDL},
+  INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
 ORDER BY (traceId, timestamp, scoreId)
 SETTINGS allow_nullable_key = 1
+`;
+
+export const SCORE_EVENTS_CURRENT_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT} (
+${SCORE_EVENT_COLUMNS_DDL},
+  INDEX idx_traceId traceId TYPE bloom_filter(0.01) GRANULARITY 1
+)
+ENGINE = ReplacingMergeTree(writeVersion)
+PARTITION BY cityHash64(scoreId) % 64
+ORDER BY scoreId
+`;
+
+export const SCORE_EVENTS_CURRENT_BACKFILL_DDL = `
+CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_CURRENT_BACKFILL} (
+  marker String,
+  completedAt DateTime64(3, 'UTC')
+)
+ENGINE = ReplacingMergeTree(completedAt)
+ORDER BY marker
+`;
+
+export const SCORE_EVENTS_CURRENT_MV_DDL = `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_CURRENT}
+TO ${TABLE_SCORE_EVENTS_CURRENT}
+AS
+SELECT ${SCORE_EVENT_COLUMN_NAMES.join(', ')}
+FROM ${TABLE_SCORE_EVENTS}
 `;
 
 export function buildScoreEventsDeltaDDL(): string {
@@ -730,7 +860,8 @@ CREATE TABLE IF NOT EXISTS ${TABLE_SCORE_EVENTS_DELTA} (
   ingestedAt         ${DELTA_INGESTED_AT_TYPE},
   traceId            Nullable(String),
   timestamp          DateTime64(3, 'UTC'),
-  scoreId            String
+  scoreId            String,
+  INDEX idx_scoreId scoreId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = MergeTree
 PARTITION BY toDate(ingestedAt)
@@ -742,12 +873,21 @@ SETTINGS allow_nullable_key = 1
 
 // Forward-only index: historical rows that predate this delta schema are not
 // backfilled into delta polling.
-export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
-  return `
-CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
-TO ${TABLE_SCORE_EVENTS_DELTA}
-AS
-SELECT
+//
+// A scoreId normally gets one cursorId. Retried or re-written inserts of the
+// same scoreId (client retries, Pub/Sub redelivery, writeVersion bumps) are
+// skipped while the scoreId is still in the delta table (until its TTL drops
+// the row, including after the score is deleted), and `LIMIT 1 BY`
+// collapses duplicates within a single insert block. This mirrors the DuckDB
+// store, which preserves cursorId on retry so the score is not re-emitted to
+// delta consumers. The inner `SELECT scoreId FROM mastra_score_events` refers
+// to the inserted block, so the delta lookup only touches the scoreIds being
+// written (served by idx_scoreId) instead of hashing the whole delta table.
+// Concurrent inserts of one scoreId can still race past the NOT IN check; the
+// read side treats a score's first delta row as its only cursor, so such
+// duplicates never reach consumers.
+export function buildScoreEventsDeltaMvQuery(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `SELECT
   ${buildDeltaCursorExpr(strategy, 'mastra_score_events_delta_cursor', 'scoreId')} AS cursorId,
   ingestedAt,
   traceId,
@@ -760,7 +900,20 @@ FROM (
     timestamp,
     scoreId
   FROM ${TABLE_SCORE_EVENTS}
-)
+  WHERE scoreId NOT IN (
+    SELECT scoreId FROM ${TABLE_SCORE_EVENTS_DELTA}
+    WHERE scoreId IN (SELECT scoreId FROM ${TABLE_SCORE_EVENTS})
+  )
+  LIMIT 1 BY scoreId
+)`;
+}
+
+export function buildScoreEventsDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string {
+  return `
+CREATE MATERIALIZED VIEW IF NOT EXISTS ${MV_SCORE_EVENTS_DELTA}
+TO ${TABLE_SCORE_EVENTS_DELTA}
+AS
+${buildScoreEventsDeltaMvQuery(strategy)}
 `;
 }
 
@@ -829,7 +982,11 @@ CREATE TABLE IF NOT EXISTS ${TABLE_FEEDBACK_EVENTS} (
 
   -- Information-only JSON payloads
   metadata           Nullable(String),
-  scope              Nullable(String)
+  scope              Nullable(String),
+
+  -- feedbackId is last in the sort key; id lookups (write versions, review
+  -- updates, deletes, trace-query dedupe) need a skip index.
+  INDEX idx_feedbackId feedbackId TYPE bloom_filter(0.01) GRANULARITY 1
 )
 ENGINE = ReplacingMergeTree
 PARTITION BY toDate(timestamp)
@@ -1068,6 +1225,8 @@ export const BASE_TABLE_DDL = [
   METRIC_EVENTS_DDL,
   LOG_EVENTS_DDL,
   SCORE_EVENTS_DDL,
+  SCORE_EVENTS_CURRENT_DDL,
+  SCORE_EVENTS_CURRENT_BACKFILL_DDL,
   FEEDBACK_EVENTS_DDL,
   DELETION_REQUESTS_DDL,
   DISCOVERY_VALUES_DDL,
@@ -1089,7 +1248,7 @@ export function buildAllTableDDL(): string[] {
   return [...BASE_TABLE_DDL, ...buildDeltaTableDDL()];
 }
 
-export const BASE_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL];
+export const BASE_MV_DDL = [TRACE_ROOTS_MV_DDL, TRACE_BRANCHES_MV_DDL, SCORE_EVENTS_CURRENT_MV_DDL];
 
 export function buildDeltaMvDDL(strategy: ClickHouseDeltaCursorStrategy): string[] {
   return [
@@ -1123,6 +1282,26 @@ export type MigrationEntry =
   | { kind: 'column'; table: string; name: string; sql: string }
   | { kind: 'index'; table: string; name: string; sql: string };
 
+/**
+ * Span columns added after the first span tables shipped, with their types.
+ * Present on span events, trace roots and trace branches.
+ */
+export const ADDED_SPAN_COLUMNS = [
+  ['inputPreview', 'Nullable(String)'],
+  ['outputPreview', 'Nullable(String)'],
+  ['errorPreview', 'Nullable(String)'],
+  ['timeToFirstChunkMs', 'Nullable(Float64)'],
+  ['externalParentSpanId', 'Nullable(String)'],
+  ['resumedFromSpanId', 'Nullable(String)'],
+  ['model', 'LowCardinality(Nullable(String))'],
+  ['provider', 'LowCardinality(Nullable(String))'],
+  ['outcome', 'LowCardinality(Nullable(String))'],
+  ['stopReason', 'LowCardinality(Nullable(String))'],
+  ['stopReasonContext', 'Nullable(String)'],
+  ['timeToFirstTokenMs', 'Nullable(Float64)'],
+  ['errorCount', 'Nullable(UInt32)'],
+] as const;
+
 const addColumn = (table: string, name: string, type: string): MigrationEntry => ({
   kind: 'column',
   table,
@@ -1130,14 +1309,40 @@ const addColumn = (table: string, name: string, type: string): MigrationEntry =>
   sql: `ALTER TABLE ${table} ADD COLUMN IF NOT EXISTS ${name} ${type}`,
 });
 
-const addBloomIndex = (table: string, name: string, column: string): MigrationEntry => ({
+const addBloomIndex = (table: string, name: string, column: string, granularity = 2): MigrationEntry => ({
   kind: 'index',
   table,
   name,
-  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY 2`,
+  sql: `ALTER TABLE ${table} ADD INDEX IF NOT EXISTS ${name} ${column} TYPE bloom_filter(0.01) GRANULARITY ${granularity}`,
 });
 
+const LOG_SKIP_INDEX_COLUMNS = [
+  'traceId',
+  'threadId',
+  'resourceId',
+  'userId',
+  'organizationId',
+  'experimentId',
+  'runId',
+  'sessionId',
+  'requestId',
+] as const;
+
 export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
+  // Added span columns. The trace_roots / trace_branches views copy span_events
+  // with SELECT *, so both targets get each column first and no write lands
+  // while the source has a column its targets lack.
+  ...ADDED_SPAN_COLUMNS.flatMap(([column, type]) => [
+    addColumn(TABLE_TRACE_ROOTS, column, type),
+    addColumn(TABLE_TRACE_BRANCHES, column, type),
+    addColumn(TABLE_SPAN_EVENTS, column, type),
+  ]),
+  // Trace branches, before span_events: its view copies span_events with SELECT *, so the target
+  // needs each column first. CREATE has always included these; listed so a table lacking them
+  // still gains them.
+  addColumn(TABLE_TRACE_BRANCHES, 'entityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'parentEntityVersionId', 'Nullable(String)'),
+  addColumn(TABLE_TRACE_BRANCHES, 'rootEntityVersionId', 'Nullable(String)'),
   // Span events
   addColumn(TABLE_SPAN_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SPAN_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
@@ -1155,15 +1360,23 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addColumn(TABLE_LOG_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_LOG_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
   // Scores
+  addColumn(TABLE_SCORE_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_SCORE_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_SCORE_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addBloomIndex(TABLE_SCORE_EVENTS, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_DELTA, 'idx_scoreId', 'scoreId', 1),
+  addBloomIndex(TABLE_SCORE_EVENTS_CURRENT, 'idx_traceId', 'traceId', 1),
   // Feedback
   addColumn(TABLE_FEEDBACK_EVENTS, 'writeVersion', 'UInt64 DEFAULT 0'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'entityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'reviewStatus', "LowCardinality(String) DEFAULT 'needs-review'"),
   addColumn(TABLE_FEEDBACK_EVENTS, 'parentEntityVersionId', 'Nullable(String)'),
   addColumn(TABLE_FEEDBACK_EVENTS, 'rootEntityVersionId', 'Nullable(String)'),
+  addBloomIndex(TABLE_FEEDBACK_EVENTS, 'idx_feedbackId', 'feedbackId', 1),
+  // Trace roots / branches: traceId sits behind startedAt in the sort key.
+  addBloomIndex(TABLE_TRACE_ROOTS, 'idx_traceId', 'traceId', 1),
+  addBloomIndex(TABLE_TRACE_BRANCHES, 'idx_traceId', 'traceId', 1),
   // Metric skip indexes — additive, instant DDL. Existing parts keep no index
   // until merged or `MATERIALIZE INDEX` is run; new parts are bloom-filtered
   // immediately. With normal retention turning over the table, the index
@@ -1177,6 +1390,8 @@ export const ALL_MIGRATIONS: readonly MigrationEntry[] = [
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_runId', 'runId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_sessionId', 'sessionId'),
   addBloomIndex(TABLE_METRIC_EVENTS, 'idx_requestId', 'requestId'),
+  // Log skip indexes — same ID drilldown set as metrics.
+  ...LOG_SKIP_INDEX_COLUMNS.map(column => addBloomIndex(TABLE_LOG_EVENTS, `idx_${column}`, column)),
   // Deletion requests: `predicateValues` is outside the sort key, so guard
   // lookups via `has()` need a skip index to avoid a per-scope full scan.
   addBloomIndex(TABLE_DELETION_REQUESTS, 'idx_predicateValues', 'predicateValues'),
@@ -1212,6 +1427,8 @@ export const ALL_TABLE_NAMES = [
   TABLE_METRIC_EVENTS,
   TABLE_LOG_EVENTS,
   TABLE_SCORE_EVENTS,
+  TABLE_SCORE_EVENTS_CURRENT,
+  TABLE_SCORE_EVENTS_CURRENT_BACKFILL,
   TABLE_FEEDBACK_EVENTS,
   TABLE_DELETION_REQUESTS,
   TABLE_METRIC_EVENTS_DELTA,
@@ -1255,6 +1472,7 @@ const SIGNAL_TTL_COLUMNS: Record<string, string> = {
   [TABLE_METRIC_EVENTS]: 'timestamp',
   [TABLE_LOG_EVENTS]: 'timestamp',
   [TABLE_SCORE_EVENTS]: 'timestamp',
+  [TABLE_SCORE_EVENTS_CURRENT]: 'timestamp',
   [TABLE_FEEDBACK_EVENTS]: 'timestamp',
 };
 
@@ -1263,7 +1481,7 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
   tracing: [TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_BRANCHES],
   logs: [TABLE_LOG_EVENTS],
   metrics: [TABLE_METRIC_EVENTS],
-  scores: [TABLE_SCORE_EVENTS],
+  scores: [TABLE_SCORE_EVENTS, TABLE_SCORE_EVENTS_CURRENT],
   feedback: [TABLE_FEEDBACK_EVENTS],
 };
 
@@ -1273,32 +1491,57 @@ const SIGNAL_TO_TABLES: Record<keyof RetentionConfig, string[]> = {
  * Replicated/Shared MergeTree tables).
  */
 export interface RetentionEntry {
+  operation: 'modify' | 'remove';
   table: string;
   column: string;
   days: number;
   sql: string;
 }
 
+export const RETENTION_MANAGED_TABLES = [...Object.keys(SIGNAL_TTL_COLUMNS), TABLE_DELETION_REQUESTS];
+
+const DELETION_REQUEST_RETENTION_MARGIN_DAYS = 30;
+const RETENTION_SIGNALS: (keyof RetentionConfig)[] = ['tracing', 'logs', 'metrics', 'scores', 'feedback'];
+
 export function buildRetentionEntries(retention: RetentionConfig): RetentionEntry[] {
   const entries: RetentionEntry[] = [];
+  const signalRetentionDays = new Map<keyof RetentionConfig, number>();
 
   for (const [signal, days] of Object.entries(retention)) {
     const safeDays = Math.floor(Number(days));
     if (!Number.isFinite(safeDays) || safeDays <= 0) continue;
 
-    const tables = SIGNAL_TO_TABLES[signal as keyof RetentionConfig];
+    const retentionSignal = signal as keyof RetentionConfig;
+    const tables = SIGNAL_TO_TABLES[retentionSignal];
     if (!tables) continue;
+    signalRetentionDays.set(retentionSignal, safeDays);
 
     for (const table of tables) {
       const col = SIGNAL_TTL_COLUMNS[table];
       if (!col) continue;
       entries.push({
+        operation: 'modify',
         table,
         column: col,
         days: safeDays,
         sql: `ALTER TABLE ${table} MODIFY TTL ${col} + INTERVAL ${safeDays} DAY`,
       });
     }
+  }
+
+  // Trace deletion requests cover every signal type and share a table-level TTL
+  // with item deletion requests. Any unbounded signal therefore makes the safe
+  // request lifetime unbounded. A request-kind-specific TTL could retire item
+  // requests independently if that distinction is needed later.
+  if (RETENTION_SIGNALS.every(signal => signalRetentionDays.has(signal))) {
+    const days = Math.max(...signalRetentionDays.values()) + DELETION_REQUEST_RETENTION_MARGIN_DAYS;
+    entries.push({
+      operation: 'modify',
+      table: TABLE_DELETION_REQUESTS,
+      column: 'requestedAt',
+      days,
+      sql: `ALTER TABLE ${TABLE_DELETION_REQUESTS} MODIFY TTL requestedAt + INTERVAL ${days} DAY`,
+    });
   }
 
   return entries;

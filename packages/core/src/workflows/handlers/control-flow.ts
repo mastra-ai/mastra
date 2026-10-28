@@ -1,4 +1,3 @@
-import { randomUUID } from 'node:crypto';
 import fastq from 'fastq';
 import type { done as DoneCallback } from 'fastq';
 import type { ActorSignal } from '../../auth/ee';
@@ -9,7 +8,7 @@ import { SpanType, createObservabilityContext, resolveObservabilityContext } fro
 import type { ObservabilityContext } from '../../observability';
 import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
-import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
+import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getStepResult } from '../step';
@@ -31,13 +30,27 @@ import type {
 } from '../types';
 import {
   createDeprecationProxy,
+  defineLazyWriter,
   runCountDeprecationMessage,
   getResumeLabelsByStepId,
   getSingleStepEntryId,
   omitPriorCompletionFields,
   resolveForeachConcurrency,
 } from '../utils';
+import { isWorkflowRunCanceled } from './entry';
+import { getForeachProgress, omitForeachProgress } from './foreach-progress';
+import type { ForeachProgress } from './foreach-progress';
 import type { ExecuteStepParams } from './step';
+
+/**
+ * Whether finished parallel arms and foreach items are checkpointed while their block is
+ * still running. These checkpoints only exist so `restart()` can skip work that already
+ * ran (#26214). Engines that replay memoized durable operations (Inngest) do not support
+ * `restart()`, so they skip the extra durable writes.
+ */
+function checkpointsMidBlockProgress(engine: DefaultExecutionEngine): boolean {
+  return !engine.requiresDurableContextSerialization();
+}
 
 function publishStepEvent(
   engine: DefaultExecutionEngine,
@@ -100,6 +113,8 @@ function executeChildEntry(
       return engine.executeAgent({ ...params, entry: child });
     case 'tool':
       return engine.executeTool({ ...params, entry: child });
+    case 'classifier':
+      return engine.executeClassifier({ ...params, entry: child });
     case 'mapping':
       return engine.executeMapping({ ...params, entry: child });
   }
@@ -261,6 +276,21 @@ export async function executeParallel(
       // Apply context changes from parallel step execution
       engine.applyMutableContext(executionContext, stepExecResult.mutableContext);
       Object.assign(stepResults, stepExecResult.stepResults);
+      if (stepExecResult.result.status === 'success' && checkpointsMidBlockProgress(engine)) {
+        // Checkpoint each finished arm so a crash before the others finish
+        // does not run it again on restart (#26214).
+        await engine.persistStepUpdate({
+          workflowId,
+          runId,
+          resourceId,
+          serializedStepGraph,
+          stepResults,
+          executionContext,
+          workflowStatus: 'running',
+          requestContext,
+          phase: `parallel-arm-end.${i}`,
+        });
+      }
       return stepExecResult.result;
     }),
   );
@@ -411,37 +441,41 @@ export async function executeConditional(
         });
 
         const operationId = `workflow.${workflowId}.conditional.${index}`;
+        const conditionCallId = globalThis.crypto.randomUUID();
         const context = createDeprecationProxy(
-          {
-            runId,
-            workflowId,
-            mastra: engine.mastra!,
-            requestContext,
-            actor,
-            inputData: prevOutput,
-            state: executionContext.state,
-            retryCount: -1,
-            ...createObservabilityContext({ currentSpan: evalSpan }),
-            getInitData: () => stepResults?.input as any,
-            getStepResult: getStepResult.bind(null, stepResults),
-            bail: (() => {}) as () => InnerOutput,
-            abort: () => {
-              abortController?.abort();
-            },
-            [PUBSUB_SYMBOL]: pubsub,
-            [STREAM_FORMAT_SYMBOL]: executionContext.format,
-            engine: engine.getEngineContext(),
-            abortSignal: abortController?.signal,
-            writer: new ToolStream(
-              {
-                prefix: 'workflow-step',
-                callId: randomUUID(),
-                name: 'conditional',
-                runId,
+          defineLazyWriter(
+            {
+              runId,
+              workflowId,
+              mastra: engine.mastra!,
+              requestContext,
+              actor,
+              inputData: prevOutput,
+              state: executionContext.state,
+              retryCount: -1,
+              ...createObservabilityContext({ currentSpan: evalSpan }),
+              getInitData: () => stepResults?.input as any,
+              getStepResult: getStepResult.bind(null, stepResults),
+              bail: (() => {}) as () => InnerOutput,
+              abort: () => {
+                abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
               },
-              outputWriter,
-            ),
-          },
+              [PUBSUB_SYMBOL]: pubsub,
+              [STREAM_FORMAT_SYMBOL]: executionContext.format,
+              engine: engine.getEngineContext(),
+              abortSignal: abortController?.signal,
+            },
+            () =>
+              new ToolStream(
+                {
+                  prefix: 'workflow-step',
+                  callId: conditionCallId,
+                  name: 'conditional',
+                  runId,
+                },
+                outputWriter,
+              ),
+          ),
           {
             paramName: 'runCount',
             deprecationMessage: runCountDeprecationMessage,
@@ -749,7 +783,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
 
     const stepExecResult = await executeChildEntry(engine, step, {
@@ -814,7 +848,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
 
     const evalSpan = await engine.createChildSpan({
@@ -832,39 +866,43 @@ export async function executeLoop(
       executionContext,
     });
 
+    const loopCallId = globalThis.crypto.randomUUID();
     isTrue = await condition(
       createDeprecationProxy(
-        {
-          workflowId,
-          runId,
-          mastra: engine.mastra!,
-          requestContext,
-          actor,
-          inputData: result.output,
-          state: executionContext.state,
-          retryCount: -1,
-          ...createObservabilityContext({ currentSpan: evalSpan }),
-          iterationCount: iteration + 1,
-          getInitData: () => stepResults?.input as any,
-          getStepResult: getStepResult.bind(null, stepResults),
-          bail: (() => {}) as () => InnerOutput,
-          abort: () => {
-            abortController?.abort();
-          },
-          [PUBSUB_SYMBOL]: pubsub,
-          [STREAM_FORMAT_SYMBOL]: executionContext.format,
-          engine: engine.getEngineContext(),
-          abortSignal: abortController?.signal,
-          writer: new ToolStream(
-            {
-              prefix: 'workflow-step',
-              callId: randomUUID(),
-              name: 'loop',
-              runId,
+        defineLazyWriter(
+          {
+            workflowId,
+            runId,
+            mastra: engine.mastra!,
+            requestContext,
+            actor,
+            inputData: result.output,
+            state: executionContext.state,
+            retryCount: -1,
+            ...createObservabilityContext({ currentSpan: evalSpan }),
+            iterationCount: iteration + 1,
+            getInitData: () => stepResults?.input as any,
+            getStepResult: getStepResult.bind(null, stepResults),
+            bail: (() => {}) as () => InnerOutput,
+            abort: () => {
+              abortController?.abort(WORKFLOW_CANCELLED_SYMBOL);
             },
-            outputWriter,
-          ),
-        },
+            [PUBSUB_SYMBOL]: pubsub,
+            [STREAM_FORMAT_SYMBOL]: executionContext.format,
+            engine: engine.getEngineContext(),
+            abortSignal: abortController?.signal,
+          },
+          () =>
+            new ToolStream(
+              {
+                prefix: 'workflow-step',
+                callId: loopCallId,
+                name: 'loop',
+                runId,
+              },
+              outputWriter,
+            ),
+        ),
         {
           paramName: 'runCount',
           deprecationMessage: runCountDeprecationMessage,
@@ -896,7 +934,7 @@ export async function executeLoop(
           },
         },
       });
-      return { status: 'canceled' } as unknown as StepResult<any, any, any, any>;
+      return { status: 'canceled' };
     }
   } while (entry.loopType === 'dowhile' ? isTrue : !isTrue);
 
@@ -987,9 +1025,13 @@ export async function executeForeach(
   const startTime = resume?.steps[0] === stepId ? undefined : Date.now();
   const resumeTime = resume?.steps[0] === stepId ? Date.now() : undefined;
 
+  // Items that finished before a crash, checkpointed on the running foreach result (#26214).
+  const restartProgress =
+    restart && stepResults[stepId]?.status === 'running' ? getForeachProgress(stepResults[stepId]) : undefined;
+
   const stepInfo = {
     // Same as executeStep: strip prior completion/suspend fields on re-entry.
-    ...omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>),
+    ...omitForeachProgress(omitPriorCompletionFields((stepResults[stepId] ?? {}) as Record<string, unknown>)),
     ...(resume?.steps[0] === stepId ? { resumePayload: resume?.resumePayload } : { payload: prevOutput }),
     ...(startTime ? { startedAt: startTime } : {}),
     ...(resumeTime ? { resumedAt: resumeTime } : {}),
@@ -1043,12 +1085,86 @@ export async function executeForeach(
 
   const prevForeachOutput = (prevPayload?.suspendPayload?.__workflow_meta?.foreachOutput ||
     []) as PersistedForeachStepResult[];
+  const foreachProgress: ForeachProgress = { ...restartProgress };
+  for (const [index, { output, nestedRunId }] of Object.entries(foreachProgress)) {
+    prevForeachOutput[Number(index)] = {
+      status: 'success',
+      output,
+      payload: prevOutput[Number(index)],
+      startedAt: Date.now(),
+      endedAt: Date.now(),
+      ...(nestedRunId ? { metadata: { nestedRunId } } : {}),
+    };
+  }
   const nestedRunIds: string[] = [];
   const prevResumeLabels = prevPayload?.suspendPayload?.__workflow_meta?.resumeLabels || {};
   const resumeLabels = getResumeLabelsByStepId(prevResumeLabels, stepId);
 
   const totalCount = prevOutput.length;
   let completedCount = 0;
+
+  /** The running foreach result that carries the checkpointed progress. */
+  const runningWithProgress = (): StepResult<any, any, any, any> =>
+    ({
+      payload: prevOutput,
+      startedAt: Date.now(),
+      ...stepInfo,
+      // A resumed foreach keeps the per-item suspend state that resumed siblings read.
+      ...(prevPayload?.suspendPayload !== undefined ? { suspendPayload: prevPayload.suspendPayload } : {}),
+      status: 'running',
+      metadata: { ...stepInfo.metadata, foreachProgress },
+    }) as StepResult<any, any, any, any>;
+
+  // Finished items are checkpointed on one serialized chain per foreach: at most one
+  // write in flight, and items that finish meanwhile are folded into the next write,
+  // which starts as soon as the previous one lands. A crash can then only lose items
+  // that finished during the write in flight, and writes never outpace storage (#26214).
+  const checkpointProgress = checkpointsMidBlockProgress(engine);
+  let checkpointDirty = false;
+  let checkpointClosed = false;
+  let checkpointChain: Promise<void> | undefined;
+  let checkpointError: Error | undefined;
+  let checkpointCount = 0;
+
+  const runCheckpointChain = async () => {
+    try {
+      while (checkpointDirty && !checkpointClosed) {
+        checkpointDirty = false;
+        executionContext.activeStepsPath[stepId] = executionContext.executionPath;
+        try {
+          await engine.persistStepUpdate({
+            workflowId,
+            runId,
+            resourceId,
+            serializedStepGraph,
+            stepResults: { ...stepResults, [stepId]: runningWithProgress() },
+            executionContext,
+            workflowStatus: 'running',
+            requestContext,
+            phase: `foreach-progress.${checkpointCount++}`,
+          });
+        } catch (err) {
+          checkpointError = err instanceof Error ? err : new Error(String(err));
+          engine.getLogger()?.error('Failed to checkpoint foreach progress', { stepId, runId, error: checkpointError });
+          checkpointClosed = true;
+        }
+      }
+    } finally {
+      checkpointChain = undefined;
+    }
+  };
+
+  const scheduleCheckpoint = () => {
+    if (!checkpointProgress || checkpointClosed) return;
+    checkpointDirty = true;
+    checkpointChain ??= runCheckpointChain();
+  };
+
+  /** Stops scheduling checkpoints and waits for the write in flight, if any. */
+  const drainCheckpoints = async () => {
+    checkpointClosed = true;
+    await checkpointChain;
+  };
 
   // Use a fastq callback-based queue for fluid concurrency.
   // Unlike the previous batch approach (Promise.all on slices), this starts the
@@ -1156,15 +1272,20 @@ export async function executeForeach(
     const { item, k, resumeToUse } = task;
 
     try {
-      // Honor cancellation before dispatching more work
-      if (abortController?.signal?.aborted) {
+      // Honor cancellation before dispatching more work. Items skip their start write
+      // while progress is checkpointed, so a remote cancel only shows up in storage.
+      const remoteCanceled =
+        !!checkpointChain &&
+        engine.honorsStoredCancellation(runId) &&
+        (await isWorkflowRunCanceled(engine, workflowId, runId));
+      if (abortController?.signal?.aborted || remoteCanceled) {
         if (!canceledResult) {
           canceledResult = {
             ...stepInfo,
             status: 'canceled',
             output: results,
             endedAt: Date.now(),
-          } as unknown as StepResult<any, any, any, any>;
+          };
         }
         killQueue();
         inFlight--;
@@ -1198,6 +1319,19 @@ export async function executeForeach(
       // round-trip through the workflow snapshot. For non-suspended results we
       // clear it to keep the snapshot small.
       prevForeachOutput[k] = result.status === 'suspended' ? result : { ...result, suspendPayload: {} };
+
+      if (result.status === 'success' && checkpointProgress) {
+        // Checkpoint finished items on the still-running foreach so a crash
+        // before the rest finish does not run them again on restart (#26214).
+        foreachProgress[k] = {
+          output: result.output,
+          ...(nestedRunIds[k] ? { nestedRunId: nestedRunIds[k] } : {}),
+        };
+        stepResults[stepId] = runningWithProgress();
+        // Not awaited: holding the queue slot for the write would change which
+        // items start before a sibling suspends and stops the queue.
+        scheduleCheckpoint();
+      }
     } catch (err) {
       const errorObj = err instanceof Error ? err : new Error(String(err));
       const thrownResult: PersistedForeachStepResult = {
@@ -1223,6 +1357,10 @@ export async function executeForeach(
   };
 
   const queue = fastq(worker, concurrency);
+
+  // Items skip their own start writes while progress is checkpointed, so the foreach
+  // records itself as running once, before any item starts.
+  scheduleCheckpoint();
 
   // Enqueue all items, skipping already-completed ones (resume case)
   for (let k = 0; k < prevOutput.length; k++) {
@@ -1278,6 +1416,17 @@ export async function executeForeach(
       resolveCompletion = resolve;
     });
   }
+  await drainCheckpoints();
+  // The progress checkpoints mark the foreach as active; it is not once every item has ended.
+  delete executionContext.activeStepsPath[stepId];
+  if (checkpointError && !errorResult && !canceledResult) {
+    errorResult = {
+      ...stepInfo,
+      status: 'failed',
+      error: checkpointError,
+      endedAt: Date.now(),
+    } as StepFailure<any, any, any, any>;
+  }
 
   // Handle cancellation
   if (canceledResult) {
@@ -1303,12 +1452,7 @@ export async function executeForeach(
         output: results,
       },
     });
-    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() } as unknown as StepResult<
-      any,
-      any,
-      any,
-      any
-    >;
+    return { ...stepInfo, status: 'canceled', output: results, endedAt: Date.now() };
   }
 
   // Handle error result first (matches previous behavior of returning on first error)

@@ -9,7 +9,7 @@ import type {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { cleanup, fireEvent, render, screen, waitFor } from '@testing-library/react';
 import { useState } from 'react';
-import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import type { TraceSignalManagement } from '../../trace-intelligence-context';
 import { TraceIntelligenceProvider } from '../../trace-intelligence-provider';
@@ -35,11 +35,6 @@ const archivedDefinition: TraceSignalDefinition = {
   status: 'archived',
 };
 
-beforeAll(() => {
-  if (typeof window.PointerEvent === 'undefined') {
-    window.PointerEvent = window.MouseEvent as unknown as typeof PointerEvent;
-  }
-});
 afterEach(() => cleanup());
 
 function management(overrides: Partial<TraceSignalManagement> = {}): TraceSignalManagement {
@@ -117,7 +112,7 @@ describe('TraceSignalSettingsButton', () => {
     expect(screen.queryByText('Current project')).toBeNull();
     expect(screen.queryByText('Built-in signals')).toBeNull();
     expect(screen.queryByText('Read only')).toBeNull();
-    fireEvent.click(screen.getByRole('button', { name: 'Close Panel' }));
+    fireEvent.click(screen.getByRole('button', { name: 'Close panel' }));
     await waitFor(() => expect(screen.queryByRole('complementary', { name: 'Trace signal settings' })).toBeNull());
   });
 

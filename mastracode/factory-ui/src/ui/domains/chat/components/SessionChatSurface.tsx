@@ -14,10 +14,11 @@ import { useChatMessagePreparation } from '../context/useChatMessagePreparation'
 import { useChatTranscript } from '../context/useChatTranscript';
 
 interface SessionChatSurfaceProps {
-  header: ReactNode;
+  header?: ReactNode;
   secondaryBar?: ReactNode;
   emptyState: ReactNode;
   composerLabel: string;
+  composerFooter?: ReactNode;
   className?: string;
   contentRef?: RefObject<HTMLDivElement | null>;
   contentOverlay?: ReactNode;
@@ -29,6 +30,7 @@ export function SessionChatSurface({
   secondaryBar,
   emptyState,
   composerLabel,
+  composerFooter,
   className,
   contentRef,
   contentOverlay,
@@ -48,7 +50,7 @@ export function SessionChatSurface({
         onReachStart: canLoadMore ? loadMore.load : undefined,
       }}
     >
-      <ChatShell.Bar>{header}</ChatShell.Bar>
+      {header && <ChatShell.Bar>{header}</ChatShell.Bar>}
       {secondaryBar && <ChatShell.Bar>{secondaryBar}</ChatShell.Bar>}
       <ChatShell.Stage>
         <ChatShell.Viewport>
@@ -64,12 +66,13 @@ export function SessionChatSurface({
                 </ChatMessageBoundary>
               </ChatShell.Column>
             </ChatShell.Content>
-            <ChatShell.Dock>
+            <ChatShell.Dock className="pb-[calc(var(--chat-gutter)+env(safe-area-inset-bottom))]">
               <ChatShell.ScrollButton aria-label="Jump to latest message" />
               <ChatShell.Column className={cn('gap-2', composerColumnClass)}>
                 <TaskPanel />
-                <div role="region" aria-label={composerLabel}>
+                <div role="region" aria-label={composerLabel} className="flex flex-col gap-2">
                   <ComposerPanel />
+                  {composerFooter}
                 </div>
               </ChatShell.Column>
             </ChatShell.Dock>

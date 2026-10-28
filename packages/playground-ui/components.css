@@ -1,0 +1,390 @@
+/* The components' stylesheet, uncompiled: tokens, plugins, custom utilities, base styles,
+ * keyframes. An app compiles it into its own sheet after `@import 'tailwindcss'`, with
+ * `sources.css` beside it. `sources.css` is not imported here: `src/index.css` builds
+ * `dist/style.css` from this file and would scan its own output. */
+@import 'tw-animate-css';
+
+@import './theme.css';
+
+@plugin '@tailwindcss/typography';
+
+@custom-variant dark (&:is(.dark *));
+
+@utility container {
+  margin-inline: auto;
+  padding-inline: 2rem;
+  @media (width >= theme(--breakpoint-3xl)) {
+    max-width: none;
+  }
+  @media (width >= 1400px) {
+    max-width: 1400px;
+  }
+}
+
+/* Assembled here, not in `theme.css`, so `--surface-rim` resolves against the
+ * element wearing the utility: a custom property that referenced it would be
+ * substituted once on the root and inherited as a finished string.
+ *
+ * `--surface-tint` is the state layer of a surface that cannot carry a
+ * pseudo-element — an `<input>`. An inset shadow paints over the element's own
+ * fill and under its content, so a wash there behaves like `state-layer`'s
+ * `::before` without needing a child, and it sits below the rim layer so the
+ * boundary keeps its resting weight while the fill moves. Each utility resets
+ * it, because a custom property would otherwise inherit into every raised
+ * surface nested inside a hovered one. */
+@utility shadow-raised {
+  --surface-tint: transparent;
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+
+@utility shadow-input {
+  --surface-tint: transparent;
+  --surface-rim: var(--field-rim);
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-raised);
+}
+
+@utility shadow-inset {
+  box-shadow:
+    inset 0 1px 0 var(--inset-highlight),
+    inset 0 0 0 1px var(--inset-rim);
+}
+
+@utility shadow-rim {
+  box-shadow: inset 0 0 0 1px var(--surface-rim);
+}
+
+@utility shadow-overlay {
+  --surface-tint: transparent;
+
+  box-shadow:
+    var(--elevation-lip),
+    inset 0 0 0 1px var(--surface-rim),
+    inset 0 0 0 9999px var(--surface-tint),
+    var(--elevation-overlay);
+}
+
+/* Interaction states for a surface that already has an opaque fill.
+ *
+ * A `hover:bg-fill-subtle` on such a surface *replaces* its `background-color`,
+ * so the rung composites over the parent instead of over the surface. Measured
+ * on `bg-muted`, that lands 3 levels darker in dark and 5 lighter in light — the
+ * hover inverts across themes. Layered, the same rung is +9/-9 from whatever it
+ * sits on, in both themes, whatever the resting rung.
+ *
+ * The layer is a pseudo-element rather than a `background-image` so it can still
+ * transition, and it stops a pixel short of the edge to leave the inset rim of
+ * `shadow-raised` visible. `isolation` is what keeps a negative z-index from
+ * escaping to an ancestor's stacking context.
+ *
+ * It does not touch the rim: `--surface-rim` inherits, so brightening it here
+ * would repaint the rim of every raised surface nested inside the hovered one.
+ *
+ * This and `--surface-tint` are the same rung by two mechanisms, and both stay:
+ * the pseudo-element transitions its colour and stops a pixel short of the rim,
+ * which is what a surface with content inside it wants; the tint paints edge to
+ * edge, cannot transition (a box-shadow list transitions as a whole, so the rim
+ * and the drops would animate with it), and is the only option for an element
+ * that cannot own a child — an `<input>`. Reach for this one unless the element
+ * is a bare control. */
+@utility state-layer {
+  position: relative;
+  isolation: isolate;
+
+  &::before {
+    content: '';
+    position: absolute;
+    inset: 1px;
+    z-index: -1;
+    border-radius: inherit;
+    pointer-events: none;
+    transition: background-color var(--duration-fast) var(--ease-out-custom);
+  }
+
+  &:not(:disabled, [aria-disabled='true']) {
+    &:hover::before,
+    &:focus-visible::before {
+      background-color: var(--fill-subtle);
+    }
+
+    &:active::before {
+      background-color: var(--fill);
+    }
+  }
+
+  @media (prefers-reduced-motion: reduce) {
+    &::before {
+      transition: none;
+    }
+  }
+}
+
+/* Pulls a ScrollArea's scrollbar ends in from a rounded container's corners, keyed to the same
+   radius steps as `rounded-*`: pair `rounded-xl` with `scrollbar-inset-xl`. At 0.7 of the radius
+   the corner's curve no longer cuts into the 6px bar. An arbitrary radius takes an arbitrary
+   inset, `scrollbar-inset-[22px]`. ScrollBar reads the variable and defaults to 0. */
+@utility scrollbar-inset-* {
+  --scroll-area-scrollbar-inset: calc(--value(--radius-*, [length]) * 0.7);
+}
+
+@utility rounded-studio-frame {
+  border-radius: var(--studio-frame-radius, 1.5rem);
+}
+
+@utility rounded-studio-panel {
+  border-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@utility rounded-tr-studio-panel {
+  border-top-right-radius: max(0px, calc(var(--studio-frame-radius, 1.5rem) - var(--studio-frame-inset, 0.5rem)));
+}
+
+@layer utilities {
+  /* Syntax roles from `syntaxHighlighter`, shared by the <Code> viewer and every CodeMirror editor. */
+  .syntax-comment {
+    color: var(--placeholder);
+  }
+
+  .syntax-string {
+    color: var(--syntax-string);
+  }
+
+  .syntax-literal {
+    color: var(--syntax-literal);
+  }
+
+  .syntax-keyword {
+    color: var(--syntax-keyword);
+  }
+
+  .syntax-name {
+    color: var(--syntax-name);
+  }
+
+  .syntax-definition {
+    color: var(--syntax-link);
+  }
+
+  .syntax-link {
+    color: var(--syntax-link);
+    text-decoration: underline;
+  }
+
+  .syntax-heading {
+    color: var(--syntax-link);
+    font-weight: bold;
+  }
+
+  .syntax-emphasis {
+    color: var(--foreground);
+    font-style: italic;
+  }
+
+  .syntax-strong {
+    color: var(--foreground);
+    font-weight: bold;
+  }
+
+  .syntax-strike {
+    text-decoration: line-through;
+  }
+
+  .syntax-invalid {
+    color: var(--destructive-foreground);
+  }
+}
+
+@layer base {
+  * {
+    border-color: var(--border);
+  }
+
+  :where(code, samp, pre, .font-mono) {
+    font-size-adjust: var(--font-mono-size-adjust, none);
+  }
+
+  kbd {
+    font-size-adjust: none;
+  }
+
+  /* Every lucide icon draws its line from one token instead of lucide's default
+     `stroke-width="2"`. The value is in the icon's 24-unit grid, so the line still
+     thickens a little as the icon grows. Components size icons; none sets a stroke. */
+  :where(svg.lucide) {
+    stroke-width: var(--icon-stroke-width);
+  }
+
+  :focus-visible {
+    outline: 1px solid var(--border-focus);
+    outline-offset: 0;
+  }
+
+  body {
+    background-color: var(--sidebar);
+    color: var(--foreground);
+    -webkit-font-smoothing: antialiased;
+    -moz-osx-font-smoothing: grayscale;
+  }
+
+  * {
+    scrollbar-width: thin;
+    scrollbar-color: var(--border-strong) transparent;
+  }
+  ::-webkit-scrollbar {
+    width: 10px;
+    height: 10px;
+  }
+  ::-webkit-scrollbar-track {
+    background: transparent;
+  }
+  ::-webkit-scrollbar-thumb {
+    background-color: var(--border-strong);
+    border-radius: 9999px;
+    border: 3px solid transparent;
+    background-clip: padding-box;
+  }
+  ::-webkit-scrollbar-thumb:hover {
+    background-color: var(--border-focus);
+  }
+  ::-webkit-scrollbar-corner {
+    background: transparent;
+  }
+}
+
+@utility wrap-break-word {
+  overflow-wrap: break-word;
+}
+
+@utility time-input {
+  &::-webkit-calendar-picker-indicator {
+    @apply cursor-pointer;
+    background: url('/icons/clock.svg') no-repeat center;
+    background-size: 1em 1em;
+    filter: invert(50%);
+  }
+}
+
+.thread-viewport > [data-radix-scroll-area-content] {
+  @apply flex flex-col items-center self-stretch bg-inherit;
+}
+
+[hidden]:where(:not([hidden='until-found'])) {
+  display: none !important;
+}
+
+.unset-position {
+  position: unset;
+}
+
+.react-flow__controls-button {
+  --xy-controls-button-color: var(--foreground);
+  --xy-controls-button-color-hover: var(--foreground);
+  --xy-controls-button-background-color: var(--surface-panel);
+  --xy-controls-button-background-color-hover: var(--gray-2);
+  --xy-controls-button-border-color: transparent;
+}
+
+/* Skeleton highlight: enters off the left edge and leaves off the right before it loops. It
+   moves `translate` (what Tailwind v4's translate utilities set), so it doesn't stack on the
+   skeleton's own `-translate-x-full` start position. */
+@keyframes shimmer {
+  from {
+    translate: -100% 0;
+  }
+
+  to {
+    translate: 100% 0;
+  }
+}
+
+/* Chart ghost sweep, in SVG user units (a 0-100 viewBox): a 40-unit band of light from off the
+   left edge to off the right, on the same 2s loop as the skeleton shimmer. */
+@keyframes chart-ghost-sweep {
+  from {
+    transform: translateX(-40px);
+  }
+
+  to {
+    transform: translateX(140px);
+  }
+}
+
+@keyframes click-ripple {
+  0% {
+    transform: scale(0);
+    opacity: 0.5;
+  }
+
+  100% {
+    transform: scale(1);
+    opacity: 0;
+  }
+}
+
+.animate-click-ripple {
+  animation: click-ripple 300ms ease-out forwards;
+}
+
+@keyframes fade-row-highlight {
+  0% {
+    background-color: var(--fill-hover);
+  }
+
+  100% {
+    background-color: transparent;
+  }
+}
+
+.animate-row-highlight {
+  animation: fade-row-highlight 2000ms ease-out forwards;
+}
+
+/* Sort arrows are "drawn" in their pointing direction: asc reveals from the
+   bottom up, desc from the top down. */
+@keyframes sort-arrow-reveal-up {
+  0% {
+    clip-path: inset(100% 0 0 0);
+    transform: translateY(20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+@keyframes sort-arrow-reveal-down {
+  0% {
+    clip-path: inset(0 0 100% 0);
+    transform: translateY(-20%);
+  }
+
+  100% {
+    clip-path: inset(0);
+    transform: translateY(0);
+  }
+}
+
+.animate-sort-arrow-up {
+  animation: sort-arrow-reveal-up 200ms var(--ease-out-custom) both;
+}
+
+.animate-sort-arrow-down {
+  animation: sort-arrow-reveal-down 200ms var(--ease-out-custom) both;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-sort-arrow-up,
+  .animate-sort-arrow-down {
+    animation: none;
+  }
+}

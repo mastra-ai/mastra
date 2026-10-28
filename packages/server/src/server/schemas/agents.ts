@@ -157,6 +157,10 @@ export const toolIdPathParams = z.object({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
 
+export const agentRunPathParams = agentIdPathParams.extend({
+  runId: z.string().min(1).describe('Unique identifier for the agent run'),
+});
+
 export const agentToolPathParams = agentIdPathParams.extend({
   toolId: z.string().describe('Unique identifier for the tool'),
 });
@@ -179,13 +183,14 @@ export const serializedProcessorSchema = z.object({
 
 /**
  * Schema for serialized tool with JSON schemas
- * Uses passthrough() to allow additional tool properties beyond core fields
  */
 export const serializedToolSchema = z.object({
   id: z.string(),
+  title: z.string().optional(),
   description: z.string().optional(),
   inputSchema: z.string().optional(),
   outputSchema: z.string().optional(),
+  requestContextSchema: z.string().optional(),
   requireApproval: z.boolean().optional(),
 });
 
@@ -230,12 +235,21 @@ const systemMessageSchema = typedPermissive<SystemMessage>(
  * Schema for model configuration in model list
  */
 const modelConfigSchema = z.object({
+  id: z.string(),
+  enabled: z.boolean(),
+  maxRetries: z.number(),
   model: z.object({
     modelId: z.string(),
     provider: z.string(),
     modelVersion: z.string(),
   }),
-  // Additional fields from AgentModelManagerConfig can be added here
+});
+
+const serializedSkillSchema = z.object({
+  name: z.string(),
+  description: z.string(),
+  license: z.string().optional(),
+  path: z.string(),
 });
 
 const agentEditorConfigSchema = z.union([
@@ -257,6 +271,11 @@ export const serializedAgentSchema = z.object({
   tools: z.record(z.string(), serializedToolSchema),
   agents: z.record(z.string(), serializedAgentDefinitionSchema),
   workflows: z.record(z.string(), serializedWorkflowSchema),
+  skills: z.array(serializedSkillSchema),
+  workspaceTools: z.array(z.string()),
+  browserTools: z.array(z.string()),
+  hasBrowser: z.boolean(),
+  workspaceId: z.string().optional(),
   inputProcessors: z.array(serializedProcessorSchema),
   outputProcessors: z.array(serializedProcessorSchema),
   provider: z.string().optional(),
@@ -264,9 +283,14 @@ export const serializedAgentSchema = z.object({
   modelVersion: z.string().optional(),
   supportsMemory: z.boolean().optional(),
   modelList: z.array(modelConfigSchema).optional(),
+  modelListEditable: z
+    .boolean()
+    .optional()
+    .describe('False when the model list comes from a function and cannot be reordered or edited'),
   defaultOptions: defaultOptionsSchema.optional(),
   defaultGenerateOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
   defaultStreamOptionsLegacy: z.record(z.string(), z.unknown()).optional(),
+  requestContextSchema: z.string().optional(),
   source: z.enum(['code', 'stored', 'fs']).optional(),
   status: z.enum(['draft', 'published', 'archived']).optional(),
   activeVersionId: z.string().optional(),
@@ -293,6 +317,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
+  modelReleaseDates: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -502,6 +527,10 @@ const toolCallActionBodySchema = z.object({
   requestContext: z.record(z.string(), z.unknown()).optional(),
   toolCallId: z.string(),
   format: z.string().optional(),
+  providerOptions: z.record(z.string(), z.record(z.string(), jsonValueSchema)).optional(),
+  modelSettings: typedPermissive<ModelSettings>(z.unknown()).optional(),
+  // Client tools must be re-sent on resume so the model can call them after the approval decision.
+  clientTools: typedPermissive<ToolsInput>(z.record(z.string(), z.unknown())).optional(),
 });
 const networkToolCallActionBodySchema = z.object({
   runId: z.string(),
@@ -757,13 +786,35 @@ export const sendAgentMessageBodySchema = z.union([
 ]);
 
 export const queueAgentMessageBodySchema = sendAgentMessageBodySchema;
+export const queueAgentSignalBodySchema = sendAgentSignalBodySchema;
 
-export const subscribeAgentThreadBodySchema = z.object({
+const agentThreadBodySchema = z.object({
   resourceId: z.string().optional(),
   threadId: z.string(),
 });
 
-export const abortAgentThreadBodySchema = subscribeAgentThreadBodySchema;
+export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withRunStatus: z.boolean().optional().describe('Emit thread-run-status chunks, including retained outcomes'),
+  withInitialHistory: z
+    .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
+    .optional()
+    .describe('Emit one thread-history chunk with stored messages before live parts'),
+});
+
+export const abortAgentThreadBodySchema = agentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  clearPendingSignals: z.boolean().optional(),
+  expectedRunId: z.string().optional(),
+});
+
+export const cancelPendingAgentSignalsBodySchema = agentThreadBodySchema.extend({
+  threadId: z.string().min(1),
+  signalIds: z.array(z.string().min(1)).min(1).max(1000),
+});
+
+export const cancelPendingAgentSignalsResponseSchema = z.object({
+  cancelledSignalIds: z.array(z.string()),
+});
 
 export const sendToolApprovalBodySchema = z.object({
   resourceId: z.string(),

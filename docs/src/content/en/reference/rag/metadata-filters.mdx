@@ -95,7 +95,7 @@ const results = await store.query({
     name: '$all',
     description: 'Matches arrays containing all elements',
     example: '{ tags: { $all: ["urgent", "high"] } }',
-    supportedBy: ['Astra', 'Pinecone', 'Upstash', 'MongoDB', 'OracleDB'],
+    supportedBy: ['Astra', 'Pinecone', 'Qdrant', 'Upstash', 'MongoDB', 'OracleDB'],
   },
   {
     name: '$elemMatch',
@@ -372,7 +372,7 @@ await store.createIndex({
 - [libSQL](/reference/vectors/libsql)
 - [MongoDB](/reference/vectors/mongodb)
 - [OracleDB](/reference/vectors/oracledb)
-- [PgStore](/reference/vectors/pg)
+- [PgVector](/reference/vectors/pg)
 - [Pinecone](/reference/vectors/pinecone)
 - [Qdrant](/reference/vectors/qdrant)
 - [Upstash](/reference/vectors/upstash)

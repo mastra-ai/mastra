@@ -122,17 +122,4 @@ describe('Select', () => {
 
     expect(screen.getByRole('combobox').classList.contains('custom-trigger')).toBe(true);
   });
-
-  it('composes the Button recipe on the trigger (unified text size + border focus)', () => {
-    renderSelect();
-
-    const trigger = screen.getByRole('combobox');
-    // The trigger inherits the button-native text size (`text-ui-smd`) for
-    // its default size.
-    expect(trigger.classList.contains('text-ui-smd')).toBe(true);
-    expect(trigger.classList.contains('text-ui-md')).toBe(false);
-    // Focus is the unified neutral border (from `buttonVariants`), not the old
-    // bespoke `focus-visible:border-border2`.
-    expect(trigger.className).toContain('focus-visible:border-neutral5/50');
-  });
 });

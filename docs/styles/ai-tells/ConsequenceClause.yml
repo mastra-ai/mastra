@@ -1,0 +1,58 @@
+---
+extends: existence
+message: "AI consequence clause: '%s'. End the sentence before the comma and state the effect as its own claim."
+level: error
+nonword: true
+ignorecase: true
+# The mechanism-and-inference sentence: a clause states what something
+# does, then ", so" introduces a second clause with a fresh full-noun
+# subject and its own present-tense verb that draws the conclusion for
+# the reader ("a replay checks out every commit it moves, so the sandbox
+# deny applies to a staged change too"; "the styles ship as release
+# assets, so the version pins itself"; "each test file names its
+# subject, so a rename fails the test"). Every sentence justifies itself
+# and no fact is left for the reader to draw a conclusion from.
+# ConsequenceParticiple reads the same move with a participle in place
+# of the conjunction ("leaving the cache cold").
+#
+# The plain form is two sentences: "A replay checks out every commit it
+# moves. The sandbox deny applies to a staged change too."
+#
+# Human technical prose uses ", so" constantly and follows it with a
+# pronoun or a purpose clause: ", so it," ", so you," ", so we," ", so
+# this," and ", so that" together are most of the 5,000 hits across the
+# seven pre-LLM corpora, and agent prose almost never writes ", so that."
+# The gate is what follows the conjunction: a determiner, a noun phrase
+# of up to three words, and a third-person present verb that is not a
+# copula or a modal. That refuses the human shapes ("so the order doesn't
+# matter," "so its installation is more involved," "so the zero value is
+# 0") and keeps the inference with its own verb. A word ending in "-ous,"
+# "-ss," "-ics," "-sis," or "-ness" is not read as the verb, nor is the
+# first half of a hyphenated compound ("so an apples-to-apples comparison
+# would be," "so the happens-before model isn't enough"), and a plural
+# noun followed by an auxiliary, a conjunction, or "of" ("so the results
+# are not comparable," "so the number of instructions") stays out. The
+# other prepositions stay in play because the verb takes them too
+# ("applies to," "depends on," "links directly to").
+#
+# Counts through Vale across the seven pre-LLM corpora: five on the Go
+# blog ("so the matcher uses the fallback language," "so the assignment
+# fails to compile"), five on the Go proposals ("so the invariant holds
+# trivially," "so the traceback proceeds normally"), thirty-two in the Go
+# standard library ("so the GC just observes nil pointers," "so the
+# compiler complains about a duplicate case"), three in the PEPs ("so the
+# tests connect to external news servers"), nine in the Rust RFCs ("so
+# the compiler accepts less code than it should," "so the path begins
+# with a root"), four in the Python standard library, and none in Pro
+# Git: fifty-eight, each the construction itself, at 0.3 per ten thousand
+# words or less. The same gate runs at about six per ten thousand words
+# on agent-written documentation.
+#
+# Measured out: the bare conjunction at 200 to 3,000 hits per corpus, the
+# pronoun subject ("so it," "so you," "so we") at 50 to 1,500, ", so
+# that" at 3 to 400, the determiner subject with a copula ("so the order
+# doesn't matter") at 30 to 500, and the elliptical "so no" ("so no
+# writes yet," "so no Unicode issues") at a dozen in the Go standard
+# library, all of them ordinary English.
+tokens:
+  - ", so (?:the|a|an|every|each|its|their|any|these|those) (?:(?!(?:is|are|has|have|does|do|was|were|will|can|must|may|should|might|would|could|this|that|its|always|unless|less|across|thus|perhaps|plus|minus|towards|versus|as|whereas|yes|us|his|of|to|in|on|for|with|from|at|by|per|and|or|but|not)\\b)[a-z'-]+ ){0,2}(?!(?:is|are|has|have|does|do|was|were|will|can|must|may|should|might|would|could|this|that|its|always|unless|less|across|thus|perhaps|plus|minus|towards|versus|as|whereas|yes|us|his|of|to|in|on|for|with|from|at|by|per|and|or|but|not)\\b)(?![a-z]+(?:ous|ss|ics|sis|ness)\\b)[a-z]+s\\b(?!-)(?! (?:are|were|have|had|will|would|can|could|must|may|might|should|do|don't|aren't|weren't|haven't|won't|cannot|need|also|then|that|which|who|and|or|of)\\b)"

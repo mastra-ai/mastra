@@ -1,21 +1,47 @@
+import type { ActivityOptions } from '@temporalio/workflow';
+
+export type WorkflowRuntimeOptions = {
+  startToCloseTimeout?: string;
+  retry?: ActivityOptions['retry'];
+};
+
 export interface WorkflowExecutionResult {
   status: 'success';
   input: unknown;
   result: unknown;
   state: unknown;
   steps: Record<string, unknown>;
+  /** Present when the run started with `recordStepMeta` on a Worker that records it. */
+  stepMeta?: Record<string, { startedAt: number; endedAt: number }>;
 }
+
+export type StepEntry = {
+  type: 'step';
+  step: { id: string };
+};
+
+export type ChildWorkflowEntry = {
+  type: 'childWorkflow';
+  workflowType: string;
+  /** The child's Mastra workflow id, its key in `steps`. Parallel output is keyed by `workflowType`. */
+  id: string;
+};
+
+export type ParallelEntry = StepEntry | ChildWorkflowEntry;
 
 export type WorkflowRuntime = ((startArgs?: {
   runId?: string;
   resourceId?: string;
   inputData?: unknown;
   initialState?: unknown;
+  recordStepMeta?: boolean;
 }) => Promise<WorkflowExecutionResult>) & {
   then(stepId: string): WorkflowRuntime;
+  thenWorkflow(workflowType: string, id: string): WorkflowRuntime;
+  map(mappingId: string, options?: unknown): WorkflowRuntime;
   sleep(durationOrFnId: number | string): WorkflowRuntime;
   sleepUntil(dateOrFnId: Date | number | string): WorkflowRuntime;
-  parallel(stepIds: string[]): WorkflowRuntime;
+  parallel(entries: ParallelEntry[]): WorkflowRuntime;
   branch(pairs: [string, string][]): WorkflowRuntime;
   dowhile(stepId: string, condId: string): WorkflowRuntime;
   dountil(stepId: string, condId: string): WorkflowRuntime;
@@ -27,7 +53,7 @@ export type WorkflowRuntime = ((startArgs?: {
 };
 
 export class TemporalExecutionEngine {
-  constructor(params?: { options?: { startToCloseTimeout?: string } });
+  constructor(params?: { options?: WorkflowRuntimeOptions });
   execute(params: {
     workflowId: string;
     runId?: string;
@@ -35,7 +61,8 @@ export class TemporalExecutionEngine {
     graph: { id: string; steps: unknown[] };
     input?: unknown;
     initialState?: unknown;
+    recordStepMeta?: boolean;
   }): Promise<WorkflowExecutionResult>;
 }
 
-export function createWorkflow(workflowId: string, options?: { startToCloseTimeout?: string }): WorkflowRuntime;
+export function createWorkflow(workflowId: string, options?: WorkflowRuntimeOptions): WorkflowRuntime;

@@ -1,10 +1,11 @@
 import { execFileSync } from 'node:child_process';
-import { randomBytes } from 'node:crypto';
 import { readFileSync } from 'node:fs';
 import { chmod, mkdir, readFile, writeFile, unlink } from 'node:fs/promises';
 import { createServer } from 'node:http';
 import { homedir, release } from 'node:os';
 import { join } from 'node:path';
+
+import * as p from '@clack/prompts';
 
 import { MASTRA_PLATFORM_API_URL } from './client.js';
 
@@ -24,15 +25,27 @@ export interface Credentials {
   currentOrgId?: string;
 }
 
+/** Which CLI entry point started the browser login. Sent to the platform for signup attribution. */
+export type LoginSource = 'create-mastra' | 'mastra-cli-create' | 'create-factory' | 'mastra-cli';
+
 export interface LoginOptions {
   skipOnInput?: boolean;
   allowLogin?: boolean;
+  timeoutMs?: number;
+  source?: LoginSource;
 }
 
 export class LoginCancelledError extends Error {
   constructor() {
-    super('Login skipped.');
+    super('Login cancelled.');
     this.name = 'LoginCancelledError';
+  }
+}
+
+class LoginTimedOutError extends Error {
+  constructor() {
+    super('Login timed out.');
+    this.name = 'LoginTimedOutError';
   }
 }
 
@@ -87,14 +100,21 @@ function isWSL(): boolean {
   }
 }
 
-function openBrowser(url: string) {
+export function openBrowser(url: string) {
   // Use execFileSync (shell: false) to avoid shell-injection via the URL.
   if (process.platform === 'darwin') {
     execFileSync('open', [url]);
   } else if (process.platform === 'win32') {
     execFileSync('cmd', ['/c', 'start', '', url]);
   } else if (isWSL()) {
-    execFileSync('powershell.exe', ['-NoProfile', '-Command', `Start-Process '${url.replace(/'/g, "''")}'`]);
+    // Pass the URL through the environment so it is never parsed as PowerShell code.
+    execFileSync(
+      'powershell.exe',
+      ['-NoProfile', '-NonInteractive', '-Command', 'Start-Process -FilePath $env:MASTRA_OPEN_URL'],
+      {
+        env: { ...process.env, MASTRA_OPEN_URL: url },
+      },
+    );
   } else {
     execFileSync('xdg-open', [url]);
   }
@@ -223,12 +243,12 @@ function listenForSkipInput(onSkip: () => void): () => void {
   return cleanup;
 }
 
-export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+async function loginAttempt(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
   signal?.throwIfAborted();
   console.info('\n   Logging in to Mastra...\n');
 
   const server = createServer();
-  const state = randomBytes(16).toString('hex');
+  const state = Buffer.from(globalThis.crypto.getRandomValues(new Uint8Array(16))).toString('hex');
 
   const port = await new Promise<number>(resolve => {
     server.listen(0, '127.0.0.1', () => {
@@ -239,7 +259,7 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
     });
   });
 
-  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}`;
+  const loginUrl = `${MASTRA_PLATFORM_API_URL}/v1/auth/login?product=cli&cli_port=${port}&state=${state}&source=${options.source ?? 'mastra-cli'}`;
   console.info(`   Opening browser...\n`);
   console.info(
     options.skipOnInput
@@ -277,9 +297,12 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
     const handleAbort = () => {
       finish(() => reject(signal?.reason instanceof Error ? signal.reason : new Error('Login cancelled')));
     };
-    const timeout = setTimeout(() => {
-      finish(() => reject(new Error('Login timed out (60s)')));
-    }, 60000);
+    const timeout = setTimeout(
+      () => {
+        finish(() => reject(new LoginTimedOutError()));
+      },
+      options.timeoutMs ?? 5 * 60 * 1000,
+    );
 
     signal?.addEventListener('abort', handleAbort, { once: true });
     if (signal?.aborted) {
@@ -326,6 +349,31 @@ export async function login(signal?: AbortSignal, options: LoginOptions = {}): P
   await saveCredentials(creds);
   console.info(`   Logged in as ${creds.user.email}\n`);
   return creds;
+}
+
+export async function login(signal?: AbortSignal, options: LoginOptions = {}): Promise<Credentials> {
+  while (true) {
+    try {
+      return await loginAttempt(signal, options);
+    } catch (error) {
+      if (!(error instanceof LoginTimedOutError)) throw error;
+    }
+
+    if (!isInteractive()) throw new LoginCancelledError();
+
+    const cancelValue = options.skipOnInput ? 'skip' : 'cancel';
+    const choice = await p.select({
+      message: 'Browser sign-in timed out.',
+      options: [
+        { value: 'retry', label: 'Retry' },
+        { value: cancelValue, label: options.skipOnInput ? 'Skip platform setup' : 'Cancel login' },
+      ],
+      initialValue: 'retry',
+      showInstructions: false,
+      signal,
+    });
+    if (p.isCancel(choice) || choice === cancelValue) throw new LoginCancelledError();
+  }
 }
 
 function isInteractive(): boolean {

@@ -71,7 +71,7 @@ export const initProject = async (args: InitArgs) => {
           directory: 'src/',
           components: ['agents', 'tools', 'workflows'],
           llmProvider: 'openai',
-          addExample: args.example === false ? false : true,
+          addExample: args.example !== false,
           mcpServer: args.mcp,
           versionTag,
           observability: args.observability,
@@ -91,7 +91,6 @@ export const initProject = async (args: InitArgs) => {
         observability: args.observability,
         observabilityProject: args.observabilityProject,
       });
-      return;
     },
     origin,
   });

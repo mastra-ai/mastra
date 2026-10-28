@@ -69,6 +69,14 @@ const response = await agent.generate('Run npm install')
     isOptional: true,
   },
   {
+    name: 'outputEncoding',
+    type: 'string',
+    description:
+      "Encoding used to decode command stdout and stderr. Accepts any WHATWG encoding label, such as `'gbk'` for native Windows commands on a Chinese (code page 936) system.",
+    isOptional: true,
+    defaultValue: "'utf-8'",
+  },
+  {
     name: 'timeout',
     type: 'number',
     description: 'Default timeout for operations in milliseconds',
@@ -135,7 +143,8 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
   {
     name: 'bwrapArgs',
     type: 'string[]',
-    description: 'Additional arguments to pass to bwrap (Linux only).',
+    description:
+      'Custom arguments to pass to bwrap (Linux only). When set, these replace the generated isolation arguments instead of extending them.',
     isOptional: true,
   },
   {
@@ -170,7 +179,8 @@ Configuration options for native OS sandboxing (used with `isolation: 'seatbelt'
   {
     name: 'status',
     type: 'ProviderStatus',
-    description: "'starting' | 'running' | 'stopped' | 'error'",
+    description:
+      "'pending' | 'initializing' | 'ready' | 'starting' | 'running' | 'stopping' | 'stopped' | 'destroying' | 'destroyed' | 'error'",
   },
   {
     name: 'workingDirectory',
@@ -299,8 +309,8 @@ const sandbox = new LocalSandbox({
 
 When isolation is enabled:
 
-- File writes are restricted to the workspace directory (and configured paths)
-- File reads are allowed everywhere (needed for system binaries)
+- File writes are restricted to the workspace directory, `readWritePaths`, and temporary locations. On macOS (seatbelt), writes are also allowed under `/private/tmp`, `/var/folders`, and `/private/var/folders`. On Linux (bubblewrap), `/tmp` is a private in-sandbox tmpfs that isn't written to the host.
+- File reads depend on the backend. On macOS (seatbelt), reads are allowed everywhere (needed for system binaries). On Linux (bubblewrap), the generated policy exposes only selected system paths (such as `/usr`, `/lib`, `/bin`, and essential `/etc` files), `readOnlyPaths`, `readWritePaths`, and the workspace. When `allowSystemBinaries` isn't `false`, the Node.js directory, `/opt`, and `/snap` are also visible. Other host paths aren't accessible. If you set `bwrapArgs`, it replaces the generated policy, so your arguments alone determine what's visible.
 - Network access is blocked by default
 - Process isolation prevents affecting the host system
 

@@ -63,6 +63,20 @@ export function isEnoentError(error: unknown): error is NodeJS.ErrnoException & 
 }
 
 /**
+ * Check if an error is an ENOTDIR error (a path component is not a directory,
+ * e.g. treating a file as a directory). Like ENOENT, this means the requested
+ * target cannot be resolved.
+ */
+export function isEnotdirError(error: unknown): error is NodeJS.ErrnoException & { code: 'ENOTDIR' } {
+  return (
+    error !== null &&
+    typeof error === 'object' &&
+    'code' in error &&
+    (error as NodeJS.ErrnoException).code === 'ENOTDIR'
+  );
+}
+
+/**
  * Check if an error is an EEXIST (file exists) error.
  */
 export function isEexistError(error: unknown): error is NodeJS.ErrnoException & { code: 'EEXIST' } {

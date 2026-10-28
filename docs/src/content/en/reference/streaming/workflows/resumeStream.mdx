@@ -69,6 +69,13 @@ if (result!.status === 'suspended') {
       {
         parameters: [
           {
+            name: 'rootSpanName',
+            type: 'string',
+            isOptional: true,
+            description:
+              "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+          },
+          {
             name: 'metadata',
             type: 'Record<string, any>',
             isOptional: true,
@@ -113,6 +120,17 @@ if (result!.status === 'suspended') {
       {
         parameters: [
           {
+            name: 'nestUnderParent',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
+          },
+        ],
+      },
+      {
+        parameters: [
+          {
             name: 'tags',
             type: 'string[]',
             isOptional: true,
@@ -141,7 +159,7 @@ if (result!.status === 'suspended') {
   },
   {
     name: 'stream.result',
-    type: 'Promise<WorkflowResult<TState, TOutput, TSteps>>',
+    type: 'Promise<WorkflowResult<TState, TInput, TOutput, TSteps>>',
     description: 'A promise that resolves to the final workflow result',
   },
   {

@@ -47,33 +47,41 @@ describe('Factory work item service boundary', () => {
     });
   });
 
-  it('maps Slack thread work items to the Slack board source', async () => {
-    vi.stubGlobal(
-      'fetch',
-      vi.fn().mockResolvedValue(
-        jsonResponse({
-          workItems: [
-            {
-              ...wireItem,
-              externalSource: {
-                integrationId: 'slack',
-                type: 'slack-thread',
-                externalId: 'slack:C-1:1700.42',
-                url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
-              },
-            },
-          ],
-        }),
-      ),
-    );
+  const factorySessionLink = 'https://factory.example.com/factories/project-1/workspaces/repo/threads/thread-1';
+
+  it.each([
+    [
+      'a thread',
+      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42' },
+      'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
+    ],
+    [
+      'a thread that saved its Factory session link',
+      { workspaceId: 'T-1', externalId: 'slack:C-1:1700.42', url: factorySessionLink },
+      'https://app.slack.com/client/T-1/C-1/thread/C-1-1700.42',
+    ],
+    ['a direct message', { workspaceId: 'T-1', externalId: 'slack:D-1:' }, 'https://app.slack.com/client/T-1/D-1'],
+    ['a card keyed before workspaces were stored', { externalId: 'slack:C-1:1700.42', url: factorySessionLink }, null],
+  ])('links a Slack card from %s', async (_case, slackSource, url) => {
+    const externalSource = { integrationId: 'slack', type: 'slack-thread', ...slackSource };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
 
     const [item] = (await listWorkItems('', 'project-1')).workItems;
 
-    expect(item).toMatchObject({
-      source: 'slack-thread',
-      sourceKey: 'slack:C-1:1700.42',
-      url: 'https://app.slack.com/client/T-1/C-1/thread/C-1-170042',
-    });
+    expect(item).toMatchObject({ source: 'slack-thread', sourceKey: slackSource.externalId, url });
+  });
+
+  it('keeps a GitLab merge request as a GitLab review card', async () => {
+    const externalSource = {
+      integrationId: 'gitlab',
+      type: 'pull-request',
+      externalId: 'gitlab-pr:encoded-5',
+      url: 'https://gitlab.com/group/project/-/merge_requests/5',
+    };
+    vi.stubGlobal('fetch', vi.fn().mockResolvedValue(jsonResponse({ workItems: [{ ...wireItem, externalSource }] })));
+
+    const [item] = (await listWorkItems('', 'project-1')).workItems;
+    expect(item).toMatchObject({ source: 'gitlab-pr', sourceKey: externalSource.externalId, url: externalSource.url });
   });
 
   it('sends provider-neutral external source data when creating a board item', async () => {

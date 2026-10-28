@@ -20,9 +20,11 @@ Do not guess a file path. Factory deployments can assemble `MastraFactory` from 
 
 Installed board definitions exclusively own lifecycle handlers: use `phases.<phase>.onEnter.<source>` and `phases.<phase>.onExit.<source>` in `defineBoard()`. Sources are `issue`, `pullRequest`, `linearIssue`, and `manual`. Work and Review install automatically with preferred defaults. Custom boards are installed through `boards`; `includeDefaultBoards: false` supports custom-only installations.
 
-Remove former global `rules.work` and `rules.review` configuration. Built-in customization is deferred: do not invent a board override API, derive replacements, or use reserved IDs `work` and `review`. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, Review declares none, and custom boards inherit nothing.
+Remove former global `rules.work` and `rules.review` configuration. There is no board override API. To customize Work or Review, set `includeDefaultBoards: false` and install a same-ID board, preferably using the exported `workBoard` or `reviewBoard` phases as the starting point. Keep the built-in phase names and roles unless the changed runtime and UI behavior is intentional. There is no global rules tree; `new MastraFactory({ rules })` throws. Set `configVersion` on `MastraFactory` for the audit label. Tool-result rules resolve only from the item's installed board: Work declares `submit_plan`, Review declares none, and custom boards inherit nothing.
 
-Work automatic intake requires both `linked_item_materialized` and `autoStartCandidate: true`. Do not remove these guards to reproduce the web deployment's former unconditional intake override. Noncandidate and manual arrivals stay unstarted merely from entering Intake; explicit issue triage and human-approval safeguards remain. Linear Intake and Review retain their existing defaults and guards.
+By default, every integration arrival stays in its routed board's initial phase (Intake for Work and Review) without starting or suggesting a run. This applies to GitHub, GitLab, Linear, Jira, and incident.io; explicit trusted GitHub review requests without an existing card go directly to Reviewing. Do not restore default arrival automation on the built-in boards.
+
+`authorTrusted` and `autoStartCandidate` remain available as metadata for custom rules. A custom board can add guarded arrival triage on its initial phase by checking both `context.cause === 'linked_item_materialized'` and `context.item.metadata?.autoStartCandidate === true`, then returning an `invokeSkill` decision for `factory-triage`.
 
 Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegration` constructor, and Linear on `LinearIntegration` or `PlatformLinearIntegration`, instead:
 
@@ -30,6 +32,8 @@ Configure GitHub on the installed `GithubIntegration` or `PlatformGithubIntegrat
 new PlatformGithubIntegration({ rules: { issueCommentCreated: null } });
 new PlatformLinearIntegration({ rules: { issueClosed: null } });
 ```
+
+When Platform credentials are present the factory installs `PlatformGithubIntegration` itself, so forward the same options with `new MastraFactory({ platform: { github: { rules, slug } } })` rather than constructing the integration; an explicit `integrations` entry with id `github` still takes precedence and makes that key a no-op, and the factory warns instead of ignoring it silently.
 
 GitHub and Linear integrations exclusively own their event handlers; configure them through constructor `rules[event]`, not the global Factory rules tree. Move former `rules.linear[event].onEvent` values to the Linear constructor's `rules[event]`. Every built-in handler is enabled automatically; never import or spread defaults just to install an integration. A function replaces the default, `null` disables that event's handler, and omitted or `undefined` values retain defaults. Constructors validate names and handler values, then copy and freeze the effective map per instance. Disabling a handler does not disable authentication, ingestion, or reconciliation bookkeeping. Linear fetch, platform polling, and reconciliation all use the owning instance's handlers.
 
@@ -64,9 +68,9 @@ Policy allowance cannot bypass topology, board ownership, ingress authorization,
 
 Every phase in `defineBoard()` requires `kind: 'resting' | 'working' | 'terminal'`; working phases also require `role`. Read `src/boards/define-board.ts` for validation and the derived helpers (`phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, `phaseForRole`) and `src/boards/semantics.ts` for how runtime resolves an item's board and phase. Work and Review declarations live in `src/boards/work.ts` and `src/boards/review.ts`.
 
-Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, sweeps, and supervisor findings; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
+Runtime reads the installed board's declarations for consent arming, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and sweeps; nothing name-matches phases, and custom boards inherit nothing from Work. `initialPhase` must be resting. Unknown board or phase fails closed: consent is requested, nothing is cleaned up, no seat is started or revoked.
 
-To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, sweeps, or supervisor. Bound transition tools accept custom phase identifiers and validate live membership and topology on the item's installed board.
+To make a custom phase terminal or seat an agent in it, change its `kind`/`role` in the definition. Do not add phase-name checks to the transition service, dispatcher, or sweeps. Bound transition tools accept custom phase identifiers and validate live membership and topology on the item's installed board.
 
 ## Execute a custom board
 
@@ -78,11 +82,11 @@ Working roles identify bindings on the shared Code Agent, not separately configu
 
 Verify the actual journey: initial entry, lifecycle kickoff, the declared role's phase signal and binding, a bound transition tool, role handoff, completed tool-result ingestion, deferred transition, and terminal cleanup. Polling and persisted-message ingestion resolve the single current phase through the installed board. Live binding, reassignment, revision, topology, approval, and external-author checks still apply. Custom roles named `triage` do not inherit Work classification requirements. A tool-result handler receives normalized `result.status` and `result.value`; it does not receive raw tool arguments. Check the result payload needed by the board's policy rather than treating every completed tool call as business success.
 
-Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, `held-waiting` is Work-specific, and built-in board replacement/customization is unsupported. Existing integration defaults do not automatically route events to a custom board.
+Keep the remaining limits explicit: `factory-ui` still uses built-in stages and roles, completion metrics still use Work's `done` phase, and `held-waiting` is Work-specific. Existing integration defaults do not automatically route events to a custom board.
 
 ## Change a built-in handler
 
-Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. There is no override mechanism for board-owned handlers, including Work's `submit_plan` tool-result rule: change the installed definition itself (`src/boards/work.ts`, handler in `src/boards/work-tool-rules.ts`) or install a custom board that declares its own `tools`.
+Integration overrides (`rules[event]` on the GitHub/Linear constructor) replace one event handler; they do not compose with the built-in handler, and siblings remain unchanged. To replace a board-owned handler, set `includeDefaultBoards: false` and install a same-ID board with the desired handler. For Work's `submit_plan` tool-result rule, declare `tools.submit_plan.onResult` on the replacement `work` board. The stock handler lives in `src/boards/work-tool-rules.ts`.
 
 Before changing a built-in handler:
 

@@ -1,6 +1,6 @@
 {
   "name": "@mastra/code-sdk",
-  "version": "1.7.3-alpha.0",
+  "version": "1.16.0",
   "description": "Mastra Code SDK: the agent core behind Mastra Code (everything except the TUI) — build your own UIs and surfaces on top of it",
   "type": "module",
   "publishConfig": {
@@ -18,6 +18,12 @@
         "default": "./dist/index.js"
       }
     },
+    "./schedules": {
+      "import": {
+        "types": "./dist/schedules/index.d.ts",
+        "default": "./dist/schedules/index.js"
+      }
+    },
     "./*": {
       "import": {
         "types": "./dist/*.d.ts",
@@ -30,8 +36,12 @@
     "build:lib": "tsdown --silent --config tsdown.config.ts",
     "check": "tsc --noEmit",
     "test": "vitest run",
-    "lint": "oxlint . && eslint .",
-    "lint:fix": "oxlint --fix . && eslint --fix ."
+    "test:acp": "vitest run --config vitest.acp.config.ts",
+    "lint": "oxlint --type-aware .",
+    "lint:fix": "oxlint --type-aware --fix .",
+    "build:acp:dev": "node scripts/build-acp-dev.mjs",
+    "test:acp:conformance": "node scripts/run-acp-conformance.mjs",
+    "check:acp": "tsc --noEmit -p tsconfig.acp.json"
   },
   "keywords": [],
   "author": "",
@@ -46,15 +56,15 @@
     "url": "https://github.com/mastra-ai/mastra/issues"
   },
   "dependencies": {
-    "@agentclientprotocol/sdk": "^0.21.0",
-    "@ai-sdk/amazon-bedrock": "^3.0.111",
-    "@ai-sdk/anthropic": "^3.0.103",
-    "@ai-sdk/openai": "^3.0.88",
-    "@ai-sdk/openai-compatible": "^2.0.62",
-    "@ast-grep/napi": "^0.42.0",
-    "@aws-sdk/credential-providers": "^3.1095.0",
+    "@agentclientprotocol/sdk": "^0.21.1",
+    "@ai-sdk/amazon-bedrock": "^5.0.124",
+    "@ai-sdk/anthropic": "^3.0.135",
+    "@ai-sdk/openai": "^3.0.131",
+    "@ai-sdk/openai-compatible": "^2.0.87",
+    "@ast-grep/napi": "^0.42.3",
+    "@aws-sdk/credential-providers": "^3.1156.0",
     "@mastra/agent-browser": "workspace:*",
-    "@mastra/core": "workspace:*",
+    "@mastra/client-js": "workspace:*",
     "@mastra/duckdb": "workspace:*",
     "@mastra/fastembed": "workspace:*",
     "@mastra/github-signals": "workspace:*",
@@ -67,29 +77,33 @@
     "@mastra/schema-compat": "workspace:*",
     "@mastra/stagehand": "workspace:*",
     "@mastra/tavily": "workspace:*",
-    "ai": "^6.0.236",
+    "ai": "^6.0.315",
     "execa": "^9.6.1",
     "libsql": "^0.5.29",
-    "posthog-node": "^5.46.1",
-    "smol-toml": "1.8.0",
-    "tokenx": "^1.3.0",
+    "posthog-node": "^5.57.1",
+    "smol-toml": "1.9.0",
+    "tokenx": "^1.6.0",
     "vscode-jsonrpc": "^8.2.1",
-    "vscode-languageserver-protocol": "^3.17.5",
-    "yaml": "^2.7.1",
-    "zod": "^4.3.6"
+    "vscode-languageserver-protocol": "^3.18.5",
+    "yaml": "^2.9.1",
+    "zod": "catalog:"
   },
   "devDependencies": {
+    "@copilotkit/aimock": "^1.46.0",
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@libsql/client": "^0.18.0",
-    "@types/node": "22.20.1",
-    "eslint": "^10.7.0",
-    "tsdown": "0.22.9",
+    "@mastra/core": "workspace:*",
+    "@types/node": "22.19.15",
+    "msw": "^2.12.11",
+    "tsdown": "0.23.1",
     "tsx": "catalog:",
     "typescript": "catalog:ts6",
-    "typescript-eslint": "^8.57.0",
     "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "engines": {
     "node": ">=22.19.0"

@@ -2,7 +2,7 @@ import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { TabbedContainer } from './index';
 import { DataList } from '@/ds/components/DataList/data-list';
-import type { DataListSortDirection } from '@/ds/components/DataList/data-list';
+import type { DataListSort } from '@/ds/components/DataList/data-list';
 import { cn } from '@/lib/utils';
 
 const meta: Meta<typeof TabbedContainer> = {
@@ -53,13 +53,15 @@ const manyRuns = Array.from({ length: 8 }, (_, index) =>
   SAMPLE_RUNS.map(run => ({ ...run, id: `${run.id}_${index}` })),
 ).flat();
 
+type RunSortKey = keyof (typeof SAMPLE_RUNS)[number];
+
 type RunSort = {
-  key: keyof (typeof SAMPLE_RUNS)[number];
-  direction: DataListSortDirection;
+  key: RunSortKey;
+  value: DataListSort;
 };
 
 function sortRuns(runs: typeof manyRuns, sort: RunSort) {
-  const multiplier = sort.direction === 'ascending' ? 1 : -1;
+  const multiplier = sort.value === 'asc' ? 1 : -1;
   return runs.toSorted((left, right) => left[sort.key].localeCompare(right[sort.key]) * multiplier);
 }
 
@@ -70,8 +72,8 @@ const STATUS_OPTIONS = [
 
 const PanelContent = ({ title, description }: { title: string; description: string }) => (
   <div className="grid gap-1">
-    <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>{title}</h2>
-    <p className="text-ui-sm text-neutral3">{description}</p>
+    <h2 className="text-subheading text-foreground">{title}</h2>
+    <p className="text-caption text-muted-foreground">{description}</p>
   </div>
 );
 
@@ -143,7 +145,8 @@ export const SearchAndFilter: Story = {
   render: function SearchAndFilterStory() {
     const [runSearch, setRunSearch] = useState('');
     const [selectedStatuses, setSelectedStatuses] = useState<string[]>([]);
-    const [runSort, setRunSort] = useState<RunSort>({ key: 'createdAt', direction: 'descending' });
+    const [runSort, setRunSort] = useState<RunSort>({ key: 'createdAt', value: 'desc' });
+    const handleSort = (value: DataListSort, key: string) => setRunSort({ key: key as RunSortKey, value });
     const runs = sortRuns(
       manyRuns.filter(
         run =>
@@ -158,8 +161,10 @@ export const SearchAndFilter: Story = {
         <TabbedContainer defaultTab="overview">
           <TabbedContainer.Panel value="overview" label="Overview">
             <div className="grid gap-1">
-              <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>Evaluation overview</h2>
-              <p className="text-ui-sm text-neutral3">Any product content can share the frame with data-heavy tabs.</p>
+              <h2 className="text-subheading text-foreground">Evaluation overview</h2>
+              <p className="text-caption text-muted-foreground">
+                Any product content can share the frame with data-heavy tabs.
+              </p>
             </div>
           </TabbedContainer.Panel>
           <TabbedContainer.DataList
@@ -184,27 +189,30 @@ export const SearchAndFilter: Story = {
           >
             <DataList.Top>
               <DataList.SortableTopCell
-                sortDirection={runSort.key === 'id' ? runSort.direction : undefined}
-                onSortChange={direction => setRunSort({ key: 'id', direction })}
+                sortKey="id"
+                sort={runSort.key === 'id' ? runSort.value : undefined}
+                onSortChange={handleSort}
               >
                 ID
               </DataList.SortableTopCell>
               <DataList.SortableTopCell
-                sortDirection={runSort.key === 'input' ? runSort.direction : undefined}
-                onSortChange={direction => setRunSort({ key: 'input', direction })}
+                sortKey="input"
+                sort={runSort.key === 'input' ? runSort.value : undefined}
+                onSortChange={handleSort}
               >
                 Input
               </DataList.SortableTopCell>
               <DataList.SortableTopCell
-                sortDirection={runSort.key === 'status' ? runSort.direction : undefined}
-                onSortChange={direction => setRunSort({ key: 'status', direction })}
+                sortKey="status"
+                sort={runSort.key === 'status' ? runSort.value : undefined}
+                onSortChange={handleSort}
               >
                 Status
               </DataList.SortableTopCell>
               <DataList.SortableTopCell
-                sortDirection={runSort.key === 'createdAt' ? runSort.direction : undefined}
-                defaultSortDirection="descending"
-                onSortChange={direction => setRunSort({ key: 'createdAt', direction })}
+                sortKey="createdAt"
+                sort={runSort.key === 'createdAt' ? runSort.value : undefined}
+                onSortChange={handleSort}
               >
                 Date
               </DataList.SortableTopCell>
@@ -223,6 +231,69 @@ export const SearchAndFilter: Story = {
           </TabbedContainer.DataList>
           <TabbedContainer.DataList value="scores" label="Scores" columns="auto minmax(0,1fr) auto auto">
             <ScoreRows />
+          </TabbedContainer.DataList>
+        </TabbedContainer>
+      </div>
+    );
+  },
+};
+
+export const SearchPerTab: Story = {
+  render: function SearchPerTabStory() {
+    const [runSearch, setRunSearch] = useState('');
+    const [scoreSearch, setScoreSearch] = useState('');
+    const runs = SAMPLE_RUNS.filter(run => run.input.toLowerCase().includes(runSearch.toLowerCase()));
+    const scores = SAMPLE_SCORES.filter(score => score.scorer.toLowerCase().includes(scoreSearch.toLowerCase()));
+
+    return (
+      <div className="flex w-full max-w-4xl">
+        <TabbedContainer defaultTab="runs">
+          <TabbedContainer.DataList
+            value="runs"
+            label="Runs"
+            columns="auto minmax(0,1fr) auto"
+            fit="container"
+            search={{ label: 'Search runs', placeholder: 'Search runs', value: runSearch, onSearch: setRunSearch }}
+          >
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Input</DataList.TopCell>
+              <DataList.TopCell>Status</DataList.TopCell>
+            </DataList.Top>
+            {runs.map(run => (
+              <DataList.RowButton key={run.id} onClick={() => {}}>
+                <DataList.IdCell id={run.id} />
+                <DataList.TextCell>{run.input}</DataList.TextCell>
+                <DataList.Cell>{run.status}</DataList.Cell>
+              </DataList.RowButton>
+            ))}
+            {runs.length === 0 && <DataList.NoMatch message="No runs match the search" />}
+          </TabbedContainer.DataList>
+          <TabbedContainer.DataList
+            value="scores"
+            label="Scores"
+            columns="auto minmax(0,1fr) auto"
+            fit="container"
+            search={{
+              label: 'Search scores',
+              placeholder: 'Search scorers',
+              value: scoreSearch,
+              onSearch: setScoreSearch,
+            }}
+          >
+            <DataList.Top>
+              <DataList.TopCell>ID</DataList.TopCell>
+              <DataList.TopCell>Scorer</DataList.TopCell>
+              <DataList.TopCell>Score</DataList.TopCell>
+            </DataList.Top>
+            {scores.map(score => (
+              <DataList.RowButton key={score.id} onClick={() => {}}>
+                <DataList.IdCell id={score.id} />
+                <DataList.TextCell>{score.scorer}</DataList.TextCell>
+                <DataList.NumberCell>{score.score.toFixed(2)}</DataList.NumberCell>
+              </DataList.RowButton>
+            ))}
+            {scores.length === 0 && <DataList.NoMatch message="No scores match the search" />}
           </TabbedContainer.DataList>
         </TabbedContainer>
       </div>
@@ -265,8 +336,10 @@ export const OverflowAndClosable: Story = {
             tab.value === 'overview' ? (
               <TabbedContainer.Panel key={tab.value} value={tab.value} label={tab.label} onClose={closeTab(tab.value)}>
                 <div className="grid gap-1">
-                  <h2 className={cn('text-ui-md', 'font-medium', 'text-neutral5')}>Workspace overview</h2>
-                  <p className="text-ui-sm text-neutral3">Arbitrary content shares the same closable tab rail.</p>
+                  <h2 className="text-subheading text-foreground">Workspace overview</h2>
+                  <p className="text-caption text-muted-foreground">
+                    Arbitrary content shares the same closable tab rail.
+                  </p>
                 </div>
               </TabbedContainer.Panel>
             ) : (

@@ -39,11 +39,7 @@ app.listen(4111, () => {
 })
 ```
 
-:::note
-
-Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`.
-
-:::
+Express requires `express.json()` middleware for JSON body parsing. Add it before creating the `MastraServer`. `init()` doesn't start Mastra's background workers. To run [scheduled workflows](/docs/workflows/scheduled-workflows), agent schedules, or event listeners, call `await mastra.startWorkers()` after the server starts listening. See [Start background workers](/docs/server/server-adapters#start-background-workers).
 
 ## Constructor parameters
 
@@ -66,7 +62,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
     type: 'string',
     description: 'Route path prefix (e.g., `/api/v2`)',
     isOptional: true,
-    defaultValue: "''",
+    defaultValue: "'/api'",
   },
   {
     name: 'openapiPath',
@@ -110,9 +106,10 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
   {
     name: 'mcpOptions',
     type: 'MCPOptions',
-    typeDescription: '{ serverless?: boolean, sessionIdGenerator?: () => string }',
+    typeDescription:
+      '{ setRequestAuth?: (req, requestContext) => void | Promise<void>, serverless?: boolean, sessionIdGenerator?: () => string }',
     description:
-      'MCP transport options. Set `serverless: true` for stateless environments like Cloudflare Workers or Vercel Edge.',
+      'MCP transport options, such as `setRequestAuth` to control what tools see as `context.mcp.extra.authInfo`.',
     isOptional: true,
   },
 ]}
@@ -126,7 +123,7 @@ Express requires `express.json()` middleware for JSON body parsing. Add it befor
 | Context storage | `res.locals` | `c.get()` / `c.set()` |
 | Middleware signature | `(req, res, next)` | `(c, next)` |
 | Streaming | `res.write()` / `res.end()` | `stream()` helper |
-| AbortSignal | Created from `req.on('close')` | `c.req.raw.signal` |
+| AbortSignal | Created from `res.on('close')`, aborted only when the response didn't finish | `c.req.raw.signal` |
 
 ## Adding custom routes
 
@@ -203,7 +200,7 @@ Available properties on `res.locals`:
 | `mastra` | Mastra instance |
 | `requestContext` | Request context map |
 | `abortSignal` | Request cancellation signal |
-| `tools` | Available tools |
+| `registeredTools` | Tools registered with the adapter |
 | `taskStore` | Task store for A2A operations |
 | `customRouteAuthConfig` | Per-route auth overrides |
 | `user` | Authenticated user (if auth configured) |

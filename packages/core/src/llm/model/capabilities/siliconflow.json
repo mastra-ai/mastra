@@ -1,28 +1,41 @@
 {
   "attachment": [
-    "Qwen/Qwen3-VL-235B-A22B-Instruct",
-    "Qwen/Qwen3-VL-235B-A22B-Thinking",
+    "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen3-VL-30B-A3B-Instruct",
     "Qwen/Qwen3-VL-30B-A3B-Thinking",
     "Qwen/Qwen3-VL-32B-Instruct",
     "Qwen/Qwen3-VL-32B-Thinking",
     "Qwen/Qwen3-VL-8B-Instruct",
+    "Qwen/Qwen3.5-122B-A10B",
+    "Qwen/Qwen3.5-27B",
+    "Qwen/Qwen3.5-35B-A3B",
+    "Qwen/Qwen3.5-9B",
+    "Qwen/Qwen3.6-27B",
+    "Qwen/Qwen3.6-35B-A3B",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
+    "google/gemma-4-12B-it",
+    "google/gemma-4-26B-A4B-it",
+    "google/gemma-4-31B-it",
+    "moonshotai/Kimi-K2.5",
+    "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
+    "nex-agi/Nex-N2-Pro",
+    "zai-org/GLM-5.3-Flash",
     "zai-org/GLM-5V-Turbo"
   ],
   "temperature": [
     "ByteDance-Seed/Seed-OSS-36B-Instruct",
     "MiniMaxAI/MiniMax-M2.5",
+    "MiniMaxAI/MiniMax-M3",
     "Qwen/Qwen2.5-72B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen3-14B",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
     "Qwen/Qwen3-30B-A3B-Instruct-2507",
     "Qwen/Qwen3-32B",
     "Qwen/Qwen3-8B",
     "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "Qwen/Qwen3-VL-235B-A22B-Instruct",
-    "Qwen/Qwen3-VL-235B-A22B-Thinking",
     "Qwen/Qwen3-VL-30B-A3B-Instruct",
     "Qwen/Qwen3-VL-30B-A3B-Thinking",
     "Qwen/Qwen3-VL-32B-Instruct",
@@ -35,7 +48,7 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
-    "baidu/ERNIE-4.5-300B-A47B",
+    "Qwen/Qwen3.8-2.4T-A95B",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-V3",
     "deepseek-ai/DeepSeek-V3.1",
@@ -43,21 +56,29 @@
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V3.2-Exp",
     "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "google/gemma-4-12B-it",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "inclusionAI/Ling-flash-2.0",
+    "meituan-longcat/LongCat-2.0",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
+    "nex-agi/Nex-N2-Pro",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "stepfun-ai/Step-3.5-Flash",
     "tencent/Hunyuan-A13B-Instruct",
-    "tencent/Hy3-preview",
+    "tencent/Hy3",
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
     "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash",
     "zai-org/GLM-5V-Turbo"
   ],
   "structuredOutput": [
@@ -65,14 +86,11 @@
     "Qwen/Qwen2.5-72B-Instruct",
     "Qwen/Qwen2.5-7B-Instruct",
     "Qwen/Qwen3-14B",
-    "Qwen/Qwen3-235B-A22B-Thinking-2507",
     "Qwen/Qwen3-30B-A3B-Instruct-2507",
     "Qwen/Qwen3-32B",
     "Qwen/Qwen3-8B",
     "Qwen/Qwen3-Coder-30B-A3B-Instruct",
     "Qwen/Qwen3-Coder-480B-A35B-Instruct",
-    "Qwen/Qwen3-VL-235B-A22B-Instruct",
-    "Qwen/Qwen3-VL-235B-A22B-Thinking",
     "Qwen/Qwen3-VL-30B-A3B-Instruct",
     "Qwen/Qwen3-VL-30B-A3B-Thinking",
     "Qwen/Qwen3-VL-32B-Instruct",
@@ -85,7 +103,7 @@
     "Qwen/Qwen3.5-9B",
     "Qwen/Qwen3.6-27B",
     "Qwen/Qwen3.6-35B-A3B",
-    "baidu/ERNIE-4.5-300B-A47B",
+    "Qwen/Qwen3.8-2.4T-A95B",
     "deepseek-ai/DeepSeek-R1",
     "deepseek-ai/DeepSeek-V3",
     "deepseek-ai/DeepSeek-V3.1",
@@ -93,12 +111,19 @@
     "deepseek-ai/DeepSeek-V3.2",
     "deepseek-ai/DeepSeek-V3.2-Exp",
     "deepseek-ai/DeepSeek-V4-Flash",
+    "deepseek-ai/DeepSeek-V4-Flash-0731",
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp",
     "deepseek-ai/DeepSeek-V4-Pro",
+    "deepseek-ai/DeepSeek-V4-Pro-0813",
+    "google/gemma-4-12B-it",
     "google/gemma-4-26B-A4B-it",
     "google/gemma-4-31B-it",
     "inclusionAI/Ling-flash-2.0",
     "moonshotai/Kimi-K2.5",
     "moonshotai/Kimi-K2.6",
+    "moonshotai/Kimi-K2.7-Code",
+    "moonshotai/Kimi-K3",
+    "nex-agi/Nex-N2-Pro",
     "openai/gpt-oss-120b",
     "openai/gpt-oss-20b",
     "stepfun-ai/Step-3.5-Flash",
@@ -106,6 +131,258 @@
     "zai-org/GLM-4.5-Air",
     "zai-org/GLM-5",
     "zai-org/GLM-5.1",
-    "zai-org/GLM-5.2"
-  ]
+    "zai-org/GLM-5.2",
+    "zai-org/GLM-5.3",
+    "zai-org/GLM-5.3-Flash"
+  ],
+  "reasoning": {
+    "MiniMaxAI/MiniMax-M3": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.2-Exp": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Pro-0813": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-R1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-0731": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "deepseek-ai/DeepSeek-V4-Flash-Vision-Exp": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "nex-agi/Nex-N2-Pro": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K3": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K2.5": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K2.7-Code": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "moonshotai/Kimi-K2.6": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-32B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-8B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-14B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-32B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.8-2.4T-A95B": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "tencent/Hunyuan-A13B-Instruct": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "tencent/Hy3": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
+      }
+    ],
+    "zai-org/GLM-5.1": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "zai-org/GLM-5V-Turbo": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "openai/gpt-oss-120b": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "meituan-longcat/LongCat-2.0": [
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ]
+  }
 }

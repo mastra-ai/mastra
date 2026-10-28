@@ -23,9 +23,9 @@ const chunker = createDocumentChunkerTool({
   doc: document,
   params: {
     strategy: 'recursive',
-    size: 512,
+    maxSize: 512,
     overlap: 50,
-    separator: '\n',
+    separators: ['\n'],
   },
 })
 
@@ -58,15 +58,15 @@ const { chunks } = await chunker.execute()
   content={[
   {
     name: 'strategy',
-    type: "'recursive'",
+    type: "'character' | 'recursive' | 'token' | 'markdown' | 'html' | 'json' | 'latex' | 'sentence' | 'semantic-markdown'",
     description: 'The chunking strategy to use',
     isOptional: true,
     defaultValue: "'recursive'",
   },
   {
-    name: 'size',
+    name: 'maxSize',
     type: 'number',
-    description: 'Target size of each chunk in tokens/characters',
+    description: 'Maximum size of each chunk in tokens/characters',
     isOptional: true,
     defaultValue: '512',
   },
@@ -78,11 +78,11 @@ const { chunks } = await chunker.execute()
     defaultValue: '50',
   },
   {
-    name: 'separator',
-    type: 'string',
-    description: 'Character(s) to use as chunk separator',
+    name: 'separators',
+    type: 'string[]',
+    description: 'Separators to split on, in order of priority (recursive strategy)',
     isOptional: true,
-    defaultValue: "'\\n'",
+    defaultValue: "['\\n']",
   },
 ]}
 />
@@ -114,9 +114,9 @@ const chunker = createDocumentChunkerTool({
   doc: technicalDoc,
   params: {
     strategy: 'recursive',
-    size: 1024, // Larger chunks
+    maxSize: 1024, // Larger chunks
     overlap: 100, // More overlap
-    separator: '\n\n', // Split on double newlines
+    separators: ['\n\n'], // Split on double newlines
   },
 })
 
@@ -132,8 +132,8 @@ chunks.forEach((chunk, index) => {
 
 The chunker is created as a Mastra tool with the following properties:
 
-- **Tool ID**: `Document Chunker {strategy} {size}`
-- **Description**: `Chunks document using {strategy} strategy with size {size} and {overlap} overlap`
+- **Tool ID**: `Document Chunker {strategy} {maxSize}`
+- **Description**: `Chunks document using {strategy} strategy with maxSize {maxSize} and {overlap} overlap`
 - **Input Schema**: Empty object (no additional inputs required)
 - **Output Schema**: Object containing the chunks array
 

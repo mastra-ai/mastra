@@ -16,10 +16,11 @@ import type { MountResult } from '../filesystem/mount';
 import type { ProviderStatus, SandboxStartResult } from '../lifecycle';
 
 import { MastraSandbox } from './mastra-sandbox';
-import type { MastraSandboxOptions } from './mastra-sandbox';
+import type { MastraSandboxOptions, SandboxStartOptions } from './mastra-sandbox';
 import type { MountManager } from './mount-manager';
 import { ProcessHandle, SandboxProcessManager } from './process-manager';
 import type { SpawnProcessOptions } from './process-manager';
+import { DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES } from './process-manager/process-handle';
 import type { WorkspaceSandbox } from './sandbox';
 import type { CommandResult } from './types';
 
@@ -617,12 +618,42 @@ describe('MastraSandbox Base Class', () => {
   });
 
   describe('Built-in executeCommand', () => {
-    it('retains full command output by default', async () => {
-      const output = 'x'.repeat(1024 * 1024 + 5);
+    it('applies a subclass foreground default without limiting background spawns', async () => {
+      class TimedSandbox extends ProcessBackedSandbox {
+        protected defaultCommandTimeout = 300;
+      }
+      const manager = new ExecuteCommandProcessManager('ok');
+      const sandbox = new TimedSandbox(manager);
+
+      await sandbox.executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBe(300);
+      await sandbox.executeCommand!('echo ok', [], { timeout: 0 });
+      expect(manager.lastOptions?.timeout).toBe(0);
+      await sandbox.processes!.spawn('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+      await new ProcessBackedSandbox(manager).executeCommand!('echo ok');
+      expect(manager.lastOptions?.timeout).toBeUndefined();
+    });
+
+    it('bounds retained command output by default', async () => {
+      const output = 'a'.repeat(5) + 'x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
       const manager = new ExecuteCommandProcessManager(output);
       const sandbox = new ProcessBackedSandbox(manager);
 
       const result = await sandbox.executeCommand!('node', ['script.js']);
+
+      expect(manager.lastOptions?.maxRetainedBytes).toBe(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES);
+      expect(result.stdout).toBe('x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES));
+      expect(result.stdoutTruncated).toBe(true);
+      expect(result.stdoutDroppedBytes).toBe(5);
+    });
+
+    it('retains full command output when the caller passes Infinity', async () => {
+      const output = 'x'.repeat(DEFAULT_MAX_RETAINED_PROCESS_OUTPUT_BYTES + 5);
+      const manager = new ExecuteCommandProcessManager(output);
+      const sandbox = new ProcessBackedSandbox(manager);
+
+      const result = await sandbox.executeCommand!('node', ['script.js'], { maxRetainedBytes: Infinity });
 
       expect(result.stdout).toBe(output);
       expect(result.stdoutTruncated).toBe(false);
@@ -804,14 +835,16 @@ class LifecycleSandbox extends MastraSandbox {
   startError: Error | undefined;
   startGate: Promise<void> | undefined;
   statusDuringImpl: ProviderStatus | undefined;
+  startOptions: SandboxStartOptions | undefined;
 
   constructor(options?: MastraSandboxOptions) {
     super({ ...options, name: 'LifecycleSandbox' });
   }
 
-  async start(): Promise<{ outcome: 'created' | 'connected' } | void> {
+  async start(options?: SandboxStartOptions): Promise<{ outcome: 'created' | 'connected' } | void> {
     this.implCalls += 1;
     this.statusDuringImpl = this.status;
+    this.startOptions = options;
     if (this.startGate) await this.startGate;
     if (this.startError) throw this.startError;
     return this.startResult;
@@ -838,6 +871,15 @@ describe('MastraSandbox start lifecycle wrap', () => {
     expect(sandbox.implCalls).toBe(1);
     expect(sandbox.statusDuringImpl).toBe('starting');
     expect(sandbox.status).toBe('running');
+  });
+
+  it('forwards start options to the provider implementation', async () => {
+    const sandbox = new LifecycleSandbox();
+    const controller = new AbortController();
+
+    await sandbox.start({ abortSignal: controller.signal });
+
+    expect(sandbox.startOptions).toEqual({ abortSignal: controller.signal });
   });
 
   it('coalesces concurrent direct start() and _start() calls onto one attempt', async () => {
@@ -992,6 +1034,9 @@ class PrimitiveSandbox extends MastraSandbox<string> {
   connectCalls = 0;
   createCalls = 0;
   lastConnectedHandle: string | undefined;
+  findOptions: SandboxStartOptions | undefined;
+  connectOptions: SandboxStartOptions | undefined;
+  createOptions: SandboxStartOptions | undefined;
   connectError: Error | undefined;
   createError: Error | undefined;
 
@@ -1001,19 +1046,22 @@ class PrimitiveSandbox extends MastraSandbox<string> {
     super({ ...options, name: 'PrimitiveSandbox' });
   }
 
-  protected override async find(): Promise<string | undefined> {
+  protected override async find(options?: SandboxStartOptions): Promise<string | undefined> {
     this.findCalls += 1;
+    this.findOptions = options;
     return this.vmExists ? 'vm-handle' : undefined;
   }
 
-  protected override async connect(handle: string): Promise<void> {
+  protected override async connect(handle: string, options?: SandboxStartOptions): Promise<void> {
     this.connectCalls += 1;
     this.lastConnectedHandle = handle;
+    this.connectOptions = options;
     if (this.connectError) throw this.connectError;
   }
 
-  protected override async create(): Promise<void> {
+  protected override async create(options?: SandboxStartOptions): Promise<void> {
     this.createCalls += 1;
+    this.createOptions = options;
     if (this.createError) throw this.createError;
     this.vmExists = true;
   }
@@ -1051,6 +1099,22 @@ describe('MastraSandbox acquisition primitives', () => {
     expect(sandbox.findCalls).toBe(1);
     expect(sandbox.createCalls).toBe(1);
     expect(sandbox.connectCalls).toBe(0);
+  });
+
+  it('forwards start options through acquisition primitives', async () => {
+    const controller = new AbortController();
+    const options = { abortSignal: controller.signal };
+    const created = new PrimitiveSandbox();
+
+    await created.start(options);
+    expect(created.findOptions).toBe(options);
+    expect(created.createOptions).toBe(options);
+
+    const connected = new PrimitiveSandbox();
+    connected.vmExists = true;
+    await connected.start(options);
+    expect(connected.findOptions).toBe(options);
+    expect(connected.connectOptions).toBe(options);
   });
 
   it('a create-only provider (no find) always creates', async () => {

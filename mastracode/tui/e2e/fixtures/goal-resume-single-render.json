@@ -1,0 +1,25 @@
+{
+  "fixtures": [
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Goal: Resume the goal box e2e objective.",
+        "sequenceIndex": 0
+      },
+      "response": {
+        "content": "{\"decision\":\"done\",\"reason\":\"The resume goal box e2e objective is complete.\"}"
+      }
+    },
+    {
+      "match": {
+        "endpoint": "chat",
+        "model": "gpt-5.4-mini",
+        "userMessage": "Resume the goal box e2e objective."
+      },
+      "response": {
+        "content": "Resume goal box e2e work completed."
+      }
+    }
+  ]
+}

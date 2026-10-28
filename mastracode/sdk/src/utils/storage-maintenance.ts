@@ -15,6 +15,8 @@
 
 import { closeSync, existsSync, openSync, readSync, renameSync, rmSync, statSync, statfsSync } from 'node:fs';
 import { dirname } from 'node:path';
+import { setFlagsFromString } from 'node:v8';
+import { runInNewContext } from 'node:vm';
 
 import type { MastraCompositeStore, PruneOptions, PruneResult, RetentionConfig } from '@mastra/core/storage';
 // Native `libsql` driver, deliberately alongside `@libsql/client` (used by the
@@ -130,6 +132,38 @@ function journalModeFromHeader(file: string): 'wal' | 'delete' | 'unknown' {
 }
 
 /**
+ * Collect our own closed-but-unfinalized libsql connections before probing.
+ *
+ * libsql-js does not finalize prepared statements on `close()` (they are only
+ * released by GC; tursodatabase/libsql-js#228), so a connection we already
+ * closed can still hold the WAL lock and make the reclaim probe fail.
+ *
+ * `gc` is only global under `--expose-gc`, so we set that V8 flag at runtime
+ * and read `gc` from a fresh VM context. The flag is process-wide, but it only
+ * makes `gc` available to contexts created afterward (the main context's
+ * globals are untouched) and changes no GC behavior. A forced
+ * collection only frees unreachable objects. This runs only on the explicit
+ * vacuum path (`mastracode prune --vacuum` or `/prune vacuum`), and both exit
+ * the process right after, so the flag never outlives maintenance in practice.
+ *
+ * Remove this once libsql-js#228 lands and `close()` finalizes statements.
+ */
+async function releaseClosedConnections(): Promise<void> {
+  // Let pending close() callbacks settle before collecting.
+  await new Promise(resolve => setImmediate(resolve));
+  const gc =
+    (globalThis as { gc?: () => void }).gc ??
+    (() => {
+      setFlagsFromString('--expose-gc');
+      return runInNewContext('gc') as () => void;
+    })();
+  // Native finalizers run after the collection; a second pass collects what they freed.
+  gc();
+  await new Promise(resolve => setTimeout(resolve, 50));
+  gc();
+}
+
+/**
  * Does this database carry a libsql vector index?
  *
  * Takes an already-open connection on purpose: the query needs a prepared
@@ -204,6 +238,11 @@ export async function reclaimLibSQLDisk(
     // https://github.com/tursodatabase/libsql-js/issues/228 (fix in flight in
     // PR #214). Once that lands, the header check can become a plain
     // journal_mode query.
+    //
+    // The same bug means the caller's own storage connection, closed by
+    // closeStorage(), still holds the lock until its statements are
+    // finalized; collect them first so the probe doesn't see ourselves.
+    await releaseClosedConnections();
     const probe = new Database(file);
     try {
       probe.exec('PRAGMA busy_timeout = 2000');
@@ -219,7 +258,7 @@ export async function reclaimLibSQLDisk(
     if (journalModeFromHeader(file) !== 'delete') {
       throw new Error(
         `${file} is in use by another process — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Native `libsql` driver, not `@libsql/client`: the wrapper's close() can
@@ -270,7 +309,7 @@ export async function reclaimLibSQLDisk(
       rmSync(tmp, { force: true });
       throw new Error(
         `${file} was opened by another process during compaction — is another Mastra Code session running? ` +
-          `Close other sessions and run /prune vacuum again.`,
+          `Close other sessions, then run /prune vacuum (or mastracode prune --vacuum) again.`,
       );
     }
     // Swap the compacted copy into place. The old WAL/SHM sidecars belong to
@@ -442,7 +481,9 @@ export async function runStorageMaintenance(opts: {
 
   if (!vacuum) {
     if (maintenance.reclaimDisk) {
-      log('Deleted rows free pages inside the db file but not on disk. Run /prune vacuum to reclaim disk space.');
+      log(
+        'Deleted rows free pages inside the db file but not on disk. Run /prune vacuum (or mastracode prune --vacuum) to reclaim disk space.',
+      );
     }
     return;
   }

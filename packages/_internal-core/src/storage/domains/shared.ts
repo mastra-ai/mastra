@@ -24,10 +24,14 @@ export enum EntityType {
   WORKFLOW_STEP = 'workflow_step',
   /** Tool */
   TOOL = 'tool',
+  /** MCP server */
+  MCP_SERVER = 'mcp_server',
   /** Workflow */
   WORKFLOW_RUN = 'workflow_run',
   /** Memory */
   MEMORY = 'memory',
+  /** Classifier */
+  CLASSIFIER = 'classifier',
 }
 
 /**

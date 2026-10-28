@@ -11,7 +11,7 @@ import { SpanType } from '@mastra/core/observability';
 import { omitKeys } from '@mastra/core/utils';
 import { TrackingExporter } from '@mastra/observability';
 import type { TraceData, TrackingExporterConfig } from '@mastra/observability';
-import { initLogger, currentSpan } from 'braintrust';
+import { initLogger, currentSpan, flush as flushGlobalLogger } from 'braintrust';
 import { removeNullish, convertAISDKMessage, serializeToolResult } from './formatter';
 import type { OpenAIMessage } from './formatter';
 import { formatUsageMetrics } from './metrics';
@@ -48,6 +48,8 @@ export interface BraintrustSpan {
   }): BraintrustSpan;
   log(event: Record<string, any>): void;
   end(args?: { endTime?: number }): number;
+  /** Waits for the span's queued rows to reach Braintrust. Present on SDK spans; optional for stand-ins. */
+  flush?(): Promise<void>;
 }
 
 /**
@@ -72,6 +74,8 @@ export interface BraintrustLogger {
     metadata?: Record<string, any>;
     source: 'external';
   }): void;
+  /** Waits for the logger's queued rows to reach Braintrust. Present on SDK loggers; optional for stand-ins. */
+  flush?(): Promise<void>;
 }
 
 /**
@@ -151,6 +155,10 @@ export class BraintrustExporter extends TrackingExporter<
   #useProvidedLogger: boolean;
   #providedLogger?: BraintrustLogger;
   #localLogger?: BraintrustLogger;
+  // Latest ambient span Mastra attached to. Its rows go through that span's own
+  // SDK state, not through the exporter's logger. One slot is enough: every span
+  // from one SDK copy shares the same background logger.
+  #externalSpan?: BraintrustSpan;
 
   constructor(config: BraintrustExporterConfig = {}) {
     // Resolve env vars BEFORE calling super (config is readonly in base class)
@@ -281,7 +289,8 @@ export class BraintrustExporter extends TrackingExporter<
    * run to rejoin the trace of its suspended half, which was exported by an
    * earlier process. Genuine roots keep empty `span_parents` so Braintrust
    * still treats them as trace roots; only a resumed continuation (marked by
-   * core with `resumedFromSpanId`) links to its persisted parent span. Roots
+   * core with `resumedFromSpanId`) or a run the caller nested with
+   * `tracingOptions.nestUnderParent` links to its parent span. Roots
    * with other parent IDs (e.g. an ambient OTEL span from the bridge) are not
    * linked — their parent was never exported to Braintrust.
    *
@@ -299,6 +308,11 @@ export class BraintrustExporter extends TrackingExporter<
     }
     if (span.parentSpanId && span.parentSpanId === span.metadata?.resumedFromSpanId) {
       return { spanId: span.parentSpanId, rootSpanId: span.traceId };
+    }
+    // The caller declared the parent to be a span of this trace
+    // (tracingOptions.nestUnderParent), so link to it by id as well.
+    if (span.nestedUnderParent && span.externalParentSpanId) {
+      return { spanId: span.externalParentSpanId, rootSpanId: span.traceId };
     }
     return { parentSpanIds: [], rootSpanId: span.traceId };
   }
@@ -322,15 +336,14 @@ export class BraintrustExporter extends TrackingExporter<
       // Check if it's a valid span (not the NOOP_SPAN)
       if (externalSpan && externalSpan.id) {
         // External span detected - attach Mastra traces to it
+        this.#externalSpan = externalSpan;
         return externalSpan;
-      } else {
-        // No external span - use provided logger
-        return this.#providedLogger!;
       }
-    } else {
-      // Use the local logger
-      return this.getLocalLogger();
+      // No external span - use provided logger
+      return this.#providedLogger!;
     }
+    // Use the local logger
+    return this.getLocalLogger();
   }
 
   protected override async _buildSpan(args: {
@@ -420,6 +433,35 @@ export class BraintrustExporter extends TrackingExporter<
       metadata: { errorDetails: reason },
     });
     spanData.span.end();
+  }
+
+  /**
+   * Wait for Braintrust's background logger to send queued rows.
+   *
+   * `span.log()`, `span.end()` and `logger.logFeedback()` only enqueue; the SDK
+   * sends on its own schedule. Rows attached to an ambient span are flushed via
+   * that span, which targets the SDK copy that created it — the package-level
+   * `flush()` only reaches the copy this exporter imports.
+   */
+  private async flushPending(): Promise<void> {
+    const logger = this.#useProvidedLogger ? this.#providedLogger : this.#localLogger;
+    const pending: Promise<void>[] = [];
+    if (logger?.flush) {
+      pending.push(logger.flush());
+    }
+    if (this.#externalSpan) {
+      pending.push(this.#externalSpan.flush ? this.#externalSpan.flush() : flushGlobalLogger());
+    }
+    await Promise.all(pending);
+  }
+
+  protected override async _flush(): Promise<void> {
+    await this.flushPending();
+  }
+
+  // Runs after shutdown() has written abort rows for still-open spans.
+  protected override async _postShutdown(): Promise<void> {
+    await this.flushPending();
   }
 
   // ==============================================================================

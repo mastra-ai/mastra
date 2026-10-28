@@ -1,3 +1,4 @@
+import { MODEL_FALLBACK_STATE_KEY } from '@mastra/code-sdk/auth/account-rotation-processor';
 import { getBuiltinModePack } from '@mastra/code-sdk/onboarding/packs';
 import {
   loadSettings,
@@ -6,16 +7,17 @@ import {
   saveSettings,
   stripMastraCodeCustomProviderPrefix,
   THREAD_ACTIVE_MODEL_PACK_ID_KEY,
+  THREAD_FALLBACK_STATUS_KEY,
 } from '@mastra/code-sdk/onboarding/settings';
 import { ModelSelectorComponent } from '../components/model-selector.js';
 import type { ModelItem } from '../components/model-selector.js';
+import { applyPackToSession } from '../model-packs/apply.js';
 import { showModalOverlay } from '../overlay.js';
 import { promptForApiKeyIfNeeded } from '../prompt-api-key.js';
 import type { SlashCommandContext } from './types.js';
 
 async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId: string): Promise<void> {
   const modeId = ctx.state.session.mode.get();
-  const modeSettingKey = `modeModelId_${modeId}`;
   const settings = loadSettings();
   const nextSettings = structuredClone(settings);
   nextSettings.models.modePackOverrides ??= {};
@@ -26,8 +28,11 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const threadId = ctx.state.session.thread.getId();
   const thread = threadId ? (await ctx.state.session.thread.list()).find(item => item.id === threadId) : undefined;
   const threadSettings = parseThreadSettings(thread?.metadata);
-  const previousModeSetting = thread?.metadata?.[modeSettingKey];
   const previousPackSetting = thread?.metadata?.[THREAD_ACTIVE_MODEL_PACK_ID_KEY];
+  const previousFallbackStatus = thread?.metadata?.[THREAD_FALLBACK_STATUS_KEY];
+  const previousPendingFallback = thread?.metadata?.[MODEL_FALLBACK_STATE_KEY];
+  const previousSessionState = ctx.state.session.state.get() as Record<string, unknown>;
+  const previousFallbackUi = ctx.state.fallbackStatus;
   const activePackId = threadSettings.activeModelPackId ?? nextSettings.models.activeModelPackId;
   const builtinPack = activePackId ? getBuiltinModePack(activePackId) : undefined;
   const customPack = activePackId?.startsWith('custom:')
@@ -37,11 +42,9 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
   const effectivePackModels = activePack ? resolveModePackModels(nextSettings, activePack) : {};
   const modeModels: Record<string, string> = {};
   for (const item of modes) {
-    const persistedModelId = threadSettings.modeModelIds[item.id];
     const fallbackModelId =
       effectivePackModels[item.id] ?? nextSettings.models.modeDefaults[item.id] ?? item.defaultModelId;
-    if (persistedModelId) modeModels[item.id] = persistedModelId;
-    else if (fallbackModelId) modeModels[item.id] = fallbackModelId;
+    if (fallbackModelId) modeModels[item.id] = fallbackModelId;
   }
   modeModels[modeId] = modelId;
 
@@ -78,52 +81,58 @@ async function switchCurrentModeModel(ctx: SlashCommandContext, selectedModelId:
     nextSettings.models.modeDefaults = modeModels;
   }
 
-  let modeSettingSaved = false;
-  let packSettingSaved = false;
-  let globalSettingsWriteStarted = false;
-  try {
-    await ctx.state.session.thread.setSetting({ key: modeSettingKey, value: modelId });
-    modeSettingSaved = true;
-    const savedModeSetting = await ctx.state.session.thread.getSetting({ key: modeSettingKey });
-    if (savedModeSetting !== modelId) throw new Error(`Could not save the ${modeId} mode model`);
-
-    await ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: nextPackId });
-    packSettingSaved = true;
-    const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
-    if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
-    globalSettingsWriteStarted = true;
-    saveSettings(nextSettings);
-    await ctx.state.session.model.switch({ modelId, scope: 'global' });
-  } catch (error) {
-    if (globalSettingsWriteStarted) {
+  await applyPackToSession(ctx, nextPackId, {
+    modeId,
+    settings: nextSettings,
+    expectedThreadId: threadId,
+    afterApply: async () => {
+      saveSettings(nextSettings);
+      const savedPackSetting = await ctx.state.session.thread.getSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY });
+      if (savedPackSetting !== nextPackId) throw new Error('Could not save the active model pack');
+      await ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: undefined });
+      ctx.state.fallbackStatus = undefined;
+      ctx.updateStatusLine();
+      ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);
+    },
+    onError: async () => {
       try {
         saveSettings(settings);
       } catch {
-        // Keep the original failure. The thread and active model still roll back below.
+        // Keep the original failure while restoring the live thread below.
       }
-    }
-
-    const rollbacks: Array<Promise<unknown>> = [];
-    if (packSettingSaved) {
-      rollbacks.push(
+      await Promise.allSettled([
+        ctx.state.session.thread.setSetting({ key: THREAD_ACTIVE_MODEL_PACK_ID_KEY, value: previousPackSetting }),
+        ctx.state.session.thread.setSetting({ key: THREAD_FALLBACK_STATUS_KEY, value: previousFallbackStatus }),
+        ctx.state.session.thread.setSetting({ key: MODEL_FALLBACK_STATE_KEY, value: previousPendingFallback }),
         ctx.state.session.thread.setSetting({
-          key: THREAD_ACTIVE_MODEL_PACK_ID_KEY,
-          value: previousPackSetting,
+          key: 'subagentModelId_explore',
+          value: previousSessionState.subagentModelId_explore,
         }),
-      );
-    }
-    if (modeSettingSaved) {
-      rollbacks.push(ctx.state.session.thread.setSetting({ key: modeSettingKey, value: previousModeSetting }));
-    }
-    if (ctx.state.session.model.get() !== previousModelId) {
-      rollbacks.push(ctx.state.session.model.switch({ modelId: previousModelId, scope: 'global' }));
-    }
-    await Promise.allSettled(rollbacks);
-    throw error;
-  }
-
-  ctx.updateStatusLine();
-  ctx.showInfo(`Switched ${modeId} mode to ${modelId}`);
+        ctx.state.session.thread.setSetting({
+          key: 'subagentModelId_plan',
+          value: previousSessionState.subagentModelId_plan,
+        }),
+        ctx.state.session.thread.setSetting({
+          key: 'subagentModelId_execute',
+          value: previousSessionState.subagentModelId_execute,
+        }),
+        ctx.state.session.thread.setSetting({ key: 'observerModelId', value: previousSessionState.observerModelId }),
+        ctx.state.session.thread.setSetting({ key: 'reflectorModelId', value: previousSessionState.reflectorModelId }),
+        ctx.state.session.model.switch(previousModelId),
+        ctx.state.session.state.set({
+          modelRoute: previousSessionState.modelRoute,
+          [MODEL_FALLBACK_STATE_KEY]: previousSessionState[MODEL_FALLBACK_STATE_KEY] ?? null,
+          subagentModelId_explore: previousSessionState.subagentModelId_explore,
+          subagentModelId_plan: previousSessionState.subagentModelId_plan,
+          subagentModelId_execute: previousSessionState.subagentModelId_execute,
+          observerModelId: previousSessionState.observerModelId,
+          reflectorModelId: previousSessionState.reflectorModelId,
+        }),
+      ]);
+      ctx.state.fallbackStatus = previousFallbackUi;
+      ctx.updateStatusLine();
+    },
+  });
 }
 
 export async function handleModelCommand(ctx: SlashCommandContext): Promise<void> {
@@ -139,6 +148,34 @@ export async function handleModelCommand(ctx: SlashCommandContext): Promise<void
     if (connected.length === 0) {
       ctx.showInfo('No connected models. Use /connect to add a provider account or API key.');
       return;
+    }
+
+    if (ctx.state.factory) {
+      return new Promise<void>(resolve => {
+        const selector = new ModelSelectorComponent({
+          tui: ctx.state.ui,
+          models: connected,
+          currentModelId,
+          onSelect: async (model: ModelItem) => {
+            ctx.state.ui.hideOverlay();
+            try {
+              await ctx.state.session.model.switch(model.id);
+              ctx.updateStatusLine();
+              ctx.showInfo(`Switched to ${model.id}`);
+            } catch (error) {
+              ctx.showError(`Failed to switch model: ${error instanceof Error ? error.message : String(error)}`);
+            } finally {
+              resolve();
+            }
+          },
+          onCancel: () => {
+            ctx.state.ui.hideOverlay();
+            resolve();
+          },
+        });
+        showModalOverlay(ctx.state.ui, selector, { maxHeight: '75%' });
+        selector.focused = true;
+      });
     }
 
     const settings = loadSettings();

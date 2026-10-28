@@ -2,6 +2,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { describe, expect, it, vi } from 'vitest';
 
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
+import type { TranscriptState } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -142,6 +143,43 @@ describe('transcript reducer message entries', () => {
         toolName: 'ask_user',
         args: { question: 'Which database?' },
         suspendPayload: { question: 'Which database?', options: [{ label: 'Postgres' }, { label: 'SQLite' }] },
+      },
+    ]);
+  });
+
+  it('restores pending tool approvals from persisted assistant metadata', () => {
+    const args = { itemId: 'item-1', to: 'review' };
+    const message = dbMessage('assistant-approval', 'assistant', [
+      {
+        type: 'tool-invocation',
+        toolInvocation: { state: 'call', toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args },
+      },
+    ]);
+    message.content.metadata = {
+      pendingToolApprovals: {
+        'approve-1': { toolCallId: 'approve-1', toolName: 'factory_transition_work_item', args, type: 'approval' },
+      },
+    };
+
+    let state = createInitialTranscript({ messages: [message] });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'tool_approval_required',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
+      },
+    });
+
+    expect(state.entries).toEqual([
+      expect.objectContaining({ kind: 'message', id: 'assistant-approval' }),
+      {
+        kind: 'approval',
+        id: 'approval-approve-1',
+        toolCallId: 'approve-1',
+        toolName: 'factory_transition_work_item',
+        args,
       },
     ]);
   });
@@ -294,6 +332,41 @@ describe('transcript reducer message entries', () => {
     });
 
     expect(messageParts(state.entries[1])).toEqual([{ type: 'text', text: 'After' }]);
+  });
+
+  it('drops part updates that would write past the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 3, part: { type: 'text', text: 'Far ahead' } },
+      },
+    });
+
+    // An out-of-range write leaves a hole in `parts`; `find` and `for…of`
+    // visit that hole as an undefined part and throw on `.type`.
+    expect(messageParts(state.entries[0])).toEqual([{ type: 'text', text: 'Before' }]);
+  });
+
+  it('appends a part that lands exactly at the end of the parts array', () => {
+    const message = dbMessage('assistant-1', 'assistant', [{ type: 'text', text: 'Before' }]);
+    let state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'message_start', message } });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: {
+        type: 'message_update',
+        id: message.id,
+        event: { type: 'part', index: 1, part: { type: 'text', text: 'Next' } },
+      },
+    });
+
+    expect(messageParts(state.entries[0])).toEqual([
+      { type: 'text', text: 'Before' },
+      { type: 'text', text: 'Next' },
+    ]);
   });
 
   it('keeps accumulated text when a message_start is re-delivered', () => {
@@ -812,6 +885,62 @@ describe('transcript reducer mergeWindow', () => {
 
     // Older history joins the front; the live message stays at the tail.
     expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
+  });
+
+  it('clears pending when the refetched window brings in the reply the stream missed', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    expect(sent.pending).toBe(true);
+
+    const next = transcriptReducer(sent, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+        dbMessage('reply-1', 'assistant', [{ type: 'text', text: 'answer' }]),
+      ],
+    });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['user-1', 'reply-1']);
+    expect(next.pending).toBe(false);
+  });
+
+  it('keeps pending when the refetched window has no reply to the latest prompt yet', () => {
+    let state = createInitialTranscript({
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+      ],
+    });
+    state = transcriptReducer(state, { type: 'localUser', id: 'user-1', text: 'question' });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+      ],
+    });
+
+    expect(next.pending).toBe(true);
+  });
+
+  it('keeps pending when only the live, still-empty reply follows the prompt', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    const started = transcriptReducer(sent, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]),
+      },
+    });
+    expect(started.pending).toBe(true);
+
+    const next = transcriptReducer(started, {
+      type: 'mergeWindow',
+      messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }])],
+    });
+
+    expect(next.pending).toBe(true);
   });
 
   it('is a no-op for an empty older window', () => {
@@ -1357,12 +1486,38 @@ describe('transcript reducer mergeWindow', () => {
 });
 
 describe('transcript reducer error notices', () => {
-  function errorNoticeText(event: Record<string, unknown>): string {
+  function errorNotice(event: Record<string, unknown>) {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
     const notice = state.entries.find(entry => entry.kind === 'notice');
     if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
-    return notice.text;
+    return notice;
   }
+  const errorNoticeText = (event: Record<string, unknown>) => errorNotice(event).text;
+
+  it('keeps the wire error name so the notice can match a missing credential on it', () => {
+    expect(
+      errorNotice({ error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } }),
+    ).toMatchObject({
+      level: 'error',
+      text: 'Not logged in to Anthropic.',
+      error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' },
+    });
+  });
+
+  it('keeps the provider details a wire error carries so the notice classifies like a reload', () => {
+    const error = {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 403,
+      responseBody: '{"error":{"type":"permission_error"}}',
+      requestId: 'req_123',
+    };
+    expect(errorNotice({ error }).error).toEqual(error);
+  });
+
+  it('names a bare error payload Error', () => {
+    expect(errorNotice({ error: 'boom' }).error).toEqual({ name: 'Error', message: 'boom' });
+  });
 
   it('renders a string error payload verbatim', () => {
     expect(errorNoticeText({ error: 'model quota exhausted' })).toBe('model quota exhausted');
@@ -1380,6 +1535,99 @@ describe('transcript reducer error notices', () => {
 
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+
+  describe('once the saved reply loads in', () => {
+    const rejectedKey = {
+      name: 'AI_APICallError',
+      message: 'invalid x-api-key',
+      statusCode: 401,
+      requestId: 'req_011CgRohdkzzzGj2p18ZeJVu',
+    };
+    const savedFailure = (id: string) => dbMessage(id, 'assistant', [{ type: 'error', error: rejectedKey }]);
+    const shownFailures = (state: TranscriptState) =>
+      state.entries.flatMap(entry => {
+        if (entry.kind === 'notice') return entry.error ? [entry.id] : [];
+        if (entry.kind !== 'message') return [];
+        return entry.message.content.parts.some(part => part.type === 'error') ? [entry.id] : [];
+      });
+
+    it('shows a failed run once, not as a live card plus its saved copy', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'say hi' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'agent_end', reason: 'error' } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-1')],
+      });
+
+      expect(shownFailures(next)).toEqual(['reply-1']);
+    });
+
+    it('keeps the next run’s live failure when a stale window brings only the previous run’s saved error', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'say hi' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'localUser', text: 'try again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const nextRunNotice = shownFailures(state).at(-1);
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-1')],
+      });
+
+      expect(shownFailures(next)).toEqual([nextRunNotice, 'reply-1']);
+    });
+
+    it('replaces the right live failure when the same prompt was sent twice', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const firstRunNotice = shownFailures(state).at(-1);
+      state = transcriptReducer(state, { type: 'localUser', id: 'user-2', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-2', 'user', [{ type: 'text', text: 'again' }]), savedFailure('reply-2')],
+      });
+
+      expect(shownFailures(next)).toEqual([firstRunNotice, 'reply-2']);
+    });
+
+    it('keeps both live failures when it cannot tell which unconfirmed repeat the saved copy answers', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'localUser', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const liveFailures = shownFailures(state);
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-2', 'user', [{ type: 'text', text: 'again' }]), savedFailure('reply-2')],
+      });
+
+      expect(shownFailures(next)).toEqual([...liveFailures, 'reply-2']);
+    });
+
+    it('keeps a new live failure when only an earlier turn saved the same error', () => {
+      let state = createInitialTranscript({
+        messages: [dbMessage('user-0', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-0')],
+      });
+      state = transcriptReducer(state, { type: 'localUser', id: 'user-1', text: 'try again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [
+          dbMessage('user-0', 'user', [{ type: 'text', text: 'say hi' }]),
+          savedFailure('reply-0'),
+          dbMessage('user-1', 'user', [{ type: 'text', text: 'try again' }]),
+        ],
+      });
+
+      expect(shownFailures(next)).toEqual(['reply-0', expect.stringMatching(/^notice-/)]);
+    });
   });
 });
 
@@ -1649,6 +1897,37 @@ describe('live user-signal events render the same as their persisted copy', () =
     });
   });
 
+  it('removes a plain message whose send failed, since nothing tracks its delivery', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'Continue from where you stopped.' });
+
+    state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
+
+    expect(state.entries).toEqual([]);
+  });
+
+  it('keeps a plain message whose signal arrived before its send failed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'hello from the composer' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveComposerSignal() },
+    });
+
+    state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
+
+    expect(state.entries).toMatchObject([
+      {
+        id: 'local-1',
+        message: {
+          id: 'sig-web',
+          role: 'user',
+          content: { parts: [{ type: 'text', text: 'hello from the composer' }] },
+        },
+      },
+    ]);
+  });
+
   it('keeps non-user signals alone', () => {
     const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
     let state = createInitialTranscript({ messages: [], threadId: 't1' });
@@ -1758,5 +2037,38 @@ describe('live user signals sent by someone else', () => {
     );
     expect(drawable).toHaveLength(1);
     expect(drawable[0]?.id).toMatch(/^local-/);
+  });
+
+  it("draws the viewer's own message sent from another client with no optimistic echo", () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const message = liveSignal('sig-3', 'hello from the TUI', { id: 'user_me', name: 'Me' });
+
+    state = transcriptReducer(state, { type: 'event', event: { type: 'message_start', message }, viewerId: 'user_me' });
+
+    const entry = state.entries.find(e => 'id' in e && e.id === 'sig-3');
+    expect(messageParts(entry)).toEqual([{ type: 'text', text: 'hello from the TUI' }]);
+  });
+
+  it('draws a same-text message from another client after the composer send was echoed', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    const me = { id: 'user_me', name: 'Me' };
+    state = transcriptReducer(state, { type: 'localUser', text: 'yes' });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-4', 'yes', me) },
+      viewerId: 'user_me',
+    });
+    state = transcriptReducer(state, {
+      type: 'event',
+      event: { type: 'message_start', message: liveSignal('sig-5', 'yes', me) },
+      viewerId: 'user_me',
+    });
+
+    const drawable = state.entries.filter(
+      entry => entry.kind === 'message' && messageParts(entry).some(part => (part as { text?: string }).text === 'yes'),
+    );
+    expect(drawable).toHaveLength(2);
+    expect(drawable[0]?.id).toMatch(/^local-/);
+    expect(drawable[1]?.id).toBe('sig-5');
   });
 });

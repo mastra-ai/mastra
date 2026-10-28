@@ -1,6 +1,7 @@
 import { Agent } from '@mastra/core/agent';
 import type { MastraDBMessage } from '@mastra/core/agent';
 import type { RequestContext } from '@mastra/core/di';
+import { ErrorCategory, MastraError } from '@mastra/core/error';
 import type { MastraMemory, StorageThreadType } from '@mastra/core/memory';
 import type { MastraStorage, MemoryStorage, StorageListThreadsOutput } from '@mastra/core/storage';
 import { generateEmptyFromSchema } from '@mastra/core/utils';
@@ -70,6 +71,7 @@ import {
   getContextResourceId,
   getEffectiveThreadId,
   enforceThreadAccess,
+  getHandlerFGAProvider,
 } from './utils';
 
 interface MemoryContext extends Context {
@@ -99,7 +101,7 @@ function hasFGAUser(requestContext?: RequestContext): requestContext is RequestC
 }
 
 function shouldFilterThreadsWithFGA(mastra: any, requestContext?: RequestContext): requestContext is RequestContext {
-  return !!mastra.getServer?.()?.fga && hasFGAUser(requestContext);
+  return !!getHandlerFGAProvider(mastra, requestContext) && hasFGAUser(requestContext);
 }
 
 async function filterAccessibleThreads({
@@ -111,7 +113,7 @@ async function filterAccessibleThreads({
   requestContext?: RequestContext;
   threads: StorageThreadType[];
 }): Promise<StorageThreadType[]> {
-  const fgaProvider = mastra.getServer?.()?.fga;
+  const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
   if (!fgaProvider || !hasFGAUser(requestContext) || threads.length === 0) {
     return threads;
   }
@@ -1411,19 +1413,21 @@ export const CREATE_THREAD_ROUTE = createRoute({
       const effectiveThreadId = threadId ?? mastra.generateId();
       validateBody({ resourceId: effectiveResourceId });
 
-      await enforceThreadAccess({
-        mastra,
-        requestContext,
-        threadId: effectiveThreadId,
-        effectiveResourceId,
-        permission: MastraFGAPermissions.MEMORY_WRITE,
-      });
-
       // Gateway proxy: create thread via gateway API
       const agent = await getAgentFromContext({ mastra, agentId, requestContext });
       if (agent && (await isGatewayAgentAsync(agent))) {
         const gwClient = getGatewayClient();
         if (gwClient) {
+          // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
+          const existing = threadId ? await gwClient.getThread(effectiveThreadId) : null;
+          await enforceThreadAccess({
+            mastra,
+            requestContext,
+            threadId: effectiveThreadId,
+            thread: existing ? toLocalThread(existing.thread) : null,
+            effectiveResourceId,
+            permission: MastraFGAPermissions.MEMORY_WRITE,
+          });
           const result = await gwClient.createThread({
             id: effectiveThreadId,
             resourceId: effectiveResourceId!,
@@ -1439,6 +1443,17 @@ export const CREATE_THREAD_ROUTE = createRoute({
       if (!memory) {
         throw new HTTPException(400, { message: 'Memory is not initialized' });
       }
+
+      // Creating with an existing id upserts the thread, so validate ownership of any existing thread first
+      const existing = threadId ? await memory.getThreadById({ threadId: effectiveThreadId }) : null;
+      await enforceThreadAccess({
+        mastra,
+        requestContext,
+        threadId: effectiveThreadId,
+        thread: existing,
+        effectiveResourceId,
+        permission: MastraFGAPermissions.MEMORY_WRITE,
+      });
 
       const result = await memory.createThread({
         resourceId: effectiveResourceId!,
@@ -1698,7 +1713,7 @@ export const TRANSFER_THREAD_ROUTE = createRoute({
       // would let any authenticated caller reassign ownership. Reject that state
       // rather than granting an implicit privilege.
       const server = mastra.getServer?.();
-      if (server?.auth && !server?.fga) {
+      if (server?.auth && !getHandlerFGAProvider(mastra, requestContext)) {
         throw new HTTPException(403, {
           message:
             'Thread transfer requires explicit authorization. Configure an FGA provider (memory:write) to authorize privileged, non-resource-scoped transfers.',
@@ -1764,7 +1779,7 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
   description: 'Updates the working memory state for a thread',
   tags: ['Memory'],
   requiresAuth: true,
-  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, requestContext }) => {
+  handler: async ({ mastra, agentId, threadId, resourceId, memoryConfig, workingMemory, mode, requestContext }) => {
     try {
       const effectiveThreadId = getEffectiveThreadId(requestContext, threadId);
       const effectiveResourceId = getEffectiveResourceId(requestContext, resourceId);
@@ -1792,6 +1807,28 @@ export const UPDATE_WORKING_MEMORY_ROUTE = createRoute({
         effectiveResourceId,
         permission: MastraFGAPermissions.MEMORY_WRITE,
       });
+
+      if (mode === 'merge') {
+        if (!(await memory.supportsAtomicWorkingMemoryMerge())) {
+          throw new HTTPException(400, {
+            message: 'Working memory merge is not supported by the configured storage adapter',
+          });
+        }
+        try {
+          await memory.mergeWorkingMemory({
+            threadId: effectiveThreadId!,
+            resourceId: effectiveResourceId,
+            workingMemory,
+            memoryConfig,
+          });
+        } catch (error) {
+          if (error instanceof MastraError && error.category === ErrorCategory.USER) {
+            throw new HTTPException(400, { message: error.message });
+          }
+          throw error;
+        }
+        return { success: true };
+      }
 
       await memory.updateWorkingMemory({
         threadId: effectiveThreadId!,

@@ -1,12 +1,15 @@
 import type { TaskItem } from '@mastra/core/signals';
-import { Database, Radio } from 'lucide-react';
 
 import { NotificationSignalNotice } from './notification-signal-notice';
 import { formatSignalValue, isRecord, isSignalData, signalContentsToText } from './signal-data';
 import type { SignalData } from './signal-data';
+import { parseSkillBody } from './skill-activation';
+import { SkillMessage } from './skill-message';
+import { SignalActivity } from '@/ds/components/ai/activity';
 
 export type SignalBadgeProps = {
   signal: unknown;
+  defaultOpen?: boolean;
 };
 
 const getStateLabel = (signal: SignalData) => {
@@ -16,12 +19,6 @@ const getStateLabel = (signal: SignalData) => {
     mode: formatSignalValue(state?.mode) ?? formatSignalValue(signal.attributes?.mode),
   };
 };
-
-const Pill = ({ children }: { children: string }) => (
-  <span className="border-border1 text-neutral4 text-ui-sm inline-flex items-center rounded-full border px-1.5 py-0.5 leading-none">
-    {children}
-  </span>
-);
 
 function isTaskItemArray(value: unknown): value is TaskItem[] {
   return (
@@ -50,49 +47,32 @@ function getTaskSignalData(signal: SignalData): TaskItem[] | undefined {
   return tasks;
 }
 
-export const SignalBadge = ({ signal: value }: SignalBadgeProps) => {
+/** A typed skill signal (`tagName: 'skill'`, skill name in `attributes.name`), parsed into its activation. */
+function getSkillActivation(signal: SignalData, text: string) {
+  if (signal.tagName !== 'skill') return undefined;
+  const name = formatSignalValue(signal.attributes?.name);
+  return name ? parseSkillBody(name, text) : undefined;
+}
+
+export const SignalBadge = ({ signal: value, defaultOpen }: SignalBadgeProps) => {
   if (!isSignalData(value)) return null;
 
   const text = signalContentsToText(value.contents);
 
   if (value.type === 'state') {
-    // Task signals are rendered in the docked TaskPanel (bottom of chat) instead
-    // of inline to avoid repetition. Hide them here.
-    const taskSignal = getTaskSignalData(value);
-    if (taskSignal) return null;
+    if (getTaskSignalData(value)) return null;
 
     const state = getStateLabel(value);
-    return (
-      <div className="border-border1 bg-surface2 text-neutral5 my-2 max-w-[80%] rounded-lg border px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Database className="text-icon3 mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <div className="flex flex-wrap items-center gap-2">
-              <p className="text-ui-sm leading-ui-sm text-neutral6 font-medium">{state.id}</p>
-              {state.mode ? <Pill>{state.mode}</Pill> : null}
-            </div>
-            {text ? <p className="text-ui-sm leading-ui-md mt-2 break-words whitespace-pre-wrap">{text}</p> : null}
-          </div>
-        </div>
-      </div>
-    );
+    return <SignalActivity kind="state" label={state.id} mode={state.mode} message={text} defaultOpen={defaultOpen} />;
   }
 
-  if (value.type === 'notification') {
-    return <NotificationSignalNotice signal={value} />;
-  }
+  if (value.type === 'notification') return <NotificationSignalNotice signal={value} defaultOpen={defaultOpen} />;
 
   if (value.type === 'reactive') {
+    const skill = getSkillActivation(value, text);
+    if (skill) return <SkillMessage activation={skill} defaultOpen={defaultOpen} />;
     return (
-      <div className="border-border1 bg-surface2 text-neutral5 my-2 max-w-[80%] rounded-lg border px-4 py-3">
-        <div className="flex items-start gap-3">
-          <Radio className="text-icon3 mt-0.5 size-4 shrink-0" />
-          <div className="min-w-0 flex-1">
-            <p className="text-ui-sm leading-ui-sm text-neutral6 font-medium">{value.tagName ?? 'Signal'}</p>
-            {text ? <p className="text-ui-sm leading-ui-md mt-2 break-words whitespace-pre-wrap">{text}</p> : null}
-          </div>
-        </div>
-      </div>
+      <SignalActivity kind="reactive" label={value.tagName ?? 'Signal'} message={text} defaultOpen={defaultOpen} />
     );
   }
 

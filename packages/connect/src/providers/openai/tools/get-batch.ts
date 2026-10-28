@@ -17,16 +17,9 @@ const RequestCountsSchema = z.object({
 const ProviderBatchSchema = z.object({
   id: z.string(),
   object: z.literal('batch'),
-  status: z.enum([
-    'validating',
-    'failed',
-    'in_progress',
-    'finalizing',
-    'completed',
-    'expired',
-    'cancelling',
-    'cancelled',
-  ]),
+  status: z
+    .enum(['validating', 'failed', 'in_progress', 'finalizing', 'completed', 'expired', 'cancelling', 'cancelled'])
+    .or(z.string()),
   input_file_id: z.string(),
   output_file_id: z.string().optional().nullable(),
   error_file_id: z.string().optional().nullable(),
@@ -40,16 +33,9 @@ const ProviderBatchSchema = z.object({
 
 export const getBatchOutputSchema = z.object({
   id: z.string(),
-  status: z.enum([
-    'validating',
-    'failed',
-    'in_progress',
-    'finalizing',
-    'completed',
-    'expired',
-    'cancelling',
-    'cancelled',
-  ]),
+  status: z
+    .enum(['validating', 'failed', 'in_progress', 'finalizing', 'completed', 'expired', 'cancelling', 'cancelled'])
+    .or(z.string()),
   input_file_id: z.string(),
   output_file_id: z.string().optional(),
   error_file_id: z.string().optional(),

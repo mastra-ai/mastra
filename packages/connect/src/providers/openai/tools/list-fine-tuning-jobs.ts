@@ -21,7 +21,7 @@ const FineTuningJobSchema = z.object({
   fine_tuned_model: z.string().nullable().optional(),
   organization_id: z.string(),
   result_files: z.array(z.string()).optional(),
-  status: z.enum(['validating_files', 'queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  status: z.enum(['validating_files', 'queued', 'running', 'succeeded', 'failed', 'cancelled']).or(z.string()),
   validation_file: z.string().nullable().optional(),
   training_file: z.string(),
   hyperparameters: z
@@ -64,7 +64,7 @@ const OutputItemSchema = z.object({
   fine_tuned_model: z.string().optional(),
   organization_id: z.string(),
   result_files: z.array(z.string()).optional(),
-  status: z.enum(['validating_files', 'queued', 'running', 'succeeded', 'failed', 'cancelled']),
+  status: z.enum(['validating_files', 'queued', 'running', 'succeeded', 'failed', 'cancelled']).or(z.string()),
   validation_file: z.string().optional(),
   training_file: z.string(),
   hyperparameters: z

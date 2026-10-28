@@ -14,8 +14,10 @@ import { getLLMTestMode } from '@internal/llm-recorder';
 import { createGatewayMock, setupDummyApiKeys } from '@internal/test-utils';
 import { afterAll, beforeAll, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { Mastra } from '../../mastra';
 import { createTool } from '../../tools';
 import { Agent } from '../agent';
+import { createDurableAgent } from '../durable/create-durable-agent';
 
 setupDummyApiKeys(getLLMTestMode(), ['anthropic', 'google', 'openai']);
 
@@ -89,47 +91,75 @@ function createTestAgent(model: any) {
   });
 }
 
-async function runToolCallTest(agent: Agent, modelName: string) {
-  const response = await agent.stream(
+type EngineLeg = 'default' | 'durable';
+
+/**
+ * Start a stream through the requested engine and return a uniform surface.
+ *
+ * The durable leg wraps the same Agent in `createDurableAgent` + a Mastra
+ * host, so the exact same recorded provider traffic must replay — this pins
+ * that durable serialization is transparent at the provider boundary
+ * (tool-call finish reasons must survive the workflowInput round-trip).
+ */
+async function streamWithEngine(engine: EngineLeg, agent: Agent, prompt: string) {
+  if (engine === 'default') {
+    const response = await agent.stream(prompt);
+    return { fullStream: response.fullStream, text: response.text, cleanup: () => {} };
+  }
+
+  const durableAgent = createDurableAgent({ agent });
+  new Mastra({ agents: { [agent.id!]: durableAgent as any }, logger: false });
+  const result = await durableAgent.stream(prompt);
+  return { fullStream: result.fullStream, text: result.output.text, cleanup: result.cleanup };
+}
+
+async function runToolCallTest(engine: EngineLeg, agent: Agent, modelName: string) {
+  const response = await streamWithEngine(
+    engine,
+    agent,
     'I need a comprehensive city report for Paris. Look up everything: weather, population, timezone, language, and currency. Explain what you are about to do first, then call all 5 tools simultaneously.',
   );
 
-  let toolCallCount = 0;
-  let toolResultCount = 0;
-  const finishReasons: string[] = [];
+  try {
+    let toolCallCount = 0;
+    let toolResultCount = 0;
+    const finishReasons: string[] = [];
 
-  for await (const chunk of response.fullStream) {
-    if (chunk.type === 'tool-call') {
-      toolCallCount++;
+    for await (const chunk of response.fullStream) {
+      if (chunk.type === 'tool-call') {
+        toolCallCount++;
+      }
+      if (chunk.type === 'tool-result') {
+        toolResultCount++;
+      }
+      if (chunk.type === 'step-finish') {
+        const reason = (chunk as any).payload?.finishReason ?? (chunk as any).finishReason ?? 'unknown';
+        finishReasons.push(reason);
+      }
     }
-    if (chunk.type === 'tool-result') {
-      toolResultCount++;
-    }
-    if (chunk.type === 'step-finish') {
-      const reason = (chunk as any).payload?.finishReason ?? (chunk as any).finishReason ?? 'unknown';
-      finishReasons.push(reason);
-    }
+
+    const text = await response.text;
+
+    // Log what we observed for debugging
+    console.log(
+      `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
+    );
+
+    // All 5 tools should have been called and returned results
+    expect(toolCallCount).toBe(5);
+    expect(toolResultCount).toBe(5);
+
+    // The agent loop must have completed at least 2 steps:
+    // step 1: tool calls (finishReason may be 'tool-calls' or 'stop' depending on the model)
+    // step 2: final text summary after processing tool results
+    expect(finishReasons.length).toBeGreaterThanOrEqual(2);
+
+    // The final response should reference the gathered data
+    expect(text).toBeTruthy();
+    expect(text.length).toBeGreaterThan(0);
+  } finally {
+    await response.cleanup();
   }
-
-  const text = await response.text;
-
-  // Log what we observed for debugging
-  console.log(
-    `[${modelName}] toolCalls=${toolCallCount} toolResults=${toolResultCount} finishReasons=${JSON.stringify(finishReasons)} textLen=${text.length}`,
-  );
-
-  // All 5 tools should have been called and returned results
-  expect(toolCallCount).toBe(5);
-  expect(toolResultCount).toBe(5);
-
-  // The agent loop must have completed at least 2 steps:
-  // step 1: tool calls (finishReason may be 'tool-calls' or 'stop' depending on the model)
-  // step 2: final text summary after processing tool results
-  expect(finishReasons.length).toBeGreaterThanOrEqual(2);
-
-  // The final response should reference the gathered data
-  expect(text).toBeTruthy();
-  expect(text.length).toBeGreaterThan(0);
 }
 
 describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {
@@ -148,14 +178,16 @@ describe('Tool calls with various LLM providers', { timeout: 120_000 }, () => {
     { name: 'google/gemini-2.5-flash', model: google('gemini-2.5-flash'), envKey: 'GOOGLE_GENERATIVE_AI_API_KEY' },
   ];
 
-  for (const { name, model, envKey } of models) {
-    it.skipIf(!process.env[envKey])(
-      `should continue after tool calls with ${name}`,
-      async () => {
-        const agent = createTestAgent(model);
-        await runToolCallTest(agent, name);
-      },
-      60_000,
-    );
+  for (const engine of ['default', 'durable'] as const) {
+    for (const { name, model, envKey } of models) {
+      it.skipIf(!process.env[envKey])(
+        `should continue after tool calls with ${name} (${engine})`,
+        async () => {
+          const agent = createTestAgent(model);
+          await runToolCallTest(engine, agent, `${name} ${engine}`);
+        },
+        60_000,
+      );
+    }
   }
 });

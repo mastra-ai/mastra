@@ -1,7 +1,7 @@
 import { skipToken, useQuery, useQueryClient } from '@tanstack/react-query';
 import { useEffect, useRef } from 'react';
 
-import type { PullRequestSubscription } from '../../factory/services/githubSubscriptions';
+import type { ChangeRequestProvider, PullRequestSubscription } from '../../factory/services/githubSubscriptions';
 import {
   listPullRequestSubscriptions,
   pullRequestSubscriptionsQueryKey,
@@ -29,19 +29,23 @@ function notificationKey(entries: TranscriptState['entries']): string {
     .join(':');
 }
 
-export function usePullRequestSubscriptions(threadId: string | undefined, enabled: boolean) {
-  const { baseUrl, resourceId, projectPath } = useChatSessionContext();
+export function usePullRequestSubscriptions(
+  threadId: string | undefined,
+  enabled: boolean,
+  provider: ChangeRequestProvider = 'github',
+) {
+  const { baseUrl, sessionId } = useChatSessionContext();
   const { transcript, busy } = useChatTranscript();
   const queryClient = useQueryClient();
   const notificationIds = notificationKey(transcript.entries);
-  const sessionKey = `${resourceId}:${threadId}:${projectPath}`;
+  const sessionKey = `${sessionId}:${threadId}`;
   const previous = useRef({ busy, notificationIds, sessionKey });
   const active = enabled && Boolean(threadId);
 
   const query = useQuery({
-    queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
+    queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
     queryFn:
-      active && threadId ? () => listPullRequestSubscriptions(baseUrl, resourceId, threadId, projectPath) : skipToken,
+      active && threadId ? () => listPullRequestSubscriptions(baseUrl, sessionId, threadId, provider) : skipToken,
   });
 
   useEffect(() => {
@@ -56,9 +60,9 @@ export function usePullRequestSubscriptions(threadId: string | undefined, enable
     if (!runSettled && !newNotification) return;
     if (!active) return;
     void queryClient.invalidateQueries({
-      queryKey: pullRequestSubscriptionsQueryKey(resourceId, threadId, projectPath),
+      queryKey: pullRequestSubscriptionsQueryKey(sessionId, threadId, provider),
     });
-  }, [active, busy, notificationIds, projectPath, queryClient, resourceId, sessionKey, threadId]);
+  }, [active, busy, notificationIds, provider, queryClient, sessionId, sessionKey, threadId]);
 
   return query.data ?? NO_SUBSCRIPTIONS;
 }

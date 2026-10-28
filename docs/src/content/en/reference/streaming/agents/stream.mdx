@@ -308,7 +308,7 @@ const stream = await agent.stream('message for agent')
                 parameters: [
                   {
                     name: 'messageFilter',
-                    type: '(context: MessageFilterContext) => MastraDBMessage[] | Promise<MastraDBMessage[]>',
+                    type: '(context: MessageFilterContext) => ModelMessage[] | Promise<ModelMessage[]>',
                     isOptional: true,
                     description:
                       'Callback function called before delegating to a subagent. Use this to filter the messages that are passed to the subagent.',
@@ -427,7 +427,8 @@ const stream = await agent.stream('message for agent')
                     name: 'instructions',
                     type: 'string',
                     isOptional: true,
-                    description: 'Additional instructions for the structured output model.',
+                    description:
+                      'Additional instructions for the structured output model. With `jsonPromptInjection` and no structuring `model`, this text is injected into the prompt in place of the serialized schema.',
                   },
                 ],
               },
@@ -497,6 +498,13 @@ const stream = await agent.stream('message for agent')
               '**Deprecated.** Use structuredOutput without a model to achieve the same thing. Defines the expected structure of the output. Can be a JSON Schema object or a Zod schema.',
           },
           {
+            name: 'scopes',
+            type: 'string[]',
+            isOptional: true,
+            description:
+              "Scopes the run acts as, written as `<type>:<value>` (for example `org:acme`, `resource:user-123`, `thread:conversation-123`). Memory reads its resource and thread from `resource:` and `thread:` scopes. Other scopes are passed to tools and processors. Combined with the agent's `scopes` and the `mastra__scopes` request context key. Throws if a `resource:` or `thread:` scope conflicts with another resource or thread value.",
+          },
+          {
             name: 'memory',
             type: 'object',
             isOptional: true,
@@ -541,7 +549,7 @@ const stream = await agent.stream('message for agent')
                     type: '(title: string) => void | Promise<void>',
                     isOptional: true,
                     description:
-                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
+                      'Callback fired asynchronously when a thread title is generated and persisted to storage. Title generation runs in the background and may complete after the stream ends, unless `generateTitle.emitEvent` is enabled — then the title is also emitted as a `data-thread-title` chunk on the stream before `finish`. Only fires when `generateTitle` is enabled in memory options and the thread has no existing title.',
                   },
                 ],
               },
@@ -704,6 +712,13 @@ const stream = await agent.stream('message for agent')
               'Maximum number of tool calls to execute concurrently. Defaults to 1 when approval may be required, otherwise 10.',
           },
           {
+            name: 'eagerToolExecution',
+            type: 'boolean',
+            isOptional: true,
+            description:
+              "Defaults to `true`. A tool call whose arguments have finished streaming starts executing immediately, instead of waiting for the model to finish the whole step. Set it to `false` to restore the previous scheduling. Tool results and message history keep their model-call order either way. Only server-side tools are started early: approval-gated, suspend-schema-declaring, provider-executed, client-side, background-dispatched (by argument or by `backgroundTasks` config), missing and inactive tools are left to the post-stream pass, as is any run using `autoResumeSuspendedTools` or an output processor that runs after the stream completes. That last case is wider than it sounds: a processor workflow you build yourself counts whatever it contains, because its contents are not inspected, and so does `structuredOutput` when given an explicit `model`. A processor implementing `processToolResult` is excluded too when a provider-executed tool is configured: that hook runs inside the stream when a provider result arrives there, and its abort bails the turn before the post-stream pass, so starting a tool early would change whether it runs, not just when. Without a provider tool, the hook only sees results after the pass and early dispatch stays on. Also left to the post-stream pass is any run using `toolCallConcurrency.strategy: 'called'` (the full set of called tools is not known until the step finishes). Eager executions honour the same `toolCallConcurrency` limit (they are counted separately from the post-stream pass, so the limit constrains each rather than being pooled across both). Aborting the run gives running tool executions a 250 ms grace period to settle and keeps successful results completed within that window. Canceled tool calls emit a `tool-result` chunk carrying a cancellation notice and record it in conversation history, so the next turn knows the tool started and its effects are unknown. Check the tool's status before retrying. Later results or errors are ignored. The grace period bounds the wait for tool cleanup, not the overall run deadline. For in-process agents, the remaining `modelSettings.timeout.totalMs` budget can expire first, producing `MastraTimeoutError` instead of the cancellation notice. This timeout precedence has not been verified for durable agents. This does not forcibly stop tool code or an already-running `onOutput` hook. Already-started tool code and external side effects may continue after cancellation. If the last model fails mid-stream with no retry, its calls still run through the post-stream pass, which adopts eager work instead of restarting it. Unless the caller cancels the run, retry and fallback allow running tools to finish and write every started call's result or error into the conversation before the replacement attempt begins, even if the retry never runs. A tool that calls `suspend()` at runtime without declaring a suspend schema cannot be detected in advance; the early attempt hands its suspension back to that call's own post-stream iteration, which raises the real suspension with the tool's own payload, so the tool body runs exactly once — the same as it would without early execution. Because that pre-suspend work already happened, an attempt holding such a call is never retried or failed over: the run suspends on that call instead, so resuming it is the only way the tool runs again. Not supported by durable agents, which reject an explicit `true`.",
+          },
+          {
             name: 'providerOptions',
             type: 'Record<string, Record<string, JSONValue>>',
             isOptional: true,
@@ -794,6 +809,13 @@ const stream = await agent.stream('message for agent')
               {
                 parameters: [
                   {
+                    name: 'rootSpanName',
+                    type: 'string',
+                    isOptional: true,
+                    description:
+                      "Display name for the root span of this trace, replacing the default `workflow run: '<id>'` or `agent run: '<id>'` name. Use it to tell runs apart in trace lists.",
+                  },
+                  {
                     name: 'metadata',
                     type: 'Record<string, any>',
                     isOptional: true,
@@ -832,6 +854,17 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     description:
                       'Parent span ID to use for this execution (1-16 hexadecimal characters). If provided, the root span will be created as a child of this span.',
+                  },
+                ],
+              },
+              {
+                parameters: [
+                  {
+                    name: 'nestUnderParent',
+                    type: 'boolean',
+                    isOptional: true,
+                    description:
+                      "Set to `true` together with `parentSpanId` to attach this run as a child of that span inside the existing trace, for example an LLM judge under the run it scores. Exporters then keep the trace's own name, input, output, and tags. Leave unset when `parentSpanId` comes from your own tracing system. Ignored without a valid `traceId` and `parentSpanId`.",
                   },
                 ],
               },
@@ -905,7 +938,7 @@ const stream = await agent.stream('message for agent')
                     isOptional: true,
                     defaultValue: '300000',
                     description:
-                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: 5 minutes.',
+                      'Closes the outer stream after this many ms of idleness between turns. The timer only runs while the wrapper is between turns. Default: `backgroundTasks.untilIdleMaxIdleMs` from the Mastra config, or 5 minutes.',
                   },
                 ],
               },
@@ -944,6 +977,24 @@ const stream = await agent.stream('message for agent')
 ]}
 />
 
+## `stopWhen` errors
+
+If a `stopWhen` predicate throws, `fullStream` rejects with that error without emitting a `step-finish`, `finish`, or `error` chunk for the failure. Catch the rejection around stream consumption:
+
+```ts
+async function consumeStream() {
+  try {
+    for await (const chunk of stream.fullStream) {
+      console.log(chunk)
+    }
+  } catch (error) {
+    console.error('stopWhen failed', error)
+  }
+}
+```
+
+Durable transports reconstruct cross-process errors from their serialized name and message. The original stack, cause, and subclass identity aren't available to the stream consumer.
+
 ## Signal visibility
 
 Signals, including reactive reminders, appear in `fullStream` by default. Set `hideSignals` to omit selected signal chunks from your stream:
@@ -960,7 +1011,7 @@ for await (const chunk of stream.fullStream) {
 
 Set `hideSignals: true` to hide all recognized signal types, or `hideSignals: false` to show all signals. An array selects individual types.
 
-The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal` or `data-user-message` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
+The array accepts `user`, `state`, `reactive`, `notification`, and the legacy aliases `user-message` and `system-reminder`. An omitted option, `false`, or `[]` excludes nothing. Streaming normalizes `system-reminder` to `reactive` and `user-message` to `user`, then matches the encoded signal type in `data-signal`, `data-user-message`, or `data-user-message-pending` chunks. Unknown or malformed signal chunks pass through, as do text, errors, and completion events.
 
 Exclusions apply after `experimentalTransform`, so transforms still receive the unfiltered input. Adapters consuming `fullStream` inherit the filter, but aggregate `content`, `getFullOutput()`, response messages, callbacks, model context, and saved messages remain unchanged.
 

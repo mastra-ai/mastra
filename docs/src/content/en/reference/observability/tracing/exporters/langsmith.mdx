@@ -81,6 +81,13 @@ Extends both `ClientConfig` (from LangSmith SDK) and `BaseExporterConfig`:
     description: 'Pre-configured LangSmith client instance',
     required: false,
   },
+  {
+    name: 'runIdCacheMaxEntries',
+    type: 'number',
+    description:
+      'How many trace-to-root-run id mappings to keep in memory so trace-level scores for recently exported traces skip the LangSmith lookup. Defaults to 10000.',
+    required: false,
+  },
 ]}
 />
 
@@ -102,13 +109,15 @@ async flush(): Promise<void>
 
 Force flushes any pending spans to LangSmith without shutting down the exporter. Useful in serverless environments where you need to ensure spans are exported before the runtime terminates.
 
+Waits for the LangSmith client's queued and in-flight batches. When the client uses `manualFlushMode: true`, this calls `client.flush()` for you, so you don't need to flush the client yourself. Overlapping calls wait for the earlier upload to finish.
+
 ### shutdown
 
 ```typescript oxfmt:false
 async shutdown(): Promise<void>
 ```
 
-Ends all active spans and clears the trace map.
+Ends all active spans and clears the trace map. Spans that are still open are ended with a shutdown error, and their updates are sent to LangSmith before the promise resolves.
 
 ## Usage
 
@@ -142,6 +151,14 @@ const exporter = new LangSmithExporter({
 | `PROVIDER_TOOL_CALL` | `tool` |
 | All others | `chain` |
 
+## `langsmithRunIdFor`
+
+```typescript
+function langsmithRunIdFor(spanId: string): string
+```
+
+Returns the LangSmith run id the exporter uses for a Mastra span id. Scores submitted with `mastra.observability.addScore()` are attached to these runs as feedback, so no in-process state is needed.
+
 ## `withLangsmithMetadata`
 
 Helper function to add LangSmith-specific metadata to tracing options.
@@ -163,7 +180,8 @@ function withLangsmithMetadata(metadata: LangSmithMetadataInput): TracingOptions
   {
     name: 'sessionId',
     type: 'string',
-    description: 'Session ID for grouping related traces',
+    description:
+      'Session ID for grouping related traces into a LangSmith Thread. Defaults to `sessionId`, then `threadId`, from span metadata',
     required: false,
   },
   {

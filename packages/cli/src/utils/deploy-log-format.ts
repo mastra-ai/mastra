@@ -447,8 +447,8 @@ export function createLogCollector(limit = DEFAULT_LOG_COLLECTOR_LIMIT): LogColl
 export interface DeployLogWriter {
   /** Format raw log entries and queue them for display. */
   write(...rawEntries: string[]): void;
-  /** Draw every queued line now. Call before printing anything after the logs. */
-  flush(): void;
+  /** Draw queued lines now. Reset the window before printing other output if logs will continue. */
+  flush(options?: { resetWindow?: boolean }): void;
 }
 
 /**
@@ -558,12 +558,17 @@ export function createDeployLogWriter(options: DeployLogWriterOptions = {}): Dep
       stepSize = Math.max(stepSize, Math.ceil((pending.length * SCROLL_STEP_INTERVAL_MS) / SCROLL_DRAIN_TARGET_MS));
       schedule();
     },
-    flush() {
+    flush({ resetWindow = false } = {}) {
       if (timer !== undefined) {
         clearTimeout(timer);
         timer = undefined;
       }
       commit(pending.splice(0));
+      if (resetWindow) {
+        window.length = 0;
+        rendered = 0;
+        stepSize = 1;
+      }
     },
   };
 }

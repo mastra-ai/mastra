@@ -28,14 +28,45 @@ export type {
   SubscribeAgentControllerSessionOptions,
   AgentControllerSubscription,
   PlanResume,
+  AgentControllerCommandAck,
+  AgentControllerCommandRejection,
 } from './resources/agent-controller';
 export { RequestContext } from '@mastra/core/request-context';
 // ObservabilityCollector type is available for power users but most
 // users interact via `observe` on the tool execution context.
 export type { ObservabilityCollector } from './observability/types';
-export type { QueryTraceThreadsInput, QueryTraceThreadsResult, QueryTracesInput } from './resources/observability';
+export type {
+  QuerySpansInput,
+  QuerySpansResult,
+  QueryTraceThreadsInput,
+  QueryTraceThreadsResult,
+  QueryTracesInput,
+  QueryTracesDeltaInput,
+  QueryTracesKeysetInput,
+  QueryTracesPaginatedInput,
+} from './resources/observability';
 export type { UIMessageWithMetadata } from '@mastra/core/agent';
-export type { GetMetricTimeSeriesResponse } from '@mastra/core/storage';
+export type { GetMetricTimeSeriesResponse } from './types';
+export type {
+  AggregateTracesArgs,
+  AggregateTracesResponse,
+  AggregateSpansArgs,
+  AggregateSpansResponse,
+  TraceAggregateDiscovery,
+  GetTraceQueryFieldsArgs,
+  GetTraceQueryFieldsResponse,
+  GetTraceQueryValuesArgs,
+  GetTraceQueryValuesResponse,
+  TraceQueryCanonicalFieldDescriptor,
+  TraceQueryGroupResponse,
+  TraceQueryKeysetTraceResponse,
+  TraceQueryObservedFieldDescriptor,
+  TraceQueryOperator,
+  TraceQueryPredicateScope,
+  TraceQueryResponse,
+  TraceQueryTraceResponse,
+  TraceQueryValueKind,
+} from './resources/observability-route-types';
 export type {
   Body,
   Client,

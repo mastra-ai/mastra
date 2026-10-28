@@ -247,7 +247,7 @@ describe('zod-v4 standard-schema adapter', () => {
       expect(serialized.task_write.properties.tasks.items.required).toEqual(['content', 'status', 'activeForm']);
       expect(serialized.task_check.properties).toEqual({});
       expect(serialized.submit_plan.required).toEqual(['plan']);
-      expect(serialized.submit_plan.properties.title).toEqual({ anyOf: [{ type: 'string' }, { type: 'null' }] });
+      expect(serialized.submit_plan.properties.title).toEqual({ type: ['string', 'null'] });
     });
 
     it('should pass adapter options to z.toJSONSchema', () => {

@@ -13,6 +13,7 @@ import { SpanType } from '@mastra/core/observability';
 import type {
   AgentRunAttributes,
   AnyExportedSpan,
+  MCPServerRequestAttributes,
   MCPToolCallAttributes,
   ModelGenerationAttributes,
   ModelInferenceAttributes,
@@ -249,6 +250,27 @@ export function getSpanName(span: AnyExportedSpan, options?: GenAISemanticsOptio
 }
 
 /**
+ * Adds authored workflow entry identity (id, description, metadata) for
+ * control-flow spans. Metadata is JSON-serialized to keep nested values and
+ * falsy members (false, 0) intact; absent fields add no key.
+ */
+function addEntryAttributes(
+  attributes: Attributes,
+  spanType: string,
+  attrs: { entryId?: string; entryDescription?: string; entryMetadata?: Record<string, unknown> },
+): void {
+  if (attrs.entryId !== undefined) {
+    attributes[`mastra.${spanType}.entry_id`] = attrs.entryId;
+  }
+  if (attrs.entryDescription !== undefined) {
+    attributes[`mastra.${spanType}.entry_description`] = attrs.entryDescription;
+  }
+  if (attrs.entryMetadata !== undefined) {
+    attributes[`mastra.${spanType}.entry_metadata`] = JSON.stringify(attrs.entryMetadata);
+  }
+}
+
+/**
  * Gets OpenTelemetry attributes from Mastra Span
  * Following OTEL Semantic Conventions for GenAI
  */
@@ -457,6 +479,28 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     attributes[ATTR_GEN_AI_SYSTEM_INSTRUCTIONS] = agentAttrs.instructions;
   }
 
+  // Add MCP server request attributes (OTel MCP semantic conventions where they exist)
+  if (span.type === SpanType.MCP_SERVER_REQUEST && span.attributes) {
+    const requestAttrs = span.attributes as MCPServerRequestAttributes;
+    attributes['mcp.method.name'] = requestAttrs.mcpMethod;
+    attributes[`mastra.${spanType}.server_name`] = requestAttrs.mcpServer;
+    if (requestAttrs.targetName) {
+      attributes[`mastra.${spanType}.target_name`] = requestAttrs.targetName;
+    }
+    if (requestAttrs.serverVersion) {
+      attributes[`mastra.${spanType}.server_version`] = requestAttrs.serverVersion;
+    }
+    if (requestAttrs.mcpProtocolVersion) {
+      attributes['mcp.protocol.version'] = requestAttrs.mcpProtocolVersion;
+    }
+    if (requestAttrs.clientName) {
+      attributes[`mastra.${spanType}.client_name`] = requestAttrs.clientName;
+    }
+    if (requestAttrs.clientVersion) {
+      attributes[`mastra.${spanType}.client_version`] = requestAttrs.clientVersion;
+    }
+  }
+
   // Add workflow-specific attributes. Control-flow spans carry native branch,
   // loop, sleep and wait metadata that is otherwise dropped on export. Values
   // are emitted under the existing `mastra.<span_type>.<snake_case>` convention;
@@ -477,6 +521,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
       if (stepAttrs.status !== undefined) {
         attributes[`mastra.${spanType}.status`] = stepAttrs.status;
       }
+      addEntryAttributes(attributes, spanType, stepAttrs);
     }
   }
 
@@ -491,6 +536,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (condAttrs.selectedSteps !== undefined) {
       attributes[`mastra.${spanType}.selected_steps`] = JSON.stringify(condAttrs.selectedSteps);
     }
+    addEntryAttributes(attributes, spanType, condAttrs);
   }
 
   if (span.type === SpanType.WORKFLOW_CONDITIONAL_EVAL && span.attributes) {
@@ -511,6 +557,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (parallelAttrs.parallelSteps !== undefined) {
       attributes[`mastra.${spanType}.parallel_steps`] = JSON.stringify(parallelAttrs.parallelSteps);
     }
+    addEntryAttributes(attributes, spanType, parallelAttrs);
   }
 
   if (span.type === SpanType.WORKFLOW_LOOP && span.attributes) {
@@ -527,6 +574,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (loopAttrs.concurrency !== undefined) {
       attributes[`mastra.${spanType}.concurrency`] = loopAttrs.concurrency;
     }
+    addEntryAttributes(attributes, spanType, loopAttrs);
   }
 
   if (span.type === SpanType.WORKFLOW_SLEEP && span.attributes) {
@@ -540,6 +588,7 @@ export function getAttributes(span: AnyExportedSpan, options?: GenAISemanticsOpt
     if (sleepAttrs.sleepType !== undefined) {
       attributes[`mastra.${spanType}.sleep_type`] = sleepAttrs.sleepType;
     }
+    addEntryAttributes(attributes, spanType, sleepAttrs);
   }
 
   if (span.type === SpanType.WORKFLOW_WAIT_EVENT && span.attributes) {

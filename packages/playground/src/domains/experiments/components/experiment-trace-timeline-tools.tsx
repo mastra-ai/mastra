@@ -1,7 +1,7 @@
-import type { LightSpanRecord } from '@mastra/core/storage';
 import { Button } from '@mastra/playground-ui/components/Button';
 import { ButtonsGroup } from '@mastra/playground-ui/components/ButtonsGroup';
-import { SearchFieldBlock } from '@mastra/playground-ui/components/FormFieldBlocks';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
+import type { LightSpanRecord } from '@mastra/playground-ui/domains/traces/types';
 import { Icon } from '@mastra/playground-ui/icons/Icon';
 import { XIcon, CircleDashedIcon } from 'lucide-react';
 import { Fragment, useEffect, useState } from 'react';
@@ -57,19 +57,14 @@ export function ExperimentTraceTimelineTools({
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="flex">
-        <SearchFieldBlock
-          name="search-spans"
+        <SearchInput
           label="Find span by name"
-          labelIsHidden
           placeholder="Look for span name"
           value={localSearchPhrase}
-          onChange={e => {
-            setLocalSearchPhrase(e.target.value);
-          }}
-          onReset={() => setLocalSearchPhrase('')}
+          onValueChange={setLocalSearchPhrase}
         />
       </div>
-      <ButtonsGroup spacing="close">
+      <ButtonsGroup>
         {usedSpanTypes.map(item => {
           const spanUI = getExperimentSpanTypeUi(item);
           const isFaded = fadedTypes?.includes(item);
@@ -89,17 +84,15 @@ export function ExperimentTraceTimelineTools({
         })}
         {hasOtherSpanTypes && (
           <Button
-            onClick={() => handleToggle('other' as ExperimentUISpanType)}
+            onClick={() => handleToggle('other')}
             className={fadedTypes?.includes('other') ? 'opacity-40' : ''}
             icon={<CircleDashedIcon />}
           >
             Other
           </Button>
         )}
-        <Button onClick={onLegendReset} disabled={fadedTypes?.length === 0}>
-          <Icon>
-            <XIcon />
-          </Icon>
+        <Button size="icon-md" onClick={onLegendReset} disabled={fadedTypes?.length === 0}>
+          <XIcon />
         </Button>
       </ButtonsGroup>
     </div>

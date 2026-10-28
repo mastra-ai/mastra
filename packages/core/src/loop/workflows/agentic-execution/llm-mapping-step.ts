@@ -1,50 +1,24 @@
 import type { StepResult, ToolSet } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
-import type { MastraDBMessage, MessageList } from '../../../agent/message-list';
-import { sanitizeToolName } from '../../../agent/message-list/utils/tool-name';
 import { TripWire } from '../../../agent/trip-wire';
-import { createObservabilityContext, EntityType, SpanType } from '../../../observability';
+import { createObservabilityContext } from '../../../observability';
 import type { ProcessorState } from '../../../processors';
 import { ProcessorRunner } from '../../../processors/runner';
+import { safeEnqueue } from '../../../stream/base';
 import type { ChunkType, ProviderMetadata } from '../../../stream/types';
 import { ChunkFrom } from '../../../stream/types';
-import {
-  transformToolPayloadForTargets,
-  withToolPayloadTransformMetadata,
-  withToolPayloadTransformProviderMetadata,
-} from '../../../tools/payload-transform';
-import { findProviderToolByName } from '../../../tools/provider-tool-utils';
+import { withToolPayloadTransformProviderMetadata } from '../../../tools/payload-transform';
 import { createStep } from '../../../workflows/workflow';
 import { readScoped, writeScoped } from '../../run-scope-access';
 import type { RunScopeContext } from '../../run-scope-access';
 import { DELEGATION_BAILED_KEY, STEP_TOOLS_KEY, TOOL_PAYLOAD_TRANSFORM_KEY } from '../../run-scope-keys';
+import { readToolResultFromMessageList } from '../../shared/read-tool-result';
+import { processAndEmitChunk } from '../../shared/steps/process-chunk-core';
+import { commitToolResult, computeModelOutputProviderMetadata } from '../../shared/steps/tool-result-commit-core';
+import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import type { OuterLLMRun } from '../../types';
-import { deserializeToolError } from '../errors';
+import { deserializeToolError, getSubAgentErrorResult } from '../errors';
 import { llmIterationOutputSchema, toolCallOutputSchema } from '../schema';
-
-/**
- * Walk messageList backwards looking for a tool-invocation part with the given
- * toolCallId in result state. Used to read the post-processToolResult value back
- * from the message list so we can sync any processor mutations into the
- * downstream tool-result stream chunk.
- */
-function readToolResultFromMessageList(messageList: MessageList, toolCallId: string): unknown {
-  const messages: MastraDBMessage[] = messageList.get.all.db();
-  for (let i = messages.length - 1; i >= 0; i--) {
-    const msg = messages[i];
-    if (!msg || msg.role !== 'assistant' || !msg.content?.parts) continue;
-    for (const part of msg.content.parts) {
-      if (
-        part?.type === 'tool-invocation' &&
-        part.toolInvocation?.toolCallId === toolCallId &&
-        part.toolInvocation?.state === 'result'
-      ) {
-        return part.toolInvocation.result;
-      }
-    }
-  }
-  return undefined;
-}
 
 export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = undefined>(
   { models, _internal, ...rest }: OuterLLMRun<Tools, OUTPUT>,
@@ -74,6 +48,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           logger: rest.logger,
           agentName: 'LLMMappingStep',
           processorStates: rest.processorStates,
+          agent: rest.agent,
         })
       : undefined;
 
@@ -87,73 +62,20 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
   // Helper function to process a chunk through output processors and enqueue it.
   // Returns the processed chunk, or null if the chunk was blocked by a processor.
+  // No onProcessorError policy: processor failures propagate and fail the request —
+  // in this engine the run and stream share a lifecycle, so the client sees the error.
   async function processAndEnqueueChunk(chunk: ChunkType<OUTPUT>): Promise<ChunkType<OUTPUT> | null> {
-    if (processorRunner && rest.processorStates) {
-      const {
-        part: processed,
-        blocked,
-        reason,
-        tripwireOptions,
-        processorId,
-      } = await processorRunner.processPart(
-        chunk,
-        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        observabilityContext,
-        rest.requestContext,
-        rest.messageList,
-        0,
-        streamWriter,
-      );
-
-      const enqueueTripwire = (r?: string, opts?: { retry?: boolean; metadata?: unknown }, pid?: string) => {
-        rest.controller.enqueue({
-          type: 'tripwire',
-          payload: {
-            reason: r || 'Output processor blocked content',
-            retry: opts?.retry,
-            metadata: opts?.metadata,
-            processorId: pid,
-          },
-        } as ChunkType<OUTPUT>);
-      };
-
-      if (blocked) {
-        // Emit a tripwire chunk so downstream knows about the abort
-        enqueueTripwire(reason, tripwireOptions, processorId);
-        return null;
-      }
-
-      if (processed) {
-        rest.controller.enqueue(processed as ChunkType<OUTPUT>);
-      }
-
-      // Emit any parts a processor stashed for reprocessing (e.g. the non-text
-      // part that triggered a BatchPartsProcessor flush), pushing each back
-      // through the whole chain so it gets downstream processing.
-      const reprocessed = await processorRunner.drainReprocessParts(
-        rest.processorStates as Map<string, ProcessorState<OUTPUT>>,
-        observabilityContext,
-        rest.requestContext,
-        rest.messageList,
-        0,
-        streamWriter,
-      );
-      for (const r of reprocessed) {
-        if (r.blocked) {
-          enqueueTripwire(r.reason, r.tripwireOptions, r.processorId);
-          return processed ? (processed as ChunkType<OUTPUT>) : null;
-        }
-        if (r.part != null) {
-          rest.controller.enqueue(r.part as ChunkType<OUTPUT>);
-        }
-      }
-
-      return processed ? (processed as ChunkType<OUTPUT>) : null;
-    } else {
-      // No processor runner, just enqueue the chunk directly
-      rest.controller.enqueue(chunk);
-      return chunk;
-    }
+    return processAndEmitChunk<OUTPUT>(chunk, {
+      runner: processorRunner,
+      processorStates: rest.processorStates as Map<string, ProcessorState<OUTPUT>> | undefined,
+      observabilityContext,
+      requestContext: rest.requestContext,
+      messageList: rest.messageList,
+      streamWriter,
+      emitChunk: c => {
+        safeEnqueue(rest.controller, c);
+      },
+    });
   }
 
   /**
@@ -215,7 +137,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
    * step result. Mirrors the tripwire emission in processAndEnqueueChunk.
    */
   function emitTripwireChunk(tripwire: TripWire): void {
-    rest.controller.enqueue({
+    safeEnqueue(rest.controller, {
       type: 'tripwire',
       payload: {
         reason: tripwire.message || 'Tool result blocked by processor',
@@ -232,6 +154,21 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
     outputSchema: llmIterationOutputSchema,
     execute: async ({ inputData, getStepResult, bail }) => {
       const initialResult = getStepResult(llmExecutionStep);
+      // A processToolResult abort is terminal for the run: stop processing the
+      // remaining tool results and end the loop instead of calling the model again.
+      const bailOnToolResultTripwire = (tripwire: TripWire) => {
+        emitTripwireChunk(tripwire);
+        initialResult.stepResult.reason = 'tripwire';
+        initialResult.stepResult.isContinued = false;
+        return bail({
+          ...initialResult,
+          messages: {
+            all: rest.messageList.get.all.aiV5.model(),
+            user: rest.messageList.get.input.aiV5.model(),
+            nonUser: rest.messageList.get.response.aiV5.model(),
+          },
+        });
+      };
 
       /**
        * Compute toModelOutput for a successful tool call and return providerMetadata
@@ -243,52 +180,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
        * When toModelOutput is defined, the transform runs under a MAPPING child span so
        * traces can distinguish "never invoked" from "ran no-op" from "ran transforming."
        */
-      /**
-       * Normalize modelOutput from toModelOutput() into the AI SDK's
-       * LanguageModelV2ToolResultOutput shape.
-       *
-       * The AI SDK's content array only accepts type 'text' or 'media'.
-       * Mastra's createTool docs show type 'image-url' as a convenience shorthand,
-       * so we normalize that here into type 'media' with the correct structure.
-       *
-       * Previously this converted 'media' -> 'image-data'/'file-data' which was wrong
-       * (those types are not valid in LanguageModelV2ToolResultOutput).
-       * See: https://github.com/mastra-ai/mastra/issues/17876
-       */
-      function normalizeModelOutput(output: unknown): unknown {
-        if (output == null || typeof output !== 'object') return output;
-
-        const obj = output as Record<string, unknown>;
-        if (obj.type !== 'content' || !Array.isArray(obj.value)) return output;
-
-        return {
-          ...obj,
-          value: (obj.value as unknown[]).map(item => {
-            if (item == null || typeof item !== 'object') return item;
-            const part = item as Record<string, unknown>;
-            // Normalize 'image-url' convenience type -> 'media' as AI SDK expects
-            if (part.type === 'image-url' && typeof part.url === 'string') {
-              // Prefer caller-supplied mediaType; fall back to parsing data: URI or defaulting to image/jpeg
-              const mediaType =
-                typeof part.mediaType === 'string' && part.mediaType
-                  ? part.mediaType
-                  : part.url.startsWith('data:')
-                    ? part.url.slice(5, part.url.indexOf(';')) || 'image/jpeg'
-                    : 'image/jpeg';
-              return { type: 'media', data: part.url, mediaType };
-            }
-            // 'image-data'/'file-data' from old normalizeModelOutput — convert back to 'media'
-            if (part.type === 'image-data' && typeof part.data === 'string') {
-              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'image/jpeg' };
-            }
-            if (part.type === 'file-data' && typeof part.data === 'string') {
-              return { type: 'media', data: part.data, mediaType: part.mediaType ?? 'application/octet-stream' };
-            }
-            return part;
-          }),
-        };
-      }
-
       async function getProviderMetadataWithModelOutput(toolCall: {
         toolName: string;
         toolCallId?: string;
@@ -302,91 +193,35 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         )?.[toolCall.toolName] ?? rest.tools?.[toolCall.toolName]) as
           | { toModelOutput?: (output: unknown) => unknown }
           | undefined;
-        let modelOutput: unknown;
-        if (tool?.toModelOutput && toolCall.result != null) {
-          const parentSpan = observabilityContext?.tracingContext?.currentSpan;
-          const mappingSpan = parentSpan?.createChildSpan({
-            type: SpanType.MAPPING,
-            name: `tool output mapping: '${toolCall.toolName}'`,
-            entityType: EntityType.TOOL,
-            entityId: toolCall.toolName,
-            entityName: toolCall.toolName,
-            input: toolCall.result,
-            attributes: {
-              mappingType: 'toModelOutput',
-              toolCallId: toolCall.toolCallId,
-            },
-          });
-          try {
-            modelOutput = await tool.toModelOutput(toolCall.result);
-            // Normalize media parts to image-data/file-data as AI SDK expects
-            modelOutput = normalizeModelOutput(modelOutput);
-            mappingSpan?.end({ output: modelOutput });
-          } catch (err) {
-            mappingSpan?.error({ error: err as Error, endSpan: true });
-            throw err;
-          }
-        }
-
-        const existingMastra = (toolCall.providerMetadata as any)?.mastra;
-        const providerMetadata = {
-          ...toolCall.providerMetadata,
-          ...(modelOutput != null ? { mastra: { ...existingMastra, modelOutput } } : {}),
-        };
-        const hasMetadata = Object.keys(providerMetadata).length > 0;
-        return hasMetadata ? providerMetadata : undefined;
+        return computeModelOutputProviderMetadata({
+          tool,
+          toolName: toolCall.toolName,
+          toolCallId: toolCall.toolCallId,
+          result: toolCall.result,
+          existingProviderMetadata: toolCall.providerMetadata,
+          parentSpan: observabilityContext?.tracingContext?.currentSpan,
+        });
       }
 
       async function transformToolChunk(
         chunk: ChunkType<OUTPUT>,
         toolCall: {
-          toolName: string;
-          toolCallId: string;
           args?: unknown;
-          result?: unknown;
-          error?: unknown;
           providerMetadata?: Record<string, unknown>;
         },
-        phase: 'output-available' | 'error' | 'approval',
       ): Promise<ChunkType<OUTPUT>> {
         const stepTools = readScoped(scopeCtx, STEP_TOOLS_KEY, 'stepTools') as ToolSet | undefined;
-        const tool =
-          stepTools?.[toolCall.toolName] ||
-          findProviderToolByName(stepTools, toolCall.toolName) ||
-          Object.values(stepTools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName) ||
-          rest.tools?.[toolCall.toolName] ||
-          findProviderToolByName(rest.tools, toolCall.toolName) ||
-          Object.values(rest.tools || {}).find((t: any) => `id` in t && t.id === toolCall.toolName);
-        const source = {
+        return applyToolPayloadTransformToChunk(chunk as ChunkType<OUTPUT> & { payload?: any }, {
           policy: readScoped(scopeCtx, TOOL_PAYLOAD_TRANSFORM_KEY, 'toolPayloadTransform'),
-          toolTransform: (tool as { transform?: unknown } | undefined)?.transform as any,
-        };
-        const inputTransform = await transformToolPayloadForTargets(
-          {
-            phase: 'input-available',
-            toolName: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            input: toolCall.args,
+          tools: [stepTools, rest.tools],
+          logger: rest.logger,
+          // Transform against the original tool-call args/providerMetadata, not the
+          // emitted payload's (which may carry the merged `mastra.modelOutput`).
+          transformInput: {
+            args: toolCall.args,
             providerMetadata: toolCall.providerMetadata,
           },
-          source,
-          rest.logger,
-        );
-        const transform = await transformToolPayloadForTargets(
-          {
-            phase,
-            toolName: toolCall.toolName,
-            toolCallId: toolCall.toolCallId,
-            input: toolCall.args,
-            output: toolCall.result,
-            error: toolCall.error,
-            providerMetadata: toolCall.providerMetadata,
-          },
-          source,
-          rest.logger,
-        );
-
-        return withToolPayloadTransformMetadata(withToolPayloadTransformMetadata(chunk, inputTransform), transform);
+        }) as Promise<ChunkType<OUTPUT>>;
       }
 
       // A declined approval has no `result` but is fully resolved — it must not be mistaken for a
@@ -396,7 +231,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
 
       if (
         inputData?.some(
-          toolCall => toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall),
+          toolCall =>
+            toolCall.aborted ||
+            (toolCall?.result === undefined && !toolCall.providerExecuted && !isDeniedApproval(toolCall)),
         )
       ) {
         const errorResults = inputData.filter(toolCall => toolCall?.error && !toolCall.providerExecuted);
@@ -407,6 +244,7 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // serializes (Error instances become `{}` over the pubsub bus). Reify here so
             // chunk consumers see a real Error with name/message/stack intact.
             const reifiedError = deserializeToolError(toolCall.error);
+            const subAgentResult = getSubAgentErrorResult(reifiedError);
             const chunk = await transformToolChunk(
               {
                 type: 'tool-error',
@@ -420,36 +258,27 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                   providerMetadata: toolCall.providerMetadata as ProviderMetadata | undefined,
                 },
               },
-              { ...toolCall, error: reifiedError },
-              'error',
+              toolCall,
             );
             const processed = await processAndEnqueueChunk(chunk);
             if (processed) await rest.options?.onChunk?.(processed);
 
-            rest.messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'output-error' as const,
-                toolCallId: toolCall.toolCallId,
-                toolName: sanitizeToolName(toolCall.toolName),
-                args: toolCall.args,
-                // Use the already-reified Error rather than `toolCall.error` (which is the
-                // plain {name,message,stack} shape after the pubsub JSON round-trip).
-                // Without reification the `instanceof Error` check below falls through to
-                // `safeStringify`, dumping the whole stringified payload into the history.
-                errorText: reifiedError.message || 'Tool execution failed',
-              },
-              ...(withToolPayloadTransformProviderMetadata(
+            // Use the already-reified Error rather than `toolCall.error` (which is the
+            // plain {name,message,stack} shape after the pubsub JSON round-trip).
+            // Without reification the `instanceof Error` check below falls through to
+            // `safeStringify`, dumping the whole stringified payload into the history.
+            // A failed sub-agent's structured result rides along so the model can
+            // read what the delegate produced before it failed.
+            commitToolResult({
+              messageList: rest.messageList,
+              outcome: { kind: 'error', errorText: reifiedError.message, result: subAgentResult },
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              toolArgs: toolCall.args,
+              providerMetadata: withToolPayloadTransformProviderMetadata(
                 toolCall.providerMetadata as ProviderMetadata,
                 chunk.metadata,
-              )
-                ? {
-                    providerMetadata: withToolPayloadTransformProviderMetadata(
-                      toolCall.providerMetadata as ProviderMetadata,
-                      chunk.metadata,
-                    ) as ProviderMetadata,
-                  }
-                : {}),
+              ) as ProviderMetadata | undefined,
             });
           }
         }
@@ -460,11 +289,9 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // will see them on the next turn. This handles both tool-not-found errors
         // (hallucinated tool names) and tool execution errors (tool throws).
         //
-        // Check for pending HITL tool calls (no result and no error); in mixed turns these
-        // take priority over continuing the loop. Exclude aborted calls: they also lack a
-        // result/error but were cancelled, not awaiting input, so they must not count as a
-        // suspension or be recorded as a result (see tool-call-step.ts). Denied approvals are
-        // resolved, not pending, so they are excluded too.
+        // Pending HITL tool calls take priority over continuing the loop in mixed turns.
+        // Aborted calls carry cancellation notices rather than awaiting input.
+        // Denied approvals are resolved, not pending, so they are excluded too.
         const hasPendingHITL = inputData.some(
           tc => tc.result === undefined && !tc.error && !tc.aborted && !tc.providerExecuted && !isDeniedApproval(tc),
         );
@@ -476,8 +303,8 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // streamed and committed before bailing — otherwise a completed server-side tool is
         // silently dropped: no tool-result chunk reaches the client (which then waits forever
         // for the call to leave `input-available`) and history persists it in `call` state as
-        // if it never ran (issue #21637). Aborted and denied-approval calls have no `result`,
-        // so they are excluded by construction and stay unrecorded (issue #17995 / PR #18034).
+        // if it never ran (issue #21637). Cancellation notices are also results;
+        // denied approvals have no `result` and are handled separately.
         const successfulResults = inputData.filter(tc => tc.result !== undefined);
         if (successfulResults.length) {
           const stepNumber = (initialResult?.output?.steps?.length ?? 0) as number;
@@ -486,9 +313,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
             // can access it on the chunk's providerMetadata.mastra.modelOutput.
             // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-            const providerMetadata = !toolCall.providerExecuted
-              ? await getProviderMetadataWithModelOutput(toolCall)
-              : undefined;
+            const providerMetadata =
+              !toolCall.providerExecuted && !toolCall.aborted
+                ? await getProviderMetadataWithModelOutput(toolCall)
+                : undefined;
             const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as
               | ProviderMetadata
               | undefined;
@@ -508,7 +336,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 },
               },
               toolCall,
-              'output-available',
             );
 
             // Run processToolResult BEFORE the raw result is committed to messageList.
@@ -530,33 +357,24 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               steps,
             });
             if (!trResult.ok) {
-              emitTripwireChunk(trResult.tripwire);
-              continue;
+              return bailOnToolResultTripwire(trResult.tripwire);
             }
 
             if (!toolCall.providerExecuted) {
               // Update tool invocations from state:'call' to state:'result' for successful client tools.
-              // Provider-executed tools are handled by llm-execution-step.
-              rest.messageList.updateToolInvocation({
-                type: 'tool-invocation' as const,
-                toolInvocation: {
-                  state: 'result' as const,
-                  toolCallId: toolCall.toolCallId,
-                  toolName: sanitizeToolName(toolCall.toolName),
-                  args: toolCall.args,
-                  result: (chunk as { payload: { result: unknown } }).payload.result,
-                  // Preserve the approval decision for an approved approval-gated tool in a mixed
-                  // turn (one tool errored, another approved) so it round-trips on recall too.
-                  ...(toolCall.approval ? { approval: toolCall.approval } : {}),
-                },
-                ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
-                  ? {
-                      providerMetadata: withToolPayloadTransformProviderMetadata(
-                        providerMetadata,
-                        chunk.metadata,
-                      ) as ProviderMetadata,
-                    }
-                  : {}),
+              // Provider-executed tools are handled by llm-execution-step. The approval decision for
+              // an approved approval-gated tool in a mixed turn (one tool errored, another approved)
+              // is preserved so it round-trips on recall too.
+              commitToolResult({
+                messageList: rest.messageList,
+                outcome: { kind: 'result', result: (chunk as { payload: { result: unknown } }).payload.result },
+                toolCallId: toolCall.toolCallId,
+                toolName: toolCall.toolName,
+                toolArgs: toolCall.args,
+                approval: toolCall.approval,
+                providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
+                  | ProviderMetadata
+                  | undefined,
               });
             }
 
@@ -565,11 +383,21 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           }
         }
 
-        if (errorResults?.length > 0 && !hasPendingHITL) {
+        if (
+          errorResults?.length > 0 &&
+          !hasPendingHITL &&
+          !(rest.options?.abortSignal?.aborted && inputData.some(toolCall => toolCall.aborted))
+        ) {
           // Continue the loop — the error messages are already in the messageList,
           // so the model will see them and can retry with correct tool names
           initialResult.stepResult.isContinued = true;
           initialResult.stepResult.reason = 'tool-calls';
+          // A delegation hook may still bail on a failed delegation (e.g. the sub-agent
+          // threw); honor it here too so the loop stops instead of retrying.
+          if (rest.requestContext?.get('__mastra_delegationBailed')) {
+            writeScoped(scopeCtx, DELEGATION_BAILED_KEY, '_delegationBailed', true);
+            rest.requestContext.set('__mastra_delegationBailed', false);
+          }
           return {
             ...initialResult,
             messages: {
@@ -585,6 +413,14 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
         // isContinued = true and we should preserve that to allow the agentic loop to continue
         if (initialResult.stepResult.reason !== 'retry') {
           initialResult.stepResult.isContinued = false;
+        }
+
+        // A cancellation notice records the outcome without making the aborted run continue.
+        if (rest.options?.abortSignal?.aborted && inputData.some(tc => tc.aborted)) {
+          initialResult.stepResult.reason = 'abort';
+          initialResult.stepResult.isContinued = false;
+          await rest.options?.onAbort?.({ steps: initialResult.output?.steps ?? [], text: '' });
+          safeEnqueue(rest.controller, { type: 'abort', runId: rest.runId, from: ChunkFrom.AGENT, payload: {} });
         }
 
         // Update messages field to include any error messages we added to messageList
@@ -612,15 +448,12 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               approved: false as const,
               reason: toolCall.approval!.reason,
             };
-            rest.messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'output-denied' as const,
-                toolCallId: toolCall.toolCallId,
-                toolName: sanitizeToolName(toolCall.toolName),
-                args: toolCall.args,
-                approval,
-              },
+            commitToolResult({
+              messageList: rest.messageList,
+              outcome: { kind: 'denied', approval },
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              toolArgs: toolCall.args,
             });
 
             const chunk = await transformToolChunk(
@@ -636,7 +469,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
                 },
               },
               toolCall,
-              'approval',
             );
             const processed = await processAndEnqueueChunk(chunk);
             if (processed) await rest.options?.onChunk?.(processed);
@@ -651,9 +483,10 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
           // Compute modelOutput before emitting the chunk so consumers (e.g. harness)
           // can access it on the chunk's providerMetadata.mastra.modelOutput.
           // getProviderMetadataWithModelOutput already returns the fully-merged providerMetadata.
-          const providerMetadata = !toolCall.providerExecuted
-            ? await getProviderMetadataWithModelOutput(toolCall)
-            : undefined;
+          const providerMetadata =
+            !toolCall.providerExecuted && !toolCall.aborted
+              ? await getProviderMetadataWithModelOutput(toolCall)
+              : undefined;
           const chunkProviderMetadata = (providerMetadata ?? toolCall.providerMetadata) as ProviderMetadata | undefined;
 
           const chunk = await transformToolChunk(
@@ -671,7 +504,6 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
               },
             },
             toolCall,
-            'output-available',
           );
 
           // Run processToolResult BEFORE the raw result is committed to messageList.
@@ -693,33 +525,24 @@ export function createLLMMappingStep<Tools extends ToolSet = ToolSet, OUTPUT = u
             steps: stepsForToolResults,
           });
           if (!trResult.ok) {
-            emitTripwireChunk(trResult.tripwire);
-            continue;
+            return bailOnToolResultTripwire(trResult.tripwire);
           }
 
           // Provider-executed tools are handled by llm-execution-step; for client-executed
           // tools we patch state:'call' -> state:'result' here after processors have run.
+          // The approval decision for an approved approval-gated tool is preserved so it
+          // round-trips on recall as `approval: { approved: true }`.
           if (!toolCall.providerExecuted) {
-            rest.messageList.updateToolInvocation({
-              type: 'tool-invocation' as const,
-              toolInvocation: {
-                state: 'result' as const,
-                toolCallId: toolCall.toolCallId,
-                toolName: sanitizeToolName(toolCall.toolName),
-                args: toolCall.args,
-                result: (chunk as { payload: { result: unknown } }).payload.result,
-                // Preserve the approval decision for an approved approval-gated tool so it
-                // round-trips on recall as `approval: { approved: true }`.
-                ...(toolCall.approval ? { approval: toolCall.approval } : {}),
-              },
-              ...(withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata)
-                ? {
-                    providerMetadata: withToolPayloadTransformProviderMetadata(
-                      providerMetadata,
-                      chunk.metadata,
-                    ) as ProviderMetadata,
-                  }
-                : {}),
+            commitToolResult({
+              messageList: rest.messageList,
+              outcome: { kind: 'result', result: (chunk as { payload: { result: unknown } }).payload.result },
+              toolCallId: toolCall.toolCallId,
+              toolName: toolCall.toolName,
+              toolArgs: toolCall.args,
+              approval: toolCall.approval,
+              providerMetadata: withToolPayloadTransformProviderMetadata(providerMetadata, chunk.metadata) as
+                | ProviderMetadata
+                | undefined,
             });
           }
 

@@ -97,7 +97,6 @@ function seedSettings(homeDir: string, useOpenAIModel: boolean, openAiApiKey = '
         onboarding: {
           skippedAt: '2026-01-01T00:00:00.000Z',
           version: 1,
-          quietModePreferenceSelected: true,
         },
         ...(useOpenAIModel
           ? {
@@ -123,15 +122,56 @@ async function initializeStorage(dbPath: string): Promise<void> {
   await storage.close();
 }
 
+// aimock (>=1.37.2) journals bodies over 64 KB as a truncation marker, and
+// Mastra Code requests carry the full tool list (~80 KB). A never-matching
+// predicate fixture sees each normalized request in full; restore truncated
+// journal entries from it by the byte size the marker records.
 async function startAimock({ fixturePath }: { fixturePath?: string }): Promise<AimockHandle> {
   const mock = new LLMock({ port: 0 });
   if (fixturePath) mock.loadFixtureFile(fixturePath);
+  // Fixtures were written for aimock's original matching. Since 1.37.3
+  // `hasToolResult` only looks after the last user message (Mastra Code injects
+  // user-role context after tool results), and replay treats `turnIndex` as a
+  // tiebreaker rather than a gate. Restore both as whole-conversation predicates.
+  for (const fixture of mock.getFixtures()) {
+    const { hasToolResult, turnIndex, ...match } = fixture.match;
+    if (hasToolResult === undefined && turnIndex === undefined) continue;
+    fixture.match = {
+      ...match,
+      predicate: req =>
+        (hasToolResult === undefined || req.messages.some(message => message.role === 'tool') === hasToolResult) &&
+        (turnIndex === undefined || req.messages.filter(message => message.role === 'assistant').length === turnIndex),
+    };
+  }
+  const seen = new Set<object>();
+  mock.prependFixture({
+    match: {
+      predicate: req => {
+        seen.add(req);
+        return false;
+      },
+    },
+    response: { content: '' },
+  });
   await mock.start();
+
+  const requests = () => {
+    const unused = [...seen].map(body => ({ body, size: Buffer.byteLength(JSON.stringify(body), 'utf8') }));
+    return mock.getRequests().map(entry => {
+      const marker = entry.body as { __aimock_truncated?: boolean; originalByteSize?: number } | null;
+      if (!marker?.__aimock_truncated) return entry;
+      const index = unused.findIndex(candidate => candidate.size === marker.originalByteSize);
+      if (index === -1) return entry;
+      const [full] = unused.splice(index, 1);
+      return full ? { ...entry, body: full.body } : entry;
+    });
+  };
+
   return {
     url: mock.url,
     stop: () => mock.stop(),
     requestCount: () => mock.getRequests().length,
-    requests: () => mock.getRequests() as unknown[],
+    requests,
   };
 }
 
@@ -213,6 +253,8 @@ async function prepareTerminalRun(
     MASTRACODE_DISABLE_HOOKS: '1',
     MASTRACODE_DISABLE_UNIX_SOCKET_PUBSUB: '1',
     ...(scenario.disableMemory === true ? { MASTRACODE_DISABLE_MEMORY: '1' } : {}),
+    ...(scenario.enableObservationalMemory === true ? {} : { MASTRACODE_DISABLE_OBSERVATIONAL_MEMORY: '1' }),
+    ...(scenario.enableTitleGeneration === true ? {} : { MASTRACODE_DISABLE_TITLE_GENERATION: '1' }),
     ...(scenario.name === 'update-startup-prompt' ? {} : { MASTRACODE_DISABLE_UPDATE_CHECK: '1' }),
     ...(scenario.useOpenAIModel ? { MASTRACODE_MODEL_ID: 'openai/gpt-5.4-mini', MASTRACODE_YOLO: '1' } : {}),
     FORCE_COLOR: '1',

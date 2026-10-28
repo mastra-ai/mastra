@@ -3,14 +3,8 @@ import type { FilePart, TextPart, UserModelMessage } from '@internal/ai-sdk-v5';
 import { convertDataContentToBase64String } from './message-list/prompt/data-content';
 import type { MastraDBMessage, MastraMessagePart, MastraProviderMetadata } from './message-list/state/types';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalCategory = 'user' | 'state' | 'reactive' | 'notification';
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentLegacySignalType = 'user-message' | 'system-reminder';
 export type AgentSignalType = AgentSignalCategory | AgentLegacySignalType;
 
@@ -25,11 +19,9 @@ type SignalFilePart = {
   providerOptions?: MastraProviderMetadata;
 };
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalContents = string | Array<TextPart | FilePart>;
 export type AgentSignalAttributes = Record<string, string | number | boolean | null | undefined>;
+export type MessageAuthor = { id: string; name?: string; avatarUrl?: string };
 export type AgentStateSignalMode = 'snapshot' | 'delta';
 
 export type AgentStateSignalInput = {
@@ -51,6 +43,7 @@ export type AgentMessageInput =
       contents: AgentSignalContents;
       attributes?: AgentSignalAttributes;
       metadata?: Record<string, unknown>;
+      author?: MessageAuthor;
       providerOptions?: MastraProviderMetadata;
     };
 
@@ -62,6 +55,7 @@ type AgentSignalInputBase = {
   contents: AgentSignalContents;
   attributes?: AgentSignalAttributes;
   metadata?: Record<string, unknown>;
+  author?: MessageAuthor;
   /**
    * Provider options attached to the resulting prompt turn. Surfaces as `providerOptions` on the
    * `UserModelMessage` sent to the model and as `content.providerMetadata` on the persisted DB
@@ -97,9 +91,6 @@ export type AgentSignalInput =
       transient?: boolean;
     });
 
-/**
- * @experimental Agent signals are experimental and may change in a future release.
- */
 export type AgentSignalDataPart = {
   type: 'data-user-message' | 'data-signal';
   data: {
@@ -111,6 +102,7 @@ export type AgentSignalDataPart = {
     acceptedAt?: string;
     attributes?: AgentSignalAttributes;
     metadata?: Record<string, unknown>;
+    author?: MessageAuthor;
     providerOptions?: MastraProviderMetadata;
     transient?: boolean;
   };
@@ -129,8 +121,6 @@ type CreatedAgentSignalBase = Omit<AgentSignalInputBase, 'id' | 'createdAt' | 'a
 
 /**
  * A signal created and validated by `createSignal`.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export type CreatedAgentSignal =
   | (CreatedAgentSignalBase & { type: 'state'; transient?: never })
@@ -147,8 +137,6 @@ export function isMastraSignalMessage(message: MastraDBMessage): message is Mast
  * True for a message the human wrote. A live agent-controller session persists
  * chat messages (and steers) as `user` signals rather than `user` rows, so a
  * plain `role === 'user'` check misses every message such a session received.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
   if (message.role === 'user') return true;
@@ -158,13 +146,37 @@ export function isUserAuthoredMessage(message: MastraDBMessage): boolean {
   return signal.type === 'user' || signal.type === 'user-message';
 }
 
+function parseMessageAuthor(author: unknown): MessageAuthor | undefined {
+  if (!author || typeof author !== 'object' || Array.isArray(author)) return undefined;
+  const { id, name, avatarUrl } = author as Partial<Record<keyof MessageAuthor, unknown>>;
+  if (typeof id !== 'string' || !id) return undefined;
+  return {
+    id,
+    ...(typeof name === 'string' ? { name } : {}),
+    ...(typeof avatarUrl === 'string' ? { avatarUrl } : {}),
+  };
+}
+
+/** Returns the authenticated author stamped on a persisted user signal. */
+export function getMessageAuthor(message: MastraDBMessage): MessageAuthor | undefined {
+  const signal = message.content?.metadata?.signal;
+  const canonicalAuthor =
+    signal && typeof signal === 'object' && !Array.isArray(signal)
+      ? parseMessageAuthor((signal as Record<string, unknown>).author)
+      : undefined;
+  if (canonicalAuthor) return canonicalAuthor;
+
+  const mastra = message.content?.providerMetadata?.mastra;
+  return mastra && typeof mastra === 'object' && !Array.isArray(mastra)
+    ? parseMessageAuthor((mastra as Record<string, unknown>).author)
+    : undefined;
+}
+
 /**
  * True for a signal DB message created with `transient: true`.
  *
  * @mastra/memory keeps a matching local predicate because its peer range includes core versions
  * without this export. Keep both copies in sync until that peer range can be tightened.
- *
- * @experimental Agent signals are experimental and may change in a future release.
  */
 export function isTransientSignalMessage(message: MastraDBMessage): boolean {
   if (message.role !== 'signal') return false;
@@ -245,6 +257,7 @@ function signalAttributesToXml(attributes?: AgentSignalAttributes): string {
 
   const serialized = Object.entries(attributes)
     .filter((entry): entry is [string, string | number | boolean] => entry[1] !== null && entry[1] !== undefined)
+    .sort(([a], [b]) => (a < b ? -1 : a > b ? 1 : 0))
     .map(([key, value]) => {
       assertXmlName(key, 'attribute name');
       return `${key}="${escapeXmlAttribute(String(value))}"`;
@@ -261,7 +274,10 @@ export function signalToXmlMarkup(
   assertXmlName(tagName, 'tag name');
   const attributesXml = signalAttributesToXml(signal.attributes);
   if (!signal.contents) return `<${tagName}${attributesXml} />`;
-  return `<${tagName}${attributesXml}>${escapeXml(signal.contents)}</${tagName}>`;
+  // Contents reach the model as written. Only the signal's own closing tag is escaped,
+  // so contents can't end the wrapper early.
+  const closingTag = new RegExp(`</${tagName.replaceAll('.', '\\.')}\\s*>`, 'gi');
+  return `<${tagName}${attributesXml}>${signal.contents.replace(closingTag, escapeXml)}</${tagName}>`;
 }
 
 // Recover legacy metadata.signal.contents shapes (pre-narrowing) into the current
@@ -511,6 +527,7 @@ function signalToDataPart(signal: ReturnType<typeof normalizeSignal>, parts: Sig
       ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
       ...(signal.attributes ? { attributes: signal.attributes } : {}),
       ...(signal.metadata ? { metadata: signal.metadata } : {}),
+      ...(signal.author ? { author: signal.author } : {}),
       ...(signal.providerOptions ? { providerOptions: signal.providerOptions } : {}),
       ...(signal.transient ? { transient: true } : {}),
     },
@@ -561,6 +578,7 @@ function signalToDBMessage(
           ...(signal.acceptedAt ? { acceptedAt: signal.acceptedAt.toISOString() } : {}),
           ...(signal.attributes ? { attributes: signal.attributes } : {}),
           ...(signal.metadata ? { metadata: signal.metadata } : {}),
+          ...(signal.author ? { author: signal.author } : {}),
           ...(signal.transient ? { transient: true } : {}),
         },
       },
@@ -573,6 +591,32 @@ export function isCreatedAgentSignal(input: unknown): input is CreatedAgentSigna
 
   const candidate = input as Partial<CreatedAgentSignal>;
   return candidate.__isCreatedSignal === true;
+}
+
+/**
+ * Typed `AGENT_RUN` span attributes describing the signal that started a run. Returns
+ * `undefined` when the run input is not a created signal. Contents stay in the span input.
+ */
+export function signalSpanAttributes(input: unknown):
+  | {
+      id: string;
+      type: string;
+      tagName?: string;
+      attributes?: Record<string, string | number | boolean | null>;
+    }
+  | undefined {
+  if (!isCreatedAgentSignal(input)) return undefined;
+  const attributes = input.attributes
+    ? Object.fromEntries(Object.entries(input.attributes).filter(([, value]) => value !== undefined))
+    : undefined;
+  return {
+    id: input.id,
+    type: input.type,
+    ...(input.tagName ? { tagName: input.tagName } : {}),
+    ...(attributes && Object.keys(attributes).length > 0
+      ? { attributes: attributes as Record<string, string | number | boolean | null> }
+      : {}),
+  };
 }
 
 export function createSignal(
@@ -612,8 +656,6 @@ export function createSignal(input: AgentSignalInput): CreatedAgentSignal {
  * Resolve delivery option attributes into concrete `attributes` on a signal.
  * Returns a new signal with the selected branch's `attributes` merged into
  * top-level `attributes`.
- *
- * @experimental
  */
 export function resolveDeliveryAttributes(
   signal: CreatedAgentSignal,
@@ -676,6 +718,7 @@ export function mastraDBMessageToSignal(message: MastraDBMessage): CreatedAgentS
       signalMetadata?.metadata && typeof signalMetadata.metadata === 'object' && !Array.isArray(signalMetadata.metadata)
         ? (signalMetadata.metadata as AgentSignalInput['metadata'])
         : undefined,
+    author: getMessageAuthor(message),
     providerOptions:
       providerMetadata && typeof providerMetadata === 'object' && !Array.isArray(providerMetadata)
         ? (providerMetadata as MastraProviderMetadata)

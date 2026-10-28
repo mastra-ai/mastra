@@ -353,7 +353,7 @@ DuckDB vector store supports MongoDB-like filter operators:
 | - | - |
 | Comparison | `$eq`, `$ne`, `$gt`, `$gte`, `$lt`, `$lte` |
 | Logical | `$and`, `$or`, `$not`, `$nor` |
-| Array | `$in`, `$nin` |
+| Array | `$in`, `$nin`, `$all` |
 | Element | `$exists` |
 | Text | `$contains` |
 
@@ -384,8 +384,8 @@ const results = await store.query({
 
 | Metric | Description | Score Interpretation | Best For |
 | - | - | - | - |
-| `cosine` | Cosine similarity | 0-1 (1 = most similar) | Text embeddings, normalized vectors |
-| `euclidean` | L2 distance | 0-∞ (0 = most similar) | Image embeddings, spatial data |
+| `cosine` | Cosine similarity | -1 to 1, computed as `1 - cosine distance` (1 = most similar) | Text embeddings, normalized vectors |
+| `euclidean` | L2 distance | 0-1, computed as `1 / (1 + distance)` (1 = most similar) | Image embeddings, spatial data |
 | `dotproduct` | Inner product | Higher = more similar | When vector magnitude matters |
 
 ## Error handling

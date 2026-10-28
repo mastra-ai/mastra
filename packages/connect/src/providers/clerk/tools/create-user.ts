@@ -1,26 +1,37 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
 import type { PlatformProxy } from '../../../runtime/platform-proxy.js';
 
-export const createUserInputSchema = z.object({
-  external_id: z.string().optional(),
-  email_address: z.array(z.string().email()).max(100).optional(),
-  phone_number: z.array(z.string()).max(100).optional(),
-  username: z.string().optional(),
-  password: z.string().min(8).optional(),
-  first_name: z.string().optional(),
-  last_name: z.string().optional(),
-  locale: z.string().optional().describe('BCP-47 locale. Example: "en-US"'),
-  skip_password_checks: z.boolean().optional(),
-  skip_password_requirement: z.boolean().optional(),
-  banned: z.boolean().optional(),
-  locked: z.boolean().optional(),
-  public_metadata: z.record(z.string(), z.unknown()).optional(),
-  private_metadata: z.record(z.string(), z.unknown()).optional(),
-  unsafe_metadata: z.record(z.string(), z.unknown()).optional(),
-});
+export const createUserInputSchema = z
+  .object({
+    external_id: z.string().optional(),
+    email_address: z.array(z.string().email()).max(100).optional(),
+    phone_number: z.array(z.string()).max(100).optional(),
+    username: z.string().optional(),
+    password: z.string().min(8).optional(),
+    first_name: z.string().optional(),
+    last_name: z.string().optional(),
+    locale: z.string().optional().describe('BCP-47 locale. Example: "en-US"'),
+    skip_password_checks: z.boolean().optional(),
+    skip_password_requirement: z.boolean().optional(),
+    banned: z.boolean().optional(),
+    locked: z.boolean().optional(),
+    public_metadata: z.record(z.string(), z.unknown()).optional(),
+    private_metadata: z.record(z.string(), z.unknown()).optional(),
+    unsafe_metadata: z.record(z.string(), z.unknown()).optional(),
+  })
+  .refine(
+    value =>
+      (value.email_address?.length ?? 0) > 0 ||
+      (value.phone_number?.length ?? 0) > 0 ||
+      value.username !== undefined ||
+      value.password !== undefined,
+    {
+      message: 'Provide at least one of email_address, phone_number, username, or password.',
+    },
+  );
 
 const UserSchema = z
   .object({

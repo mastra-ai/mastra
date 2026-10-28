@@ -1,4 +1,3 @@
-import { formatDataStreamPart } from '@ai-sdk/ui-utils';
 import { APICallError } from '@internal/ai-sdk-v5';
 import type { ToolsInput } from '@mastra/core/agent';
 import { getErrorFromUnknown } from '@mastra/core/error';
@@ -6,6 +5,7 @@ import { createTool } from '@mastra/core/tools';
 import { describe, it, beforeEach, expect, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { MastraClient } from '../client';
+import { formatDataStreamPart } from '../utils/ai-sdk-v4';
 
 // Mock fetch globally
 global.fetch = vi.fn();
@@ -137,12 +137,17 @@ describe('Agent client-side tools', () => {
     const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
 
     let lastChunk: any = null;
+    let clientToolResultChunk: any = null;
     await resp.processDataStream({
       onChunk: async chunk => {
         lastChunk = chunk;
+        if (chunk.type === 'tool-result' && chunk.payload?.toolCallId === toolCallId) {
+          clientToolResultChunk = chunk;
+        }
       },
     });
 
+    expect(clientToolResultChunk?.payload?.args).toEqual({ location: 'NYC' });
     expect(lastChunk?.type).toBe('finish');
     expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
     // Client tool executed
@@ -349,6 +354,84 @@ describe('Agent client-side tools', () => {
     expect(firstCallBody).not.toHaveProperty('clientToolsResolver');
     const secondCallBody = JSON.parse((global.fetch as any).mock.calls[1][1].body);
     expect(JSON.stringify(secondCallBody.messages)).toContain('tool-result');
+  });
+
+  it('generate: forwards abortSignal to fetch and stops client-tool continuations once aborted', async () => {
+    const controller = new AbortController();
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [{ payload: { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } } }],
+      response: { messages: [{ role: 'assistant', content: [] }] },
+      usage: { totalTokens: 2 },
+    };
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      // Abort while the first request is "in flight" – the response still arrives, but the
+      // client must not execute the tool or fire the continuation request afterwards.
+      controller.abort();
+      return new Response(JSON.stringify(firstResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const executeWeather = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeWeather,
+    });
+
+    await expect(
+      agent.generate('weather?', { clientTools: { weatherTool }, abortSignal: controller.signal }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [, init] = (global.fetch as any).mock.calls[0];
+    expect(init.signal).toBeInstanceOf(AbortSignal);
+    expect(init.signal.aborted).toBe(true);
+    expect(JSON.parse(init.body)).not.toHaveProperty('abortSignal');
+    expect(executeWeather).not.toHaveBeenCalled();
+  });
+
+  it('generateLegacy: forwards abortSignal to fetch and stops client-tool continuations once aborted', async () => {
+    const controller = new AbortController();
+    const firstResponse = {
+      finishReason: 'tool-calls',
+      toolCalls: [{ toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } }],
+      response: { messages: [{ role: 'assistant', content: [] }] },
+      usage: { totalTokens: 2 },
+    };
+    (global.fetch as any).mockImplementationOnce(async () => {
+      controller.abort();
+      return new Response(JSON.stringify(firstResponse), {
+        status: 200,
+        headers: { 'content-type': 'application/json' },
+      });
+    });
+
+    const executeWeather = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeWeather,
+    });
+
+    await expect(
+      agent.generateLegacy({
+        messages: [{ role: 'user', content: 'weather?' }],
+        clientTools: { weatherTool },
+        abortSignal: controller.signal,
+      }),
+    ).rejects.toMatchObject({ name: 'AbortError' });
+
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+    const [url, init] = (global.fetch as any).mock.calls[0];
+    expect(url).toContain('/generate-legacy');
+    expect(init.signal.aborted).toBe(true);
+    expect(JSON.parse(init.body)).not.toHaveProperty('abortSignal');
+    expect(executeWeather).not.toHaveBeenCalled();
   });
 
   it('streamLegacy: re-invokes the resolver for each continuation round', async () => {
@@ -646,6 +729,168 @@ describe('Agent client-side tools', () => {
       ]),
     );
     expect(executeSpy).toHaveBeenCalledTimes(1);
+  });
+
+  it.each([
+    ['approveToolCall', 'approve-tool-call'],
+    ['declineToolCall', 'decline-tool-call'],
+  ] as const)(
+    '%s: does not error on a tool-result whose tool-call was emitted in an earlier stream',
+    async (method, route) => {
+      const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+      const chunks = [
+        { type: 'tool-result', payload: { toolCallId: 'suspended-call', toolName: 'approvalTool', result: 'ok' } },
+        { type: 'step-start', payload: { messageId: 'm2' } },
+        { type: 'text-delta', payload: { text: 'Done' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 1 } } },
+      ];
+      (global.fetch as any).mockResolvedValueOnce(sseResponse(chunks));
+
+      const resp = await agent[method]({ runId: 'run-1', toolCallId: 'suspended-call' });
+      let received = 0;
+      await resp.processDataStream({
+        onChunk: async () => {
+          received++;
+        },
+      });
+
+      expect((global.fetch as any).mock.calls[0][0]).toBe(`http://localhost:4111/api/agents/agent-1/${route}`);
+      expect(received).toBe(chunks.length);
+      expect(errorSpy).not.toHaveBeenCalled();
+      errorSpy.mockRestore();
+    },
+  );
+
+  it('resumeStream: executes a client tool called after the resumed tool-result', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const firstCycle = [
+      { type: 'tool-result', payload: { toolCallId: 'suspended-call', toolName: 'approvalTool', result: 'ok' } },
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'tool-call', payload: { toolCallId: 'call_2', toolName: 'weatherTool', args: { location: 'NYC' } } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.resumeStream({ approved: true }, {
+      runId: 'run-1',
+      memory: { thread: 'thread-1', resource: 'user-1' },
+      clientTools: { weatherTool },
+    } as any);
+
+    let lastChunk: any = null;
+    await resp.processDataStream({
+      onChunk: async chunk => {
+        lastChunk = chunk;
+      },
+    });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(lastChunk?.payload?.stepResult?.reason).toBe('stop');
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('stream: skips a tool-result whose toolCallId does not match any earlier tool-call', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const firstCycle = [
+      { type: 'step-start', payload: { messageId: 'm1' } },
+      { type: 'tool-call', payload: { toolCallId: 'call_2', toolName: 'weatherTool', args: { location: 'NYC' } } },
+      { type: 'tool-result', payload: { toolCallId: 'unrelated-call', toolName: 'approvalTool', result: 'ok' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } },
+    ];
+    const secondCycle = [
+      { type: 'step-start', payload: { messageId: 'm2' } },
+      { type: 'text-delta', payload: { text: 'Tool handled' } },
+      { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+      { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 3 } } },
+    ];
+    (global.fetch as any)
+      .mockResolvedValueOnce(sseResponse(firstCycle))
+      .mockResolvedValueOnce(sseResponse(secondCycle));
+
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      outputSchema: z.object({ ok: z.boolean() }),
+      execute: executeSpy,
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    await resp.processDataStream({ onChunk: async () => {} });
+
+    expect(executeSpy).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it('streamLegacy: skips tool results with no matching tool call and still runs the client tool', async () => {
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+    const finish = (finishReason: 'tool-calls' | 'stop') => [
+      formatDataStreamPart('finish_step', {
+        finishReason,
+        usage: { promptTokens: 1, completionTokens: 1 },
+        isContinued: false,
+      }),
+      formatDataStreamPart('finish_message', { finishReason, usage: { promptTokens: 1, completionTokens: 1 } }),
+    ];
+    const firstCycle = legacyStreamResponse([
+      // No tool call seen yet in this stream (e.g. a resumed call)
+      formatDataStreamPart('tool_result', { toolCallId: 'suspended-call', result: 'ok' }),
+      formatDataStreamPart('start_step', { messageId: 'm1' }),
+      formatDataStreamPart('tool_call', { toolCallId: 'call_1', toolName: 'checkpointTool', args: {} }),
+      // Tool calls exist, but none has this ID
+      formatDataStreamPart('tool_result', { toolCallId: 'unrelated-call', result: 'ok' }),
+      ...finish('tool-calls'),
+    ]);
+    const secondCycle = legacyStreamResponse([
+      formatDataStreamPart('start_step', { messageId: 'm2' }),
+      formatDataStreamPart('text', 'done'),
+      ...finish('stop'),
+    ]);
+    (global.fetch as any).mockResolvedValueOnce(firstCycle).mockResolvedValueOnce(secondCycle);
+
+    const executeCheckpoint = vi.fn(async () => ({ success: true }));
+    const checkpointTool = createTool({
+      id: 'checkpointTool',
+      description: 'Checkpoint the draft',
+      inputSchema: z.object({}),
+      execute: executeCheckpoint,
+    });
+
+    const resp = await agent.streamLegacy({
+      messages: [{ role: 'user', content: 'build' }],
+      clientTools: { checkpointTool },
+    });
+    await resp.processDataStream({});
+
+    expect(executeCheckpoint).toHaveBeenCalledTimes(1);
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
   });
 
   it('stream: receives chunks from both initial and recursive requests', async () => {
@@ -2012,5 +2257,361 @@ describe('Agent client-side tools', () => {
     expect(errorChunk.payload.error.responseBody).toEqual(testAPICallError.responseBody);
     expect(errorChunk.payload.error.isRetryable).toEqual(testAPICallError.isRetryable);
     expect(errorChunk.payload.error.url).toEqual(testAPICallError.url);
+  });
+});
+
+describe('Agent stream cancellation', () => {
+  const client = new MastraClient({ baseUrl: 'http://localhost:4111' });
+  const agent = client.getAgent('agent-1');
+  const encoder = new TextEncoder();
+
+  // A response whose body stays open until the fetch signal aborts (or we close it manually).
+  // Mirrors a real server: the body is only cancelled when the request is aborted.
+  function hangingSseResponse(init: RequestInit | undefined, headChunks: object[]) {
+    const state = { bodyCancelled: false, aborted: false };
+    const signal = init?.signal as AbortSignal | undefined;
+    const stream = new ReadableStream<Uint8Array>({
+      start(controller) {
+        for (const chunk of headChunks) {
+          controller.enqueue(encoder.encode(`data: ${JSON.stringify(chunk)}\n\n`));
+        }
+        signal?.addEventListener(
+          'abort',
+          () => {
+            state.aborted = true;
+            controller.error(signal.reason ?? new DOMException('aborted', 'AbortError'));
+          },
+          { once: true },
+        );
+      },
+      cancel() {
+        state.bodyCancelled = true;
+      },
+    });
+    const response = new Response(stream as unknown as ReadableStream, {
+      status: 200,
+      headers: { 'content-type': 'text/event-stream' },
+    });
+    return { response, state, signal };
+  }
+
+  async function flush() {
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+
+  beforeEach(() => {
+    vi.clearAllMocks();
+  });
+
+  it('body.cancel() aborts the underlying fetch signal', async () => {
+    let captured: ReturnType<typeof hangingSseResponse> | undefined;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      captured = hangingSseResponse(init, [
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'partial' } },
+      ]);
+      return captured.response;
+    });
+
+    const resp = await agent.stream('hi');
+    expect(captured?.signal).toBeInstanceOf(AbortSignal);
+    expect(captured!.signal!.aborted).toBe(false);
+
+    const reader = resp.body!.getReader();
+    await reader.read();
+    await reader.cancel('consumer done');
+    await flush();
+
+    expect(captured!.signal!.aborted).toBe(true);
+    expect(captured!.state.aborted).toBe(true);
+  });
+
+  it('params.abortSignal aborts the underlying request', async () => {
+    let captured: ReturnType<typeof hangingSseResponse> | undefined;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      captured = hangingSseResponse(init, [{ type: 'step-start', payload: { messageId: 'm1' } }]);
+      return captured.response;
+    });
+
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
+    const ac = new AbortController();
+    const resp = await agent.stream('hi', { abortSignal: ac.signal });
+    const body = JSON.parse((global.fetch as any).mock.calls[0][1].body);
+    expect(body).not.toHaveProperty('abortSignal');
+
+    ac.abort();
+    await flush();
+    expect(captured!.signal!.aborted).toBe(true);
+
+    // The consumer sees the stream error out rather than hang forever.
+    const reader = resp.body!.getReader();
+    await expect(
+      (async () => {
+        while (!(await reader.read()).done) {
+          /* drain */
+        }
+      })(),
+    ).rejects.toBeDefined();
+  });
+
+  it('cancelling before finish suppresses client-tool execution and the recursive request', async () => {
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeSpy,
+    });
+
+    // Server emits tool-call, then waits before sending finish. We cancel in between.
+    let sendFinish!: () => void;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      const signal = init.signal as AbortSignal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const push = (c: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(c)}\n\n`));
+          push({ type: 'step-start', payload: { messageId: 'm1' } });
+          push({
+            type: 'tool-call',
+            payload: { toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } },
+          });
+          sendFinish = () => {
+            try {
+              push({ type: 'step-finish', payload: { stepResult: { isContinued: false } } });
+              push({ type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } });
+              controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+              controller.close();
+            } catch {
+              // stream already errored by abort
+            }
+          };
+          signal.addEventListener('abort', () => {
+            try {
+              controller.error(signal.reason);
+            } catch {}
+          });
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    const resp = await agent.stream('weather?', { clientTools: { weatherTool } });
+    const reader = resp.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await flush();
+
+    sendFinish();
+    await flush();
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('generate: client-wide abortSignal aborted after the tool-call response suppresses client-tool execution', async () => {
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeSpy,
+    });
+
+    const clientAc = new AbortController();
+    const scopedClient = new MastraClient({ baseUrl: 'http://localhost:4111', abortSignal: clientAc.signal });
+    const scopedAgent = scopedClient.getAgent('agent-1');
+
+    // The HTTP request completes, then the client-wide signal fires before tools run.
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const response = new Response(
+        JSON.stringify({
+          finishReason: 'tool-calls',
+          toolCalls: [{ toolCallId: 'call_1', toolName: 'weatherTool', args: { location: 'NYC' } }],
+          messages: [],
+        }),
+        { status: 200, headers: { 'content-type': 'application/json' } },
+      );
+      clientAc.abort();
+      return response;
+    });
+
+    await expect(scopedAgent.generate('weather?', { clientTools: { weatherTool } })).rejects.toMatchObject({
+      name: 'AbortError',
+    });
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('stream: aborting during the first client tool stops the remaining tools in the same step', async () => {
+    const abortDuringFirst = new AbortController();
+    const firstSpy = vi.fn(async () => {
+      abortDuringFirst.abort();
+      return { ok: 1 };
+    });
+    const secondSpy = vi.fn(async () => ({ ok: 2 }));
+    const toolA = createTool({ id: 'toolA', description: 'A', inputSchema: z.object({}), execute: firstSpy });
+    const toolB = createTool({ id: 'toolB', description: 'B', inputSchema: z.object({}), execute: secondSpy });
+
+    (global.fetch as any).mockImplementationOnce(async () => {
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          const push = (c: object) => controller.enqueue(encoder.encode(`data: ${JSON.stringify(c)}\n\n`));
+          push({ type: 'step-start', payload: { messageId: 'm1' } });
+          push({ type: 'tool-call', payload: { toolCallId: 'call_a', toolName: 'toolA', args: {} } });
+          push({ type: 'tool-call', payload: { toolCallId: 'call_b', toolName: 'toolB', args: {} } });
+          push({ type: 'step-finish', payload: { stepResult: { isContinued: false } } });
+          push({ type: 'finish', payload: { stepResult: { reason: 'tool-calls' }, usage: { totalTokens: 2 } } });
+          controller.enqueue(encoder.encode(`data: [DONE]\n\n`));
+          controller.close();
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, {
+        status: 200,
+        headers: { 'content-type': 'text/event-stream' },
+      });
+    });
+
+    (global.fetch as any).mockResolvedValueOnce(Response.json({ aborted: true }));
+    const resp = await agent.stream('go', { clientTools: { toolA, toolB }, abortSignal: abortDuringFirst.signal });
+    const reader = resp.body!.getReader();
+    try {
+      while (!(await reader.read()).done) {
+        /* drain */
+      }
+    } catch {
+      // aborted mid-stream
+    }
+    await flush();
+
+    expect(firstSpy).toHaveBeenCalledTimes(1);
+    expect(secondSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(2);
+    expect(vi.mocked(global.fetch).mock.calls[1]![0]).toContain('/abort');
+  });
+
+  it('streamLegacy: body.cancel() aborts the request and suppresses client-tool continuations', async () => {
+    const executeSpy = vi.fn(async () => ({ ok: true }));
+    const weatherTool = createTool({
+      id: 'weatherTool',
+      description: 'Weather',
+      inputSchema: z.object({ location: z.string() }),
+      execute: executeSpy,
+    });
+
+    let capturedSignal: AbortSignal | undefined;
+    let sendFinish!: () => void;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      capturedSignal = init.signal as AbortSignal;
+      const stream = new ReadableStream<Uint8Array>({
+        start(controller) {
+          controller.enqueue(encoder.encode(formatDataStreamPart('start_step', { messageId: 'm1' })));
+          controller.enqueue(
+            encoder.encode(
+              formatDataStreamPart('tool_call', {
+                toolCallId: 'call_1',
+                toolName: 'weatherTool',
+                args: { location: 'NYC' },
+              }),
+            ),
+          );
+          sendFinish = () => {
+            try {
+              controller.enqueue(
+                encoder.encode(
+                  formatDataStreamPart('finish_step', { finishReason: 'tool-calls', usage: {}, isContinued: false }),
+                ),
+              );
+              controller.enqueue(
+                encoder.encode(formatDataStreamPart('finish_message', { finishReason: 'tool-calls', usage: {} })),
+              );
+              controller.close();
+            } catch {}
+          };
+          capturedSignal!.addEventListener('abort', () => {
+            try {
+              controller.error(capturedSignal!.reason);
+            } catch {}
+          });
+        },
+      });
+      return new Response(stream as unknown as ReadableStream, { status: 200 });
+    });
+
+    const resp = await agent.streamLegacy({ messages: 'weather?', clientTools: { weatherTool } });
+    expect(capturedSignal!.aborted).toBe(false);
+
+    const reader = resp.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await flush();
+
+    expect(capturedSignal!.aborted).toBe(true);
+    sendFinish();
+    await flush();
+
+    expect(executeSpy).not.toHaveBeenCalled();
+    expect(global.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it('cancelling after the stream completed is a no-op', async () => {
+    (global.fetch as any).mockResolvedValueOnce(
+      sseResponse([
+        { type: 'step-start', payload: { messageId: 'm1' } },
+        { type: 'text-delta', payload: { text: 'Hello' } },
+        { type: 'step-finish', payload: { stepResult: { isContinued: false } } },
+        { type: 'finish', payload: { stepResult: { reason: 'stop' }, usage: { totalTokens: 1 } } },
+      ]),
+    );
+    const errorSpy = vi.spyOn(console, 'error').mockImplementation(() => {});
+
+    const resp = await agent.stream('hi');
+    let chunks = 0;
+    await resp.processDataStream({ onChunk: async () => void chunks++ });
+    expect(chunks).toBe(4);
+
+    await expect(resp.body!.cancel()).resolves.toBeUndefined();
+    await flush();
+    expect(errorSpy).not.toHaveBeenCalled();
+    errorSpy.mockRestore();
+  });
+
+  it.each([
+    ['streamUntilIdle', (a: typeof agent) => a.streamUntilIdle('hi'), '/stream-until-idle'],
+    [
+      'approveToolCall',
+      (a: typeof agent) => a.approveToolCall({ runId: 'r1', toolCallId: 't1' }),
+      '/approve-tool-call',
+    ],
+    [
+      'declineToolCall',
+      (a: typeof agent) => a.declineToolCall({ runId: 'r1', toolCallId: 't1' }),
+      '/decline-tool-call',
+    ],
+    ['resumeStream', (a: typeof agent) => a.resumeStream({}, { runId: 'r1' } as any), '/resume-stream'],
+    [
+      'resumeStreamUntilIdle',
+      (a: typeof agent) => a.resumeStreamUntilIdle({}, { runId: 'r1' } as any),
+      '/resume-stream-until-idle',
+    ],
+  ])('%s: body.cancel() aborts the underlying request', async (_name, call, urlPart) => {
+    let captured: ReturnType<typeof hangingSseResponse> | undefined;
+    (global.fetch as any).mockImplementationOnce(async (_url: string, init: RequestInit) => {
+      captured = hangingSseResponse(init, [{ type: 'step-start', payload: { messageId: 'm1' } }]);
+      return captured.response;
+    });
+
+    const resp = await call(agent);
+    expect(new URL((global.fetch as any).mock.calls[0][0]).pathname.endsWith(urlPart)).toBe(true);
+    expect(captured!.signal!.aborted).toBe(false);
+
+    const reader = resp.body!.getReader();
+    await reader.read();
+    await reader.cancel();
+    await flush();
+
+    expect(captured!.signal!.aborted).toBe(true);
   });
 });

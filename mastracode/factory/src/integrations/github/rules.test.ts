@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from 'vitest';
-import { createBoardRegistry } from '../../boards/index.js';
+import { createBoardRegistry, defineBoard } from '../../boards/index.js';
 import { createTestBoard } from '../../boards/test-utils.js';
 import { FactoryDecisionDispatcher } from '../../rules/dispatcher.js';
 import { FactoryStartCoordinator } from '../../rules/start-coordinator.js';
@@ -7,9 +7,14 @@ import { FactoryTransitionService } from '../../rules/transition-service.js';
 import { FACTORY_PULL_REQUEST_RECONCILIATION_KEY } from '../../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../../storage/test-utils.js';
 import { GithubAppIdentity } from './app-identity.js';
-import { resolveGithubRules } from './default-rules.js';
+import { defaultGithubRules, resolveGithubRules } from './default-rules.js';
 import type { GithubRuleOverrides } from './default-rules.js';
-import { createGithubPullRequestReconciler, GithubRules, reconciledClosedEvent } from './rules.js';
+import {
+  createGithubPullRequestReconciler,
+  GithubRules,
+  polledPullRequestEvent,
+  reconciledClosedEvent,
+} from './rules.js';
 import type { ReconcileIssueState, ReconcilePullRequestState } from './rules.js';
 import { changeRequestTargetKey } from './subscriptions.js';
 
@@ -483,6 +488,62 @@ describe('GithubRules', () => {
     expect(decisions[0]?.decision).toMatchObject({ type: 'transition', board: 'work', stage: 'canceled' });
   });
 
+  it('closes a custom-board card into the terminal phase its board declares for closed sources', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        board: 'release',
+        stages: ['queued'],
+        title: 'Release issue',
+        sessions: {},
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+      },
+    });
+    const release = defineBoard({
+      id: 'release',
+      title: 'Release',
+      initialPhase: 'queued',
+      sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+        dropped: { title: 'Dropped', kind: 'terminal' },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry({ boards: [release] }),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(service.ingest(issueClosed('delivery-release-np', 'not_planned'))).resolves.toEqual({
+      status: 'committed',
+    });
+
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toMatchObject([
+      {
+        decision: {
+          type: 'transition',
+          board: 'release',
+          stage: 'dropped',
+          message: { text: 'GitHub issue #42 was closed (not_planned); this Release card was moved to Dropped.' },
+        },
+      },
+    ]);
+  });
+
   it('never binds a close to another linked repository card with the same issue number', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     // Same canonical key (`github-issue:42`) but the card tracks other/repo#42.
@@ -518,6 +579,42 @@ describe('GithubRules', () => {
       status: 'committed',
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(0);
+  });
+
+  it('opens a separate card for an issue whose number matches another linked repository card', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/other/repo/issues/42',
+        },
+        title: 'Issue 42 (other repo)',
+        stages: ['planning'],
+        sessions: {},
+        metadata: { githubRepositoryId: 999 },
+      },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(issueOpened('delivery-open-cross-repo'));
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(decision => decision.decision)).toContainEqual(
+      expect.objectContaining({ type: 'upsertLinkedWorkItem', sourceKey: 'github:10:issue:42' }),
+    );
   });
 
   it('commits nothing when the closed issue card is already off the board', async () => {
@@ -582,6 +679,58 @@ describe('GithubRules', () => {
       skillName: 'factory-triage',
       idempotencyKey: '7:delivery-human-marker:factory-triage',
     });
+  });
+
+  it('re-evaluates against the fresh revision when a concurrent write makes the commit stale', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const original = workItems.commitRuleEvaluation.bind(workItems);
+    const commit = vi
+      .spyOn(workItems, 'commitRuleEvaluation')
+      .mockImplementationOnce(input => original({ ...input, expectedRevision: (input.expectedRevision ?? 0) - 1 }));
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-race', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).resolves.toEqual({ status: 'committed' });
+
+    expect(commit).toHaveBeenCalledTimes(2);
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions.map(d => d.decision)).toEqual([
+      expect.objectContaining({ type: 'invokeSkill', skillName: 'factory-triage' }),
+    ]);
+  });
+
+  it('fails the delivery after repeated stale commits so a redelivery can process it', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    await createLinkedIssue(workItems, project.id);
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation').mockResolvedValue({ status: 'stale' });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await expect(
+      service.ingest(
+        issueComment('created', 'delivery-hot', { body: '<!-- mastra-factory-triage -->\nNew investigation lead' }),
+      ),
+    ).rejects.toThrow('kept losing revision races');
+    expect(commit).toHaveBeenCalledTimes(3);
   });
 
   it('ignores a marked handoff comment authored by the configured GitHub App', async () => {
@@ -733,6 +882,39 @@ describe('GithubRules', () => {
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toHaveLength(1);
   });
 
+  it('keeps a trusted post-Factory issue in Intake without queueing a run', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const configVersion = 'trusted-arrival-intake';
+    const boards = createBoardRegistry();
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      configVersion,
+      boards,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: {} as never,
+      transitionService: new FactoryTransitionService({ storage: workItems, configVersion, boards }),
+      storage: workItems,
+      boards,
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-guard',
+    });
+
+    await service.ingest(issueOpened('trusted-arrival'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(item).toMatchObject({ stages: ['intake'], metadata: { authorTrusted: true, autoStartCandidate: true } });
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(1);
+    expect(decisions[0]?.decision.type).toBe('upsertLinkedWorkItem');
+    expect(decisions.some(({ decision }) => decision.type === 'invokeSkill')).toBe(false);
+  });
+
   it('moves a trusted issue through Intake to Triage with one investigation and rematerializes it after deletion', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
       await setup('write');
@@ -767,6 +949,7 @@ describe('GithubRules', () => {
           switch: vi.fn(async ({ threadId: next }: { threadId: string }) => {
             threadId = next;
           }),
+          getSetting: vi.fn(async () => undefined),
           setSetting: vi.fn(async () => {}),
           rename: vi.fn(async () => {}),
           requireId: vi.fn(() => {
@@ -796,7 +979,7 @@ describe('GithubRules', () => {
           return () => agentEndListeners.delete(listener);
         }),
         state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-        mode: { get: vi.fn(() => 'build') },
+        mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
         model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
         identity: { getId: vi.fn(() => key), getOwnerId: vi.fn(() => 'user-1') },
         permissions: { setForTool: vi.fn(async () => {}) },
@@ -808,8 +991,9 @@ describe('GithubRules', () => {
     }
 
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async ({ id, threadId }: { id: string; threadId: string }) => makeSession(id, threadId)),
-      getSessionByResource: vi.fn(async (resourceId: string) => sessions.get(resourceId)),
+      getSession: vi.fn(async (sessionId: string) => sessions.get(sessionId)),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-issue-42',
@@ -845,11 +1029,25 @@ describe('GithubRules', () => {
 
     await service.ingest(issueOpened('delivery-full-flow'));
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    const [arrived] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(arrived).toMatchObject({ stages: ['intake'] });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: arrived!.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: arrived!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'human-start-issue-42' },
+      cause: 'board_drag',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
 
     const [item] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(item).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
       sessions: {
         triage: {
@@ -863,7 +1061,9 @@ describe('GithubRules', () => {
     expect(deliveredSignals).toEqual([
       expect.objectContaining({
         threadId: 'session-issue-42',
-        contents: expect.stringContaining('<skill name="factory-triage">'),
+        type: 'reactive',
+        tagName: 'skill',
+        attributes: { name: 'factory-triage' },
         user: { workosId: 'user-1', organizationId: 'org-1' },
       }),
     ]);
@@ -877,18 +1077,32 @@ describe('GithubRules', () => {
     ).toHaveLength(1);
 
     await workItems.delete({ orgId: 'org-1', id: item!.id });
-    await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'replayed' });
+    await expect(service.ingest(issueOpened('delivery-full-flow'))).resolves.toEqual({ status: 'committed' });
     expect((await workItems.listDeferredDecisions('org-1', project.id)).map(decision => decision.status)).toEqual([
-      'retry',
       'succeeded',
+      'pending',
     ]);
 
     await dispatcher.runOnce(new Date('2030-01-01T00:00:02Z'));
+    const [rematerializedArrival] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(rematerializedArrival).toMatchObject({ stages: ['intake'] });
+    await transitionService.transition({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      workItemId: rematerializedArrival!.id,
+      board: 'work',
+      stage: 'triage',
+      expectedRevision: rematerializedArrival!.revision,
+      actor: { type: 'human', id: 'user-1' },
+      ingress: { type: 'human', identity: 'human-restart-issue-42' },
+      cause: 'board_drag',
+    });
     await dispatcher.runOnce(new Date('2030-01-01T00:00:03Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:04Z'));
 
     const [rematerialized] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(rematerialized).toMatchObject({
-      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github-issue:42' },
+      externalSource: { integrationId: 'github', type: 'issue', externalId: 'github:10:issue:42' },
       stages: ['triage'],
     });
     expect(rematerialized?.id).not.toBe(item?.id);
@@ -1006,7 +1220,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1048,7 +1262,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['intake'],
+      stages: ['review'],
       metadata: {
         author: 'pr-author',
         authorTrusted: true,
@@ -1085,7 +1299,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1105,7 +1319,7 @@ describe('GithubRules', () => {
     const [card] = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
     expect(card).toMatchObject({
       title: 'PR 17',
-      stages: ['intake'],
+      stages: ['review'],
       metadata: { author: 'pr-author', authorTrusted: true, factoryAuthored: false, autoStartCandidate: true },
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual(
@@ -1390,7 +1604,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1481,7 +1695,7 @@ describe('GithubRules', () => {
       configVersion,
     });
     const dispatcher = new FactoryDecisionDispatcher({
-      controller: { getSessionByResource: vi.fn(async () => undefined) } as never,
+      controller: { getSession: vi.fn(async () => undefined) } as never,
       transitionService: new FactoryTransitionService({
         storage: workItems,
         configVersion,
@@ -1538,6 +1752,106 @@ describe('GithubRules', () => {
     });
   });
 
+  it('starts the re-review of a pushed commit on that commit, not the one the last verdict covered (#27590)', async () => {
+    const reviewedHeadSha = 'aaaaaaa000000000000000000000000000000000';
+    const pushedHeadSha = 'bbbbbbb000000000000000000000000000000000';
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    // The reviewer requested changes on A and its run ended; the card stays in
+    // Reviewing with the verdict recorded.
+    const card = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'pull-request',
+          externalId: 'github-pr:17',
+          url: 'https://github.com/acme/repo/pull/17',
+        },
+        title: 'PR 17',
+        stages: ['review'],
+        sessions: {},
+        metadata: {
+          authorTrusted: true,
+          reviewVerdict: 'request changes',
+          reviewedHeadSha,
+          pullRequestHeadSha: reviewedHeadSha,
+          pullRequestHeadAt: Date.parse('2030-01-01T00:00:00.000Z'),
+        },
+      },
+    });
+    const configVersion = 'factory-config-v1';
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    // The dispatcher polls on its own timer, so its tick can land as soon as
+    // the push's re-review transition commits, before the webhook handler has
+    // finished. Run it at exactly that point.
+    const commitRuleEvaluation = workItems.commitRuleEvaluation.bind(workItems);
+    const pushStatuses: string[] = [];
+    workItems.commitRuleEvaluation = async input => {
+      const committed = await commitRuleEvaluation(input);
+      if (input.ingress.identity.includes('delivery-push-b')) pushStatuses.push(committed.status);
+      if (committed.status === 'committed' && input.ingress.identity.endsWith('delivery-push-b')) {
+        await dispatcher.runOnce(new Date('2030-01-01T01:00:00Z'));
+      }
+      return committed;
+    };
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+
+    const push = pullRequest('synchronize', 'delivery-push-b');
+    await expect(
+      service.ingest({
+        ...push,
+        payload: {
+          ...push.payload,
+          pull_request: {
+            ...push.payload.pull_request,
+            head: { ref: 'feature', sha: pushedHeadSha },
+            updated_at: '2030-01-01T01:00:00Z',
+          },
+        },
+      }),
+    ).resolves.toEqual({ status: 'committed' });
+    await dispatcher.runOnce(new Date('2030-01-01T01:00:01Z'));
+
+    // The push is evaluated against the card as it is after the head was
+    // recorded, so it commits first time rather than retrying a stale read.
+    expect(pushStatuses).toEqual(['committed']);
+
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    const invocations = decisions.filter(entry => entry.decision.type === 'invokeSkill');
+    expect(invocations).toHaveLength(1);
+    const kickoff = invocations[0]!.decision;
+    expect(kickoff).toMatchObject({ type: 'invokeSkill', skillName: 'factory-rereview', role: 'review' });
+    const text = kickoff.type === 'invokeSkill' ? (kickoff.arguments ?? '') : '';
+    // The new run names the pushed head as the one to review, and the head the
+    // recorded verdict covered as superseded.
+    expect(text).toContain(`new review pass for head \`${pushedHeadSha}\``);
+    expect(text).toContain(`recorded "request changes" on \`${reviewedHeadSha}\``);
+    expect(text).toContain(`record a verdict for \`${pushedHeadSha}\``);
+    const stored = await workItems.get({ orgId: 'org-1', id: card.item.id });
+    expect(stored?.metadata).toMatchObject({ pullRequestHeadSha: pushedHeadSha, reviewedHeadSha });
+  });
+
   it('ignores push events on PRs whose card has not yet completed a review pass', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
     await workItems.upsert({
@@ -1571,6 +1885,253 @@ describe('GithubRules', () => {
       status: 'committed',
     });
     expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+  });
+
+  describe('recording the pushed head against a review verdict', () => {
+    const reviewedHeadSha = 'be10bfa000000000000000000000000000000000';
+    const pushedHeadSha = '8fa258d000000000000000000000000000000000';
+
+    function push(deliveryId: string, sha: string, updatedAt: string | undefined = '2030-01-01T01:00:00Z') {
+      const delivery = pullRequest('synchronize', deliveryId);
+      return {
+        ...delivery,
+        payload: {
+          ...delivery.payload,
+          pull_request: {
+            ...delivery.payload.pull_request,
+            head: { ref: 'feature', sha },
+            ...(updatedAt ? { updated_at: updatedAt } : {}),
+          },
+        },
+      };
+    }
+
+    async function seed(permission: string, workMetadata: Record<string, unknown>) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup(permission);
+      const verdict = { reviewVerdict: 'approve', reviewedHeadSha };
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { ...verdict, ...workMetadata },
+        },
+      });
+      const review = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'pull-request',
+            externalId: 'github:10:pull-request:17',
+            url: 'https://github.com/acme/repo/pull/17',
+          },
+          parentWorkItemId: work.item.id,
+          title: 'PR 17',
+          stages: ['done'],
+          sessions: {},
+          metadata: { authorTrusted: true, ...verdict },
+        },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const metadataOf = async (id: string) =>
+        (await workItems.list({ orgId: 'org-1', factoryProjectId: project.id })).find(item => item.id === id)?.metadata;
+      return { service, workItems, project, workId: work.item.id, reviewId: review.item.id, metadataOf };
+    }
+
+    it('stamps the new head on the Review card and its authoring Work item without clearing the verdict', async () => {
+      const { service, workItems, project, workId, reviewId, metadataOf } = await seed('write', {
+        openPullRequestNumber: 17,
+      });
+
+      await expect(service.ingest(push('delivery-head-1', pushedHeadSha.toUpperCase()))).resolves.toEqual({
+        status: 'committed',
+      });
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({
+          reviewVerdict: 'approve',
+          reviewedHeadSha,
+          pullRequestHeadSha: pushedHeadSha,
+        });
+      }
+      // The kept verdict still makes the push start a re-review.
+      const transitions = (await workItems.listDeferredDecisions('org-1', project.id)).filter(
+        entry => entry.decision.type === 'transition',
+      );
+      expect(transitions).toHaveLength(1);
+    });
+
+    it('leaves a Work item alone when it has a different pull request out', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 18 });
+
+      await service.ingest(push('delivery-head-other', pushedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await metadataOf(workId)).not.toHaveProperty('pullRequestHeadSha');
+    });
+
+    it('records the head from an untrusted push without starting a review', async () => {
+      const { service, workItems, project, reviewId, metadataOf } = await seed('read', {});
+
+      await service.ingest(push('delivery-head-untrusted', pushedHeadSha));
+
+      expect(await metadataOf(reviewId)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    });
+
+    it('ignores a push delivered after a newer one', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 17 });
+
+      await service.ingest(push('delivery-head-new', pushedHeadSha, '2030-01-01T02:00:00Z'));
+      await service.ingest(push('delivery-head-late', reviewedHeadSha, '2030-01-01T01:00:00Z'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
+
+    it('keeps a head that returned to an earlier commit when the push in between arrives late', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 17 });
+
+      await service.ingest(push('delivery-head-a', reviewedHeadSha, '2030-01-01T01:00:00Z'));
+      await service.ingest(push('delivery-head-a-again', reviewedHeadSha, '2030-01-01T03:00:00Z'));
+      await service.ingest(push('delivery-head-b-late', pushedHeadSha, '2030-01-01T02:00:00Z'));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: reviewedHeadSha });
+      }
+    });
+
+    it('ignores a push that carries no time to order it by', async () => {
+      const { service, workId, reviewId, metadataOf } = await seed('write', { openPullRequestNumber: 17 });
+
+      await service.ingest(push('delivery-head-timed', pushedHeadSha));
+      await service.ingest(push('delivery-head-untimed', reviewedHeadSha, ''));
+
+      for (const id of [reviewId, workId]) {
+        expect(await metadataOf(id)).toMatchObject({ pullRequestHeadSha: pushedHeadSha });
+      }
+    });
+
+    it('keeps the pushed head when the opening of the recorded pull request is redelivered', async () => {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { openPullRequestNumber: 17, pullRequestHeadSha: pushedHeadSha },
+        },
+      });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const opened = pullRequest('opened', 'delivery-open-redelivered');
+      opened.payload.pull_request.head = {
+        ref: 'feature',
+        sha: reviewedHeadSha,
+      } as typeof opened.payload.pull_request.head;
+
+      await service.ingest(opened);
+
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: pushedHeadSha,
+      });
+    });
+
+    it('replaces a head left by an earlier pull request when the Work item opens the next one', async () => {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+      // Pull request 16 was pushed to and closed; its head is still on the Work item.
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: { openPullRequestNumber: null, pullRequestHeadSha: reviewedHeadSha },
+        },
+      });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const opened = pullRequest('opened', 'delivery-open-next');
+      opened.payload.pull_request.head = {
+        ref: 'feature',
+        sha: pushedHeadSha.toUpperCase(),
+      } as typeof opened.payload.pull_request.head;
+
+      await service.ingest(opened);
+
+      // A verdict recorded on the new pull request's head now reads as current.
+      expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata).toMatchObject({
+        openPullRequestNumber: 17,
+        pullRequestHeadSha: pushedHeadSha,
+      });
+    });
   });
 
   it.each(['maintain', 'triage', 'read', undefined])('fails closed for GitHub permission %s', async permission => {
@@ -1865,7 +2426,7 @@ describe('GithubRules', () => {
       getWorkspace: () => ({ skills: { maybeRefresh: vi.fn(async () => {}), get: vi.fn(async () => undefined) } }),
       subscribe: vi.fn(() => () => {}),
       state: { get: vi.fn(() => ({ factoryProjectId: project.id })), set: vi.fn(async () => {}) },
-      mode: { get: vi.fn(() => 'build') },
+      mode: { get: vi.fn(() => 'build'), resolve: vi.fn(() => ({})) },
       model: { get: vi.fn(() => 'openai/gpt-5.6-sol') },
       identity: { getId: vi.fn(() => 'session-work-42'), getOwnerId: vi.fn(() => 'user-1') },
       permissions: { setForTool: vi.fn(async () => {}) },
@@ -1882,8 +2443,9 @@ describe('GithubRules', () => {
       ),
     };
     const controller = {
+      queryThreadById: vi.fn(async () => null),
       createSession: vi.fn(async () => session),
-      getSessionByResource: vi.fn(async () => session),
+      getSession: vi.fn(async () => session),
     };
     await sourceControl.sessions.create({
       sessionId: 'session-work-42',
@@ -2048,7 +2610,133 @@ describe('GithubRules', () => {
     );
   });
 
-  it('uses verified Factory provenance to link an opened Review card and remind Work on merge', async () => {
+  describe('edited Factory verdicts', () => {
+    // The review skill edits its earlier verdict in place on a re-review
+    // instead of stacking a new post. The edit is the only handoff the author
+    // gets, so it has to wake the Work item exactly like a new verdict does.
+    const verdictBody = '> Opened by @DSchau\n\nVerdict: request changes\nReviewed head: ' + 'a'.repeat(40);
+
+    async function ingestEdit(
+      event: 'issue_comment' | 'pull_request_review',
+      body: string,
+      state = 'changes_requested',
+    ) {
+      const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+      const work = await workItems.upsert({
+        orgId: 'org-1',
+        userId: 'user-1',
+        factoryProjectId: project.id,
+        input: {
+          externalSource: {
+            integrationId: 'github',
+            type: 'issue',
+            externalId: 'github:10:issue:42',
+            url: 'https://github.com/acme/repo/issues/42',
+          },
+          title: 'Issue 42',
+          stages: ['execute'],
+          sessions: {},
+          metadata: {},
+        },
+      });
+      await integrationStorage.subscriptions.create({
+        orgId: 'org-1',
+        targetKey: 'factory-pr-provenance:10:17',
+        threadId: 'thread-1',
+        status: 'active',
+        data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+      });
+      const service = new GithubRules({
+        github,
+        sourceControl,
+        integrationStorage,
+        projects,
+        storage: workItems,
+        boards: createBoardRegistry(),
+        configVersion: 'factory-config-v1',
+      });
+      const pullRequest = {
+        number: 17,
+        title: 'PR 17',
+        html_url: 'https://github.com/acme/repo/pull/17',
+        state: 'open',
+        merged: false,
+        head: { ref: 'feature' },
+        base: { ref: 'main' },
+      };
+      const base = {
+        action: 'edited',
+        changes: { body: { from: 'Verdict: request changes\nReviewed head: ' + 'b'.repeat(40) } },
+        installation: { id: 7 },
+        repository: { id: 10, full_name: 'acme/repo' },
+        sender: { login: 'reviewer' },
+      };
+      const payload =
+        event === 'issue_comment'
+          ? {
+              ...base,
+              comment: {
+                id: 555,
+                body,
+                html_url: 'https://github.com/acme/repo/pull/17#issuecomment-555',
+                user: { login: 'reviewer' },
+              },
+              issue: { ...pullRequest, pull_request: { url: 'https://api.github.com/repos/acme/repo/pulls/17' } },
+            }
+          : {
+              ...base,
+              review: {
+                id: 99,
+                state,
+                body,
+                html_url: 'https://github.com/acme/repo/pull/17#pullrequestreview-99',
+                user: { login: 'reviewer' },
+              },
+              pull_request: pullRequest,
+            };
+      const result = await service.ingest({ event, deliveryId: `delivery-${event}-edited`, payload });
+      return {
+        result,
+        decisions: await workItems.listDeferredDecisions('org-1', project.id),
+        workItemId: work.item.id,
+      };
+    }
+
+    it.each(['issue_comment', 'pull_request_review'] as const)(
+      'wakes the authoring Work item when a %s verdict is edited to request changes',
+      async event => {
+        const { decisions, workItemId } = await ingestEdit(event, verdictBody);
+        expect(decisions).toEqual(
+          expect.arrayContaining([
+            expect.objectContaining({
+              workItemId,
+              decision: expect.objectContaining({ type: 'sendMessage', role: 'work', priority: 'high' }),
+            }),
+          ]),
+        );
+      },
+    );
+
+    it.each(['issue_comment', 'pull_request_review'] as const)(
+      'ignores a %s edit that leaves no request-changes verdict',
+      async event => {
+        const { result, decisions } = await ingestEdit(event, 'Fixed a typo in my note.');
+        expect(result.status).toBe('ignored');
+        expect(decisions).toEqual([]);
+      },
+    );
+
+    it('ignores an edited approval', async () => {
+      const { result } = await ingestEdit(
+        'pull_request_review',
+        'Verdict: approve\nReviewed head: ' + 'a'.repeat(40),
+        'approved',
+      );
+      expect(result.status).toBe('ignored');
+    });
+  });
+
+  it('uses verified Factory provenance to link an opened Review card and carry Work through review to Done', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
       orgId: 'org-1',
@@ -2085,7 +2773,11 @@ describe('GithubRules', () => {
     });
 
     await service.ingest(pullRequest('opened', 'delivery-open'));
+    // While the pull request is open the Work item records it, which is what
+    // keeps an agent from closing the work before the merge.
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBe(17);
     await service.ingest(pullRequest('closed', 'delivery-merge', true));
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
     const decisions = await workItems.listDeferredDecisions('org-1', project.id);
     expect(decisions).toEqual(
       expect.arrayContaining([
@@ -2095,12 +2787,13 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: work.item.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'review' }),
+        }),
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
-    );
-    expect(decisions.map(entry => entry.decision)).not.toEqual(
-      expect.arrayContaining([expect.objectContaining({ type: 'transition' })]),
     );
   });
 
@@ -2157,6 +2850,67 @@ describe('GithubRules', () => {
     expect(decisions[0]?.workItemId).not.toBe(work.item.id);
   });
 
+  it('stops recording a pull request that closes without merging and ignores a replayed opening', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github:10:issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion: 'factory-config-v1',
+        boards: createBoardRegistry(),
+      }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-open'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    expect(cards.find(card => card.externalSource?.type === 'pull-request')?.parentWorkItemId).toBe(work.item.id);
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBe(17);
+    await service.ingest(pullRequest('closed', 'delivery-close'));
+    // An abandoned pull request must not leave the Work item blocked for agents.
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
+    await service.ingest(pullRequest('opened', 'delivery-open'));
+    expect((await workItems.get({ orgId: 'org-1', id: work.item.id }))?.metadata?.openPullRequestNumber).toBeNull();
+  });
+
   it('links an opened Review card to the work item whose session branch matches the PR head branch', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await workItems.upsert({
@@ -2198,6 +2952,190 @@ describe('GithubRules', () => {
         }),
       }),
     ]);
+    // An untrusted author's branch match links the card but must not move the
+    // Work item or mark it as having a pull request out.
+    const after = await workItems.get({ orgId: 'org-1', id: work.item.id });
+    expect(after?.stages).toEqual(['execute']);
+    expect(after?.metadata?.openPullRequestNumber).toBeUndefined();
+  });
+
+  it('answers a pull request opening for the pull request card and the item it was authored from', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      pullRequestOpened: context => {
+        // The arrival files the pull request's own card; the item the pull
+        // request was authored from is placed in review instead.
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+          return defaultGithubRules.pullRequestOpened(context);
+        return {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:work-item-review`,
+          source: context.item.source,
+          sourceKey: context.item.sourceKey,
+          title: context.item.title,
+          url: context.item.url,
+          board: 'work',
+          stage: 'review',
+          skipRules: true,
+        };
+      },
+    });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: { work: { sessionId: 'session-issue-42', branch: 'feature', threadId: 'session-issue-42' } },
+        metadata: {},
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-two-cards'));
+
+    // Both decisions are committed against the authoring item — that binding is
+    // what links the Review card to it — but they come from separate
+    // evaluations: the arrival under the delivery's own identity, and the item
+    // under one suffixed with its id.
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decisions).toHaveLength(2);
+    expect(decisions).toEqual(
+      expect.arrayContaining([
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({
+            type: 'upsertLinkedWorkItem',
+            source: 'github-pr',
+            board: 'review',
+            idempotencyKey: '7:delivery-two-cards:pull-request-intake',
+          }),
+        }),
+        expect.objectContaining({
+          workItemId: work.item.id,
+          decision: expect.objectContaining({
+            type: 'upsertLinkedWorkItem',
+            source: 'github-issue',
+            sourceKey: 'github-issue:42',
+            board: 'work',
+            stage: 'review',
+            skipRules: true,
+            idempotencyKey: `7:delivery-two-cards:${work.item.id}:work-item-review`,
+          }),
+        }),
+      ]),
+    );
+  });
+
+  it("moves the item that authored a pull request into review when it opens, and still files the pull request's card", async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read', {
+      pullRequestOpened: context => {
+        if (context.pullRequestIntake === true || !context.item || context.item.sourceKey === null)
+          return defaultGithubRules.pullRequestOpened(context);
+        return {
+          type: 'upsertLinkedWorkItem',
+          idempotencyKey: `${context.ingress.id}:work-item-review`,
+          source: context.item.source,
+          sourceKey: context.item.sourceKey,
+          title: context.item.title,
+          url: context.item.url,
+          board: 'work',
+          stage: 'review',
+          skipRules: true,
+        };
+      },
+    });
+    const configVersion = 'factory-config-v1';
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion,
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      transitionService: new FactoryTransitionService({
+        storage: workItems,
+        configVersion,
+        boards: createBoardRegistry(),
+      }),
+      storage: workItems,
+      boards: createBoardRegistry(),
+      isAutoRunEnabled: async () => true,
+      ownerId: 'worker-1',
+    });
+    const work = await workItems.upsert({
+      orgId: 'org-1',
+      userId: 'user-1',
+      factoryProjectId: project.id,
+      input: {
+        board: 'work',
+        externalSource: {
+          integrationId: 'github',
+          type: 'issue',
+          externalId: 'github-issue:42',
+          url: 'https://github.com/acme/repo/issues/42',
+        },
+        title: 'Issue 42',
+        stages: ['execute'],
+        sessions: {},
+        metadata: { labels: ['bug'] },
+      },
+    });
+    await integrationStorage.subscriptions.create({
+      orgId: 'org-1',
+      targetKey: 'factory-pr-provenance:10:17',
+      threadId: 'thread-1',
+      status: 'active',
+      data: { kind: 'factory-pr-provenance', factoryProjectId: project.id, workItemId: work.item.id },
+    });
+
+    await service.ingest(pullRequest('opened', 'delivery-work-review'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
+    await dispatcher.runOnce(new Date('2030-01-01T00:00:01Z'));
+
+    const cards = await workItems.list({ orgId: 'org-1', factoryProjectId: project.id });
+    // The item the pull request was authored from is waiting for review, moved
+    // there by placement: its own facts are untouched and no phase rule ran.
+    expect(cards.find(card => card.id === work.item.id)).toMatchObject({
+      board: 'work',
+      stages: ['review'],
+      metadata: { labels: ['bug'] },
+    });
+    expect(cards.find(card => card.id === work.item.id)?.stageHistory).toMatchObject([
+      { stage: 'execute', exitedBy: 'factory-rule-dispatcher' },
+      { stage: 'review', by: 'factory-rule-dispatcher' },
+    ]);
+    // The pull request still gets its own card, linked to that item.
+    expect(cards.find(card => card.externalSource?.type === 'pull-request')).toMatchObject({
+      board: 'review',
+      stages: ['intake'],
+      parentWorkItemId: work.item.id,
+    });
   });
 
   it('moves the merged Review card to Done when the PR has no Factory provenance', async () => {
@@ -2216,7 +3154,7 @@ describe('GithubRules', () => {
         title: 'PR 17',
         stages: ['review'],
         sessions: {},
-        metadata: {},
+        metadata: { state: 'open', merged: false },
       },
     });
     const service = new GithubRules({
@@ -2239,11 +3177,23 @@ describe('GithubRules', () => {
         decision: expect.objectContaining({ type: 'transition', board: 'review', stage: 'done' }),
       }),
     ]);
+    // The card must read merged straight away, not only after the next sweep.
+    expect((await workItems.get({ orgId: 'org-1', id: card.item.id }))?.metadata).toMatchObject({
+      state: 'closed',
+      merged: true,
+    });
   });
 
-  it('closes the merged Review card and wakes the work item it was opened from', async () => {
+  it('closes the merged Review card and the work item it was opened from', async () => {
     const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('read');
     const work = await createLinkedIssue(workItems, project.id);
+    // The last review asked for changes; the merge overrides it.
+    await workItems.update({
+      orgId: 'org-1',
+      id: work.id,
+      userId: 'user-1',
+      patch: { metadata: { reviewVerdict: 'request changes' } },
+    });
     const card = await workItems.upsert({
       orgId: 'org-1',
       userId: 'user-1',
@@ -2285,13 +3235,16 @@ describe('GithubRules', () => {
         }),
         expect.objectContaining({
           workItemId: work.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
       ]),
     );
 
+    // The merge settles the review, so the builder may close its work.
+    expect((await workItems.get({ orgId: 'org-1', id: work.id }))?.metadata?.reviewVerdict).toBeNull();
+
     // The fan-out rides the same delivery, so replaying it must stay inert for
-    // both cards rather than sending the work item a second reminder.
+    // both cards rather than moving the work item a second time.
     await expect(service.ingest(pullRequest('closed', 'delivery-merged-both', true))).resolves.toEqual({
       status: 'replayed',
     });
@@ -2343,7 +3296,7 @@ describe('GithubRules', () => {
       expect.arrayContaining([
         expect.objectContaining({
           workItemId: work.id,
-          decision: expect.objectContaining({ type: 'sendMessage', role: 'work' }),
+          decision: expect.objectContaining({ type: 'transition', board: 'work', stage: 'done' }),
         }),
         expect.objectContaining({
           workItemId: card.item.id,
@@ -2419,7 +3372,10 @@ describe('GithubRules label routes', () => {
     };
   }
 
-  async function setupRoutes(route: string | undefined) {
+  async function setupRoutes(
+    route: string | undefined,
+    binding?: { board: string | null; sourceId?: 'id' | 'slug'; factoryProjectId?: string },
+  ) {
     const base = await setup('write');
     const intake = base.intake;
     if (route) {
@@ -2432,13 +3388,23 @@ describe('GithubRules label routes', () => {
         userId: 'user-1',
       });
     }
+    if (binding) {
+      await intake.setBinding({
+        orgId: 'org-1',
+        integrationId: 'github',
+        sourceId: binding.sourceId === 'slug' ? 'acme/repo' : base.projectRepository.repositoryId,
+        factoryProjectId: binding.factoryProjectId ?? base.project.id,
+        board: binding.board,
+        userId: 'user-1',
+      });
+    }
     const service = new GithubRules({
       github: base.github,
       sourceControl: base.sourceControl,
       integrationStorage: base.integrationStorage,
       projects: base.projects,
       storage: base.workItems,
-      boards: createBoardRegistry({ boards: [createTestBoard()] }),
+      boards: createBoardRegistry({ boards: [createTestBoard(), createTestBoard({ id: 'triage' })] }),
       configVersion: 'factory-config-v1',
       intake,
     });
@@ -2489,6 +3455,57 @@ describe('GithubRules label routes', () => {
     });
   });
 
+  it.each(['id', 'slug'] as const)(
+    'lands an unlabelled issue on the board its repository binding names (bound by %s)',
+    async sourceId => {
+      const { service, workItems, project } = await setupRoutes(undefined, { board: 'release', sourceId });
+      await expect(service.ingest(issueOpened('bound-open'))).resolves.toEqual({ status: 'committed' });
+      const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+      expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'release', stage: 'queued' });
+    },
+  );
+
+  it('prefers a matching label route over the repository binding', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const routed = issueOpened('routed-over-binding');
+    (routed.payload.issue as Record<string, unknown>).labels = [{ name: 'release' }];
+    await expect(service.ingest(routed)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ board: 'release', stage: 'queued' });
+  });
+
+  it('falls back to the repository binding when no label route matches', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const unrouted = issueOpened('unrouted-bound');
+    (unrouted.payload.issue as Record<string, unknown>).labels = [{ name: 'bug' }];
+    await expect(service.ingest(unrouted)).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ board: 'triage', stage: 'queued' });
+  });
+
+  it.each([
+    ['has no board', { board: null }],
+    ['names a board that is not installed', { board: 'missing' }],
+    ['belongs to another project', { board: 'release', factoryProjectId: 'other-project' }],
+  ])('keeps the issue on Work › Intake when the binding %s', async (_, binding) => {
+    const { service, workItems, project } = await setupRoutes(undefined, binding);
+    await expect(service.ingest(issueOpened('binding-fallback'))).resolves.toEqual({ status: 'committed' });
+    const [decision] = await workItems.listDeferredDecisions('org-1', project.id);
+    expect(decision?.decision).toMatchObject({ type: 'upsertLinkedWorkItem', board: 'work', stage: 'intake' });
+  });
+
+  it('moves a card to the binding board when its last routed label is removed', async () => {
+    const { service, workItems, project } = await setupRoutes('release', { board: 'triage' });
+    const item = await createLinkedIssue(workItems, project.id);
+    await expect(service.ingest(issueLabels('labeled', ['release']))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({ board: 'release' });
+    await expect(service.ingest(issueLabels('unlabeled', []))).resolves.toEqual({ status: 'committed' });
+    expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+      board: 'triage',
+      stages: ['queued'],
+    });
+  });
+
   it('leaves a card a run owns where it is but still records the labels', async () => {
     const { service, workItems, project } = await setupRoutes('release');
     const item = await createLinkedIssue(workItems, project.id);
@@ -2515,6 +3532,146 @@ describe('GithubRules label routes', () => {
     const onPullRequest = issueLabels('labeled', ['release'], 'pr-labeled');
     (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
     await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
+
+  function issueAssignees(action: 'assigned' | 'unassigned', assignees: string[], deliveryId = `assignee-${action}`) {
+    const ingress = issueLabels('labeled', [], deliveryId);
+    (ingress.payload as Record<string, unknown>).action = action;
+    (ingress.payload.issue as Record<string, unknown>).assignees = assignees.map(login => ({ login }));
+    return ingress;
+  }
+
+  it.each([
+    { action: 'assigned', before: [], after: ['alice', 'bob'] },
+    { action: 'unassigned', before: ['alice', 'bob'], after: ['bob'] },
+    { action: 'unassigned', before: ['bob'], after: [] },
+  ] as const)(
+    'mirrors $action from $before to $after onto the linked issue card without moving it or proposing runs',
+    async ({ action, before, after }) => {
+      const { service, workItems, project } = await setupRoutes('release');
+      const created = await createLinkedIssue(workItems, project.id);
+      const item = (await workItems.update({
+        orgId: 'org-1',
+        id: created.id,
+        userId: 'user-1',
+        patch: { metadata: { assignees: [...before] } },
+      }))!.item;
+
+      await expect(service.ingest(issueAssignees(action, [...after]))).resolves.toEqual({ status: 'committed' });
+      expect(await workItems.get({ orgId: 'org-1', id: item.id })).toMatchObject({
+        board: item.board,
+        stages: ['planning'],
+        metadata: { assignees: [...after] },
+      });
+      expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    },
+  );
+
+  it('keeps the newer assignees when an older assigned payload arrives after a newer unassigned one', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'] } },
+    });
+    const newer = issueAssignees('unassigned', [], 'assignee-newer');
+    (newer.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+    const older = issueAssignees('assigned', ['alice'], 'assignee-older');
+    (older.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:01Z';
+
+    await expect(service.ingest(newer)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(older)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: [],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:02Z',
+    });
+  });
+
+  it('advances the stored time on a newer no-op so a delayed older unassigned cannot overwrite it', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    const created = await createLinkedIssue(workItems, project.id);
+    await workItems.update({
+      orgId: 'org-1',
+      id: created.id,
+      userId: 'user-1',
+      patch: { metadata: { assignees: ['alice'], githubAssigneesUpdatedAt: '2030-01-01T00:00:01Z' } },
+    });
+    const newerNoop = issueAssignees('assigned', ['alice'], 'assignee-t3');
+    (newerNoop.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:03Z';
+    const delayed = issueAssignees('unassigned', [], 'assignee-t2');
+    (delayed.payload.issue as Record<string, unknown>).updated_at = '2030-01-01T00:00:02Z';
+
+    await expect(service.ingest(newerNoop)).resolves.toEqual({ status: 'committed' });
+    await expect(service.ingest(delayed)).resolves.toEqual({ status: 'ignored' });
+    expect((await workItems.get({ orgId: 'org-1', id: created.id }))?.metadata).toMatchObject({
+      assignees: ['alice'],
+      githubAssigneesUpdatedAt: '2030-01-01T00:00:03Z',
+    });
+  });
+
+  it('ignores assignee changes for issues without a card and on pull requests', async () => {
+    const { service, workItems, project } = await setupRoutes('release');
+    await expect(service.ingest(issueAssignees('assigned', ['alice']))).resolves.toEqual({ status: 'ignored' });
+    expect(await workItems.listDeferredDecisions('org-1', project.id)).toEqual([]);
+    const onPullRequest = issueAssignees('assigned', ['alice'], 'pr-assigned');
+    (onPullRequest.payload.issue as Record<string, unknown>).pull_request = { url: 'x' };
+    await expect(service.ingest(onPullRequest)).resolves.toEqual({ status: 'ignored' });
+  });
+});
+
+describe('polledPullRequestEvent', () => {
+  const repositoryTarget = { id: 10, fullName: 'acme/repo', installationId: 7 };
+
+  async function reviewCardMetadata(author: string) {
+    const { github, sourceControl, integrationStorage, workItems, projects, project } = await setup('write');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'factory-config-v1',
+    });
+    await service.ingest(
+      polledPullRequestEvent(repositoryTarget, 17, {
+        title: 'PR 17',
+        url: 'https://github.com/acme/repo/pull/17',
+        state: 'open',
+        draft: false,
+        merged: false,
+        assignees: ['assignee'],
+        requestedReviewers: ['reviewer'],
+        labels: ['bug'],
+        headBranch: 'feature',
+        baseBranch: 'main',
+        author,
+        createdAt: '2030-01-01T00:00:00Z',
+      }),
+    );
+    const decisions = await workItems.listDeferredDecisions('org-1', project.id);
+    const intake = decisions.find(({ decision }) => decision.type === 'upsertLinkedWorkItem');
+    if (intake?.decision.type !== 'upsertLinkedWorkItem') throw new Error('Expected a Review card intake');
+    return intake.decision.metadata;
+  }
+
+  it('records the author on the Review card, as a webhook delivery does', async () => {
+    expect(await reviewCardMetadata('pr-author')).toMatchObject({
+      author: 'pr-author',
+      factoryAuthored: false,
+      assignees: ['assignee'],
+      requestedReviewers: ['reviewer'],
+      labels: ['bug'],
+    });
+  });
+
+  it('recognises a pull request Factory opened from its author alone', async () => {
+    expect(await reviewCardMetadata('factory-app[bot]')).toMatchObject({
+      author: 'factory-app[bot]',
+      factoryAuthored: true,
+    });
   });
 });
 
@@ -3525,5 +4682,78 @@ describe('createGithubPullRequestReconciler', () => {
         },
       ],
     });
+  });
+});
+
+describe('GithubRules push hand-off', () => {
+  function push(ref: string, repositoryId = 10) {
+    return {
+      event: 'push',
+      deliveryId: `push-${ref}`,
+      payload: {
+        ref,
+        after: 'c'.repeat(40),
+        installation: { id: 7 },
+        repository: { id: repositoryId, full_name: 'acme/repo', default_branch: 'main' },
+        sender: { login: 'maintainer' },
+      },
+    };
+  }
+
+  it('hands a push to a linked repository to the hook once per project and never to the rules', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects, project, projectRepository } =
+      await setup('write');
+    const onRepositoryPush = vi.fn();
+    const commit = vi.spyOn(workItems, 'commitRuleEvaluation');
+    const service = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+
+    await expect(service.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
+
+    expect(onRepositoryPush).toHaveBeenCalledTimes(1);
+    expect(onRepositoryPush).toHaveBeenCalledWith({
+      orgId: 'org-1',
+      factoryProjectId: project.id,
+      projectRepository: { id: projectRepository.id, inEnvironment: true },
+      ref: 'refs/heads/main',
+      defaultBranch: 'main',
+    });
+    expect(commit).not.toHaveBeenCalled();
+  });
+
+  it('ignores pushes to repositories no project links and runs without a hook', async () => {
+    const { github, sourceControl, integrationStorage, workItems, projects } = await setup('write');
+    const onRepositoryPush = vi.fn();
+    const withHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+      onRepositoryPush,
+    });
+    await expect(withHook.ingest(push('refs/heads/main', 99))).resolves.toEqual({ status: 'ignored' });
+    expect(onRepositoryPush).not.toHaveBeenCalled();
+
+    const withoutHook = new GithubRules({
+      github,
+      sourceControl,
+      integrationStorage,
+      projects,
+      storage: workItems,
+      boards: createBoardRegistry(),
+      configVersion: 'v1',
+    });
+    await expect(withoutHook.ingest(push('refs/heads/main'))).resolves.toEqual({ status: 'ignored' });
   });
 });

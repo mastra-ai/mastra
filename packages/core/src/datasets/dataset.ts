@@ -19,14 +19,18 @@ import type {
   ExperimentResultStatus,
   ExperimentStatus,
   ExperimentTenancyFilters,
+  ListDatasetItemsInput,
   ListDatasetItemsOutput,
   ListExperimentResultsOutput,
+  ListExperimentsInput,
   ListExperimentsOutput,
+  ListExperimentResultsInput,
   TargetType,
   UpdateDatasetInput,
   UpdateDatasetItemInput,
   UpdateExperimentResultInput,
 } from '../storage/types.js';
+import { assertAgentModelTarget, withAgentModelMetadata } from './experiment/agent-model.js';
 import { runExperiment, resolveTarget, executeExperimentItem } from './experiment/index.js';
 import { experimentScoreId } from './experiment/scorer.js';
 import type { ExperimentConfig, StartExperimentConfig, ExperimentSummary } from './experiment/types.js';
@@ -267,6 +271,7 @@ export class Dataset {
     page?: number;
     perPage?: number;
     search?: string;
+    orderBy?: ListDatasetItemsInput['orderBy'];
   }): Promise<DatasetItem[] | ListDatasetItemsOutput> {
     const store = await this.#getDatasetsStore();
 
@@ -283,6 +288,7 @@ export class Dataset {
       datasetId: this.id,
       ...(args?.version !== undefined ? { version: args.version } : {}),
       ...(args?.search ? { search: args.search } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
       filters: this.#scope,
     });
@@ -381,6 +387,7 @@ export class Dataset {
   async startExperimentAsync<I = unknown, O = unknown, E = unknown>(
     config: StartExperimentConfig<I, O, E>,
   ): Promise<{ experimentId: string; status: 'pending'; totalItems: number }> {
+    assertAgentModelTarget(config);
     const persistExperiments = config.persistence?.experiments !== 'none';
     const experimentsStore = persistExperiments ? await this.#getExperimentsStore() : undefined;
     const datasetsStore = await this.#getDatasetsStore();
@@ -422,7 +429,7 @@ export class Dataset {
         totalItems: items.length,
         name: config.name,
         description: config.description,
-        metadata: config.metadata,
+        metadata: withAgentModelMetadata(config.metadata, config.agentModel),
         provenance: config.provenance,
         experimentSetId: config.grouping?.experimentSetId,
         comparisonId: config.grouping?.comparisonId,
@@ -482,6 +489,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentsInput['orderBy'];
   }): Promise<ListExperimentsOutput> {
     await this.#assertScope();
     const experimentsStore = await this.#getExperimentsStore();
@@ -496,6 +504,7 @@ export class Dataset {
       ...(args?.variantId !== undefined ? { variantId: args.variantId } : {}),
       ...(args?.trialIndex !== undefined ? { trialIndex: args.trialIndex } : {}),
       ...(args?.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args?.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }
@@ -579,6 +588,7 @@ export class Dataset {
     filters?: ExperimentTenancyFilters;
     page?: number;
     perPage?: number;
+    orderBy?: ListExperimentResultsInput['orderBy'];
   }): Promise<ListExperimentResultsOutput> {
     await this.#assertExperimentOwnership(args.experimentId);
     const experimentsStore = await this.#getExperimentsStore();
@@ -588,6 +598,7 @@ export class Dataset {
       ...(args.status !== undefined ? { status: args.status } : {}),
       ...(args.tags !== undefined ? { tags: args.tags } : {}),
       ...(args.filters !== undefined ? { filters: args.filters } : {}),
+      ...(args.orderBy !== undefined ? { orderBy: args.orderBy } : {}),
       pagination: { page: args?.page ?? 0, perPage: args?.perPage ?? 20 },
     });
   }

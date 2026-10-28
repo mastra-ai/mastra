@@ -20,16 +20,8 @@ import { existsSync, mkdirSync, readFileSync, readdirSync, renameSync, rmSync, w
 import { resolve } from 'node:path';
 import { fileURLToPath } from 'node:url';
 
-import {
-  Node,
-  Project,
-  SyntaxKind,
-  type CallExpression,
-  type ImportDeclaration,
-  type ObjectLiteralExpression,
-  type SourceFile,
-  type Statement,
-} from 'ts-morph';
+import { Node, Project, SyntaxKind } from 'ts-morph';
+import type { CallExpression, ImportDeclaration, ObjectLiteralExpression, SourceFile, Statement } from 'ts-morph';
 import { format, resolveConfig } from 'prettier';
 
 import {
@@ -42,19 +34,36 @@ import {
   providersDir,
   templatesDir,
   validateProviderId,
-  type ProviderManifest,
 } from './provider-utils.js';
-import { templatePinFor, type TemplatePin } from './templates-config.js';
+import type { ProviderManifest } from './provider-utils.js';
+import { templatePinFor } from './templates-config.js';
+import type { TemplatePin } from './templates-config.js';
 
 /** Module specifier the upstream templates import their SDK from. */
 const TEMPLATE_SDK_MODULE = 'nango';
-const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete']);
-const PROXY_CONTEXT_METHODS = new Set([...PROXY_REQUEST_METHODS, 'getConnection', 'getMetadata', 'ActionError', 'log']);
-const UNSUPPORTED_PROXY_OPTIONS = ['responseType'] as const;
+const PROXY_REQUEST_METHODS = new Set(['get', 'post', 'put', 'patch', 'delete', 'proxy']);
+const PROXY_CONTEXT_METHODS = new Set([
+  ...PROXY_REQUEST_METHODS,
+  'getConnection',
+  'getMetadata',
+  'updateMetadata',
+  'zodValidateInput',
+  'ActionError',
+  'log',
+]);
+/**
+ * Proxy config keys that shipped templates use but the platform proxy cannot
+ * honor. If a template sets any of these, the action is skipped rather than
+ * silently ignoring the option. `responseType` is not listed because the
+ * platform proxy handles `'arraybuffer'` (the only value templates actually
+ * pass).
+ */
+const UNSUPPORTED_PROXY_OPTIONS: readonly string[] = [];
 const ALLOWED_TEMPLATE_SDK_IMPORTS = new Set(['createAction', 'ProxyConfiguration']);
 
 interface ActionCandidate {
   providerId: string;
+  localId: string;
   file: string;
   actionSlug: string;
   toolKey: string;
@@ -105,6 +114,17 @@ function findCreateActionCall(source: SourceFile): CallExpression | undefined {
   return undefined;
 }
 
+function callsTemplateContextMethod(source: SourceFile, methods: ReadonlySet<string>): boolean {
+  return source.getDescendantsOfKind(SyntaxKind.CallExpression).some(call => {
+    const expression = call.getExpression();
+    return (
+      Node.isPropertyAccessExpression(expression) &&
+      expression.getExpression().getText() === 'nango' &&
+      methods.has(expression.getName())
+    );
+  });
+}
+
 function readStringProperty(obj: ObjectLiteralExpression, name: string): string | undefined {
   const property = obj.getProperty(name);
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
@@ -117,6 +137,26 @@ function readIdentifierPropertyInitializer(obj: ObjectLiteralExpression, name: s
   if (!property || !Node.isPropertyAssignment(property)) return undefined;
   const initializer = property.getInitializer();
   return initializer && Node.isIdentifier(initializer) ? initializer.getText() : undefined;
+}
+
+function normalizeSupportedRuntimeImports(source: SourceFile): void {
+  for (const declaration of source.getImportDeclarations()) {
+    const moduleName = declaration.getModuleSpecifierValue();
+    if (moduleName !== 'crypto' && moduleName !== 'node:crypto') continue;
+
+    const namedImports = declaration.getNamedImports();
+    if (
+      declaration.getDefaultImport() ||
+      declaration.getNamespaceImport() ||
+      namedImports.length !== 1 ||
+      namedImports[0]!.getName() !== 'randomUUID' ||
+      namedImports[0]!.getAliasNode()
+    ) {
+      continue;
+    }
+
+    declaration.replaceWithText('const randomUUID = () => globalThis.crypto.randomUUID();');
+  }
 }
 
 function unsupportedImportReason(source: SourceFile): string | undefined {
@@ -174,7 +214,14 @@ function usesNamedImport(declaration: ImportDeclaration, name: string): boolean 
 }
 
 function sanitizeVendoredSource(source: string): string {
-  return source.replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '');
+  return (
+    source
+      .replace(/^.*@nangohq\/custom-integrations-linting\/.*\r?\n/gm, '')
+      // Upstream `updateMetadata` typing forces templates to suppress the
+      // call; against the platform proxy's signature the call type-checks,
+      // so the directive would itself fail as unused.
+      .replace(/^\s*\/\/\s*@ts-expect-error[^\n]*\r?\n(?=\s*(?:await\s+)?platformProxy\.updateMetadata\()/gm, '')
+  );
 }
 
 function escapeRegExp(value: string): string {
@@ -183,6 +230,62 @@ function escapeRegExp(value: string): string {
 
 function isArrayInputField(inputSchemaText: string, field: string): boolean {
   return new RegExp(`(?:^|[\\s{,])${escapeRegExp(field)}\\s*:\\s*z\\s*\\.\\s*array\\s*\\(`).test(inputSchemaText);
+}
+
+/**
+ * True when the exec reads `credentials` off the result of
+ * `nango.getConnection()` — directly on the call, through a variable bound to
+ * it, or by destructuring `credentials` from it. Reads of `.credentials` on
+ * unrelated values (such as an input field named `credentials`) don't count,
+ * so the generated tool never fetches a secret the action doesn't use.
+ */
+function execReadsConnectionCredentials(execInitializer: Node): boolean {
+  // Unwrap `await` and parentheses so wrapped calls (e.g.
+  // `await (nango.getConnection())`) resolve to the underlying expression.
+  const unwrap = (node: Node): Node => {
+    let current = node;
+    while (Node.isParenthesizedExpression(current) || Node.isAwaitExpression(current)) {
+      current = current.getExpression();
+    }
+    return current;
+  };
+  const isGetConnectionCall = (node: Node): boolean => {
+    const call = unwrap(node);
+    if (!Node.isCallExpression(call) || call.getArguments().length > 0) return false;
+    const callee = call.getExpression();
+    if (!Node.isPropertyAccessExpression(callee) || callee.getName() !== 'getConnection') return false;
+    const receiver = unwrap(callee.getExpression());
+    return Node.isIdentifier(receiver) && receiver.getText() === 'nango';
+  };
+  const connectionSymbols = new Set<unknown>();
+  for (const declaration of execInitializer.getDescendantsOfKind(SyntaxKind.VariableDeclaration)) {
+    const initializer = declaration.getInitializer();
+    if (!initializer || !isGetConnectionCall(initializer)) continue;
+    const nameNode = declaration.getNameNode();
+    if (Node.isIdentifier(nameNode)) {
+      const symbol = nameNode.getSymbol();
+      if (symbol) connectionSymbols.add(symbol);
+    } else if (Node.isObjectBindingPattern(nameNode)) {
+      // `const { credentials } = await nango.getConnection();` (or a rename
+      // such as `{ credentials: creds }` — the property name is what counts).
+      for (const element of nameNode.getElements()) {
+        const propertyName = element.getPropertyNameNode()?.getText() ?? element.getName();
+        if (propertyName === 'credentials') return true;
+      }
+    }
+  }
+  for (const access of execInitializer.getDescendantsOfKind(SyntaxKind.PropertyAccessExpression)) {
+    if (access.getName() !== 'credentials') continue;
+    const target = access.getExpression();
+    if (isGetConnectionCall(target)) return true;
+    // Resolve the identifier to its declaration so a shadowing binding with
+    // the same name (e.g. a callback parameter) never counts as a read.
+    if (Node.isIdentifier(target)) {
+      const symbol = target.getSymbol();
+      if (symbol && connectionSymbols.has(symbol)) return true;
+    }
+  }
+  return false;
 }
 
 /**
@@ -201,29 +304,158 @@ function simplifyScalarQuerySerialization(execBody: string, inputSchemaText: str
 /**
  * Provider responses evolve independently of the template pin. Enums on the
  * response side accept any string so a new provider value never rejects an
- * otherwise valid response; request-side enums stay strict.
+ * otherwise valid response; request-side enums stay strict. When a response
+ * schema builds on an input-side schema (e.g. via `.extend()`), a widened
+ * clone of that input-side schema is emitted and the response side references
+ * the clone, so the permissiveness survives schema reuse.
  */
 function widenResponseEnums(statements: string[], inputSchemaName: string): string[] {
-  const declared = statements.map(statement => statement.match(/^(?:export\s+)?const\s+([A-Za-z_$][\w$]*)/)?.[1]);
+  const widenLiterals = (statement: string) =>
+    statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+
+  // Re-parse the vendored statements so declarations and their references
+  // resolve as TypeScript symbols; text matching would confuse identifiers
+  // that merely share a name (or appear inside string literals).
+  const scratch = new Project({ useInMemoryFileSystem: true }).createSourceFile('scratch.ts', statements.join('\n'));
+  const topLevel = scratch.getStatements();
+  // A statement can declare several variables (`const A = …, B = …;`); track
+  // every identifier-named declaration so the statement can be cloned as a
+  // unit without emitting an unrenamed duplicate of a sibling declaration.
+  const declared: string[][] = topLevel.map(statement => {
+    if (!Node.isVariableStatement(statement)) return [];
+    return statement
+      .getDeclarations()
+      .map(declaration => declaration.getNameNode())
+      .filter(Node.isIdentifier)
+      .map(nameNode => nameNode.getText());
+  });
+  const statementIndexOf = (node: Node): number =>
+    topLevel.findIndex(statement => statement.getStart() <= node.getStart() && node.getEnd() <= statement.getEnd());
+
+  // For each declared schema, resolve every identifier that references it and
+  // record which top-level statement the reference sits in, plus its exact
+  // span so a rename never touches lookalike text.
+  interface SchemaReference {
+    name: string;
+    start: number;
+    end: number;
+  }
+  const referencesByStatement: SchemaReference[][] = topLevel.map(() => []);
+  const referencedNamesByStatement: Set<string>[] = topLevel.map(() => new Set());
+  topLevel.forEach(statement => {
+    if (!Node.isVariableStatement(statement)) return;
+    for (const declaration of statement.getDeclarations()) {
+      const nameNode = declaration.getNameNode();
+      if (!Node.isIdentifier(nameNode)) continue;
+      const name = nameNode.getText();
+      for (const reference of nameNode.findReferencesAsNodes()) {
+        if (reference === nameNode) continue;
+        const referenceIndex = statementIndexOf(reference);
+        if (referenceIndex < 0) continue;
+        const statementStart = topLevel[referenceIndex]!.getStart();
+        referencesByStatement[referenceIndex]!.push({
+          name,
+          start: reference.getStart() - statementStart,
+          end: reference.getEnd() - statementStart,
+        });
+        referencedNamesByStatement[referenceIndex]!.add(name);
+      }
+    }
+  });
+  const declarationNameSpans = (index: number): SchemaReference[] => {
+    const statement = topLevel[index]!;
+    if (!Node.isVariableStatement(statement)) return [];
+    return statement
+      .getDeclarations()
+      .map(declaration => declaration.getNameNode())
+      .filter(Node.isIdentifier)
+      .map(nameNode => ({
+        name: nameNode.getText(),
+        start: nameNode.getStart() - statement.getStart(),
+        end: nameNode.getEnd() - statement.getStart(),
+      }));
+  };
+
+  // Statements are classified as a unit: when any of a statement's
+  // declarations is input-side, its siblings and everything it references are
+  // input-side too.
   const inputSide = new Set<string>([inputSchemaName]);
   let changed = true;
   while (changed) {
     changed = false;
-    statements.forEach((statement, index) => {
-      const name = declared[index];
-      if (!name || !inputSide.has(name)) return;
-      for (const other of declared) {
-        if (other && !inputSide.has(other) && new RegExp(`\\b${escapeRegExp(other)}\\b`).test(statement)) {
+    topLevel.forEach((_, index) => {
+      const names = declared[index]!;
+      if (!names.some(name => inputSide.has(name))) return;
+      for (const other of [...names, ...referencedNamesByStatement[index]!]) {
+        if (!inputSide.has(other)) {
           inputSide.add(other);
           changed = true;
         }
       }
     });
   }
-  return statements.map((statement, index) => {
-    const name = declared[index];
-    if (name && inputSide.has(name)) return statement;
-    return statement.replace(/z\.enum\((\[[^\]]*\])\)(?!\.or\()/g, 'z.enum($1).or(z.string())');
+
+  // Input-side declarations whose inferred type would change if widened,
+  // directly (literal enum) or through a reference to another such declaration.
+  const enumBearing = new Set<string>();
+  changed = true;
+  while (changed) {
+    changed = false;
+    topLevel.forEach((statement, index) => {
+      const names = declared[index]!.filter(name => inputSide.has(name) && !enumBearing.has(name));
+      if (names.length === 0) return;
+      const text = statement.getText();
+      const carriesEnum =
+        widenLiterals(text) !== text || [...enumBearing].some(other => referencedNamesByStatement[index]!.has(other));
+      if (carriesEnum) {
+        for (const name of names) enumBearing.add(name);
+        changed = true;
+      }
+    });
+  }
+
+  // Enum-bearing input-side declarations the response side reaches, including
+  // the ones their clones will need transitively. Cloning a statement clones
+  // every declaration in it, so siblings enter the set together.
+  const needsClone = new Set<string>();
+  const visit = (name: string) => {
+    if (needsClone.has(name)) return;
+    const index = declared.findIndex(names => names.includes(name));
+    if (index < 0) {
+      needsClone.add(name);
+      return;
+    }
+    for (const sibling of declared[index]!) needsClone.add(sibling);
+    for (const other of enumBearing) {
+      if (!needsClone.has(other) && referencedNamesByStatement[index]!.has(other)) visit(other);
+    }
+  };
+  topLevel.forEach((_, index) => {
+    if (declared[index]!.some(name => inputSide.has(name))) return;
+    for (const candidate of enumBearing) {
+      if (referencedNamesByStatement[index]!.has(candidate)) visit(candidate);
+    }
+  });
+
+  // Rewrite recorded identifier spans back-to-front so earlier offsets stay
+  // valid; only resolved references are touched, never coincidental text.
+  const redirectToClones = (index: number, extraSpans: SchemaReference[] = []) => {
+    const spans = [...referencesByStatement[index]!, ...extraSpans]
+      .filter(span => needsClone.has(span.name))
+      .sort((a, b) => b.start - a.start);
+    let result = topLevel[index]!.getText();
+    for (const span of spans) {
+      result = `${result.slice(0, span.start)}${span.name}Widened${result.slice(span.end)}`;
+    }
+    return result;
+  };
+
+  return topLevel.flatMap((statement, index) => {
+    if (declared[index]!.some(name => inputSide.has(name))) {
+      if (!declared[index]!.some(name => needsClone.has(name))) return [statement.getText()];
+      return [statement.getText(), widenLiterals(redirectToClones(index, declarationNameSpans(index)))];
+    }
+    return [widenLiterals(redirectToClones(index))];
   });
 }
 
@@ -250,6 +482,7 @@ function extractAction(
   candidate: ActionCandidate,
 ): { kind: 'ok'; value: ExtractedAction } | { kind: 'skip'; reason: string } {
   const source = project.addSourceFileAtPath(candidate.file);
+  normalizeSupportedRuntimeImports(source);
   const importReason = unsupportedImportReason(source);
   if (importReason) return { kind: 'skip', reason: importReason };
 
@@ -296,9 +529,15 @@ function extractAction(
   if (unsupportedMethods.length > 0) {
     return { kind: 'skip', reason: `exec uses unsupported template SDK helpers: ${unsupportedMethods.join(', ')}` };
   }
-  const usesProviderProxy = [...PROXY_REQUEST_METHODS].some(method =>
-    new RegExp(`\\bnango\\.${method}\\s*\\(`).test(source.getFullText()),
-  );
+  // Templates that read `credentials` off the `nango.getConnection()` result
+  // need the raw credential the platform proxy deliberately leaves out of
+  // `getConnection()`. Their calls are rewritten below to
+  // `getConnectionWithCredentials()`, which fetches it from the platform's
+  // credential endpoint, so only these execs ever see a secret. Detection is
+  // binding-aware: `.credentials` reads on unrelated values (for example a
+  // `credentials` input field) don't trigger the rewrite.
+  const readsCredentials = execReadsConnectionCredentials(execInitializer);
+  const usesProviderProxy = callsTemplateContextMethod(source, PROXY_REQUEST_METHODS);
   if (!usesProviderProxy) {
     return { kind: 'skip', reason: 'exec does not call the provider proxy' };
   }
@@ -342,9 +581,29 @@ function extractAction(
     if (parameter.getName() === 'nango') parameter.rename('platformProxy');
   }
 
+  // Some templates skip the `NangoActionLocal` alias and type helper
+  // parameters inline against the SDK context — either through the action
+  // declaration (`Parameters<(typeof action)['exec']>[0]`) or through the
+  // factory itself (`Parameters<Parameters<typeof createAction>[0]['exec']>[0]`).
+  // Both names are stripped from the generated module, so rewrite those
+  // references to the imported `PlatformProxy` type.
+  const actionVariableName = createActionCall.getFirstAncestorByKind(SyntaxKind.VariableDeclaration)?.getName();
+  const inlineContextTypes = new Set(
+    [
+      actionVariableName ? `Parameters<(typeof ${actionVariableName})['exec']>[0]` : undefined,
+      "Parameters<Parameters<typeof createAction>[0]['exec']>[0]",
+    ].filter((text): text is string => text !== undefined),
+  );
+  const inlineContextNodes = source
+    .getDescendantsOfKind(SyntaxKind.IndexedAccessType)
+    .filter(node => inlineContextTypes.has(node.getText()));
+  for (const node of inlineContextNodes.reverse()) {
+    if (!node.wasForgotten()) node.replaceWithText('PlatformProxy');
+  }
+
   const renamedExecBodyNode = execInitializer.getBody();
   const inputSchemaText = inputDeclaration.getText();
-  const execBody = simplifyScalarQuerySerialization(
+  let execBody = simplifyScalarQuerySerialization(
     replaceProxyRequestType(
       sanitizeVendoredSource(
         Node.isBlock(renamedExecBodyNode)
@@ -355,6 +614,12 @@ function extractAction(
     ),
     inputSchemaText,
   );
+  if (readsCredentials) {
+    execBody = execBody.replace(
+      /\bplatformProxy\s*\.\s*getConnection\s*\(\s*\)/g,
+      'platformProxy.getConnectionWithCredentials()',
+    );
+  }
 
   const moduleStatements = widenResponseEnums(
     source
@@ -376,6 +641,47 @@ function extractAction(
       execBody,
       usesProxyRequestType,
     },
+  };
+}
+
+const DELEGATED_OFFICE_PROVIDER_IDS = new Set(['microsoft-excel', 'microsoft-powerpoint', 'microsoft-word']);
+
+// Nango shares these actions with client-credentials templates. Adapt only the
+// customer-facing delegated providers; keep the explicit -oauth2-cc variants unchanged.
+function applyProviderActionOverrides(action: ExtractedAction): ExtractedAction {
+  if (
+    !DELEGATED_OFFICE_PROVIDER_IDS.has(action.candidate.localId) ||
+    action.candidate.actionSlug !== 'get-user-drive'
+  ) {
+    return action;
+  }
+
+  let inputSchemaUpdated = false;
+  const moduleStatements = action.moduleStatements.map(statement => {
+    if (!statement.includes(`const ${action.inputSchemaName}`)) return statement;
+
+    const updated = statement.replace('userId: z.string().describe(', 'userId: z.string().optional().describe(');
+    inputSchemaUpdated ||= updated !== statement;
+    return updated;
+  });
+
+  const endpointPattern = /endpoint:\s*`\/v1\.0\/users\/\$\{encodeURIComponent\(input\.userId\)\}\/drive`/;
+  const execBody = action.execBody.replace(
+    endpointPattern,
+    "endpoint: input.userId ? `/v1.0/users/${encodeURIComponent(input.userId)}/drive` : '/v1.0/me/drive'",
+  );
+
+  if (!inputSchemaUpdated || execBody === action.execBody) {
+    throw new Error(
+      `Unable to adapt ${action.candidate.providerId}/${action.candidate.actionSlug} for delegated OAuth; the upstream template shape changed.`,
+    );
+  }
+
+  return {
+    ...action,
+    description: "Get the connected user's OneDrive, or another user's drive when userId is provided.",
+    moduleStatements,
+    execBody,
   };
 }
 
@@ -480,7 +786,7 @@ function emitToolsFile(integrationId: string, actions: ExtractedAction[], pin: T
   return `// AUTO-GENERATED from ${pin.repo} @ ${pin.sha.slice(0, 12)} — do not edit by hand.
 import { createPlatformProxy } from '../../runtime/platform-proxy.js';
 import type { ProviderToolsOptions } from '../../toolset.js';
-import { applyAllowTools } from '../../toolset.js';
+import { applyToolFilter } from '../../toolset.js';
 ${imports}
 
 export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOptions) {
@@ -488,7 +794,7 @@ export function create${toPascal(integrationId)}Tools(options?: ProviderToolsOpt
   const tools = {
 ${toolEntries}
   };
-  return applyAllowTools(tools, options?.allowTools);
+  return applyToolFilter(tools, { allowTools: options?.allowTools, disallowTools: options?.disallowTools });
 }
 `;
 }
@@ -559,12 +865,13 @@ export async function generateProvider({
     const actionSlug = filename.replace(/\.ts$/, '');
     const candidate: ActionCandidate = {
       providerId,
+      localId,
       file: resolve(actionDir, filename),
       actionSlug,
       toolKey: `${localId.replace(/-/g, '_')}_${toSnake(actionSlug)}`,
     };
     const result = extractAction(project, candidate);
-    if (result.kind === 'ok') extracted.push(result.value);
+    if (result.kind === 'ok') extracted.push(applyProviderActionOverrides(result.value));
     else skipped.push({ candidate, reason: result.reason });
   }
 

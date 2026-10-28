@@ -129,6 +129,21 @@ export const mastra = new Mastra({
     defaultValue: 'false',
   },
   {
+    name: 'includeSubAgentMetadata',
+    type: 'boolean',
+    description:
+      'Whether to stream sub-agent progress as `data-tool-agent` and `data-tool-agent-step` parts when the agent delegates to sub-agents. These parts can include sub-agent reasoning and tool calls and results. Set to `false` if your clients should not receive them.',
+    isOptional: true,
+    defaultValue: 'true',
+  },
+  {
+    name: 'messageMetadata',
+    type: '(options: { part: UIMessageStreamPart; traceId?: string }) => Record<string, unknown> | undefined',
+    description:
+      "A function that receives the current stream part and returns metadata to attach to start and finish chunks. Also receives the run's `traceId` (undefined when tracing is disabled), so you can return it as metadata, for example `({ part, traceId }) => (part.type === 'start' ? { traceId } : undefined)`. See the [AI SDK message metadata docs](https://ai-sdk.dev/docs/ai-sdk-ui/message-metadata) for details.",
+    isOptional: true,
+  },
+  {
     name: 'heartbeatMs',
     type: 'number',
     description:
@@ -143,13 +158,15 @@ export const mastra = new Mastra({
 You can use [`prepareSendMessagesRequest`](https://ai-sdk.dev/docs/reference/ai-sdk-ui/use-chat#transport.default-chat-transport.prepare-send-messages-request) to customize the request sent to the chat route, for example to pass additional configuration to the agent:
 
 ```typescript
-const { error, status, sendMessage, messages, regenerate, stop } = useChat({
+const { error, status, sendMessage, messages, stop } = useChat({
   transport: new DefaultChatTransport({
     api: 'http://localhost:4111/chat',
     prepareSendMessagesRequest({ messages }) {
       return {
         body: {
-          messages,
+          // With memory configured, send only the new message. Mastra loads the
+          // rest of the conversation from storage.
+          messages: [messages[messages.length - 1]],
           // Pass memory config
           memory: {
             thread: 'user-1',
@@ -161,3 +178,7 @@ const { error, status, sendMessage, messages, regenerate, stop } = useChat({
   }),
 })
 ```
+
+Without memory, send the full `messages` array as the chat route uses it as the request context.
+
+With memory, the stored thread is the source of truth, so `regenerate` and editing an earlier message in `useChat` don't change it. To change stored history, use `memory.saveMessages` or the memory store's `updateMessages`, then send a new message.

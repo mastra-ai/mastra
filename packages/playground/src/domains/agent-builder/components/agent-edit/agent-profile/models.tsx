@@ -1,6 +1,10 @@
-import { InputGroup, InputGroupAddon, InputGroupInput } from '@mastra/playground-ui/components/InputGroup';
+import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { LockIcon, SearchIcon, TriangleAlertIcon } from 'lucide-react';
+import { ProviderLogo, cleanProviderId } from '@mastra/playground-ui/domains/llm';
+import { raisedSurfaceStyle } from '@mastra/playground-ui/primitives/raised-surface';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { compareModelReleaseDates } from '@mastra/playground-ui/utils/model';
+import { LockIcon, TriangleAlertIcon } from 'lucide-react';
 import { useMemo, useState } from 'react';
 import { useFormContext, useWatch } from 'react-hook-form';
 import type { AgentBuilderEditFormValues } from '../../../schemas';
@@ -9,7 +13,6 @@ import { FilterableList } from './filterable-list';
 import { TwoPanePickerSkeleton } from './two-pane-picker-skeleton';
 import { useBuilderModelPolicy } from '@/domains/agent-builder';
 import { useAgentBuilderAllowedModels } from '@/domains/agent-builder/hooks/use-agent-builder-allowed-models';
-import { ProviderLogo, cleanProviderId } from '@/domains/llm';
 import type { ModelInfo } from '@/domains/llm/hooks/use-filtered-models';
 
 export interface Modelprops {
@@ -136,23 +139,19 @@ const ModelPicker = ({ disabled = false }: ModelPickerProps) => {
         )}
 
         <div className="grid h-full min-h-0 grid-rows-[auto_minmax(0,1fr)] gap-4 px-4 py-4">
-          <div data-testid="model-card-picker-search" className="bg-surface3 max-w-[30ch] shrink-0 rounded-full">
-            <InputGroup variant="outline" size="md">
-              <InputGroupAddon align="inline-start">
-                <SearchIcon />
-              </InputGroupAddon>
-              <InputGroupInput
-                type="search"
-                aria-label="Search models"
-                placeholder="Search models or providers..."
-                onChange={event => setSearch(event.target.value)}
-              />
-            </InputGroup>
-          </div>
+          <SearchInput
+            label="Search models"
+            size="md"
+            className="max-w-[30ch] shrink-0"
+            data-testid="model-card-picker-search"
+            placeholder="Search models or providers..."
+            value={search}
+            onValueChange={setSearch}
+          />
 
           {groups.length === 0 ? (
             <div className="flex min-h-0 items-center justify-center">
-              <Txt variant="ui-md" className="text-neutral3">
+              <Txt variant="body" tone="muted">
                 {search.trim()
                   ? `No models match "${search.trim()}"`
                   : allProvidersUnchecked
@@ -201,14 +200,15 @@ const ModelGroups = ({ groups, selectedProvider, selectedModel, disabled, onChan
           className="flex flex-col gap-3"
         >
           <Txt
-            variant="ui-sm"
+            variant="eyebrow"
+            tone="muted"
             as="h3"
-            className="text-neutral3 tracking-wide uppercase"
+
             data-testid={`model-provider-section-title-${group.providerId}`}
           >
             {group.providerName}
           </Txt>
-          <div className="grid grid-cols-1 content-start gap-2 sm:grid-cols-2 lg:gap-4 2xl:grid-cols-3">
+          <div className="grid grid-cols-1 content-start gap-2 2xl:grid-cols-3 sm:grid-cols-2 lg:gap-4">
             {group.models.map(entry => {
               const cleanedProvider = cleanProviderId(entry.provider);
               const isSelected = cleanedProvider === selectedProvider && entry.model === selectedModel;
@@ -242,15 +242,15 @@ interface StaleWarningProps {
 const StaleWarning = ({ provider, modelId }: StaleWarningProps) => {
   return (
     <div
-      className="border-accent6 bg-accent6Dark/40 text-accent6 mx-4 mb-4 flex items-start gap-2 rounded-md border px-3 py-2"
+      className="mx-4 mb-4 flex items-start gap-2 rounded-md border border-warning-edge bg-warning-subtle px-3 py-2 text-warning-subtle-foreground"
       data-testid="model-detail-stale-warning"
       role="alert"
     >
       <TriangleAlertIcon className="mt-0.5 h-4 w-4 shrink-0" />
-      <Txt variant="ui-xs">
-        <span className="font-medium">
+      <Txt variant="meta">
+        <Txt as="span" variant="meta">
           {provider}/{modelId}
-        </span>{' '}
+        </Txt>{' '}
         is no longer allowed by the admin policy. Pick a different model to save changes.
       </Txt>
     </div>
@@ -264,14 +264,14 @@ interface LockedModelChipProps {
 
 const LockedModelChip = ({ provider, modelId }: LockedModelChipProps) => (
   <div
-    className="border-border1 bg-surface3 flex items-center gap-2 rounded-md border px-3 py-2"
+    className={cn(raisedSurfaceStyle, 'flex items-center gap-2 rounded-md px-3 py-2')}
     data-testid="model-detail-locked-chip"
   >
-    <LockIcon className="text-neutral3 h-4 w-4 shrink-0" />
-    <Txt variant="ui-sm" className="text-neutral6 truncate font-medium">
+    <LockIcon className="h-4 w-4 shrink-0 text-muted-foreground" />
+    <Txt variant="column" tone="ink" className="truncate">
       {provider && modelId ? `${provider}/${modelId}` : 'Locked by admin'}
     </Txt>
-    <Txt variant="ui-xs" className="text-neutral3 ml-auto shrink-0">
+    <Txt variant="meta" tone="muted" className="ml-auto shrink-0">
       Set by admin
     </Txt>
   </div>
@@ -307,7 +307,9 @@ function groupModelsByProvider(
   }
 
   for (const group of groupsById.values()) {
-    group.models.sort((a, b) => a.model.localeCompare(b.model));
+    group.models.sort(
+      (a, b) => compareModelReleaseDates(a.releaseDate, b.releaseDate) || a.model.localeCompare(b.model),
+    );
   }
 
   return Array.from(groupsById.values()).sort((a, b) => {

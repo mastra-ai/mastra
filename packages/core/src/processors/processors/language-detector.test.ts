@@ -64,6 +64,7 @@ function setupMockModel(result: LanguageDetectionResult | LanguageDetectionResul
         rawCall: { rawPrompt: null, rawSettings: {} },
         finishReason: 'stop',
         usage: { promptTokens: 10, completionTokens: 20 },
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve response text coercion when a mock fixture serializes to undefined.
         text: `${JSON.stringify(currentResult)}`,
       };
     },
@@ -86,14 +87,14 @@ describe('LanguageDetector', () => {
       expect(detector.id).toBe('language-detector');
     });
 
-    it('should use default target languages when none specified', () => {
+    it('should use default target languages when none specified', async () => {
       const model = setupMockModel(createMockLanguageResult('English', 'en', 0.95, true));
-      const detector = new LanguageDetector({
-        model,
-        targetLanguages: ['English'],
-      });
+      const generateSpy = vi.spyOn(model, 'doGenerate');
+      const detector = new LanguageDetector({ model });
 
-      expect(detector.id).toBe('language-detector');
+      await detector.processInput({ messages: [createTestMessage('Hola, ¿cómo estás?')], abort: vi.fn() as any });
+
+      expect(JSON.stringify(generateSpy.mock.calls[0]?.[0])).toContain('Target: English/en');
     });
 
     it('should accept custom target languages', () => {
@@ -739,6 +740,7 @@ describe('LanguageDetector', () => {
             rawCall: { rawPrompt: null, rawSettings: {} },
             finishReason: 'stop' as const,
             usage: { promptTokens: 10, completionTokens: 20 },
+            // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve response text coercion when a mock fixture serializes to undefined.
             text: `${JSON.stringify(result)}`,
           };
         },

@@ -39,6 +39,35 @@ export function serializeToolError(error: unknown): SerializedError {
   return { name: 'Error', message: String(error) };
 }
 
+// Keep failed delegation transcripts reachable without putting their contents in model-facing error text.
+export function getSubAgentErrorResult(
+  error: unknown,
+): { subAgentThreadId: string; subAgentResourceId?: string } | undefined {
+  const seen = new Set<object>();
+  while (error && typeof error === 'object' && !seen.has(error)) {
+    seen.add(error);
+    const code = 'id' in error ? error.id : 'code' in error ? error.code : undefined;
+    if (code === 'AGENT_AGENT_TOOL_EXECUTION_FAILED' && 'details' in error) {
+      const details = error.details;
+      if (
+        details &&
+        typeof details === 'object' &&
+        'subAgentThreadId' in details &&
+        typeof details.subAgentThreadId === 'string'
+      ) {
+        return {
+          subAgentThreadId: details.subAgentThreadId,
+          ...('subAgentResourceId' in details && typeof details.subAgentResourceId === 'string'
+            ? { subAgentResourceId: details.subAgentResourceId }
+            : {}),
+        };
+      }
+    }
+    error = 'cause' in error ? error.cause : undefined;
+  }
+  return undefined;
+}
+
 export function deserializeToolError(value: unknown): Error {
   if (value instanceof Error) return value;
   const data = (value && typeof value === 'object' ? (value as Record<string, unknown>) : undefined) ?? {};

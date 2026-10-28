@@ -408,20 +408,13 @@ export class MastraAuthGoogle extends MastraAuthProvider<GoogleUser> implements 
         expiresAt: number;
       };
 
-      if (sessionData.expiresAt < Date.now()) {
+      if (!Number.isFinite(sessionData.expiresAt) || sessionData.expiresAt < Date.now()) {
         return null;
       }
 
-      const userExpiresAt = getExpirationMs(sessionData.user.expiresAt);
-      if (userExpiresAt !== undefined && (!Number.isFinite(userExpiresAt) || userExpiresAt < Date.now())) {
-        return null;
-      }
-
+      // The session lifetime (cookieMaxAge) governs cookie sessions, not the ~1h Google ID token exp.
       const { expiresAt: _expiresAt, ...sessionUser } = sessionData.user;
-      const user: GoogleUser = {
-        ...sessionUser,
-        ...(userExpiresAt !== undefined ? { expiresAt: new Date(userExpiresAt) } : {}),
-      };
+      const user: GoogleUser = { ...sessionUser, expiresAt: new Date(sessionData.expiresAt) };
 
       if (!this.isHostedDomainAllowed(user.hostedDomain)) {
         return null;

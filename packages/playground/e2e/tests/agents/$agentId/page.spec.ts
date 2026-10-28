@@ -13,7 +13,7 @@ test.describe('Agent detail page', () => {
       await expect(page).toHaveTitle(/Mastra Studio/);
 
       // Thread sidebar
-      const newChatButton = page.locator('a:has-text("New Chat")');
+      const newChatButton = page.locator('a:has-text("New Thread")');
       await expect(newChatButton).toBeVisible();
       await expect(newChatButton).toHaveAttribute('href', /agents\/weather-agent\/threads\/.*/);
       // Thread history: either stored threads or the empty state on a fresh database
@@ -28,7 +28,8 @@ test.describe('Agent detail page', () => {
       await expect(page.getByRole('heading', { name: /^Tools/ })).toBeVisible({ timeout: 10000 });
       await expect(page.getByRole('link', { name: 'weatherInfo' })).toHaveAttribute(
         'href',
-        /\/agents\/weather-agent\/tools\/weatherInfo$/,
+        // The chip opens the tool drawer over the agent page you're on.
+        /\/agents\/weather-agent\/threads\/[^/?]+\?tool=weatherInfo$/,
       );
     });
   });
@@ -42,6 +43,11 @@ test.describe('Agent detail page', () => {
       await expect(page.getByTestId('agent-overview-panel-toggle')).toBeVisible();
       const overview = page.getByTestId('agent-overview-panel');
       await expect(overview).not.toBeVisible();
+
+      // The composer auto-focuses and swallows `]` as text, so move focus out of it first.
+      const composer = page.getByPlaceholder('Enter your message...');
+      await expect(composer).toBeFocused();
+      await composer.blur();
 
       await page.keyboard.press(']');
       await expect(overview).toBeVisible();
@@ -89,7 +95,7 @@ test.describe('Agent detail page', () => {
       // Arrange
       await expect(page.getByText('Chat Method', { exact: true })).toBeVisible();
       await page.click('text=Generate');
-      await page.click('text=Advanced Settings');
+      await page.click('text=Advanced settings');
       await page.getByLabel('Top K').fill('9');
       await page.getByLabel('Frequency Penalty').fill('0.7');
       await page.getByLabel('Presence Penalty').fill('0.6');
@@ -100,7 +106,7 @@ test.describe('Agent detail page', () => {
       // Act
       await page.reload();
       await page.getByTestId('composer-model-settings-trigger').click();
-      await page.click('text=Advanced Settings');
+      await page.click('text=Advanced settings');
 
       // Assert
       await expect(page.getByLabel('Top K')).toHaveValue('9');
@@ -115,7 +121,7 @@ test.describe('Agent detail page', () => {
       // Arrange
       await page.isVisible('text=Chat Method');
       await page.click('text=Generate');
-      await page.click('text=Advanced Settings');
+      await page.click('text=Advanced settings');
       await page.getByLabel('Top K').fill('9');
       await page.getByLabel('Frequency Penalty').fill('0.7');
       await page.getByLabel('Presence Penalty').fill('0.6');
@@ -123,14 +129,14 @@ test.describe('Agent detail page', () => {
       await page.getByLabel('Max Steps').fill('3');
       await page.getByLabel('Max Retries').fill('2');
 
-      // Close the Advanced Settings dialog before clicking Reset (Reset lives in the composer popover)
+      // Close the Advanced settings dialog before clicking Reset (Reset lives in the composer popover)
       await page.keyboard.press('Escape');
 
       // Act
       await page.click('text=Reset');
 
-      // Reopen Advanced Settings to inspect the reset field values
-      await page.click('text=Advanced Settings');
+      // Reopen Advanced settings to inspect the reset field values
+      await page.click('text=Advanced settings');
 
       // Assert - values reset to defaults (maxSteps: 15, maxRetries: 2 are fallback defaults)
       await expect(page.getByLabel('Top K')).toHaveValue('');

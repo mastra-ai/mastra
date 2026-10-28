@@ -49,7 +49,7 @@ const result = await scorer.run({
   {
     name: 'input',
     type: 'any',
-    required: true,
+    required: false,
     description: "Input data to be evaluated. Can be any type depending on your scorer's requirements.",
   },
   {
@@ -92,12 +92,22 @@ const result = await scorer.run({
   {
     name: 'score',
     type: 'number',
-    description: 'Numerical score computed by the generateScore step.',
+    isOptional: true,
+    description:
+      'Numerical score computed by the generateScore step. Absent when a step returned notScorable(). Check notScorable first.',
+  },
+  {
+    name: 'notScorable',
+    type: 'NotScorableOutcome',
+    isOptional: true,
+    description:
+      'Present when a step returned notScorable(). Carries the step name and optional reason. Remaining steps are skipped and no score is produced. See the notScorable() reference (optional).',
   },
   {
     name: 'reason',
-    type: 'string',
-    description: 'Explanation for the score, if generateReason step was defined (optional).',
+    type: 'TReason | undefined',
+    description:
+      "Explanation for the score. Its type is inferred from the `generateReason` step's return type (which defaults to `string`), and it is omitted when that step is not defined. Observability only records the reason when it is a string.",
   },
   {
     name: 'preprocessStepResult',

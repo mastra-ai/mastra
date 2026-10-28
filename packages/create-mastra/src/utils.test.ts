@@ -16,12 +16,14 @@ const mockDistTags = (stdout: string) => {
   vi.mocked(x).mockResolvedValue({ stdout } as Awaited<ReturnType<typeof x>>);
 };
 
+const CREATE_PKG_REGEX = /create-mastra[/\\]package\.json$/;
+
 describe('getPackageVersion', () => {
   it('reads the package version from the package manifest', async () => {
     vi.mocked(fsPromises.readFile).mockResolvedValue(JSON.stringify({ version: '1.2.3' }));
 
     await expect(getPackageVersion()).resolves.toBe('1.2.3');
-    expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringMatching(/create-mastra[/\\]package\.json$/), 'utf8');
+    expect(fsPromises.readFile).toHaveBeenCalledWith(expect.stringMatching(CREATE_PKG_REGEX), 'utf8');
   });
 });
 

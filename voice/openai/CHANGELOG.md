@@ -1,5 +1,43 @@
 # @mastra/voice-openai
 
+## 0.13.4
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.13.4-alpha.0
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+
+## 0.13.3
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.13.3-alpha.0
+
+### Patch Changes
+
+- Bump for npm ([#27221](https://github.com/mastra-ai/mastra/pull/27221))
+
+## 0.13.2
+
+### Patch Changes
+
+- Fixed install warnings when `@mastra/voice-openai` is used alongside Zod 4 by updating the OpenAI SDK to v6. Existing speech and transcription behavior is unchanged. ([#24198](https://github.com/mastra-ai/mastra/pull/24198))
+
+## 0.13.2-alpha.0
+
+### Patch Changes
+
+- Fixed install warnings when `@mastra/voice-openai` is used alongside Zod 4 by updating the OpenAI SDK to v6. Existing speech and transcription behavior is unchanged. ([#24198](https://github.com/mastra-ai/mastra/pull/24198))
+
 ## 0.13.1
 
 ### Patch Changes

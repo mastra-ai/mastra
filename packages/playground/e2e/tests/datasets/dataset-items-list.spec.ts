@@ -24,18 +24,18 @@ test.describe('Dataset items list', () => {
 
       await page.getByRole('button', { name: /Test input 1/ }).click();
 
-      // Scope to the detail panel's metadata list (a <dl> uniquely identified by its
-      // "Dataset Id" field, which the list rows don't render), so the timestamp regex
-      // can't accidentally match a datetime elsewhere on the page.
-      const itemMetadata = page.locator('dl').filter({ hasText: 'Dataset Id' });
-      await expect(itemMetadata).toBeVisible({ timeout: 5000 });
-      // The "Created" timestamp renders as "MMM d, yyyy h:mm aaa", e.g. "May 29, 2026 1:08 pm".
-      await expect(itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4} \d{1,2}:\d{2} (am|pm)/).first()).toBeVisible();
+      // Scope to the item side panel so the timestamp regex can't match a datetime in the list.
+      const itemMetadata = page.getByRole('region', { name: /^Dataset item / });
+      await expect(itemMetadata.getByText('Item Id')).toBeVisible({ timeout: 5000 });
+      // The shared dateTime preset includes the date, year, and time, e.g. "May 29, 2026, 1:08 PM".
+      await expect(
+        itemMetadata.getByText(/[A-Z][a-z]{2} \d{1,2}, \d{4}, \d{1,2}:\d{2}\s(AM|PM)/).first(),
+      ).toBeVisible();
     });
   });
 
   test.describe('when an item checkbox is checked', () => {
-    test('shows the contextual selection menu with a Delete Items entry', async ({ page }) => {
+    test('shows the contextual selection menu with a Delete items entry', async ({ page }) => {
       const { id: datasetId } = await seedDatasetWithItems(3);
 
       await page.goto(`/datasets/${datasetId}`);
@@ -47,7 +47,7 @@ test.describe('Dataset items list', () => {
       await checkbox1.click();
 
       await page.getByRole('button', { name: /1 selected/i }).click();
-      await expect(page.getByRole('menuitem', { name: /Delete Items/i })).toBeVisible();
+      await expect(page.getByRole('menuitem', { name: /Delete items/i })).toBeVisible();
     });
   });
 
@@ -64,7 +64,7 @@ test.describe('Dataset items list', () => {
       await page.getByRole('checkbox', { name: /Select all items/i }).click();
 
       await page.getByRole('button', { name: /3 selected/i }).click();
-      await page.getByRole('menuitem', { name: /Delete Items/i }).click();
+      await page.getByRole('menuitem', { name: /Delete items/i }).click();
 
       const confirmButton = page.getByRole('button', { name: /^Delete$/i });
       await confirmButton.click();

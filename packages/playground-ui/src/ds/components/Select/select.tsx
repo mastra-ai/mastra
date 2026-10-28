@@ -5,9 +5,19 @@ import * as React from 'react';
 
 import { buttonVariants } from '../Button/Button';
 import type { TextButtonSize } from '../Button/Button';
+import { keepOwnAccessibleName } from '@/ds/components/Field/field-control-aria';
 import { controlTriggerOpenState } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { menuItemCheckClass, menuItemClass, menuPopupClass, menuPositionerClass } from '@/ds/primitives/menu-item';
+import { useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
+import { fieldTriggerErrorBorder, fieldTriggerStyle, fieldTriggerWidthStyle } from '@/ds/primitives/form-element';
+import {
+  menuItemCheckClass,
+  menuItemClass,
+  menuPopupClass,
+  menuPositionerClass,
+  menuSeparatorClass,
+} from '@/ds/primitives/menu-item';
+import { menuScrollPopupClass, MenuScrollArea } from '@/ds/primitives/menu-scroll-area';
 import { usePortalContainer } from '@/ds/primitives/portal-container';
 import { transitions } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -52,7 +62,7 @@ function collectItems(children: React.ReactNode, acc: Array<{ value: unknown; la
   });
 }
 
-type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value, false>;
+type SelectRootProps<Value> = SelectPrimitive.Root.Props<Value>;
 type SelectChangeDetails = Parameters<NonNullable<SelectRootProps<unknown>['onValueChange']>>[1];
 
 /**
@@ -74,7 +84,7 @@ function Select<Value = string>({ children, items, onValueChange, ...props }: Se
 
   return (
     <SelectPrimitive.Root
-      items={derivedItems as SelectRootProps<Value>['items']}
+      items={derivedItems}
       onValueChange={onValueChange ? (value, eventDetails) => onValueChange(value as Value, eventDetails) : undefined}
       {...props}
     >
@@ -102,13 +112,13 @@ const SelectValue = React.forwardRef<HTMLSpanElement, SelectValueProps>(({ class
 SelectValue.displayName = 'SelectValue';
 
 /**
- * A select is a form field, so it reuses the same button looks consumers see
- * everywhere: `default` (the Button's filled default surface — the default
- * here too), `outline` (bordered, transparent) and `ghost` (borderless, for
- * dense toolbars/inline pickers). The high-emphasis `primary` look is the only
- * one intentionally NOT offered (a field is not a call-to-action).
+ * A select is a form field, so it reuses the Button's size/shape recipe with
+ * these looks: `default` (the Input's overlay surface — the default here too,
+ * so a select sits next to an Input as the same kind of thing) and `ghost`
+ * (borderless, for dense toolbars/inline pickers). The high-emphasis `primary` look is the only one intentionally NOT
+ * offered (a field is not a call-to-action).
  */
-export type SelectTriggerVariant = 'default' | 'outline' | 'ghost';
+export type SelectTriggerVariant = 'default' | 'ghost';
 type SelectTriggerLegacyVariant = 'primary';
 
 export type SelectTriggerProps = Omit<SelectPrimitive.Trigger.Props, 'className'> & {
@@ -136,29 +146,33 @@ const SelectTrigger = React.forwardRef<HTMLButtonElement, SelectTriggerProps>(
         // focus, disabled) and layer only the select-specific extras.
         className={cn(
           buttonVariants({ variant: visualVariant, size }),
+          visualVariant === 'default' && fieldTriggerStyle,
           // Fill the field and push the value left / chevron right (Button's
           // base centers its content with `justify-center`).
-          'w-full justify-between',
+          fieldTriggerWidthStyle,
+          'justify-between',
           // Read as "active" while the menu is open, per variant (see map above).
           controlTriggerOpenState[visualVariant],
-          'data-[placeholder]:text-neutral3',
+          'data-[placeholder]:text-muted-foreground',
+          fieldTriggerErrorBorder,
           '[&>span]:truncate',
           className,
         )}
         {...props}
+        {...keepOwnAccessibleName(props)}
       >
         {children}
         {/* `SelectPrimitive.Icon` renders the provided element in place of its
-            default `<span>`, so the chevron would land as a *direct* `<svg>`
-            child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
-            `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
-            would distort and mis-position it. Wrapping it in a `<span>` keeps
-            the svg one level deep so those rules can't reach it, leaving the
-            chevron pinned at the right edge at its intended size and opacity. */}
+ default `<span>`, so the chevron would land as a *direct* `<svg>`
+ child of the trigger — where Button's `TEXT_MODE_ADORNMENTS`
+ `[&>svg]` rules (negative `mx`, forced 50% opacity, 1.1em sizing)
+ would distort and mis-position it. Wrapping it in a `<span>` keeps
+ the svg one level deep so those rules can't reach it, leaving the
+ chevron pinned at the right edge at its intended size and color. */}
         <SelectPrimitive.Icon
           render={
             <span className="flex shrink-0 items-center">
-              <ChevronDown className={cn('size-4 opacity-60', transitions.colors)} />
+              <ChevronDown className={cn('size-4 text-muted-foreground', transitions.colors)} />
             </span>
           }
         />
@@ -210,6 +224,7 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     // Default to the nearest SideDialog/Drawer popup so the dropdown stays
     // interactive inside a modal drawer; an explicit `container` still wins.
     const resolvedContainer = usePortalContainer(container);
+    const menu = useFluidMenu();
     const positionerProps: SelectContentPositionerProps = {
       side,
       align,
@@ -229,8 +244,12 @@ const SelectContent = React.forwardRef<HTMLDivElement, SelectContentProps>(
     return (
       <SelectPrimitive.Portal container={resolvedContainer}>
         <SelectPrimitive.Positioner className={menuPositionerClass} {...positionerProps}>
-          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, className)} {...props}>
-            <SelectPrimitive.List>{children}</SelectPrimitive.List>
+          <SelectPrimitive.Popup ref={ref} className={cn(menuPopupClass, menuScrollPopupClass, className)} {...props}>
+            {/* The viewport is Select's list, so Select scrolls it to line the selected item up with the
+                trigger. `role` is restated because the viewport's own `presentation` role would win. */}
+            <MenuScrollArea menu={menu} viewportRender={<SelectPrimitive.List role="listbox" />}>
+              {children}
+            </MenuScrollArea>
           </SelectPrimitive.Popup>
         </SelectPrimitive.Positioner>
       </SelectPrimitive.Portal>
@@ -244,7 +263,7 @@ export type SelectItemProps = Omit<SelectPrimitive.Item.Props, 'className'> & {
 };
 
 const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ className, children, ...props }, ref) => (
-  <SelectPrimitive.Item ref={ref} className={cn(menuItemClass, className)} {...props}>
+  <SelectPrimitive.Item ref={useFluidMenuItemRef(ref)} className={cn(menuItemClass, className)} {...props}>
     <SelectPrimitive.ItemText>{children}</SelectPrimitive.ItemText>
     <SelectPrimitive.ItemIndicator className={menuItemCheckClass}>
       <Check />
@@ -253,4 +272,18 @@ const SelectItem = React.forwardRef<HTMLDivElement, SelectItemProps>(({ classNam
 ));
 SelectItem.displayName = 'SelectItem';
 
-export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem };
+export type SelectSeparatorProps = Omit<SelectPrimitive.Separator.Props, 'className'> & {
+  className?: string;
+};
+
+const SelectSeparator = React.forwardRef<HTMLDivElement, SelectSeparatorProps>(({ className, ...props }, ref) => (
+  <SelectPrimitive.Separator
+    ref={ref}
+    data-slot="select-separator"
+    className={cn(menuSeparatorClass, className)}
+    {...props}
+  />
+));
+SelectSeparator.displayName = 'SelectSeparator';
+
+export { Select, SelectGroup, SelectValue, SelectTrigger, SelectContent, SelectItem, SelectSeparator };

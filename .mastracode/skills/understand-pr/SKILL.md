@@ -1,268 +1,196 @@
 ---
 name: understand-pr
-description: Guided interactive PR review — understand the history and context before forming opinions
+description: Review a PR the way a seasoned maintainer would — build an independent model before seeing the diff, investigate the implementation and history, verify material claims, and return a concise briefing. Use for any PR review, self-review, or re-review.
 metadata:
   goal: true
 ---
 
 # Understand PR
 
-Guide a maintainer through understanding a pull request — its goal, whether it meets a quality bar, and then the history and context behind the changes. The reviewer should genuinely understand the PR before forming opinions or drafting comments.
+Review the PR as a maintainer deciding whether the change belongs in the codebase. Help the human understand it without turning the review into a walkthrough. Run uninterrupted to a concise front page. For draft PRs authored by the user or a confirmed user-owned bot, follow `gh-review`'s autonomous posting exception and finish the review without an approval checkpoint; otherwise stay available inside the goal until the human says the review is finished.
 
-Do not produce walls of text. Every response should be short, dense, and end with lettered options (A/B/C/D) so the user can type a single letter to continue. Minimize fluff. Be direct and information-dense.
+The PR follows `ARGUMENTS:` at the end of the objective. If absent, infer it from the conversation or checked-out branch.
 
-## Setup
+## What matters
 
-**Shell note:** `gh` output often contains ANSI color codes that break `jq`. Use `gh`'s built-in `--jq` flag instead of piping to `jq`, or prefix commands with `NO_COLOR=1`.
+1. **Your design before theirs.** Establish the required outcome and real constraints from the problem and base branch, then choose the simplest design that satisfies them—not a restatement of the author's proposal. Compare the PR against that reasoning. Agreement is valid when independently justified; disagreement needs evidence, not merely a different preference.
+2. **Depth proportional to risk.** Blast radius, irreversibility, uncertainty, and public-contract impact determine how hard to look—not a fixed checklist.
+3. **Verify material claims.** Read code deeply and run the smallest useful probes. Findings need real evidence and pointers; process compliance is not evidence.
+4. **Judgment over coverage theater.** Find the core decision, root cause, and meaningful risks. Do not manufacture findings or run work merely to look thorough.
+5. **Complete, not padded.** Every request you have evidence for is in the review; length follows from findings, never the other way around. Lead with what matters most and cut narration, not requests. Preserve supporting detail in one review file for follow-up questions.
 
-1. Parse the PR number and optional `--working-file <path>` from `$ARGUMENTS`.
-2. If `--working-file` is present, verify the file exists and read it first. Treat it as caller-provided context, follow its handoff instructions, and update that same file with findings before returning to the caller. Do not treat the working file as the final user-facing output. If the file does not exist but `--working-file` argument was passed, tell the user and end.
-3. Verify the checked-out branch matches the PR head branch.
-4. Run `gh pr view --json title,body,commits,files,labels,number,headRefName,author` to get PR metadata.
-5. Run `gh pr diff` to get the full diff.
-6. Identify the current user: `gh api user --jq .login`.
-7. Never post comments without explicit approval.
+## Review record
 
-### People
+Use one ignored file: `.mastracode/scratch/reviews/<owner>-<repo>-<pr>.md`. Never stage or commit it.
 
-Figure out who's involved:
+Before reading the diff, write a short **Pre-diff model** containing:
 
-- **PR author** — who opened this PR? Are they a maintainer, a regular contributor, or a first-time community contributor? Check with `gh api repos/{owner}/{repo}/collaborators/{author} --silent` (404 = not a collaborator).
-- **Current reviewer** (you, the user running this command) — are you the PR author (self-review) or someone else?
-- **Linked issue author(s)** — if the PR references issues, who opened them? Same person as the PR author, or someone else reporting a problem that this PR claims to fix?
+- the required outcome and constraints, separate from the proposed solution;
+- how the base branch currently works;
+- the cause or design pressure;
+- the simplest design that meets those requirements, why it is sufficient, and what you would deliberately not add (flags, config, documented limitations);
+- the behavior a valuable test would exercise;
+- what evidence would make you comfortable approving.
 
-For each person discovered, check their merged PR count on this repo: `gh pr list --author <login> --state merged --limit 100 --json number --jq length`. For linked issue authors, also check their issue count: `gh issue list --author <login> --state all --limit 100 --json number --jq length`. This tells you how much context each person has — a first-time contributor needs different review attention than someone with 50+ merged PRs, and a prolific issue reporter's bug reports carry different weight than a first-time filer.
+Once you inspect the PR, leave that section unchanged. Append the review beneath it. Capture decisive evidence as you work so it survives context compression, but keep a ledger—not command transcripts. Use `references/templates.md` as an example, not a schema.
 
-Note these relationships briefly — they inform how to read the PR. A maintainer fixing their own bug is different from a community member's first contribution addressing someone else's issue.
+## 1. Build the independent model
 
-### Linked Issues
+Resolve the PR and base branch using the minimal metadata recipe in `references/archaeology.md`. Until the pre-diff model is written, use only:
 
-If the PR description or commits reference any issues (e.g. "fixes #1234", "closes #456", or just "#789"), read them now:
+- the problem statement from the PR title and description—treat any solution it names as the author's choice, not part of the problem;
+- linked issue context about the problem;
+- base-branch code and repository guidance.
 
-- Run `gh issue view <number> --json title,body,labels,comments,author,state` for each linked issue
-- Understand what was originally reported, by whom, and what the expected fix looks like
-- Check if the issue discussion contains context that the PR description doesn't mention
+Do not inspect the changed-file list, diff, PR branch, commits, review conversation, or CI details yet. Do not run `git log` before writing the pre-diff model—the current checkout may already be the PR branch, which would expose its commit history. Do not consult `mastra_expert` or another source that may know the PR. Orient on the base branch: locate the entry point, trace the current mechanism, find the closest sibling, and read the nearest repository instructions. Stop when you can explain the mechanism and commit to a design; do not perform archaeology for its own sake.
 
-This is critical context for the PR Goal — the linked issues often explain _why_ this PR exists better than the PR description itself.
+Write the pre-diff model. Before opening the diff, consider every entry in `references/categories/README.md` and load the pages relevant to the problem. These references contain broadly useful review knowledge, not just rules for one PR label. If a page could plausibly help, err on the side of reading it. Use their reading order, review focus, characteristic traps, and approval criteria to guide the investigation. Do not skip relevant pages because the main skill seems sufficient. Reading the relevant guidance is required; select checks according to the actual change and its risks rather than executing every listed recipe mechanically. Then open the PR fully.
 
-Do not begin analysis yet. Move to the PR Goal phase.
+## 2. Understand what actually changed
 
-## Phase 1: PR Goal
+Read the changed-file overview and reassess the categories against the actual change. Load additional relevant pages before reviewing those portions in depth; do the same whenever later inspection reveals another category. Select by the behavior, compatibility boundaries, and failure modes each portion touches, not just the PR's headline category.
 
-Orient the user before anything else — they need to know what this PR is trying to do before history or quality checks make sense.
+Then read the 1–3 hunks that are the real change before reading plumbing top-to-bottom, following the category's reading order. Read commits, CI, and the existing conversation:
 
-Present a concise summary of the PR's goal: what problem it solves, why it exists, and what the intended outcome is. Ground this in the PR description, commit messages, and linked issues. Be specific — "fixes a bug" is not enough.
+- Do not re-raise resolved findings.
+- Treat unresolved reviewer concerns as questions to independently evaluate, not conclusions to repeat.
+- Read CI failures for what they prove; “CI is red” is not a finding.
+- If the diff is a different category than described, say so and review the actual change.
 
-If the PR changes any public API, exported interface, CLI command, configuration option, or user-facing behavior, show what the change looks like from a user's perspective — before and after. For example: how would a developer's code change, what new options are available, what would they import differently. Don't just describe the internal implementation; show the impact on someone using the thing that changed.
+Trace the implementation outward from the core hunk: callers, sibling paths, failure paths, public boundaries, and tests. For large PRs, identify separable portions and give each its own conclusion rather than averaging them together.
 
-Then pause:
+## 3. Review like a maintainer
 
-```text
-A) That matches my understanding — continue
-B) I think the goal is actually different — let me explain
-C) I'm not sure what this PR is solving — dig deeper
-```
+Use these questions where they apply. They shape judgment; they are not rows to fill.
 
-Only proceed to the quality gate after the user confirms understanding of the PR's purpose.
+- **Does the description match the code?** Look for undescribed behavior and promised behavior that is absent.
+- **Where is the actual change?** Separate the core decision from plumbing, generated files, and tests.
+- **Cause or symptom?** Trace bugs backward to the first point where state becomes wrong. A fix at the display site is suspect when the bad value originates earlier.
+- **Who else calls this?** Account for callers and sibling paths that may rely on the old behavior.
+- **What does this assume, and where is it enforced?** An unenforced invariant is a future bug.
+- **How does it fail?** Watch for loud failures turned silent by defaults, retries, or swallowed errors.
+- **What was deleted?** Removed checks, awaits, branches, and tests deserve explicit scrutiny.
+- **What is left behind?** Name deferred issue scope, TODOs, or partial fixes rather than silently accepting them.
+- **Is there a simpler way to achieve the goal?** Reason from the required outcome, not just ways to trim this implementation. Can an existing mechanism do the job? Does the added machinery serve a real requirement or solve a problem the proposed design created? Check alternatives against the same requirements and compatibility constraints; fewer lines or several implementation defects alone do not prove a better design.
+- **Is it over-built?** Single-caller abstractions, unused options, speculative extensibility, registries for fixed sets, and unnecessary indirection create obligations without present value.
+- **Would simpler also be more reliable or easier to use?** Fewer branches, configurations, and call shapes often improve the product—not merely reduce code.
+- **Should this exist here?** Check package/layer ownership and whether a plugin, documentation change, or existing primitive is the better home.
+- **Does a new API match neighboring public APIs?** Compare naming, defaults, exports, errors, types, documentation, and extension points with multiple nearby examples.
+- **Does the test prove the claim?** A regression test should fail for the right reason without the fix. Tests that merely execute code or mirror implementation provide little protection.
+- **What would the changelog line say?** If the behavior cannot be stated clearly, the change may not be understood or user-visible.
 
-## Phase 2: Quality Gate
+Open deeper branches when the code crosses them:
 
-Now that the user understands the PR's goal, check whether this PR meets a minimum bar before investing time in history research. Run `gh pr checks` to get CI status, then evaluate:
+- input/network/filesystem/package boundary → validation, injection, traversal, and secret leakage;
+- async/stream/event/lifecycle → duplicate calls, ordering, concurrency, teardown, and leaked resources;
+- serialized state → old-data/new-code upgrades, rollback, and partial migration;
+- cross-package contract → asymmetric versions and ownership;
+- new dependency → need, duplication, size, license, maintenance, and pinning;
+- hot path → realistic scale and an actual before/after measurement;
+- platform behavior → ordering, timezone, locale, paths, case, Windows, and no-network environments;
+- user-facing behavior → run it through the supported surface, not tests alone.
 
-- Is CI passing (build, typecheck, tests)? If CI is still running, note it and proceed with caveats.
-- Does the PR add or modify tests? If so, do they look meaningful at a glance? (Deep test quality analysis happens in Phase 3.)
-- Is the diff coherent — a focused change, or a WIP dump with unrelated changes mixed in?
-- **Changeset**: Check whether the PR includes a changeset. If the repo uses changesets (look for a `.changeset/` directory), any PR that changes runtime behavior, fixes a bug, or adds a feature must have one. A missing changeset is a quality gate failure — flag it explicitly.
-- Does it meet other repo requirements (docs updates, AGENTS.md updates, etc.)?
-- **Author verification**: Has the PR author stated that they personally verified the change works? Look for comments like "tested locally", "verified this fixes…", reproduction evidence, screenshots, or test output. If the PR description and comments contain no indication that the author actually ran or tested their change, flag it — this should be raised as a question in the review comment (Phase 7) if the user chooses to draft one.
-- Any obvious red flags — broken patterns, removed safety checks, huge unrelated diffs?
+Authorship may inform where you are skeptical, never whether you trust the change. Agent-authored PRs especially invite checks for drive-by scope, copied patterns without understanding, and defensive complexity; they do not require a separate ritual.
 
-If the PR doesn't meet the bar, tell the user directly:
+## 4. Recover history when it can change the verdict
 
-```text
-This PR isn't ready for detailed review yet:
-- [specific reasons]
+History answers whether the old behavior was an accident or a decision. Run a light pass when the change touches established behavior, an architectural boundary, or code whose rationale is unclear. Go deep when you see a revert, repeated churn, “because/workaround/don't/see #” comments, a regression in old stable code, a test named after a past bug, or a prior design discussion.
 
-A) Review it anyway — I want to understand what's here
-B) Help me draft feedback to the author about what needs fixing
-C) Stop here
-```
+Use blame, `git log -S`, originating PRs, reverted/closed attempts, issues, and related in-flight PRs as needed. End with the implication for this PR. “Nothing notable” is a valid result. Recipes live in `references/archaeology.md`.
 
-If the PR passes the bar (or the user chooses to proceed anyway), move to history.
+If Mastra-specific history remains unclear after the PR is open, `mastra_expert` may help orient you. Verify its source leads yourself and do not treat it as required.
 
-## Phase 3: History & Context
+## 5. Verify according to the claim
 
-Now that the user knows the PR's goal and it's passed the quality bar, dig into the history to understand how we got here and whether the approach makes sense.
+Choose the smallest verification that could falsify the important claims:
 
-### Git history
+- Bug fix: establish whether the regression evidence would fail without the fix and explain why. Code reasoning is sufficient when the result is deterministic. Execute against the merge-base only when the outcome is uncertain and would materially affect confidence.
+- Public behavior/API: exercise the supported user-facing surface and compare neighboring APIs.
+- Refactor: target behavior-preservation boundaries and edge cases.
+- Performance: measure identical realistic inputs.
+- Schema/storage: prove upgrade, rollback, and mixed-version behavior where relevant.
+- Packaging: build/pack and consume through exports when package shape is the claim.
 
-For each file changed in the PR:
+Run broader suites only when blast radius or uncertainty justifies them. Test the exact merge only when base interaction or discrepant CI makes it informative. Do not turn “more commands ran” into a proxy for confidence.
 
-1. Run `git log --oneline -20 -- <file>` to see recent commit history
-2. Run `git log --oneline --all -20 -- <file>` to catch cross-branch activity
-3. Use `git blame` on the specific changed regions (pre-PR state) to understand who wrote the current code and when
-4. Check for related changes — if the PR touches a function, trace its callers and check whether they've changed recently too
-5. Look at linked issues or referenced PRs in commit messages
+Implement experimental fixes and probes in a disposable worktree or temporary project, not the live checkout.
 
-### Architecture & surrounding code
+Every finding is a change request: a real code pointer, the consequence, the evidence, and the change that would resolve it. Reading code may be enough for a deterministic fact; do not pretend it was executed. Never invent a pointer or keep a finding after contrary evidence resolves it.
 
-Read the code around the changed areas — not just the changed lines. Understand:
+A suspicion you have not verified is not finished work. Verify it—usually a minute of probing—or state it in the review as unverified with what would settle it. Never hold it back as a "candidate", "secondary note", or something to mention only if asked. The same goes for what you deliberately did not run: say what you are trusting rather than verified, so the human can judge confidence without asking.
 
-- The module/package architecture and where the changed code fits in it
-- Surrounding features that interact with or depend on the changed code
-- Interfaces, types, and contracts the changed code participates in
-- How data flows through this area of the codebase
-- Any relevant AGENTS.md, README, or doc files in the changed packages
+## 6. Decide and brief
 
-### Tests
+Findings are change requests, not observations. Each one says what to change and why (pointer, consequence, evidence). There is no severity ladder, no "optional" tier, no "follow-up" tier, and no "risks" or "questions" section: if the review wants something changed, it requests the change—small requests included—and never labels it as less than required. A question is allowed only when the answer could remove the request—and it still states what to change if the answer is "not intentional".
 
-Examine the PR's test changes (or lack thereof) and the existing test patterns in the codebase:
+Verdicts for open PRs: **approve / request changes / needs discussion**. Any request precludes approval; **request changes** requires at least one request with a concrete resolving change; **needs discussion** is for a product or design decision the author cannot make alone. For merged or closed PRs, frame the result as a post-merge audit: **no follow-up needed / follow-up needed / revert candidate**.
 
-- Does the PR add or modify tests? Read them carefully.
-- Do the tests actually verify the claimed behavior, or do they just exercise code paths without meaningful assertions?
-- Look at how similar features are tested elsewhere in the codebase — is the PR following those patterns or doing something weaker?
-- Are there edge cases or failure modes that the tests don't cover?
-- If the PR has no tests, should it?
+The verdict must address whether the approach and scope are justified, not just whether the implementation works. When a simpler sufficient design removes the need for local repairs, recommend that direction rather than only patching its symptoms.
 
-### Approach
+Before finalizing, scrutinize your conclusions and requested changes as critically as the PR. Establish why each request belongs in this PR. Assume the author follows your requests exactly as written, accounting for alternatives and changes that must work together. Trace the resulting behavior through affected callers and contracts: does it satisfy the required outcome and resolve the findings without introducing another failure or unnecessary change?
 
-Given the history and the PR's stated goal, does the approach make sense? Is it solving the problem the right way, or is it fighting the existing design? If a simpler or more consistent approach exists given the codebase's history, flag it.
+Check the verdict and recommendation against supporting and contrary evidence, including when recommending approval. Investigate material uncertainties; implement or probe proposed fixes when that helps settle them. Inspect what each probe executes, asserts, substitutes, and leaves untested. Where its ability to detect the claimed failure is uncertain, test a relevant broken control as well as the proposed fix. The control must isolate the claimed behavior; an unrelated setup failure or another component failing first does not establish it. Confirm the actual artifact and dependency resolution exercised, and capture the command’s own result rather than a wrapper’s. Keep verification claims tied to the specific runs that establish them. Correct conclusions and requests that don’t hold up, retain those that do, and state unresolved uncertainty.
 
-### Write the understanding artifact
+The verdict and the requests must tell the same story. If the user asks to post under a verdict different from the draft, reassess the requests and rewrite the body coherently—not just the headline. If the evidence cannot support the requested verdict, say so before posting.
 
-If a working file was provided, update that same file with what you learned and any requested outputs from its handoff instructions. Otherwise, write `.artifacts/understand-pr/HISTORY.md` in the workspace root.
+Write the rest of the review file for the human. Lead with the mechanism and the requests, then include only useful context: proof, relevant history, public contract, important hunks to read, decisions that genuinely need the human, and the verdict. Omit empty sections. Do not pad it with self-audit or process evidence.
 
-Capture what you learned:
+Then post the front page in chat. It should make the result understandable quickly and leave nothing out that the human would have to ask for:
 
-- Why does each changed file/module exist? What problem did it originally solve?
-- How has it evolved? Key commits that shaped the current state.
-- Recent activity — has this area been actively worked on or dormant?
-- How the changed code fits into the broader architecture.
-- Surrounding features and dependencies that could be affected.
-- Any patterns or conventions established by the history and codebase.
-- Test quality assessment — are the tests meaningful?
-- Approach assessment — does the PR's approach fit with the existing design?
+- PR, verdict, and the reason to accept or change the approach and scope;
+- one-line mechanism;
+- every request with real pointers, most consequential first;
+- what was verified versus trusted, and any suspicion left unverified;
+- any genuine human decision;
+- the review-file path and context-specific offers.
 
-Present the history to the user interactively — one file or logical area at a time. After each chunk, offer follow-up options:
+This is a content contract, not a formatting template. There is no line budget: a review with eight requests lists eight requests. Cut narration, process, and self-audit—never findings. Omit what does not apply. Offers follow from findings; zero offers is fine. The full review stays in the file unless the user asks for a section.
 
-```text
-A) Why was [specific thing] added originally?
-B) Who else has changed this recently?
-C) Show me the related code that depends on this
-D) I understand this part — move on
-```
+After the chat briefing, go to `waiting` unless `gh-review`'s autonomous draft review exception applies. In that case, draft and post the GitHub review under its authorization checks, report the link, subscribe as a reviewer when available, and finish this review pass without user confirmation. Genuine blocking decisions still require input. Answer follow-up questions from the review record without reposting the summary; outside the exception, the goal ends only when the user explicitly says the review is finished.
 
-Tailor the options to what's actually interesting or relevant. Do not use generic options. The point is to help the user fully and deeply understand the change being made and its implications.
+## Re-review
 
-Do not move to Phase 4 until the user has seen the history for all major changed areas and indicated they're ready.
+Read the existing review file first. The independent model already exists; do not recreate it. Reuse category guidance already in context and load any missing pages relevant to the changed portions before reviewing them in depth. Inspect only what changed in code and conversation, decide whether earlier findings were addressed at the cause or merely patched at the cited line, and report resolved / still open / new. If nothing changed, say so briefly and wait.
 
-## Phase 4: Walkthrough
+## Tone and review comments
 
-Walk through the actual PR diff one piece at a time, grounded in the history context from Phase 3.
+Apply this guidance to every human-facing review interaction, including the local briefing, drafted or posted GitHub review bodies, inline comments, and follow-up replies. **Before drafting or posting anything to GitHub, load the `gh-review` skill** and follow it: every posted item is a required change, reviews land as request-changes or approve (except its self-review comment fallback), and nothing is marked optional or deferred.
 
-For each chunk:
+Be direct, specific, calm, and easy to disagree with:
 
-- Show what changed (keep it brief — the user can read the diff themselves)
-- Explain why it matters given the history you just covered
-- Flag anything that contradicts established patterns, seems risky, or raises questions
-- Offer follow-up options
+- Discuss code, not the author.
+- Write every comment as a request: what to change and why. Never label a request optional or deferred.
+- Give criticism a reason and evidence.
+- Ask a question only when the answer could remove the request. A question is not a politeness wrapper for a request; uncertainty about intent, severity, or the best fix does not turn a known problem into a question. State the request, then ask the follow-up.
+- Drop a request immediately when shown contrary evidence—no face-saving.
+- Match explanation depth to the author's familiarity without changing the quality bar.
+- Specific praise is useful; generic praise is filler.
+- Keep most comments to a pointer, consequence, and the resolving change.
 
-```text
-A) What breaks if this change is wrong?
-B) Are there tests covering this path?
-C) Show me the surrounding code
-D) Next change
-```
+Suggestion blocks are for mechanical edits, not logic or judgment. Post reviews and review-related comments only with explicit user approval or under `gh-review`'s autonomous draft review exception; outside that exception, show the draft and wait for the go. The exception does not authorize code changes or pushes, opening issues, merging, closing, marking ready, or creating other GitHub artifacts.
 
-Again — tailor the options to what's actually relevant. Be skeptical. If something looks suspicious, say so directly. If something looks solid, don't waste words praising it.
+## Judge criteria
 
-For large PRs with many files, group changes by logical area and let the user choose which area to explore next. Do not just go file-by-file in alphabetical order.
+Judge review quality, not ritual. Open the review file, inspect the front page, and spot-check evidence where needed. Send the executor back only when a substantive invariant fails:
 
-## Phase 5: Understanding Check
+- the pre-diff model is missing, was written after inspecting the diff or PR discussion, or adopts the author's proposed solution without independent justification from the problem and base-branch evidence;
+- relevant category pages were not loaded in time to guide the review of their portions, or their review focus and approval criteria did not inform the investigation; check existing tool history and review evidence, not a new category ledger;
+- depth was unreasonable for the risk, or a material claim lacks enough evidence, including claims that following the requests or recommended alternative satisfies the requirements and constraints;
+- requests lack a justified connection to this PR or real pointers/consequences/resolving changes, conflict without accounting for alternatives or dependencies, or repeat resolved conversation;
+- an established defect that this PR needs to address is presented as a question, risk, or observation instead of a request for the change;
+- the review assesses only implementation correctness without judging whether the approach and scope are justified, or the verdict contradicts the requests, including a request-changes verdict with no request and resolving change, or an approve verdict alongside requests;
+- a drafted or posted GitHub body hedges, marks requests optional or follow-up, or would post as a bare comment outside `gh-review`'s self-review exception;
+- the front page omits a request or unverified suspicion the reviewer had, or information necessary to understand the decision;
+- the review record is insufficient to support follow-up questions;
+- something was posted without explicit approval or verified eligibility under `gh-review`'s autonomous draft review exception, or something was pushed without separate authorization;
 
-Once the walkthrough is complete, offer the user a choice:
+Do **not** bounce for section order, labels, capitalization, exact fields, word counts, omitted empty sections, the reviewer's chosen commands, or other formatting when the meaning is clear. Do not require a separate artifact, checklist row, history search, test suite, or offer merely because one could exist.
 
-```text
-We've been through all the changes. Want to:
-A) Quick quiz to test your understanding
-B) Revisit a specific area
-C) I understand — let's move to opinions
-```
+Once a sufficient front page is posted: `waiting`, unless the autonomous draft review exception applies. An eligible autonomous pass is `done` after the GitHub review is posted, its link is reported, and the reviewer subscription is established when available; do not require user confirmation. Otherwise, never `done` until the user explicitly says the review is finished. During follow-up, enforce evidence integrity and posting/pushing authorization; re-check eligibility before each autonomous post.
 
-If the user picks the quiz, ask 3-5 multiple-choice questions about the PR — what the code does, why specific decisions were made, what the risks are. These should be real questions that test understanding, not softballs. If the user gets something wrong, explain it clearly and offer to revisit that area.
+## References
 
-## Phase 6: Opinion Exchange
-
-Once the user understands the PR, ask for their opinion first:
-
-```text
-I've formed my own opinion on this PR, but I'd like to hear yours first.
-What do you think — is this ready to merge? Any concerns?
-```
-
-Wait for the user's response. Then share your opinion — be direct and honest. Agree where you agree, disagree where you disagree. Do not soften your position to match the user's. Call out:
-
-- Things that should be fixed before merge
-- Risks or unknowns
-- Missing tests, docs, changesets, or other repo requirements
-- Things that are good and worth noting (briefly)
-
-## Phase 7: Review Comment (Optional)
-
-If `--working-file` is present, do not offer a PR comment by default. Update the working file with Review findings and return to the caller so it can handle the lifecycle output.
-
-Otherwise, after the opinion exchange, offer to draft a review comment:
-
-```text
-Want me to draft a review comment? Options:
-A) Draft a full review comment
-B) Draft a short approval/comment
-C) No comment needed
-```
-
-If the user wants a comment, draft it and present the full text directly in your message. Then:
-
-```text
-A) Post this comment as-is
-B) Make it shorter
-C) Make it more detailed
-D) Change the tone (specify)
-E) I want to edit specific parts (tell me what)
-F) Don't post anything
-```
-
-Iterate until the user is happy or decides not to post. Do not post unless the user explicitly asks.
-
-### Posting
-
-When posting/updating comments from a file, pass the file contents as the body (as below), not `@file` as the literal body.
-
-When posting, use the REST API to avoid GraphQL rate limits:
-
-```bash
-cat > /tmp/pr-comment.md <<'EOF'
-Comment body here.
-EOF
-
-body=$(jq -Rs . /tmp/pr-comment.md)
-gh api repos/:owner/:repo/issues/<PR_NUMBER>/comments \
-  -X POST \
-  -H 'Content-Type: application/json' \
-  --input - <<EOF
-{"body":$body}
-EOF
-```
-
-If the wrong body is posted, patch with:
-
-```bash
-body=$(jq -Rs . /tmp/pr-comment.md)
-gh api repos/:owner/:repo/issues/comments/<COMMENT_ID> \
-  -X PATCH \
-  -H 'Content-Type: application/json' \
-  --input - <<EOF
-{"body":$body}
-EOF
-```
-
-Use `gh api rate_limit --jq '.rate'` to check REST quota if you hit errors.
+- `references/archaeology.md` — known-working Git/GitHub and verification recipes
+- `references/categories/README.md` — category index; reading the relevant pages is required
+- `references/templates.md` — flexible review-record and front-page examples
+- `gh-review` skill — voice and posting rules for anything that goes to GitHub

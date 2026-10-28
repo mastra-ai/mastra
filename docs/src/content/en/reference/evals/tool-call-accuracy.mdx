@@ -42,7 +42,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedTool',
     type: 'string',
     description:
-      'The name of the tool that should be called for the given task. Ignored when expectedToolOrder is provided.',
+      'The name of the tool that should be called for the given task. Determines the score when expectedToolOrder is omitted or empty. With a non-empty expectedToolOrder it does not affect the score, but still populates correctToolCalled.',
     required: false,
   },
   {
@@ -57,7 +57,7 @@ The `createToolCallAccuracyScorerCode()` function from `@mastra/evals/scorers/pr
     name: 'expectedToolOrder',
     type: 'string[]',
     description:
-      'Array of tool names in the expected calling order. When provided, enables order checking mode and ignores expectedTool parameter.',
+      'Array of tool names in the expected calling order. A non-empty array enables order checking mode, which determines the score. An empty array scores in single tool mode using expectedTool, but still populates correctOrderCalled.',
     required: false,
   },
 ]}
@@ -71,14 +71,14 @@ The code-based scorer operates in two distinct modes:
 
 #### Single Tool Mode
 
-When `expectedToolOrder` isn't provided, the scorer evaluates single tool selection:
+When `expectedToolOrder` isn't provided or is empty, the score reflects single tool selection:
 
 - **Standard Mode (strictMode: false)**: Returns `1` if the expected tool is called, regardless of other tools
 - **Strict Mode (strictMode: true)**: Returns `1` only if exactly one tool is called and it matches the expected tool
 
 #### Order Checking Mode
 
-When `expectedToolOrder` is provided, the scorer validates tool calling sequence:
+When a non-empty `expectedToolOrder` is provided, the score reflects the tool calling sequence:
 
 - **Strict Order (strictMode: true)**: Tools must be called in exactly the specified order with no extra tools
 - **Flexible Order (strictMode: false)**: Expected tools must appear in correct relative order (extra tools allowed)
@@ -118,7 +118,7 @@ const strictOrderScorer = createCodeScorer({
 {
   runId: string,
   preprocessStepResult: {
-    expectedTool: string,
+    expectedTool?: string, // undefined when only expectedToolOrder is configured
     actualTools: string[],
     strictMode: boolean,
     expectedToolOrder?: string[],
@@ -315,8 +315,9 @@ The `createToolCallAccuracyScorerLLM()` function from `@mastra/evals/scorers/pre
   },
   {
     name: 'availableTools',
-    type: 'Array<{name: string, description: string}>',
-    description: 'List of available tools with their descriptions for context',
+    type: 'Tool[]',
+    description:
+      "Tools available to the agent, for example created with `createTool()`. Each tool's `id` and `description` are passed to the judge as context.",
     required: true,
   },
 ]}
@@ -352,8 +353,8 @@ The LLM-based scorer provides:
 const basicLLMScorer = createLLMScorer({
   model: '__GATEWAY_OPENAI_MODEL__',
   availableTools: [
-    { name: 'tool1', description: 'Description 1' },
-    { name: 'tool2', description: 'Description 2' }
+    createTool({ id: 'tool1', description: 'Description 1' }),
+    createTool({ id: 'tool2', description: 'Description 2' })
   ]
 });
 
@@ -389,21 +390,24 @@ The LLM-based scorer uses AI to evaluate whether tool selections are appropriate
 ### Basic LLM evaluation
 
 ```typescript title="src/example-llm-basic.ts"
+import { createTool } from '@mastra/core/tools'
+import { createToolCallAccuracyScorerLLM } from '@mastra/evals/scorers/prebuilt'
+
 const llmScorer = createToolCallAccuracyScorerLLM({
   model: '__GATEWAY_OPENAI_MODEL__',
   availableTools: [
-    {
-      name: 'weather-tool',
+    createTool({
+      id: 'weather-tool',
       description: 'Get current weather information for any location',
-    },
-    {
-      name: 'calendar-tool',
+    }),
+    createTool({
+      id: 'calendar-tool',
       description: 'Check calendar events and scheduling',
-    },
-    {
-      name: 'search-tool',
+    }),
+    createTool({
+      id: 'search-tool',
       description: 'Search the web for general information',
-    },
+    }),
   ],
 })
 
@@ -511,6 +515,7 @@ console.log(result.reason); // "The agent appropriately asked for clarification 
 Here's an example using both scorers on the same data:
 
 ```typescript title="src/example-comparison.ts"
+import { createTool } from '@mastra/core/tools'
 import {
   createToolCallAccuracyScorerCode as createCodeScorer,
   createToolCallAccuracyScorerLLM as createLLMScorer,
@@ -525,8 +530,8 @@ const codeScorer = createCodeScorer({
 const llmScorer = createLLMScorer({
   model: '__GATEWAY_OPENAI_MODEL__',
   availableTools: [
-    { name: 'weather-tool', description: 'Get weather information' },
-    { name: 'search-tool', description: 'Search the web' },
+    createTool({ id: 'weather-tool', description: 'Get weather information' }),
+    createTool({ id: 'search-tool', description: 'Search the web' }),
   ],
 })
 

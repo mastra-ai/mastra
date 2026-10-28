@@ -1,8 +1,8 @@
+import { LinkComponentProvider } from '@mastra/playground-ui/lib/framework';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DeletePromptBlockAction } from '../delete-prompt-block-action';
-import { LinkComponentProvider } from '@/lib/framework';
 import { StubLink, stubLinkPaths } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';

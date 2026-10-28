@@ -1,14 +1,10 @@
-import { format, isToday } from 'date-fns';
 import { DataListCell } from '../data-list-cells';
+import { Txt } from '@/ds/components/Txt';
+import { formatDate } from '@/utils/date-format';
 
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-function toDate(value: Date | string): Date | null {
-  const date = value instanceof Date ? value : new Date(value);
-  return isNaN(date.getTime()) ? null : date;
-}
 
 // ---------------------------------------------------------------------------
 // DateCell
@@ -19,12 +15,7 @@ export interface ScoresDataListDateCellProps {
 }
 
 export function ScoresDataListDateCell({ timestamp }: ScoresDataListDateCellProps) {
-  const date = toDate(timestamp);
-  return (
-    <DataListCell className="text-ui-smd text-neutral2">
-      {date ? (isToday(date) ? 'Today' : format(date, 'MMM dd')) : '-'}
-    </DataListCell>
-  );
+  return <DataListCell className="text-muted-foreground">{formatDate(timestamp, 'date') ?? '-'}</DataListCell>;
 }
 
 // ---------------------------------------------------------------------------
@@ -36,8 +27,9 @@ export interface ScoresDataListTimeCellProps {
 }
 
 export function ScoresDataListTimeCell({ timestamp }: ScoresDataListTimeCellProps) {
-  const date = toDate(timestamp);
-  return <DataListCell className="text-ui-smd text-neutral3">{date ? format(date, 'h:mm:ss aaa') : '-'}</DataListCell>;
+  return (
+    <DataListCell className="text-body-sm text-muted-foreground">{formatDate(timestamp, 'time') ?? '-'}</DataListCell>
+  );
 }
 
 // ---------------------------------------------------------------------------
@@ -52,9 +44,16 @@ export function ScoresDataListInputCell({ input }: ScoresDataListInputCellProps)
   const display = input != null ? JSON.stringify(input) : '-';
   return (
     <DataListCell>
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <Txt
+        as="span"
+        variant="body-sm"
+        tone="muted"
+        font="mono"
+        className="block max-w-full min-w-0 truncate"
+        title={display}
+      >
         {display}
-      </span>
+      </Txt>
     </DataListCell>
   );
 }
@@ -71,9 +70,9 @@ export function ScoresDataListEntityCell({ entityId }: ScoresDataListEntityCellP
   const display = entityId || '-';
   return (
     <DataListCell>
-      <span className="text-ui-smd block max-w-full min-w-0 truncate" title={display}>
+      <Txt as="span" variant="body-sm" className="block max-w-full min-w-0 truncate" title={display}>
         {display}
-      </span>
+      </Txt>
     </DataListCell>
   );
 }
@@ -90,9 +89,16 @@ export function ScoresDataListScoreCell({ score }: ScoresDataListScoreCellProps)
   const display = score == null ? '-' : typeof score === 'object' ? JSON.stringify(score) : String(score);
   return (
     <DataListCell>
-      <span className="text-ui-smd text-neutral3 block max-w-full min-w-0 truncate font-mono" title={display}>
+      <Txt
+        as="span"
+        variant="body-sm"
+        tone="muted"
+        font="mono"
+        className="block max-w-full min-w-0 truncate"
+        title={display}
+      >
         {display}
-      </span>
+      </Txt>
     </DataListCell>
   );
 }

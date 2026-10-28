@@ -7,6 +7,7 @@ import type {
 } from '../../../observability/index.js';
 import type { CorrelationContext } from '../../../observability/types/core.js';
 import { EntityType } from '../../../observability/types/tracing.js';
+import { getTimeToFirstChunkMs } from '../../../observability/utils.js';
 import type { CreateFeedbackRecord } from './feedback.js';
 import type { CreateLogRecord } from './logs.js';
 import type { CreateMetricRecord } from './metrics.js';
@@ -169,16 +170,35 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     traceId: span.traceId,
     spanId: span.id,
     // Mastra storage detects trace roots by a null parentSpanId, so only a Mastra
-    // parent belongs here. A span's externalParentSpanId is intentionally not
-    // persisted, so a run started under an external parent stays a trace root.
+    // parent belongs here. The external parent has its own column, so a run
+    // started under an external parent stays a trace root.
     parentSpanId: span.parentSpanId ?? null,
     name: span.name,
+
+    // Native span fields: stored as supplied, null when the span does not carry them.
+    externalParentSpanId: span.externalParentSpanId ?? null,
+    resumedFromSpanId: span.resumedFromSpanId ?? null,
+    model: span.model ?? null,
+    provider: span.provider ?? null,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
+    stopReasonContext: span.stopReasonContext ?? null,
+    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    errorCount: span.errorCount ?? null,
 
     // Entity identification - from span
     entityType: span.entityType ?? null,
     entityId: span.entityId ?? null,
     entityName: span.entityName ?? null,
-    entityVersionId: getStringOrNull(metadata.entityVersionId),
+    entityVersionId: span.entityVersionId ?? null,
+    parentEntityType: span.parentEntityType ?? null,
+    parentEntityId: span.parentEntityId ?? null,
+    parentEntityName: span.parentEntityName ?? null,
+    parentEntityVersionId: span.parentEntityVersionId ?? null,
+    rootEntityType: span.rootEntityType ?? null,
+    rootEntityId: span.rootEntityId ?? null,
+    rootEntityName: span.rootEntityName ?? null,
+    rootEntityVersionId: span.rootEntityVersionId ?? null,
 
     // Identity & Tenancy - extracted from metadata if present
     userId: getStringOrNull(metadata.userId),
@@ -205,11 +225,15 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     attributes: serializeSpanAttributes(span),
     metadata: span.metadata ?? null,
     tags: span.tags ?? null,
-    links: null,
+    links: span.links ?? null,
     input: span.input ?? null,
+    inputPreview: span.inputPreview,
+    outputPreview: span.outputPreview,
+    errorPreview: span.errorPreview,
     output: span.output ?? null,
     error: span.errorInfo ?? null,
     isEvent: span.isEvent,
+    timeToFirstChunkMs: getTimeToFirstChunkMs(span) ?? null,
 
     // Request context
     requestContext: span.requestContext ?? null,
@@ -220,14 +244,39 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
   };
 }
 
+/** Columns an update sets only when the span has a value, so an earlier write is never cleared. */
+const SUPPLIED_SPAN_COLUMNS = [
+  'externalParentSpanId',
+  'resumedFromSpanId',
+  'model',
+  'provider',
+  'outcome',
+  'stopReason',
+  'stopReasonContext',
+  'timeToFirstTokenMs',
+  'errorCount',
+  'inputPreview',
+  'outputPreview',
+  'errorPreview',
+  'timeToFirstChunkMs',
+] as const;
+
+function suppliedSpanColumns(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
+  const source = { ...span, timeToFirstChunkMs: getTimeToFirstChunkMs(span) };
+  return Object.fromEntries(
+    SUPPLIED_SPAN_COLUMNS.filter(column => source[column] !== undefined).map(column => [column, source[column]]),
+  ) as Partial<UpdateSpanRecord>;
+}
+
 /** Convert an exported span to a partial UpdateSpanRecord */
 export function buildUpdateSpanRecord(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
   return {
+    ...suppliedSpanColumns(span),
     name: span.name,
     scope: null,
     attributes: serializeSpanAttributes(span),
     metadata: span.metadata ?? null,
-    links: null,
+    links: span.links ?? null,
     endedAt: span.endTime ?? null,
     input: span.input,
     output: span.output,

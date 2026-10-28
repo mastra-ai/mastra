@@ -1,4 +1,5 @@
 import type { IToolExecutionComponent } from '../components/tool-execution-interface.js';
+import { switchModeWithPack } from '../model-packs/apply.js';
 import type { SlashCommandContext } from './types.js';
 
 function applyCurrentModeColorToRenderedTools(ctx: SlashCommandContext): void {
@@ -18,7 +19,7 @@ export async function handleModeCommand(ctx: SlashCommandContext, args: string[]
   }
   if (args[0]) {
     try {
-      await ctx.state.session.mode.switch({ modeId: args[0] });
+      await switchModeWithPack(ctx, args[0]);
       applyCurrentModeColorToRenderedTools(ctx);
     } catch (err) {
       ctx.showError(`Failed to switch mode: ${err instanceof Error ? err.message : String(err)}`);

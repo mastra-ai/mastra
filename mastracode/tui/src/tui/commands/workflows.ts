@@ -6,10 +6,11 @@
  * The service layer (mastracode/sdk/src/workflows/service.ts) is the single
  * implementation; agent tools and this slash handler both call it.
  */
-import { randomUUID } from 'node:crypto';
 import { deleteWorkflow, getWorkflow, listWorkflows, runWorkflow } from '@mastra/code-sdk/workflows/service';
 import type { StoredWorkflowRow, WorkflowRunEvent } from '@mastra/code-sdk/workflows/service';
 import { RequestContext } from '@mastra/core/request-context';
+import { requireLocal } from '../runtime.js';
+import { getTermWidth } from '../theme.js';
 import type { SlashCommandContext } from './types.js';
 
 /**
@@ -68,7 +69,7 @@ function buildSessionRequestContext(ctx: SlashCommandContext): RequestContext | 
   // in the parent thread, swap in `session.thread?.getId?.()`.
   const resourceId = session.identity?.getResourceId?.() ?? '';
   requestContext.set('MastraMemory', {
-    thread: { id: randomUUID() },
+    thread: { id: globalThis.crypto.randomUUID() },
     resourceId,
     memoryConfig: undefined,
   });
@@ -162,7 +163,7 @@ function containerTitle(index: number, entry: SerializedStepEntry): string {
  * render an outer box plus one indented sub-box per inner step so the reader
  * can see WHAT is being fanned out, iterated, or branched over.
  */
-function renderWorkflowDefinition(def: StoredWorkflowRow): string {
+function renderWorkflowDefinition(def: StoredWorkflowRow, termWidth: number = getTermWidth()): string {
   const lines: string[] = [];
   const header = def.description ? `${def.id}  (${def.status})\n${def.description}` : `${def.id}  (${def.status})`;
   lines.push(header, '');
@@ -176,7 +177,10 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
     return lines.join('\n');
   }
 
-  const BOX_WIDTH = 45;
+  // Keep the diagram within the terminal: grow to the design width of 45, but shrink when the
+  // reported width is narrower so the box is drawn intact instead of wrapping mid-border. The
+  // 20-column floor keeps the `inner / 2` arrow math from ever going negative.
+  const BOX_WIDTH = Math.max(20, Math.min(45, termWidth - 2));
   const inner = BOX_WIDTH - 2;
   const pad = (text: string) => {
     const trimmed = text.length > inner - 2 ? text.slice(0, inner - 3) + '…' : text;
@@ -251,6 +255,7 @@ function renderWorkflowDefinition(def: StoredWorkflowRow): string {
         break;
       }
       case 'loop': {
+        // oxlint-disable-next-line typescript/no-unnecessary-template-expression -- Preserve string labels for persisted workflow metadata.
         pushContainerBox(containerTitle(i, entry), `${entry.loopType ?? 'loop'}`, [labelInnerStep(entry.step)], last);
         break;
       }
@@ -319,7 +324,7 @@ export async function handleWorkflowsCommand(
     return;
   }
 
-  const mastra = ctx.controller.getMastra();
+  const mastra = requireLocal(ctx.state, '/workflows').controller.getMastra();
   if (!mastra) {
     ctx.showError('Workflows: no Mastra instance attached to this controller.');
     return;
@@ -396,10 +401,10 @@ export async function handleWorkflowsCommand(
                 const status = (evt.payload as { status?: string } | undefined)?.status;
                 const mark = status === 'success' ? '✓' : status === 'failed' ? '✗' : '·';
                 ctx.showInfo(`  ${mark} ${stepId}${ms !== undefined ? ` (${ms}ms)` : ''}`);
-                return;
+                break;
               }
               default:
-                return;
+                break;
             }
           },
         );

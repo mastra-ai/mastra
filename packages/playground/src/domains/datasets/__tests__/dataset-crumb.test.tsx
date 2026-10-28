@@ -7,7 +7,7 @@ import { http, HttpResponse } from 'msw';
 import { Link, MemoryRouter, Route, Routes } from 'react-router';
 import { afterEach, beforeEach, describe, expect, it } from 'vitest';
 
-import { DatasetCrumb, DatasetSwitcherAction } from '../dataset-crumb';
+import { DatasetCrumb, DatasetSwitcher } from '../dataset-crumb';
 import { TestLinkProvider } from '@/test/link-provider';
 import { server } from '@/test/msw-server';
 
@@ -17,17 +17,24 @@ const datasets = [
   { id: 'ds-1', name: 'Weather evals', version: 1 },
   { id: 'ds-2', name: 'Support evals', version: 1 },
 ];
+// Not on the first page of the dataset list; only reachable through the detail endpoint.
+const pagedOutDataset = { id: 'ds-99', name: 'Archived evals', version: 1 };
 
 beforeEach(() => {
   server.use(
-    http.get(`${BASE_URL}/api/datasets`, () => HttpResponse.json({ datasets, pagination: { total: 2, page: 0 } })),
+    http.get(`${BASE_URL}/api/datasets`, () =>
+      HttpResponse.json({ datasets, pagination: { total: 99, page: 0, perPage: 2, hasMore: true } }),
+    ),
+    http.get(`${BASE_URL}/api/datasets/:datasetId`, ({ params }) => {
+      const found = [...datasets, pagedOutDataset].find(d => d.id === params.datasetId);
+      return found ? HttpResponse.json(found) : HttpResponse.json({ error: 'not found' }, { status: 404 });
+    }),
   );
 });
 
 afterEach(() => cleanup());
 
-// Mirrors how RouteHeader mounts the crumb: label as span/link, switcher in `action`.
-const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
+const renderCrumb = ({ isCurrent, datasetId = 'ds-1' }: { isCurrent: boolean; datasetId?: string }) => {
   const queryClient = new QueryClient({
     defaultOptions: { queries: { retry: false } },
   });
@@ -37,7 +44,7 @@ const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
         as={isCurrent ? 'span' : Link}
         to={isCurrent ? undefined : '/datasets/ds-1'}
         isCurrent={isCurrent}
-        action={<DatasetSwitcherAction />}
+        switcher={<DatasetSwitcher />}
       >
         <DatasetCrumb />
       </Crumb>
@@ -47,7 +54,7 @@ const renderCrumb = ({ isCurrent }: { isCurrent: boolean }) => {
     <MastraReactProvider baseUrl={BASE_URL}>
       <QueryClientProvider client={queryClient}>
         <TestLinkProvider>
-          <MemoryRouter initialEntries={['/datasets/ds-1/items/item-1']}>
+          <MemoryRouter initialEntries={[`/datasets/${datasetId}/items/item-1`]}>
             <Routes>
               <Route path="/datasets/:datasetId/items/:itemId" element={crumb} />
             </Routes>
@@ -72,6 +79,13 @@ describe('DatasetCrumb', () => {
     const label = await screen.findByText('Weather evals', { ignore: '.sr-only' });
     expect(label.closest('[aria-current="page"]')).not.toBeNull();
     expect(screen.queryByRole('link')).toBeNull();
+  });
+
+  it('renders the dataset name even when the dataset is not on the first page of the list', async () => {
+    renderCrumb({ isCurrent: true, datasetId: pagedOutDataset.id });
+
+    expect(await screen.findByText('Archived evals', { ignore: '.sr-only' })).toBeDefined();
+    expect(screen.queryByText(pagedOutDataset.id, { ignore: '.sr-only' })).toBeNull();
   });
 
   it('opens the dataset switcher only from the arrow trigger', async () => {

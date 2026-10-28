@@ -4,9 +4,9 @@
  * Tests that the server properly enforces RBAC permissions on API endpoints.
  */
 
-import { createDefaultTestContext } from '@internal/server-adapter-test-utils';
-import type { AdapterTestContext } from '@internal/server-adapter-test-utils';
 import type { ServerRoute } from '@mastra/server/server-adapter';
+import { createDefaultTestContext } from '@mastra/server-adapters-test-suite';
+import type { AdapterTestContext } from '@mastra/server-adapters-test-suite';
 import { Elysia } from 'elysia';
 import { describe, it, expect, beforeEach } from 'vitest';
 import { MastraServer } from '../index';
@@ -489,6 +489,34 @@ describe('RBAC Permission Enforcement', () => {
         new Request('http://localhost/api/test/workflows-write', {
           method: 'GET',
           headers: { Authorization: 'Bearer readonly' },
+        }),
+      );
+
+      expect(response.status).toBe(403);
+    });
+  });
+  describe('Reserved permissions key', () => {
+    it('reads permissions from the reserved request-context key, not the legacy key', async () => {
+      const { app, adapter } = await setupAuthAdapter(context);
+      // A user object without `id` is authenticated but gets no permissions loaded.
+      const originalGetServer = context.mastra.getServer.bind(context.mastra);
+      context.mastra.getServer = () =>
+        ({
+          ...originalGetServer(),
+          auth: {
+            authenticateToken: async () => ({ email: 'no-id@test.com' }),
+            authorize: async () => true,
+          },
+          rbac: createMockRBACProvider(),
+        }) as any;
+      const testRoute = createProtectedRoute('agents:read');
+      await adapter.registerRoute(app, testRoute, { prefix: '' });
+
+      const legacyKeyOnly = encodeURIComponent(JSON.stringify({ userPermissions: ['*'] }));
+      const response = await app.fetch(
+        new Request(`http://localhost/api/test/agents-read?requestContext=${legacyKeyOnly}`, {
+          method: 'GET',
+          headers: { Authorization: 'Bearer anything' },
         }),
       );
 

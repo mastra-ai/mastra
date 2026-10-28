@@ -1,4 +1,4 @@
-// AUTO-GENERATED from NangoHQ/integration-templates @ 8b75595da34c — do not edit by hand.
+// AUTO-GENERATED from NangoHQ/integration-templates @ 23df553a789b — do not edit by hand.
 import { createTool } from '@mastra/core/tools';
 import { z } from 'zod';
 
@@ -10,6 +10,7 @@ export const updateOrganizationInputSchema = z.object({
   slug: z.string().optional(),
   admin_delete_enabled: z.boolean().optional(),
   max_allowed_memberships: z.number().int().min(0).optional(),
+  public_metadata: z.record(z.string(), z.unknown()).optional(),
 });
 
 const OrganizationSchema = z
@@ -51,6 +52,7 @@ export function updateOrganizationTool(proxy: PlatformProxy) {
           ...(input.max_allowed_memberships !== undefined && {
             max_allowed_memberships: input.max_allowed_memberships,
           }),
+          ...(input.public_metadata !== undefined && { public_metadata: input.public_metadata }),
         },
         retries: 3,
       });

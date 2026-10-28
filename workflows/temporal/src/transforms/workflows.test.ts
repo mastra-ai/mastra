@@ -19,6 +19,81 @@ async function transform(source: string): Promise<string> {
 }
 
 describe('workflow transform', () => {
+  it.each([
+    '...{ retry: { maximumAttempts: 5 } }',
+    '...{ ...{ retry: { maximumAttempts: 5 } } }',
+    'retry: { maximumAttempts: 0 }, ...{ retry: { maximumAttempts: 5 } }',
+    '...{ retry: { maximumAttempts: 0 } }, retry: { maximumAttempts: 5 }',
+  ])('preserves retry options and override order from inline spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\}\s*\}\)/);
+    expect(result).not.toContain('maximumAttempts: 0');
+  });
+
+  it('preserves builds with unresolved init option spreads and no activity options', async () => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { taskQueue: 'mastra' };
+      const { createWorkflow } = init({ client: undefined, ...config });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toContain("createWorkflow('weather-workflow')");
+  });
+
+  it.each([
+    "...config, retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes'",
+    "retry: { maximumAttempts: 5 }, startToCloseTimeout: '5 minutes', ...config",
+  ])('forwards explicit activity options while skipping unresolved spreads: %s', async options => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const config = { retry: { maximumAttempts: 99 }, startToCloseTimeout: '99 minutes' };
+      const { createWorkflow } = init({ client: undefined, taskQueue: 'mastra', ${options} });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(
+      /createWorkflow\('weather-workflow',\s*\{\s*retry: \{\s*maximumAttempts: 5\s*\},\s*startToCloseTimeout: '5 minutes'\s*\}\)/,
+    );
+    expect(result).not.toContain('maximumAttempts: 99');
+    expect(result).not.toContain("'99 minutes'");
+  });
+
+  it.each([true, false])('injects activity retries with configured timeout: %s', async withTimeout => {
+    const result = await transform(`
+      import { init } from '@mastra/temporal';
+      const { createWorkflow } = init({
+        client: undefined,
+        taskQueue: 'mastra',
+        ${withTimeout ? "startToCloseTimeout: '5 minutes'," : ''}
+        retry: {
+          initialInterval: '5 seconds',
+          backoffCoefficient: 2,
+          maximumInterval: '5 minutes',
+          maximumAttempts: 5,
+          nonRetryableErrorTypes: ['ValidationError'],
+        },
+      });
+      export const weatherWorkflow = createWorkflow({ id: 'weather-workflow' }).then('fetch-weather').commit();
+    `);
+
+    expect(result).toMatch(/createWorkflow\('weather-workflow',\s*\{/);
+    expect(result).toContain('retry: {');
+    expect(result).toContain("initialInterval: '5 seconds'");
+    expect(result).toContain('backoffCoefficient: 2');
+    expect(result).toContain("maximumInterval: '5 minutes'");
+    expect(result).toContain('maximumAttempts: 5');
+    expect(result).toContain("nonRetryableErrorTypes: ['ValidationError']");
+    if (withTimeout) {
+      expect(result).toContain("startToCloseTimeout: '5 minutes'");
+    }
+  });
+
   it.each(['weather-workflow'])('matches fixture output for %s', async fixtureName => {
     const inputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/input.mjs`, import.meta.url));
     const outputPath = fileURLToPath(new URL(`./__fixtures__/workflow/${fixtureName}/output.js`, import.meta.url));
@@ -72,8 +147,23 @@ describe('workflow transform', () => {
 
     expect(result).toContain('const fetchWeatherWorkflow =');
     expect(result).toContain('const weatherWorkflow =');
-    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow")');
+    expect(result).toContain('.thenWorkflow("fetchWeatherWorkflow", "fetch-weather")');
     expect(result).not.toContain('.then("subWorkflow")');
+  });
+
+  it('preserves child workflows passed directly to parallel', async () => {
+    const result = await transform(`
+      import { createStep, createWorkflow } from '@mastra/core/workflows';
+
+      const childStep = createStep({ id: 'child-step', execute: async () => ({}) });
+      const child = createWorkflow({ id: 'child' }).then(childStep).commit();
+      export const parent = createWorkflow({ id: 'parent' }).parallel([child]).commit();
+    `);
+
+    expect(result).toContain('type: "childWorkflow"');
+    expect(result).toContain('workflowType: "childWorkflow"');
+    expect(result).toContain('id: "child"');
+    expect(result).not.toContain('.parallel(["child"])');
   });
 
   it('resolves steps returned by factory functions', async () => {
@@ -93,6 +183,80 @@ describe('workflow transform', () => {
     expect(result).toContain('.then("plan-activities").then("plan-activities")');
     expect(result).not.toContain('.then("planActivities")');
     expect(result).not.toContain('.then("createPlanActivities")');
+  });
+
+  it('rewrites callback mappings as generated activity steps', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      import { z } from 'zod';
+
+      export const mappedWorkflow = createWorkflow({
+        id: 'mapped-workflow',
+        inputSchema: z.object({ value: z.number() }),
+        outputSchema: z.object({ doubled: z.number() }),
+      })
+        .map(({ inputData }) => ({ doubled: inputData.value * 2 }))
+        .commit();
+    `);
+
+    expect(result).toContain('.map("mapping_mapped-workflow_0")');
+  });
+
+  it('keeps mapping order and assigns stable ordinal ids', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+
+      const mapValue = ({ inputData }) => ({ value: inputData.value + 1 });
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .then('before')
+        .map(mapValue)
+        .then('between')
+        .map(async ({ inputData }) => ({ value: inputData.value * 2 }))
+        .then('after')
+        .commit();
+    `);
+
+    expect(result).toContain(
+      '.then("before").map("mapping_mapped-workflow_0").then("between").map("mapping_mapped-workflow_1").then("after").commit()',
+    );
+  });
+
+  it('rejects unsupported mapping forms with actionable errors', async () => {
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map({ value: { path: 'inputData.value' } })
+          .commit();
+      `),
+    ).rejects.toThrow('does not yet support declarative object mappings');
+
+    await expect(
+      transform(`
+        import { createWorkflow } from '@mastra/core/workflows';
+        const getMapping = () => ({ inputData }) => inputData;
+        export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+          .map(getMapping())
+          .commit();
+      `),
+    ).rejects.toThrow('requires an inline function or a statically declared function identifier');
+  });
+
+  it('forwards mapping options while retaining the generated mapping activity id', async () => {
+    const result = await transform(`
+      import { createWorkflow } from '@mastra/core/workflows';
+      export const mappedWorkflow = createWorkflow({ id: 'mapped-workflow' })
+        .map(({ inputData }) => inputData, {
+          id: 'custom-mapping',
+          description: 'Custom mapping',
+          metadata: { source: 'test' },
+        })
+        .commit();
+    `);
+
+    expect(result).toContain(
+      ".map(\"mapping_mapped-workflow_0\", {\n    id: 'custom-mapping',\n    description: 'Custom mapping',\n    metadata: {\n      source: 'test'\n    }\n  })",
+    );
   });
 
   it('injects the helper runtime from the dedicated module into transformed output', async () => {

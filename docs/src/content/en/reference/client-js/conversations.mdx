@@ -125,7 +125,7 @@ console.log(items.data)
 - `data`: Conversation items such as `message`, `function_call`, and `function_call_output`
 - `first_id`: The first item ID in the page
 - `last_id`: The last item ID in the page
-- `has_more`: Whether more items exist beyond the current page
+- `has_more`: Currently always `false`. `items.list()` returns up to 1000 items in a single response.
 
 ## Parameters
 
