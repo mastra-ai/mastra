@@ -14,6 +14,7 @@ import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { OutputProcessorOrWorkflow } from '../../../processors';
 import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
+import type { MessageHistory } from '../../../processors/memory/message-history';
 import type { RequestContext } from '../../../request-context';
 import type { MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
@@ -122,17 +123,26 @@ export function createMapResultsStep<OUTPUT = undefined>({
       if (effectiveConfig.readOnly) return;
       const hasConfiguredProcessor = (id: string) =>
         configuredOutputProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+      const configuredHistory = configuredOutputProcessors.find(
+        p => !isProcessorWorkflow(p) && p.id === 'message-history',
+      ) as Partial<Pick<MessageHistory, 'persistMessages'>> | undefined;
       const memoryAddsMessageHistory =
         normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
         !hasConfiguredProcessor('observational-memory') &&
         !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
-      if (!hasConfiguredProcessor('message-history') && !memoryAddsMessageHistory) return;
+      if (!configuredHistory && !memoryAddsMessageHistory) return;
       const input = filterMessagesForPersistence(messageList.get.input.db());
       if (input.length === 0) return;
 
       await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
       await ensureThreadExists();
-      await memory.saveMessages({ messages: messageList.transformMessagesForTranscript(input), memoryConfig });
+      const messages = messageList.transformMessagesForTranscript(input);
+      // A configured MessageHistory may use its own storage; save where the finish path would.
+      if (typeof configuredHistory?.persistMessages === 'function') {
+        await configuredHistory.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
+        return;
+      }
+      await memory.saveMessages({ messages, memoryConfig });
     };
 
     const result = {

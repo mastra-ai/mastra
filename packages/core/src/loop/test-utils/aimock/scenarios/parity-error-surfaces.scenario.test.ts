@@ -198,14 +198,17 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
     { savePerStep: false, readOnly: true },
     // History disabled in config, but the agent saves through an explicitly configured MessageHistory.
     { savePerStep: false, readOnly: false, explicitHistory: true },
+    // Same, but that MessageHistory writes to its own store, not the agent memory store.
+    { savePerStep: false, readOnly: false, explicitHistory: true, historyStore: true },
     // Same, but the agent picks MessageHistory from requestContext, and a tool changes that context
     // mid-run. The deadline save must use the processors the run started with.
     { savePerStep: false, readOnly: false, dynamicHistory: true },
   ])(
-    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory)',
-    async ({ savePerStep, readOnly, explicitHistory, dynamicHistory }) => {
+    'only completed steps reach memory at the deadline (savePerStep: $savePerStep, readOnly: $readOnly, explicitHistory: $explicitHistory, dynamicHistory: $dynamicHistory, historyStore: $historyStore)',
+    async ({ savePerStep, readOnly, explicitHistory, dynamicHistory, historyStore }) => {
       const memory = new MockMemory();
-      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}-${!!dynamicHistory}`;
+      const historyMemory = historyStore ? new MockMemory() : memory;
+      const threadId = `deadline-memory-${engine}-${savePerStep}-${readOnly}-${!!explicitHistory}-${!!dynamicHistory}-${!!historyStore}`;
       const resourceId = RESOURCE;
       const llm = getMock();
       let completedTool = false;
@@ -222,7 +225,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         ...(readOnly && { memoryOptions: { readOnly } }),
         ...(explicitHistory && {
           memoryOptions: { lastMessages: false },
-          outputProcessors: [new MessageHistory({ storage: (await memory.storage.getStore('memory'))! })],
+          outputProcessors: [new MessageHistory({ storage: (await historyMemory.storage.getStore('memory'))! })],
         }),
         ...(dynamicHistory && {
           memoryOptions: { lastMessages: false },
@@ -278,9 +281,12 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const errors = result.chunks!.filter(chunk => chunk.type === 'error');
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-      const { messages } = await memory.recall({ threadId, resourceId });
+      const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
-      expect(saved.includes('Look up the order, then check the courier.')).toBe(!readOnly);
+      // Durable and evented persist the input through agent memory, not the configured MessageHistory
+      // store. That predates this test and is out of scope here.
+      const durableHistoryStore = historyStore && (engine === 'durable' || engine === 'evented');
+      expect(saved.includes('Look up the order, then check the courier.')).toBe(!readOnly && !durableHistoryStore);
       expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
