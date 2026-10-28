@@ -1,9 +1,10 @@
-import type { DashboardDefinition, DashboardWidget } from '@mastra/client-js';
-import { dashboardDefinitionEnvelopeSchema } from '@mastra/core/storage';
+import type { DashboardDefinition } from '@mastra/client-js';
+import { dashboardDefinitionEnvelopeSchema, migrateDashboardDefinition } from '@mastra/core/storage';
 import { useMetricsScope } from '../../metrics/hooks/use-metrics-scope';
 import { BUILT_IN_WIDGET_KINDS } from '../kinds';
 import type { DashboardScope, OnDashboardDrilldown } from '../lib/definition';
 import { describeIssue, prepareWidget } from '../lib/prepare-widget';
+import type { StoredWidget } from '../lib/prepare-widget';
 import type { AnyWidgetKind } from '../widget-kind';
 import { DashboardGrid, DashboardGridCell, DashboardGridRow } from './dashboard-grid';
 import type { DashboardSpan } from './dashboard-grid';
@@ -21,7 +22,7 @@ export type DashboardRendererProps = {
 };
 
 const SPANS = new Set<unknown>([1, 2, 3, 4, 6, 12]);
-const spanOf = (widget: DashboardWidget): DashboardSpan => (SPANS.has(widget.span) ? widget.span : 12);
+const spanOf = (widget: StoredWidget) => (SPANS.has(widget.span) ? (widget.span as DashboardSpan) : 12);
 
 /**
  * Lays a dashboard definition out on a 12-column grid inside the page's `MetricsProvider`, which
@@ -37,29 +38,33 @@ export function DashboardRenderer({ definition, onDrilldown, kinds = [], classNa
   if (!envelope.success) {
     return <MetricsCard.Error message={`This dashboard can't be shown. ${describeIssue(envelope.error.issues[0])}`} />;
   }
+  // Each widget is parsed on its own below, so one that doesn't fit the current version shows its own error.
+  const { rows } = migrateDashboardDefinition(envelope.data);
 
   return (
     <DashboardGrid className={className}>
-      {definition.rows.map((row, rowIndex) => (
+      {rows.map((row, rowIndex) => (
         <DashboardGridRow key={rowIndex}>
           {row.widgets.map(widget => {
             const prepared = prepareWidget(widget, registry, scope);
             if (prepared.ok === 'hidden') return null;
+            // Unparsed, the title may be anything; the error card shows it only when it's text.
+            const heading = { id: widget.id, title: typeof widget.title === 'string' ? widget.title : undefined };
             return (
               <DashboardGridCell key={widget.id} id={widget.id} span={spanOf(widget)}>
                 <ErrorBoundary
                   variant="inline"
-                  fallback={({ error }) => <WidgetError widget={widget} message={error.message} />}
+                  fallback={({ error }) => <WidgetError widget={heading} message={error.message} />}
                 >
                   {prepared.ok ? (
                     <prepared.kind.component
-                      widget={widget}
+                      widget={prepared.widget}
                       views={prepared.views}
                       scope={scope}
                       onDrilldown={onDrilldown}
                     />
                   ) : (
-                    <WidgetError widget={widget} message={prepared.message} />
+                    <WidgetError widget={heading} message={prepared.message} />
                   )}
                 </ErrorBoundary>
               </DashboardGridCell>
