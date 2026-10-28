@@ -2,6 +2,7 @@ import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { z } from 'zod';
 
+import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
@@ -606,7 +607,16 @@ export const FACTORY_ROUTE_CONTRACTS = {
               /** @deprecated Use `context`. */
               role: z.string().optional(),
               autoStart: z.boolean().optional(),
-              exitTool: z.object({ id: z.string(), autoApprove: z.boolean() }).optional(),
+              /** Cards the phase starts on its own for; absent means every card. */
+              autoStartWhen: cardRuleGroupSchema.optional(),
+              exitTool: z
+                .object({
+                  id: z.string(),
+                  autoApprove: z.boolean(),
+                  /** Cards the exit tool is approved for; absent means every card. */
+                  autoApproveWhen: cardRuleGroupSchema.optional(),
+                })
+                .optional(),
               transitions: z.array(z.object({ outcome: z.string().nullable(), to: z.string() })),
             }),
           ),

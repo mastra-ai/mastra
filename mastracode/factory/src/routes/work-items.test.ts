@@ -60,6 +60,7 @@ const audit: AuditEmitter = {
 };
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryStorageTestSeed } from '../storage/test-utils.js';
+import { FACTORY_ROUTE_CONTRACTS } from './contracts.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import { parseCreateWorkItem, parseUpdateWorkItem, WorkItemRoutes } from './work-items.js';
 
@@ -219,6 +220,50 @@ describe('installed board catalog', () => {
         { id: 'shipped', name: 'Shipped', title: 'Shipped', kind: 'terminal', nextPhases: [], transitions: [] },
       ],
     });
+  });
+
+  it('sends the conditions a phase starts and approves its exit tool under', async () => {
+    const lowEffort = {
+      operator: 'AND' as const,
+      conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'effort:low' }],
+    };
+    const board = defineBoard({
+      id: 'release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning', 'shipping'] },
+        planning: {
+          name: 'Planning',
+          kind: 'working',
+          nextPhases: ['shipping'],
+          autoStart: true,
+          autoStartWhen: lowEffort,
+          exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+        },
+        shipping: { name: 'Shipping', kind: 'working', nextPhases: ['shipped'], autoStart: true, exitTool: 'ship' },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    const app = buildApp(
+      orgUser,
+      undefined,
+      undefined,
+      new Set(),
+      createBoardRegistry({ boards: [board], includeDefaultBoards: false }),
+    );
+    const body = await (await app.request(`/web/factory/projects/${PROJECT_ID}/boards`)).json();
+    expect(FACTORY_ROUTE_CONTRACTS.boardCatalog.responseSchema.parse(body)).toEqual(body);
+    const [, planning, shipping] = body.boards[0].phases;
+    expect(planning).toMatchObject({
+      autoStart: true,
+      autoStartWhen: lowEffort,
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: lowEffort },
+    });
+    // No condition means every card.
+    expect(shipping).toMatchObject({ autoStart: true, exitTool: { id: 'ship', autoApprove: false } });
+    expect(shipping).not.toHaveProperty('autoStartWhen');
+    expect(shipping.exitTool).not.toHaveProperty('autoApproveWhen');
   });
 
   it('supports an empty installation', async () => {

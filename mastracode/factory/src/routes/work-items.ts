@@ -347,8 +347,17 @@ export class WorkItemRoutes extends Route<WorkItemRoutesDeps> {
                       role: phase.runner.context,
                       context: phase.runner.context,
                       autoStart: phase.autoStart === true,
+                      ...(phase.autoStartWhen ? { autoStartWhen: phase.autoStartWhen } : {}),
                       ...(phase.exitTool
-                        ? { exitTool: { id: phase.exitTool.id, autoApprove: phase.exitTool.autoApprove } }
+                        ? {
+                            exitTool: {
+                              id: phase.exitTool.id,
+                              autoApprove: phase.exitTool.autoApprove,
+                              ...(phase.exitTool.autoApproveWhen
+                                ? { autoApproveWhen: phase.exitTool.autoApproveWhen }
+                                : {}),
+                            },
+                          }
                         : {}),
                     }
                   : {}),
