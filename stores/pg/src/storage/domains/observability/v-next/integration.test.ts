@@ -2086,6 +2086,75 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await harness.close();
       }
     });
+
+    it('a write by a role that can create tables but does not own them leaves nothing behind', async () => {
+      const schema = schemaName('obs_vnext_partition_owner');
+      const ownerRole = `${schema}_owner`;
+      const appRole = `${schema}_app`;
+      const adminPool = new Pool({ connectionString, max: 2 });
+      const admin = new PoolAdapter(adminPool);
+      const poolFor = (user: string) =>
+        new Pool({
+          host: defaultConnection.host,
+          port: defaultConnection.port,
+          database: defaultConnection.database,
+          user,
+          password: 'app',
+          max: 2,
+        });
+
+      await admin.none(`CREATE SCHEMA IF NOT EXISTS ${quotedIdentifier(schema)}`);
+      for (const role of [ownerRole, appRole]) {
+        await admin.none(`CREATE ROLE ${quotedIdentifier(role)} LOGIN PASSWORD 'app'`);
+        await admin.none(`GRANT USAGE, CREATE ON SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(role)}`);
+      }
+      const ownerPool = poolFor(ownerRole);
+      const appPool = poolFor(appRole);
+      const ownerDomain = () =>
+        new ObservabilityStoragePostgresVNext({
+          client: new PoolAdapter(ownerPool),
+          schemaName: schema,
+          partitioning: { futureDays: 25 },
+        });
+      const appDomain = new ObservabilityStoragePostgresVNext({ client: new PoolAdapter(appPool), schemaName: schema });
+
+      try {
+        await new ObservabilityStoragePostgresVNext({ client: new PoolAdapter(ownerPool), schemaName: schema }).init();
+        await admin.none(
+          `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(appRole)}`,
+        );
+        await admin.none(
+          `GRANT USAGE ON ALL SEQUENCES IN SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(appRole)}`,
+        );
+
+        const future = dayAt(20, 11);
+        const write = () =>
+          appDomain.batchCreateSpans({
+            records: [makeSpan({ traceId: 'owner-trace', spanId: 'owner-span', startedAt: future })],
+          });
+        await expect(write()).rejects.toThrow(/must be owner of table/);
+        const child = `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(20))}`;
+        const leftover = await admin.oneOrNone(
+          `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`,
+          [schema, child],
+        );
+        expect(leftover).toBeNull();
+
+        await expect(ownerDomain().init()).resolves.toBeUndefined();
+        await expect(write()).resolves.toBeUndefined();
+        const trace = await appDomain.getTrace({ traceId: 'owner-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['owner-span']);
+      } finally {
+        await appPool.end();
+        await ownerPool.end();
+        await admin.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
+        for (const role of [appRole, ownerRole]) {
+          await admin.none(`DROP OWNED BY ${quotedIdentifier(role)}`);
+          await admin.none(`DROP ROLE IF EXISTS ${quotedIdentifier(role)}`);
+        }
+        await adminPool.end();
+      }
+    });
   });
 
   describe('ON CONFLICT DO NOTHING — retry idempotency', () => {

@@ -151,34 +151,34 @@ export async function ensureDayPartitions(
     // resolved at execution and so are rejected here. `partStart` /
     // `partEnd` are produced by `dayBounds()` (formatted from a JS Date)
     // and never touch user input, so the template interpolation is safe.
+    //
+    // Both statements run in one transaction so a failed ATTACH (for
+    // example a role that can create tables but does not own the parent)
+    // rolls the CREATE back instead of leaving a detached child that the
+    // owner's next init() cannot attach either.
     try {
-      // `LIKE parent INCLUDING ALL` copies columns, defaults, NOT NULL,
-      // PRIMARY KEY, and indexes but not the parent's partition spec, so
-      // the child becomes a regular table that can later be attached as
-      // a partition. Index names are auto-generated per child and don't
-      // collide across days.
-      await client.none(`CREATE TABLE IF NOT EXISTS ${child} (LIKE ${parent} INCLUDING ALL)`);
+      await client.tx(async t => {
+        // `LIKE parent INCLUDING ALL` copies columns, defaults, NOT NULL,
+        // PRIMARY KEY, and indexes but not the parent's partition spec, so
+        // the child becomes a regular table that can later be attached as
+        // a partition. Index names are auto-generated per child and don't
+        // collide across days.
+        await t.none(`CREATE TABLE IF NOT EXISTS ${child} (LIKE ${parent} INCLUDING ALL)`);
+        // ATTACH PARTITION on an empty child is fast: there are no rows to
+        // scan against the partition constraint, and the parent lock is
+        // SHARE UPDATE EXCLUSIVE rather than ACCESS EXCLUSIVE.
+        await t.none(
+          `ALTER TABLE ${parent} ATTACH PARTITION ${child}
+           FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
+        );
+      });
     } catch (error) {
-      // `CREATE TABLE IF NOT EXISTS` is not atomic under concurrency;
-      // a parallel init() can win the race between the existence check
-      // and the create. Treat the duplicate as success.
-      if (!isDuplicateRelationError(error)) throw error;
-    }
-
-    try {
-      // ATTACH PARTITION on an empty child is fast: there are no rows to
-      // scan against the partition constraint, and the parent lock is
-      // SHARE UPDATE EXCLUSIVE rather than ACCESS EXCLUSIVE.
-      await client.none(
-        `ALTER TABLE ${parent} ATTACH PARTITION ${child}
-         FOR VALUES FROM ('${partStart}') TO ('${partEnd}')`,
-      );
-    } catch (error) {
-      // The child can already be attached from a previous init() or from
-      // a concurrent caller that won the race between our CREATE and
-      // ATTACH. Either way, treat "already a partition of this parent"
-      // as success.
-      if (!isAlreadyAttachedError(error)) throw error;
+      // The child can already be attached from a previous init() or from a
+      // concurrent caller. `CREATE TABLE IF NOT EXISTS` is also not atomic
+      // under concurrency, so a parallel caller can win the race between the
+      // existence check and the create; its ATTACH then completes the day.
+      // Either way, treat the duplicate as success.
+      if (!isAlreadyAttachedError(error) && !isDuplicateRelationError(error)) throw error;
     }
   }
 }
