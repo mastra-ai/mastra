@@ -213,8 +213,8 @@ describe('updateStatusLine', () => {
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     const activity = state.idleCounter.setActivity.mock.calls[0]?.[0];
     expect(rendered).toContain('openai/gpt-5');
-    expect(rendered).not.toContain('1m1s');
-    expect(activity).toContain('1m1s · 48 tok/s · esc to interrupt');
+    expect(rendered).not.toContain('1m 1s');
+    expect(activity).toContain('1m 1s · 48 tok/s · esc to interrupt');
     vi.useRealTimers();
   });
 
@@ -237,7 +237,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('openai/gpt-5 1m1s ✓');
+    expect(rendered).toContain('openai/gpt-5 1m 1s ✓');
     expect(rendered).not.toContain('done in');
   });
 
@@ -250,9 +250,9 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(aborted);
 
-    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s');
-    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ×');
-    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m1s ✓');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m 1s');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m 1s ×');
+    expect(aborted.statusLine.setText.mock.calls[0]?.[0]).not.toContain('1m 1s ✓');
 
     const errored = createState();
     errored.lastAgentRunDurationMs = 61_000;
@@ -262,7 +262,7 @@ describe('updateStatusLine', () => {
 
     updateStatusLine(errored);
 
-    expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m1s ×');
+    expect(errored.statusLine.setText.mock.calls[0]?.[0]).toContain('openai/gpt-5 1m 1s ×');
   });
 
   it('shows the active GitHub PR subscription beside the thread title', () => {
@@ -492,7 +492,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain(' · goal 1hr10m · ');
+    expect(rendered).toContain(' · goal 1h 10m · ');
     expect(rendered).not.toContain('goal attempt');
     expect(rendered).not.toContain('1/20');
     vi.useRealTimers();
@@ -539,7 +539,7 @@ describe('updateStatusLine', () => {
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
     expect(rendered).toContain('goal 10m');
-    expect(rendered).not.toContain('6hr10m');
+    expect(rendered).not.toContain('6h 10m');
     vi.useRealTimers();
   });
 
@@ -562,7 +562,7 @@ describe('updateStatusLine', () => {
     updateStatusLine(state);
 
     const rendered = state.statusLine.setText.mock.calls[0]?.[0];
-    expect(rendered).toContain('goal 2days3hr');
+    expect(rendered).toContain('goal 2d 3h');
     expect(rendered).not.toContain('pursuing');
     expect(rendered).not.toContain('(');
     vi.useRealTimers();

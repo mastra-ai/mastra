@@ -5,6 +5,7 @@
 
 import { Container, matchesKey, Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
+import { formatDuration } from '../format-duration.js';
 import { theme, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 
@@ -121,7 +122,7 @@ export class MultiStepProgressComponent extends Container {
 
     // Header with title and overall progress
     const progressBar = this.renderProgressBar(overallProgress, 20);
-    const elapsed = this.formatDuration(now - this.startTime);
+    const elapsed = formatDuration(now - this.startTime);
     const headerText = `${theme.bold(theme.fg('accent', this.options.title))} ${progressBar} ${overallProgress}% (${elapsed})`;
 
     this.addChild(new Text(headerText, 0, 0));
@@ -165,7 +166,7 @@ export class MultiStepProgressComponent extends Container {
         const elapsed = now - this.startTime;
         const estimatedRemaining = Math.max(0, this.options.estimatedTime - elapsed);
         if (estimatedRemaining > 0) {
-          const remaining = this.formatDuration(estimatedRemaining);
+          const remaining = formatDuration(estimatedRemaining);
           this.addChild(new Text(theme.fg('dim', `  Est. time remaining: ${remaining}`), 0, 0));
         }
       }
@@ -208,10 +209,10 @@ export class MultiStepProgressComponent extends Container {
     // Add timing info if enabled and available
     if (this.options.showTimings && step.startTime) {
       if (step.endTime) {
-        const duration = this.formatDuration(step.endTime - step.startTime);
+        const duration = formatDuration(step.endTime - step.startTime);
         text += theme.fg('dim', ` (${duration})`);
       } else if (step.status === 'active') {
-        const elapsed = this.formatDuration(Date.now() - step.startTime);
+        const elapsed = formatDuration(Date.now() - step.startTime);
         text += theme.fg('dim', ` (${elapsed})`);
       }
     }
@@ -236,21 +237,6 @@ export class MultiStepProgressComponent extends Container {
   private getSpinner(): string {
     const frames = ['⠋', '⠙', '⠹', '⠸', '⠼', '⠴', '⠦', '⠧', '⠇', '⠏'];
     return frames[this.spinnerFrame]!;
-  }
-
-  private formatDuration(ms: number): string {
-    const seconds = Math.floor(ms / 1000);
-    if (seconds < 60) {
-      return `${seconds}s`;
-    }
-    const minutes = Math.floor(seconds / 60);
-    const remainingSeconds = seconds % 60;
-    if (minutes < 60) {
-      return remainingSeconds > 0 ? `${minutes}m ${remainingSeconds}s` : `${minutes}m`;
-    }
-    const hours = Math.floor(minutes / 60);
-    const remainingMinutes = minutes % 60;
-    return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}m` : `${hours}h`;
   }
 
   /**

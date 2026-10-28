@@ -7,6 +7,7 @@
 
 import { Text } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
+import { formatDuration } from '../format-duration.js';
 import { BOX_INDENT, mastra } from '../theme.js';
 import type { ChatSpacingKind } from './chat-spacing.js';
 import { TOOL_DOT, toolBlock } from './surface.js';
@@ -181,7 +182,9 @@ export class OMOutputComponent extends WidthAwareContainer {
         (this.data.tokensObserved ?? 0) > 0 && (this.data.compressedTokens ?? this.data.observationTokens ?? 0) > 0
           ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.compressedTokens ?? this.data.observationTokens ?? 1))}x`
           : '';
-      const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
+      const durationStr = this.data.durationMs
+        ? ` in ${formatDuration(this.data.durationMs, { precision: 'ms' })}`
+        : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
       return chalk.hex(color)(`Reflected: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`);
     } else {
@@ -192,7 +195,9 @@ export class OMOutputComponent extends WidthAwareContainer {
         (this.data.tokensObserved ?? 0) > 0 && (this.data.observationTokens ?? 0) > 0
           ? `${Math.round((this.data.tokensObserved ?? 0) / (this.data.observationTokens ?? 1))}x`
           : '';
-      const durationStr = this.data.durationMs ? ` in ${(this.data.durationMs / 1000).toFixed(1)}s` : '';
+      const durationStr = this.data.durationMs
+        ? ` in ${formatDuration(this.data.durationMs, { precision: 'ms' })}`
+        : '';
       const ratioStr = ratio ? ` (${ratio} compression)` : '';
       return chalk.hex(color)(`Observed: ${observed} → ${compressed} tokens${ratioStr}${durationStr}`);
     }

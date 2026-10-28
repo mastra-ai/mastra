@@ -15,8 +15,8 @@ import type { TUI } from '@earendil-works/pi-tui';
 import { MC_TOOLS } from '@mastra/code-sdk/tool-names';
 import type { TaskItemInput } from '@mastra/core/signals';
 import chalk from 'chalk';
+import { formatDuration } from '../format-duration.js';
 import { sanitizeAnsiForRendering } from '../sanitize-ansi.js';
-import { formatStatusDuration } from '../status-duration.js';
 import { highlightCode } from '../syntax-highlight.js';
 import {
   BOX_INDENT,
@@ -1589,8 +1589,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
     } else if (running) {
       mark = theme.fg('warning', SPINNER_FRAMES[Math.floor(Date.now() / 100) % SPINNER_FRAMES.length]!);
       const elapsed = Date.now() - this.startTime;
-      time =
-        elapsed < 60_000 ? `${Math.floor(elapsed / 1000)}s` : formatStatusDuration(elapsed, { includeSeconds: true });
+      time = formatDuration(elapsed);
     } else {
       errorLine = this.getShellFailureLine();
       mark = errorLine !== undefined ? theme.fg('error', '✗') : theme.fg('success', '✓');
@@ -2002,9 +2001,7 @@ export class ToolExecutionComponentEnhanced extends WidthAwareContainer implemen
   private formatDuration(): string {
     if (this.durationUnknown) return '';
     const ms = (this.endTime ?? Date.now()) - this.startTime;
-    if (ms < 1000) return `${ms}ms`;
-    if (ms < 60_000) return `${(ms / 1000).toFixed(1)}s`;
-    return formatStatusDuration(ms, { includeSeconds: true });
+    return formatDuration(ms, { precision: 'ms' });
   }
 
   private getFormattedOutput(): string {

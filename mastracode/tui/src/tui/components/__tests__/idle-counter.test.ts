@@ -1,26 +1,5 @@
 import { describe, expect, it } from 'vitest';
-import { IdleCounterComponent, formatIdleStatusTiming, formatStatusDuration } from '../idle-counter.js';
-
-describe('formatStatusDuration', () => {
-  it('formats active durations with seconds below an hour', () => {
-    expect(formatStatusDuration(1_000, { includeSeconds: true })).toBe('1s');
-    expect(formatStatusDuration(59_000, { includeSeconds: true })).toBe('59s');
-    expect(formatStatusDuration(61_000, { includeSeconds: true })).toBe('1m1s');
-    expect(formatStatusDuration(59 * 60_000 + 59_000, { includeSeconds: true })).toBe('59m59s');
-  });
-
-  it('formats hour and day durations without seconds', () => {
-    expect(formatStatusDuration(60 * 60_000, { includeSeconds: true })).toBe('1hr');
-    expect(formatStatusDuration(61 * 60_000 + 1_000, { includeSeconds: true })).toBe('1hr1m');
-    expect(formatStatusDuration(24 * 60 * 60_000 + 61 * 60_000, { includeSeconds: true })).toBe('1d1hr1m');
-  });
-
-  it('floors idle durations to compact whole minutes', () => {
-    expect(formatStatusDuration(3 * 60_000 + 59_000)).toBe('3m');
-    expect(formatStatusDuration(61 * 60_000)).toBe('1hr1m');
-    expect(formatStatusDuration(24 * 60 * 60_000 + 61 * 60_000)).toBe('1d1hr1m');
-  });
-});
+import { IdleCounterComponent, formatIdleStatusTiming } from '../idle-counter.js';
 
 describe('formatIdleStatusTiming', () => {
   it('does not show active elapsed time while the agent is running', () => {

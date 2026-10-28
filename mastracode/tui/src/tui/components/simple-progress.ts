@@ -4,6 +4,7 @@
  */
 
 import { Container, Text } from '@earendil-works/pi-tui';
+import { formatDuration } from '../format-duration.js';
 import { theme } from '../theme.js';
 
 export interface SimpleProgressOptions {
@@ -125,8 +126,7 @@ export class SimpleProgressComponent extends Container {
 
     // Add elapsed time if enabled
     if (this.options.showElapsed && this.isActive) {
-      const elapsed = Math.floor((now - this.startTime) / 1000);
-      text += theme.fg('dim', ` ${elapsed}s`);
+      text += theme.fg('dim', ` ${formatDuration(now - this.startTime)}`);
     }
 
     this.addChild(new Text(text, 0, 0));

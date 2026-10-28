@@ -6,9 +6,9 @@ import { visibleWidth } from '@earendil-works/pi-tui';
 import chalk from 'chalk';
 import { applyGradientSweep } from './components/obi-loader.js';
 import { formatOMContextIndicator } from './components/om-progress.js';
+import { formatDuration } from './format-duration.js';
 import { getEffectiveOMRoleModelId } from './om-model.js';
 import type { GithubPrSubscriptionBadge, TUIState } from './state.js';
-import { formatStatusDuration } from './status-duration.js';
 import { theme, mastra, displayModeColor, extendedColors, getContrastBg } from './theme.js';
 
 // Colors for OM modes — read from proxy at render time so they pick up contrast adaptation
@@ -57,16 +57,7 @@ function getGoalDurationMs(
 }
 
 function formatGoalDuration(goal: { startedAt: string; activeStartedAt?: string; activeDurationMs?: number }): string {
-  const elapsedMinutes = Math.floor(getGoalDurationMs(goal, Date.now()) / 60_000);
-  if (elapsedMinutes < 1) return '<1m';
-
-  const days = Math.floor(elapsedMinutes / 1_440);
-  const hours = Math.floor((elapsedMinutes % 1_440) / 60);
-  const minutes = elapsedMinutes % 60;
-
-  if (days > 0) return hours > 0 ? `${days}days${hours}hr` : `${days}days`;
-  if (hours > 0) return minutes > 0 ? `${hours}hr${minutes}m` : `${hours}hr`;
-  return `${minutes}m`;
+  return formatDuration(getGoalDurationMs(goal, Date.now()), { precision: 'm' });
 }
 
 /** Shorten a path under the home directory to ~/… */
@@ -242,7 +233,7 @@ export function updateStatusLine(state: TUIState): void {
     // Last run's duration stays beside the model once the run ends (the live timer is in the Working row).
     const lastRun =
       state.agentRunStartedAt === undefined && state.lastAgentRunDurationMs !== undefined
-        ? formatStatusDuration(state.lastAgentRunDurationMs, { includeSeconds: true })
+        ? formatDuration(state.lastAgentRunDurationMs)
         : '';
     if (!lastRun) return { plain: id, styled: theme.fg('secondary', id) };
     const reason = state.lastAgentRunEndReason;
@@ -403,10 +394,10 @@ function updateActivityLine(state: TUIState, modeColor: string | undefined, now:
   }
   const color = modeColor ?? theme.getTheme().accent;
   const spinner = pulseDot(color, now);
-  const elapsed = formatStatusDuration(now - state.agentRunStartedAt, { includeSeconds: true });
+  const elapsed = formatDuration(now - state.agentRunStartedAt);
   const stale =
     state.agentRunLastStreamPartAt !== undefined && now - state.agentRunLastStreamPartAt > 3 * 60_000
-      ? formatStatusDuration(now - state.agentRunLastStreamPartAt, { includeSeconds: false })
+      ? formatDuration(now - state.agentRunLastStreamPartAt, { precision: 'm' })
       : null;
   const parts = [theme.fg(stale ? 'error' : 'dim', elapsed)];
   if (stale) parts.push(theme.fg('warning', `no output for ${stale}`));
