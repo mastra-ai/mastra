@@ -13,6 +13,7 @@ import {
   ParameterBuilder,
   ROOT_VERSION_ORDER,
   runWithClickHouseTraceQueryTimeout,
+  timeToFirstTokenSupported,
 } from './trace-query';
 
 const contextFields = [
@@ -150,7 +151,7 @@ export function compileClickHouseThreadRowsQuery(
       ? 's.inWindow > 0'
       : `s.${plan.timeRange.field} >= ${from} AND s.${plan.timeRange.field} < ${to}`;
   const filtered = predicateFields(plan.where);
-  const firstContext = [...contextFields, 'timeToFirstChunkMs'].filter(
+  const firstContext = [...contextFields, 'timeToFirstChunkMs', 'timeToFirstTokenMs'].filter(
     field => field === 'resourceId' || filtered.has(field),
   );
   const firstFields = ['startedAt', 'traceId', 'spanId', 'endedAt', ...firstContext];
@@ -175,8 +176,8 @@ export function compileClickHouseThreadRowsQuery(
     ...(filtered.has('status') ? ['status'] : []),
   ];
   const rootExpression = (field: string) =>
-    field === 'timeToFirstChunkMs'
-      ? "if(spanType = 'agent_run', timeToFirstChunkMs, NULL)"
+    field === 'timeToFirstChunkMs' || field === 'timeToFirstTokenMs'
+      ? `if(spanType = 'agent_run', ${field}, NULL)`
       : field === 'status'
         ? "if(isNull(error), 'success', 'error')"
         : field;
@@ -309,6 +310,7 @@ export async function queryThreadRows(
       ...(await run<Root & Record<string, unknown>>({
         query: `SELECT organizationId, traceId, spanId, startedAt, endedAt,
       ${contextFields.join(', ')}, if(spanType = 'agent_run', timeToFirstChunkMs, NULL) AS timeToFirstChunkMs,
+      if(spanType = 'agent_run', timeToFirstTokenMs, NULL) AS timeToFirstTokenMs,
       if(isNull(error), 'success', 'error') AS status, ${PREVIEW_COLUMNS.join(', ')}
       FROM ${TABLE_TRACE_ROOTS} WHERE ${rootWhere}
       ORDER BY ${ROOT_VERSION_ORDER} LIMIT 1 BY organizationId, traceId, spanId`,
@@ -345,6 +347,7 @@ export async function queryThreadRows(
         endedAt: iso(row.endedAt),
         traceCount: Number(row.traceCount),
         timeToFirstChunkMs: first.timeToFirstChunkMs,
+        ...(timeToFirstTokenSupported && { timeToFirstTokenMs: first.timeToFirstTokenMs }),
         inputPreview: resolveStoredPreviews(first).inputPreview,
         outputPreview: resolveStoredPreviews(last).outputPreview,
         errorPreview: resolveStoredPreviews(last).errorPreview,
