@@ -364,12 +364,28 @@ describe('Repositories settings', () => {
             installationId: 9,
             accountLogin: 'ada',
             accountType: 'User',
-            unusableReason: 'personal_installation_not_shared',
+            unusableReason: 'some_future_reason',
           },
         ],
         reason: 'installations_unusable',
       },
       action: 'Install on a GitHub organization',
+    },
+    {
+      situation: 'a personal GitHub account install not shared with this factory',
+      status: {
+        unusableInstallations: [
+          {
+            installationId: 9,
+            accountLogin: 'ada',
+            accountType: 'User',
+            unusableReason: 'personal_installation_not_shared',
+            shareUrl: 'https://api.mastra.ai/v1/server/github-app/share?organizationId=org-1&installationId=9',
+          },
+        ],
+        reason: 'installations_unusable',
+      },
+      action: 'Share with this factory',
     },
     {
       situation: 'an install whose linker membership could not be checked',

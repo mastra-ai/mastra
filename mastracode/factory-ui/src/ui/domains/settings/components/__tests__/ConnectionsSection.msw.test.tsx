@@ -8,6 +8,8 @@ import { server } from '../../../../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../../factory/services/platformConnect';
 import type { GithubStatus } from '../../../workspaces/services/github';
+import type * as GithubService from '../../../workspaces/services/github';
+import { shareGithubInstallation } from '../../../workspaces/services/github';
 import { ConnectionsSection } from '../ConnectionsSection';
 
 const authCalls: Array<{ integrationId: string; options: Record<string, unknown> }> = [];
@@ -23,6 +25,11 @@ vi.mock('@nangohq/frontend', () => {
   }
   return { default: Nango, AuthError };
 });
+
+vi.mock('../../../workspaces/services/github', async importOriginal => ({
+  ...(await importOriginal<typeof GithubService>()),
+  shareGithubInstallation: vi.fn(),
+}));
 
 beforeEach(() => {
   authCalls.length = 0;
@@ -209,6 +216,42 @@ describe('Connections settings', () => {
     const organization = screen.getByRole('region', { name: 'Organization connections' });
     expect(await within(organization).findByText(/left this platform org/)).toBeInTheDocument();
     expect(within(organization).getByRole('button', { name: 'Install on a GitHub organization' })).toBeInTheDocument();
+  });
+
+  it('given a personal GitHub account install not shared with this factory, when Share is chosen, then the consent page opens', async () => {
+    const shareUrl =
+      'https://api.mastra.ai/v1/server/github-app/share?organizationId=org-1&installationId=9&projectId=p-1';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          unusableInstallations: [
+            {
+              installationId: 9,
+              accountLogin: 'ada',
+              accountType: 'User',
+              unusableReason: 'personal_installation_not_shared',
+              shareUrl,
+            },
+          ],
+          reason: 'installations_unusable',
+        } satisfies GithubStatus),
+      ),
+      http.get(`${TEST_BASE_URL}/web/github/pat`, () =>
+        HttpResponse.json({ configured: false, reviewerConfigured: false }),
+      ),
+    );
+    renderConnections();
+
+    const organization = screen.getByRole('region', { name: 'Organization connections' });
+    expect(
+      await within(organization).findByText(/ada is linked to this platform org but not shared with this factory/),
+    ).toBeInTheDocument();
+    expect(within(organization).getByRole('button', { name: 'Install on a GitHub organization' })).toBeInTheDocument();
+    await userEvent.click(within(organization).getByRole('button', { name: 'Share with this factory' }));
+    expect(shareGithubInstallation).toHaveBeenCalledExactlyOnceWith(shareUrl);
   });
 
   it.each(['gitlab', 'jira'] as const)(

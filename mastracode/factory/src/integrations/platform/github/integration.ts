@@ -92,6 +92,8 @@ type PlatformGithubInstallation = {
   suspendedAt: string | null;
   usable: boolean;
   unusableReason?: string | null;
+  /** Platform consent page for sharing a personal install with this deploy's project; set only when it isn't shared. */
+  shareUrl?: string | null;
 };
 
 type PlatformGithubUserConnection = {
@@ -261,8 +263,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   #integrationStorage: GithubSubscriptionStorage | undefined;
   /** installationId → cached repository listing (TTL-bounded). */
   readonly #installationReposCache = new Map<number, { repos: RepoSummary[]; expiresAt: number }>();
-  /** `orgId:repositoryId` → cached repository access (TTL-bounded). */
-  readonly #repositoryAccessCache = new Map<string, { access: RepositoryAccess; expiresAt: number }>();
+  /** `orgId:repositoryId` → cached repository access, tagged with what it covers so a revocation can drop it. */
+  readonly #repositoryAccessCache = new Map<
+    string,
+    { access: RepositoryAccess; expiresAt: number; installationId: number; repositories: string[] }
+  >();
   /** `owner/repo:login` → cached collaborator permission (TTL-bounded). */
   readonly #collaboratorPermissionCache = new Map<
     string,
@@ -274,7 +279,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   readonly intake: Intake = {
     resolveIntakeDispatch: input => this.#resolveIntakeDispatch(input),
     listSources: async ({ orgId, userId }) => {
-      const installations = await this.#client.request<{
+      const installations = await this.#request<{
         installations: Array<{
           installationId: number;
           accountLogin: string;
@@ -297,7 +302,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               accountType: installation.accountType,
             },
           });
-          const result = await this.#client.request<{
+          const result = await this.#request<{
             repositories: Array<{
               id: number;
               fullName: string;
@@ -450,7 +455,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const repositoryName = splitRepository(repository.slug).repo;
 
       try {
-        const token = await this.#client.request<{ token: string }>(
+        const token = await this.#request<{ token: string }>(
           'POST',
           `${API_PREFIX}/github-app/installations/${installationId}/token`,
           { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
@@ -462,6 +467,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         setBounded(this.#repositoryAccessCache, cacheKey, {
           access,
           expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+          installationId,
+          repositories: [repository.slug.toLowerCase()],
         });
         return access;
       } catch (err) {
@@ -485,7 +492,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           newInstallationId: newInstallation.id,
         });
 
-        const token = await this.#client.request<{ token: string }>(
+        const token = await this.#request<{ token: string }>(
           'POST',
           `${API_PREFIX}/github-app/installations/${newInstallationId}/token`,
           { repositories: [repositoryName], permissions: REPOSITORY_TOKEN_PERMISSIONS },
@@ -497,6 +504,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         setBounded(this.#repositoryAccessCache, cacheKey, {
           access,
           expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+          installationId: newInstallationId,
+          repositories: [repository.slug.toLowerCase()],
         });
         return access;
       }
@@ -521,7 +530,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       const installationId = parsePositiveInteger(installation.externalId);
       if (installationId === null) throw new Error('GitHub installation id is invalid.');
 
-      const token = await this.#client.request<{ token: string }>(
+      const token = await this.#request<{ token: string }>(
         'POST',
         `${API_PREFIX}/github-app/installations/${installationId}/token`,
         {
@@ -536,6 +545,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       setBounded(this.#repositoryAccessCache, cacheKey, {
         access,
         expiresAt: Date.now() + REPOSITORY_ACCESS_CACHE_TTL_MS,
+        installationId,
+        repositories: found.map(repository => repository.slug.toLowerCase()),
       });
       return access;
     },
@@ -774,10 +785,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           redirectTo,
           originator,
         });
-        const { url } = await this.#client.request<{ url: string }>(
-          'GET',
-          `${API_PREFIX}/github-app/install-url?${query}`,
-        );
+        const { url } = await this.#request<{ url: string }>('GET', `${API_PREFIX}/github-app/install-url?${query}`);
         return c.redirect(url);
       },
     });
@@ -804,10 +812,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
           redirectTo,
           originator,
         });
-        const { url } = await this.#client.request<{ url: string }>(
-          'GET',
-          `${API_PREFIX}/github-app/authenticate?${query}`,
-        );
+        const { url } = await this.#request<{ url: string }>('GET', `${API_PREFIX}/github-app/authenticate?${query}`);
         return c.redirect(url);
       },
     });
@@ -819,7 +824,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
    */
   async #fetchUserConnection(userId: string): Promise<PlatformGithubUserConnection> {
     try {
-      const connection = await this.#client.request<PlatformGithubUserConnection>(
+      const connection = await this.#request<PlatformGithubUserConnection>(
         'GET',
         `${API_PREFIX}/github-app/user-connection?${new URLSearchParams({ userId })}`,
       );
@@ -845,10 +850,11 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       accountLogin: string;
       accountType: string;
       unusableReason: string;
+      shareUrl: string | null;
     }>;
     hiddenPersonalInstallReason: PlatformHiddenPersonalInstallReason | null;
   }> {
-    const result = await this.#client.request<{
+    const result = await this.#request<{
       installations: PlatformGithubInstallation[];
       hiddenPersonalInstallReason?: PlatformHiddenPersonalInstallReason | null;
     }>('GET', `${API_PREFIX}/github-app/installations`);
@@ -868,7 +874,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         }),
       ),
     );
-    const unusableInstallations = result.installations.flatMap(({ unusableReason, ...installation }) =>
+    const unusableInstallations = result.installations.flatMap(({ unusableReason, shareUrl, ...installation }) =>
       unusableReason && !installation.usable
         ? [
             {
@@ -876,6 +882,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
               accountLogin: installation.accountLogin,
               accountType: installation.accountType,
               unusableReason,
+              shareUrl: shareUrl ?? null,
             },
           ]
         : [],
@@ -947,7 +954,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       return undefined;
     }
     try {
-      const result = await this.#client.request<{
+      const result = await this.#request<{
         title?: string;
         html_url?: string;
         state?: string;
@@ -1006,7 +1013,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       return undefined;
     }
     try {
-      const result = await this.#client.request<{
+      const result = await this.#request<{
         title?: string;
         html_url?: string;
         state?: string;
@@ -1047,7 +1054,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const issues: Array<ReconcileIssueState & { number: number }> = [];
     for (let page = 1; page <= OPEN_ISSUE_DISCOVERY_MAX_PAGES; page += 1) {
       const query = new URLSearchParams({ state: 'open', page: String(page), per_page: String(PAGE_SIZE) });
-      const result = await this.#client.request<{ issues: GithubIssue[] }>(
+      const result = await this.#request<{ issues: GithubIssue[] }>(
         'GET',
         `${repositoryPath(input.repository, 'issues')}?${query}`,
       );
@@ -1073,7 +1080,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const comments: GithubComment[] = [];
     for (let page = 1; ; page += 1) {
       const query = new URLSearchParams({ page: String(page), per_page: String(PAGE_SIZE) });
-      const result = await this.#client.request<{ comments: GithubComment[] }>(
+      const result = await this.#request<{ comments: GithubComment[] }>(
         'GET',
         `${repositoryPath(input.repository, `issues/${input.issueNumber}/comments`)}?${query}`,
       );
@@ -1087,7 +1094,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       )
       .sort((left, right) => left.id - right.id)[0];
     if (existing) {
-      const comment = await this.#client.request<GithubComment>(
+      const comment = await this.#request<GithubComment>(
         'PATCH',
         repositoryPath(input.repository, `issues/comments/${existing.id}`),
         { body: input.body },
@@ -1095,7 +1102,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       this.#observeSelfAuthor(comment, undefined);
       return { action: 'updated', commentId: String(comment.id), url: comment.htmlUrl };
     }
-    const comment = await this.#client.request<GithubComment>(
+    const comment = await this.#request<GithubComment>(
       'POST',
       repositoryPath(input.repository, `issues/${input.issueNumber}/comments`),
       { body: input.body },
@@ -1165,7 +1172,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (inFlight) return settleOrAbort(inFlight, signal, undefined);
     const lookup = (async () => {
       try {
-        const result = await this.#client.request<{ permission: GithubRepositoryPermission }>(
+        const result = await this.#request<{ permission: GithubRepositoryPermission }>(
           'GET',
           `${API_PREFIX}/github/repos/${encodeURIComponent(repository.owner)}/${encodeURIComponent(repository.repo)}/collaborators/${encodeURIComponent(username)}/permission`,
           undefined,
@@ -1197,7 +1204,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     if (!options?.fresh && cached && cached.expiresAt > Date.now()) return cached.repos;
     this.#installationReposCache.delete(installationId);
 
-    const result = await this.#client.request<{
+    const result = await this.#request<{
       repositories: Array<{
         id: number;
         owner: string;
@@ -1215,12 +1222,57 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return repos;
   }
 
+  /**
+   * Every Platform call goes through here so a withheld answer — the linker
+   * left, or the share was revoked — also drops the bearers minted for that
+   * installation instead of letting the cache extend the access.
+   */
+  async #request<T>(
+    method: string,
+    path: string,
+    body?: unknown,
+    options?: { signal?: AbortSignal; actingUserId?: string },
+  ): Promise<T> {
+    try {
+      return await this.#client.request<T>(method, path, body, options);
+    } catch (error) {
+      if (error instanceof PlatformApiError && error.type === 'github_repository_access_withheld') {
+        this.#forgetWithheld(path);
+      }
+      throw error;
+    }
+  }
+
+  #forgetWithheld(path: string): void {
+    const installation = /\/github-app\/installations\/(\d+)\//.exec(path);
+    if (installation) {
+      this.#forgetInstallation(Number(installation[1]));
+      return;
+    }
+    const repository = /\/github\/repos\/([^/]+)\/([^/?]+)/.exec(path);
+    if (!repository) return;
+    const slug = `${decodeURIComponent(repository[1]!)}/${decodeURIComponent(repository[2]!)}`.toLowerCase();
+    const installationIds = new Set(
+      [...this.#repositoryAccessCache.values()]
+        .filter(entry => entry.repositories.includes(slug))
+        .map(entry => entry.installationId),
+    );
+    for (const installationId of installationIds) this.#forgetInstallation(installationId);
+  }
+
+  #forgetInstallation(installationId: number): void {
+    this.#installationReposCache.delete(installationId);
+    for (const [key, entry] of this.#repositoryAccessCache) {
+      if (entry.installationId === installationId) this.#repositoryAccessCache.delete(key);
+    }
+  }
+
   async mintInstallationToken(installationId: number): Promise<string> {
     const repositories = await this.listInstallationRepos(installationId);
     if (repositories.length === 0 || repositories.length > MAX_REPOSITORIES_PER_TOKEN) {
       throw new Error('Platform GitHub token minting requires between one and ten installation repositories.');
     }
-    const result = await this.#client.request<{ token: string }>(
+    const result = await this.#request<{ token: string }>(
       'POST',
       `${API_PREFIX}/github-app/installations/${installationId}/token`,
       { repositories: repositories.map(repository => repository.name), permissions: REPOSITORY_TOKEN_PERMISSIONS },
@@ -1234,7 +1286,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     issueNumber: number,
     labels: string[],
   ): Promise<string[]> {
-    const result = await this.#client.request<{ labels: string[] }>(
+    const result = await this.#request<{ labels: string[] }>(
       'POST',
       repositoryPath(sourceId, `issues/${issueNumber}/labels`),
       { labels },
@@ -1245,7 +1297,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   async removeIssueLabel(_installationId: number, sourceId: string, issueNumber: number, label: string): Promise<void> {
     const name = label.trim();
     if (!name) return;
-    await this.#client.request<void>(
+    await this.#request<void>(
       'DELETE',
       repositoryPath(sourceId, `issues/${issueNumber}/labels/${encodeURIComponent(name)}`),
     );
@@ -1255,7 +1307,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     return {
       pulls: {
         get: async ({ owner, repo, pull_number }: { owner: string; repo: string; pull_number: number }) => {
-          const data = await this.#client.request<GithubPullRequest>(
+          const data = await this.#request<GithubPullRequest>(
             'GET',
             repositoryPath(`${owner}/${repo}`, `pulls/${pull_number}`),
           );
@@ -1271,7 +1323,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const query = new URLSearchParams({ state: 'open', page: String(page), per_page: String(PAGE_SIZE) });
     const normalizedLabels = normalizeLabels(labels);
     if (normalizedLabels.length > 0) query.set('label', normalizedLabels.join(','));
-    const result = await this.#client.request<{ issues: GithubIssue[] }>('GET', `${path}?${query}`);
+    const result = await this.#request<{ issues: GithubIssue[] }>('GET', `${path}?${query}`);
     return {
       issues: result.issues.map(issue => parseIntakeIssue(sourceId, issue)),
       nextCursor: result.issues.length > 0 ? String(page + 1) : null,
@@ -1284,8 +1336,8 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const issueNumber = requirePositiveId(issueId, 'issue');
     try {
       const [issue, comments] = await Promise.all([
-        this.#client.request<GithubIssue>('GET', repositoryPath(repository, `issues/${issueNumber}`)),
-        this.#client.request<{ comments: GithubComment[] }>(
+        this.#request<GithubIssue>('GET', repositoryPath(repository, `issues/${issueNumber}`)),
+        this.#request<{ comments: GithubComment[] }>(
           'GET',
           `${repositoryPath(repository, `issues/${issueNumber}/comments`)}?per_page=100`,
         ),
@@ -1313,7 +1365,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     // pull request, not an issue. Factory does not close PRs via updateIssue —
     // PR merges/closes go through the version-control pipeline.
     try {
-      await this.#client.request<GithubPullRequest>('GET', repositoryPath(repository, `pulls/${issueNumber}`));
+      await this.#request<GithubPullRequest>('GET', repositoryPath(repository, `pulls/${issueNumber}`));
       logPlatformWarn(`Platform GitHub: updateIssue rejected — target ${repository}#${issueNumber} is a pull request.`);
       return null;
     } catch (error) {
@@ -1321,7 +1373,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       // 404 on pulls means it's an issue (or nothing) — fall through to PATCH.
     }
     try {
-      const issue = await this.#client.request<GithubIssue>(
+      const issue = await this.#request<GithubIssue>(
         'PATCH',
         repositoryPath(repository, `issues/${issueNumber}`),
         {
@@ -1352,7 +1404,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
     const repository = requireSource(input.sourceId, 'GitHub Intake requires a repository source.');
     const issueNumber = requirePositiveId(input.issueId, 'issue');
     try {
-      const comment = await this.#client.request<GithubComment>(
+      const comment = await this.#request<GithubComment>(
         'POST',
         repositoryPath(repository, `issues/${issueNumber}/comments`),
         { body: input.body },
@@ -1374,7 +1426,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       page: String(page),
       per_page: String(PAGE_SIZE),
     });
-    const result = await this.#client.request<{ pullRequests: GithubPullRequest[] }>(
+    const result = await this.#request<{ pullRequests: GithubPullRequest[] }>(
       'GET',
       `${repositoryPath(input.sourceId, 'pulls')}?${query}`,
     );
@@ -1389,7 +1441,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   async #getPullRequest(input: PullRequestRef) {
     try {
       return parsePullRequest(
-        await this.#client.request<GithubPullRequest>('GET', pullRequestPath(input, input.pullRequestId)),
+        await this.#request<GithubPullRequest>('GET', pullRequestPath(input, input.pullRequestId)),
       );
     } catch (error) {
       if (isNotFound(error)) return null;
@@ -1399,7 +1451,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #createPullRequest(input: CreatePullRequestInput) {
     requireGithubConnection(input.connection);
-    const result = await this.#client.request<GithubPullRequest>(
+    const result = await this.#request<GithubPullRequest>(
       'POST',
       repositoryPath(input.sourceId, 'pulls'),
       {
@@ -1418,7 +1470,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
         const login = user.githubUsername;
         if (user.connected && login) {
           const { owner, repo } = splitRepository(input.sourceId);
-          const { token } = await this.#client.request<{ token: string }>(
+          const { token } = await this.#request<{ token: string }>(
             'POST',
             `${API_PREFIX}/github-app/installations/${input.connection.installationId}/token`,
             { repositories: [repo], permissions: REPOSITORY_TOKEN_PERMISSIONS },
@@ -1447,7 +1499,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #updatePullRequest(input: UpdatePullRequestInput) {
-    const result = await this.#client.request<GithubPullRequest>(
+    const result = await this.#request<GithubPullRequest>(
       'PATCH',
       pullRequestPath(input, input.pullRequestId),
       {
@@ -1462,7 +1514,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   #mergePullRequest(input: MergePullRequestInput) {
-    return this.#client.request<{ merged: boolean; message: string; sha: string | null }>(
+    return this.#request<{ merged: boolean; message: string; sha: string | null }>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/merge`,
       { commitTitle: input.commitTitle, commitMessage: input.commitMessage, method: input.method },
@@ -1472,7 +1524,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #listComments(input: ListPullRequestCommentsInput) {
     const page = parsePositiveCursor(input.cursor);
-    const result = await this.#client.request<{ comments: GithubComment[] }>(
+    const result = await this.#request<{ comments: GithubComment[] }>(
       'GET',
       `${repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`)}?page=${page}&per_page=${PAGE_SIZE}`,
     );
@@ -1483,7 +1535,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #createComment(input: CreatePullRequestCommentInput) {
-    const comment = await this.#client.request<GithubComment>(
+    const comment = await this.#request<GithubComment>(
       'POST',
       repositoryPath(input.sourceId, `issues/${requirePositiveId(input.pullRequestId, 'pull request')}/comments`),
       { body: input.body },
@@ -1495,7 +1547,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #updateComment(input: UpdatePullRequestCommentInput) {
     requireGithubConnection(input.connection);
-    const comment = await this.#client.request<GithubComment>(
+    const comment = await this.#request<GithubComment>(
       'PATCH',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
       { body: input.body },
@@ -1506,7 +1558,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #deleteComment(input: DeletePullRequestCommentInput) {
     requireGithubConnection(input.connection);
-    await this.#client.request<void>(
+    await this.#request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `issues/comments/${requirePositiveId(input.commentId, 'comment')}`),
       undefined,
@@ -1516,7 +1568,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #listReviews(input: ListReviewsInput) {
     const page = parsePositiveCursor(input.cursor);
-    const result = await this.#client.request<{ reviews: GithubReview[] }>(
+    const result = await this.#request<{ reviews: GithubReview[] }>(
       'GET',
       `${pullRequestPath(input, input.pullRequestId)}/reviews?page=${page}&per_page=${PAGE_SIZE}`,
     );
@@ -1529,7 +1581,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   async #getReview(input: ReviewRef) {
     try {
       return parseReview(
-        await this.#client.request<GithubReview>(
+        await this.#request<GithubReview>(
           'GET',
           `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
         ),
@@ -1541,7 +1593,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #createReview(input: CreateReviewInput) {
-    const review = await this.#client.request<GithubReview>(
+    const review = await this.#request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews`,
       { body: input.body, commitId: input.commitId, event: input.event ? reviewEvent(input.event) : undefined },
@@ -1553,7 +1605,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   async #publishCommitCheck(input: PublishCommitCheckInput): Promise<CommitCheck> {
     requireGithubConnection(input.connection);
     // Every call creates a new run; GitHub shows the latest run per app and name.
-    const run = await this.#client.request<{ id: number; htmlUrl: string }>(
+    const run = await this.#request<{ id: number; htmlUrl: string }>(
       'POST',
       repositoryPath(input.sourceId, 'check-runs'),
       {
@@ -1574,7 +1626,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #updateReview(input: UpdateReviewInput) {
-    const review = await this.#client.request<GithubReview>(
+    const review = await this.#request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
       { body: input.body },
@@ -1584,7 +1636,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #submitReview(input: SubmitReviewInput) {
-    const review = await this.#client.request<GithubReview>(
+    const review = await this.#request<GithubReview>(
       'POST',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/events`,
       { body: input.body, event: reviewEvent(input.event) },
@@ -1594,7 +1646,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #dismissReview(input: DismissReviewInput) {
-    const review = await this.#client.request<GithubReview>(
+    const review = await this.#request<GithubReview>(
       'PUT',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}/dismissals`,
       { message: input.message },
@@ -1604,7 +1656,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   }
 
   async #deletePendingReview(input: ReviewRef) {
-    await this.#client.request<void>(
+    await this.#request<void>(
       'DELETE',
       `${pullRequestPath(input, input.pullRequestId)}/reviews/${requirePositiveId(input.reviewId, 'review')}`,
       undefined,
@@ -1614,7 +1666,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #listReviewComments(input: ListReviewCommentsInput) {
     const page = parsePositiveCursor(input.cursor);
-    const result = await this.#client.request<{ comments: GithubReviewComment[] }>(
+    const result = await this.#request<{ comments: GithubReviewComment[] }>(
       'GET',
       `${pullRequestPath(input, input.pullRequestId)}/comments?page=${page}&per_page=${PAGE_SIZE}`,
     );
@@ -1643,7 +1695,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
       };
     }
     return parseReviewComment(
-      await this.#client.request<GithubReviewComment>(
+      await this.#request<GithubReviewComment>(
         'POST',
         `${pullRequestPath(input, input.pullRequestId)}/comments`,
         body,
@@ -1655,7 +1707,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
   async #updateReviewComment(input: UpdatePullRequestCommentInput) {
     requireGithubConnection(input.connection);
     return parseReviewComment(
-      await this.#client.request<GithubReviewComment>(
+      await this.#request<GithubReviewComment>(
         'PATCH',
         repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
         { body: input.body },
@@ -1666,7 +1718,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   async #deleteReviewComment(input: DeletePullRequestCommentInput) {
     requireGithubConnection(input.connection);
-    await this.#client.request<void>(
+    await this.#request<void>(
       'DELETE',
       repositoryPath(input.sourceId, `pulls/comments/${requirePositiveId(input.commentId, 'review comment')}`),
       undefined,
@@ -1676,7 +1728,7 @@ export class PlatformGithubIntegration implements FactoryIntegration {
 
   #requestedReviewers(method: 'GET' | 'POST' | 'DELETE', input: UpdateReviewersInput) {
     requireGithubConnection(input.connection);
-    return this.#client.request<{ users: string[]; teams: string[] }>(
+    return this.#request<{ users: string[]; teams: string[] }>(
       method,
       `${pullRequestPath(input, input.pullRequestId)}/requested-reviewers`,
       method === 'GET' ? undefined : { users: input.users, teams: input.teams },

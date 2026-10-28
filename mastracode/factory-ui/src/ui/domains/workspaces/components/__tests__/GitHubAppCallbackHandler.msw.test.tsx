@@ -128,6 +128,35 @@ describe('GitHubAppCallbackHandler', () => {
     expect(await screen.findByText(/installed on a personal GitHub account/)).toBeInTheDocument();
     expect(screen.queryByText('GitHub App installed')).not.toBeInTheDocument();
   });
+
+  it('given the linker shared their personal GitHub account install, when the factory page returns, then it refetches GitHub status and confirms', async () => {
+    let statusRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () => {
+        statusRequests += 1;
+        return HttpResponse.json({
+          enabled: true,
+          connected: true,
+          installations: [{ installationId: 9, accountLogin: 'ada', accountType: 'User' }],
+          reason: 'ready',
+        } satisfies GithubStatus);
+      }),
+    );
+    const router = renderCallback(
+      '/factories/fp-1/settings/repositories?github_app_share=granted&installation_id=9&keep=1',
+    );
+
+    expect(await screen.findByText('GitHub App shared with this factory')).toBeInTheDocument();
+    expect(statusRequests).toBeGreaterThan(0);
+    await waitFor(() => expect(router.state.location.search).toBe('?keep=1'));
+  });
+
+  it('given the linker declined to share, when the factory page returns, then it says nothing was shared', async () => {
+    const router = renderCallback('/factories/fp-1/settings/repositories?github_app_share=declined');
+
+    expect(await screen.findByText('The GitHub App was not shared with this factory.')).toBeInTheDocument();
+    await waitFor(() => expect(router.state.location.search).toBe(''));
+  });
 });
 
 describe('OnboardingPage GitHub callback', () => {

@@ -64,12 +64,15 @@ function normalizeIntegrationsApiUrl(integrationsApiUrl: string): string {
 export class PlatformApiError extends Error {
   readonly status: number;
   readonly retryAfterSeconds: number | null;
+  /** The problem `type` the Platform answered with, e.g. `github_repository_access_withheld`. */
+  readonly type: string | null;
 
-  constructor(message: string, status: number, retryAfterSeconds: number | null = null) {
+  constructor(message: string, status: number, retryAfterSeconds: number | null = null, type: string | null = null) {
     super(message);
     this.name = 'PlatformApiError';
     this.status = status;
     this.retryAfterSeconds = retryAfterSeconds;
+    this.type = type;
   }
 }
 
@@ -98,7 +101,8 @@ export class PlatformApiClient {
   ): Promise<T> {
     const response = await this.#send(method, path, body, options);
     if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
+      const error = await extractError(response);
+      const message = redact(error.message, this.#accessToken);
       const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
       logPlatformError('Platform API request failed', {
         method,
@@ -107,7 +111,7 @@ export class PlatformApiClient {
         retryAfterSeconds,
         message,
       });
-      throw new PlatformApiError(message, response.status, retryAfterSeconds);
+      throw new PlatformApiError(message, response.status, retryAfterSeconds, error.type);
     }
     if (response.status === 204) return undefined as T;
     return (await response.json()) as T;
@@ -120,7 +124,8 @@ export class PlatformApiClient {
       if (location) return location;
     }
     if (!response.ok) {
-      const message = redact(await extractError(response), this.#accessToken);
+      const error = await extractError(response);
+      const message = redact(error.message, this.#accessToken);
       const retryAfterSeconds = parseRetryAfter(response.headers.get('retry-after'));
       logPlatformError('Platform API redirect request failed', {
         method,
@@ -129,7 +134,7 @@ export class PlatformApiClient {
         retryAfterSeconds,
         message,
       });
-      throw new PlatformApiError(message, response.status, retryAfterSeconds);
+      throw new PlatformApiError(message, response.status, retryAfterSeconds, error.type);
     }
     logPlatformError('Platform API request did not return a redirect', { method, path, status: response.status });
     throw new PlatformApiError('Platform API request did not return a redirect.', response.status);
@@ -195,16 +200,17 @@ export class PlatformApiClient {
   }
 }
 
-async function extractError(response: Response): Promise<string> {
+async function extractError(response: Response): Promise<{ message: string; type: string | null }> {
   try {
     const data = (await response.clone().json()) as Record<string, unknown>;
+    const type = typeof data.type === 'string' && data.type ? data.type : null;
     for (const field of ['detail', 'error', 'title']) {
-      if (typeof data[field] === 'string' && data[field]) return data[field];
+      if (typeof data[field] === 'string' && data[field]) return { message: data[field], type };
     }
+    return { message: `Platform API request failed (${response.status})`, type };
   } catch {
-    // Fall through to the status-based message.
+    return { message: `Platform API request failed (${response.status})`, type: null };
   }
-  return `Platform API request failed (${response.status})`;
 }
 
 function redact(message: string, accessToken: string): string {

@@ -12,7 +12,7 @@ import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { useDebouncedValue } from '@mastra/playground-ui/hooks/use-debounced-value';
 import { SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Link2, Plus, RefreshCw, RotateCcw, Settings2, X } from 'lucide-react';
+import { Link2, Plus, RefreshCw, RotateCcw, Settings2, Share2, X } from 'lucide-react';
 import { useRef, useState } from 'react';
 import { Link } from 'react-router';
 
@@ -27,9 +27,11 @@ import { SkeletonRows } from '../../../ui/SkeletonRows';
 import type { FactoryProject, GithubStatus, SourceControlRepository } from '../services/github';
 import {
   connectGithub,
-  unavailableInstallNotice,
   INSTALL_ON_GITHUB_ORGANIZATION,
   isGitLabRepository,
+  SHARE_WITH_THIS_FACTORY,
+  shareGithubInstallation,
+  unavailableInstallNotice,
 } from '../services/github';
 
 export function AddRepositoryPicker({
@@ -85,6 +87,7 @@ export function AddRepositoryPicker({
   const gitlabUnavailable = gitlabStatus.data?.reason === 'unavailable';
   const statusUnavailable = githubUnavailable || gitlabUnavailable;
   const installNotice = unavailableInstallNotice(githubStatus.data);
+  const shareUrl = installNotice?.shareUrl;
   const canSearch = githubConnected || gitlabConfigured;
   const waitingForSearch =
     githubConnected && (query !== (searchQuery ?? '') || reposQuery.isPlaceholderData || reposQuery.isFetching);
@@ -135,21 +138,28 @@ export function AddRepositoryPicker({
           <Notice
             variant="info"
             action={
-              githubConnected ? undefined : installNotice.temporary ? (
-                <Button
-                  size="sm"
-                  variant="ghost"
-                  icon={<RotateCcw />}
-                  disabled={githubStatus.isFetching}
-                  onClick={() => void githubStatus.refetch()}
-                >
-                  Retry GitHub
-                </Button>
-              ) : (
-                <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
-                  {INSTALL_ON_GITHUB_ORGANIZATION}
-                </Button>
-              )
+              <>
+                {shareUrl && (
+                  <Button size="sm" icon={<Share2 />} onClick={() => shareGithubInstallation(shareUrl)}>
+                    {SHARE_WITH_THIS_FACTORY}
+                  </Button>
+                )}
+                {githubConnected ? null : installNotice.temporary ? (
+                  <Button
+                    size="sm"
+                    variant="ghost"
+                    icon={<RotateCcw />}
+                    disabled={githubStatus.isFetching}
+                    onClick={() => void githubStatus.refetch()}
+                  >
+                    Retry GitHub
+                  </Button>
+                ) : (
+                  <Button size="sm" variant="ghost" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
+                    {INSTALL_ON_GITHUB_ORGANIZATION}
+                  </Button>
+                )}
+              </>
             }
           >
             {installNotice.message}

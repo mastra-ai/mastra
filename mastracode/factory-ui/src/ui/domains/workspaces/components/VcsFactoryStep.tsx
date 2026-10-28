@@ -13,7 +13,12 @@ import { useGitLabProjectsQuery, useGitLabStatusQuery } from '../../../../hooks/
 import { useGithubReposQuery, useRefreshGithubReposMutation } from '../../../../hooks/useGithubRepos';
 import { useGithubStatusQuery } from '../../../../hooks/useGithubStatus';
 import { gitLabProjectRepository } from '../../factory/services/gitlab';
-import { INSTALL_ON_GITHUB_ORGANIZATION, isGitLabRepository, unavailableInstallNotice } from '../services/github';
+import {
+  INSTALL_ON_GITHUB_ORGANIZATION,
+  isGitLabRepository,
+  SHARE_WITH_THIS_FACTORY,
+  unavailableInstallNotice,
+} from '../services/github';
 import type { SourceControlRepository, UnavailableInstallNotice } from '../services/github';
 import { ProviderConnectControl } from '../../settings/components/PlatformProviderConnections';
 import { GitLabIcon } from '../../../ui/icons';
@@ -66,6 +71,8 @@ export interface VcsFactoryStepProps {
   githubRedirecting: boolean;
   onConnect: () => void;
   onManageConnection: () => void;
+  /** Opens the Platform page where the linker shares their personal GitHub account install with this factory. */
+  onShare: (shareUrl: string) => void;
   onSelectRepository: (repository: SourceControlRepository) => void;
   onPreviewRepository?: (repository: SourceControlRepository | undefined) => void;
 }
@@ -75,6 +82,7 @@ export function VcsFactoryStep({
   githubRedirecting,
   onConnect,
   onManageConnection,
+  onShare,
   onSelectRepository,
   onPreviewRepository,
 }: VcsFactoryStepProps) {
@@ -122,6 +130,7 @@ export function VcsFactoryStep({
           gitlabUnavailableReason={gitLabUnavailableReason(gitlabStatus.data)}
           onChooseGithub={() => {
             if (connected) setProviderChoice('github');
+            else if (installNotice?.shareUrl) onShare(installNotice.shareUrl);
             else if (installNotice?.temporary) void githubStatus.refetch();
             else onConnect();
           }}
@@ -270,11 +279,13 @@ function ProviderChoice({
             {githubRedirecting && <Spinner size="sm" aria-label="Connecting to GitHub" />}
             {githubConnected
               ? 'Continue with GitHub'
-              : githubInstallNotice?.temporary
-                ? 'Retry GitHub'
-                : githubInstallNotice
-                  ? INSTALL_ON_GITHUB_ORGANIZATION
-                  : 'Connect GitHub'}
+              : githubInstallNotice?.shareUrl
+                ? SHARE_WITH_THIS_FACTORY
+                : githubInstallNotice?.temporary
+                  ? 'Retry GitHub'
+                  : githubInstallNotice
+                    ? INSTALL_ON_GITHUB_ORGANIZATION
+                    : 'Connect GitHub'}
           </Button>
         }
       />

@@ -1,7 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
-import { Check, Link2, Plus, RotateCcw } from 'lucide-react';
+import { Check, Link2, Plus, RotateCcw, Share2 } from 'lucide-react';
 import { useId, useState } from 'react';
 import type { ReactNode } from 'react';
 import { useSearchParams } from 'react-router';
@@ -20,9 +20,11 @@ import { isPlatformConnectUnavailableError, PLATFORM_CONNECT_PROVIDERS } from '.
 import type { PlatformConnectProviderId, PlatformProviderConnection } from '../../factory/services/platformConnect';
 import {
   connectGithub,
-  unavailableInstallNotice,
   INSTALL_ON_GITHUB_ORGANIZATION,
   manageGithubConnection,
+  SHARE_WITH_THIS_FACTORY,
+  shareGithubInstallation,
+  unavailableInstallNotice,
 } from '../../workspaces/services/github';
 import { isIncidentioDirectConfigured } from './IncidentioIntakeSection';
 import { IntegrationLabel } from './IntegrationLabel';
@@ -112,6 +114,7 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
   if (!status.enabled && !status.connected) return <NotConfiguredRow label={label} showAvailable={showAvailable} />;
   const notice = unavailableInstallNotice(status);
   if (!status.connected && !showAvailable && !notice) return null;
+  const shareUrl = notice?.shareUrl;
   const accounts = status.installations
     .map(installation => installation.accountLogin || `Installation ${installation.installationId}`)
     .join(', ');
@@ -127,8 +130,18 @@ function GithubInstallationRow({ showAvailable }: { showAvailable: boolean }) {
           Retry
         </Button>
       ) : (
-        <Button size="sm" icon={<Link2 />} onClick={() => connectGithub(baseUrl)}>
+        <Button
+          size="sm"
+          variant={shareUrl ? 'ghost' : undefined}
+          icon={<Link2 />}
+          onClick={() => connectGithub(baseUrl)}
+        >
           {notice ? INSTALL_ON_GITHUB_ORGANIZATION : 'Connect GitHub'}
+        </Button>
+      )}
+      {shareUrl && (
+        <Button size="sm" icon={<Share2 />} onClick={() => shareGithubInstallation(shareUrl)}>
+          {SHARE_WITH_THIS_FACTORY}
         </Button>
       )}
     </SettingsRow>

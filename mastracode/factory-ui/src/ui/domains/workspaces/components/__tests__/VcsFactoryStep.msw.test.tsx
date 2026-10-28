@@ -42,6 +42,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={onSelectRepository}
       />,
     );
@@ -73,6 +74,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={onSelectRepository}
       />,
     );
@@ -101,11 +103,53 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
     await userEvent.click(await screen.findByRole('button', { name: 'Install on a GitHub organization' }));
     expect(onConnect).toHaveBeenCalledOnce();
+  });
+
+  it('given a personal install not shared with this factory, when Share is chosen, then it opens the consent page', async () => {
+    const shareUrl =
+      'https://api.mastra.ai/v1/server/github-app/share?organizationId=org-1&installationId=9&projectId=p-1';
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/github/status`, () =>
+        HttpResponse.json({
+          enabled: true,
+          connected: false,
+          installations: [],
+          unusableInstallations: [
+            {
+              installationId: 9,
+              accountLogin: 'ada',
+              accountType: 'User',
+              unusableReason: 'personal_installation_not_shared',
+              shareUrl,
+            },
+          ],
+          reason: 'installations_unusable',
+        } satisfies GithubStatus),
+      ),
+    );
+    const onShare = vi.fn();
+    const onConnect = vi.fn();
+    renderWithProviders(
+      <VcsFactoryStep
+        githubRedirecting={false}
+        onConnect={onConnect}
+        onManageConnection={vi.fn()}
+        onShare={onShare}
+        onSelectRepository={vi.fn()}
+      />,
+    );
+    expect(
+      await screen.findByText('ada is linked to this platform org but not shared with this factory.'),
+    ).toBeInTheDocument();
+    await userEvent.click(screen.getByRole('button', { name: 'Share with this factory' }));
+    expect(onShare).toHaveBeenCalledExactlyOnceWith(shareUrl);
+    expect(onConnect).not.toHaveBeenCalled();
   });
 
   it('debounces repository searches before requesting filtered results', async () => {
@@ -123,6 +167,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -156,6 +201,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -182,6 +228,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -228,6 +275,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -266,6 +314,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={onConnect}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -292,6 +341,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -337,6 +387,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -380,6 +431,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -422,6 +474,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
@@ -455,6 +508,7 @@ describe('VCS Factory step', () => {
         githubRedirecting={false}
         onConnect={vi.fn()}
         onManageConnection={vi.fn()}
+        onShare={vi.fn()}
         onSelectRepository={vi.fn()}
       />,
     );
