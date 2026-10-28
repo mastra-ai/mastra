@@ -16,7 +16,7 @@ import type {
 } from '@mastra/core/storage';
 
 import { TABLE_SPAN_EVENTS, TABLE_TRACE_ROOTS, TABLE_TRACE_ROOTS_DELTA } from './ddl';
-import { buildTraceFilterConditions, buildTraceOrderByClause } from './filters';
+import { buildTraceFilterConditions, buildTraceOrderByClause, latestOutcomePredicate } from './filters';
 import { CH_SETTINGS, rowToLightSpanRecord, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
@@ -78,6 +78,8 @@ const LIGHT_TRACE_ROOT_FIELDS = [
   'isEvent',
   'startedAt',
   'endedAt',
+  'outcome',
+  'stopReason',
   'entityType',
   'entityId',
   'entityName',
@@ -136,6 +138,9 @@ async function listTraceRows<TSpan>(
   const perPage = pagination?.perPage ?? 10;
 
   const { conditions, params } = buildTraceFilterConditions(filters, 'r');
+  if (filters?.outcome !== undefined || filters?.stopReason !== undefined) {
+    conditions.push(latestOutcomePredicate(TABLE_TRACE_ROOTS, 'r', conditions));
+  }
 
   if (filters?.hasChildError != null) {
     // Set-based rather than a correlated EXISTS. When other filters are set,

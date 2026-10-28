@@ -47,6 +47,41 @@ describe('record-builders', () => {
       expect(buildUpdateSpanRecord(span())).not.toHaveProperty('timeToFirstChunkMs');
     });
 
+    it('preserves a causal observer outcome and signals through record creation and updates', () => {
+      const stopped: AnyExportedSpan = {
+        ...span(),
+        outcome: 'interrupted',
+        stopReason: 'observer_failed',
+        stopReasonContext: {
+          reason: 'observer_failed',
+          observerSpanId: 'observer',
+          cause: {
+            outcome: 'limit',
+            stopReason: 'context_window_exceeded',
+            stopReasonContext: { reason: 'context_window_exceeded', errorCode: 'context_length_exceeded' },
+          },
+          signals: [
+            { id: 'signal', type: 'reactive', contents: 'Observer stopped', createdAt: '2026-10-27T12:00:00Z' },
+          ],
+        },
+      };
+      for (const record of [buildCreateSpanRecord(stopped), buildUpdateSpanRecord(stopped)]) {
+        expect(JSON.parse(JSON.stringify(record))).toMatchObject({
+          outcome: stopped.outcome,
+          stopReason: stopped.stopReason,
+          stopReasonContext: stopped.stopReasonContext,
+        });
+      }
+      expect(buildCreateSpanRecord(span())).toMatchObject({ outcome: null, stopReason: null, stopReasonContext: null });
+      const omitted = buildUpdateSpanRecord(span());
+      expect(omitted).not.toHaveProperty('outcome');
+      expect(omitted).not.toHaveProperty('stopReason');
+      expect(omitted).not.toHaveProperty('stopReasonContext');
+      expect(
+        buildUpdateSpanRecord({ ...stopped, outcome: 'success', stopReason: null, stopReasonContext: null }),
+      ).toMatchObject({ outcome: 'success', stopReason: null, stopReasonContext: null });
+    });
+
     it('stores the version of the span own entity, not an inherited metadata version', () => {
       const inherited: AnyExportedSpan = { ...span(), metadata: { entityVersionId: 'agent-v1' } };
       expect(buildCreateSpanRecord(inherited).entityVersionId).toBeNull();

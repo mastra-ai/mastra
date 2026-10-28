@@ -17,6 +17,8 @@ import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
+import { workflowTermination } from '../execution-outcome';
+import { getControlFlowIdentityAttributes } from '../handlers/control-flow';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
 import { getEntryComponent, getEntryId, getEntrySchemas } from '../step-entry';
@@ -28,6 +30,8 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
+
+import { checkpointEventedChildSpan, completeEventedSpan } from './span-checkpoints';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -208,6 +212,7 @@ export class StepExecutor extends MastraBase {
     // and traces match the default engine.
     const workflowStepSpan = params.tracingContext?.currentSpan?.createChildSpan({
       type: SpanType.WORKFLOW_STEP,
+      outcome: null,
       name: `workflow step: '${stepId}'`,
       entityType: EntityType.WORKFLOW_STEP,
       entityId: stepId,
@@ -220,6 +225,12 @@ export class StepExecutor extends MastraBase {
       : (params.tracingContext ?? {});
 
     try {
+      const root = this.mastra?.__getRunTracingContext(runId)?.currentSpan ?? params.tracingContext?.currentSpan;
+      if (root)
+        await checkpointEventedChildSpan(this.mastra, params.workflowId, runId, workflowStepSpan, {
+          traceId: root.traceId,
+          spanId: root.id,
+        });
       if (validationError) {
         throw validationError;
       }
@@ -382,11 +393,20 @@ export class StepExecutor extends MastraBase {
         finalResult.__stateDelta = stateDelta;
       }
 
-      if (finalResult.status === 'success') {
-        workflowStepSpan?.end({ output: stepOutput, attributes: { status: 'success' } });
-      } else {
-        workflowStepSpan?.end({ attributes: { status: finalResult.status } });
-      }
+      await completeEventedSpan(
+        this.mastra,
+        params.workflowId,
+        runId,
+        workflowStepSpan,
+        `step:${workflowStepSpan?.id}`,
+        {
+          end: {
+            ...workflowTermination(finalResult),
+            ...(finalResult.status === 'success' ? { output: stepOutput } : {}),
+            attributes: { status: finalResult.status },
+          },
+        },
+      );
 
       return finalResult;
     } catch (error: any) {
@@ -397,7 +417,23 @@ export class StepExecutor extends MastraBase {
         fallbackMessage: 'Unknown step execution error',
       });
 
-      workflowStepSpan?.error({ error: errorInstance });
+      await completeEventedSpan(
+        this.mastra,
+        params.workflowId,
+        runId,
+        workflowStepSpan,
+        `step:${workflowStepSpan?.id}`,
+        {
+          error: {
+            ...workflowTermination(
+              error instanceof TripWire
+                ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
+                : { status: 'failed', error: errorInstance },
+            ),
+            error: errorInstance,
+          },
+        },
+      );
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
@@ -446,15 +482,29 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
+    tracingContext?: TracingContext;
   }): Promise<number[]> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
 
     const abortController = params.abortController ?? new AbortController();
 
     const results = await Promise.all(
-      step.conditions.map(async condition => {
+      step.conditions.map(async (condition, conditionIndex) => {
+        const span = params.tracingContext?.currentSpan?.createChildSpan({
+          type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
+          outcome: null,
+          name: `condition '${conditionIndex}'`,
+          input: params.input,
+          attributes: { conditionIndex, ...getControlFlowIdentityAttributes(step) },
+        });
         try {
-          return await this.evaluateCondition({
+          const root = this.mastra?.__getRunTracingContext(runId)?.currentSpan;
+          if (root)
+            await checkpointEventedChildSpan(this.mastra, params.workflowId, runId, span, {
+              traceId: root.traceId,
+              spanId: root.id,
+            });
+          const result = await this.evaluateCondition({
             workflowId: params.workflowId,
             condition,
             runId,
@@ -467,9 +517,17 @@ export class StepExecutor extends MastraBase {
             abortController,
             stepResults,
             iterationCount: 0,
+            tracingContext: { currentSpan: span },
           });
+          await completeEventedSpan(this.mastra, params.workflowId, runId, span, `predicate:${span?.id}`, {
+            end: { ...workflowTermination({ status: 'success' }), output: result },
+          });
+          return result;
         } catch (e) {
           const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
+          await completeEventedSpan(this.mastra, params.workflowId, runId, span, `predicate:${span?.id}`, {
+            error: { ...workflowTermination({ status: 'failed', error: errorInstance }), error: errorInstance },
+          });
           const mastraError = new MastraError(
             {
               id: 'WORKFLOW_CONDITION_EVALUATION_FAILED',
@@ -511,6 +569,7 @@ export class StepExecutor extends MastraBase {
     abortController,
     retryCount = 0,
     iterationCount,
+    tracingContext,
   }: {
     workflowId: string;
     condition: LoopConditionFunction<any, any, any, any, any, any>;
@@ -524,6 +583,7 @@ export class StepExecutor extends MastraBase {
     abortController: AbortController;
     retryCount?: number;
     iterationCount: number;
+    tracingContext?: TracingContext;
   }): Promise<boolean> {
     const callId = globalThis.crypto.randomUUID();
     const outputWriter = this.createOutputWriter(runId);
@@ -559,8 +619,7 @@ export class StepExecutor extends MastraBase {
           [STREAM_FORMAT_SYMBOL]: undefined, // TODO
           engine: {},
           abortSignal: abortController?.signal,
-          // TODO
-          ...createObservabilityContext(),
+          ...createObservabilityContext({ currentSpan: tracingContext?.currentSpan }),
           iterationCount,
         },
         {
@@ -584,6 +643,7 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
+    tracingContext?: TracingContext;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -641,8 +701,7 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            // TODO
-            ...createObservabilityContext(),
+            ...createObservabilityContext({ currentSpan: params.tracingContext?.currentSpan }),
           },
           {
             paramName: 'runCount',
@@ -669,6 +728,7 @@ export class StepExecutor extends MastraBase {
     actor?: ActorSignal;
     retryCount?: number;
     abortController?: AbortController;
+    tracingContext?: TracingContext;
   }): Promise<number> {
     const { step, stepResults, runId, requestContext, retryCount = 0 } = params;
     const currentState = params.state ?? stepResults?.__state ?? {};
@@ -726,8 +786,7 @@ export class StepExecutor extends MastraBase {
             [STREAM_FORMAT_SYMBOL]: undefined, // TODO
             engine: {},
             abortSignal: abortController?.signal,
-            // TODO
-            ...createObservabilityContext(),
+            ...createObservabilityContext({ currentSpan: params.tracingContext?.currentSpan }),
           },
           {
             paramName: 'runCount',

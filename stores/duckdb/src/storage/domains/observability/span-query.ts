@@ -22,6 +22,7 @@ const fields = [
   'parentSpanId',
   'name',
   'spanType',
+  ...('outcome' in (coreStorage.SPAN_QUERY_FIELD_REGISTRY ?? {}) ? ['outcome', 'stopReason'] : []),
   'entityType',
   'entityId',
   'entityName',

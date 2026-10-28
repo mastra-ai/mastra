@@ -7,8 +7,8 @@ import type { LanguageModelRequestMetadata, LogProbs as LanguageModelV1LogProbs 
 import type { LanguageModelUsage, ModelMessage } from '@internal/ai-sdk-v5';
 import type { JSONSchema7 } from 'json-schema';
 import type { z } from 'zod';
-
 import type { MastraFGAPermissionInput } from '../../auth/ee';
+
 import type { ActorSignal } from '../../auth/ee/fga-check';
 import type { BackgroundTaskManager } from '../../background-tasks/manager';
 import type { AgentBackgroundConfig } from '../../background-tasks/types';
@@ -44,7 +44,7 @@ import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
 import type { SaveQueueManager } from '../save-queue';
-import type { AgentSignalInput, CreatedAgentSignal } from '../signals';
+import type { PendingSignalListener, AgentSignalInput, CreatedAgentSignal } from '../signals';
 import type { TripwireData } from '../trip-wire';
 import type { GoalConfig, StructuredOutputOptions } from '../types';
 import type { ExecutionFence } from './execution-fence';
@@ -485,6 +485,7 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  tripwire?: StepTripwireData;
   /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
@@ -929,7 +930,7 @@ export interface RunRegistryEntry {
   /** Process-local reminders for runs without a memory thread. Drained by the next LLM step. */
   pendingProcessorSignals?: CreatedAgentSignal[];
   /** Owner-queue notifications, in-process only like the drain closure. */
-  subscribePendingSignals?: (listener: () => void) => () => void;
+  subscribePendingSignals?: (listener: PendingSignalListener) => () => void;
   /** Releases the latest LLM step's pending-signal listener, whichever way that step exited. */
   stopStepSignalListener?: () => void;
   /**

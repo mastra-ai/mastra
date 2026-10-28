@@ -1,11 +1,15 @@
+import { Mastra } from '@mastra/core/mastra';
+import { Inngest } from 'inngest';
 import { describe, expect, it, vi } from 'vitest';
+import { z } from 'zod/v4';
 import { InngestExecutionEngine } from './execution-engine';
 import {
   compactNestedWorkflowResult,
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
-import { InngestWorkflow } from './workflow';
+import type { InngestWorkflow } from './workflow';
+import { init } from './index';
 
 describe('nested workflow output mode', () => {
   it('defaults missing modes to the normal output', () => {
@@ -99,7 +103,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
       runId: 'child-run',
     });
     const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
-    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+    const engine = new InngestExecutionEngine(new Mastra({ logger: false }), { invoke, run } as any, 0, {} as any);
     const workflow = createNestedWorkflow('child');
     const executionContext = createExecutionContext();
 
@@ -148,7 +152,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
       runId: 'child-run',
     });
     const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
-    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+    const engine = new InngestExecutionEngine(new Mastra({ logger: false }), { invoke, run } as any, 0, {} as any);
     const executionContext = createExecutionContext();
 
     const result = await engine.executeWorkflowStep({
@@ -180,7 +184,7 @@ describe('InngestExecutionEngine nested workflow output', () => {
     });
     const invoke = vi.fn().mockRejectedValue(invocationError);
     const run = vi.fn(async (_id: string, operation: () => Promise<unknown>) => operation());
-    const engine = new InngestExecutionEngine({} as any, { invoke, run } as any, 0, {} as any);
+    const engine = new InngestExecutionEngine(new Mastra({ logger: false }), { invoke, run } as any, 0, {} as any);
 
     const result = await engine.executeWorkflowStep({
       step: createNestedWorkflow('child'),
@@ -203,12 +207,17 @@ describe('InngestExecutionEngine nested workflow output', () => {
 });
 
 function createNestedWorkflow(id: string): InngestWorkflow {
-  const workflow = Object.create(InngestWorkflow.prototype);
-  Object.defineProperties(workflow, {
-    id: { value: id },
-    getFunction: { value: vi.fn().mockReturnValue({ id: `workflow.${id}` }) },
-  });
-  return workflow;
+  const { createWorkflow, createStep } = init(new Inngest({ id: 'nested-output-unit' }));
+  return createWorkflow({ id, inputSchema: z.object({}), outputSchema: z.object({}) })
+    .then(
+      createStep({
+        id: 'echo',
+        inputSchema: z.object({}),
+        outputSchema: z.object({}),
+        execute: async ({ inputData }) => inputData,
+      }),
+    )
+    .commit();
 }
 
 function createExecutionContext() {

@@ -1,3 +1,5 @@
+import * as coreObservability from '@mastra/core/observability';
+import type { ObserverFailureMetadata } from '@mastra/core/observability';
 import { hasAbortInChain, isTransientLLMError } from './retry';
 
 const AI_API_CALL_ERROR_MARKER = Symbol.for('vercel.ai.error.AI_APICallError');
@@ -53,6 +55,13 @@ export function isOmModelExecutionError(error: unknown): error is OmModelExecuti
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
   return {
     failurePolicy,
+    ...(isOmModelExecutionError(error) &&
+    error.failureKind === 'observer-model' &&
+    typeof coreObservability.executionFailureTermination === 'function'
+      ? ({
+          observerFailure: { cause: coreObservability.executionFailureTermination(error.cause, 'model_error') },
+        } satisfies ObserverFailureMetadata)
+      : {}),
     ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
   };
 }

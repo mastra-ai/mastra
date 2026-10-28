@@ -1,5 +1,6 @@
 import { z } from 'zod/v4';
 import { scoreRowDataSchema } from '../../../evals/types';
+import { spanStopReasonContextSchema } from '../../../observability/outcome-schema';
 import { PREVIEW_MAX_LENGTH, truncatePreview } from '../../../observability/span-previews';
 import { SpanType } from '../../../observability/types';
 import type { SpanInput, SpanOutput, SpanTypeMap } from '../../../observability/types';
@@ -151,6 +152,33 @@ export const spanRecordSchema = z
       .nullish()
       .describe('Milliseconds from span start to the first streamed chunk; null when the span never streamed one'),
 
+    // Native span fields. Copied from the exported span as supplied; a value the producer did not
+    // set is stored as null, never derived. `outcome` / `stopReason` values follow the shared
+    // outcome contract and are not validated here.
+    externalParentSpanId: z
+      .string()
+      .nullish()
+      .describe('Immediate parent span owned by an external tracing system; null when Mastra owns the parent'),
+    resumedFromSpanId: z
+      .string()
+      .nullish()
+      .describe('Span id of the initial invocation a resumed execution continues; null on the initial execution'),
+    model: z.string().nullish().describe('Model identity for this span, where applicable'),
+    provider: z.string().nullish().describe('Provider paired with model'),
+    outcome: z
+      .string()
+      .nullish()
+      .describe('Producer-reported execution outcome; null is also used for unavailable historical values'),
+    stopReason: z.string().nullish().describe('Machine-readable cause of stopping, when known'),
+    stopReasonContext: spanStopReasonContextSchema
+      .nullish()
+      .describe('Typed supplemental termination detail; not a filtering dimension'),
+    timeToFirstTokenMs: z
+      .number()
+      .nullish()
+      .describe('Milliseconds from the model call to the first token received; null when unknown'),
+    errorCount: z.number().int().nullish().describe('Errors in this span and all nested spans; null when unknown'),
+
     // Database timestamps
     ...dbTimestamps,
   })
@@ -200,6 +228,17 @@ export function computeTraceStatus(span: { error?: unknown; endedAt?: Date | str
   if (span.error != null) return TraceStatus.ERROR;
   if (span.endedAt == null) return TraceStatus.RUNNING;
   return TraceStatus.SUCCESS;
+}
+
+/**
+ * A string attribute of a span, or null when unset or not a string.
+ * Model-call spans keep `model` and `provider` in `attributes`; the native
+ * columns of the same name fall back to it for rows written before the
+ * columns existed, since those rows are never backfilled.
+ */
+export function getStringAttribute(attributes: unknown, key: string): string | null {
+  const value = (attributes as Record<string, unknown> | null | undefined)?.[key];
+  return typeof value === 'string' ? value : null;
 }
 
 /** Schema for a trace span (root span with computed status) */
@@ -687,6 +726,8 @@ export function toLightSpanRecord(span: SpanRecord): LightSpanRecord {
     startedAt: span.startedAt,
     endedAt: span.endedAt,
     error: span.error,
+    outcome: span.outcome,
+    stopReason: span.stopReason,
     status: computeTraceStatus(span),
     entityType: span.entityType,
     entityId: span.entityId,
@@ -720,6 +761,10 @@ export const lightSpanRecordSchema = z
     parentSpanId: parentSpanIdField.nullish(),
     endedAt: endedAtField.nullish(),
     error: errorField.nullish(),
+
+    // Native execution result, independent of the legacy computed status.
+    outcome: spanRecordSchema.shape.outcome,
+    stopReason: spanRecordSchema.shape.stopReason,
 
     // Computed status, so trace lists can render their status column.
     // Nullable AND optional: rows from stores/APIs that predate the field
@@ -789,6 +834,8 @@ export const tracesFilterSchema = z
     ...sharedFields,
 
     // Filter-specific derived status fields
+    outcome: z.string().optional().describe('Exact native outcome of this execution'),
+    stopReason: z.string().optional().describe('Exact native stop reason of this execution'),
     status: traceStatusField.optional(),
     hasChildError: hasChildErrorField.optional(),
   })
@@ -907,6 +954,8 @@ export const branchesFilterSchema = z
     ...sharedFields,
 
     // Derived status filter (computed from this anchor's own error/endedAt)
+    outcome: z.string().optional().describe('Exact native outcome of this execution'),
+    stopReason: z.string().optional().describe('Exact native stop reason of this execution'),
     status: traceStatusField.optional(),
   })
   .describe('Filters for querying trace branches');

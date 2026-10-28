@@ -27,6 +27,7 @@ import {
   TABLE_WORKFLOW_SNAPSHOT,
   TABLE_SCHEMAS,
   matchesExpectedWorkflowStatus,
+  mergeWorkflowSpanSnapshots,
   WorkflowsStorage,
 } from '@mastra/core/storage';
 import type { WorkflowRunState, WorkflowRunStatus, StepResult } from '@mastra/core/workflows';
@@ -89,6 +90,10 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
     this.setupPragmaSettings().catch(err =>
       this.logger.warn('LibSQL Workflows: Failed to setup PRAGMA settings.', err),
     );
+  }
+
+  supportsWorkflowSpanSnapshots(): boolean {
+    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -405,14 +410,20 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
               throw new Error(`Snapshot not found for runId ${runId}`);
             }
 
-            const { expectedStatus, ...state } = opts;
+            const { expectedStatus, tracingSpans, ...state } = opts;
             if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
               await tx.rollback();
               return undefined;
             }
 
             // Merge the new options with the existing snapshot
-            const updatedSnapshot = { ...snapshot, ...state };
+            const updatedSnapshot = {
+              ...snapshot,
+              ...state,
+              ...(tracingSpans
+                ? { tracingSpans: mergeWorkflowSpanSnapshots(snapshot.tracingSpans, tracingSpans) }
+                : {}),
+            };
 
             // Update the snapshot within the same transaction
             await tx.execute({
@@ -473,6 +484,11 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
         : expected.length
           ? ` WHERE json_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.status') IN (${expected.map(() => '?').join(', ')})`
           : ' WHERE 0';
+    const preservedSnapshot = ['tracingSpans', 'executionSpan'].reduce(
+      (value, field) =>
+        `CASE WHEN json_type(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.${field}') = 'object' THEN jsonb_set(${value}, '$.${field}', jsonb_extract(${TABLE_WORKFLOW_SNAPSHOT}.snapshot, '$.${field}')) ELSE ${value} END`,
+      'excluded.snapshot',
+    );
     const check = this.#runFenceCheck(fence, runId, 'persistWorkflowSnapshot');
     const result = await this.executeWithRetry(
       () =>
@@ -481,7 +497,7 @@ export class WorkflowsLibSQL extends WorkflowsStorage {
             sql: `INSERT INTO ${TABLE_WORKFLOW_SNAPSHOT} (workflow_name, run_id, resourceId, snapshot, createdAt, updatedAt)
                 VALUES (?, ?, ?, jsonb(?), ?, ?)
                 ON CONFLICT(workflow_name, run_id)
-                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = excluded.snapshot, updatedAt = excluded.updatedAt${guard}`,
+                DO UPDATE SET resourceId = COALESCE(excluded.resourceId, ${TABLE_WORKFLOW_SNAPSHOT}.resourceId), snapshot = ${preservedSnapshot}, updatedAt = excluded.updatedAt${guard}`,
             args: [
               workflowName,
               runId,

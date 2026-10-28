@@ -558,6 +558,10 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       this.db.traces.set(traceId, traceEntry);
     }
 
+    // A buffered start/update may arrive after another worker has completed
+    // this execution. A continuation must use a new span identity.
+    if (traceEntry.spans[spanId]?.endedAt != null && span.endedAt == null) return;
+
     traceEntry.spans[spanId] = span;
 
     // Update root span if this is a root span
@@ -683,6 +687,8 @@ export class ObservabilityInMemory extends ObservabilityStorage {
           name: span.name,
           spanType: span.spanType,
           isEvent: span.isEvent,
+          outcome: span.outcome,
+          stopReason: span.stopReason,
           startedAt: span.startedAt,
           endedAt: span.endedAt,
           error: span.error,
@@ -948,6 +954,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
       }
     }
 
+    if (filters.outcome !== undefined && rootSpan.outcome !== filters.outcome) return false;
+    if (filters.stopReason !== undefined && rootSpan.stopReason !== filters.stopReason) return false;
+
     // Derived status filter
     if (filters.status !== undefined && traceEntry.status !== filters.status) {
       return false;
@@ -1120,6 +1129,9 @@ export class ObservabilityInMemory extends ObservabilityStorage {
         if (!span.tags.includes(tag)) return false;
       }
     }
+
+    if (filters.outcome !== undefined && span.outcome !== filters.outcome) return false;
+    if (filters.stopReason !== undefined && span.stopReason !== filters.stopReason) return false;
 
     if (filters.status !== undefined) {
       const spanStatus = toTraceSpan(span).status;

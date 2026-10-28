@@ -43,6 +43,8 @@ export interface RawTraceQuerySpan {
   isPending: boolean;
   name: string;
   spanType: string;
+  outcome?: string | null;
+  stopReason?: string | null;
   attributes: Record<string, unknown> | null;
   metadata: Record<string, unknown> | null;
   error: unknown | null;
@@ -682,6 +684,8 @@ export const TRACE_QUERY_FEEDBACK_REPLACEMENT_SCENARIOS: TraceQueryFeedbackRepla
 export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
   spans: [
     span(1, 'trace-a', 'root-a-old', {
+      outcome: 'blocked',
+      stopReason: 'guardrail',
       threadId: 'thread-1',
       resourceId: 'resource-old',
       startedAt: '2026-08-01T10:00:00.000Z',
@@ -689,6 +693,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       tags: ['superseded'],
     }),
     span(10, 'trace-a', 'root-a', {
+      outcome: 'limit',
+      stopReason: 'max_steps',
       threadId: 'thread-1',
       resourceId: 'resource-1',
       startedAt: '2026-08-05T10:00:00.000Z',
@@ -713,6 +719,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       },
     }),
     span(11, 'trace-a', 'span-a-tool', {
+      outcome: 'error',
+      stopReason: 'runtime_error',
       parentSpanId: 'root-a',
       name: 'superseded_lookup',
       spanType: 'tool_call',
@@ -726,6 +734,8 @@ export const TRACE_QUERY_FIXTURE_DATA: TraceQueryFixtureData = {
       endedAt: '2026-08-05T10:00:01.000Z',
     }),
     span(12, 'trace-a', 'span-a-tool', {
+      outcome: 'success',
+      stopReason: null,
       parentSpanId: 'root-a',
       name: 'medication_lookup',
       spanType: 'tool_call',
@@ -1187,6 +1197,42 @@ export interface ThreadQueryConformanceCase {
 
 export const THREAD_QUERY_CONFORMANCE_CASES: ThreadQueryConformanceCase[] = [
   {
+    name: 'qualifies threads by native trace outcomes',
+    request: {
+      traces: { timeRange: fullRange },
+      where: {
+        traces: {
+          some: {
+            op: 'eq',
+            left: { path: 'outcome' },
+            right: { literal: 'limit' },
+          },
+        },
+      },
+    },
+    expected: [{ threadId: 'thread-1' }],
+  },
+  {
+    name: 'does not qualify threads using a cleared child stop reason',
+    request: {
+      traces: { timeRange: fullRange },
+      where: {
+        traces: {
+          some: {
+            spans: {
+              some: {
+                op: 'eq',
+                left: { path: 'stopReason' },
+                right: { literal: 'runtime_error' },
+              },
+            },
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
     name: 'returns distinct non-null threads from current completed traces',
     request: { traces: { timeRange: fullRange } },
     expected: [{ threadId: 'thread-1' }, { threadId: 'thread-2' }],
@@ -1551,6 +1597,63 @@ export const TRACE_QUERY_TIED_TIMESTAMP_CASES: TraceQueryConformanceCase[] = [
 ];
 
 export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
+  {
+    name: 'filters related spans by their current native outcome',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'eq',
+            left: { path: 'outcome' },
+            right: { literal: 'success' },
+          },
+        },
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not match a cleared stop reason on a superseded child span',
+    request: {
+      timeRange: fullRange,
+      where: {
+        spans: {
+          some: {
+            op: 'eq',
+            left: { path: 'stopReason' },
+            right: { literal: 'runtime_error' },
+          },
+        },
+      },
+    },
+    expected: [],
+  },
+  {
+    name: 'filters current native root outcomes independently from legacy status',
+    request: {
+      timeRange: fullRange,
+      where: {
+        op: 'and',
+        args: [
+          { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
+          { op: 'eq', left: { path: 'stopReason' }, right: { literal: 'max_steps' } },
+          { op: 'eq', left: { path: 'status' }, right: { literal: 'success' } },
+        ],
+      },
+    },
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'does not match a superseded root outcome',
+    request: { timeRange: fullRange, where: { op: 'eq', left: { path: 'outcome' }, right: { literal: 'blocked' } } },
+    expected: [],
+  },
+  {
+    name: 'preserves missing native outcomes instead of deriving success',
+    request: { timeRange: fullRange, where: { op: 'notExists', path: 'outcome' } },
+    expected: [{ traceId: 'trace-d' }, { traceId: 'trace-c' }, { traceId: 'trace-b' }],
+  },
   {
     name: 'returns one current completed root per trace in default order',
     request: { timeRange: fullRange },
@@ -3175,6 +3278,8 @@ function spanValues(span: RawTraceQuerySpan): Record<string, unknown> {
   return {
     name: span.name,
     spanType: span.spanType,
+    outcome: span.outcome ?? null,
+    stopReason: span.stopReason ?? null,
     model,
     provider,
     startedAt: span.startedAt,
@@ -3251,6 +3356,8 @@ function traceValues(root: RawTraceQuerySpan): Record<string, unknown> {
     }),
   );
   return {
+    outcome: root.outcome ?? null,
+    stopReason: root.stopReason ?? null,
     traceId: root.traceId,
     threadId: traceQueryDimensionValue(root, 'threadId'),
     resourceId: traceQueryDimensionValue(root, 'resourceId'),

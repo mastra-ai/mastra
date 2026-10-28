@@ -93,8 +93,8 @@ describe('inngest declarative step entries', () => {
       .foreach(foreachBody as any)
       .commit() as unknown as InngestWorkflow;
 
-    // getFunctions must include the parent + both nested workflow functions.
-    expect(parent.getFunctions()).toHaveLength(3);
+    // Each workflow includes its execution function and durable cancellation finalizer.
+    expect(parent.getFunctions()).toHaveLength(6);
 
     // Ordinary workflows emit watch events by default. Internal callers can disable
     // them for a parent and every nested workflow without changing the public config.

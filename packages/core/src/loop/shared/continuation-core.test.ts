@@ -3,6 +3,60 @@ import { describe, expect, it, vi } from 'vitest';
 import type { ContinuationDeps } from './continuation-core';
 import { decideContinuation } from './continuation-core';
 
+describe.each(['default', 'durable'] as const)('OBS-724 continuation cause (%s)', mode => {
+  const deps = (overrides: Partial<ContinuationDeps> = {}) =>
+    makeDeps({ policy: mode === 'default' ? { mode, hasFiniteMaxSteps: true } : { mode }, ...overrides });
+
+  it('reports normal completion on the final allowed step', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: false }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'model_finished',
+    });
+  });
+
+  it('reports a step limit only when the model requested continuation', async () => {
+    expect(await decideContinuation(deps({ underMaxSteps: false, llmWantsToContinue: true }))).toMatchObject({
+      isFinal: true,
+      stopCause: 'max_steps',
+    });
+  });
+
+  it('reports a step limit when a hook requests another turn after the model finishes', async () => {
+    expect(
+      await decideContinuation(deps({ underMaxSteps: false, onIterationComplete: () => ({ continue: true }) })),
+    ).toMatchObject({ isFinal: true, stopCause: 'max_steps' });
+  });
+
+  it('does not attribute an intentional hook stop to the step limit', async () => {
+    expect(
+      await decideContinuation(
+        deps({ underMaxSteps: false, llmWantsToContinue: true, onIterationComplete: () => ({ continue: false }) }),
+      ),
+    ).toMatchObject({ isFinal: true, stopCause: 'iteration_hook' });
+  });
+
+  it('reports a stop condition without re-running the predicate', async () => {
+    let calls = 0;
+    const decision = await decideContinuation(
+      deps({
+        llmWantsToContinue: true,
+        stopWhen: () => {
+          calls++;
+          return true;
+        },
+      }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'stop_condition' });
+    expect(calls).toBe(1);
+  });
+
+  it('does not report a terminal cause after a hook reopens execution', async () => {
+    const decision = await decideContinuation(deps({ onIterationComplete: () => ({ continue: true }) }));
+    expect(decision.isFinal).toBe(false);
+    expect(decision.stopCause).toBeUndefined();
+  });
+});
+
 /**
  * Truth-table tests for the per-engine continuation policy split.
  *
@@ -50,7 +104,12 @@ describe('decideContinuation — pendingFeedbackStop finality', () => {
         onIterationComplete: async () => ({ continue: true }),
       }),
     );
-    expect(decision).toEqual({ isFinal: true, forceContinue: false, nextPendingFeedbackStop: false });
+    expect(decision).toEqual({
+      isFinal: true,
+      forceContinue: false,
+      nextPendingFeedbackStop: false,
+      stopCause: 'feedback_complete',
+    });
   });
 });
 

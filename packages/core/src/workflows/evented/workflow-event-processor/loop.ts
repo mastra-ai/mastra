@@ -1,10 +1,17 @@
 import type { StepFlowEntry, StepResult } from '../..';
 import { RequestContext } from '../../../di';
+import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
 import type { Mastra } from '../../../mastra';
+import { SpanType } from '../../../observability';
+import type { TracingContext } from '../../../observability';
+import { selectFields } from '../../../utils';
+import { workflowTermination } from '../../execution-outcome';
+import { getControlFlowIdentityAttributes } from '../../handlers/control-flow';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
+import { checkpointEventedChildSpan, completeEventedSpan } from '../span-checkpoints';
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
@@ -20,21 +27,52 @@ export async function evaluateLoopCondition(
   step: Extract<StepFlowEntry, { type: 'loop' }>,
   stepExecutor: StepExecutor,
   stepResult: StepResult<any, any, any, any>,
+  tracingContext?: TracingContext,
+  mastra?: Mastra,
 ) {
-  return stepExecutor.evaluateCondition({
-    workflowId: args.workflowId,
-    condition: step.condition,
-    runId: args.runId,
-    stepResults: args.stepResults,
-    state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
-    requestContext: new RequestContext(Object.entries(args.requestContext ?? {}) as any),
-    actor: args.actor,
-    inputData: stepResult.status === 'success' ? stepResult.output : undefined,
-    resumeData: args.resumeData,
-    abortController: new AbortController(),
-    retryCount: args.retryCount ?? 0,
-    iterationCount: (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1,
+  const iterationCount = (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1;
+  const span = tracingContext?.currentSpan?.createChildSpan({
+    type: SpanType.WORKFLOW_CONDITIONAL_EVAL,
+    outcome: null,
+    name: `condition: '${step.loopType}'`,
+    input:
+      stepResult.status === 'success'
+        ? selectFields(stepResult.output, ['stepResult', 'output.text', 'output.object', 'messages'])
+        : undefined,
+    attributes: { conditionIndex: iterationCount - 1, ...getControlFlowIdentityAttributes(step) },
   });
+  try {
+    const root = mastra?.__getRunTracingContext(args.runId)?.currentSpan;
+    if (root)
+      await checkpointEventedChildSpan(mastra, args.workflowId, args.runId, span, {
+        traceId: root.traceId,
+        spanId: root.id,
+      });
+    const result = await stepExecutor.evaluateCondition({
+      workflowId: args.workflowId,
+      condition: step.condition,
+      runId: args.runId,
+      stepResults: args.stepResults,
+      state: resolveCurrentState({ stepResult, stepResults: args.stepResults, state: args.state }),
+      requestContext: new RequestContext(Object.entries(args.requestContext ?? {}) as any),
+      actor: args.actor,
+      inputData: stepResult.status === 'success' ? stepResult.output : undefined,
+      resumeData: args.resumeData,
+      abortController: new AbortController(),
+      retryCount: args.retryCount ?? 0,
+      iterationCount,
+      tracingContext: { currentSpan: span },
+    });
+    await completeEventedSpan(mastra, args.workflowId, args.runId, span, `predicate:${span?.id}`, {
+      end: { ...workflowTermination({ status: 'success' }), output: result },
+    });
+    return result;
+  } catch (error) {
+    await completeEventedSpan(mastra, args.workflowId, args.runId, span, `predicate:${span?.id}`, {
+      error: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
+    });
+    throw error;
+  }
 }
 
 export async function processWorkflowLoop(
@@ -61,12 +99,16 @@ export async function processWorkflowLoop(
     step,
     stepResult,
     savedCondition,
+    tracingContext,
+    mastra,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
     savedCondition?: boolean;
+    mastra?: Mastra;
+    tracingContext?: TracingContext;
   },
 ) {
   // Get current state from stepResult, stepResults or passed state
@@ -94,6 +136,8 @@ export async function processWorkflowLoop(
       step,
       stepExecutor,
       stepResult,
+      tracingContext,
+      mastra,
     ));
 
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any
@@ -183,10 +227,12 @@ export async function processWorkflowForEach(
     pubsub,
     mastra,
     step,
+    onComplete,
   }: {
     pubsub: PubSub;
     mastra: Mastra;
     step: Extract<StepFlowEntry, { type: 'foreach' }>;
+    onComplete?: (result: StepResult<any, any, any, any>) => void | Promise<void>;
   },
 ) {
   // Restart checkpoints may point at an iteration, but the coordinator advances the workflow path.
@@ -658,6 +704,8 @@ export async function processWorkflowForEach(
       >;
       result = stepResults[getEntryId(step.step)] as typeof result;
     }
+
+    await onComplete?.(result);
 
     await pubsub.publish('workflows', {
       type: 'workflow.step.run',

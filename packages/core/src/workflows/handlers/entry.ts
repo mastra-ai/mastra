@@ -1,12 +1,14 @@
 import type { ActorSignal } from '../../auth/ee';
 import type { RequestContext } from '../../di';
+import { getErrorFromUnknown } from '../../error';
 import type { SerializedError } from '../../error';
 import type { PubSub } from '../../events/pubsub';
-import { resolveObservabilityContext } from '../../observability';
+import { SpanType, createObservabilityContext, resolveObservabilityContext } from '../../observability';
 import type { ObservabilityContext } from '../../observability';
 import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statuses';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
+import { workflowTermination } from '../execution-outcome';
 import type {
   EntryExecutionResult,
   ExecutionContext,
@@ -21,6 +23,7 @@ import type {
   WorkflowRunState,
 } from '../types';
 import { getSingleStepEntryId, isSingleStepEntry } from '../utils';
+import { getControlFlowIdentityAttributes, getControlFlowSpanName } from './control-flow';
 
 function publishStepEvent(
   engine: DefaultExecutionEngine,
@@ -321,6 +324,55 @@ export interface ExecuteEntryParams extends ObservabilityContext {
 }
 
 export async function executeEntry(
+  engine: DefaultExecutionEngine,
+  params: ExecuteEntryParams,
+): Promise<EntryExecutionResult> {
+  const { entry, resume, executionContext, workflowId, runId } = params;
+  if (!resume?.resumePath.length || (entry.type !== 'parallel' && entry.type !== 'conditional'))
+    return executeEntryBody(engine, params);
+
+  // Resume selects the suspended branch directly; it does not re-evaluate conditions
+  // or re-run completed branches. This invocation still owns a new block execution.
+  const context = resolveObservabilityContext(params);
+  const operationId = `workflow.${workflowId}.run.${runId}.${entry.type}.${executionContext.executionPath.join('-')}.resume.span`;
+  const span = await engine.createChildSpan({
+    parentSpan: context.tracingContext.currentSpan,
+    operationId: `${operationId}.start`,
+    options: {
+      type: entry.type === 'parallel' ? SpanType.WORKFLOW_PARALLEL : SpanType.WORKFLOW_CONDITIONAL,
+      name: getControlFlowSpanName(entry, `${entry.type}: resumed branch`),
+      outcome: null,
+      attributes: getControlFlowIdentityAttributes(entry),
+      tracingPolicy: engine.options?.tracingPolicy,
+    },
+    executionContext,
+  });
+  try {
+    const result = await executeEntryBody(engine, { ...params, ...createObservabilityContext({ currentSpan: span }) });
+    const settled = result.result;
+    const termination = workflowTermination(
+      { ...settled, status: settled.status === 'failed' && settled.tripwire ? 'tripwire' : settled.status },
+      params.abortController.signal,
+    );
+    if (settled.status === 'failed')
+      await engine.errorChildSpan({
+        span,
+        operationId: `${operationId}.error`,
+        errorOptions: { ...termination, error: getErrorFromUnknown(settled.error) },
+      });
+    else await engine.endChildSpan({ span, operationId: `${operationId}.end`, endOptions: termination });
+    return result;
+  } catch (error) {
+    await engine.errorChildSpan({
+      span,
+      operationId: `${operationId}.error`,
+      errorOptions: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
+    });
+    throw error;
+  }
+}
+
+async function executeEntryBody(
   engine: DefaultExecutionEngine,
   params: ExecuteEntryParams,
 ): Promise<EntryExecutionResult> {

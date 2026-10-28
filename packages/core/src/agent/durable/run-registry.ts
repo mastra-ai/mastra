@@ -1,6 +1,7 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraScorer } from '../../evals/base';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
+import { executionFailureTermination } from '../../loop/shared/execution-outcome';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
@@ -256,8 +257,16 @@ export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<voi
 export function endRunSpansWithError(runId: string, error: Error): void {
   try {
     const entry = globalRunRegistry.has(runId) ? globalRunRegistry.get(runId) : undefined;
-    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({ error, endSpan: true });
-    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({ error, endSpan: true });
+    (entry?.resumeModelSpan ?? entry?.modelSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: true,
+    });
+    (entry?.resumeAgentSpan ?? entry?.agentSpan)?.error({
+      error,
+      ...executionFailureTermination(error),
+      endSpan: true,
+    });
   } catch {
     // Span bookkeeping must never break error reporting.
   }

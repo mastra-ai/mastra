@@ -9,6 +9,15 @@ import { z } from 'zod/v4';
 
 import { Observability } from './default';
 import { TestExporter } from './exporters';
+import {
+  expectWorkflowSegments,
+  createResumeOutcomeStep,
+  resumeActions,
+  expectedResumeOutcomes,
+  createResumeSeed,
+  controlFlowResumeKinds,
+  expectControlFlowSegments,
+} from './test-utils/workflow-outcomes';
 
 /**
  * Regression tests for the spanId a suspended run persists for resume linkage.
@@ -136,6 +145,111 @@ describe('workflow resume span linkage', () => {
       }
     },
   );
+
+  it.each(['default', 'evented', 'evented-async'] as const)(
+    '%s ends suspension before a distinct resumed execution',
+    async engine => {
+      const workflow = makeWorkflow(engine === 'default' ? 'default' : 'evented');
+      const host = new Mastra({
+        logger: false,
+        storage: new MockStore(),
+        workflows: { [workflow.id]: workflow },
+        observability: new Observability({
+          configs: { default: { serviceName: 'workflow-outcomes', exporters: [exporter] } },
+        }),
+      });
+      try {
+        if (engine !== 'default') await host.startWorkers();
+        const run = await workflow.createRun();
+        if (engine === 'evented-async' && 'startAsync' in run) {
+          await run.startAsync({ inputData: {} });
+          await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
+        } else {
+          expect((await run.start({ inputData: {} })).status).toBe('suspended');
+        }
+        const suspended = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        expect(suspended).toHaveLength(1);
+        expect(suspended[0]).toMatchObject({ outcome: 'suspend' });
+        const originalId = suspended[0]!.id;
+
+        const resumedRun = await workflow.createRun({ runId: run.runId });
+        expect(await resumedRun.resume({ resumeData: { approved: true } })).toMatchObject({
+          status: 'success',
+          result: { approved: true },
+        });
+        const executions = endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN);
+        expectWorkflowSegments(endedSpans(), originalId);
+        expect(executions[1]).toMatchObject({ outcome: 'success', parentSpanId: originalId });
+        const started = exporter
+          .getByEventType(TracingEventType.SPAN_STARTED)
+          .map(event => event.exportedSpan)
+          .filter(span => span.type === SpanType.WORKFLOW_RUN);
+        expect(started.map(span => span.outcome)).toEqual([null, null]);
+        expectNoOrphans();
+      } finally {
+        await host.shutdown();
+      }
+    },
+  );
+
+  it.each(
+    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+      controlFlowResumeKinds.flatMap(kind => resumeActions.map(action => ({ engine, kind, action }))),
+    ),
+  )('$engine gives resumed $kind blocks separate $action executions', async ({ engine, kind, action }) => {
+    const workflow = (engine === 'default' ? createWorkflow : createEventedWorkflow)({
+      id: `resume-${kind}-${action}`,
+      inputSchema: empty,
+      outputSchema: kind === 'foreach' ? z.array(empty) : empty,
+    });
+    const step = createResumeOutcomeStep();
+    if (kind === 'parallel') workflow.parallel([step]).commit();
+    else if (kind === 'conditional') workflow.branch([[async () => true, step]]).commit();
+    else if (kind === 'until') workflow.dountil(step, async () => true).commit();
+    else if (kind === 'while') workflow.dowhile(step, async () => false).commit();
+    else workflow.then(createResumeSeed()).foreach(step, { concurrency: 1 }).commit();
+    const host = new Mastra({
+      logger: false,
+      storage: new MockStore(),
+      workflows: { [workflow.id]: workflow },
+      observability: new Observability({
+        configs: { default: { serviceName: 'workflow-resume', exporters: [exporter] } },
+      }),
+    });
+    try {
+      if (engine !== 'default') await host.startWorkers();
+      const run = await workflow.createRun();
+      if (engine === 'evented-async' && 'startAsync' in run) await run.startAsync({ inputData: {} });
+      else expect((await run.start({ inputData: {} })).status).toBe('suspended');
+      await expect.poll(() => endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN).length).toBe(1);
+      const original = endedSpans();
+      for (const nextAction of action === 'suspend' ? (['suspend', 'success'] as const) : [action]) {
+        const resumed = await workflow.createRun({ runId: run.runId });
+        expect(
+          (
+            await resumed.resume({
+              step: 'decision-suspend',
+              resumeData: { action: nextAction },
+              ...(kind === 'foreach' ? { forEachIndex: 0 } : {}),
+            })
+          ).status,
+        ).toBe(
+          nextAction === 'error'
+            ? 'failed'
+            : nextAction === 'suspend'
+              ? 'suspended'
+              : nextAction === 'tripwire'
+                ? 'tripwire'
+                : 'success',
+        );
+      }
+      expectControlFlowSegments(endedSpans(), kind, true, expectedResumeOutcomes(action));
+      for (const span of original) expect(endedSpans().filter(event => event.id === span.id)).toEqual([span]);
+      expectNoOrphans();
+    } finally {
+      await host.shutdown();
+    }
+  });
 
   it('omits the persisted resume spanId when the suspended run span is never exported', async () => {
     const { storage, workflow } = buildMastra(exporter, [SpanType.WORKFLOW_RUN]);

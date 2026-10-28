@@ -1,6 +1,7 @@
 import type { SingleStepEntry, StepFlowEntry } from '../..';
 import { RequestContext } from '../../../di';
 import type { PubSub } from '../../../events';
+import type { TracingContext } from '../../../observability';
 import { getSingleStepEntryId } from '../../utils';
 import { resolveCurrentState } from '../helpers';
 import type { StepExecutor } from '../step-executor';
@@ -113,9 +114,11 @@ export async function processWorkflowConditional(
     pubsub,
     stepExecutor,
     step,
+    tracingContext,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
+    tracingContext?: TracingContext;
     step: Extract<StepFlowEntry, { type: 'conditional' }>;
   },
 ) {
@@ -145,6 +148,7 @@ export async function processWorkflowConditional(
       actor,
       input: prevResult?.status === 'success' ? prevResult.output : undefined,
       resumeData,
+      tracingContext,
     }));
 
   const truthyIdxs: Record<number, boolean> = {};

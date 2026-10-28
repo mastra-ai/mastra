@@ -266,12 +266,26 @@ function addCommonFilterFields(
 // Trace filter builder (for trace_roots table)
 // ---------------------------------------------------------------------------
 
+/** Apply mutable native filters only to the latest stored copy of an execution. */
+export function latestOutcomePredicate(table: string, alias: string, conditions: string[]): string {
+  // First narrow to candidate traces, then compare all copies of those identities.
+  // Filtering by outcome before deduplication alone can resurrect a stale failure.
+  const scope = conditions.length ? `WHERE ${conditions.join(' AND ')}` : '';
+  return `(${alias}.dedupeKey, ${alias}.endedAt) IN (
+    SELECT dedupeKey, max(endedAt) FROM ${table}
+    WHERE traceId IN (SELECT ${alias}.traceId FROM ${table} ${alias} ${scope})
+    GROUP BY dedupeKey
+  )`;
+}
+
 export function buildTraceFilterConditions(filters: TracesFilter | undefined, tableAlias?: string): FilterResult {
   const out: FilterResult = { conditions: [], params: {} };
   if (!filters) return out;
 
   const col = (name: string) => (tableAlias ? `${tableAlias}.${name}` : name);
 
+  addEq(col('outcome'), filters.outcome, 'outcome', 'String', out);
+  addEq(col('stopReason'), filters.stopReason, 'stopReason', 'String', out);
   addDateRange(col('startedAt'), filters.startedAt as DateRange | undefined, 'startedAt', out);
   addDateRange(col('endedAt'), filters.endedAt as DateRange | undefined, 'endedAt', out);
   addEq(col('spanType'), filters.spanType, 'spanType', 'String', out);

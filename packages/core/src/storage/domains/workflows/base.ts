@@ -22,6 +22,11 @@ export abstract class WorkflowsStorage extends StorageDomain {
 
   abstract supportsConcurrentUpdates(): boolean;
 
+  /** Atomic checkpoint/active-root updates and preservation across full snapshot writes. */
+  supportsWorkflowSpanSnapshots(): boolean {
+    return false;
+  }
+
   /** Atomic occurrence checks for evented step writes and replay-safe continuation. */
   supportsWorkflowStepGuards(): boolean {
     return false;

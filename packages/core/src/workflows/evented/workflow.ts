@@ -29,6 +29,7 @@ import {
 } from '../../observability';
 import type { ObservabilityContext, TracingContext, TracingPolicy } from '../../observability';
 import { initContextStorage } from '../../observability/context-storage';
+import { executionFailureTermination } from '../../observability/execution-outcome';
 import { executeWithContext } from '../../observability/utils';
 import type { OutputResult, Processor, ProcessorStreamWriter } from '../../processors';
 import {
@@ -80,6 +81,8 @@ import type {
   WorkflowStreamEvent,
   WorkflowEngineType,
   WorkflowRunStatus,
+  WorkflowOptions,
+  StepTripwireInfo,
   WorkflowRunState,
   StepParams,
   ToolStep,
@@ -92,6 +95,7 @@ import type {
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
+import { workflowTermination } from '../execution-outcome';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -102,6 +106,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
+import { checkpointEventedSpan, completeEventedSpan, completeCheckpointedEventedChildren } from './span-checkpoints';
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -1897,6 +1902,7 @@ export class EventedWorkflow<
         stateSchema: this.stateSchema,
         workflowEngineType: this.engineType,
         tracingPolicy: this.options?.tracingPolicy,
+        isForeignExecution: this.options?.isForeignExecution,
       });
 
     this.runs.set(runIdToUse, run);
@@ -1979,9 +1985,27 @@ export class EventedRun<
     stateSchema?: StandardSchemaWithJSON<TState>;
     workflowEngineType: WorkflowEngineType;
     tracingPolicy?: TracingPolicy;
+    isForeignExecution?: WorkflowOptions['isForeignExecution'];
   }) {
     super(params);
     this.serializedStepGraph = params.serializedStepGraph;
+    this.isForeignExecution = params.isForeignExecution;
+  }
+
+  private readonly isForeignExecution?: WorkflowOptions['isForeignExecution'];
+
+  private async completeWorkflowTracing(
+    span: TracingContext['currentSpan'],
+    completion: Parameters<typeof completeEventedSpan>[5],
+  ): Promise<void> {
+    await completeEventedSpan(this.mastra, this.workflowId, this.runId, span, `caller:${span?.id}`, completion);
+  }
+
+  private releaseWorkflowTracing(span: TracingContext['currentSpan']): void {
+    // Checkpoint persistence yields: a resume may have installed its new root
+    // before the prior segment finishes releasing its context.
+    if (span && this.mastra?.__getRunTracingContext(this.runId)?.currentSpan === span)
+      this.mastra.__unregisterRunTracingContext(this.runId);
   }
 
   #cancelPublished = false;
@@ -2109,6 +2133,7 @@ export class EventedRun<
     // spans under it (see `WorkflowEventProcessor.resolveRunTracingContext`).
     const workflowSpan = getOrCreateSpan({
       type: SpanType.WORKFLOW_RUN,
+      outcome: null,
       name: `workflow run: '${this.workflowId}'`,
       entityType: EntityType.WORKFLOW_RUN,
       entityId: this.workflowId,
@@ -2127,6 +2152,7 @@ export class EventedRun<
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
     try {
+      await checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true);
       result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
@@ -2144,22 +2170,34 @@ export class EventedRun<
         outputOptions,
       });
     } catch (error) {
-      workflowSpan?.error({ error: error instanceof Error ? error : new Error(String(error)) });
-      this.mastra?.__unregisterRunTracingContext(this.runId);
+      await this.completeWorkflowTracing(workflowSpan, {
+        error: {
+          ...executionFailureTermination(error),
+          error: error instanceof Error ? error : new Error(String(error)),
+        },
+      });
+
+      this.releaseWorkflowTracing(workflowSpan);
       throw error;
     }
 
     this.workflowRunStatus = result.status;
-    if (result.status !== 'suspended') {
-      if (result.status === 'failed') {
-        const err = (result as { error?: unknown }).error;
-        workflowSpan?.error({ error: err instanceof Error ? err : new Error(String(err)) });
-      } else {
-        workflowSpan?.end({ output: (result as { result?: unknown }).result });
-      }
-      this.mastra?.__unregisterRunTracingContext(this.runId);
-      this.cleanup?.();
+    if (result.status === 'failed') {
+      const err = result.error;
+      await this.completeWorkflowTracing(workflowSpan, {
+        error: {
+          ...workflowTermination(result),
+          error: err instanceof Error ? err : new Error(String(err)),
+        },
+      });
+    } else {
+      await this.completeWorkflowTracing(workflowSpan, {
+        end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
+      });
     }
+
+    this.releaseWorkflowTracing(workflowSpan);
+    if (result.status !== 'suspended') this.cleanup?.();
 
     return result;
   }
@@ -2239,20 +2277,92 @@ export class EventedRun<
       throw new Error('Mastra instance with pubsub is required for workflow execution');
     }
 
-    // Fire-and-forget: publish the workflow start event without subscribing for completion
-    await this.mastra.pubsub.publish('workflows', {
-      type: 'workflow.start',
-      runId: this.runId,
-      data: {
-        workflowId: this.workflowId,
-        runId: this.runId,
-        prevResult: { status: 'success', output: inputDataToUse },
-        requestContext: requestContext.toJSON(),
-        actor,
-        initialState: initialStateToUse,
-        perStep,
-      },
+    const pubsub = this.mastra.pubsub;
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      outcome: null,
+      name: `workflow run: '${this.workflowId}'`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
+      input: inputDataToUse,
+      metadata: { resourceId: this.resourceId, runId: this.runId },
+      tracingPolicy: this.tracingPolicy,
+      requestContext,
+      mastra: this.mastra,
     });
+    this.workflowRunSpan = workflowSpan;
+    const executionRequestContext = requestContext;
+    // Observe completion without waiting for it. Subscribe before publication so
+    // even a synchronous worker cannot finish before tracing is listening.
+    const finishTracing = async (event: Event, ack?: () => Promise<void>) => {
+      if (
+        event.runId !== this.runId ||
+        !['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type) ||
+        (workflowSpan &&
+          event.data?.executionSpan &&
+          (event.data.executionSpan.traceId !== workflowSpan.traceId ||
+            event.data.executionSpan.spanId !== workflowSpan.id)) ||
+        this.isForeignExecution?.(event.data?.requestContext, executionRequestContext)
+      ) {
+        await ack?.();
+        return;
+      }
+      const result = event.data?.prevResult;
+      const tripwire = Object.values(event.data?.stepResults ?? {}).find(
+        (step: any) => step?.status === 'failed' && step.tripwire,
+      ) as { tripwire?: StepTripwireInfo } | undefined;
+      const status =
+        result?.status === 'failed' && tripwire?.tripwire
+          ? 'tripwire'
+          : result?.status === 'success' && perStep
+            ? 'paused'
+            : result?.status;
+      const termination = workflowTermination({ status, error: result?.error, tripwire: tripwire?.tripwire });
+      if (status === 'failed') {
+        await this.completeWorkflowTracing(workflowSpan, { error: { ...termination, error: result.error } });
+      } else {
+        await this.completeWorkflowTracing(workflowSpan, { end: { ...termination, output: result?.output } });
+      }
+      this.workflowRunStatus = status;
+
+      this.releaseWorkflowTracing(workflowSpan);
+      await ack?.();
+      await pubsub.unsubscribe('workflows-finish', finishTracing);
+      if (status !== 'suspended') this.cleanup?.();
+    };
+    if (workflowSpan) {
+      this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
+    }
+    try {
+      await checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true);
+      if (workflowSpan) await pubsub.subscribe('workflows-finish', finishTracing, { startFrom: 'latest' });
+      // Fire-and-forget: publishing does not wait for workflow completion.
+      await pubsub.publish('workflows', {
+        type: 'workflow.start',
+        runId: this.runId,
+        data: {
+          workflowId: this.workflowId,
+          runId: this.runId,
+          prevResult: { status: 'success', output: inputDataToUse },
+          requestContext: requestContext.toJSON(),
+          actor,
+          initialState: initialStateToUse,
+          perStep,
+        },
+      });
+    } catch (error) {
+      await this.completeWorkflowTracing(workflowSpan, {
+        error: {
+          ...executionFailureTermination(error),
+          error: error instanceof Error ? error : new Error(String(error)),
+        },
+      });
+
+      this.releaseWorkflowTracing(workflowSpan);
+      if (workflowSpan) await pubsub.unsubscribe('workflows-finish', finishTracing);
+      throw error;
+    }
 
     // Return immediately without waiting for completion
     return { runId: this.runId };
@@ -2636,6 +2746,29 @@ export class EventedRun<
     this.setupAbortHandler();
     await this.#claimResume(workflowsStore);
 
+    const workflowSpan = getOrCreateSpan({
+      type: SpanType.WORKFLOW_RUN,
+      outcome: null,
+      name: `workflow run: '${this.workflowId}' (resumed)`,
+      entityType: EntityType.WORKFLOW_RUN,
+      entityId: this.workflowId,
+      entityName: this.workflowId,
+      input: resumeDataToUse,
+      metadata: {
+        resourceId: this.resourceId,
+        runId: this.runId,
+        resumed: true,
+        resumedFromSpanId: snapshot.tracingContext?.spanId,
+      },
+      tracingPolicy: this.tracingPolicy,
+      tracingOptions: { traceId: snapshot.tracingContext?.traceId },
+      resumedFromSpanId: snapshot.tracingContext?.spanId,
+      requestContext,
+      mastra: this.mastra,
+    });
+    this.workflowRunSpan = workflowSpan;
+    if (workflowSpan) this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
+
     const releaseClaimIfUnused = async () => {
       try {
         const current = await workflowsStore.loadWorkflowSnapshot({
@@ -2675,30 +2808,48 @@ export class EventedRun<
     // Extract state from snapshot - could be in context.__state or in value
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
 
-    const executionResultPromise = this.executionEngine
-      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-        workflowId: this.workflowId,
-        runId: this.runId,
-        graph: this.executionGraph,
-        serializedStepGraph: this.serializedStepGraph,
-        input: snapshot?.context?.input as TInput,
-        initialState: resumeState as TState,
-        resume: {
-          steps,
-          stepResults: snapshot?.context as any,
-          resumePayload: resumeDataToUse,
-          resumePath,
-          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
-        },
-        pubsub: this.mastra.pubsub,
-        requestContext,
-        actor: params.actor,
-        abortController: this.abortController,
-        perStep: params.perStep,
-        outputOptions: params.outputOptions,
-      })
-      .then(result => {
+    const resumePubsub = this.mastra.pubsub;
+    const executionResultPromise = checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true)
+      .then(() =>
+        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+          workflowId: this.workflowId,
+          runId: this.runId,
+          graph: this.executionGraph,
+          serializedStepGraph: this.serializedStepGraph,
+          input: snapshot?.context?.input as TInput,
+          initialState: resumeState as TState,
+          resume: {
+            steps,
+            stepResults: snapshot?.context as any,
+            resumePayload: resumeDataToUse,
+            resumePath,
+            forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
+          },
+          pubsub: resumePubsub,
+          requestContext,
+          actor: params.actor,
+          abortController: this.abortController,
+          perStep: params.perStep,
+          outputOptions: params.outputOptions,
+        }),
+      )
+      .then(async result => {
         this.workflowRunStatus = result.status;
+        if (result.status === 'failed') {
+          const error = result.error;
+          await this.completeWorkflowTracing(workflowSpan, {
+            error: {
+              ...workflowTermination(result),
+              error: error instanceof Error ? error : new Error(String(error)),
+            },
+          });
+        } else {
+          await this.completeWorkflowTracing(workflowSpan, {
+            end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
+          });
+        }
+
+        this.releaseWorkflowTracing(workflowSpan);
         if (result.status !== 'suspended') {
           this.closeStreamAction?.().catch(() => {});
           this.cleanup?.();
@@ -2707,6 +2858,14 @@ export class EventedRun<
         return result;
       })
       .catch(async error => {
+        await this.completeWorkflowTracing(workflowSpan, {
+          error: {
+            ...executionFailureTermination(error),
+            error: error instanceof Error ? error : new Error(String(error)),
+          },
+        });
+
+        this.releaseWorkflowTracing(workflowSpan);
         await releaseClaimIfUnused();
         throw error;
       });
@@ -2764,16 +2923,38 @@ export class EventedRun<
 
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    await workflowsStore?.updateWorkflowState({
+    const canceled = await workflowsStore?.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
       opts: {
         status: 'canceled',
+        expectedStatus: ['pending', 'running', 'suspended', 'waiting', 'paused', 'skipped', 'canceled'],
       },
+    });
+
+    if (workflowsStore && !canceled) return;
+
+    await completeCheckpointedEventedChildren(this.mastra, this.workflowId, this.runId, 'caller-cancel', {
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      stopReasonContext: null,
     });
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({ attributes: { status: 'canceled' } });
+    await this.completeWorkflowTracing(this.workflowRunSpan, {
+      end: {
+        outcome: 'abort',
+        stopReason: 'caller_cancelled',
+        stopReasonContext: null,
+        attributes: { status: 'canceled' },
+      },
+    });
+    this.workflowRunSpan?.endTree({
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      stopReasonContext: null,
+      attributes: { status: 'canceled' },
+    });
   }
 }

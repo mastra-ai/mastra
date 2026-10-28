@@ -6,25 +6,34 @@ import {
   SpanType,
   TracingEventType,
 } from '@mastra/core/observability';
-import type { SpanSnapshot, TracingEvent } from '@mastra/core/observability';
+import type { SpanSnapshot, TracingEvent, SpanOutputProcessor } from '@mastra/core/observability';
 import { describe, expect, it } from 'vitest';
 import { DefaultObservabilityInstance } from './instances';
+import { SensitiveDataFilter } from './span_processors/sensitive-data-filter';
 
-function setup(includeInternalSpans?: boolean) {
+function setup(includeInternalSpans?: boolean, spanOutputProcessors?: SpanOutputProcessor[]) {
   const events: TracingEvent[] = [];
   const tracing = new DefaultObservabilityInstance({
     serviceName: 's',
     name: 'i',
     sampling: { type: SamplingStrategyType.ALWAYS },
     includeInternalSpans,
-    exporters: [{ name: 'capture', exportTracingEvent: async e => void events.push(e), shutdown: async () => {} }],
+    spanOutputProcessors,
+    exporters: [
+      {
+        name: 'capture',
+        exportTracingEvent: async e => void events.push(e),
+        flush: async () => {},
+        shutdown: async () => {},
+      },
+    ],
   });
   const agent = tracing.startSpan({ type: SpanType.AGENT_RUN, name: 'agent' });
   const ended = async () => {
     await new Promise(r => setTimeout(r, 10));
     return events.filter(e => e.type === TracingEventType.SPAN_ENDED).map(e => e.exportedSpan.name);
   };
-  return { tracing, agent, ended };
+  return { tracing, agent, ended, events };
 }
 
 describe('rebuildSpan internal status', () => {
@@ -54,6 +63,7 @@ describe('rebuildSpan internal status', () => {
       },
     });
     const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(span.exportSpan())));
+    expect(rebuilt.isRootSpan).toBe(span.isRootSpan);
     expect(rebuilt.exportSpan()?.nestedUnderParent).toBe(true);
     expect(rebuilt.exportSpan()?.externalParentSpanId).toBe('0123456789abcdef');
     rebuilt.end();
@@ -66,6 +76,8 @@ describe('rebuildSpan internal status', () => {
     expect('isInternal' in exported).toBe(false);
     const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(exported)));
     expect(rebuilt.isInternal).toBe(false);
+    expect(rebuilt.isRootSpan).toBe(false);
+    expect(rebuilt.exportSpan().isRootSpan).toBe(false);
     rebuilt.end();
     expect(await ended()).toEqual(['normal']);
   });
@@ -76,7 +88,14 @@ describe('rebuildSpan internal status', () => {
       serviceName: 's',
       name: 'i',
       sampling: { type: SamplingStrategyType.ALWAYS },
-      exporters: [{ name: 'capture', exportTracingEvent: async e => void events.push(e), shutdown: async () => {} }],
+      exporters: [
+        {
+          name: 'capture',
+          exportTracingEvent: async e => void events.push(e),
+          flush: async () => {},
+          shutdown: async () => {},
+        },
+      ],
     });
     const workflow = tracing.startSpan({
       type: SpanType.WORKFLOW_RUN,
@@ -372,5 +391,45 @@ describe('rebuildSpan trace state', () => {
       requestContext: new RequestContext([['tenant', 'acme']]),
     });
     expect(child.metadata).toEqual({ tenant: 'acme' });
+  });
+});
+
+describe('durable span completion exports', () => {
+  it('persists a completion before export and retains its timestamp through ordinary redaction', async () => {
+    const { tracing, agent, ended, events } = setup(false, [new SensitiveDataFilter()]);
+    const prepared = tracing.prepareSpanCompletion(agent.snapshot()!, {
+      end: {
+        outcome: 'abort',
+        stopReason: 'caller_cancelled',
+        metadata: { secret: 'private-value' },
+      },
+    })!;
+    expect(agent.endTime).toBeUndefined();
+    expect(await ended()).toEqual([]);
+    const persisted = JSON.parse(JSON.stringify(prepared));
+    tracing.emitSpanCompletion(persisted);
+    expect(await ended()).toEqual(['agent']);
+    const exported = events.find(event => event.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+    expect(exported).toMatchObject({
+      outcome: 'abort',
+      stopReason: 'caller_cancelled',
+      metadata: { secret: '[REDACTED]' },
+    });
+    expect(exported.endTime).toEqual(prepared.endTime);
+    expect(persisted.metadata.secret).toBe('private-value');
+    await tracing.shutdown();
+  });
+
+  it('retains completed snapshots and refuses to export unfinished ones', async () => {
+    const { tracing, agent, ended } = setup();
+    const started = agent.snapshot()!;
+    expect(() => tracing.emitSpanCompletion(started)).toThrow('unfinished');
+    const completed = tracing.prepareSpanCompletion(started, { end: { outcome: 'success', stopReason: null } })!;
+    const repeated = tracing.prepareSpanCompletion(completed, {
+      error: { error: new Error('late failure'), outcome: 'error', stopReason: 'runtime_error' },
+    });
+    expect(repeated).toEqual(completed);
+    expect(await ended()).toEqual([]);
+    await tracing.shutdown();
   });
 });

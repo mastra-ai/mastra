@@ -14,7 +14,7 @@ import type { Agent } from '../agent';
 import type { IsTaskCompleteConfig, OnIterationCompleteHandler } from '../agent/agent.types';
 import type { MessageInput, MessageList } from '../agent/message-list';
 import type { SaveQueueManager } from '../agent/save-queue';
-import type { AgentSignalType, CreatedAgentSignal } from '../agent/signals';
+import type { PendingSignalListener, AgentSignalType, CreatedAgentSignal } from '../agent/signals';
 import type { GoalConfig, StructuredOutputOptions } from '../agent/types';
 import type { ActorSignal } from '../auth/ee';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -169,7 +169,7 @@ export type StreamInternal = {
   /** @deprecated Use `runScope.get(DRAIN_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
   drainPendingSignals?: (runId: string, scope?: 'pending' | 'pre-run') => CreatedAgentSignal[];
   /** @deprecated Use `runScope.get(SUBSCRIBE_PENDING_SIGNALS_KEY)` from `loop/run-scope-keys`. */
-  subscribePendingSignals?: (runId: string, listener: () => void) => () => void;
+  subscribePendingSignals?: (runId: string, listener: PendingSignalListener) => () => void;
   // Signal inputs already stored in the initial message list that still need
   // stream data-part echoes before the first model step.
   /** @deprecated Use `runScope.get(INITIAL_SIGNAL_ECHOES_KEY)` from `loop/run-scope-keys`. */

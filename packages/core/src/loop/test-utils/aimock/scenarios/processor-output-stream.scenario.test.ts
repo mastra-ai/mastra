@@ -1,5 +1,7 @@
 import { it, expect } from 'vitest';
 import { z } from 'zod/v4';
+import { SpanType } from '../../../../observability';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import type { Processor } from '../../../../processors';
 import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
 
@@ -78,6 +80,7 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
   // "Tripwire triggered by <processor id>" on the tripwire chunk and output.tripwire
   // on every engine (#27538).
   it('a reply stopped without a reason reports which processor stopped it', async () => {
+    const { observability, ended } = captureOutcomeEvents();
     const breaker: Processor = {
       id: 'stream-breaker',
       processOutputStream: async ({ part, abort }) => {
@@ -88,6 +91,7 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
 
     const { output, chunks } = await runLoopScenario({
       engine,
+      observability,
       llm: getMock(),
       prompt: QUESTION,
       collectChunks: true,
@@ -102,6 +106,13 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
     expect(output.tripwire).toMatchObject({ processorId: 'stream-breaker' });
     expect(chunks!.find(c => c.type === 'tripwire')?.payload).toMatchObject({ reason: DEFAULT_REASON });
     expect(output.tripwire).toMatchObject({ reason: DEFAULT_REASON });
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
+      expect(ended(type).at(-1)).toMatchObject({
+        outcome: 'blocked',
+        stopReason: 'guardrail',
+        stopReasonContext: { reason: 'guardrail', processorId: 'stream-breaker', message: DEFAULT_REASON },
+      });
+    }
   });
 
   // Technical: with structuredOutput, the JSON answer streams as text-delta chunks through

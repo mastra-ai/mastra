@@ -7,7 +7,15 @@ import type { MastraScorers } from '../evals';
 import type { PubSub } from '../events/pubsub';
 import type { IMastraLogger } from '../logger';
 import type { Mastra } from '../mastra';
-import type { AnySpan, ObservabilityContext, TracingOptions, TracingPolicy, TracingProperties } from '../observability';
+import type {
+  AnySpan,
+  SpanSnapshot,
+  SpanType,
+  ObservabilityContext,
+  TracingOptions,
+  TracingPolicy,
+  TracingProperties,
+} from '../observability';
 import type { RequestContext } from '../request-context';
 import type { InferPublicSchema, PublicSchema, StandardSchemaWithJSON, InferStandardSchemaOutput } from '../schema';
 import type { OutputSchema } from '../stream';
@@ -403,7 +411,21 @@ export interface NestedWorkflowParent {
   foreachIndex?: number;
 }
 
+/** @internal Span plus the durable export routing and operation that committed its completion. */
+export interface WorkflowSpanSnapshot extends SpanSnapshot<SpanType> {
+  /** Execution root owning this checkpointed child. */
+  executionSpan?: { traceId: string; spanId: string };
+  observabilityInstanceName?: string;
+  completionOperationId?: string;
+  /** Child invocation owned by this workflow step, recorded before dispatch. */
+  nestedWorkflow?: { workflowId: string; runId: string };
+}
+
 export interface WorkflowRunState {
+  /** @internal Active checkpointed execution root; independent of an explicit resume parent. */
+  executionSpan?: { traceId: string; spanId: string };
+  /** @internal Durable execution checkpoints keyed by `${traceId}:${spanId}`. Updated through checkpoint-capable workflow storage. */
+  tracingSpans?: Record<string, WorkflowSpanSnapshot>;
   // Core state info
   runId: string;
   status: WorkflowRunStatus;

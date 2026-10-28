@@ -4,6 +4,7 @@ import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
 import type { MastraMemory } from '../../../memory/memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
@@ -160,6 +161,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
         // End the whole tree with tripwire information; descendants close
         // without inheriting the terminal output
         agentSpan?.end({
+          ...agentLoopTermination({ tripwire: memoryData.tripwire }),
           endTree: true,
           output: { tripwire: memoryData.tripwire },
           attributes: {
@@ -191,6 +193,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 error,
               );
         agentSpan?.error({
+          ...executionFailureTermination(spanError),
           error: spanError,
           endTree: true,
           attributes: {
@@ -370,12 +373,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
             // Record the error, then end the whole span tree. Ending only the
             // root would orphan still-open descendants, and exporters that wait
             // for every span to finish (e.g. Datadog) retain the trace forever.
-            agentSpan?.error({ error, endTree: true });
+            agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
             return;
           }
 
           if (payload.finishReason === 'suspended') {
             agentSpan?.end({
+              outcome: 'suspend',
+              stopReason: payload.suspendReason === 'tool-call-approval' ? 'approval_required' : null,
+              stopReasonContext:
+                payload.suspendReason === 'tool-call-approval'
+                  ? {
+                      reason: 'approval_required',
+                      toolName: payload.toolName,
+                      toolCallId: payload.toolCallId,
+                    }
+                  : null,
               endTree: true,
               output: {
                 status: 'suspended',
@@ -391,12 +404,17 @@ export function createMapResultsStep<OUTPUT = undefined>({
 
           if (aborted) {
             if (payload.finishReason === 'aborted') {
-              agentSpan?.end({ endTree: true, output: { status: 'aborted', reason: 'abort' } });
+              agentSpan?.end({
+                outcome: 'abort',
+                stopReason: 'caller_cancelled',
+                endTree: true,
+                output: { status: 'aborted', reason: 'abort' },
+              });
               // The aborted finish payload is synthetic; the caller already received onAbort.
               return;
             }
 
-            agentSpan?.end({ endTree: true });
+            agentSpan?.end({ outcome: 'abort', stopReason: 'caller_cancelled', endTree: true });
           } else {
             if (context?.outputResultTripwire) {
               await undoSavedResponseMessages({
@@ -421,6 +439,12 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, result.threadId);
               }
               await capabilities.executeOnFinish({
+                termination: agentLoopTermination({
+                  stopCause: context?.continuationStopCause,
+                  finishReason: payload.finishReason,
+                  tripwire: payload.tripwire,
+                  maxSteps: options.maxSteps,
+                }),
                 result: payload,
                 outputText,
                 thread: result.thread,
@@ -460,7 +484,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                       e,
                     );
 
-              agentSpan?.error({ error: spanError, endTree: true });
+              agentSpan?.error({ error: spanError, ...executionFailureTermination(spanError), endTree: true });
             }
           }
 
@@ -474,7 +498,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: options.onError,
+        onError: async (event: { error: Error | string }) => {
+          // Terminal stream failures (including total deadlines) can close without
+          // an onFinish callback. Provider/processor retries settle inside the loop.
+          const error = event.error instanceof Error ? event.error : new Error(String(event.error));
+          agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
+          await options.onError?.(event);
+        },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
       },

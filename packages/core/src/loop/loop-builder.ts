@@ -651,6 +651,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
+        typedInputData.stepResult.continuationStopCause = decision.stopCause;
         if (decision.forceContinue) {
           typedInputData.stepResult.isContinued = true;
         }

@@ -5,7 +5,11 @@ import type { PubSub } from '../../../events/pubsub';
  * `workflows` topic, a fixed number of times per type. Everything else is
  * forwarded to the wrapped transport unchanged.
  */
-export function createFlakyPublishPubSub(inner: PubSub, failures: Record<string, number>) {
+export function createFlakyPublishPubSub<T extends Pick<PubSub, 'publish'>>(
+  inner: T,
+  failures: Record<string, number>,
+  matches: (event: Parameters<PubSub['publish']>[1]) => boolean = () => true,
+) {
   const remaining = { ...failures };
   const attempts: Record<string, number> = {};
   const rejected: Record<string, number> = {};
@@ -13,7 +17,7 @@ export function createFlakyPublishPubSub(inner: PubSub, failures: Record<string,
     get(target, prop) {
       if (prop === 'publish') {
         return async (topic: string, event: { type: string }, options?: { localOnly?: boolean }) => {
-          if (topic === 'workflows' && event.type in remaining) {
+          if (topic === 'workflows' && event.type in remaining && matches(event as Parameters<PubSub['publish']>[1])) {
             attempts[event.type] = (attempts[event.type] ?? 0) + 1;
             if (remaining[event.type]! > 0) {
               remaining[event.type]!--;

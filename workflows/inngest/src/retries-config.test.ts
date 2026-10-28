@@ -45,7 +45,7 @@ describe('Inngest function-level retries', () => {
 
   it('forwards retries to the cron function', () => {
     const functions = build({ retries: 3, cron: '0 * * * *' }).getFunctions();
-    expect(functions).toHaveLength(2);
+    expect(functions).toHaveLength(3);
     for (const fn of functions) {
       expect(optsOf(fn).retries).toBe(3);
     }

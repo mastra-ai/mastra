@@ -366,6 +366,50 @@ async function insertAllSignals(harness: DomainHarness): Promise<void> {
 }
 
 describe('ObservabilityStoragePostgresVNext — integration', () => {
+  it('upgrades native span columns on existing partitions without backfilling outcomes', async () => {
+    const harness = await createHarness({ schemaPrefix: 'native_outcome_upgrade', partitioning: { mode: 'native' } });
+    const fields = {
+      externalParentSpanId: 'external-parent',
+      resumedFromSpanId: 'prior-segment',
+      model: 'gpt-4o-mini',
+      provider: 'openai',
+      outcome: 'limit' as const,
+      stopReason: 'max_steps' as const,
+      stopReasonContext: { reason: 'max_steps' as const, maxSteps: 2, completedSteps: 2 },
+      timeToFirstTokenMs: 123.5,
+      errorCount: 2,
+    };
+    const columns = Object.keys(fields);
+    const span = makeSpan({ traceId: 'old-trace', spanId: 'root' });
+    try {
+      await harness.domain.batchCreateSpans({ records: [span] });
+      for (const column of columns) {
+        await harness.client.none(
+          `ALTER TABLE ${qualifiedTable(harness.schema, TABLE_SPAN_EVENTS)} DROP COLUMN "${column}"`,
+        );
+      }
+      const upgraded = new ObservabilityStoragePostgresVNext({
+        client: harness.client,
+        schemaName: harness.schema,
+        partitioning: { mode: 'native' },
+      });
+      await upgraded.init();
+      const missing = Object.fromEntries(columns.map(column => [column, null]));
+      expect((await upgraded.getSpan({ traceId: 'old-trace', spanId: 'root' }))!.span).toMatchObject(missing);
+      await upgraded.batchCreateSpans({ records: [{ ...span, traceId: 'new-trace', ...fields }] });
+      const repeated = new ObservabilityStoragePostgresVNext({
+        client: harness.client,
+        schemaName: harness.schema,
+        partitioning: { mode: 'native' },
+      });
+      await repeated.init();
+      expect((await repeated.getSpan({ traceId: 'new-trace', spanId: 'root' }))!.span).toMatchObject(fields);
+      expect((await repeated.getSpan({ traceId: 'old-trace', spanId: 'root' }))!.span).toMatchObject(missing);
+    } finally {
+      await harness.close();
+    }
+  });
+
   describe.skipIf(!integrationEnabled)('init() — TimescaleDB path', () => {
     it('cancels timed-out work and does not leak statement_timeout through the pool', async () => {
       const harness = await createHarness({
