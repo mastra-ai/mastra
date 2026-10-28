@@ -292,8 +292,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
       // The durable engines persist the input through agent memory regardless of the configured
-      // MessageHistory or lastMessages; durable and evented up front, Inngest at the deadline. This
-      // predates this test and is out of scope here.
+      // MessageHistory or lastMessages, up front. This predates this test and is out of scope here.
       const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
       const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
       // Recall at the deadline and again once a late write from the settling run would have landed.

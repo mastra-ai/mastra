@@ -910,7 +910,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
    * deadline the run is reported failed: the stream gets one
    * `MastraTimeoutError` and the snapshot rows are deleted. Mirrors core
    * `DurableAgent.#installAbortWithTotalTimeout` + `settleExecution`.
-   * `beforeReport` runs at the deadline, before the error reaches the stream.
    * Returns the timer teardown; a no-op when no budget is configured.
    */
   function armTotalTimeout(
@@ -918,7 +917,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     abortController: AbortController,
     runId: string,
     timeoutMs: number | undefined,
-    beforeReport?: () => Promise<void>,
   ): () => void {
     const totalTimeout = createTimeoutAbortSignal({
       parentSignal: abortController.signal,
@@ -930,13 +928,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
-      await beforeReport?.().catch(saveError =>
-        mastra?.getLogger?.()?.warn?.('Failed to save the input of an Inngest run stopped by its deadline', {
-          agentId,
-          runId,
-          error: saveError instanceof Error ? saveError.message : String(saveError),
-        }),
-      );
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });
@@ -1324,8 +1315,6 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
         abortController,
         runId,
         callbackOptions.modelSettings?.timeout?.totalMs,
-        // Keep the accepted request at the deadline, as the other engines do (#28659).
-        () => persistDurableRunInput(runId, workflowInput, mastra, { atDeadline: true }),
       );
 
       // 1b. Register non-serializable state on the global run registry so
@@ -1439,6 +1428,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             from: ChunkFrom.AGENT,
             payload: { id: workflowInput.agentId, messageId },
           });
+          // Save the accepted request before the run starts, as DurableAgent does,
+          // so a run that times out or fails still keeps it (#28659).
+          await persistDurableRunInput(runId, workflowInput, mastra);
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           try {
