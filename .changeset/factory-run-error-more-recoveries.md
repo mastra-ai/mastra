@@ -10,3 +10,5 @@ More failed-run cards in the Factory web chat now come with a button that fixes 
 - **Conversation exceeds the model's limit** and **Conversation history rejected** offer **New session**.
 
 In Slack, every card that offers **Change model** in the web chat now links to the session, and the rate-limit card also links to the credential settings.
+
+Returning from another thread of a workspace session to its first thread now switches the session back to it, so messages sent there no longer land in the thread you left.
