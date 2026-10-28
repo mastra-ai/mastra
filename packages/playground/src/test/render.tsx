@@ -1,7 +1,7 @@
 import { MastraReactProvider } from '@mastra/react';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import type { RenderHookOptions, RenderHookResult, RenderOptions, RenderResult } from '@testing-library/react';
-import { render, renderHook, waitFor } from '@testing-library/react';
+import { act, render, renderHook, waitFor } from '@testing-library/react';
 import type { ReactElement, ReactNode } from 'react';
 import { MemoryRouter } from 'react-router';
 import { expect } from 'vitest';
@@ -85,8 +85,8 @@ export const renderHookWithProviders = <Result, Props>(
  * `waitFor`, preventing post-test "not wrapped in act(...)" warnings and the
  * deferred-timer leaks they cause once the jsdom `window` is torn down.
  */
-export const waitForMutationsIdle = (queryClient: QueryClient) =>
-  waitFor(() => {
+export const waitForMutationsIdle = async (queryClient: QueryClient) => {
+  await waitFor(() => {
     expect(queryClient.isMutating()).toBe(0);
     expect(queryClient.isFetching()).toBe(0);
     // Every mutation observed so far must have reached a terminal state. Polling
@@ -99,3 +99,8 @@ export const waitForMutationsIdle = (queryClient: QueryClient) =>
       .some(mutation => mutation.state.status === 'pending');
     expect(pending).toBe(false);
   });
+  // Settling marks the cache idle, but React Query delivers the matching observer
+  // notification on a setTimeout(0). Drain that timer inside act so it can't fire
+  // after jsdom teardown.
+  await act(() => new Promise(resolve => setTimeout(resolve, 0)));
+};
