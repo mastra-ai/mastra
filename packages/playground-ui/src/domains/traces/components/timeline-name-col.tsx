@@ -115,7 +115,7 @@ export function TimelineNameCol({
                 {kind ? (
                   <>
                     {kind}
-                    <span aria-hidden className="text-foreground/70 px-1">
+                    <span aria-hidden className="px-1 text-foreground/70">
                       ›
                     </span>
                     {value}
