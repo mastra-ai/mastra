@@ -22,6 +22,7 @@ import type {
   MessageScrollerScrollAlign,
   MessageScrollerScrollOptions,
   MessageScrollerScrollable,
+  MessageScrollerVisibility,
 } from './message-scroller-context';
 
 import {
@@ -35,7 +36,6 @@ import type { MessageScrollerItemRecord } from './message-scroller-geometry';
 import { glideContent } from './message-scroller-glide';
 import { startTrip } from './message-scroller-trip';
 import type { TripAnimation } from './message-scroller-trip';
-import { createVisibilityStore } from './message-scroller-visibility-store';
 
 import { overlaySurfaceStyle } from '@/ds/primitives/raised-surface';
 import { mergeRefs } from '@/lib/merge-refs';
@@ -52,6 +52,11 @@ export type {
 
 const scrollableMatches = (left: MessageScrollerScrollable, right: MessageScrollerScrollable) =>
   left.start === right.start && left.end === right.end;
+
+const visibilityMatches = (left: MessageScrollerVisibility, right: MessageScrollerVisibility) =>
+  left.currentAnchorId === right.currentAnchorId &&
+  left.visibleMessageIds.length === right.visibleMessageIds.length &&
+  left.visibleMessageIds.every((messageId, index) => messageId === right.visibleMessageIds[index]);
 
 const orderItemsByDocumentPosition = (items: Array<readonly [string, MessageScrollerItemRecord]>) =>
   items.sort(([, left], [, right]) => {
@@ -129,8 +134,7 @@ export function MessageScrollerProvider({
   const seenAnchorElements = seenAnchorElementsRef.current;
   const turnAnchoringArmedRef = React.useRef(false);
   const [scrollable, setScrollable] = React.useState<MessageScrollerScrollable>(DEFAULT_SCROLLABLE);
-  const [visibilityStore] = React.useState(createVisibilityStore);
-  const publishVisibility = visibilityStore.publish;
+  const [visibility, setVisibility] = React.useState<MessageScrollerVisibility>(DEFAULT_VISIBILITY);
   const atEndRef = React.useRef(true);
   // Attachment is a mode, not a measurement: a growing reply moves the end away
   // without the reader having moved, so only the reader detaches it.
@@ -173,6 +177,10 @@ export function MessageScrollerProvider({
     },
     [rootElement, viewportElement],
   );
+
+  const publishVisibility = React.useCallback((nextVisibility: MessageScrollerVisibility) => {
+    setVisibility(current => (visibilityMatches(current, nextVisibility) ? current : nextVisibility));
+  }, []);
 
   // Registration is mount order, not document order, once history is prepended.
   const getOrderedItems = React.useCallback(() => {
@@ -710,10 +718,18 @@ export function MessageScrollerProvider({
     [scrollable.end, scrollable.start],
   );
 
+  const visibilityContextValue = React.useMemo<MessageScrollerVisibility>(
+    () => ({
+      currentAnchorId: visibility.currentAnchorId,
+      visibleMessageIds: visibility.visibleMessageIds,
+    }),
+    [visibility.currentAnchorId, visibility.visibleMessageIds],
+  );
+
   return (
     <MessageScrollerActionsContext.Provider value={actionsContextValue}>
       <MessageScrollerScrollableContext.Provider value={scrollableContextValue}>
-        <MessageScrollerVisibilityContext.Provider value={visibilityStore}>
+        <MessageScrollerVisibilityContext.Provider value={visibilityContextValue}>
           {children}
         </MessageScrollerVisibilityContext.Provider>
       </MessageScrollerScrollableContext.Provider>

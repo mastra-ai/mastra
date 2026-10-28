@@ -1,7 +1,5 @@
 import * as React from 'react';
 
-import type { MessageScrollerVisibilityStore } from './message-scroller-visibility-store';
-
 export type MessageScrollerDefaultScrollPosition = 'start' | 'end' | 'last-anchor';
 export type MessageScrollerButtonDirection = 'start' | 'end';
 export type MessageScrollerScrollAlign = 'start' | 'center' | 'end' | 'nearest';
@@ -49,7 +47,7 @@ export const AUTO_SCROLL_ATTACH_THRESHOLD = 160;
 
 export const MessageScrollerActionsContext = React.createContext<MessageScrollerActionsContextValue | null>(null);
 export const MessageScrollerScrollableContext = React.createContext<MessageScrollerScrollable | null>(null);
-export const MessageScrollerVisibilityContext = React.createContext<MessageScrollerVisibilityStore | null>(null);
+export const MessageScrollerVisibilityContext = React.createContext<MessageScrollerVisibility | null>(null);
 
 const useRequiredContext = <TValue>(context: React.Context<TValue | null>, hookName: string) => {
   const value = React.useContext(context);

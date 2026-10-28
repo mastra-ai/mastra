@@ -2,36 +2,21 @@ import React, { useRef } from 'react';
 
 export interface UseAutoscrollOptions {
   enabled?: boolean;
-  /** Start pinned to the end. `false` keeps the reader's position until they scroll back to the end. Defaults to true. */
-  startFollowing?: boolean;
-  /** Called whenever following turns on or off (reader scrolls away, or returns to the end). */
-  onFollowingChange?: (following: boolean) => void;
 }
 
 const SCROLL_END_THRESHOLD = 8;
 
-export const useAutoscroll = (
-  ref: React.RefObject<HTMLElement | null>,
-  { enabled = true, startFollowing = true, onFollowingChange }: UseAutoscrollOptions,
-) => {
-  const shouldScrollRef = useRef(enabled && startFollowing);
+export const useAutoscroll = (ref: React.RefObject<HTMLElement | null>, { enabled = true }: UseAutoscrollOptions) => {
+  const shouldScrollRef = useRef(enabled);
   const scrollFrameRef = useRef<number | null>(null);
   const userScrollIntentRef = useRef(false);
   const userScrollIntentTimeoutRef = useRef<number | null>(null);
-
-  const notifyFollowing = React.useEffectEvent((following: boolean) => onFollowingChange?.(following));
 
   React.useEffect(() => {
     if (!enabled) return;
     if (!ref?.current) return;
 
     const area = ref.current;
-
-    const setFollowing = (next: boolean) => {
-      if (shouldScrollRef.current === next) return;
-      shouldScrollRef.current = next;
-      notifyFollowing(next);
-    };
 
     const scrollToEnd = () => {
       if (!shouldScrollRef.current) return;
@@ -67,7 +52,7 @@ export const useAutoscroll = (
     };
 
     const stopFollowing = () => {
-      setFollowing(false);
+      shouldScrollRef.current = false;
       cancelPendingScroll();
     };
 
@@ -107,12 +92,12 @@ export const useAutoscroll = (
       const isAtEnd = currentPosition >= totalHeight - SCROLL_END_THRESHOLD;
 
       if (isAtEnd) {
-        setFollowing(true);
+        shouldScrollRef.current = true;
         return;
       }
 
       if (userScrollIntentRef.current) {
-        setFollowing(false);
+        shouldScrollRef.current = false;
         cancelPendingScroll();
       }
     };

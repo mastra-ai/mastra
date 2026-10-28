@@ -115,18 +115,14 @@ export const getCurrentAnchorId = ({
 }) => {
   const anchorLine = viewportElement.getBoundingClientRect().top + scrollMargin + scrollPreviousItemPeek;
   const anchors = items.filter(([, item]) => item.scrollAnchor);
-  const passedLine = (index: number) =>
-    (anchors[index]?.[1].element.getBoundingClientRect().top ?? Infinity) <= anchorLine + VISIBILITY_EPSILON;
-  // Anchors stack top to bottom in document order, so their tops only grow: a scroll reads log(n) of them.
-  let firstUnpassed = 0;
-  let lastCandidate = anchors.length;
-  while (firstUnpassed < lastCandidate) {
-    const middle = (firstUnpassed + lastCandidate) >>> 1;
-    if (passedLine(middle)) firstUnpassed = middle + 1;
-    else lastCandidate = middle;
+  let anchoredAboveViewport: string | undefined;
+
+  for (const [messageId, item] of anchors) {
+    if (item.element.getBoundingClientRect().top <= anchorLine + VISIBILITY_EPSILON) {
+      anchoredAboveViewport = messageId;
+    }
   }
 
-  const anchoredAboveViewport = anchors[firstUnpassed - 1]?.[0];
   if (anchoredAboveViewport) return anchoredAboveViewport;
   return anchors.find(([messageId]) => visibleMessageIds.has(messageId))?.[0] ?? fallbackAnchorId;
 };
