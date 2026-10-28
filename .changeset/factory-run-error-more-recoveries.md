@@ -9,4 +9,4 @@ More failed-run cards in the Factory web chat now come with a button that fixes 
 - **Model request rejected** and **Model request failed** offer **Change model**.
 - **Conversation exceeds the model's limit** and **Conversation history rejected** offer **New session**.
 
-In Slack, the rate-limit card links to the credential settings and to the session to change the model.
+In Slack, every card that offers **Change model** in the web chat now links to the session, and the rate-limit card also links to the credential settings.
