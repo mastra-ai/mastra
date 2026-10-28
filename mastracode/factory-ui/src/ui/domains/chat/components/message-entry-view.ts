@@ -18,7 +18,7 @@ export interface StatusMetadata {
   level: 'info' | 'error';
 }
 
-export function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
+function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
   const harnessContent = entry.message.content.metadata?.harnessContent;
   if (!Array.isArray(harnessContent)) return undefined;
 

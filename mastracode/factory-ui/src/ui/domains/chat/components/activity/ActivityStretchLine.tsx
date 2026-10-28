@@ -1,14 +1,14 @@
 import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
 import { getReasoningContent } from '@mastra/playground-ui/domains/chat/messages/reasoning-content';
 
-import { toolHasBody } from '../tool/ToolCard';
+import { toolHasBody } from '../tool/ToolBody';
 import { toolFromInvocationPart } from '../transcript-parts';
 import type { MessagePart } from '../transcript-parts';
 import { stretchHeader } from './activity-header';
 import type { StretchView } from './activity-header';
 import { reasoningWithState } from './activity-plan';
 import type { ActivityStretch } from './activity-plan';
-import { callsViewKeys, useActivityView, useActivityViewStore } from './activity-view';
+import { useActivityView, useActivityViewStore } from './activity-view';
 import { ActivityFold } from './stretch/ActivityFold';
 import { reasoningHasBody } from './stretch/ReasoningBody';
 import { StretchContent } from './stretch/StretchContent';
@@ -51,15 +51,11 @@ export function ActivityStretchLine({
   const store = useActivityViewStore();
   const view = useActivityView(memberKeys);
 
-  const [single] = visible;
-  if (!single) return null;
-  const segments = stretchSegments(visible);
-  const [onlySegment] = segments;
-  const soleCalls = segments.length === 1 && onlySegment?.kind === 'calls' ? onlySegment.tools : undefined;
+  if (visible.length === 0) return null;
+  const shown = visible.filter(member => member.kind === 'tool' || memberHasBody(member));
 
-  function rememberOpen(open: boolean) {
+  function rememberOpen() {
     store.link(view, memberKeys);
-    if (soleCalls) store.claim(callsViewKeys(soleCalls)).open = open;
   }
 
   return (
@@ -67,11 +63,11 @@ export function ActivityStretchLine({
       slot="activity-stretch"
       header={stretchHeader(visible, stretch.live, stretch.elapsedMs)}
       view={view}
-      foldable={visible.length > 1 || memberHasBody(single)}
+      foldable={shown.length > 1 || shown.some(memberHasBody)}
       prominent
       onOpenChange={rememberOpen}
     >
-      <StretchContent segments={segments} view={view} live={stretch.live} />
+      <StretchContent segments={stretchSegments(shown)} view={view} live={stretch.live} />
     </ActivityFold>
   );
 }

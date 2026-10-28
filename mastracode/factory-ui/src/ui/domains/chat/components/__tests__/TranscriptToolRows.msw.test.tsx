@@ -1,9 +1,9 @@
 import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-controller';
 import { formatDate } from '@mastra/playground-ui/utils/date-format';
-import { screen, waitFor, within } from '@testing-library/react';
+import { fireEvent, screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { MemoryRouter } from 'react-router';
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { initialTranscript, transcriptReducer } from '../../services/transcript';
@@ -11,6 +11,44 @@ import type { TimelineEntry, ToolCall } from '../../services/transcript';
 import { TranscriptEntries } from '../Transcript';
 
 const CREATED_AT = new Date('2026-07-15T10:00:00.000Z');
+const ROW_HEIGHT = 40;
+
+function panelOf(element: Element): HTMLElement {
+  const viewport = element.closest<HTMLElement>('[data-id$="-viewport"]');
+  if (!viewport) throw new Error('Not inside a scrolling panel');
+  return viewport;
+}
+
+function rect(top: number, height: number): DOMRect {
+  return { x: 0, y: top, width: 600, height, top, bottom: top + height, left: 0, right: 600, toJSON: () => ({}) };
+}
+
+/** Lays panel rows out in a column, one row height each, moved up by how far their panel is scrolled. */
+function layOutPanels(): () => void {
+  const scrolled = new WeakMap<Element, number>();
+  Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return scrolled.get(this) ?? 0;
+    },
+    set(this: HTMLElement, value: number) {
+      scrolled.set(this, value);
+    },
+  });
+  const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
+    this: HTMLElement,
+  ) {
+    if (this.matches('[data-id$="-viewport"]')) return rect(0, 2 * ROW_HEIGHT);
+    const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
+    if (!viewport || !this.dataset.activityKey) return rect(0, 0);
+    const index = Array.from(viewport.querySelectorAll('[data-activity-key]')).indexOf(this);
+    return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
+  });
+  return () => {
+    measure.mockRestore();
+    Reflect.deleteProperty(HTMLElement.prototype, 'scrollTop');
+  };
+}
 
 function assistantMessage(
   id: string,
@@ -112,6 +150,26 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(failedRow).getByRole('img', { name: 'Failed' })).toBeInTheDocument();
   });
 
+  it('keeps a live stretch on screen when it opens with a thought that has no text yet', () => {
+    renderEntries(
+      [
+        assistantMessage(
+          'msg-1',
+          [
+            { type: 'reasoning', reasoning: '', details: [] },
+            doneTool('call-1', 'view', { path: 'a.ts' }),
+            runningTool('call-2', 'execute_command', { command: 'pnpm test' }),
+          ],
+          undefined,
+          true,
+        ),
+      ],
+      true,
+    );
+
+    expect(screen.getByRole('group', { name: 'Thinking' })).toBeInTheDocument();
+  });
+
   it('names a single call in the past tense with its salient argument, not the raw tool name', () => {
     renderEntries([assistantMessage('msg-1', [doneTool('call-1', 'execute_command', { command: 'pnpm build' })])]);
 
@@ -172,12 +230,16 @@ describe('TranscriptEntries tool rows', () => {
     const line = screen.getByRole('group', { name: 'Read files, searched code' });
     await expand(line);
 
-    const rows = Array.from(line.querySelectorAll<HTMLElement>('[data-activity-key]'), row => row.textContent ?? '');
-    expect(rows).toHaveLength(4);
-    expect(rows[0]).toContain('The board query caps at 50 items.');
-    expect(rows[1]).toContain('a.ts');
-    expect(rows[2]).toContain('Page by week instead.');
-    expect(rows[3]).not.toContain('b.ts');
+    const content = line.textContent ?? '';
+    const positions = [
+      'The board query caps at 50 items.',
+      'a.ts',
+      'Page by week instead.',
+      'Read a file, searched code',
+    ].map(text => content.indexOf(text));
+    expect(positions).not.toContain(-1);
+    expect(positions).toEqual([...positions].sort((a, b) => a - b));
+    expect(within(line).queryByText('b.ts')).not.toBeInTheDocument();
 
     const calls = within(line).getByRole('group', { name: 'Read a file, searched code' });
     await expand(calls);
@@ -199,22 +261,63 @@ describe('TranscriptEntries tool rows', () => {
     expect(within(line).getByText('· 1m 12s')).toBeVisible();
   });
 
-  it('keeps calls the reader opened in view when a thought joins them and they become a group', async () => {
-    const calls = assistantMessage('step-1', [
-      doneTool('call-1', 'view', { path: 'a.ts' }),
-      doneTool('call-2', 'view', { path: 'b.ts' }),
+  it('keeps calls the reader opened in view, on the row they scrolled to, when a thought joins them', async () => {
+    const restoreLayout = layOutPanels();
+    try {
+      const calls = assistantMessage('step-1', [
+        doneTool('call-1', 'view', { path: 'a.ts' }),
+        doneTool('call-2', 'view', { path: 'b.ts' }),
+        doneTool('call-3', 'view', { path: 'c.ts' }),
+      ]);
+      const { rerender } = renderEntries([calls]);
+      await expand(screen.getByRole('group', { name: 'Read files' }));
+      const panel = panelOf(screen.getByText('b.ts'));
+      panel.scrollTop = ROW_HEIGHT;
+      fireEvent.scroll(panel);
+
+      rerender(
+        entriesView([calls, assistantMessage('step-2', [{ type: 'reasoning', reasoning: 'All agree.', details: [] }])]),
+      );
+
+      const [line] = stretchLines();
+      expect(within(line).getByText('All agree.')).toBeInTheDocument();
+      const group = within(line).getByRole('group', { name: 'Read files' });
+      expect(panelOf(within(group).getByText('b.ts')).scrollTop).toBe(ROW_HEIGHT);
+    } finally {
+      restoreLayout();
+    }
+  });
+
+  it('keeps calls open when a stretch the reader opened on one call grows into a group', async () => {
+    const first = assistantMessage('step-1', [doneTool('call-1', 'view', { path: 'a.ts' })]);
+    const second = assistantMessage('step-2', [doneTool('call-2', 'view', { path: 'b.ts' })]);
+    const thought = assistantMessage('step-3', [{ type: 'reasoning', reasoning: 'All agree.', details: [] }]);
+    const { rerender } = renderEntries([first]);
+    await expand(screen.getByRole('group', { name: 'Read a.ts' }));
+
+    rerender(entriesView([first, second]));
+    rerender(entriesView([first, second, thought]));
+
+    const group = within(stretchLines()[0]).getByRole('group', { name: 'Read files' });
+    expect(within(group).getByText('b.ts')).toBeVisible();
+  });
+
+  it('keeps a call the reader opened between two thoughts open when another call joins it', async () => {
+    const before = assistantMessage('step-1', [
+      { type: 'reasoning', reasoning: 'Check a.', details: [] },
+      doneTool('call-1', 'execute_command', { command: 'pnpm lint' }),
     ]);
-    const { rerender } = renderEntries([calls]);
-    await expand(screen.getByRole('group', { name: 'Read files' }));
-    expect(screen.getByText('b.ts')).toBeInTheDocument();
+    const thought = assistantMessage('step-3', [{ type: 'reasoning', reasoning: 'All agree.', details: [] }]);
+    const { rerender } = renderEntries([before, thought]);
+    await expand(stretchLines()[0]);
+    await userEvent.click(within(screen.getByRole('group', { name: 'Tool: execute_command' })).getByRole('button'));
 
     rerender(
-      entriesView([calls, assistantMessage('step-2', [{ type: 'reasoning', reasoning: 'Both agree.', details: [] }])]),
+      entriesView([before, assistantMessage('step-2', [doneTool('call-2', 'view', { path: 'b.ts' })]), thought]),
     );
 
-    const [line] = stretchLines();
-    expect(within(line).getByText('Both agree.')).toBeInTheDocument();
-    expect(within(within(line).getByRole('group', { name: 'Read files' })).getByText('b.ts')).toBeInTheDocument();
+    const row = screen.getByRole('group', { name: 'Tool: execute_command' });
+    expect(within(row).getAllByRole('button')[0]).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('folds a still-arriving run as it plays, so the reply reads as one busy line', async () => {
@@ -298,16 +401,21 @@ describe('TranscriptEntries tool rows', () => {
     const stepC = assistantMessage('step-c', [doneTool('call-c', 'view', { path: 'c.ts' })]);
     const { rerender } = renderEntries([stepB, stepC]);
     await expand(screen.getByRole('group', { name: 'Read files' }));
-    const rowC = () =>
-      screen.getAllByRole('group', { name: 'Tool: view' }).find(row => row.textContent?.includes('c.ts'));
-    await userEvent.click(within(rowC()!).getByRole('button'));
+    const rowC = () => {
+      const row = screen
+        .getAllByRole('group', { name: 'Tool: view' })
+        .find(group => group.textContent?.includes('c.ts'));
+      if (!row) throw new Error('The c.ts row is not drawn');
+      return row;
+    };
+    await userEvent.click(within(rowC()).getByRole('button'));
 
     rerender(entriesView([assistantMessage('step-a', [doneTool('call-a', 'view', { path: 'a.ts' })]), stepB, stepC]));
 
     const line = screen.getByRole('group', { name: 'Read files' });
     expect(within(line).getAllByRole('button')[0]).toHaveAttribute('aria-expanded', 'true');
     expect(screen.getAllByRole('group', { name: 'Tool: view' })).toHaveLength(3);
-    expect(within(rowC()!).getAllByRole('button')[0]).toHaveAttribute('aria-expanded', 'true');
+    expect(within(rowC()).getAllByRole('button')[0]).toHaveAttribute('aria-expanded', 'true');
   });
 
   it('keeps the words on screen in place when an ask_user prompt fills its slot above them', () => {

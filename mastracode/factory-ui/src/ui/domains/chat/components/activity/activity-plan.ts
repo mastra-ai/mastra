@@ -15,12 +15,11 @@ export type StretchMember =
       kind: 'tool';
       key: string;
       entryId: string;
-      index: number;
       part: ToolPart;
       runtime: ToolCall | undefined;
       messageCreatedAt: Date | string | undefined;
     }
-  | { kind: 'reasoning'; key: string; entryId: string; index: number; part: ReasoningPart; entryStreaming: boolean };
+  | { kind: 'reasoning'; key: string; entryId: string; part: ReasoningPart; entryStreaming: boolean };
 
 /** One uninterrupted run of tool calls and reasoning, drawn as a single activity line. */
 export interface ActivityStretch {
@@ -37,7 +36,7 @@ export interface EntryActivity {
   hidden: ReadonlySet<string>;
 }
 
-export type PartRole = 'joins' | 'ends' | 'ignored';
+type PartRole = 'joins' | 'ends' | 'ignored';
 
 interface PlanItem {
   key: string;
@@ -59,7 +58,7 @@ export function reasoningWithState(part: ReasoningPart, streaming: boolean): Rea
   return { ...part, state: part.state ?? (streaming ? 'streaming' : 'done') };
 }
 
-export function classifyPart(
+function classifyPart(
   part: MessagePart,
   entry: MessageEntry,
   suspensions: ReadonlyMap<string, SuspensionPrompt>,
@@ -88,14 +87,13 @@ function member(entry: MessageEntry, part: MessagePart, index: number): StretchM
       kind: 'tool',
       key,
       entryId: entry.id,
-      index,
       part,
       runtime: entry.runtimeTools?.[part.toolInvocation.toolCallId],
       messageCreatedAt: entry.message.createdAt,
     };
   }
   if (part.type === 'reasoning') {
-    return { kind: 'reasoning', key, entryId: entry.id, index, part, entryStreaming: Boolean(entry.streaming) };
+    return { kind: 'reasoning', key, entryId: entry.id, part, entryStreaming: Boolean(entry.streaming) };
   }
   return undefined;
 }
@@ -164,8 +162,7 @@ export function planTurnActivity(
 
   for (const [key, run] of runs.byFirstKey) {
     const [first, ...rest] = run;
-    if (!first) continue;
-    const last = run.at(-1);
+    const last = run[run.length - 1];
     const live =
       runningTurn &&
       (last === lastItem ||
@@ -177,7 +174,7 @@ export function planTurnActivity(
       key,
       members: run.map(item => item.member),
       live,
-      elapsedMs: live || !last ? undefined : elapsedBetween(first.at, after.get(last)?.at),
+      elapsedMs: live ? undefined : elapsedBetween(first.at, after.get(last)?.at),
     });
     for (const item of rest) activityOf(item.entryId).hidden.add(item.key);
   }

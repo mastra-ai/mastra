@@ -82,10 +82,11 @@ export function MessageBubble({
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
-  const drawsOwnPart = written.some(
-    (part, index) =>
-      draws(part, suspensions, entry.runtimeTools) && !activity?.hidden.has(activityPartKey(entry.id, part, index)),
-  );
+  const drawsOwnPart = written.some((part, index) => {
+    const key = activityPartKey(entry.id, part, index);
+    if (activity?.hosts.has(key)) return true;
+    return draws(part, suspensions, entry.runtimeTools) && !activity?.hidden.has(key);
+  });
   const revealed = new Map(parts.map((part, index) => [activityPartKey(entry.id, part, index), part] as const));
   const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
   const stretchLine = (key: string | undefined) => {

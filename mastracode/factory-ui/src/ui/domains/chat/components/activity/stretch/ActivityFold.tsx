@@ -14,8 +14,6 @@ import type { ReactNode } from 'react';
 
 import { TimedTrigger } from '../TimedTrigger';
 import type { StretchHeader } from '../activity-header';
-import type { ActivityView } from '../activity-view';
-import { prominentStyle, rowStyle } from '../row-style';
 
 function outcomeText({ tools, failed, incomplete }: StretchHeader): string {
   if (tools <= 1) return incomplete ? 'incomplete' : '';
@@ -34,7 +32,7 @@ export function ActivityFold({
 }: {
   slot?: string;
   header: StretchHeader;
-  view: ActivityView;
+  view: { open: boolean };
   foldable: boolean;
   prominent?: boolean;
   onOpenChange?: (open: boolean) => void;
@@ -42,7 +40,6 @@ export function ActivityFold({
 }) {
   const [open, setOpen] = useState(view.open);
   const outcome = outcomeText(header);
-  const text = cn(rowStyle.text, prominent && prominentStyle.text);
 
   function toggle(next: boolean) {
     view.open = next;
@@ -53,29 +50,28 @@ export function ActivityFold({
   return (
     <Activity
       data-slot={slot}
+      appearance="inline"
       status={header.status}
       open={foldable && open}
       onOpenChange={toggle}
       foldable={foldable}
       aria-label={header.name}
     >
-      <TimedTrigger at={header.startedAt} className={cn(prominent && prominentStyle.trigger)}>
-        <ActivityHeader className={rowStyle.header}>
-          <ActivityIcon className={cn(header.status !== 'error' && rowStyle.icon)}>
+      <TimedTrigger at={header.startedAt} className={cn(prominent && 'mb-2 border-b border-border pb-2')}>
+        <ActivityHeader>
+          <ActivityIcon>
             <header.icon aria-hidden />
           </ActivityIcon>
-          <ActivityLabel className={cn(text, 'max-w-none', !header.detail && 'min-w-0 shrink')}>
+          <ActivityLabel className={cn(prominent && 'text-body', !header.detail && 'min-w-0 shrink')}>
             {header.label}
           </ActivityLabel>
           {header.detail && (
-            <ActivityDetail className={cn(rowStyle.text, prominent && prominentStyle.detail)}>
-              {header.detail}
-            </ActivityDetail>
+            <ActivityDetail className={cn(prominent && 'text-body-sm')}>{header.detail}</ActivityDetail>
           )}
           {header.duration && (
-            <Txt as="span" variant="caption" tone="muted" className={cn(text, '-ml-1 shrink-0 tabular-nums')}>
+            <ActivityLabel className={cn(prominent && 'text-body', '-ml-1 tabular-nums')}>
               · {header.duration}
-            </Txt>
+            </ActivityLabel>
           )}
           {header.failed > 0 && (
             <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />

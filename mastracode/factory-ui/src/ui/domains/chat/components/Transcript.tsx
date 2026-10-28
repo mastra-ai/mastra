@@ -205,14 +205,18 @@ interface TranscriptEntryContentProps {
 }
 
 /** The turn's plan is rebuilt every token: compare `activity` by what it draws, the rest by identity. */
-function sameEntryContentProps(
-  { activity: prevActivity, ...prev }: TranscriptEntryContentProps,
-  { activity: nextActivity, ...next }: TranscriptEntryContentProps,
-): boolean {
-  const keys = new Set([...Object.keys(prev), ...Object.keys(next)]);
+function sameEntryContentProps(prev: TranscriptEntryContentProps, next: TranscriptEntryContentProps): boolean {
   return (
-    sameEntryActivity(prevActivity, nextActivity) &&
-    [...keys].every(key => Object.is(Reflect.get(prev, key), Reflect.get(next, key)))
+    sameEntryActivity(prev.activity, next.activity) &&
+    prev.entry === next.entry &&
+    prev.suspensions === next.suspensions &&
+    prev.reply === next.reply &&
+    prev.redundantSuspension === next.redundantSuspension &&
+    prev.isSubmitting === next.isSubmitting &&
+    prev.viewerId === next.viewerId &&
+    prev.owner === next.owner &&
+    prev.onApprove === next.onApprove &&
+    prev.onRespond === next.onRespond
   );
 }
 
