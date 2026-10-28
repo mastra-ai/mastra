@@ -91,4 +91,27 @@ describe.skipIf(!canLaunchBrowser)('BrowserViewer.setCookies', () => {
       await external.close();
     }
   }, 30_000);
+
+  it('adds waiting cookies before telling ready listeners the browser is ready', async () => {
+    for (const scope of ['shared', 'thread'] as const) {
+      viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope });
+      await viewer.setCookies([cookie(scope)], 'thread-1');
+      viewer.setCurrentThread('thread-1');
+      // Read the cookie jar the moment the listener runs, as a listener that navigates right away would.
+      const seen = new Promise<string[]>(resolve => {
+        viewer.onBrowserReady(
+          () => {
+            const context = viewer['threadManager'].getContextForThread('thread-1')!;
+            resolve(context.cookies().then(cookies => cookies.map(c => `${c.name}=${c.value}`)));
+          },
+          scope === 'thread' ? 'thread-1' : undefined,
+        );
+      });
+
+      await viewer.launch('thread-1');
+
+      expect(await seen).toEqual([`preview=${scope}`]);
+      await viewer.close();
+    }
+  }, 60_000);
 });

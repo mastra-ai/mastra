@@ -270,7 +270,7 @@ With `'thread'` scope, the cookies reach only that thread's browser. With `'shar
 
 Cookies still waiting for a browser are dropped when you call `close()`, and with `'thread'` scope when you close that thread with `closeThreadSession()`. With `'shared'` scope they stay until the shared browser opens.
 
-A cookie without a `url`, or without both `domain` and `path`, throws.
+A cookie must have either a `url` or both `domain` and `path`; otherwise, `setCookies` throws.
 
 `AgentBrowser`, `BrowserViewer`, `FirecrawlBrowser` and `StagehandBrowser` support cookies. Other providers throw.
 

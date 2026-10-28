@@ -1550,6 +1550,20 @@ export abstract class MastraBrowser extends MastraBase {
   private readonly pendingCookies = new Map<string, BrowserCookie[]>();
 
   /** With `scope: 'shared'` every thread uses one browser, so they share one queue. */
+  /** The last queued cookie update per queue key, so updates run one at a time. */
+  private readonly cookieQueueUpdates = new Map<string, Promise<unknown>>();
+
+  /** Run cookie updates for one queue key in call order, so overlapping calls don't lose cookies. */
+  private updateCookieQueue<T>(key: string, update: () => Promise<T>): Promise<T> {
+    const result = (this.cookieQueueUpdates.get(key) ?? Promise.resolve()).then(update, update);
+    const settled = result.catch(() => {});
+    this.cookieQueueUpdates.set(key, settled);
+    void settled.then(() => {
+      if (this.cookieQueueUpdates.get(key) === settled) this.cookieQueueUpdates.delete(key);
+    });
+    return result;
+  }
+
   private cookieQueueKey(threadId: string): string {
     return this.getScope() === 'shared' ? DEFAULT_THREAD_ID : threadId;
   }
@@ -1572,13 +1586,15 @@ export abstract class MastraBrowser extends MastraBase {
     }
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     const key = this.cookieQueueKey(effectiveThreadId);
-    // Cookies still waiting go first, so an older value never overwrites a newer one.
-    const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
-    if (await this.addCookiesToOpenBrowser(all, effectiveThreadId)) {
-      this.pendingCookies.delete(key);
-      return;
-    }
-    this.pendingCookies.set(key, all);
+    await this.updateCookieQueue(key, async () => {
+      // Cookies still waiting go first, so an older value never overwrites a newer one.
+      const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
+      if (await this.addCookiesToOpenBrowser(all, effectiveThreadId)) {
+        this.pendingCookies.delete(key);
+        return;
+      }
+      this.pendingCookies.set(key, all);
+    });
   }
 
   /**
@@ -1595,9 +1611,11 @@ export abstract class MastraBrowser extends MastraBase {
   /** Add the cookies {@link setCookies} queued while the thread's browser wasn't open. */
   protected async addPendingCookies(threadId: string): Promise<void> {
     const key = this.cookieQueueKey(threadId);
-    const pending = this.pendingCookies.get(key);
-    if (!pending) return;
-    if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(key);
+    await this.updateCookieQueue(key, async () => {
+      const pending = this.pendingCookies.get(key);
+      if (!pending) return;
+      if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(key);
+    });
   }
 
   // ---------------------------------------------------------------------------

@@ -164,9 +164,15 @@ describe('MastraBrowser.setCookies', () => {
   class QueueingBrowser extends NoCookieBrowser {
     open = false;
     added: string[] = [];
-    protected override async addCookiesToOpenBrowser(cookies: { name: string }[]) {
+    values: Record<string, string> = {};
+    protected override async addCookiesToOpenBrowser(cookies: { name: string; value: string }[]) {
+      // Like a real browser, answering takes a moment.
+      await new Promise(resolve => setTimeout(resolve, 1));
       if (!this.open) return false;
-      this.added.push(...cookies.map(cookie => cookie.name));
+      for (const cookie of cookies) {
+        this.added.push(cookie.name);
+        this.values[cookie.name] = cookie.value;
+      }
       return true;
     }
     async openThread(threadId: string) {
@@ -175,15 +181,27 @@ describe('MastraBrowser.setCookies', () => {
     }
   }
 
-  it('adds cookies still waiting before newer ones, so the newer value wins', async () => {
+  it('keeps the newest value when a cookie set before the browser opens is set again after', async () => {
     const browser = new QueueingBrowser({ headless: true, scope: 'shared' });
-    await browser.setCookies([{ name: 'v1', value: 'v', url: 'https://example.com' }]);
+    await browser.setCookies([{ name: 'session', value: 'old', url: 'https://example.com' }]);
     browser.open = true;
 
-    await browser.setCookies([{ name: 'v2', value: 'v', url: 'https://example.com' }]);
+    await browser.setCookies([{ name: 'session', value: 'new', url: 'https://example.com' }]);
     await browser.openThread('thread-1');
 
-    expect(browser.added).toEqual(['v1', 'v2']);
+    expect(browser.values.session).toBe('new');
+  });
+
+  it('keeps every cookie from calls that overlap before the browser opens', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
+
+    await Promise.all([
+      browser.setCookies([{ name: 'a', value: 'v', url: 'https://example.com' }], 'thread-1'),
+      browser.setCookies([{ name: 'b', value: 'v', url: 'https://example.com' }], 'thread-1'),
+    ]);
+    await browser.openThread('thread-1');
+
+    expect(browser.added.sort()).toEqual(['a', 'b']);
   });
 
   it('rejects a cookie with neither a url nor a domain and path', async () => {

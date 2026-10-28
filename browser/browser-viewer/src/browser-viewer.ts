@@ -86,8 +86,11 @@ export class BrowserViewer extends MastraBrowser {
       browserConfig: { ...config, headless: this.headless },
       logger: this.logger,
       onSessionCreated: session => {
-        // Notify listeners so screencast can start for this thread
-        this.notifyBrowserReady(session.threadId);
+        // Add waiting cookies first, so a ready listener that navigates is already signed in.
+        // Then notify listeners so screencast can start for this thread.
+        void this.addPendingCookies(session.threadId)
+          .catch(error => this.logger?.warn?.(`Couldn't add cookies for thread ${session.threadId}: ${error}`))
+          .then(() => this.notifyBrowserReady(session.threadId));
       },
       onBrowserCreated: (_browser, threadId, _cdpUrl) => {
         this.logger?.debug?.(`Browser created for thread ${threadId}`);
@@ -132,6 +135,8 @@ export class BrowserViewer extends MastraBrowser {
       // Shared mode: launch single browser
       await this.threadManager.createSharedSession();
     }
+    // Before launch() reports the browser ready, so ready listeners that navigate are signed in.
+    await this.addPendingCookies(this.getCurrentThread());
     // For thread scope, browsers are launched lazily per thread via ensureReady()
   }
 
