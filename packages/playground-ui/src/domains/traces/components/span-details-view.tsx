@@ -10,6 +10,7 @@ import {
   SpanOutputRenderer,
   SpanPayloadJsonSection,
   SpanPayloadSection,
+  SpanProcessorAttributes,
   SpanProcessorMutations,
 } from './span-payload';
 import { SpanToolsSection } from './span-payload/span-tools-section';
@@ -66,7 +67,11 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
               <br />
             </>
           )}
+          <SpanProcessorAttributes span={span} className="mb-4" />
 
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false}>
+            <SpanErrorRenderer span={span} />
+          </SpanPayloadSection>
           {getSpanChanges(span).length > 0 && (
             <SpanPayloadSection
               title="Changes"
@@ -95,9 +100,6 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             layout="details"
           >
             <SpanOutputRenderer span={span} />
-          </SpanPayloadSection>
-          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false}>
-            <SpanErrorRenderer span={span} />
           </SpanPayloadSection>
           <SpanToolsSection span={span} layout="details" />
           <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} layout="details" />

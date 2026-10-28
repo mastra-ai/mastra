@@ -63,14 +63,15 @@ export interface SpanToolsSectionProps {
 }
 
 /**
- * The tools the model called, each opening on its input and result like in the chat.
- * A span that called none lists the tools it offered the model instead.
+ * The tools the model called, each opening on its input and result like in the chat,
+ * then the tools the span offered the model.
  */
 export function SpanToolsSection({ span, layout }: SpanToolsSectionProps) {
-  return getRequestedToolCalls(span).length > 0 ? (
-    <SpanToolCallsSection span={span} layout={layout} />
-  ) : (
-    <SpanAvailableToolsSection span={span} layout={layout} />
+  return (
+    <>
+      {getRequestedToolCalls(span).length > 0 && <SpanToolCallsSection span={span} layout={layout} />}
+      <SpanAvailableToolsSection span={span} layout={layout} />
+    </>
   );
 }
 
@@ -84,8 +85,8 @@ export function SpanToolCallsSection({ span, layout, heading }: SpanToolCallsSec
   // The results live on the tool spans, which the trace panel has usually loaded already.
   const { data } = useTraceSpans({ traceId: span.traceId, passive: true });
   const toolCalls = formatSpanToolCallMessages(span, data?.spans ?? []);
-  // Only tools the chat never draws (task tools, working memory) were called.
-  if (toolCalls.length === 0) return <SpanAvailableToolsSection span={span} layout={layout} />;
+  // Only tools the chat never draws (task tools, working memory) were called; the Output JSON keeps them.
+  if (toolCalls.length === 0) return null;
 
   return (
     <SpanPayloadSection
@@ -113,7 +114,8 @@ export function SpanToolCallsSection({ span, layout, heading }: SpanToolCallsSec
   );
 }
 
-function SpanAvailableToolsSection({ span, layout }: SpanToolsSectionProps) {
+/** The tools the span offered the model, linking to their pages when registered. */
+export function SpanAvailableToolsSection({ span, layout }: SpanToolsSectionProps) {
   const spanTools = getSpanTools(span);
   if (!spanTools) return null;
 

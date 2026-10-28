@@ -63,7 +63,7 @@ export function getSpanOutcome(span: SpanRecord): SpanOutcome | undefined {
   if (!error) return outcome;
   return {
     ...outcome,
-    // The Error section right below quotes the message with its details.
+    // The error itself sits under the headline, with its details.
     headline: `${failedSubject(span)} failed`,
     detail: undefined,
     tone: 'error',
@@ -211,18 +211,17 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
   const changed = additions > 0 || tally.removed > 0;
   const processor = actorOf(span, PIPELINE_ACTORS[span.spanType] ?? 'The processor');
 
-  // Phase, step, retries and hook time already lead the Attributes section right below.
   const base = {
     evidence: changed ? ('changes' as const) : undefined,
   };
 
   if (pipeline.tripwireAbort) {
-    // The tripwire notice leads the Attributes section right below.
+    // The full reason, retry flag and metadata read in the processor facts right under the headline;
+    // the changes keep their own section.
     return {
       ...base,
       evidence: undefined,
       headline: `${processor} stopped the run`,
-      detail: firstLine(pipeline.tripwireAbort.reason),
       tone: 'error',
     };
   }

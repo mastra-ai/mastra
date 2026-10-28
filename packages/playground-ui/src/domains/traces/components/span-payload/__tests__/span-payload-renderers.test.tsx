@@ -233,12 +233,20 @@ describe('SpanDataPanelView integration', () => {
     expect(slot('span-outcome')).not.toBeNull();
   });
 
-  it('shows the error of a failed span once, after its input and output', () => {
+  it('shows the error of a failed span once, in the summary at the top', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
-    expect(slot('span-outcome')?.textContent).toContain('getWeather failed');
-    const titles = sectionTitles();
-    expect(titles[0]).toBe('Input');
-    expect(titles.indexOf('Error')).toBeGreaterThan(titles.indexOf('Input'));
+    const outcome = slot('span-outcome');
+    expect(outcome?.textContent).toContain('getWeather failed');
+    expect(outcome?.querySelector('[data-slot="span-error"]')?.textContent).toContain('City not found: Atlantis');
+    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+    expect(screen.getAllByText('City not found: Atlantis')).toHaveLength(1);
+    expect(sectionTitles()).not.toContain('Error');
+  });
+
+  it('leads a failed root span with its error too', () => {
+    const failedRoot = { ...errorSpan, parentSpanId: null };
+    render(<SpanDataPanelView traceId="trace-1" spanId={failedRoot.spanId} span={failedRoot} />);
+    expect(slot('span-outcome')?.querySelector('[data-slot="span-error"]')).not.toBeNull();
     expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
   });
 

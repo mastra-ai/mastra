@@ -199,13 +199,14 @@ describe('getSpanOutcome', () => {
       });
     });
 
-    it('surfaces the reason a processor aborted the run', () => {
-      expect(getSpanOutcome(processorTripwireSpan)).toMatchObject({
+    it('says a processor aborted the run, leaving the reason to the processor facts under it', () => {
+      const outcome = getSpanOutcome(processorTripwireSpan);
+      expect(outcome).toMatchObject({
         headline: 'prompt-guard stopped the run',
-        detail: 'Prompt injection detected',
         tone: 'error',
         evidence: undefined,
       });
+      expect(outcome?.detail).toBeUndefined();
     });
   });
 
@@ -338,7 +339,7 @@ describe('getSpanOutcome', () => {
     });
   });
 
-  it('leads a failed span with its failure, leaving the message to the Error section', () => {
+  it('leads a failed span with its failure, leaving the message to the error under it', () => {
     expect(getSpanOutcome(errorSpan)).toMatchObject({ headline: 'getWeather failed', tone: 'error' });
     expect(getSpanOutcome(errorSpan)?.detail).toBeUndefined();
   });

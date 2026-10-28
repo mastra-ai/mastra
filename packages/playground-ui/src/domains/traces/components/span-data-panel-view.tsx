@@ -6,6 +6,7 @@ import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils'
 import { SpanOutcomeSummary } from './span-outcome';
 import { getSpanChanges, getSpanOutcome } from './span-outcome.utils';
 import {
+  SpanErrorDetails,
   SpanErrorRenderer,
   SpanInputRenderer,
   getSpanOutputPayload,
@@ -14,9 +15,10 @@ import {
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanPayloadJsonSection,
+  SpanProcessorAttributes,
   SpanProcessorMutations,
 } from './span-payload';
-import { SpanToolCallsSection, SpanToolsSection } from './span-payload/span-tools-section';
+import { SpanAvailableToolsSection, SpanToolCallsSection, SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
@@ -31,9 +33,10 @@ import { cn } from '@/lib/utils';
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-2';
 
 type SpanSection = 'error' | 'changes' | 'output' | 'input' | 'tools' | 'metadata' | 'attributes';
-// Every span reads the same way: what it changed, what it received, what it returned, then the rest.
-const LEAD: SpanSection[] = ['changes', 'input', 'output'];
-const REST: SpanSection[] = ['error', 'tools', 'metadata', 'attributes'];
+// Every span reads the same way: how it failed, what it changed, what it received, what it returned,
+// then the rest, with the raw metadata and attributes last.
+const LEAD: SpanSection[] = ['error', 'changes', 'input', 'output'];
+const REST: SpanSection[] = ['tools', 'metadata', 'attributes'];
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -175,15 +178,26 @@ function SpanDataPanelContent({
   const outputPayload = getSpanOutputPayload(span);
   const evidence = outcome?.evidence === 'output' && outputPayload == null ? undefined : outcome?.evidence;
   const toolCallsInOutcome = showOutcome && evidence === 'toolCalls';
+  const changesInOutcome = showOutcome && evidence === 'changes';
+  const errorInOutcome = showOutcome && evidence === 'error';
+  const changes = getSpanChanges(span);
 
   const sections: Record<SpanSection, ReactNode> = {
-    error: span.error != null && (
+    // A failed span says so in the summary on top, with its error; only spans with no summary need the section.
+    error: span.error != null && !errorInOutcome && (
       <SpanPayloadSection title="Error" raw={span.error} framed={false}>
         <SpanErrorRenderer span={span} />
       </SpanPayloadSection>
     ),
-    changes: evidence === 'changes' && !showOutcome && (
-      <SpanPayloadSection title="Changes" icon={<ArrowLeftRightIcon />} raw={getSpanChanges(span)} hasPreview emphasis>
+    // A failed or stopped processor still shows what it changed before it stopped.
+    changes: changes.length > 0 && !changesInOutcome && (
+      <SpanPayloadSection
+        title="Changes"
+        icon={<ArrowLeftRightIcon />}
+        raw={changes}
+        hasPreview
+        emphasis={evidence === 'changes'}
+      >
         <SpanProcessorMutations span={span} />
       </SpanPayloadSection>
     ),
@@ -207,7 +221,8 @@ function SpanDataPanelContent({
         <SpanInputRenderer span={span} />
       </SpanPayloadSection>
     ),
-    tools: !toolCallsInOutcome && <SpanToolsSection span={span} />,
+    // The tool calls already sit in the summary; the tools the model could pick from still read here.
+    tools: toolCallsInOutcome ? <SpanAvailableToolsSection span={span} /> : <SpanToolsSection span={span} />,
     metadata: <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} />,
     attributes: <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} />,
   };
@@ -219,17 +234,23 @@ function SpanDataPanelContent({
           outcome={outcome}
           showDetail={!evidence}
           className="mb-3"
-          // The changes or tool calls prove the headline, so they sit in the notice under it rather than in a section of their own.
+          // The error, changes or tool calls prove the headline, so they sit in the notice under it rather than in a section of their own.
           renderProof={
-            evidence === 'changes'
+            errorInOutcome
               ? headline => (
-                  <SpanPayloadSection title="Changes" heading={headline} raw={getSpanChanges(span)} hasPreview>
-                    <SpanProcessorMutations span={span} />
+                  <SpanPayloadSection title="Error" heading={headline} raw={span.error} framed={false} clip={false}>
+                    <SpanErrorDetails span={span} />
                   </SpanPayloadSection>
                 )
-              : toolCallsInOutcome
-                ? headline => <SpanToolCallsSection span={span} heading={headline} />
-                : undefined
+              : changesInOutcome
+                ? headline => (
+                    <SpanPayloadSection title="Changes" heading={headline} raw={changes} hasPreview>
+                      <SpanProcessorMutations span={span} />
+                    </SpanPayloadSection>
+                  )
+                : toolCallsInOutcome
+                  ? headline => <SpanToolCallsSection span={span} heading={headline} />
+                  : undefined
           }
         />
       )}
@@ -243,6 +264,7 @@ function SpanDataPanelContent({
       )}
 
       <SpanModelSummary span={span} className="mb-4" />
+      <SpanProcessorAttributes span={span} className="mb-4" />
 
       <div className="grid gap-4">
         {LEAD.map(section => (

@@ -8,6 +8,7 @@ import { SpanDataPanelView } from '../../span-data-panel-view';
 import { SpanDetailsView } from '../../span-details-view';
 import { SpanInputRenderer } from '../span-input-renderers';
 import { SpanOutputRenderer } from '../span-output-renderers';
+import { SpanProcessorAttributes } from '../span-processor-attributes';
 import { SpanProcessorMutations } from '../span-processor-mutations';
 import {
   legacyProcessorSpan,
@@ -201,6 +202,48 @@ describe('SpanProcessorMutations', () => {
   });
 });
 
+describe('SpanProcessorAttributes', () => {
+  const facts = () => {
+    const found = slot('span-processor-attributes');
+    if (!(found instanceof HTMLElement)) throw new Error('Missing processor facts');
+    return found;
+  };
+  const factOf = (label: string) => within(facts()).getByText(label).nextElementSibling?.textContent;
+
+  it('shows the pipeline facts as labelled values', () => {
+    render(<SpanProcessorAttributes span={processorInputSpan} />);
+    expect(factOf('Processor')).toBe('context-note');
+    expect(factOf('Phase')).toBe('Input');
+    expect(factOf('Executor')).toBe('Workflow');
+    // processorIndex is 0-based; the position reads 1-based.
+    expect(factOf('Pipeline position')).toBe('2');
+    expect(factOf('Hook duration')).toBe('1.84s');
+  });
+
+  it('shows a tripwire with its full reason, retry state and metadata', () => {
+    const span = makeSpan({
+      ...processorTripwireSpan,
+      attributes: {
+        ...processorTripwireSpan.attributes,
+        tripwireAbort: {
+          reason: 'Prompt injection detected\nRule injection/v2 matched',
+          retry: false,
+          metadata: { rule: 'injection/v2' },
+        },
+      },
+    });
+    render(<SpanProcessorAttributes span={span} />);
+    expect(factOf('Tripwire')).toBe('Prompt injection detected\nRule injection/v2 matched');
+    expect(factOf('Retry')).toBe('No');
+    expect(factOf('Tripwire metadata')).toBe('{"rule":"injection/v2"}');
+  });
+
+  it('renders nothing for a span with no recorded phase', () => {
+    const { container } = render(<SpanProcessorAttributes span={legacyProcessorSpan} />);
+    expect(container.innerHTML).toBe('');
+  });
+});
+
 describe('processor spans in the data panel', () => {
   it('leads with what the processor did and shows the conversation it passed along', () => {
     render(<SpanDataPanelView traceId="t" spanId="s" span={processorInputSpan} />);
@@ -323,5 +366,53 @@ describe.each(LAYOUTS)('processor spans in the %s layout', (_name, renderView) =
     render(renderView(legacyProcessorSpan));
     expect(slot('span-payload-processor')).toBeNull();
     expect(slot('span-processor-changes')).toBeNull();
+    expect(slot('span-processor-attributes')).toBeNull();
+  });
+
+  it('leads with the error of a failed processor, once', () => {
+    render(renderView(processorRequestErrorSpan));
+    const first = document.querySelector('[data-slot="span-payload-section"]');
+    expect(first?.querySelector('[data-slot="span-error"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+  });
+
+  it('shows the processor facts on top, under the summary and before any section', () => {
+    render(renderView(processorInputSpan));
+    const facts = slot('span-processor-attributes');
+    const firstSection = [...document.querySelectorAll('[data-slot="span-payload-section"]')].find(
+      el => !el.closest('[data-slot="span-outcome"]'),
+    );
+    if (!facts || !firstSection) throw new Error('Missing processor facts or sections');
+    const follows = (a: Element, b: Element) =>
+      Boolean(a.compareDocumentPosition(b) & Node.DOCUMENT_POSITION_FOLLOWING);
+    expect(follows(facts, firstSection)).toBe(true);
+    const summary = slot('span-outcome');
+    if (summary) expect(follows(summary, facts)).toBe(true);
+    expect(sectionTitles()).not.toContain('Processor');
+    expect(sectionTitles().slice(-1)).toEqual(['Attributes']);
+  });
+
+  it('shows the full tripwire of a processor that stopped the run, once', () => {
+    render(renderView(processorTripwireSpan));
+    const facts = slot('span-processor-attributes');
+    if (!(facts instanceof HTMLElement)) throw new Error('Missing processor facts');
+    expect(within(facts).getByText('Tripwire')).toBeTruthy();
+    expect(screen.getAllByText('Prompt injection detected')).toHaveLength(1);
+  });
+
+  it('still shows what a processor changed before its tripwire stopped the run', () => {
+    render(
+      renderView(
+        makeSpan({
+          ...processorTripwireSpan,
+          attributes: {
+            ...processorTripwireSpan.attributes,
+            messageListMutations: [{ type: 'add', source: 'memory', count: 2 }],
+          },
+        }),
+      ),
+    );
+    expect(section('Changes')).toBeTruthy();
+    expect(steps()).toEqual(['Added 2 messages from memory to the conversation']);
   });
 });

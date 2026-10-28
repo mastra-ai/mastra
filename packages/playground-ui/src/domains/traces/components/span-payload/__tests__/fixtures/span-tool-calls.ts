@@ -25,7 +25,13 @@ export const toolCallsGenerationSpan: TraceSpan = {
   parentSpanId: 'agent-root',
   name: "llm: 'gpt-5-mini'",
   spanType: SpanType.MODEL_GENERATION,
-  attributes: { model: 'gpt-5-mini' },
+  attributes: {
+    model: 'gpt-5-mini',
+    tools: [
+      { type: 'function', name: 'weatherInfo', description: 'Gets the weather for a city.' },
+      { type: 'function', name: 'readFile', description: 'Reads a file from the workspace.' },
+    ],
+  },
   input: { messages: [{ role: 'user', content: 'Weather in Paris and London, then read hello.md' }] },
   output: {
     text: 'Paris is overcast, London is drizzly, and hello.md does not exist.',

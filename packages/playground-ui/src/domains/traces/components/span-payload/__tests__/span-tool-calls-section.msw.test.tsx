@@ -80,13 +80,13 @@ describe.each(LAYOUTS)('Tool calls section (%s)', (_layout, renderSpan) => {
   const render = (span: SpanRecord) => renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
 
   describe('when the model called tools', () => {
-    it('lists every call the chat would show, in order, instead of the available tools', async () => {
+    it('lists every call the chat would show, in order, and still the tools it was offered', async () => {
       const { queryClient } = render(toolCallsGenerationSpan);
       await waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
       // task_write is a task tool the chat never draws, so it is not listed.
       expect(within(toolCallsSection()).getAllByTestId('tool-badge')).toHaveLength(3);
-      expect(screen.queryByText(/^Available tools/)).toBeNull();
+      expect(screen.getByText('Available tools (2)')).toBeTruthy();
     });
 
     it('opens a call on its input and the result its tool span recorded', async () => {
