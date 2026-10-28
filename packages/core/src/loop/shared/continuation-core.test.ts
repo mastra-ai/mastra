@@ -114,6 +114,13 @@ describe('decideContinuation — pendingFeedbackStop finality', () => {
 });
 
 describe('decideContinuation — delegation bail ordering (per-engine split)', () => {
+  it.each(['default', 'durable'] as const)('%s: records bail when it stops requested continuation', async mode => {
+    const decision = await decideContinuation(
+      makeDeps({ policy: { mode }, llmWantsToContinue: true, underMaxSteps: true, consumeDelegationBail: () => true }),
+    );
+    expect(decision).toMatchObject({ isFinal: true, stopCause: 'delegation' });
+  });
+
   it.each(['default', 'durable'] as const)('%s: a queued bail does not relabel normal model completion', async mode => {
     const decision = await decideContinuation(
       makeDeps({ policy: { mode }, llmWantsToContinue: false, consumeDelegationBail: () => true }),

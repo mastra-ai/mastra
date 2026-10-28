@@ -175,9 +175,9 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   // Delegation bail (ctx.bail() from a delegation hook) is a hard stop.
   // Consumed before the hook so its isFinal context reflects the bail.
   if (deps.consumeDelegationBail()) {
+    if (shouldContinue && deps.underMaxSteps && !hasFinishedSteps) stopCause = 'delegation';
     hasFinishedSteps = true;
     hardStop = true;
-    if (stopCause !== 'model_finished') stopCause = 'delegation';
   }
 
   let isFinal = !shouldContinue || !deps.underMaxSteps || hasFinishedSteps;
@@ -367,9 +367,9 @@ async function decideContinuationDefault(
   // which `isFinal = true` (applied after forceContinue by the glue)
   // reproduces exactly.
   if (!hasFinishedSteps && deps.consumeDelegationBail()) {
+    if (!isFinal || forceContinue) stopCause = 'delegation';
     isFinal = true;
     forceContinue = false;
-    if (stopCause !== 'model_finished') stopCause = 'delegation';
   }
 
   return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };
