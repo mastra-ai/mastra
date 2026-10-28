@@ -8,8 +8,10 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  authorizeRoute,
   cancelReaderOnResponseClose,
   checkRouteFGA,
+  checkRouteRBAC,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
   isSafeObjectKey,
@@ -29,22 +31,7 @@ class BodyLimitExceededError extends Error {
   }
 }
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type AuthErrorWithHeaders = { status: number; error: string; headers?: Record<string, string> };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/express] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Convert Express request to Web API Request for cookie-based auth providers.
@@ -624,39 +611,19 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
           request: toWebRequest(req),
         };
 
-        // Check route permission requirement (EE feature)
-        // Uses convention-based permission derivation: permissions are auto-derived
-        // from route path/method unless explicitly set or route is public
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              route,
-              userPermissions,
-              hasPermission,
-              res.locals.requestContext,
-            );
-
-            if (permissionError) {
-              return res.status(permissionError.status).json({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
-          }
-        }
-
-        // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, route, res.locals.requestContext, {
-          ...params.urlParams,
-          ...params.queryParams,
-          ...(typeof params.body === 'object' ? params.body : {}),
-        });
-        if (fgaError) {
-          return res.status(fgaError.status).json({ error: fgaError.error, message: fgaError.message });
+        // Check route permission (RBAC) and FGA authorization (EE features)
+        const authzError = await authorizeRoute(
+          this.mastra,
+          route,
+          {
+            ...params.urlParams,
+            ...params.queryParams,
+            ...(typeof params.body === 'object' ? params.body : {}),
+          },
+          res.locals.requestContext,
+        );
+        if (authzError) {
+          return res.status(authzError.status).json({ error: authzError.error, message: authzError.message });
         }
 
         try {
@@ -732,25 +699,12 @@ export class MastraServer extends MastraServerBase<Application, Request, Respons
             }
           }
 
-          // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-          if (hasAuth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = res.locals.requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = this.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                res.locals.requestContext,
-              );
-              if (permissionError) {
-                return res.status(permissionError.status).json({
-                  error: permissionError.error,
-                  message: permissionError.message,
-                });
-              }
-            }
+          const permissionError = checkRouteRBAC(this.mastra, serverRoute, res.locals.requestContext);
+          if (permissionError) {
+            return res.status(permissionError.status).json({
+              error: permissionError.error,
+              message: permissionError.message,
+            });
           }
         }
 

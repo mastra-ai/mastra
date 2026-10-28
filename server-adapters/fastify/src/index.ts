@@ -8,8 +8,10 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  authorizeRoute,
   cancelReaderOnResponseClose,
   checkRouteFGA,
+  checkRouteRBAC,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
   isSafeObjectKey,
@@ -22,22 +24,6 @@ import {
 import type { FastifyInstance, FastifyReply, FastifyRequest, preHandlerHookHandler, RouteHandlerMethod } from 'fastify';
 export { createAuthMiddleware } from './auth-middleware';
 export type { FastifyAuthMiddlewareOptions } from './auth-middleware';
-
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Convert Fastify request to Web API Request for cookie-based auth providers.
@@ -668,35 +654,19 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         request: toWebRequest(request),
       };
 
-      // Check route permission requirement (EE feature)
-      // Uses convention-based permission derivation: permissions are auto-derived
-      // from route path/method unless explicitly set or route is public
-      const requestContext = request.requestContext;
-      // Check if any auth is configured (studio or server) for RBAC
-      const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-      if (hasAuth) {
-        const hasPermission = await loadHasPermission();
-        if (hasPermission) {
-          const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-          const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-
-          if (permissionError) {
-            return reply.status(permissionError.status).send({
-              error: permissionError.error,
-              message: permissionError.message,
-            });
-          }
-        }
-      }
-
-      // Check FGA authorization (EE feature)
-      const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
-        ...params.urlParams,
-        ...params.queryParams,
-        ...(typeof params.body === 'object' ? params.body : {}),
-      });
-      if (fgaError) {
-        return reply.status(fgaError.status).send({ error: fgaError.error, message: fgaError.message });
+      // Check route permission (RBAC) and FGA authorization (EE features)
+      const authzError = await authorizeRoute(
+        this.mastra,
+        route,
+        {
+          ...params.urlParams,
+          ...params.queryParams,
+          ...(typeof params.body === 'object' ? params.body : {}),
+        },
+        request.requestContext,
+      );
+      if (authzError) {
+        return reply.status(authzError.status).send({ error: authzError.error, message: authzError.message });
       }
 
       try {
@@ -822,33 +792,12 @@ export class MastraServer extends MastraServerBase<FastifyInstance, FastifyReque
         }
 
         const requestContext = request.requestContext;
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
-          let hasPermission: ((userPerms: string[], required: string) => boolean) | undefined;
-          try {
-            ({ hasPermission } = await import('@mastra/core/auth/ee'));
-          } catch {
-            console.error(
-              '[@mastra/fastify] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-            );
-          }
-
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              serverRoute,
-              userPermissions,
-              hasPermission,
-              requestContext,
-            );
-            if (permissionError) {
-              return reply.status(permissionError.status).send({
-                error: permissionError.error,
-                message: permissionError.message,
-              });
-            }
-          }
+        const permissionError = checkRouteRBAC(this.mastra, serverRoute, requestContext);
+        if (permissionError) {
+          return reply.status(permissionError.status).send({
+            error: permissionError.error,
+            message: permissionError.message,
+          });
         }
 
         // Check FGA authorization (EE feature)

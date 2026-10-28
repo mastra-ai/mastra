@@ -9,8 +9,10 @@ import type { ParsedRequestParams, ServerRoute } from '@mastra/server/server-ada
 import {
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  authorizeRoute,
   cancelReaderOnResponseClose,
   checkRouteFGA,
+  checkRouteRBAC,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
   isSafeObjectKey,
@@ -25,7 +27,6 @@ import type { Context, Middleware, Next } from 'koa';
 export { createAuthMiddleware } from './auth-middleware';
 export type { KoaAuthMiddlewareOptions } from './auth-middleware';
 
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
 type RegisteredKoaRoute = {
   route: ServerRoute;
   prefix: string;
@@ -37,20 +38,6 @@ type RouteDispatcherGroup = {
   routes: RegisteredKoaRoute[];
   stackLengthAfterRegistration: number;
 };
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/koa] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 /**
  * Once the adapter writes a streaming response itself, a client that leaves while a write is still pending makes the
@@ -510,38 +497,20 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
       request: toWebRequest(ctx),
     };
 
-    // Check route permission requirement (EE feature)
-    // Uses convention-based permission derivation: permissions are auto-derived
-    // from route path/method unless explicitly set or route is public
-    const requestContext = ctx.state.requestContext;
-    // Check if any auth is configured (studio or server) for RBAC
-    const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-    if (hasAuth) {
-      const hasPermission = await loadHasPermission();
-      if (hasPermission) {
-        const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-        const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-
-        if (permissionError) {
-          ctx.status = permissionError.status;
-          ctx.body = {
-            error: permissionError.error,
-            message: permissionError.message,
-          };
-          return;
-        }
-      }
-    }
-
-    // Check FGA authorization (EE feature)
-    const fgaError = await checkRouteFGA(this.mastra, route, requestContext, {
-      ...params.urlParams,
-      ...params.queryParams,
-      ...(typeof params.body === 'object' ? params.body : {}),
-    });
-    if (fgaError) {
-      ctx.status = fgaError.status;
-      ctx.body = { error: fgaError.error, message: fgaError.message };
+    // Check route permission (RBAC) and FGA authorization (EE features)
+    const authzError = await authorizeRoute(
+      this.mastra,
+      route,
+      {
+        ...params.urlParams,
+        ...params.queryParams,
+        ...(typeof params.body === 'object' ? params.body : {}),
+      },
+      ctx.state.requestContext,
+    );
+    if (authzError) {
+      ctx.status = authzError.status;
+      ctx.body = { error: authzError.error, message: authzError.message };
       return;
     }
 
@@ -1015,28 +984,14 @@ export class MastraServer extends MastraServerBase<Koa, Context, Context> {
             }
           }
 
-          const requestContext = ctx.state.requestContext;
-          // Check if any auth is configured (studio or server) for RBAC
-          const hasAuth = server.mastra.getStudio?.()?.auth || server.mastra.getServer()?.auth;
-          if (hasAuth) {
-            const hasPermission = await loadHasPermission();
-            if (hasPermission) {
-              const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-              const permissionError = server.checkRoutePermission(
-                serverRoute,
-                userPermissions,
-                hasPermission,
-                requestContext,
-              );
-              if (permissionError) {
-                ctx.status = permissionError.status;
-                ctx.body = {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                };
-                return;
-              }
-            }
+          const permissionError = checkRouteRBAC(server.mastra, serverRoute, ctx.state.requestContext);
+          if (permissionError) {
+            ctx.status = permissionError.status;
+            ctx.body = {
+              error: permissionError.error,
+              message: permissionError.message,
+            };
+            return;
           }
 
           // Check FGA authorization (EE feature)

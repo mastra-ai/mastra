@@ -9,7 +9,9 @@ import {
   MASTRA_FRAMEWORK_PUBLIC_KEY,
   MastraServer as MastraServerBase,
   applyMcpRequestAuth,
+  authorizeRoute,
   checkRouteFGA,
+  checkRouteRBAC,
   getFGAProvider,
   getCustomHTTPExceptionResponse,
   getHTTPErrorResponse,
@@ -30,22 +32,6 @@ export type { HonoAuthMiddlewareOptions } from './auth-middleware';
 // Browser stream setup (Hono-specific WebSocket implementation)
 export { setupBrowserStream } from './browser-stream';
 export type { HonoBrowserStreamConfig } from './browser-stream';
-
-type HasPermissionFn = (userPerms: string[], required: string) => boolean;
-let _hasPermissionPromise: Promise<HasPermissionFn | undefined> | undefined;
-function loadHasPermission(): Promise<HasPermissionFn | undefined> {
-  if (!_hasPermissionPromise) {
-    _hasPermissionPromise = import('@mastra/core/auth/ee')
-      .then(m => m.hasPermission)
-      .catch(() => {
-        console.error(
-          '[@mastra/hono] Auth features require @mastra/core >= 1.6.0. Please upgrade: npm install @mastra/core@latest',
-        );
-        return undefined;
-      });
-  }
-  return _hasPermissionPromise;
-}
 
 // Export type definitions for Hono app configuration
 export type HonoVariables = {
@@ -670,38 +656,19 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           request: c.req.raw, // Standard Request object with headers/cookies
         };
 
-        // Check route permission requirement (EE feature)
-        // Uses convention-based permission derivation: permissions are auto-derived
-        // from route path/method unless explicitly set or route is public
-        const requestContext = c.get('requestContext');
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(route, userPermissions, hasPermission, requestContext);
-
-            if (permissionError) {
-              return c.json(
-                {
-                  error: permissionError.error,
-                  message: permissionError.message,
-                },
-                permissionError.status as any,
-              );
-            }
-          }
-        }
-
-        // Check FGA authorization (EE feature)
-        const fgaError = await checkRouteFGA(this.mastra, route, c.get('requestContext'), {
-          ...params.urlParams,
-          ...params.queryParams,
-          ...(typeof params.body === 'object' ? params.body : {}),
-        });
-        if (fgaError) {
-          return c.json({ error: fgaError.error, message: fgaError.message }, fgaError.status as any);
+        // Check route permission (RBAC) and FGA authorization (EE features)
+        const authzError = await authorizeRoute(
+          this.mastra,
+          route,
+          {
+            ...params.urlParams,
+            ...params.queryParams,
+            ...(typeof params.body === 'object' ? params.body : {}),
+          },
+          c.get('requestContext'),
+        );
+        if (authzError) {
+          return c.json({ error: authzError.error, message: authzError.message }, authzError.status as any);
         }
 
         try {
@@ -774,26 +741,12 @@ export class MastraServer extends MastraServerBase<HonoApp, HonoRequest, Context
           }
         }
 
-        const requestContext = c.get('requestContext');
-        // Check if any auth is configured (studio or server) for RBAC
-        const hasAuth = this.mastra.getStudio?.()?.auth || this.mastra.getServer()?.auth;
-        if (hasAuth) {
-          const hasPermission = await loadHasPermission();
-          if (hasPermission) {
-            const userPermissions = requestContext.get('mastra__userPermissions') as string[] | undefined;
-            const permissionError = this.checkRoutePermission(
-              serverRoute,
-              userPermissions,
-              hasPermission,
-              requestContext,
-            );
-            if (permissionError) {
-              return c.json(
-                { error: permissionError.error, message: permissionError.message },
-                permissionError.status as any,
-              );
-            }
-          }
+        const permissionError = checkRouteRBAC(this.mastra, serverRoute, c.get('requestContext'));
+        if (permissionError) {
+          return c.json(
+            { error: permissionError.error, message: permissionError.message },
+            permissionError.status as any,
+          );
         }
 
         // Use the pristine clone captured by the context middleware (before

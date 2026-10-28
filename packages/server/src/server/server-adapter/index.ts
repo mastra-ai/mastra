@@ -45,7 +45,7 @@ export { isZodError, type ZodErrorLike } from '../handlers/error';
 import { normalizeRoutePath } from '../utils';
 import type { SetMcpRequestAuth } from './mcp-auth';
 import { generateOpenAPIDocument, convertCustomRoutesToOpenAPIPaths } from './openapi-utils';
-import type { ServerRoute } from './routes';
+import type { ServerContext, ServerRoute } from './routes';
 import { OPT_IN_ROUTES, SERVER_ROUTES, getEffectivePermission } from './routes';
 import { getBuiltInRouteFGAConfig } from './routes/fga-manifest';
 
@@ -432,13 +432,13 @@ function unwrapOptionalNullable(schema: z.ZodTypeAny): z.ZodTypeAny {
 
 function parseComplexQueryParams(
   queryParamSchema: z.ZodTypeAny,
-  params: Record<string, QueryParamValue>,
-): Record<string, QueryParamValue | unknown> {
+  params: Record<string, unknown>,
+): Record<string, unknown> {
   if (!(queryParamSchema instanceof z.ZodObject)) {
     return params;
   }
 
-  const parsedParams: Record<string, QueryParamValue | unknown> = { ...params };
+  const parsedParams: Record<string, unknown> = { ...params };
   const shape = queryParamSchema.shape as Record<string, z.ZodTypeAny>;
 
   for (const [key, fieldSchema] of Object.entries(shape)) {
@@ -1644,7 +1644,7 @@ export function getRoutePermissionError(
 
 export async function parseRoutePathParams(
   route: ServerRoute,
-  params: Record<string, string>,
+  params: Record<string, unknown>,
 ): Promise<Record<string, any>> {
   const pathParamSchema = route.pathParamSchema;
   if (!pathParamSchema) {
@@ -1656,7 +1656,7 @@ export async function parseRoutePathParams(
 
 export async function parseRouteQueryParams(
   route: ServerRoute,
-  params: Record<string, QueryParamValue>,
+  params: Record<string, unknown>,
 ): Promise<Record<string, any>> {
   const queryParamSchema = route.queryParamSchema;
   if (!queryParamSchema) {
@@ -1720,6 +1720,136 @@ export function resolveRouteValidationError(
     status: 400,
     body: formatZodError(error, VALIDATION_CONTEXT_LABELS[context]),
   };
+}
+
+type RouteAuthorizationError = { status: number; error: string; message: string };
+
+/**
+ * Check the route's RBAC permission (explicit `requiresPermission` or derived from
+ * path/method) against the permissions `checkRouteAuth` stored in the request context.
+ * Skipped when no auth or no RBAC provider is configured, matching what adapters enforce.
+ * Uses the studio RBAC provider for studio-authenticated requests.
+ * Returns null if allowed, or a 403 error object if denied.
+ */
+export function checkRouteRBAC(
+  mastra: Mastra,
+  route: ServerRoute,
+  requestContext: RequestContext,
+): RouteAuthorizationError | null {
+  if (!mastra.getStudio?.()?.auth && !mastra.getServer()?.auth) {
+    return null;
+  }
+
+  const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
+  return getRoutePermissionError(mastra, route, userPermissions, hasPermission, requestContext);
+}
+
+/**
+ * Run the route authorization adapters enforce after authentication and schema
+ * validation: RBAC (`checkRouteRBAC`) then FGA (`checkRouteFGA`) on the parsed params.
+ * Returns null if allowed, or a 403 error object if denied.
+ */
+export async function authorizeRoute(
+  mastra: Mastra,
+  route: ServerRoute,
+  params: Record<string, unknown>,
+  requestContext: RequestContext,
+): Promise<RouteAuthorizationError | null> {
+  return checkRouteRBAC(mastra, route, requestContext) ?? (await checkRouteFGA(mastra, route, requestContext, params));
+}
+
+export interface DispatchRouteInput {
+  pathParams?: Record<string, unknown>;
+  query?: Record<string, unknown>;
+  body?: unknown;
+}
+
+export type DispatchRouteResult = { ok: true; result: unknown } | { ok: false; status: number; body: unknown };
+
+/**
+ * Invoke a schema route in-process with the same pipeline adapters run after
+ * authentication: schema validation (query, body, path) → RBAC → FGA → handler.
+ *
+ * Authentication is not repeated: `context.requestContext` must already be populated
+ * by the caller's own authenticated request. Validation and authorization failures,
+ * and handler errors, resolve to the status and JSON body an adapter would send.
+ * Successful calls return the raw handler result (streams are not converted).
+ */
+export async function dispatchRoute(
+  route: ServerRoute,
+  input: DispatchRouteInput,
+  context: ServerContext,
+): Promise<DispatchRouteResult> {
+  const { mastra, requestContext } = context;
+
+  const validate = async <T>(
+    kind: ValidationErrorContext,
+    label: string,
+    parse: () => Promise<T>,
+  ): Promise<{ value: T } | { error: DispatchRouteResult }> => {
+    try {
+      return { value: await parse() };
+    } catch (error) {
+      if (isZodError(error)) {
+        const { status, body } = resolveRouteValidationError(mastra, route, error, kind);
+        return { error: { ok: false, status, body } };
+      }
+      return {
+        error: {
+          ok: false,
+          status: 400,
+          body: {
+            error: `Invalid ${label}`,
+            issues: [{ field: 'unknown', message: error instanceof Error ? error.message : 'Unknown error' }],
+          },
+        },
+      };
+    }
+  };
+
+  const query = await validate('query', 'query parameters', () => parseRouteQueryParams(route, input.query ?? {}));
+  if ('error' in query) return query.error;
+
+  let body: unknown = input.body;
+  if (body !== undefined || route.bodySchema) {
+    const parsedBody = await validate('body', 'request body', () => parseRouteBody(route, body));
+    if ('error' in parsedBody) return parsedBody.error;
+    body = parsedBody.value;
+  }
+
+  const pathParams = await validate('path', 'path parameters', () =>
+    parseRoutePathParams(route, input.pathParams ?? {}),
+  );
+  if ('error' in pathParams) return pathParams.error;
+
+  const params = {
+    ...pathParams.value,
+    ...query.value,
+    ...(typeof body === 'object' ? body : {}),
+  };
+
+  const authError = await authorizeRoute(mastra, route, params, requestContext);
+  if (authError) {
+    return { ok: false, status: authError.status, body: { error: authError.error, message: authError.message } };
+  }
+
+  try {
+    return { ok: true, result: await route.handler({ ...params, ...context }) };
+  } catch (error) {
+    const customResponse = getCustomHTTPExceptionResponse(error);
+    if (customResponse) {
+      const text = await customResponse.text();
+      let responseBody: unknown = text;
+      try {
+        responseBody = JSON.parse(text);
+      } catch {
+        // non-JSON custom response body stays as text
+      }
+      return { ok: false, status: customResponse.status, body: responseBody };
+    }
+    const { status, body: errorBody } = getHTTPErrorResponse(error);
+    return { ok: false, status, body: errorBody };
+  }
 }
 
 export interface InvokeRouteOptions {
@@ -1802,55 +1932,12 @@ export async function invokeRoute(route: ServerRoute, options: InvokeRouteOption
     }
   }
 
-  const parse = async <T>(context: ValidationErrorContext, run: () => Promise<T>) => {
-    try {
-      return { value: await run() };
-    } catch (error) {
-      if (isZodError(error)) return { error: resolveRouteValidationError(mastra, route, error, context) };
-      throw error;
-    }
-  };
-
-  const pathParams = await parse('path', () => parseRoutePathParams(route, options.pathParams ?? {}));
-  if (pathParams.error) return pathParams.error;
-  const query = await parse('query', () => parseRouteQueryParams(route, options.query ?? {}));
-  if (query.error) return query.error;
-  const body = await parse('body', () => parseRouteBody(route, options.body));
-  if (body.error) return body.error;
-
-  const params: Record<string, unknown> = {
-    ...pathParams.value,
-    ...query.value,
-    ...(typeof body.value === 'object' ? (body.value as Record<string, unknown>) : {}),
-  };
-
-  if (authConfigured) {
-    const userPermissions = requestContext.get(MASTRA_USER_PERMISSIONS_KEY) as string[] | undefined;
-    const permissionError = getRoutePermissionError(mastra, route, userPermissions, hasPermission, requestContext);
-    if (permissionError) {
-      return {
-        status: permissionError.status,
-        body: { error: permissionError.error, message: permissionError.message },
-      };
-    }
-  }
-
-  const fgaError = await checkRouteFGA(mastra, route, requestContext, params);
-  if (fgaError) {
-    return { status: fgaError.status, body: { error: fgaError.error, message: fgaError.message } };
-  }
-
-  try {
-    const result = await route.handler({
-      ...params,
-      requestContext,
-      mastra,
-      abortSignal: options.abortSignal ?? new AbortController().signal,
-    } as any);
-    return { status: 200, body: result };
-  } catch (error) {
-    return getHTTPErrorResponse(error);
-  }
+  const result = await dispatchRoute(
+    route,
+    { pathParams: options.pathParams, query: options.query, body: options.body },
+    { mastra, requestContext, abortSignal: options.abortSignal ?? new AbortController().signal },
+  );
+  return result.ok ? { status: 200, body: result.result } : { status: result.status, body: result.body };
 }
 
 /**
