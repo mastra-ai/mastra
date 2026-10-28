@@ -118,7 +118,7 @@ jobs:
           echo "tag=alpha" >> $GITHUB_OUTPUT
 
       - name: Publish packages
-        run: pnpm publish -r --tag ${{ steps.determine-tag.outputs.tag }} --access public --no-git-checks
+        run: node .github/scripts/publish-packages.mjs --tag ${{ steps.determine-tag.outputs.tag }}
         env:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
@@ -300,7 +300,7 @@ jobs:
 
       - name: Publish packages
         if: ${{ !inputs.dry_run }}
-        run: pnpm publish -r --access public --no-git-checks
+        run: node .github/scripts/publish-packages.mjs
         env:
           NPM_CONFIG_PROVENANCE: true
           REQUIRE_PACKAGE_DOCS: 'true'
@@ -729,7 +729,7 @@ jobs:
           GITHUB_TOKEN: ${{ steps.app-auth.outputs.token }}
 
       - name: Publish to npm
-        run: pnpm publish -r --no-git-checks --tag ${{ env.FINAL_TAG }} --access public
+        run: node .github/scripts/publish-packages.mjs --tag ${{ env.FINAL_TAG }}
         env:
           NPM_CONFIG_PROVENANCE: true
 
