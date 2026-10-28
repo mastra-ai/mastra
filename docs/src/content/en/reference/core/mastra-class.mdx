@@ -39,6 +39,8 @@ export const mastra = new Mastra({
 Enable scheduled notification dispatch when deferred notification records and notification summaries should be delivered automatically through the workflow scheduler:
 
 ```typescript title="src/mastra/index.ts"
+import { Mastra } from '@mastra/core'
+
 export const mastra = new Mastra({
   agents: { supportAgent },
   storage,

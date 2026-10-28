@@ -35,6 +35,8 @@ The server may cache the counts for a few seconds between requests. Servers that
 Get an instance of a specific workflow by its ID:
 
 ```typescript title="src/mastra/workflows/test-workflow.ts"
+import { createWorkflow } from '@mastra/core/workflows'
+
 export const testWorkflow = createWorkflow({
   id: 'city-workflow',
 })

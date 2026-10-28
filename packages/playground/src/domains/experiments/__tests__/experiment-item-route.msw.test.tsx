@@ -509,7 +509,7 @@ describe('experiment item sub-route', () => {
       expect(dialog.isConnected).toBe(true);
     });
 
-    it('navigates between adjacent spans inside the shared trace card', async () => {
+    it('switches between spans from the tree inside the shared trace card', async () => {
       renderExperimentRoute(`/experiments/${EXPERIMENT_ID}/items/item-1`);
 
       await findResultPanel('res-1');
@@ -517,10 +517,14 @@ describe('experiment item sub-route', () => {
       fireEvent.click(await screen.findByText('Experiment tool call'));
       expect(await screen.findByRole('heading', { name: /child1/ })).toBeDefined();
 
-      fireEvent.click(screen.getByLabelText('Go to previous span'));
+      // The span panel has no previous/next buttons; the tree switches spans.
+      expect(screen.queryByLabelText('Go to previous span')).toBeNull();
+      expect(screen.queryByLabelText('Go to next span')).toBeNull();
+
+      fireEvent.click(screen.getByText('Experiment agent run'));
       expect(await screen.findByRole('heading', { name: /root01/ })).toBeDefined();
 
-      fireEvent.click(screen.getByLabelText('Go to next span'));
+      fireEvent.click(screen.getByText('Experiment tool call'));
       expect(await screen.findByRole('heading', { name: /child1/ })).toBeDefined();
     });
 

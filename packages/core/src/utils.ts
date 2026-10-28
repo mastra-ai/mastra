@@ -607,9 +607,8 @@ function detectSingleMessageCharacteristics(
     ['system', 'user', 'assistant', 'tool'].includes(message.role)
   ) {
     return 'message';
-  } else {
-    return 'other';
   }
+  return 'other';
 }
 
 export function isUiMessage(message: CoreMessage | AiMessageType): message is AiMessageType {

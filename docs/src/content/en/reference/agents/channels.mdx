@@ -199,11 +199,11 @@ const agent = new Agent({
   },
   {
     name: 'formatError',
-    type: '(error: Error) => PostableMessage',
+    type: '(error: Error, context: { requestContext?: RequestContext }) => PostableMessage',
     isOptional: true,
     defaultValue: '"❌ Error: <error.message>"',
     description:
-      'Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error.',
+      "Override how errors are rendered in the chat. Return a user-friendly message instead of exposing the raw error. `context.requestContext` is the failed run's request context, so the message can link back to whatever the run belongs to.",
   },
   {
     name: 'formatToolCall',
@@ -243,6 +243,14 @@ const agent = new Agent({
     defaultValue: "'cards' ('grouped' for Slack)",
     description:
       'How tool calls are rendered in the channel. `"cards"` posts per-tool running/result cards as rich Block Kit. `"text"` posts the same lifecycle as plain text (no Block Kit). `"timeline"` and `"grouped"` stream tool state as inline `task_update` chunks (requires `streaming: true`; Slack only today — other adapters may render a placeholder). `"hidden"` executes tools silently. Pass a function to render tool events yourself; return `{ kind: "post", message }` for a discrete post/edit, `{ kind: "stream", chunk }` to push into the streaming widget, or `undefined` to skip rendering that event. Add `openIfEmpty: false` to a stream result when its chunk should only apply to an active streaming session. Approve/deny prompts render as a separate built-in card in every string mode; a `toolDisplay` function receives the `approval` event and may replace the card by returning `{ kind: "post", message }`.',
+  },
+  {
+    name: 'toolApprovers',
+    type: "'requester' | 'anyone'",
+    isOptional: true,
+    defaultValue: "'requester'",
+    description:
+      "Who may approve or deny a pending tool call in this adapter's channel. By default, only the user who triggered the call can respond when their identity was recorded; runs without a recorded requester (such as scheduled runs) may allow another channel member to respond. Set `'anyone'` to allow another channel member to respond even when a requester was recorded. Pending-approval and thread-mapping checks still apply.",
   },
   {
     name: 'typingStatus',
@@ -377,7 +385,7 @@ const agent = new Agent({
 
 Override built-in event handlers. Each handler can be:
 
-- **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response)
+- **Omitted**: uses the default Mastra handler (routes the message through the agent and posts the response), except `onMessage`, which is disabled by default
 - **`false`**: disables the handler entirely
 - **A function** `(thread, message, defaultHandler, ctx) => Promise<void>`: wraps or replaces the default
 - When a `chatOptions.concurrency` strategy batches messages from several senders into one dispatch, the function is called once per sender's turn, each with its own `ctx`; `ctx.skipped` holds that turn's earlier batched messages
@@ -421,6 +429,13 @@ const agent = new Agent({
     description: 'Called when the bot is @mentioned in a channel or thread.',
   },
   {
+    name: 'onMessage',
+    type: 'ChannelHandler | false',
+    isOptional: true,
+    description:
+      'Opt-in handler for messages that neither mention the bot nor belong to a subscribed thread. Registered only when a function is supplied. Omitted or false leaves these messages ignored, except that unmentioned senders in a queued batch with a mention still go to `onMention` unless it is also false.',
+  },
+  {
     name: 'onSubscribedMessage',
     type: 'ChannelHandler | false',
     isOptional: true,
@@ -428,6 +443,21 @@ const agent = new Agent({
   },
 ]}
 />
+
+To answer without an @mention, supply `onMessage`. It receives every message the bot can read that hasn't already been routed to a direct-message, mention, or subscribed-thread handler. Filter by channel before calling `defaultHandler` if only some channels should receive replies:
+
+```typescript
+import type { ChannelHandlers } from '@mastra/core/channels'
+
+const handlers: ChannelHandlers = {
+  onMessage: async (thread, message, defaultHandler) => {
+    if (thread.channelId !== 'slack:C_SUPPORT') return
+    await defaultHandler(thread, message)
+  },
+}
+```
+
+`defaultHandler` runs the agent, posts the response, and subscribes the thread. Later messages in that thread go to `onSubscribedMessage`. Runs started through `onMessage` report `channel.eventType` as `message`. When a queued batch mixes mentioned and unmentioned senders, unmentioned senders go to `onMessage` when it's set. Otherwise they go to `onMention`, or are skipped if `onMention` is `false`.
 
 The `ChannelHandler` function signature:
 

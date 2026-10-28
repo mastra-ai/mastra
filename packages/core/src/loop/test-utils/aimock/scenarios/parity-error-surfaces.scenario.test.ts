@@ -87,12 +87,18 @@ function turnsByEngine(target: ParityTarget, results: EngineParityResults) {
 
 describeForAllEngines('error-surfaces: tool-timeout', engine => {
   const getMock = useLoopScenarioAimock();
+  // Every Inngest step is a round trip through the dev server, so a run needs
+  // more than 500ms just to reach its tool.
+  const DEADLINE_MS = engine === 'inngest' ? 2_500 : 500;
+  const TEST_TIMEOUT_MS = engine === 'inngest' ? 15_000 : 5_000;
 
   it.each([false, true])(
     'closes a stuck tool run without flushing unfinished-step memory (save blocked: %s)',
     async blockSave => {
       const onError = vi.fn();
       let toolStarted = false;
+      const execution = Promise.withResolvers<unknown>();
+      const onOutput = vi.fn();
       const memory = new MockMemory();
       let releaseSave!: () => void;
       const saveGate = new Promise<void>(resolve => {
@@ -122,11 +128,12 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
               inputSchema: z.object({}),
               execute: async () => {
                 toolStarted = true;
-                return new Promise<never>(() => {});
+                return execution.promise;
               },
+              onOutput,
             }),
           },
-          modelSettings: { timeout: { totalMs: 500 } },
+          modelSettings: { timeout: { totalMs: DEADLINE_MS } },
           onError,
           collectChunks: true,
           fixtures: llm => {
@@ -145,21 +152,42 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         expect(errors).toHaveLength(1);
         expect(errors[0]!.payload.error).toMatchObject({
           name: 'MastraTimeoutError',
-          message: 'Agent execution timed out after 500ms (modelSettings.timeout.totalMs)',
+          message: `Agent execution timed out after ${DEADLINE_MS}ms (modelSettings.timeout.totalMs)`,
         });
         await vi.waitFor(() => expect(onError).toHaveBeenCalledTimes(1));
         expect(result.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
         expect(result.requests).toHaveLength(1);
+        const workflows = await result.mastra.getStorage()!.getStore('workflows');
+        const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+        const prefix = engine === 'inngest' ? 'inngest:' : '';
+        for (const name of durable
+          ? ['durable-agentic-loop', 'durable-agentic-execution']
+          : ['agentic-loop', 'executionWorkflow']) {
+          await expect
+            .poll(async () => {
+              const snapshot = await workflows!.loadWorkflowSnapshot({
+                workflowName: `${prefix}${name}`,
+                runId: result.output.runId,
+              });
+              return snapshot?.status;
+            })
+            .not.toBe('running');
+        }
+        execution.reject(new Error('tool failed after the total deadline'));
+        await new Promise<void>(resolve => setImmediate(resolve));
+        expect(onOutput).not.toHaveBeenCalled();
+        expect(onError).toHaveBeenCalledTimes(1);
         if (blockSave && (engine === 'durable' || engine === 'evented')) {
           await new Promise(resolve => setTimeout(resolve, 50));
           expect(saveBlocked).toBe(false);
         }
       } finally {
+        execution.resolve(undefined);
         releaseSave();
         saveSpy.mockRestore();
       }
     },
-    5_000,
+    TEST_TIMEOUT_MS,
   );
 
   it.each([false, true])(
@@ -180,7 +208,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         prompt: 'Look up the order, then check the courier.',
         maxSteps: 3,
         savePerStep,
-        modelSettings: { timeout: { totalMs: 500 } },
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
         collectChunks: true,
         tools: {
           lookup: createTool({
@@ -234,7 +262,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       expect(saved.includes('The order lookup is complete.')).toBe(savePerStep);
       expect(saved.includes('Checking the courier now.')).toBe(false);
     },
-    5_000,
+    TEST_TIMEOUT_MS,
   );
 
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
@@ -275,7 +303,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           }),
         },
       });
-      const options = { modelSettings: { timeout: { totalMs: 500 } }, onError };
+      const options = { modelSettings: { timeout: { totalMs: DEADLINE_MS } }, onError };
       try {
         if (method === 'generate') {
           await expect(shared.agent.generate('Call the hanging tool.', options)).rejects.toMatchObject({
@@ -307,7 +335,7 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         releaseTool();
       }
     },
-    5_000,
+    TEST_TIMEOUT_MS,
   );
 });
 

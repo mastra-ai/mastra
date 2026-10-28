@@ -1,5 +1,5 @@
 export { SpanInputRenderer, type SpanInputRendererProps } from './span-input-renderers';
-export { hasSpanInputPreview } from './span-payload-registry';
+export { getSpanOutputPayload, hasSpanInputPreview } from './span-payload-registry';
 export { SpanOutputRenderer, type SpanOutputRendererProps } from './span-output-renderers';
 export { SpanErrorRenderer, type SpanErrorRendererProps } from './span-error-renderer';
 export { SpanPayloadSection, type SpanPayloadSectionProps, type SpanPayloadView } from './span-payload-section';
