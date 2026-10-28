@@ -1,7 +1,7 @@
 import { mkdtemp, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { z } from 'zod/v4';
 import { isForeignExecutionContext, setExecutionClaim } from '../../agent/durable/execution-fence';
 import { EventEmitterPubSub } from '../../events/event-emitter';
@@ -197,6 +197,81 @@ describe('workflow finish publication failure', () => {
       expect(result).toMatch(/publisher queue limit exceeded/);
       expect(published).toContain('workflow.publish-failed');
     } finally {
+      await mastra.stopWorkers();
+      await cappedPublisher.close();
+      await pubsub.close();
+      await broker.close();
+      await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('waits for snapshot deletion before reporting an oversized finish failure', async () => {
+    const dir = await mkdtemp(join(tmpdir(), 'mastra-finish-cleanup-'));
+    const path = join(dir, 'events.sock');
+    const broker = new UnixSocketPubSub(path);
+    await broker.subscribe('broker-ready', () => {});
+    const pubsub = new UnixSocketPubSub(path);
+    const cappedPublisher = new UnixSocketPubSub(path, { maxPublisherQueuedBytes: 48 * 1024 });
+    const publish = pubsub.publish.bind(pubsub);
+    pubsub.publish = (topic, event, options) =>
+      topic === 'workflows-finish' ? cappedPublisher.publish(topic, event, options) : publish(topic, event, options);
+
+    const storage = new MockStore();
+    const workflowsStore = await storage.getStore('workflows');
+    const deleteSnapshot = workflowsStore!.deleteWorkflowRunById.bind(workflowsStore);
+    let deletionStarted!: () => void;
+    const started = new Promise<void>(resolve => {
+      deletionStarted = resolve;
+    });
+    let releaseDeletion!: () => void;
+    const released = new Promise<void>(resolve => {
+      releaseDeletion = resolve;
+    });
+    vi.spyOn(workflowsStore!, 'deleteWorkflowRunById').mockImplementation(async args => {
+      deletionStarted();
+      await released;
+      return deleteSnapshot(args);
+    });
+    const workflow = createWorkflow({
+      id: 'oversized-finish-cleanup',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ payload: z.string() }),
+      options: { shouldPersistSnapshot: ({ workflowStatus }) => workflowStatus !== 'success' },
+    })
+      .then(
+        createStep({
+          id: 'large-output',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ payload: z.string() }),
+          execute: async () => ({ payload: 'x'.repeat(32 * 1024) }),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({ workflows: { [workflow.id]: workflow }, storage, pubsub, logger: false });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      let settled = false;
+      const result = run
+        .start({ inputData: {} })
+        .then(
+          () => 'RESOLVED',
+          error => (error as Error).message,
+        )
+        .finally(() => {
+          settled = true;
+        });
+      await Promise.race([
+        started,
+        new Promise((_, reject) => setTimeout(() => reject(new Error('delete not started')), 5000)),
+      ]);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(settled).toBe(false);
+      releaseDeletion();
+      expect(await result).toMatch(/publisher queue limit exceeded/);
+      expect(await workflowsStore!.getWorkflowRunById({ runId: run.runId, workflowName: workflow.id })).toBeNull();
+    } finally {
+      releaseDeletion();
       await mastra.stopWorkers();
       await cappedPublisher.close();
       await pubsub.close();

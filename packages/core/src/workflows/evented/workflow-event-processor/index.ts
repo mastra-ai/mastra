@@ -1257,6 +1257,7 @@ export class WorkflowEventProcessor extends EventProcessor {
             workflowId: event.data.workflowId,
             runId: event.runId,
             requestContext: event.data.requestContext,
+            finishPendingCleanup: event.data.finishPendingCleanup,
           },
         };
         for (;;) {
@@ -1417,17 +1418,26 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (deleteSnapshotAfterEnd === true) {
       // Declined terminal snapshots must not outlive completed runs (#22209),
       // but remain recoverable until parent/loop and finish publications succeed.
+      let cleanupSucceeded = false;
       try {
         const workflowsStore = await this.mastra.getStorage()?.getStore('workflows');
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+        cleanupSucceeded = true;
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
+        await this.publishFinishEvent({
+          type: 'workflow.finish-cleanup-failed',
+          runId,
+          data: { workflowId, requestContext, message: e instanceof Error ? e.message : String(e) },
+        });
       }
-      await this.publishFinishEvent({
-        type: 'workflow.finish-cleanup-complete',
-        runId,
-        data: { workflowId, requestContext },
-      });
+      if (cleanupSucceeded) {
+        await this.publishFinishEvent({
+          type: 'workflow.finish-cleanup-complete',
+          runId,
+          data: { workflowId, requestContext },
+        });
+      }
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)
@@ -1653,16 +1663,25 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     if (!ownershipLost && !shouldPersist) {
       // As with successful runs, cleanup must wait for every terminal publication.
+      let cleanupSucceeded = false;
       try {
         await workflowsStore?.deleteWorkflowRunById({ runId, workflowName: workflowId });
+        cleanupSucceeded = true;
       } catch (e) {
         this.mastra.getLogger()?.warn('Failed to clean up workflow snapshot', { workflowId, runId, error: e });
+        await this.publishFinishEvent({
+          type: 'workflow.finish-cleanup-failed',
+          runId,
+          data: { workflowId, requestContext, message: e instanceof Error ? e.message : String(e) },
+        });
       }
-      await this.publishFinishEvent({
-        type: 'workflow.finish-cleanup-complete',
-        runId,
-        data: { workflowId, requestContext },
-      });
+      if (cleanupSucceeded) {
+        await this.publishFinishEvent({
+          type: 'workflow.finish-cleanup-complete',
+          runId,
+          data: { workflowId, requestContext },
+        });
+      }
     }
 
     // Clean up run-scoped internal workflow registrations (e.g. execution-workflow)

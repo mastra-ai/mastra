@@ -132,10 +132,16 @@ export class EventedExecutionEngine extends ExecutionEngine {
           'workflow.suspend',
           'workflow.publish-failed',
           'workflow.finish-cleanup-complete',
+          'workflow.finish-cleanup-failed',
         ].includes(event.type)
       ) {
         await ack?.();
-        if ((event.type === 'workflow.end' || event.type === 'workflow.fail') && event.data.finishPendingCleanup) {
+        if (
+          (event.type === 'workflow.end' ||
+            event.type === 'workflow.fail' ||
+            event.type === 'workflow.publish-failed') &&
+          event.data.finishPendingCleanup
+        ) {
           pendingCleanupFinish = event;
           return;
         }
@@ -144,7 +150,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           event = pendingCleanupFinish;
         }
         await pubsub.unsubscribe('workflows-finish', finishCb);
-        if (event.type === 'workflow.publish-failed') {
+        if (event.type === 'workflow.finish-cleanup-failed' || event.type === 'workflow.publish-failed') {
           rejectResult(new Error(event.data.message));
           return;
         }
