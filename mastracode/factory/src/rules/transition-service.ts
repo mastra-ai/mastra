@@ -1,5 +1,6 @@
 import { createBoardRegistry } from '../boards/index.js';
 import type { BoardRegistry } from '../boards/index.js';
+import { autoApprovedExitTool } from '../boards/phase-automation.js';
 import { boardTransitionPolicyResultSchema, immutablePolicySnapshot } from '../boards/transition-policy.js';
 import type { AuditActorProfileInput, AuditActorType, AuditContext } from '../storage/domains/audit/base.js';
 import type { AuditRecorder } from '../storage/domains/audit/domain.js';
@@ -478,9 +479,12 @@ export class FactoryTransitionService {
         (async () => {
           // Resolve the project switch inside the timed block so a resolver rejection
           // surfaces as a committed rule_error and a slow lookup is bounded.
-          const plansAutoApproved = this.#autoApprovePlans
-            ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
-            : false;
+          // A phase whose submit_plan exit tool is auto-approved for this card approves its plans too.
+          const plansAutoApproved =
+            autoApprovedExitTool(this.#boards, item) === 'submit_plan' ||
+            (this.#autoApprovePlans
+              ? await this.#autoApprovePlans({ orgId: request.orgId, factoryProjectId: request.factoryProjectId })
+              : false);
           const policy = boardTransitionPolicyResultSchema.parse(
             await board.transitionPolicy?.(
               immutablePolicySnapshot({
