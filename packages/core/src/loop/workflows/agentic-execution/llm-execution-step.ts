@@ -50,8 +50,8 @@ import { getToolDefinitionsForTracing } from '../../../stream/aisdk/v5/compat/pr
 import { execute, sendsNativeResponseFormat } from '../../../stream/aisdk/v5/execute';
 import { DefaultStepResult } from '../../../stream/aisdk/v5/output-helpers';
 import { safeEnqueue } from '../../../stream/base';
-import { isStructuredOutputError } from '../../../stream/base/output-format-handlers';
 import { MastraModelOutput } from '../../../stream/base/output';
+import { isStructuredOutputError } from '../../../stream/base/output-format-handlers';
 import type {
   ChunkType,
   ExecuteStreamModelManager,
