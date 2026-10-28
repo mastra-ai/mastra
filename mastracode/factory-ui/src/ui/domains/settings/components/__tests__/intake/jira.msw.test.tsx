@@ -224,14 +224,52 @@ describe('IntakeSection jira', () => {
     expect(
       screen.getByText("Choose a board — this factory won't pick up issues until one is set."),
     ).toBeInTheDocument();
-    // The existing factory's row names the slice now routed elsewhere.
-    expect(screen.getByText('Also routed to Acme API (payments, billing).')).toBeInTheDocument();
+    // The new factory takes nothing until it has a board, so the all-issues factory keeps its labels for now.
+    expect(screen.queryByText(/Takes all issues except/)).toBeNull();
     expect(
       screen.getByText(
         'Label filters take precedence over "All issues". An issue matching two filters goes to the factory added first.',
       ),
     ).toBeInTheDocument();
   });
+
+  it.each([
+    { board: 'work', excepted: true },
+    { board: null, excepted: false },
+  ])(
+    'shows the labels the all-issues factory gives up only once the label factory has a board ($board)',
+    async ({ board, excepted }) => {
+      seedFactories();
+      useJiraHandlers({
+        config: { ...baseConfig(), jira: { enabled: true, sourceIds: ['10001'] } },
+        bindings: [
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_A,
+            board: 'work',
+            labels: null,
+            createdAt: '2026-10-01T00:00:00.000Z',
+          },
+          {
+            integrationId: 'jira',
+            sourceId: '10001',
+            factoryProjectId: FACTORY_B,
+            board,
+            labels: ['payments', 'billing'],
+            createdAt: '2026-10-02T00:00:00.000Z',
+          },
+        ],
+      });
+
+      renderIntakeSection();
+
+      expect(await screen.findByLabelText('Issues from ENG · Engineering for Acme API')).toBeInTheDocument();
+      const note = screen.queryByText('Takes all issues except those labelled payments, billing.');
+      if (excepted) expect(note).toBeInTheDocument();
+      else expect(note).toBeNull();
+    },
+  );
 
   it('explains which factory already takes a label when the save is refused', async () => {
     seedFactories();

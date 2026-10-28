@@ -159,7 +159,7 @@ function JiraSourceRoutes({
           factory={factoryName(factories, binding.factoryProjectId)}
           others={bindings
             .filter(other => other.factoryProjectId !== binding.factoryProjectId)
-            .map(other => ({ factory: factoryName(factories, other.factoryProjectId), labels: other.labels ?? null }))}
+            .map(other => ({ labels: other.labels ?? null, board: other.board }))}
           error={errors[binding.factoryProjectId]}
           disabled={busy}
           onBoardChange={board => route(binding.factoryProjectId, { board })}
@@ -274,7 +274,7 @@ function JiraBindingRow({
   name: string;
   binding: IntakeSourceBinding;
   factory: string;
-  others: Array<{ factory: string; labels: string[] | null }>;
+  others: Array<{ labels: string[] | null; board: string | null }>;
   error: string | undefined;
   disabled: boolean;
   onBoardChange: (board: string | null) => void;
@@ -296,17 +296,18 @@ function JiraBindingRow({
     if (added.length > 0) onLabelsChange([...labels, ...added]);
   };
 
-  const elsewhere = others
-    .map(other => (other.labels ? `${other.factory} (${other.labels.join(', ')})` : `${other.factory} (all issues)`))
-    .join(', ');
+  // Label filters beat "all issues", so the all-issues factory gives up every label routed to a
+  // factory with a board. A factory without one doesn't poll, so it takes nothing yet.
+  const excepted =
+    saved === null && !filtered ? others.filter(other => other.board).flatMap(other => other.labels ?? []) : [];
   const description =
     error ??
     (binding.board === null
       ? "Choose a board — this factory won't pick up issues until one is set."
       : filtered && labels.length === 0
         ? 'Add a label — this factory takes no issues until it has one.'
-        : elsewhere
-          ? `Also routed to ${elsewhere}.`
+        : excepted.length > 0
+          ? `Takes all issues except those labelled ${excepted.join(', ')}.`
           : undefined);
 
   return (
@@ -392,7 +393,7 @@ function JiraBindingRow({
               }
             }}
             onBlur={addDraft}
-            className="w-32"
+            className="w-28"
           />
         </div>
       )}
