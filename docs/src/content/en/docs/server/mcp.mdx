@@ -19,7 +19,7 @@ Use the built-in server to let coding assistants and other MCP clients drive the
 
 | Environment | Served at `/api/mcp` |
 | - | - |
-| `mastra dev` | Yes, also without auth. Requests with a foreign `Origin` or `Host` header are rejected to block DNS rebinding. |
+| `mastra dev` | Yes, also without auth. Requests with a foreign `Origin` or `Host` header are rejected to block DNS rebinding. This also blocks tunnels and LAN IP addresses unless `server.host` matches them. |
 | Production build with `server.auth` | Yes. Every request needs a bearer token. |
 | Production build without `server.auth` | No, the endpoint returns 404. |
 
@@ -86,7 +86,7 @@ This adds `agent_support-agent` and `workflow_refund` next to the operation tool
 
 ## Choose what to expose
 
-Use `include` and `exclude` to select primitives by the id they're registered under. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by id fails as not found. The selection only affects MCP. The HTTP routes are unchanged.
+Use `include` and `exclude` to select primitives by id. Each entry matches both a primitive's own `id` and the key it's registered under in `new Mastra({ ... })`, so `deleteAccountTool` and `delete-account` select the same tool. `exclude` wins over `include`. Excluded primitives are hidden from the tool list, and calling one by either name fails as not found. The selection only affects MCP. The HTTP routes are unchanged.
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'

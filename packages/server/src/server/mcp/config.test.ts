@@ -2,7 +2,12 @@ import { Mastra } from '@mastra/core/mastra';
 import type { ServerConfig } from '@mastra/core/server';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
-import { getBuiltinMCPTransportOptions, isBuiltinMCPEnabled, resolveBuiltinMCPPath } from './config';
+import {
+  getBuiltinMCPTransportOptions,
+  isBuiltinMCPEnabled,
+  resolveBuiltinMCPConfig,
+  resolveBuiltinMCPPath,
+} from './config';
 
 const auth = { authenticateToken: async () => null } as unknown as ServerConfig['auth'];
 const mastraWith = (server: ServerConfig) => new Mastra({ logger: false, server });
@@ -50,5 +55,18 @@ describe('getBuiltinMCPTransportOptions', () => {
       enableDnsRebindingProtection: true,
       allowedHosts: ['localhost', '127.0.0.1', '[::1]', 'devbox.local'],
     });
+  });
+});
+
+describe('resolveBuiltinMCPConfig isSelected', () => {
+  it('matches include/exclude against every name of a primitive (id and registration key)', () => {
+    const { isSelected } = resolveBuiltinMCPConfig(
+      mastraWith({ mcp: { include: { agents: ['billingAgent', 'support'] }, exclude: { agents: ['support-agent'] } } }),
+    );
+    expect(isSelected('agents', ['billing-agent', 'billingAgent'])).toBe(true);
+    expect(isSelected('agents', ['billing-agent'])).toBe(false);
+    // Exclude wins when any name is excluded.
+    expect(isSelected('agents', ['support-agent', 'support'])).toBe(false);
+    expect(isSelected('workflows', 'anything')).toBe(true);
   });
 });

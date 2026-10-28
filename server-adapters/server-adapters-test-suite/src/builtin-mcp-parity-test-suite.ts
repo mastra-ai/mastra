@@ -158,7 +158,7 @@ function createParityMastra(mcp: ServerMCPConfig = {}) {
       rbac: new StaticRBACProvider<TestUser>({ roles: ROLES, getUserRoles: user => [user.studioRole] }),
     },
   });
-  return { mastra, memory, makeAgent };
+  return { mastra, memory, makeAgent, makeWorkflow, makeTool };
 }
 
 type ToolResult = {
@@ -171,6 +171,30 @@ type ToolResult = {
 /** Text of an MCP tool result, which for errors carries `<status> <message>`. */
 function resultText(result: ToolResult): string {
   return (result.content ?? []).map(part => part.text ?? '').join('');
+}
+
+/** A successful MCP result's payload (structuredContent, else parsed text). */
+function payload(result: ToolResult): any {
+  if (result.structuredContent !== undefined) return result.structuredContent;
+  // MCPClient resolves tools that declare an outputSchema to the structured output itself.
+  if (!Array.isArray(result.content)) return result;
+  const text = resultText(result);
+  try {
+    return JSON.parse(text);
+  } catch {
+    return text;
+  }
+}
+
+/** MCP outcome: `ok`, the HTTP status in the error, `not offered`, or `invalid` (rejected by the advertised schema). */
+function mcpOutcome(result: ToolResult): number | 'ok' | 'not offered' | 'invalid' {
+  // MCPClient validates arguments against the advertised schema (e.g. an id missing from the enum).
+  if (result.error === true) return 'invalid';
+  if (!result.isError) return 'ok';
+  const text = resultText(result);
+  if (text.includes('not offered')) return 'not offered';
+  const status = /"?(\d{3}) /.exec(text)?.[1];
+  return status ? Number(status) : 500;
 }
 
 /**
@@ -234,30 +258,6 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       const tool = tools[`mastra_${name}`];
       if (!tool) return { isError: true, content: [{ type: 'text', text: `tool ${name} not offered` }] };
       return (await tool.execute!(args, {} as any)) as ToolResult;
-    };
-
-    /** A successful MCP result's payload (structuredContent, else parsed text). */
-    const payload = (result: ToolResult): any => {
-      if (result.structuredContent !== undefined) return result.structuredContent;
-      // MCPClient resolves tools that declare an outputSchema to the structured output itself.
-      if (!Array.isArray(result.content)) return result;
-      const text = resultText(result);
-      try {
-        return JSON.parse(text);
-      } catch {
-        return text;
-      }
-    };
-
-    /** MCP outcome: `ok`, the HTTP status in the error, `not offered`, or `invalid` (rejected by the advertised schema). */
-    const mcpOutcome = (result: ToolResult): number | 'ok' | 'not offered' | 'invalid' => {
-      // MCPClient validates arguments against the advertised schema (e.g. an id missing from the enum).
-      if (result.error === true) return 'invalid';
-      if (!result.isError) return 'ok';
-      const text = resultText(result);
-      if (text.includes('not offered')) return 'not offered';
-      const status = /"?(\d{3}) /.exec(text)?.[1];
-      return status ? Number(status) : 500;
     };
 
     describe('transport auth', () => {
@@ -598,6 +598,127 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       )) as ToolResult;
       expect(status(ok)).toBe('ok');
     });
+  });
+
+  // Handlers resolve an agent, workflow, or tool by its `.id` or by the key it is registered under, so
+  // include/exclude must match both, whichever one the config or the caller uses.
+  describe(`${suiteName} — include/exclude match ids and registration keys`, () => {
+    const running: Array<{ close: () => Promise<void> }> = [];
+    const clients: MCPClient[] = [];
+    afterAll(async () => {
+      await Promise.all(clients.map(client => client.disconnect()));
+      await Promise.all(running.map(server => server.close()));
+    });
+
+    const BY_ID = { agents: ['billing-agent'], workflows: ['greet-workflow'], tools: ['delete-account'] };
+    const BY_KEY = { agents: ['billingAgent'], workflows: ['greetWorkflow'], tools: ['deleteAccountTool'] };
+    const ALIASES = {
+      agent: ['billing-agent', 'billingAgent'],
+      workflow: ['greet-workflow', 'greetWorkflow'],
+      tool: ['delete-account', 'deleteAccountTool'],
+    };
+    const KINDS = ['agent', 'workflow', 'tool'] as const;
+
+    /** Serves the parity app plus one agent, workflow, and tool whose registration key differs from its id. */
+    const serve = async (mcp: ServerMCPConfig) => {
+      const { mastra, makeAgent, makeWorkflow, makeTool } = createParityMastra(mcp);
+      mastra.addAgent(makeAgent('billing-agent', 'Bills customers'), 'billingAgent');
+      mastra.addWorkflow(makeWorkflow('greet-workflow'), 'greetWorkflow');
+      mastra.addTool(makeTool('delete-account'), 'deleteAccountTool');
+      const started = await startServer(mastra);
+      running.push(started);
+      const client = new MCPClient({
+        id: `mcp-alias-${clients.length}`,
+        servers: {
+          mastra: {
+            url: new URL(`${started.url}/api/mcp`),
+            requestInit: { headers: { authorization: 'Bearer owner-token' } },
+            onToolError: 'return',
+          },
+        },
+      });
+      clients.push(client);
+      const tools = Object.fromEntries(
+        Object.entries(await client.listTools()).map(([name, tool]) => [name.replace(/^mastra_/, ''), tool]),
+      );
+      const run = async (name: string, args: Record<string, unknown>) =>
+        tools[name] ? mcpOutcome((await tools[name].execute!(args, {} as any)) as ToolResult) : 'not offered';
+      const listed = async (name: string, key: string): Promise<string[]> =>
+        tools[name]
+          ? payload((await tools[name].execute!({}, {} as any)) as ToolResult)[key].map((e: any) => e.id)
+          : [];
+      const call = {
+        agent: (id: string) => run('call_agent', { agentId: id, message: 'hi' }),
+        workflow: (id: string) => run('start_workflow', { workflowId: id, inputData: { value: 'x' } }),
+        tool: (id: string) => run('call_tool', { toolId: id, data: { text: 'x' } }),
+      };
+      return { names: Object.keys(tools), run, listed, call };
+    };
+
+    for (const [label, exclude] of [
+      ['by id', BY_ID],
+      ['by registration key', BY_KEY],
+    ] as const) {
+      it(`exclude ${label} hides and refuses every alias above enumLimit`, async () => {
+        const app = await serve({ exclude, enumLimit: 0, featured: { agents: BY_KEY.agents } });
+        const aliases = Object.values(ALIASES).flat();
+        for (const [tool, key] of [
+          ['list_agents', 'agents'],
+          ['list_workflows', 'workflows'],
+          ['list_tools', 'tools'],
+        ] as const) {
+          const ids = await app.listed(tool, key);
+          expect(ids.length).toBeGreaterThan(0);
+          expect(ids.filter(id => aliases.includes(id))).toEqual([]);
+        }
+        expect(app.names.filter(name => /billing|greet|delete/i.test(name))).toEqual([]);
+        for (const kind of KINDS) {
+          for (const alias of ALIASES[kind]) expect([alias, await app.call[kind](alias)]).toEqual([alias, 404]);
+        }
+      });
+
+      it(`exclude ${label} keeps every alias out of enums, entity tools, and featured tools`, async () => {
+        const app = await serve({ exclude, featured: { agents: BY_KEY.agents, workflows: BY_ID.workflows } });
+        expect(app.names).not.toContain('call_tool');
+        expect(app.names.filter(name => /billing|greet|delete/i.test(name))).toEqual([]);
+        // Not in the advertised enum, so the client rejects them before they reach the server.
+        for (const kind of ['agent', 'workflow'] as const) {
+          for (const alias of ALIASES[kind]) expect([alias, await app.call[kind](alias)]).toEqual([alias, 'invalid']);
+        }
+      });
+    }
+
+    for (const [label, include] of [
+      ['by id', BY_ID],
+      ['by registration key', BY_KEY],
+    ] as const) {
+      it(`include ${label} offers only them, callable by either alias`, async () => {
+        const app = await serve({ include, enumLimit: 0 });
+        expect(await app.listed('list_agents', 'agents')).toEqual(['billing-agent']);
+        expect(await app.listed('list_workflows', 'workflows')).toEqual(['greetWorkflow']);
+        expect(await app.listed('list_tools', 'tools')).toEqual(['delete-account']);
+        for (const kind of KINDS) {
+          for (const alias of ALIASES[kind]) expect([alias, await app.call[kind](alias)]).toEqual([alias, 'ok']);
+        }
+        expect(await app.call.agent('test-agent')).toBe(404);
+        expect(await app.call.workflow('test-workflow')).toBe(404);
+        expect(await app.call.tool('test-tool')).toBe(404);
+      });
+
+      it(`include ${label} names entity and featured tools from the id`, async () => {
+        const app = await serve({ include, featured: { agents: include.agents, workflows: include.workflows } });
+        expect(app.names).toEqual(
+          expect.arrayContaining(['agent_billing-agent', 'workflow_greet-workflow', 'tool_delete-account']),
+        );
+        expect(app.names.filter(name => /^(agent|workflow|tool)_/.test(name)).sort()).toEqual([
+          'agent_billing-agent',
+          'tool_delete-account',
+          'workflow_greet-workflow',
+        ]);
+        expect(await app.run('tool_delete-account', { text: 'x' })).toBe('ok');
+        expect(await app.run('agent_billing-agent', { message: 'hi' })).toBe('ok');
+      });
+    }
   });
 
   describe(`${suiteName} — abort`, () => {

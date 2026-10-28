@@ -6,13 +6,14 @@ import { createTool } from '@mastra/core/tools';
 import type { JSONSchema7 } from '@mastra/schema-compat';
 import { standardSchemaToJSONSchema, toStandardSchema } from '@mastra/schema-compat/schema';
 import { MASTRA_RESOURCE_ID_KEY } from '../constants';
-import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE, LIST_AGENTS_ROUTE } from '../handlers/agents';
-import { EXECUTE_TOOL_ROUTE, GET_TOOL_BY_ID_ROUTE, LIST_TOOLS_ROUTE } from '../handlers/tools';
+import { GENERATE_AGENT_ROUTE, GET_AGENT_BY_ID_ROUTE, getAgentFromSystem, LIST_AGENTS_ROUTE } from '../handlers/agents';
+import { EXECUTE_TOOL_ROUTE, findTool, GET_TOOL_BY_ID_ROUTE, LIST_TOOLS_ROUTE } from '../handlers/tools';
 import {
   CANCEL_WORKFLOW_RUN_ROUTE,
   GET_WORKFLOW_BY_ID_ROUTE,
   GET_WORKFLOW_RUN_BY_ID_ROUTE,
   LIST_WORKFLOWS_ROUTE,
+  listWorkflowsFromSystem,
   RESUME_ASYNC_WORKFLOW_ROUTE,
   START_ASYNC_WORKFLOW_ROUTE,
 } from '../handlers/workflows';
@@ -87,6 +88,26 @@ export function nameEntityTools(prefix: string, ids: string[], used: Set<string>
     names.set(id, name);
   }
   return names;
+}
+
+/**
+ * Maps every name of a registered primitive (its `.id` and registration key) to all of its names.
+ * A name that is some primitive's `.id` resolves to that primitive, as in the handlers' id-first lookups.
+ */
+function registryNames(...registries: Array<Record<string, { id?: string } | undefined> | undefined>) {
+  const byId = new Map<string, Set<string>>();
+  for (const registry of registries) {
+    for (const [key, value] of Object.entries(registry ?? {})) {
+      const id = typeof value?.id === 'string' ? value.id : key;
+      const names = byId.get(id) ?? new Set([id]);
+      names.add(key);
+      byId.set(id, names);
+    }
+  }
+  const byName = new Map<string, string[]>();
+  for (const names of byId.values()) for (const name of names) byName.set(name, [...names]);
+  for (const [id, names] of byId) byName.set(id, [...names]);
+  return byName;
 }
 
 function toolError(status: number, body: unknown): MastraError {
@@ -172,9 +193,39 @@ export async function buildBuiltinMCPTools(
     return result.result;
   };
 
-  const requireSelected = (kind: MCPPrimitiveKind, id: string, label: string) => {
-    if (!config.isSelected(kind, id)) throw toolError(404, `${label} not found`);
+  // include/exclude name a primitive by its `.id` or its registration key, and handlers resolve either,
+  // so selection always checks every name of the primitive an id resolves to.
+  const registries = {
+    agents: () => registryNames(mastra.listAgents() as Record<string, { id?: string }>),
+    workflows: () => registryNames(mastra.listWorkflows() as Record<string, { id?: string }>),
+    tools: () => registryNames(ctx.registeredTools as Record<string, { id?: string }>, mastra.listTools()),
   };
+  const registryCache = new Map<MCPPrimitiveKind, Map<string, string[]>>();
+  /** Every name of the registered primitive called `name` (just `name` when it isn't registered). */
+  const namesOf = (kind: MCPPrimitiveKind, name: string): string[] => {
+    let names = registryCache.get(kind);
+    if (!names) registryCache.set(kind, (names = registries[kind]()));
+    return names.get(name) ?? [name];
+  };
+  /** Resolves a caller-supplied id with the backing handler's own resolver, then returns every name it has. */
+  const resolveNames = async (kind: MCPPrimitiveKind, id: string): Promise<string[]> => {
+    let resolved: string | undefined;
+    try {
+      if (kind === 'agents') resolved = (await getAgentFromSystem({ mastra, agentId: id, requestContext })).id;
+      else if (kind === 'workflows') resolved = (await listWorkflowsFromSystem({ mastra, workflowId: id })).workflow.id;
+      else
+        resolved = (await findTool({ mastra, registeredTools: ctx.registeredTools, toolId: id, requestContext }))?.id;
+    } catch {
+      // Not found: the backing route answers 404 itself.
+    }
+    return [...new Set([id, ...(resolved ? namesOf(kind, resolved) : [])])];
+  };
+  const requireSelected = async (kind: MCPPrimitiveKind, id: string, label: string) => {
+    if (!config.isSelected(kind, await resolveNames(kind, id))) throw toolError(404, `${label} not found`);
+  };
+  /** Keys of listed entities that a configured id list (e.g. `featured`) names by `.id` or registration key. */
+  const named = (kind: MCPPrimitiveKind, listed: Map<string, unknown>, ids: string[]) =>
+    [...listed.keys()].filter(key => namesOf(kind, key).some(name => ids.includes(name)));
 
   /** Lists visible entities through the backing list route, so FGA filtering and stored agents are inherited. */
   const listVisible = async (route: ServerRoute, kind: MCPPrimitiveKind, query?: DispatchRouteInput['query']) => {
@@ -182,7 +233,7 @@ export async function buildBuiltinMCPTools(
     const result = await dispatchRoute(route, { query }, routeContext);
     if (!result.ok) return undefined;
     const entries = Object.entries((result.result ?? {}) as Record<string, any>);
-    return new Map(entries.filter(([id]) => config.isSelected(kind, id)));
+    return new Map(entries.filter(([key]) => config.isSelected(kind, namesOf(kind, key))));
   };
 
   const idParam = (label: string, ids: string[] | undefined, listTool: string): JSONSchema7 =>
@@ -241,7 +292,7 @@ export async function buildBuiltinMCPTools(
       usage: { type: 'object' },
     });
     const callAgent = async (agentId: string, args: Args, signal?: AbortSignal) => {
-      requireSelected('agents', agentId, 'Agent');
+      await requireSelected('agents', agentId, 'Agent');
       const { message } = args;
       // The generate route decides the effective resource (auth-derived ids win); a new thread is minted
       // whenever there is one, so memory-backed agents work without the client managing thread ids.
@@ -268,15 +319,17 @@ export async function buildBuiltinMCPTools(
       const listed = (await call(LIST_AGENTS_ROUTE, { query: { partial: 'true' } }, signal)) as Record<string, any>;
       return {
         agents: Object.entries(listed ?? {})
-          .filter(([id, agent]) => config.isSelected('agents', id) && matches(args.query, id, agent?.name))
+          .filter(
+            ([id, agent]) => config.isSelected('agents', namesOf('agents', id)) && matches(args.query, id, agent?.name),
+          )
           .map(([id, agent]) => ({ id, name: agent?.name, description: describeAgent(mastra, id, agent) })),
       };
     });
     addOperation(
       GET_AGENT_BY_ID_ROUTE,
       object({ agentId: idParam('Agent', agentIds, 'list_agents') }, ['agentId']),
-      (args, signal) => {
-        requireSelected('agents', args.agentId, 'Agent');
+      async (args, signal) => {
+        await requireSelected('agents', args.agentId, 'Agent');
         return call(GET_AGENT_BY_ID_ROUTE, { pathParams: { agentId: args.agentId } }, signal);
       },
     );
@@ -289,8 +342,8 @@ export async function buildBuiltinMCPTools(
 
     if (agents && offered(GENERATE_AGENT_ROUTE)) {
       const featured = [];
-      for (const id of config.featured.agents) {
-        if (agents.has(id) && !(await authorizeRoute(mastra, GENERATE_AGENT_ROUTE, { agentId: id }, requestContext))) {
+      for (const id of named('agents', agents, config.featured.agents)) {
+        if (!(await authorizeRoute(mastra, GENERATE_AGENT_ROUTE, { agentId: id }, requestContext))) {
           featured.push(id);
         }
       }
@@ -323,7 +376,7 @@ export async function buildBuiltinMCPTools(
         : { runId: id, ...result };
 
     const startWorkflow = async (id: string, args: Args, signal?: AbortSignal) => {
-      requireSelected('workflows', id, 'Workflow');
+      await requireSelected('workflows', id, 'Workflow');
       const run = args.runId ?? crypto.randomUUID();
       const result = await call(
         START_ASYNC_WORKFLOW_ROUTE,
@@ -337,14 +390,21 @@ export async function buildBuiltinMCPTools(
       const listed = (await call(LIST_WORKFLOWS_ROUTE, { query: { partial: 'true' } }, signal)) as Record<string, any>;
       return {
         workflows: Object.entries(listed ?? {})
-          .filter(([id, workflow]) => config.isSelected('workflows', id) && matches(args.query, id, workflow?.name))
+          .filter(
+            ([id, workflow]) =>
+              config.isSelected('workflows', namesOf('workflows', id)) && matches(args.query, id, workflow?.name),
+          )
           .map(([id, workflow]) => ({ id, name: workflow?.name, description: workflow?.description })),
       };
     });
-    addOperation(GET_WORKFLOW_BY_ID_ROUTE, object({ workflowId: workflowId() }, ['workflowId']), (args, signal) => {
-      requireSelected('workflows', args.workflowId, 'Workflow');
-      return call(GET_WORKFLOW_BY_ID_ROUTE, { pathParams: { workflowId: args.workflowId } }, signal);
-    });
+    addOperation(
+      GET_WORKFLOW_BY_ID_ROUTE,
+      object({ workflowId: workflowId() }, ['workflowId']),
+      async (args, signal) => {
+        await requireSelected('workflows', args.workflowId, 'Workflow');
+        return call(GET_WORKFLOW_BY_ID_ROUTE, { pathParams: { workflowId: args.workflowId } }, signal);
+      },
+    );
     addOperation(
       START_ASYNC_WORKFLOW_ROUTE,
       object(
@@ -367,8 +427,8 @@ export async function buildBuiltinMCPTools(
         },
         ['workflowId', 'runId'],
       ),
-      (args, signal) => {
-        requireSelected('workflows', args.workflowId, 'Workflow');
+      async (args, signal) => {
+        await requireSelected('workflows', args.workflowId, 'Workflow');
         return call(
           GET_WORKFLOW_RUN_BY_ID_ROUTE,
           {
@@ -391,7 +451,7 @@ export async function buildBuiltinMCPTools(
         ['workflowId', 'runId'],
       ),
       async (args, signal) => {
-        requireSelected('workflows', args.workflowId, 'Workflow');
+        await requireSelected('workflows', args.workflowId, 'Workflow');
         const result = await call(
           RESUME_ASYNC_WORKFLOW_ROUTE,
           {
@@ -407,8 +467,8 @@ export async function buildBuiltinMCPTools(
     addOperation(
       CANCEL_WORKFLOW_RUN_ROUTE,
       object({ workflowId: workflowId(), runId }, ['workflowId', 'runId']),
-      (args, signal) => {
-        requireSelected('workflows', args.workflowId, 'Workflow');
+      async (args, signal) => {
+        await requireSelected('workflows', args.workflowId, 'Workflow');
         return call(
           CANCEL_WORKFLOW_RUN_ROUTE,
           { pathParams: { workflowId: args.workflowId, runId: args.runId } },
@@ -419,23 +479,26 @@ export async function buildBuiltinMCPTools(
     );
 
     if (workflows && offered(START_ASYNC_WORKFLOW_ROUTE)) {
-      const featured = [];
-      for (const id of config.featured.workflows) {
-        if (
-          workflows.has(id) &&
-          !(await authorizeRoute(mastra, START_ASYNC_WORKFLOW_ROUTE, { workflowId: id }, requestContext))
-        ) {
-          featured.push(id);
+      const registered = mastra.listWorkflows() as Record<
+        string,
+        { id?: string; inputSchema?: unknown; description?: string }
+      >;
+      // Featured tools are named from the workflow's `.id`; the list is keyed by registration key.
+      const featured = new Map<string, string>();
+      for (const key of named('workflows', workflows, config.featured.workflows)) {
+        const id = registered[key]?.id ?? key;
+        if (!(await authorizeRoute(mastra, START_ASYNC_WORKFLOW_ROUTE, { workflowId: id }, requestContext))) {
+          featured.set(id, key);
         }
       }
-      const registered = mastra.listWorkflows() as Record<string, { inputSchema?: unknown; description?: string }>;
-      for (const [id, name] of nameEntityTools('workflow', featured, used)) {
-        const inputSchema = toJSONSchema(registered[id]?.inputSchema);
+      for (const [id, name] of nameEntityTools('workflow', [...featured.keys()], used)) {
+        const key = featured.get(id)!;
+        const inputSchema = toJSONSchema(registered[key]?.inputSchema);
         const isObject = inputSchema?.type === 'object';
         add(
           name,
           START_ASYNC_WORKFLOW_ROUTE,
-          workflows.get(id)?.description ?? registered[id]?.description ?? `Run the ${id} workflow.`,
+          workflows.get(key)?.description ?? registered[key]?.description ?? `Run the ${id} workflow.`,
           isObject ? inputSchema : object({ inputData: inputSchema ?? {} }),
           (args, signal) => startWorkflow(id, { inputData: isObject ? args : args.inputData }, signal),
         );
@@ -473,12 +536,14 @@ export async function buildBuiltinMCPTools(
           EXECUTE_TOOL_ROUTE,
           tool?.description ?? `Call the ${id} tool.`,
           isObject ? inputSchema : object({ data: inputSchema ?? {} }),
-          (args, signal) =>
-            call(
+          async (args, signal) => {
+            await requireSelected('tools', id, 'Tool');
+            return call(
               EXECUTE_TOOL_ROUTE,
               { pathParams: { toolId: id }, body: { data: isObject ? args : args.data } },
               signal,
-            ),
+            );
+          },
           { annotations: { readOnlyHint: false, destructiveHint: false, ...tool?.mcp?.annotations } },
         );
       }
@@ -489,12 +554,20 @@ export async function buildBuiltinMCPTools(
         const tools = (await call(LIST_TOOLS_ROUTE, {}, signal)) as Record<string, any>;
         return {
           tools: Object.entries(tools ?? {})
-            .map(([key, tool]) => ({ id: (tool?.id as string | undefined) ?? key, description: tool?.description }))
-            .filter(tool => config.isSelected('tools', tool.id) && matches(args.query, tool.id)),
+            .map(([key, tool]) => ({
+              key,
+              id: (tool?.id as string | undefined) ?? key,
+              description: tool?.description,
+            }))
+            .filter(
+              tool =>
+                config.isSelected('tools', [...namesOf('tools', tool.key), tool.id]) && matches(args.query, tool.id),
+            )
+            .map(({ id, description }) => ({ id, description })),
         };
       });
-      addOperation(GET_TOOL_BY_ID_ROUTE, object({ toolId: toolId() }, ['toolId']), (args, signal) => {
-        requireSelected('tools', args.toolId, 'Tool');
+      addOperation(GET_TOOL_BY_ID_ROUTE, object({ toolId: toolId() }, ['toolId']), async (args, signal) => {
+        await requireSelected('tools', args.toolId, 'Tool');
         return call(GET_TOOL_BY_ID_ROUTE, { pathParams: { toolId: args.toolId } }, signal);
       });
       addOperation(
@@ -502,8 +575,8 @@ export async function buildBuiltinMCPTools(
         object({ toolId: toolId(), data: { description: 'Input matching the tool input schema (see get_tool).' } }, [
           'toolId',
         ]),
-        (args, signal) => {
-          requireSelected('tools', args.toolId, 'Tool');
+        async (args, signal) => {
+          await requireSelected('tools', args.toolId, 'Tool');
           return call(EXECUTE_TOOL_ROUTE, { pathParams: { toolId: args.toolId }, body: { data: args.data } }, signal);
         },
       );

@@ -121,7 +121,7 @@ export interface WorkflowContext extends Context {
   requestContext?: RequestContext;
 }
 
-async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
+export async function listWorkflowsFromSystem({ mastra, workflowId }: WorkflowContext) {
   const logger = mastra.getLogger();
 
   if (!workflowId) {

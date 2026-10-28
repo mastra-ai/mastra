@@ -895,8 +895,8 @@ Configures the [built-in MCP server](/docs/server/mcp) that exposes your agents,
 | `enumLimit` | `number` | `25` | Up to this many visible agents or workflows are listed as an enum on the id argument, and up to this many tools get an individual `tool_<id>` tool. |
 | `featured` | `{ agents?: string[]; workflows?: string[] }` | `undefined` | Agents and workflows that also get a dedicated `agent_<id>` or `workflow_<id>` tool. |
 | `readOnly` | `boolean` | `false` | Only serve tools whose backing route is a read operation. Clients can also request this with `?readonly=1` or the `X-MCP-Readonly` header. |
-| `include` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | When set for a primitive type, only these ids are exposed. |
-| `exclude` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | Ids that are never exposed. Takes precedence over `include`. |
+| `include` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | When set for a primitive type, only these are exposed. Each entry matches a primitive's `id` or its registration key. |
+| `exclude` | `{ agents?: string[]; workflows?: string[]; tools?: string[] }` | `undefined` | Never exposed. Each entry matches a primitive's `id` or its registration key. Takes precedence over `include`. |
 | `serverInfo` | `{ name?: string; version?: string; title?: string; instructions?: string }` | `undefined` | Server identity reported to MCP clients. |
 
 ```typescript title="src/mastra/index.ts"

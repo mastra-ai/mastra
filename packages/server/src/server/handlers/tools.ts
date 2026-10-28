@@ -77,6 +77,35 @@ async function findToolInAgents(mastra: any, toolId: string, requestContext: any
 }
 
 /**
+ * Resolves a tool the way the tool routes do: `registeredTools` by `tool.id`, then `mastra.getToolById`
+ * (by `tool.id`, then registration key), then tools resolved by agents.
+ */
+export async function findTool({
+  mastra,
+  registeredTools,
+  toolId,
+  requestContext,
+}: {
+  mastra: any;
+  registeredTools?: Record<string, any>;
+  toolId: string;
+  requestContext?: any;
+}): Promise<any | undefined> {
+  if (registeredTools && Object.keys(registeredTools).length > 0) {
+    const tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
+    if (tool) return tool;
+  }
+  try {
+    const tool = mastra.getToolById(toolId);
+    if (tool) return tool;
+  } catch {
+    // tool not found in global registry, continue to agent fallback
+  }
+  // Fallback: search dynamically-resolved agent tools (toolsResolver)
+  return findToolInAgents(mastra, toolId, requestContext);
+}
+
+/**
  * Serializes a tool for API responses, handling both regular tools (with Zod schemas)
  * and provider-defined tools (with AI SDK lazy schemas).
  */
@@ -164,12 +193,14 @@ export const LIST_TOOLS_ROUTE = createRoute({
       const fgaProvider = getHandlerFGAProvider(mastra, requestContext);
       const user = requestContext?.get('user');
       if (fgaProvider && user) {
-        const toolList = Object.entries(serializedTools).map(([id, t]) => ({ id, ...t }));
+        // FGA checks a tool by its `tool.id` (as POST /tools/:toolId/execute does); the response is keyed by
+        // registration key, which can differ.
+        const toolList = Object.entries(serializedTools).map(([key, t]) => ({ ...t, id: t?.id ?? key, key }));
         const accessible = await fgaProvider.filterAccessible(user, toolList, 'tool', MastraFGAPermissions.TOOLS_READ);
-        const accessibleSet = new Set(accessible.map((t: any) => t.id));
-        for (const id of Object.keys(serializedTools)) {
-          if (!accessibleSet.has(id)) {
-            delete serializedTools[id];
+        const accessibleSet = new Set(accessible.map((t: any) => t.key));
+        for (const key of Object.keys(serializedTools)) {
+          if (!accessibleSet.has(key)) {
+            delete serializedTools[key];
           }
         }
       }
@@ -198,24 +229,7 @@ export const GET_TOOL_BY_ID_ROUTE = createRoute({
   requiresAuth: true,
   handler: async ({ mastra, registeredTools, toolId, requestContext }) => {
     try {
-      let tool: any;
-
-      // Try explicit registeredTools first, then fallback to mastra
-      if (registeredTools && Object.keys(registeredTools).length > 0) {
-        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      }
-      if (!tool) {
-        try {
-          tool = mastra.getToolById(toolId);
-        } catch {
-          // tool not found in global registry, continue to agent fallback
-        }
-      }
-
-      // Fallback: search dynamically-resolved agent tools (toolsResolver)
-      if (!tool) {
-        tool = await findToolInAgents(mastra, toolId, requestContext);
-      }
+      const tool: any = await findTool({ mastra, registeredTools, toolId, requestContext });
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });
@@ -251,24 +265,7 @@ export const EXECUTE_TOOL_ROUTE = createRoute({
         throw new HTTPException(400, { message: 'Tool ID is required' });
       }
 
-      let tool: any;
-
-      // Try explicit registeredTools first, then fallback to mastra
-      if (registeredTools && Object.keys(registeredTools).length > 0) {
-        tool = Object.values(registeredTools).find((t: any) => t.id === toolId);
-      }
-      if (!tool) {
-        try {
-          tool = mastra.getToolById(toolId);
-        } catch {
-          // tool not found in global registry, continue to agent fallback
-        }
-      }
-
-      // Fallback: search dynamically-resolved agent tools (toolsResolver)
-      if (!tool) {
-        tool = await findToolInAgents(mastra, toolId, requestContext);
-      }
+      const tool: any = await findTool({ mastra, registeredTools, toolId, requestContext });
 
       if (!tool) {
         throw new HTTPException(404, { message: 'Tool not found' });

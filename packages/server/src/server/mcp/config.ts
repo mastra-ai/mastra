@@ -16,8 +16,11 @@ export interface ResolvedBuiltinMCPConfig {
   readOnly: boolean;
   enumLimit: number;
   featured: { agents: string[]; workflows: string[] };
-  /** Selection filter from `include` / `exclude`. `exclude` wins. */
-  isSelected(kind: MCPPrimitiveKind, id: string): boolean;
+  /**
+   * Selection filter from `include` / `exclude`. `exclude` wins. Pass every name of one primitive (its `.id` and
+   * registration key); it is excluded when any name is excluded, and included when any name is included.
+   */
+  isSelected(kind: MCPPrimitiveKind, names: string | readonly string[]): boolean;
   serverInfo: NonNullable<ServerMCPConfig['serverInfo']>;
 }
 
@@ -133,7 +136,13 @@ export function resolveBuiltinMCPConfig(mastra: Mastra, request?: Request): Reso
     readOnly,
     enumLimit: config.enumLimit ?? DEFAULT_ENUM_LIMIT,
     featured: { agents: config.featured?.agents ?? [], workflows: config.featured?.workflows ?? [] },
-    isSelected: (kind, id) => !exclude?.[kind]?.includes(id) && (include?.[kind]?.includes(id) ?? true),
+    isSelected: (kind, names) => {
+      const ids = typeof names === 'string' ? [names] : names;
+      return (
+        !ids.some(id => exclude?.[kind]?.includes(id)) &&
+        (include?.[kind] ? ids.some(id => include[kind]!.includes(id)) : true)
+      );
+    },
     serverInfo: config.serverInfo ?? {},
   };
 }
