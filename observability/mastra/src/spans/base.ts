@@ -26,6 +26,7 @@ import { ModelSpanTracker } from '../model-tracing';
 import { isPlainRecord, mergeMetadata as mergeSpanMetadata } from './metadata';
 import { deepClean, mergeSerializationOptions } from './serialization';
 import type { DeepCleanOptions } from './serialization';
+import { getTimeToFirstTokenMs } from './time-to-first-token';
 
 /** Extended span type that includes getParentSpan method available on BaseSpan instances */
 type AnyBaseSpan = AnySpan & {
@@ -689,6 +690,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     // Checked again here because links can be set on the span after it starts
     const links = validLinks(this.links);
     const correlation = this.getCorrelationContext();
+    const timeToFirstTokenMs = getTimeToFirstTokenMs(this);
 
     return {
       id: this.id,
@@ -717,6 +719,7 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
       ...(this.outcome !== undefined ? { outcome: this.outcome } : {}),
       ...(this.stopReason !== undefined ? { stopReason: this.stopReason } : {}),
       ...(this.stopReasonContext !== undefined ? { stopReasonContext: this.stopReasonContext } : {}),
+      ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
       ...(nestedUnderParent ? { nestedUnderParent: true } : {}),
       ...(links ? { links } : {}),
       // Tags are only included for root spans, and a nested run does not own the trace

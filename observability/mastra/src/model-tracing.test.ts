@@ -2626,5 +2626,144 @@ describe('ModelSpanTracker', () => {
         expect(clockOf(testExporter.getSpansByType(type)[0])).toBeUndefined();
       }
     });
+
+    describe('time to first token', () => {
+      const inferenceClockOf = (span: { attributes?: { inferenceStartTime?: Date } } | undefined) =>
+        span?.attributes?.inferenceStartTime?.getTime();
+      const ttftOf = (type: SpanType) => testExporter.getSpansByType(type).map(span => span.timeToFirstTokenMs);
+      const advance = (ms: number) => vi.setSystemTime((now += ms));
+
+      it('copies the first inference start up the chain and measures every level from it', async () => {
+        const t0 = now;
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        tracker.startStep();
+        advance(50);
+        tracker.startInference(); // +50, after input processors
+
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [
+                { type: 'step-start', payload: {} }, // +150
+                { type: 'text-delta', payload: { text: 'a' } }, // +250 first chunk of step 0
+                stepFinish('tool-calls'), // +350
+                { type: 'step-start', payload: {} }, // +450 opens step 1 and its inference
+                { type: 'text-delta', payload: { text: 'b' } }, // +550 first chunk of step 1
+                stepFinish('stop'), // +650
+              ],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        const inferences = testExporter.getSpansByType(SpanType.MODEL_INFERENCE);
+        expect(inferences.map(span => span.startTime.getTime())).toEqual([t0 + 50, t0 + 450]);
+        expect(inferences.map(inferenceClockOf)).toEqual([undefined, undefined]);
+        expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(inferenceClockOf)).toEqual([t0 + 50, t0 + 450]);
+        expect(inferenceClockOf(testExporter.getSpansByType(SpanType.MODEL_GENERATION)[0])).toBe(t0 + 50);
+        expect(inferenceClockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 50);
+
+        expect(ttftOf(SpanType.MODEL_INFERENCE)).toEqual([200, 100]);
+        expect(ttftOf(SpanType.MODEL_STEP)).toEqual([200, 100]);
+        expect(ttftOf(SpanType.MODEL_GENERATION)).toEqual([200]);
+        expect(ttftOf(SpanType.AGENT_RUN)).toEqual([200]);
+        // Time to first chunk counts from each span's own start, so it is never shorter.
+        expect(testExporter.getSpansByType(SpanType.MODEL_STEP).map(clockOf)).toEqual([t0 + 250, t0 + 550]);
+        expect(clockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])! - t0).toBe(250);
+      });
+
+      it('keeps the first generation clock on the agent run across generations', async () => {
+        const t0 = now;
+        const { agentSpan, modelSpan } = startRun();
+        const stream = () =>
+          tickingStream(
+            [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+            100,
+          );
+        const first = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+        await consumeStream(first.wrapStream(stream())); // inference +100, chunk +200
+        first.endGeneration();
+
+        const secondSpan = agentSpan.createChildSpan({
+          type: SpanType.MODEL_GENERATION,
+          name: 'generation 2',
+          attributes: { model: 'gpt-test', provider: 'test', streaming: true },
+        });
+        const second = new ModelSpanTracker(secondSpan, { agentRunSpan: agentSpan });
+        await consumeStream(second.wrapStream(stream())); // inference +400, chunk +500
+        second.endGeneration();
+        agentSpan.end();
+
+        expect(testExporter.getSpansByType(SpanType.MODEL_GENERATION).map(inferenceClockOf)).toEqual([
+          t0 + 100,
+          t0 + 400,
+        ]);
+        expect(inferenceClockOf(testExporter.getSpansByType(SpanType.AGENT_RUN)[0])).toBe(t0 + 100);
+        expect(ttftOf(SpanType.AGENT_RUN)).toEqual([100]);
+      });
+
+      it('carries a clock passed to endGeneration when a fresh tracker ends the generation', () => {
+        const t0 = now;
+        const { agentSpan, modelSpan } = startRun();
+        advance(300);
+        new ModelSpanTracker(modelSpan).endGeneration({
+          attributes: { inferenceStartTime: new Date(t0 + 100), completionStartTime: new Date(t0 + 250) },
+        });
+        agentSpan.end();
+
+        expect(ttftOf(SpanType.MODEL_GENERATION)).toEqual([150]);
+      });
+
+      it('never writes to an agent run it was not given', async () => {
+        const { agentSpan, modelSpan } = startRun();
+        const tracker = new ModelSpanTracker(modelSpan);
+
+        await consumeStream(
+          tracker.wrapStream(
+            tickingStream(
+              [{ type: 'step-start', payload: {} }, { type: 'text-delta', payload: { text: 'a' } }, stepFinish('stop')],
+              100,
+            ),
+          ),
+        );
+        tracker.endGeneration();
+        agentSpan.end();
+
+        expect(ttftOf(SpanType.MODEL_GENERATION)).toEqual([100]);
+        const agentRun = testExporter.getSpansByType(SpanType.AGENT_RUN)[0]!;
+        expect(agentRun.attributes).not.toHaveProperty('inferenceStartTime');
+        expect(agentRun).not.toHaveProperty('timeToFirstTokenMs');
+      });
+
+      it('exports none when no chunk streamed or the installed core has no inference spans', async () => {
+        const run = async () => {
+          const { agentSpan, modelSpan } = startRun();
+          const tracker = new ModelSpanTracker(modelSpan, { agentRunSpan: agentSpan });
+          await consumeStream(
+            tracker.wrapStream(tickingStream([{ type: 'step-start', payload: {} }, stepFinish('stop')], 100)),
+          );
+          tracker.endGeneration();
+          agentSpan.end();
+        };
+        await run();
+        coreFeatures.delete('model-inference-span');
+        await run();
+
+        expect(inferenceClockOf(testExporter.getSpansByType(SpanType.MODEL_STEP)[0])).toBeDefined();
+        for (const type of [
+          SpanType.MODEL_INFERENCE,
+          SpanType.MODEL_STEP,
+          SpanType.MODEL_GENERATION,
+          SpanType.AGENT_RUN,
+        ]) {
+          for (const span of testExporter.getSpansByType(type)) {
+            expect(span).not.toHaveProperty('timeToFirstTokenMs');
+          }
+        }
+      });
+    });
   });
 });

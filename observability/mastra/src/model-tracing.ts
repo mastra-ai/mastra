@@ -391,6 +391,7 @@ export class ModelSpanTracker {
   #stepIndex: number = 0;
   #chunkSequence: number = 0;
   #completionStartTime?: Date;
+  #inferenceStartTime?: Date;
   #inferenceCompletionStartTime?: Date;
   /**
    * True between a step's `step-start` and `step-finish` chunks, the window in which
@@ -489,6 +490,7 @@ export class ModelSpanTracker {
       // clock it carried through the loop state.
       spanOptions.attributes.completionStartTime =
         this.#completionStartTime ?? spanOptions.attributes.completionStartTime;
+      spanOptions.attributes.inferenceStartTime = this.#inferenceStartTime ?? spanOptions.attributes.inferenceStartTime;
       spanOptions.attributes.usage = extractUsageMetrics(usage, providerMetadata);
       spanOptions.attributes.costContext = providerCostContext ?? spanOptions.attributes.costContext;
       if (!spanOptions.attributes.costContext) {
@@ -501,6 +503,10 @@ export class ModelSpanTracker {
 
   getCompletionStartTime(): Date | undefined {
     return this.#completionStartTime;
+  }
+
+  getInferenceStartTime(): Date | undefined {
+    return this.#inferenceStartTime;
   }
 
   /**
@@ -669,6 +675,23 @@ export class ModelSpanTracker {
       input,
       tracingPolicy: this.#modelSpan?.tracingPolicy,
     });
+    this.#captureInferenceStartTime();
+  }
+
+  /**
+   * Copy the first inference's start up the agent's own chain (step → generation
+   * → agent run), first write wins at each level, so time to first token is
+   * `completionStartTime - inferenceStartTime` on whichever span is being read.
+   */
+  #captureInferenceStartTime(): void {
+    const startTime = this.#currentInferenceSpan?.startTime;
+    if (!startTime) return;
+    this.#inferenceStartTime ??= startTime;
+    for (const span of [this.#currentStepSpan, this.#modelSpan, this.#agentRunSpan]) {
+      if (span && !span.attributes?.inferenceStartTime) {
+        span.update({ attributes: { inferenceStartTime: startTime } });
+      }
+    }
   }
 
   /**
