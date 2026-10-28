@@ -94,7 +94,7 @@ query({
   topK?: number;
   randomWalkSteps?: number;
   restartProb?: number;
-  filter?: Record<string, any>;
+  filter?: Partial<Record<string, any>>;
 }): RankedNode[]
 ```
 
@@ -131,7 +131,7 @@ query({
   },
   {
     name: 'filter',
-    type: 'Record<string, any>',
+    type: 'Partial<Record<string, any>>',
     description:
       'Restricts the search to nodes whose metadata matches every given key/value pair. Similarity search and the random walk both stay within matching nodes.',
     isOptional: true,
