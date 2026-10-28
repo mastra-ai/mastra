@@ -1,11 +1,11 @@
 import * as p from '@clack/prompts';
 import color from 'picocolors';
 import { listenForSkipInput, openBrowser } from '../auth/credentials.js';
-import { DEFAULT_CREDITS_PURCHASE, getGatewayCredits, startCreditsCheckout } from './api.js';
+import { creditsPageUrl, getGatewayCredits } from './api.js';
 import type { GatewayCredits } from './api.js';
 
 const POLL_INTERVAL_MS = 3_000;
-const CHECKOUT_TIMEOUT_MS = 10 * 60_000;
+const PURCHASE_TIMEOUT_MS = 10 * 60_000;
 
 export function formatCredits(amount: number): string {
   return `$${amount.toFixed(2)}`;
@@ -20,8 +20,9 @@ export interface CreditsOutcome {
 }
 
 /**
- * Offer to buy credits, by default only when the organization has none. Payment happens on the
- * checkout page in the browser; the terminal waits until the new balance shows up (any key stops waiting).
+ * Offer to add credits, by default only when the organization has none. Credits (and auto top-up) are
+ * bought in the dashboard, which opens in the browser; the terminal waits until the new balance shows
+ * up (any key stops waiting).
  */
 export async function offerGatewayCredits({
   token,
@@ -40,11 +41,10 @@ export async function offerGatewayCredits({
   if (credits.unlimited) return { remaining: credits.remaining, unlimited: true };
   if (credits.remaining > 0 && !always) return { remaining: credits.remaining };
 
-  const amount = DEFAULT_CREDITS_PURCHASE;
   const choice = await p.select({
     message: `Your Gateway balance is ${formatCredits(credits.remaining)}. Model calls are paid per token from credits.`,
     options: [
-      { value: 'buy', label: `Add ${formatCredits(amount)} in credits`, hint: 'opens your browser' },
+      { value: 'buy', label: 'Add credits', hint: 'opens the Mastra dashboard' },
       { value: 'skip', label: 'Skip for now' },
     ],
     initialValue: 'buy',
@@ -53,12 +53,14 @@ export async function offerGatewayCredits({
   });
   if (p.isCancel(choice) || choice === 'skip') return { remaining: credits.remaining };
 
-  const paymentUrl = await startCreditsCheckout(token, orgId, credits, amount);
+  const url = creditsPageUrl(orgId);
   try {
-    openBrowser(paymentUrl);
-    p.log.info(`Opened checkout in your browser. If it didn't open, go to:\n${color.cyan(paymentUrl)}`);
+    openBrowser(url);
+    p.log.info(
+      `Opened the Mastra dashboard. Add credits there, then come back. If it didn't open, go to:\n${color.cyan(url)}`,
+    );
   } catch {
-    p.log.info(`Finish checkout in your browser:\n${color.cyan(paymentUrl)}`);
+    p.log.info(`Add credits in the Mastra dashboard, then come back:\n${color.cyan(url)}`);
   }
 
   return waitForCredits({ token, orgId, before: credits.remaining, signal });
@@ -72,24 +74,27 @@ async function waitForCredits({
 }: {
   token: string;
   orgId: string;
-  /** Balance before checkout; the purchase shows up as an increase. */
+  /** Balance before the purchase; it shows up as an increase. */
   before: number;
   signal?: AbortSignal;
 }): Promise<CreditsOutcome> {
   const spinner = p.spinner();
-  spinner.start('Waiting for checkout to finish (press any key to stop waiting)');
+  spinner.start('Waiting for your credits (press any key to stop waiting)');
 
   let stopped = false;
   const stopListening = listenForSkipInput(() => {
     stopped = true;
   });
-  const deadline = Date.now() + CHECKOUT_TIMEOUT_MS;
+  const deadline = Date.now() + PURCHASE_TIMEOUT_MS;
   try {
     while (!stopped && Date.now() < deadline) {
       signal?.throwIfAborted();
       await sleep(POLL_INTERVAL_MS, signal);
       if (stopped) break;
-      const latest = await getGatewayCredits(token, orgId).catch(() => undefined);
+      const latest = await getGatewayCredits(token, orgId, signal).catch(error => {
+        if (signal?.aborted) throw error;
+        return undefined;
+      });
       if (latest && (latest.unlimited || latest.remaining > before)) {
         const added = latest.remaining - before;
         spinner.stop(`Added ${formatCredits(added)} in credits.`);
@@ -97,13 +102,13 @@ async function waitForCredits({
       }
     }
   } catch (error) {
-    spinner.stop('Stopped waiting for checkout.');
+    spinner.stop('Stopped waiting for credits.');
     throw error;
   } finally {
     stopListening();
   }
 
-  spinner.stop(stopped ? 'Stopped waiting for checkout.' : 'Checkout is taking a while, continuing without it.');
+  spinner.stop(stopped ? 'Stopped waiting for credits.' : 'No credits yet, continuing without them.');
   return { remaining: before };
 }
 

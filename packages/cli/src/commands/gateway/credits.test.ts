@@ -16,9 +16,8 @@ vi.mock('../auth/credentials.js', () => ({
 }));
 
 vi.mock('./api.js', () => ({
-  DEFAULT_CREDITS_PURCHASE: 25,
+  creditsPageUrl: (orgId: string) => `https://projects.test/orgs/${orgId}/settings/credits`,
   getGatewayCredits: vi.fn(),
-  startCreditsCheckout: vi.fn(),
 }));
 
 const prompts = await import('@clack/prompts');
@@ -26,17 +25,11 @@ const credentials = await import('../auth/credentials.js');
 const api = await import('./api.js');
 const { offerGatewayCredits } = await import('./credits');
 
-const credits = (remaining: number, unlimited = false) => ({
-  remaining,
-  unlimited,
-  featureId: 'gateway_credits',
-  topupPlanId: 'gateway_credit_topup',
-});
+const credits = (remaining: number, unlimited = false) => ({ remaining, unlimited });
 
 beforeEach(() => {
   vi.clearAllMocks();
   vi.useRealTimers();
-  vi.mocked(api.startCreditsCheckout).mockResolvedValue('https://checkout.test/s/1');
 });
 
 describe('offerGatewayCredits', () => {
@@ -47,7 +40,15 @@ describe('offerGatewayCredits', () => {
     expect(prompts.select).not.toHaveBeenCalled();
   });
 
-  it('asks at $0 and says calls are paid per token', async () => {
+  it('keeps an unlimited balance', async () => {
+    await expect(offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0, true) })).resolves.toEqual({
+      remaining: 0,
+      unlimited: true,
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
+  });
+
+  it('asks at $0, says calls are paid per token, and opens nothing on skip', async () => {
     vi.mocked(prompts.select).mockResolvedValueOnce('skip');
 
     await expect(offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0) })).resolves.toEqual({
@@ -58,15 +59,15 @@ describe('offerGatewayCredits', () => {
       expect.objectContaining({
         message: 'Your Gateway balance is $0.00. Model calls are paid per token from credits.',
         options: [
-          { value: 'buy', label: 'Add $25.00 in credits', hint: 'opens your browser' },
+          { value: 'buy', label: 'Add credits', hint: 'opens the Mastra dashboard' },
           { value: 'skip', label: 'Skip for now' },
         ],
       }),
     );
-    expect(api.startCreditsCheckout).not.toHaveBeenCalled();
+    expect(credentials.openBrowser).not.toHaveBeenCalled();
   });
 
-  it('opens checkout and waits until the purchase shows up in the balance', async () => {
+  it('opens the dashboard and waits until the purchase shows up in the balance', async () => {
     vi.useFakeTimers();
     vi.mocked(prompts.select).mockResolvedValueOnce('buy');
     vi.mocked(api.getGatewayCredits).mockResolvedValueOnce(credits(0)).mockResolvedValueOnce(credits(25));
@@ -75,9 +76,9 @@ describe('offerGatewayCredits', () => {
     await vi.advanceTimersByTimeAsync(6_000);
 
     await expect(result).resolves.toEqual({ remaining: 25, added: 25 });
-    expect(api.startCreditsCheckout).toHaveBeenCalledWith('t', 'o', credits(0), 25);
-    expect(credentials.openBrowser).toHaveBeenCalledWith('https://checkout.test/s/1');
+    expect(credentials.openBrowser).toHaveBeenCalledWith('https://projects.test/orgs/o/settings/credits');
     expect(api.getGatewayCredits).toHaveBeenCalledTimes(2);
+    expect(spinnerStop).toHaveBeenCalledWith('Added $25.00 in credits.');
   });
 
   it('stops waiting on any key and keeps the old balance', async () => {
@@ -94,6 +95,7 @@ describe('offerGatewayCredits', () => {
 
     await expect(result).resolves.toEqual({ remaining: 0 });
     expect(api.getGatewayCredits).not.toHaveBeenCalled();
+    expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for credits.');
   });
 
   it('stops the spinner and cleans up when the wait is aborted', async () => {
@@ -110,15 +112,8 @@ describe('offerGatewayCredits', () => {
     await settled;
 
     expect(removeListener).toHaveBeenCalledTimes(2);
-    expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for checkout.');
-  });
-
-  it('keeps an unlimited balance', async () => {
-    await expect(offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0, true) })).resolves.toEqual({
-      remaining: 0,
-      unlimited: true,
-    });
-    expect(prompts.select).not.toHaveBeenCalled();
+    expect(api.getGatewayCredits).toHaveBeenCalledWith('t', 'o', controller.signal);
+    expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for credits.');
   });
 
   it('offers more credits on request even with a balance', async () => {

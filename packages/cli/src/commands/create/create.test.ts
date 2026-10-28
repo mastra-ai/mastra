@@ -492,7 +492,13 @@ describe('managed Gateway', () => {
     expect(adapter.adaptDefaultTemplate).toHaveBeenCalledWith(
       expect.objectContaining({ provider: 'mastra', apiKey: undefined }),
     );
-    expect(gatewayApi.createGatewayApiKey).toHaveBeenCalledWith('auth-token', 'org-id', 'my-project');
+    expect(gatewayApi.createGatewayApiKey).toHaveBeenCalledWith(
+      'auth-token',
+      'org-id',
+      'my-project',
+      expect.any(AbortSignal),
+    );
+    expect(gatewayApi.getGatewayCredits).toHaveBeenCalledWith('auth-token', 'org-id', expect.any(AbortSignal));
     expect(gatewayCredits.offerGatewayCredits).toHaveBeenCalledWith(
       expect.objectContaining({ token: 'auth-token', orgId: 'org-id' }),
     );
@@ -611,9 +617,44 @@ describe('managed Gateway', () => {
     expect(prompts.log.warn).toHaveBeenCalledWith('Could not add credits: Requires role: admin');
     expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
     expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Model calls fail until you add credits: npx mastra gateway credits'),
+    );
+  });
+
+  it("doesn't claim a balance it couldn't read", async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayApi = await import('../gateway/api.js');
+    const gatewayCredits = await import('../gateway/credits.js');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayApi.getGatewayCredits).mockRejectedValueOnce(new Error('Billing unavailable'));
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(gatewayCredits.offerGatewayCredits).not.toHaveBeenCalled();
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
+    expect(prompts.note).toHaveBeenCalledWith(
       expect.stringContaining('Check your balance with npx mastra gateway credits'),
     );
     expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Balance: $0.00'));
+  });
+
+  it('shows a spinner while the key is created', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const spinnerStart = vi.fn();
+    const spinnerStop = vi.fn();
+    await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(prompts.spinner).mockReturnValue({ start: spinnerStart, stop: spinnerStop } as never);
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(spinnerStart).toHaveBeenCalledWith('Setting up your Gateway key...');
+    expect(spinnerStop).toHaveBeenCalledWith('Created a Gateway key in Test Org.');
   });
 
   it('explains how to add a key when sign-in is skipped', async () => {

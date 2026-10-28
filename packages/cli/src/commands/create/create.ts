@@ -557,20 +557,35 @@ async function setUpGateway({
   projectName: string;
   signal: AbortSignal;
 }): Promise<GatewaySetupResult> {
+  // Without a spinner the terminal looks stuck while the key is created and the balance is read.
+  const spinner = p.spinner();
+  spinner.start('Setting up your Gateway key...');
+  let spinning = true;
   try {
-    const apiKey = await createGatewayApiKey(token, org.orgId, projectName);
-    signal.throwIfAborted();
-    // Credits are optional: a failed balance read or checkout still keeps the new key.
-    let outcome: { remaining?: number; added?: number; unlimited?: boolean } = {};
+    const apiKey = await createGatewayApiKey(token, org.orgId, projectName, signal);
+    // Credits are optional: a failed balance read or purchase still keeps the new key.
+    let credits: Awaited<ReturnType<typeof getGatewayCredits>> | undefined;
     try {
-      const credits = await getGatewayCredits(token, org.orgId);
-      outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
+      credits = await getGatewayCredits(token, org.orgId, signal);
     } catch (error) {
       if (signal.aborted) throw error;
-      p.log.warn(`Could not add credits: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
+    spinner.stop(`Created a Gateway key in ${org.orgName}.`);
+    spinning = false;
+
+    let outcome: { remaining?: number; added?: number; unlimited?: boolean } = {};
+    if (credits) {
+      try {
+        outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
+      } catch (error) {
+        if (signal.aborted) throw error;
+        p.log.warn(`Could not add credits: ${error instanceof Error ? error.message : 'Unknown error'}`);
+        outcome = { remaining: credits.remaining };
+      }
     }
     return { status: 'ready', apiKey, orgName: org.orgName, ...outcome };
   } catch (error) {
+    if (spinning) spinner.stop('Could not set up a Gateway key.');
     if (signal.aborted) throw error;
     return { status: 'failed', error };
   }
