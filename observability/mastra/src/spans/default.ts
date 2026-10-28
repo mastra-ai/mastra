@@ -125,9 +125,9 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
     if (options?.endTree) {
-      // Close open descendants first (bare, without these options) so
+      // Close affected descendants first so
       // exporters that wait for the root still see it end last.
-      this.endOpenDescendants();
+      this.endOpenDescendants(options);
     }
     if (options) this.applyOutcome(options);
     if (this.outcome === null) this.outcome = 'unknown';

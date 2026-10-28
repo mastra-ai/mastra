@@ -10,7 +10,7 @@ import { ToolStream } from '../../tools/stream';
 import { selectFields } from '../../utils';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import { workflowTermination } from '../execution-outcome';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type { ConditionFunction, InnerOutput, LoopConditionFunction } from '../step';
 import { getStepResult } from '../step';
 import { getEntryId } from '../step-entry';

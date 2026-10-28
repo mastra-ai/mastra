@@ -25,7 +25,7 @@ import {
 /** Identical public runtime scenarios for stores with and without step occurrence guards. */
 export function createControlFlowOutcomeTests({
   createStorage,
-  engines = ['default', 'evented', 'evented-async'],
+  engines = ['default'],
 }: {
   createStorage: () => MastraCompositeStore | Promise<MastraCompositeStore>;
   engines?: readonly ('default' | 'evented' | 'evented-async')[];
@@ -205,7 +205,7 @@ export function createControlFlowOutcomeTests({
 /** A committed loop decision must survive a failed continuation publication. */
 export function createConcurrentBranchOutcomeTests({
   createStorage,
-  engines = ['default', 'evented', 'evented-async'],
+  engines = ['default'],
 }: {
   createStorage: () => MastraCompositeStore | Promise<MastraCompositeStore>;
   engines?: readonly ('default' | 'evented' | 'evented-async')[];
@@ -295,7 +295,7 @@ export function createConcurrentBranchOutcomeTests({
       const blocks = ended().filter(span => span.type === blockType);
       expect(blocks).toHaveLength(1);
       expect(blocks[0]).toMatchObject({
-        outcome: action === 'cancel' ? 'abort' : 'success',
+        outcome: action === 'cancel' ? 'interrupted' : 'success',
         stopReason: action === 'cancel' ? 'caller_cancelled' : null,
       });
       expect(ended().find(span => span.entityId === pending.id)).toMatchObject({

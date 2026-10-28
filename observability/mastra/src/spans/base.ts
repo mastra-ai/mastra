@@ -423,21 +423,25 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
 
-  /** End the span and any descendant spans that are still open, applying `options` to each */
+  /** End this execution and interrupt affected descendants that are still open. */
   endTree(options?: EndSpanOptions<TType>): void {
-    if (this.#openChildren) {
-      for (const child of [...this.#openChildren]) {
-        child.endTree(options as EndSpanOptions<any>);
-      }
-    }
-    this.end(options);
+    this.end({ ...options, endTree: true });
   }
 
-  /** Close any still-open descendant spans without applying options to them */
-  protected endOpenDescendants(): void {
+  /** Preserve completed children; only known cascading termination interrupts open work. */
+  protected endOpenDescendants(options?: EndSpanOptions<TType>): void {
+    const outcome = options?.outcome !== undefined ? options.outcome : this.outcome;
+    const stopReason = options?.stopReason !== undefined ? options.stopReason : this.stopReason;
+    const stopReasonContext =
+      options?.stopReasonContext !== undefined ? options.stopReasonContext : this.stopReasonContext;
+    const interrupts =
+      outcome === 'abort' || outcome === 'interrupted' || (outcome === 'limit' && stopReason === 'timeout');
     if (this.#openChildren) {
       for (const child of [...this.#openChildren]) {
-        child.endTree();
+        child.end({
+          endTree: true,
+          ...(interrupts ? { outcome: 'interrupted', stopReason, stopReasonContext } : {}),
+        } as EndSpanOptions<SpanType>);
       }
     }
   }

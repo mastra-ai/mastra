@@ -8,7 +8,7 @@ import type { ObservabilityContext } from '../../observability';
 import { WORKFLOW_RUN_STATUSES } from '../../storage/domains/workflows/run-statuses';
 import { WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import { workflowTermination } from '../execution-outcome';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type {
   EntryExecutionResult,
   ExecutionContext,

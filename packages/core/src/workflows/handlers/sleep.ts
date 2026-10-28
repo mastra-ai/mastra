@@ -6,7 +6,7 @@ import type { ObservabilityContext, SpanTermination } from '../../observability'
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
 import type { DefaultExecutionEngine } from '../default';
-import { workflowTermination } from '../execution-outcome';
+import { workflowChildTermination as workflowTermination } from '../execution-outcome';
 import type { ExecuteFunction, InnerOutput } from '../step';
 import { getStepResult } from '../step';
 import type {

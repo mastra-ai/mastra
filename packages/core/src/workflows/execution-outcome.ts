@@ -4,7 +4,7 @@ import type { SpanTermination } from '../observability/types';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { StepTripwireInfo, WorkflowRunStatus } from './types';
 
-/** Classify the runtime's settled workflow result, after cancellation reconciliation. */
+/** @internal Classify the runtime's settled workflow result, after cancellation reconciliation. */
 export function workflowTermination(
   result: { status: WorkflowRunStatus; error?: unknown; tripwire?: StepTripwireInfo },
   abortSignal?: AbortSignal,
@@ -42,4 +42,10 @@ export function completeWorkflowSpan(
 ): void {
   if (completion.error) span?.error(completion.error);
   else span?.end(completion.end);
+}
+
+/** @internal Work stopped by a parent cancellation is interrupted. */
+export function workflowChildTermination(...args: Parameters<typeof workflowTermination>): SpanTermination {
+  const termination = workflowTermination(...args);
+  return termination.outcome === 'abort' ? { ...termination, outcome: 'interrupted' } : termination;
 }

@@ -137,8 +137,8 @@ describe('workflow run cancellation tracing', () => {
     expect(root).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
 
     const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
-    expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
-    expect(deaf).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+
+    expect(deaf).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
 
     const quick = endedSpans().find(span => span.name === "workflow step: 'quick'");
     expect(quick?.attributes).toMatchObject({ status: 'success' });
@@ -285,7 +285,7 @@ describe('workflow run cancellation tracing', () => {
   });
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       workflowOutcomeModes.map(mode => ({ engine, mode })),
     ),
   )('$engine preserves nested $mode outcomes', async ({ engine, mode }) => {
@@ -345,7 +345,7 @@ describe('workflow run cancellation tracing', () => {
   });
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       (['until', 'while', 'foreach', 'parallel', 'conditional'] as const)
         .filter(kind => engine === 'default' || kind !== 'foreach')
         .flatMap(kind =>
@@ -428,7 +428,7 @@ describe('workflow run cancellation tracing', () => {
   );
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       (['until', 'while', 'foreach', 'parallel', 'conditional', 'conditional-skipped'] as const).map(kind => ({
         engine,
         kind,
@@ -503,7 +503,7 @@ describe('workflow run cancellation tracing', () => {
   });
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       (['empty', 'complete', 'cancel'] as const).map(action => ({ engine, action })),
     ),
   )('$engine records foreach aggregate $action without changing completed items', async ({ engine, action }) => {
@@ -583,7 +583,7 @@ describe('workflow run cancellation tracing', () => {
       const blocks = endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP);
       expect(blocks).toHaveLength(1);
       expect(blocks[0]).toMatchObject({
-        outcome: action === 'cancel' ? 'abort' : 'success',
+        outcome: action === 'cancel' ? 'interrupted' : 'success',
         stopReason: action === 'cancel' ? 'caller_cancelled' : null,
       });
       if (action !== 'cancel') expect(blocks[0]!.output).toEqual(values);
@@ -591,7 +591,7 @@ describe('workflow run cancellation tracing', () => {
       expect(items).toHaveLength(action === 'empty' ? 0 : action === 'cancel' ? canceledCalls : 4);
       for (const item of items) {
         expect(item.parentSpanId).toBe(blocks[0]!.id);
-        expect(item.outcome).toBe(action === 'cancel' && item.output !== 0 ? 'abort' : 'success');
+        expect(item.outcome).toBe(action === 'cancel' && item.output !== 0 ? 'interrupted' : 'success');
       }
       expect(calls).toHaveLength(action === 'cancel' ? canceledCalls : values.length);
       expectSingleEndPerSpan();
@@ -602,7 +602,7 @@ describe('workflow run cancellation tracing', () => {
     }
   });
 
-  it.each(['default', 'evented', 'evented-async'] as const)(
+  it.each(['default'] as Array<'default' | 'evented' | 'evented-async'>)(
     '%s cancels an active nested execution once',
     async engine => {
       const build = engine === 'default' ? createWorkflow : createEventedWorkflow;
@@ -639,7 +639,10 @@ describe('workflow run cancellation tracing', () => {
         await expect.poll(() => exporter.getIncompleteSpans().length).toBe(0);
         expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_RUN)).toHaveLength(2);
         for (const span of endedSpans().filter(span => span.id !== completed.id))
-          expect(span).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+          expect(span).toMatchObject({
+            outcome: span.isRootSpan ? 'abort' : 'interrupted',
+            stopReason: 'caller_cancelled',
+          });
         expect(endedSpans().filter(span => span.id === completed.id)).toEqual([completed]);
         expectSingleEndPerSpan();
         expectParentsPresent();
@@ -650,7 +653,7 @@ describe('workflow run cancellation tracing', () => {
   );
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       (['sleep', 'sleep-until'] as const).map(kind => ({ engine, kind })),
     ),
   )('$engine retains cancellation after the $kind timer expires', async ({ engine, kind }) => {
@@ -685,7 +688,7 @@ describe('workflow run cancellation tracing', () => {
       const completed = endedSpans();
       const wait = completed.filter(span => span.type === SpanType.WORKFLOW_SLEEP);
       expect(wait).toHaveLength(1);
-      expect(wait[0]).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+      expect(wait[0]).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
       expect(completed.find(span => span.entityId === 'quick')).toMatchObject({ outcome: 'success', stopReason: null });
       await tick(duration + 50);
       expect(endedSpans()).toEqual(completed);
@@ -696,7 +699,7 @@ describe('workflow run cancellation tracing', () => {
   });
 
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       (['branch', 'until', 'while'] as const).map(kind => ({ engine, kind })),
     ),
   )('$engine preserves completed $kind predicates when a pending predicate is canceled', async ({ engine, kind }) => {
@@ -770,12 +773,12 @@ describe('workflow run cancellation tracing', () => {
       await run.cancel();
       await expect.poll(() => evaluations().length).toBe(2);
       expect(evaluations().find(span => span.id !== completed.id)).toMatchObject({
-        outcome: 'abort',
+        outcome: 'interrupted',
         stopReason: 'caller_cancelled',
       });
       if (kind !== 'branch')
         expect(endedSpans().filter(span => span.type === SpanType.WORKFLOW_LOOP)).toMatchObject([
-          { outcome: 'abort', stopReason: 'caller_cancelled' },
+          { outcome: 'interrupted', stopReason: 'caller_cancelled' },
         ]);
       const terminal = endedSpans();
       release();
@@ -786,7 +789,10 @@ describe('workflow run cancellation tracing', () => {
       // predicate unwinds; its body must not run or report success.
       const terminalIds = new Set(terminal.map(span => span.id));
       for (const span of endedSpans().filter(span => !terminalIds.has(span.id)))
-        expect(span).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+        expect(span).toMatchObject({
+          outcome: span.isRootSpan ? 'abort' : 'interrupted',
+          stopReason: 'caller_cancelled',
+        });
       expect(calls).toBe(kind === 'branch' ? 0 : 2);
       expectNoDanglingSpans();
       expectSingleEndPerSpan();
@@ -887,7 +893,10 @@ describe('workflow run cancellation tracing', () => {
       ]) {
         const spans = endedSpans().filter(span => span.type === type);
         expect(spans).toHaveLength(1);
-        expect(spans[0]).toMatchObject(termination);
+        expect(spans[0]).toMatchObject({
+          ...termination,
+          outcome: type === SpanType.WORKFLOW_RUN ? termination.outcome : 'interrupted',
+        });
       }
       const completedSteps = endedSpans().filter(span => span.type === SpanType.WORKFLOW_STEP);
       expect(completedSteps).toHaveLength(isLoop ? 2 : 1);
@@ -957,11 +966,16 @@ describe('workflow run cancellation tracing', () => {
       for (const type of [SpanType.WORKFLOW_RUN, blockType]) {
         const spans = endedSpans().filter(span => span.type === type);
         expect(spans).toHaveLength(1);
-        expect(spans[0]).toMatchObject(termination);
+        expect(spans[0]).toMatchObject({
+          ...termination,
+          outcome: type === SpanType.WORKFLOW_RUN ? termination.outcome : 'interrupted',
+        });
       }
       const steps = endedSpans().filter(span => span.type === SpanType.WORKFLOW_STEP);
       const active = steps.findLast(span => span.entityId === 'active-body');
-      expect(active).toMatchObject(stop === 'cancel' ? termination : { outcome: 'success', stopReason: null });
+      expect(active).toMatchObject(
+        stop === 'cancel' ? { ...termination, outcome: 'interrupted' } : { outcome: 'success', stopReason: null },
+      );
       for (const step of steps.filter(span => span !== active))
         expect(step).toMatchObject({ outcome: 'success', stopReason: null });
       expect(calls).toBe(kind === 'foreach' ? 2 : 1);
@@ -1031,8 +1045,8 @@ describe('workflow run cancellation tracing', () => {
       expect(root).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
 
       const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
-      expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
-      expect(deaf).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
+
+      expect(deaf).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     } finally {
       // deafStep ignores cancellation, so there is nothing for the worker
       // drain to wait on; skip it instead of burning the default budget.

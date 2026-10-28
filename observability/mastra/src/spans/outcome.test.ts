@@ -42,6 +42,32 @@ describe('native execution outcomes (OBS-724)', () => {
     expect(child.exportSpan()).toMatchObject({ outcome: 'unknown' });
   });
 
+  it.each(['method', 'option'] as const)('%s: distinguishes cancellation from consequential interruption', api => {
+    const { tracing } = setup();
+    const root = tracing.startSpan({ name: 'agent', type: SpanType.AGENT_RUN, outcome: null });
+    const open = root.createChildSpan({ name: 'tool', type: SpanType.TOOL_CALL, outcome: null });
+    const done = root.createChildSpan({ name: 'done', type: SpanType.TOOL_CALL, outcome: null });
+    done.end({ outcome: 'success' });
+    const termination = { outcome: 'abort' as const, stopReason: 'caller_cancelled' as const };
+    if (api === 'method') root.endTree(termination);
+    else root.end({ ...termination, endTree: true });
+    expect(root.exportSpan()).toMatchObject(termination);
+    expect(open.exportSpan()).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
+    expect(done.exportSpan()).toMatchObject({ outcome: 'success' });
+  });
+
+  it('records an ancestor deadline as interruption on its unfinished descendants', () => {
+    const { tracing } = setup();
+    const root = tracing.startSpan({ name: 'agent', type: SpanType.AGENT_RUN, outcome: null });
+    const child = root.createChildSpan({ name: 'tool', type: SpanType.TOOL_CALL, outcome: null });
+    root.end({ outcome: 'limit', stopReason: 'timeout', stopReasonContext: { timeoutMs: 100 }, endTree: true });
+    expect(child.exportSpan()).toMatchObject({
+      outcome: 'interrupted',
+      stopReason: 'timeout',
+      stopReasonContext: { timeoutMs: 100 },
+    });
+  });
+
   it('retains known stop details when an ongoing span is bare-ended', () => {
     const { tracing } = setup();
     const span = tracing.startSpan({ name: 'stopped', type: SpanType.AGENT_RUN, outcome: null });
@@ -137,13 +163,13 @@ describe('native execution outcomes (OBS-724)', () => {
     });
   });
 
-  it('does not copy a primary cancellation onto children closed for cleanup', () => {
+  it('records primary cancellation as interruption on children closed for cleanup', () => {
     const { tracing } = setup();
     const primary = tracing.startSpan({ name: 'primary', type: SpanType.AGENT_RUN, outcome: null });
     const child = primary.createChildSpan({ name: 'child', type: SpanType.TOOL_CALL });
     primary.end({ outcome: 'abort', stopReason: 'caller_cancelled', endTree: true });
     expect(primary.exportSpan()).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
-    expect(child.exportSpan()).not.toHaveProperty('outcome');
+    expect(child.exportSpan()).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
   });
 
   it.each([false, true])('does not rewrite a completed suspension after late events (rebuilt=%s)', rebuild => {

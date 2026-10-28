@@ -24,6 +24,7 @@ import type {
   ModelStepInput,
   Span,
   SpanTermination,
+  SpanOutcomeFields,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
@@ -44,6 +45,16 @@ function supportsModelInference(): boolean {
 
 import { extractOpenRouterCost, extractUsageMetrics } from './usage';
 import type { OpenRouterCostResult } from './usage';
+
+// Run cancellation/deadlines interrupt work inside the model generation.
+function interruptedByRun(termination: SpanTermination): SpanTermination;
+function interruptedByRun(termination: SpanOutcomeFields): SpanOutcomeFields;
+function interruptedByRun(termination: SpanOutcomeFields): SpanOutcomeFields {
+  return termination.outcome === 'abort' ||
+    (termination.stopReason === 'timeout' && termination.stopReasonContext && 'timeoutType' in termination.stopReasonContext && termination.stopReasonContext.timeoutType === 'total')
+    ? { ...termination, outcome: 'interrupted' }
+    : termination;
+}
 
 type StepInputPreview = ModelStepInput | undefined;
 
@@ -467,11 +478,11 @@ export class ModelSpanTracker {
         ? { outcome: options.outcome, stopReason: options.stopReason, stopReasonContext: options.stopReasonContext }
         : coreObservability.executionFailureTermination?.(options.error);
     if (this.#currentInferenceSpan) {
-      this.#currentInferenceSpan.error({ error: options.error, ...termination, endSpan: true });
+      this.#currentInferenceSpan.error({ error: options.error, ...(termination ? interruptedByRun(termination) : {}), endSpan: true });
       this.#currentInferenceSpan = undefined;
     }
     if (this.#currentStepSpan) {
-      this.#currentStepSpan.error({ error: options.error, ...termination, endSpan: true });
+      this.#currentStepSpan.error({ error: options.error, ...(termination ? interruptedByRun(termination) : {}), endSpan: true });
       this.#currentStepSpan = undefined;
     }
     this.#modelSpan?.error(options);
@@ -514,7 +525,7 @@ export class ModelSpanTracker {
         stopReasonContext: spanOptions.stopReasonContext,
       };
       this.#endChunkSpan();
-      this.#currentStepSpan?.endTree(termination);
+      this.#currentStepSpan?.end({ ...termination, outcome: 'interrupted', endTree: true });
       this.#currentStepSpan = undefined;
       this.#currentInferenceSpan = undefined;
       this.#currentStepInputIsFinal = false;
@@ -685,6 +696,7 @@ export class ModelSpanTracker {
 
   /** End the current attempt only; generation and agent spans belong to their owners. */
   endAttempt(termination: SpanTermination): void {
+    termination = interruptedByRun(termination);
     const payload = this.#pendingStepFinishPayload ?? this.#pendingInferenceFinish;
     if (payload) {
       this.#endStepSpan(payload, termination);

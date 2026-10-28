@@ -435,6 +435,7 @@ export function createDurableLLMMappingStep() {
               });
           stepSpan.end({
             ...termination,
+            ...(signal?.aborted ? { outcome: 'interrupted' as const } : {}),
             output: {
               text: llmOutput.text,
               toolCalls: llmOutput.toolCalls,
