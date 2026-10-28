@@ -1,5 +1,6 @@
 import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
+import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
@@ -2034,9 +2035,88 @@ export class WorkflowEventProcessor extends EventProcessor {
       );
     }
 
-    activeStepsPath[leafId] = executionPath;
-
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const nestedWorkflowStep = getEntryWorkflow(leaf);
+    const guardStart =
+      workflowsStore?.supportsWorkflowStepGuards() &&
+      args.eventId &&
+      !restart &&
+      !timeTravel &&
+      !resumeSteps?.length &&
+      step.type !== 'foreach';
+    let nestedRunId = '';
+    if (nestedWorkflowStep) {
+      const continueRedelivery = async () => {
+        if (restart || timeTravel || resumeSteps?.length || step.type === 'foreach' || !workflowsStore) return false;
+        // Redeliveries that cannot execute a child must not make a new authorization decision.
+        const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflowId, runId });
+        if (snapshot && ['success', 'failed', 'canceled', 'tripwire'].includes(snapshot.status)) return true;
+        if (snapshot?.status === 'suspended' && snapshot.context[leafId]?.status === 'suspended') return true;
+        if (guardStart) {
+          try {
+            assertWorkflowStepGuard({
+              snapshot,
+              stepId: leafId,
+              startGuard: { eventId: args.eventId!, expectedStartedBy: stepResults[leafId]?.metadata?.startedBy },
+            });
+          } catch (error) {
+            if (!isWorkflowStepConflictError(error) || error.reason !== 'completed') throw error;
+            if (error.storedResult?.status === 'success') {
+              const continuation = {
+                ...args,
+                stepResults: { ...stepResults, ...error.storedSnapshot?.context },
+                requestContext: restoreLiveRequestContext(error.storedRequestContext, requestContext),
+                state: error.storedSnapshot?.context.__state ?? currentState,
+                prevResult: error.storedResult,
+              };
+              if (step.type === 'loop') await this.#processLoop(continuation, step, error.storedResult, args.eventId);
+              else await this.processWorkflowStepEnd(continuation);
+              return true;
+            }
+          }
+        }
+        return false;
+      };
+      if (await continueRedelivery()) return;
+      if (resumeSteps?.length && resumeSteps[0] === leafId) {
+        nestedRunId = stepResults[leafId]?.suspendPayload?.__workflow_meta?.runId;
+      } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
+        nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
+      } else if (restart && !!restart.activeStepsPath?.[leafId]) {
+        nestedRunId =
+          (step.type === 'foreach'
+            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
+            : undefined) ??
+          stepResults[leafId]?.metadata?.nestedRunId ??
+          globalThis.crypto.randomUUID();
+      } else {
+        nestedRunId = globalThis.crypto.randomUUID();
+      }
+      const fgaProvider = this.mastra.getServer()?.fga;
+      if (fgaProvider && !nestedWorkflowStep.isInternal) {
+        const parentRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
+        const rc = new RequestContext(Object.entries(requestContext ?? {}));
+        try {
+          // Nested evented dispatch bypasses Workflow.execute, including its FGA gate.
+          await requireFGA({
+            fgaProvider,
+            user: rc.get('user'),
+            resource: { type: 'workflow', id: getWorkflowFGAResourceId(nestedWorkflowStep.id) },
+            permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+            requestContext: rc,
+            actor,
+            context: { resourceId: parentRun?.resourceId },
+            metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
+          });
+        } catch (error) {
+          // A concurrent delivery may have finished while authorization was pending.
+          if (await continueRedelivery()) return;
+          return this.errorWorkflow(args, getErrorFromUnknown(error));
+        }
+      }
+    }
+
+    activeStepsPath[leafId] = executionPath;
 
     // Record "this step is running, with this input" BEFORE executing it —
     // mirroring the default engine's `persistStepUpdate` phase:'start' contract
@@ -2054,13 +2134,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepResults: stepResults ?? {},
         workflowStatus: 'running',
       }) ?? true;
-    const guardStart =
-      workflowsStore?.supportsWorkflowStepGuards() &&
-      args.eventId &&
-      !restart &&
-      !timeTravel &&
-      !resumeSteps?.length &&
-      step.type !== 'foreach';
     let completedResult: StepResult<any, any, any, any> | undefined;
     if ((shouldPersistRunning || guardStart) && workflowsStore) {
       // A resumed step skips this generic write (it is claimed separately
@@ -2236,13 +2309,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     }
 
     // Run nested workflow - only a plain `step` entry can wrap a live Workflow
-    const nestedWorkflowStep = getEntryWorkflow(leaf);
     if (nestedWorkflowStep) {
       const nestedWorkflow = nestedWorkflowStep;
       // Handle resume with only nested workflow ID specified (auto-detect suspended inner step)
       if (resumeSteps?.length === 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
-        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2343,8 +2413,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (resumeSteps?.length > 1 && resumeSteps[0] === leafId) {
-        const stepData = stepResults[leafId];
-        const nestedRunId = stepData?.suspendPayload?.__workflow_meta?.runId;
         if (!nestedRunId) {
           return this.errorWorkflow(
             {
@@ -2418,7 +2486,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (timeTravel && timeTravel.steps?.length > 1 && timeTravel.steps[0] === leafId) {
-        const nestedRunId = stepResults[leafId]?.metadata?.nestedRunId ?? globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2473,12 +2540,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else if (restart && !!restart.activeStepsPath?.[leafId]) {
-        const nestedRunId =
-          (step.type === 'foreach'
-            ? stepResults[leafId]?.metadata?.foreachNestedRunIds?.[executionPath[1]!]
-            : undefined) ??
-          stepResults[leafId]?.metadata?.nestedRunId ??
-          globalThis.crypto.randomUUID();
         const snapshot =
           (await workflowsStore?.loadWorkflowSnapshot({
             workflowName: leafId,
@@ -2591,7 +2652,6 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
       } else {
-        const nestedRunId = globalThis.crypto.randomUUID();
         coverNestedRun(runId, nestedRunId);
         const shouldPersist =
           nestedWorkflow?.options?.shouldPersistSnapshot?.({
