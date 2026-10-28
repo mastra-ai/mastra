@@ -9,7 +9,7 @@ packages:
 
 An agent's instructions hold its always-on system prompt: the model reads it on every turn. Use them to define the agent's identity, tone, role, and standing rules.
 
-Write them in `instructions.md`, `instructions.ts`, or `instructions.js` at the agent root. Use `instructions.md` when the prompt is fixed text. Use `instructions.ts` (or `instructions.js`) when the prompt needs code, for example when it's built from shared constants or resolved per request.
+Write them in one of two files at the agent root. Use `instructions.md` when the prompt is fixed text. Use `instructions.ts` when the prompt needs code, for example when it's built from shared constants or resolved per request.
 
 Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
 
@@ -32,9 +32,9 @@ Effective instructions cover the parts of an agent's behavior that don't change 
 
 Move conditional, large, or action-oriented guidance into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
 
-## Instructions in TypeScript or JavaScript
+## Instructions in TypeScript
 
-Use `instructions.ts` or `instructions.js` when markdown can't express the prompt. Both filenames are discovered and processed the same way. The module default-exports a string, a system message, a non-empty array of strings or system messages, or a function returning one, and `agentInstructions()` types the export without changing it.
+Use `instructions.ts` when markdown can't express the prompt. The file default-exports a string, a system message, a non-empty array of strings or system messages, or a function returning one, and `agentInstructions()` types the export without changing it.
 
 Export a string when the prompt is assembled in code, for example from constants shared with the rest of your app:
 
@@ -61,23 +61,23 @@ export default agentInstructions(({ requestContext }) => {
 
 The function can be `async`. Alongside `requestContext`, it receives `mastra`, the Mastra instance the agent is registered with, so it can read from storage or another registered primitive before returning the prompt. `mastra` is optional in the function type, so guard its use (for example, `mastra?.getStorage()`).
 
-Any of these files can also live in a [subagent](/reference/file-based-agents/subagents) directory, which follows the same rules.
+Both files can also live in a [subagent](/reference/file-based-agents/subagents) directory, which follows the same rules.
 
 ## Build-time behavior
 
-`instructions.md` and the instruction module (`instructions.ts` or `instructions.js`) reach the deployed agent differently:
+`instructions.md` and `instructions.ts` reach the deployed agent differently:
 
 - `instructions.md`: Mastra reads the file and inlines its contents into the generated code at build time.
-- `instructions.ts` / `instructions.js`: The generated code imports the module, so it's bundled like any other source file and can import from the rest of your project.
+- `instructions.ts`: The generated code imports the module, so it's bundled like any other TypeScript file and can import from the rest of your project.
 
-Under `mastra dev`, editing any of these files triggers a rebuild. In a deployed app neither file is read from disk at runtime, so changes take effect after the next build.
+Under `mastra dev`, editing either file triggers a rebuild. In a deployed app neither file is read from disk at runtime, so changes take effect after the next build.
 
 ## Precedence with config
 
-Instructions can come from `instructions.ts`, `instructions.js`, `instructions.md`, or the `instructions` field in [`config.ts`](/reference/file-based-agents/config):
+Instructions can come from `instructions.ts`, `instructions.md`, or the `instructions` field in [`config.ts`](/reference/file-based-agents/config):
 
 - A runtime-defined (function) `instructions` in `config.ts` wins over both files.
-- Otherwise `instructions.ts` or `instructions.js` wins over `instructions.md`.
+- Otherwise `instructions.ts` wins over `instructions.md`.
 - `instructions.md` wins over a static `instructions` string in `config.ts`.
 - If none is present, the build fails and names the agent directory.
 
