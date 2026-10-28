@@ -80,33 +80,36 @@ export function ThreadRail({
     [messageScroller, onSelect],
   );
 
-  const showPreview = (index: number, element: HTMLElement) => {
-    const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
-    const itemRect = element.getBoundingClientRect();
-    const nextTurn = turns[index];
-    if (!nextTurn) return;
+  const showPreview = React.useCallback(
+    (index: number, element: HTMLElement) => {
+      const railTop = railRef.current?.getBoundingClientRect().top ?? 0;
+      const itemRect = element.getBoundingClientRect();
+      const nextTurn = turns[index];
+      if (!nextTurn) return;
 
-    setPreviewState(current => {
-      const nextTop = itemRect.top + itemRect.height / 2 - railTop;
-      if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
-        return { ...current, top: nextTop };
-      }
+      setPreviewState(current => {
+        const nextTop = itemRect.top + itemRect.height / 2 - railTop;
+        if (current.index === index && current.phase !== 'hidden' && current.phase !== 'exiting') {
+          return { ...current, top: nextTop };
+        }
 
-      const previousTurn =
-        current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
-          ? current.currentTurn
-          : undefined;
+        const previousTurn =
+          current.currentTurn && current.currentTurn.key !== nextTurn.key && current.phase !== 'hidden'
+            ? current.currentTurn
+            : undefined;
 
-      return {
-        currentTurn: nextTurn,
-        previousTurn,
-        index,
-        phase: 'entering',
-        top: nextTop,
-        transitionKey: current.transitionKey + 1,
-      };
-    });
-  };
+        return {
+          currentTurn: nextTurn,
+          previousTurn,
+          index,
+          phase: 'entering',
+          top: nextTop,
+          transitionKey: current.transitionKey + 1,
+        };
+      });
+    },
+    [turns],
+  );
 
   const hidePreview = () => {
     setPreviewState(current => {
@@ -258,7 +261,7 @@ const getRailItemTone = ({
   return 'bg-foreground/40';
 };
 
-function ThreadRailItem({
+const ThreadRailItem = React.memo(function ThreadRailItem({
   turn,
   index,
   distance,
@@ -297,7 +300,7 @@ function ThreadRailItem({
       />
     </div>
   );
-}
+});
 
 function ThreadRailPreview({
   id,

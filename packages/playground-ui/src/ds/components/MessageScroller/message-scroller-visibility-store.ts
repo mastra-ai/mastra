@@ -1,10 +1,7 @@
 import { DEFAULT_VISIBILITY } from './message-scroller-context';
 import type { MessageScrollerVisibility } from './message-scroller-context';
 
-/**
- * Which messages are on screen, outside React state: it changes on nearly every scroll frame, and a
- * context value changing that often would make React walk the whole transcript below the provider.
- */
+/** Changes on nearly every scroll frame: as a context value, React walked the whole transcript to find readers. */
 export interface MessageScrollerVisibilityStore {
   getSnapshot: () => MessageScrollerVisibility;
   subscribe: (onChange: () => void) => () => void;
