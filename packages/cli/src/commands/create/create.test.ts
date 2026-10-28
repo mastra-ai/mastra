@@ -86,7 +86,7 @@ vi.mock('./provider-adapter', () => ({
 vi.mock('../gateway/api.js', () => ({
   GATEWAY_API_KEY_ENV: 'MASTRA_GATEWAY_API_KEY',
   createGatewayApiKey: vi.fn(),
-  creditsPageUrl: (orgId: string) => `https://projects.test/orgs/${orgId}/settings/credits`,
+  creditsPageUrl: (orgId: string) => `https://projects.test/add-credits/${orgId}`,
   getGatewayCredits: vi.fn(),
 }));
 
@@ -539,7 +539,7 @@ describe('managed Gateway', () => {
 
     expect(prompts.note).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Model calls fail until you add Gateway credits: https://projects.test/orgs/org-id/settings/credits',
+        'Model calls fail until you add Gateway credits: https://projects.test/add-credits/org-id',
       ),
     );
     expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Balance:'));
@@ -628,7 +628,7 @@ describe('managed Gateway', () => {
     expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
     expect(prompts.note).toHaveBeenCalledWith(
       expect.stringContaining(
-        'Model calls fail until you add Gateway credits: https://projects.test/orgs/org-id/settings/credits',
+        'Model calls fail until you add Gateway credits: https://projects.test/add-credits/org-id',
       ),
     );
   });
@@ -648,9 +648,7 @@ describe('managed Gateway', () => {
     expect(gatewayCredits.offerGatewayCredits).not.toHaveBeenCalled();
     expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
     expect(prompts.note).toHaveBeenCalledWith(
-      expect.stringContaining(
-        'Check your balance in the Mastra dashboard: https://projects.test/orgs/org-id/settings/credits',
-      ),
+      expect.stringContaining('Check your balance in the Mastra dashboard: https://projects.test/add-credits/org-id'),
     );
     expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Balance: $0.00'));
   });

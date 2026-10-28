@@ -83,7 +83,7 @@ describe('getGatewayCredits', () => {
 });
 
 describe('creditsPageUrl', () => {
-  it("points at the organization's credits in the dashboard", () => {
-    expect(creditsPageUrl('org-1')).toBe('https://projects.test/orgs/org-1/settings/credits');
+  it("points at the organization's Add credits page", () => {
+    expect(creditsPageUrl('org-1')).toBe('https://projects.test/add-credits/org-1');
   });
 });

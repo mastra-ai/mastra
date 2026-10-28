@@ -13,7 +13,7 @@ vi.mock('../auth/credentials.js', () => ({
 }));
 
 vi.mock('./api.js', () => ({
-  creditsPageUrl: (orgId: string) => `https://projects.test/orgs/${orgId}/settings/credits`,
+  creditsPageUrl: (orgId: string) => `https://projects.test/add-credits/${orgId}`,
 }));
 
 const prompts = await import('@clack/prompts');
@@ -59,9 +59,7 @@ describe('offerGatewayCredits', () => {
 
     await expect(offerGatewayCredits({ orgId: 'o', credits: credits(0) })).resolves.toBe(true);
 
-    expect(credentials.openBrowser).toHaveBeenCalledWith('https://projects.test/orgs/o/settings/credits');
-    expect(prompts.log.info).toHaveBeenCalledWith(
-      expect.stringContaining('https://projects.test/orgs/o/settings/credits'),
-    );
+    expect(credentials.openBrowser).toHaveBeenCalledWith('https://projects.test/add-credits/o');
+    expect(prompts.log.info).toHaveBeenCalledWith(expect.stringContaining('https://projects.test/add-credits/o'));
   });
 });

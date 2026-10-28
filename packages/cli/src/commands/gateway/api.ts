@@ -108,7 +108,7 @@ export async function getGatewayCredits(token: string, orgId: string, signal?: A
   };
 }
 
-/** The organization's credits in the dashboard (billing), where credits and auto top-up are managed. */
+/** The dashboard's Add credits page for the organization, where credits and auto top-up are bought. */
 export function creditsPageUrl(orgId: string): string {
-  return `${MASTRA_PROJECTS_URL}/orgs/${orgId}/settings/credits`;
+  return `${MASTRA_PROJECTS_URL}/add-credits/${orgId}`;
 }
