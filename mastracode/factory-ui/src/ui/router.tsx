@@ -22,17 +22,15 @@ import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPa
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
-import { AppLayout } from './layouts/AppLayout';
-import type { PageHandle } from './layouts/AppLayout';
+import { AppLayout, sessionPageHandle } from './layouts/AppLayout';
 import { AppRouteErrorPage, RouteErrorPage } from './layouts/RouteErrorPage';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
-import { RulesPage } from './pages/RulesPage';
-import { SignInPage } from './pages/SignInPage';
 
-// Boards stay eager. Heavy secondary pages load on first visit, suspending
-// inside the app shell (see `RoutedPage`) or behind the onboarding loader.
+// Only the boards ship in the startup bundle. Every other page loads on first
+// visit, suspending inside the app shell (see `RoutedPage`) or behind the
+// full-screen loader outside it.
 const NewPage = lazy(() => import('./pages/NewPage').then(module => ({ default: module.NewPage })));
 const ThreadPage = lazy(() => import('./pages/ThreadPage').then(module => ({ default: module.ThreadPage })));
 const KnowledgePage = lazy(() => import('./pages/KnowledgePage').then(module => ({ default: module.KnowledgePage })));
@@ -46,8 +44,8 @@ const CreateFactoryPage = lazy(() =>
 const OnboardingPage = lazy(() =>
   import('./pages/OnboardingPage').then(module => ({ default: module.OnboardingPage })),
 );
-
-const sessionPage: PageHandle = { pageGroup: 'session' };
+const RulesPage = lazy(() => import('./pages/RulesPage').then(module => ({ default: module.RulesPage })));
+const SignInPage = lazy(() => import('./pages/SignInPage').then(module => ({ default: module.SignInPage })));
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -162,11 +160,15 @@ export function createAppRoutes(): RouteObject[] {
                   errorElement: <AppRouteErrorPage />,
                   children: [
                     { index: true, element: <FactoryHomeRedirect /> },
-                    { path: 'workspaces/:sessionId', element: <NewPage />, handle: sessionPage },
-                    { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage />, handle: sessionPage },
-                    { path: 'user/new/:draftSessionId', element: <NewPage />, handle: sessionPage },
-                    { path: 'user/threads/:threadId', element: <ThreadPage />, handle: sessionPage },
-                    { path: 'new', element: <NewPage />, handle: sessionPage },
+                    { path: 'workspaces/:sessionId', element: <NewPage />, handle: sessionPageHandle },
+                    {
+                      path: 'workspaces/:sessionId/threads/:threadId',
+                      element: <ThreadPage />,
+                      handle: sessionPageHandle,
+                    },
+                    { path: 'user/new/:draftSessionId', element: <NewPage />, handle: sessionPageHandle },
+                    { path: 'user/threads/:threadId', element: <ThreadPage />, handle: sessionPageHandle },
+                    { path: 'new', element: <NewPage />, handle: sessionPageHandle },
                     { path: 'new-factory', element: <CreateFactoryPage /> },
                     { path: 'work', element: <WorkBoardPage /> },
                     { path: 'review', element: <ReviewBoardPage /> },
@@ -201,7 +203,11 @@ export function createAppRoutes(): RouteObject[] {
     },
     {
       path: '/signin',
-      element: <SignInPage />,
+      element: (
+        <Suspense fallback={<AuthPendingSkeleton label="Loading page" />}>
+          <SignInPage />
+        </Suspense>
+      ),
       errorElement: <RouteErrorPage />,
     },
   ];

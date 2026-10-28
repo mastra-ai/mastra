@@ -36,22 +36,17 @@ function SidebarShortcuts() {
   return null;
 }
 
-/** Routes sharing a `pageGroup` share one loading boundary: moving between them never shows the loader. */
-export type PageHandle = { pageGroup: string };
-
-function isPageHandle(handle: unknown): handle is PageHandle {
-  return typeof handle === 'object' && handle !== null && 'pageGroup' in handle && typeof handle.pageGroup === 'string';
-}
+/** Route `handle` for session pages: they share one loading boundary, so moving between them never shows the loader. */
+export const sessionPageHandle = Symbol('session page');
 
 // Navigations run in a transition, where a boundary already showing a page keeps
 // it instead of the loader, so each page needs its own boundary.
 function RoutedPage() {
   const page = useMatches().at(-1);
-  const handle = page?.handle;
 
   return (
     <Suspense
-      key={isPageHandle(handle) ? handle.pageGroup : page?.id}
+      key={page?.handle === sessionPageHandle ? 'session' : page?.id}
       fallback={
         <div className="flex flex-1 items-center justify-center transition-opacity delay-150 starting:opacity-0">
           <BrandLoader size="lg" aria-label="Loading page" />
