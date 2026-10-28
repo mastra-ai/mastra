@@ -2,7 +2,7 @@ import type { RouteResponse } from '@mastra/client-js';
 import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
 import { fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { JSONImportDialog } from '../json-import-dialog';
 import { server } from '@/test/msw-server';
@@ -231,17 +231,26 @@ describe('JSONImportDialog', () => {
     await waitForMutationsIdle(queryClient);
   });
 
-  it('cancels the post-close reset timer when the dialog unmounts', () => {
-    const resetTimers: ReturnType<typeof setTimeout>[] = [];
-    const realSetTimeout = globalThis.setTimeout;
-    vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler: () => void, ms?: number) => {
-      const id = realSetTimeout(handler, ms);
-      if (ms === 150) resetTimers.push(id);
-      return id;
-    });
-    const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+  describe('when the dialog unmounts while a reset is pending or about to be scheduled', () => {
+    const trackResetTimers = () => {
+      const resetTimers: ReturnType<typeof setTimeout>[] = [];
+      const realSetTimeout = globalThis.setTimeout;
+      vi.spyOn(globalThis, 'setTimeout').mockImplementation((handler: () => void, ms?: number) => {
+        const id = realSetTimeout(handler, ms);
+        if (ms === 150) resetTimers.push(id);
+        return id;
+      });
+      return resetTimers;
+    };
 
-    try {
+    afterEach(() => {
+      vi.restoreAllMocks();
+    });
+
+    it('cancels the post-close reset timer', () => {
+      const resetTimers = trackResetTimers();
+      const clearSpy = vi.spyOn(globalThis, 'clearTimeout');
+
       const { unmount, onOpenChange } = renderDialog();
       fireEvent.click(screen.getByRole('button', { name: 'Cancel' }));
       expect(onOpenChange).toHaveBeenCalledWith(false);
@@ -250,9 +259,34 @@ describe('JSONImportDialog', () => {
       // If the timer survives unmount it fires into a torn-down tree ("window is not defined" after jsdom teardown).
       unmount();
       expect(clearSpy).toHaveBeenCalledWith(resetTimers[0]);
-    } finally {
-      vi.restoreAllMocks();
-    }
+    });
+
+    it('does not schedule a reset when the import finishes after unmount', async () => {
+      let release: () => void = () => {};
+      const held = new Promise<void>(resolve => {
+        release = resolve;
+      });
+      server.use(
+        http.post(BATCH_URL, async () => {
+          await held;
+          const response: BatchInsertResponse = { items: [], count: 3 };
+          return HttpResponse.json(response);
+        }),
+      );
+      const resetTimers = trackResetTimers();
+
+      const { unmount, onSuccess, queryClient } = renderDialog();
+      pasteJSON(VALID_ITEMS);
+      fireEvent.click(screen.getByRole('button', { name: 'Import 3 items' }));
+      await waitFor(() => expect(queryClient.isMutating()).toBe(1));
+
+      unmount();
+      release();
+      await waitFor(() => expect(onSuccess).toHaveBeenCalledTimes(1));
+      await waitForMutationsIdle(queryClient);
+
+      expect(resetTimers).toHaveLength(0);
+    });
   });
 
   it('copies the example JSON and flips the button label', async () => {

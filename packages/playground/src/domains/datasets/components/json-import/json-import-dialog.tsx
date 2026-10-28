@@ -48,6 +48,7 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
   const [isImporting, setIsImporting] = useState(false);
   const readIdRef = useRef(0);
   const resetTimerRef = useRef<ReturnType<typeof setTimeout>>(undefined);
+  const mountedRef = useRef(false);
 
   const { batchInsertItems } = useDatasetMutations();
 
@@ -99,13 +100,20 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
     setPastedText('');
   }, []);
 
-  // Reset after the close animation; the timer is cleared on unmount so it never fires into a torn-down tree.
+  // Reset after the close animation. Never schedule or keep the timer once unmounted, or it fires into a torn-down tree.
   const scheduleReset = useCallback(() => {
     clearTimeout(resetTimerRef.current);
+    if (!mountedRef.current) return;
     resetTimerRef.current = setTimeout(resetState, 150);
   }, [resetState]);
 
-  useEffect(() => () => clearTimeout(resetTimerRef.current), []);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => {
+      mountedRef.current = false;
+      clearTimeout(resetTimerRef.current);
+    };
+  }, []);
 
   const handleClose = useCallback(() => {
     onOpenChange(false);
