@@ -456,6 +456,8 @@ export class MastraFactory {
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #channelShutdowns: Array<() => Promise<void>> = [];
+  #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -1962,6 +1964,7 @@ export class MastraFactory {
           .join(', ')}] all provide channels, but only one may. Remove all but one.`,
       );
     }
+    this.#channelShutdowns = [];
     for (const { integration } of channelRegistrations) {
       const context = buildIntegrationContext(
         {
@@ -1983,8 +1986,13 @@ export class MastraFactory {
         },
         integration.id,
       );
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // Integrations return a channels CONFIG; the factory owns construction and teardown.
+      const channels = new AgentControllerChannels(integration.channels!(context));
+      prepared.base.controller.setChannels(channels);
+      for (const adapter of Object.values(channels.adapters)) {
+        const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
+        if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
+      }
     }
 
     // Feed publishers mirror web-feed comments outward (a chat bridge, a
@@ -2090,8 +2098,28 @@ export class MastraFactory {
     this.#dispatcher?.start();
   }
 
-  /** Stop Factory-owned background dispatch before the host process shuts down. */
+  /** Stop Factory-owned background work and channel transports before the host process shuts down. */
   async shutdown(): Promise<void> {
-    await this.#dispatcher?.stop();
+    if (this.#shutdownPromise) return this.#shutdownPromise;
+
+    const channelShutdowns = this.#channelShutdowns;
+    this.#channelShutdowns = [];
+    const shutdownPromise = (async () => {
+      const results = await Promise.allSettled([
+        this.#dispatcher?.stop() ?? Promise.resolve(),
+        ...channelShutdowns.map(async shutdown => shutdown()),
+      ]);
+      results.slice(1).forEach((result, index) => {
+        if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
+      });
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure) throw failure.reason;
+    })();
+    this.#shutdownPromise = shutdownPromise;
+    try {
+      await shutdownPromise;
+    } finally {
+      if (this.#shutdownPromise === shutdownPromise) this.#shutdownPromise = undefined;
+    }
   }
 }

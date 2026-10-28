@@ -7,7 +7,7 @@ description: "Browse LLM Gateway model IDs, capabilities, context windows, and p
 
 # <img src="https://models.dev/logos/llmgateway-providers.svg" alt="LLM Gateway logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />LLM Gateway
 
-Access 421 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 423 LLM Gateway models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [LLM Gateway documentation](https://llmgateway.io/docs).
 
@@ -862,18 +862,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 50
   },
   {
-    "model": "llmgateway-providers/azure-ai-foundry/grok-4-1-fast-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 2000000,
-    "maxOutput": 30000,
-    "inputCost": 0.2,
-    "outputCost": 0.5
-  },
-  {
     "model": "llmgateway-providers/azure-ai-foundry/grok-4-1-fast-reasoning",
     "imageInput": true,
     "audioInput": false,
@@ -1690,6 +1678,66 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 1.2
   },
   {
+    "model": "llmgateway-providers/cloudflare/deepseek-v4-flash",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 0.44,
+    "outputCost": 1.32
+  },
+  {
+    "model": "llmgateway-providers/cloudflare/deepseek-v4-pro",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 1.32,
+    "outputCost": 3.96
+  },
+  {
+    "model": "llmgateway-providers/cloudflare/deepseek-v4.1-flash-1017",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 393216,
+    "inputCost": 0.3,
+    "outputCost": 1.2
+  },
+  {
+    "model": "llmgateway-providers/cloudflare/glm-5.3",
+    "imageInput": false,
+    "audioInput": false,
+    "videoInput": false,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 1.4,
+    "outputCost": 4.4
+  },
+  {
+    "model": "llmgateway-providers/cloudflare/glm-5.3-flash",
+    "imageInput": true,
+    "audioInput": false,
+    "videoInput": true,
+    "toolUsage": true,
+    "reasoning": true,
+    "contextWindow": 1048576,
+    "maxOutput": 131072,
+    "inputCost": 0.15,
+    "outputCost": 0.5
+  },
+  {
     "model": "llmgateway-providers/consensusprotocol/deepseek-v4-flash",
     "imageInput": false,
     "audioInput": false,
@@ -2120,18 +2168,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1040384,
     "inputCost": 4.5,
     "outputCost": 22.5
-  },
-  {
-    "model": "llmgateway-providers/gonka24/minimax-m2.7",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 204800,
-    "maxOutput": 131100,
-    "inputCost": 0.08,
-    "outputCost": 0.32
   },
   {
     "model": "llmgateway-providers/google-ai-studio/gemini-3-flash-preview",
@@ -3188,18 +3224,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8000,
     "inputCost": 0.51,
     "outputCost": 0.74
-  },
-  {
-    "model": "llmgateway-providers/novita/llama-3.2-3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 32000,
-    "inputCost": 0.03,
-    "outputCost": 0.05
   },
   {
     "model": "llmgateway-providers/novita/llama-3.3-70b-instruct",
