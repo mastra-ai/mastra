@@ -43,6 +43,10 @@ services:
     # persistence volume is needed for local dev.
     image: redis:8-alpine
     container_name: mastracode-web-redis
+    # Pub/sub keys (streams, consumer groups, leases) are live state, not cache:
+    # an evicting policy drops events and leases under memory pressure. Use the
+    # same policy in production.
+    command: ['redis-server', '--maxmemory-policy', 'noeviction']
     ports:
       - '63799:6379'
     healthcheck:
