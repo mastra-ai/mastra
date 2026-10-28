@@ -702,6 +702,9 @@ interface AgentRunAttributes {
 
   /** When the run's model streamed its first chunk, copied from the agent's own first generation */
   completionStartTime?: Date
+
+  /** When the run's first model inference started, copied the same way */
+  inferenceStartTime?: Date
 }
 ```
 
@@ -812,6 +815,9 @@ interface ModelStepAttributes {
 
   /** When the step's first inference streamed its first chunk */
   completionStartTime?: Date
+
+  /** When the step's first model inference started */
+  inferenceStartTime?: Date
 }
 ```
 

@@ -93,7 +93,7 @@ const result = await mastraClient.querySpans({
 console.log(result.spans)
 ```
 
-Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, or `timeToFirstChunkMs`, ascending or descending, and defaults to descending start time. Spans without a `timeToFirstChunkMs` value sort last in both directions.
+Pages default to 100 rows and allow at most 1,000. The response is `{ spans, page: { next } }`, without a total count. Ordering accepts exactly one of `startedAt`, `endedAt`, `timeToFirstChunkMs`, or `timeToFirstTokenMs`, ascending or descending, and defaults to descending start time. Spans without a value for the `timeToFirstChunkMs` or `timeToFirstTokenMs` sort field sort last in both directions.
 
 | Fields | Operators |
 | - | - |
@@ -101,7 +101,7 @@ Pages default to 100 rows and allow at most 1,000. The response is `{ spans, pag
 | `organizationId`, `resourceId`, `runId`, `sessionId`, `userId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | Entity, parent entity and root entity `Type`, `Id`, `Name`, `VersionId` fields, such as `parentEntityId` | Same string operators |
 | `name`, `spanType`, `status` | Same string operators; `name` also accepts `matches` / `notMatches` for normalized whole words and phrases |
-| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs` | Comparisons, membership and presence |
+| `startedAt`, `endedAt`, `durationMs`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | Comparisons, membership and presence |
 | `error` | `exists`, `notExists` |
 
 Combine predicates with `and`, `or` and `not`. Membership uses `{ op: 'in', value: { path: 'spanType' }, set: ['agent_run', 'tool_call'] }`. A span's status is `error` when it has an error and `success` otherwise.
@@ -195,7 +195,7 @@ Use `where` to filter thread rows. Combine predicates with `and`, `or` and `not`
 | `resourceId`, `userId`, `runId`, `sessionId`, `requestId`, `serviceName`, `experimentId`, `environment`, `executionSource` | Same string operators |
 | `entityType`, `entityId`, `entityName`, `entityVersionId` | Same string operators |
 | `status` | `eq`, `ne`, `in`, `notIn`, with values `success` or `error` |
-| `startedAt`, `endedAt`, `timeToFirstChunkMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
+| `startedAt`, `endedAt`, `timeToFirstChunkMs`, `timeToFirstTokenMs` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte`, `in`, `notIn`, `exists`, `notExists` |
 | `traceCount` | `eq`, `ne`, `lt`, `lte`, `gt`, `gte` |
 
 For example, filter for threads from selected agents with at least three traces:
@@ -236,6 +236,7 @@ The response is `{ threads, page: { next } }`, without a total count. Each entry
 | `inputPreview` | First trace's input preview. |
 | `outputPreview`, `errorPreview` | Last-started trace's previews. |
 | `timeToFirstChunkMs` | First trace's root agent time to first chunk, in milliseconds. `null` when unavailable or the root isn't an agent. |
+| `timeToFirstTokenMs` | First trace's root agent time to first token, in milliseconds, with the same `null` rules. Present only when the store supports it. |
 
 An earlier-started trace can finish last. In that case, it supplies `endedAt`, while the last-started trace still supplies status and output/error previews. Missing first-trace values aren't replaced with values from a later trace.
 
