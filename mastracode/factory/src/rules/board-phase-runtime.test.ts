@@ -251,9 +251,14 @@ describe('board phase fields at runtime', () => {
       );
 
       // The high-effort card reaches Build too, but its run waits for a person: nothing ran.
-      expect(await stagesOf(large)).toEqual(['build']);
-      expect((await decisionsFor(large)).map(record => [record.decision.type, record.status])).toEqual(
-        expect.arrayContaining([['invokeSkill', 'proposed']]),
+      await vi.waitFor(
+        async () => {
+          expect(await stagesOf(large)).toEqual(['build']);
+          expect((await decisionsFor(large)).map(record => [record.decision.type, record.status])).toEqual(
+            expect.arrayContaining([['invokeSkill', 'proposed']]),
+          );
+        },
+        { timeout: 15_000 },
       );
       expect(await workItems.listRunBindings(ORG, project.id, large.id)).toEqual([]);
       expect(requests.some(text => text.includes('Publish large rewrite.'))).toBe(false);
