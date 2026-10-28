@@ -1873,6 +1873,25 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             expect(result.toolCalls ?? []).toEqual([]);
           });
 
+          it('does not run a tool whose streamed input was cut off before the validation error', async () => {
+            const execute = vi.fn(async () => 'ran');
+            const { error } = await runStructuredFailure({
+              finishReason: 'stop',
+              holdStreamOpenAfterFinish: false,
+              toolInputParts: [
+                { type: 'tool-input-start', id: 'call-1', toolName: 'update-status' },
+                { type: 'tool-input-delta', id: 'call-1', delta: '{' },
+                { type: 'tool-input-end', id: 'call-1' },
+              ],
+              tools: {
+                'update-status': { inputSchema: z.object({}), execute },
+              },
+            });
+
+            expect(error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+            expect(execute).not.toHaveBeenCalled();
+          });
+
           it('stops at the finish chunk without waiting for the upstream to close, and keeps the validation error', async () => {
             const { result, error } = await runStructuredFailure({
               finishReason: 'stop',
