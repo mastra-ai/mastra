@@ -51,9 +51,11 @@ export function serializeSpanAttributes(span: AnyExportedSpan): Record<string, a
     return null;
   }
 
+  // Time to first token has its own column, so it is not kept in the attributes JSON too.
+  const { timeToFirstTokenMs: _timeToFirstTokenMs, ...attributes } = span.attributes as Record<string, unknown>;
   try {
     return JSON.parse(
-      JSON.stringify(span.attributes, (_key, value) => {
+      JSON.stringify(attributes, (_key, value) => {
         if (value instanceof Date) {
           return value.toISOString();
         }
@@ -63,6 +65,12 @@ export function serializeSpanAttributes(span: AnyExportedSpan): Record<string, a
   } catch {
     return null;
   }
+}
+
+/** The span's time to first token, measured by the tracker and stored as an attribute. */
+function getTimeToFirstTokenMs(span: AnyExportedSpan): number | undefined {
+  const value = (span.attributes as { timeToFirstTokenMs?: unknown } | undefined)?.timeToFirstTokenMs;
+  return typeof value === 'number' ? value : span.timeToFirstTokenMs;
 }
 
 type CorrelationRecordFields = Pick<
@@ -183,7 +191,7 @@ export function buildCreateSpanRecord(span: AnyExportedSpan): CreateSpanRecord {
     outcome: span.outcome ?? null,
     stopReason: span.stopReason ?? null,
     stopReasonContext: span.stopReasonContext ?? null,
-    timeToFirstTokenMs: span.timeToFirstTokenMs ?? null,
+    timeToFirstTokenMs: getTimeToFirstTokenMs(span) ?? null,
     errorCount: span.errorCount ?? null,
 
     // Entity identification - from span
@@ -262,7 +270,11 @@ const SUPPLIED_SPAN_COLUMNS = [
 ] as const;
 
 function suppliedSpanColumns(span: AnyExportedSpan): Partial<UpdateSpanRecord> {
-  const source = { ...span, timeToFirstChunkMs: getTimeToFirstChunkMs(span) };
+  const source = {
+    ...span,
+    timeToFirstChunkMs: getTimeToFirstChunkMs(span),
+    timeToFirstTokenMs: getTimeToFirstTokenMs(span),
+  };
   return Object.fromEntries(
     SUPPLIED_SPAN_COLUMNS.filter(column => source[column] !== undefined).map(column => [column, source[column]]),
   ) as Partial<UpdateSpanRecord>;

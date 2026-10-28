@@ -79,6 +79,19 @@ describe('record-builders', () => {
       }
     });
 
+    it('fills the time to first token column from the attribute and drops it from the attributes JSON', () => {
+      const streamed: AnyExportedSpan = {
+        ...span(),
+        type: SpanType.MODEL_INFERENCE,
+        attributes: { model: 'gpt-6.1-sol', timeToFirstTokenMs: 210 },
+      };
+      for (const record of [buildCreateSpanRecord(streamed), buildUpdateSpanRecord(streamed)]) {
+        expect(record.timeToFirstTokenMs).toBe(210);
+        expect(record.attributes).toEqual({ model: 'gpt-6.1-sol' });
+      }
+      expect(buildCreateSpanRecord({ ...span(), attributes: { model: 'gpt-6.1-sol' } }).timeToFirstTokenMs).toBeNull();
+    });
+
     it('stores the parent and root entity carried on the exported span, null when absent', () => {
       const nested: AnyExportedSpan = {
         ...span(),
