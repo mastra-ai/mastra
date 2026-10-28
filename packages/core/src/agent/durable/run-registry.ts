@@ -1,11 +1,13 @@
 import { TTLCache } from '@isaacs/ttlcache';
 import type { MastraScorer } from '../../evals/base';
+import { EventEmitterPubSub } from '../../events/event-emitter';
 import type { MastraLanguageModel } from '../../llm/model/shared.types';
 import type { Mastra } from '../../mastra';
 import { unwrapMastraTracingProxy } from '../../observability/context';
 import type { CoreTool } from '../../tools/types';
 import type { MessageList } from '../message-list';
 import type { SaveQueueManager } from '../save-queue';
+import { stopDurableExecutionParticipants } from './evented-execution';
 import type { RunRegistryEntry } from './types';
 
 /**
@@ -241,10 +243,16 @@ export function getActiveDurableAgentWorkflowExecutions(mastra: Mastra): Promise
  * Executions that already settled are left alone.
  */
 export async function abandonDurableAgentExecutions(mastra: Mastra): Promise<void> {
-  const fences = registryEntries().flatMap(entry =>
-    entry.mastra === mastra && entry.executionFence ? [entry.executionFence] : [],
+  await stopDurableExecutionParticipants(mastra);
+  const processLocal = mastra.pubsub.__rawBus() instanceof EventEmitterPubSub;
+  await Promise.allSettled(
+    registryEntries().map(async entry => {
+      if (entry.mastra !== mastra || !entry.executionFence) return;
+      // A broker does not prove that this is the only executing process.
+      if (entry.eventedExecution && !processLocal) entry.executionFence.detach();
+      else await entry.executionFence.abandon();
+    }),
   );
-  await Promise.allSettled(fences.map(fence => fence.abandon()));
 }
 
 /**

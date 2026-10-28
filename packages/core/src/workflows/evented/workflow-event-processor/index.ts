@@ -1,6 +1,13 @@
 import EventEmitter from 'node:events';
+import {
+  participateInDurableExecution,
+  retrySettledDurableExecution,
+  settleEventedDurableExecution,
+} from '../../../agent/durable/evented-execution';
+import { DurableExecutionFenceError, EXECUTION_SUPERSEDED_ERROR_ID } from '../../../agent/durable/execution-fence';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
+import { EventEmitterPubSub } from '../../../events/event-emitter';
 import { EventProcessor } from '../../../events/processor';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
@@ -4153,6 +4160,24 @@ export class WorkflowEventProcessor extends EventProcessor {
    *   should drop the event (or return 4xx for HTTP push).
    */
   async handle(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
+    if (this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub) return this.#handleDelivery(event);
+    try {
+      if (await retrySettledDurableExecution(this.mastra, event)) return { ok: true };
+      const execute = async () => {
+        const result = await this.#handleDelivery(event);
+        if (result.ok) await settleEventedDurableExecution(this.mastra, event);
+        return result;
+      };
+      return await participateInDurableExecution(this.mastra, event, execute);
+    } catch (error) {
+      if (error instanceof DurableExecutionFenceError && error.id === EXECUTION_SUPERSEDED_ERROR_ID)
+        return { ok: true };
+      this.mastra.getLogger()?.warn('WorkflowEventProcessor.handle: durable execution delivery failed', { error });
+      return { ok: false, retry: true };
+    }
+  }
+
+  async #handleDelivery(event: Event): Promise<{ ok: true } | { ok: false; retry: boolean }> {
     // Fence step execution so a broker redelivery of a still-running
     // `workflow.step.run` (e.g. its ack deadline elapsed) is dropped instead of
     // running the step concurrently (#24589). Redeliveries keep the same event

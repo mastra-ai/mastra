@@ -1023,6 +1023,8 @@ export interface RunRegistryEntry {
    * that execution segment ends.
    */
   executionFence?: ExecutionFence;
+  /** The evented engine may dispatch this execution to another process. */
+  eventedExecution?: boolean;
   /**
    * Tool call resumed by the `resume()` currently driving this run in this
    * process. Its in-flight marker is cleared when the segment suspends again.

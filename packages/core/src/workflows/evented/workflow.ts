@@ -1995,12 +1995,15 @@ export class EventedRun<
     if (this.#cancelPublished) return;
     this.#cancelPublished = true;
     try {
+      const store = await this.mastra?.getStorage()?.getStore('workflows');
+      const snapshot = await store?.loadWorkflowSnapshot({ workflowName: this.workflowId, runId: this.runId });
       await this.mastra?.pubsub.publish('workflows', {
         type: 'workflow.cancel',
         runId: this.runId,
         data: {
           workflowId: this.workflowId,
           runId: this.runId,
+          requestContext: snapshot?.requestContext,
         },
       });
     } catch (err) {

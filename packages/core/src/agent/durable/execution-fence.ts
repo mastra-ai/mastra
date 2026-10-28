@@ -35,6 +35,7 @@ import { isRunFenceConflictError, matchesRunFence, runOutsideRunFenceScope } fro
 import type { RunFence, RunFenceScope } from '../../storage/run-fencing';
 import { PUBSUB_SYMBOL } from '../../workflows/constants';
 import { AGENT_LEASE_RENEW_INTERVAL_MS, AGENT_LEASE_TTL_MS } from '../run-ownership';
+import { agentThreadStreamRuntime } from '../thread-stream-runtime';
 import { ExecutionOwnershipGuard } from './execution-ownership-guard';
 import { runInRunFenceScope } from './run-fence-scope';
 
@@ -186,10 +187,15 @@ export async function readRunGeneration(mastra: Mastra | undefined, runId: strin
 /** The claim an execution holds on a run, as carried on its RequestContext. */
 export interface DurableExecutionClaim {
   executionId: string;
+  /** Resolves the same lease backend on an evented worker. */
+  agentId?: string;
   /** Storage claim generation. Absent when ownership is a pubsub lease. */
   generation?: number;
   /** Whether the memory store was raised to this claim's generation. */
   memoryFenced?: boolean;
+  /** The existing thread lease to renew with this run's claim. */
+  threadId?: string;
+  resourceId?: string;
 }
 
 export function getExecutionClaim(
@@ -200,10 +206,14 @@ export function getExecutionClaim(
   if (!executions || typeof executions !== 'object') return undefined;
   const claim = (executions as Record<string, unknown>)[runId];
   if (!claim || typeof claim !== 'object') return undefined;
-  const { executionId, generation, memoryFenced } = claim as Partial<DurableExecutionClaim>;
+  const { executionId, generation, memoryFenced, agentId, threadId, resourceId } =
+    claim as Partial<DurableExecutionClaim>;
   if (typeof executionId !== 'string') return undefined;
   return {
     executionId,
+    ...(typeof agentId === 'string' ? { agentId } : {}),
+    ...(typeof threadId === 'string' ? { threadId } : {}),
+    ...(typeof resourceId === 'string' ? { resourceId } : {}),
     ...(typeof generation === 'number' ? { generation } : {}),
     ...(memoryFenced === true ? { memoryFenced } : {}),
   };
@@ -485,6 +495,7 @@ function storageBackend(store: WorkflowsStorage, runId: string): OwnershipBacken
 
 export type ExecutionSettlement = 'owned' | 'orphaned' | 'superseded';
 
+export const DURABLE_PARTICIPANT_FENCES = createRunScopeKey<Map<string, ExecutionFence>>('durable-participant-fences');
 const fencesByExecutionId = new Map<string, ExecutionFence>();
 const activeFenceByRunId = new Map<string, ExecutionFence>();
 
@@ -637,9 +648,103 @@ export class ExecutionFence implements RunFenceScope {
     return fence;
   }
 
-  /**
-   * The unsettled execution this process is running for `runId`, if any.
-   */
+  /** Release only the captured claim; a successor is never affected. */
+  static async releaseSharedClaim(mastra: Mastra, runId: string, claim: DurableExecutionClaim): Promise<void> {
+    if (!claim.agentId) return;
+    const backend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
+    await backend?.release(claim);
+  }
+
+  /** Join an existing claim without acquiring ownership or advancing its generation. */
+  static async follow(
+    mastra: Mastra,
+    runId: string,
+    claim: DurableExecutionClaim,
+  ): Promise<ExecutionFence | undefined> {
+    if (!claim.agentId) return undefined;
+    const executionBackend = await resolveRemoteBackend(mastra, claim.agentId, runId, claim);
+    if (!executionBackend) return undefined;
+    const backend: OwnershipBackend = {
+      ...executionBackend,
+      renew: async current => {
+        if (!(await executionBackend.renew(current))) {
+          if (claim.generation === undefined && !(await executionBackend.isSuperseded(current))) {
+            throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+              agentId: claim.agentId!,
+              runId,
+              executionId: claim.executionId,
+            });
+          }
+          return false;
+        }
+        if (
+          claim.threadId &&
+          !(await agentThreadStreamRuntime.renewDurableThreadLease(
+            mastra.pubsub,
+            runId,
+            claim.threadId,
+            claim.resourceId,
+            claim.generation,
+            claim.executionId,
+          ))
+        ) {
+          throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, {
+            agentId: claim.agentId!,
+            runId,
+            executionId: claim.executionId,
+          });
+        }
+        return true;
+      },
+    };
+    const startedAt = Date.now();
+    const details = { agentId: claim.agentId, runId, executionId: claim.executionId };
+    let deadline: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        (async () => {
+          if (await backend.renew(claim)) return true;
+          if (claim.generation !== undefined) {
+            const store = await mastra.getStorage()?.getStore('workflows');
+            const record = await store?.getRunOwnership({ runId });
+            if (
+              !record ||
+              (record.ownerId === claim.executionId &&
+                record.generation === claim.generation &&
+                record.leaseExpiresAt !== null)
+            ) {
+              throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+            }
+          }
+          throw new DurableExecutionFenceError(EXECUTION_SUPERSEDED_ERROR_ID, details);
+        })(),
+        new Promise<never>((_, reject) => {
+          deadline = setTimeout(
+            () => reject(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details)),
+            EXECUTION_LEASE_TTL_MS,
+          );
+          deadline.unref?.();
+        }),
+      ]);
+      if (Date.now() >= startedAt + EXECUTION_LEASE_TTL_MS) {
+        throw new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, details);
+      }
+    } finally {
+      if (deadline) clearTimeout(deadline);
+    }
+    const fence = new ExecutionFence({
+      ...details,
+      backend,
+      generation: claim.generation,
+      workflowsStore: await mastra.getStorage()?.getStore('workflows'),
+      leaseExpiresAt: startedAt + EXECUTION_LEASE_TTL_MS,
+      logger: mastra.getLogger(),
+    });
+    if (claim.memoryFenced) await fence.coverMemory(await mastra.getStorage()?.getStore('memory'));
+    if (backend.expires) fence.#startHeartbeat();
+    return fence;
+  }
+
   static getLocalActive(runId: string): ExecutionFence | undefined {
     return activeFenceByRunId.get(runId);
   }
@@ -648,6 +753,7 @@ export class ExecutionFence implements RunFenceScope {
   get claim(): DurableExecutionClaim {
     return {
       executionId: this.executionId,
+      agentId: this.agentId,
       ...(this.generation !== undefined ? { generation: this.generation } : {}),
       ...(this.#memoryStore ? { memoryFenced: true } : {}),
     };
@@ -770,6 +876,11 @@ export class ExecutionFence implements RunFenceScope {
     this.#heartbeat = undefined;
   }
 
+  /** Cancel only this worker's invocations, keeping the shared claim valid for survivors. */
+  interruptParticipant(): void {
+    this.#markLost(new DurableExecutionFenceError(EXECUTION_UNVERIFIED_ERROR_ID, this.#details()));
+  }
+
   /**
    * End this execution exactly once and release the claim unless another
    * execution holds it. `whileOwned` (the terminal writes) runs only when the
@@ -841,6 +952,17 @@ export class ExecutionFence implements RunFenceScope {
    *
    * A no-op once the execution has settled or lost the run.
    */
+  /** Detach a coordinator without changing the claim shared with remote workers. */
+  detach(): void {
+    if (this.#settlement) return;
+    this.stopHeartbeat();
+    this.#settledAs = 'superseded';
+    this.#settlement = Promise.resolve('superseded');
+    if (fencesByExecutionId.get(this.executionId) === this) fencesByExecutionId.delete(this.executionId);
+    if (activeFenceByRunId.get(this.runId) === this) activeFenceByRunId.delete(this.runId);
+    this.#resolveSettled();
+  }
+
   async abandon(): Promise<void> {
     if (this.#settlement || this.#lossError) return;
     this.#markLost(new DurableExecutionFenceError(EXECUTION_ABANDONED_ERROR_ID, this.#details()));
@@ -1050,7 +1172,9 @@ export async function assertExecutionOwned(args: {
   const claim = getExecutionClaim(args.requestContext, args.runId);
   if (!claim) return;
 
-  const local = fencesByExecutionId.get(claim.executionId);
+  const local =
+    args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
+    fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();
 
   const guard = createOwnershipGuard(args, claim);
@@ -1076,7 +1200,9 @@ export async function assertExecutionNotSuperseded(args: {
   const claim = getExecutionClaim(args.requestContext, args.runId);
   if (!claim) return;
 
-  const local = fencesByExecutionId.get(claim.executionId);
+  const local =
+    args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
+    fencesByExecutionId.get(claim.executionId);
   if (local) return local.verify();
 
   const backend = await resolveRemoteBackend(args.mastra, args.agentId, args.runId, claim);
@@ -1099,7 +1225,9 @@ function createOwnershipGuard(
   args: { runId: string; agentId: string; mastra: Mastra | undefined },
   claim: DurableExecutionClaim,
 ): ExecutionOwnershipGuard {
-  const local = fencesByExecutionId.get(claim.executionId);
+  const local =
+    args.mastra?.__getRunScope(args.runId)?.get(DURABLE_PARTICIPANT_FENCES)?.get(claim.executionId) ??
+    fencesByExecutionId.get(claim.executionId);
   const details = { agentId: args.agentId, runId: args.runId, executionId: claim.executionId };
   return new ExecutionOwnershipGuard({
     details,

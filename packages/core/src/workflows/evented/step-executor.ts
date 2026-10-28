@@ -1,3 +1,4 @@
+import { isExecutionFenceError } from '../../agent/durable/execution-fence';
 import { TripWire } from '../../agent/trip-wire';
 import type { ActorSignal } from '../../auth/ee';
 import { MastraBase } from '../../base';
@@ -390,6 +391,13 @@ export class StepExecutor extends MastraBase {
 
       return finalResult;
     } catch (error: any) {
+      if (
+        isExecutionFenceError(error) &&
+        this.mastra &&
+        !(this.mastra.pubsub.__rawBus() instanceof EventEmitterPubSub)
+      ) {
+        throw error;
+      }
       const endedAt = Date.now();
 
       const errorInstance = getErrorFromUnknown(error, {
