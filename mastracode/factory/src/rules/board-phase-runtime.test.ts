@@ -39,36 +39,36 @@ const LOW_EFFORT: RuleGroup = {
 const ORG = 'phase-org';
 
 /**
- * Cards enter Shipping by a board rule, not a person, so only the phase's start rule decides
- * whether their run starts. Shipping ends when its agent has listed the work items; the agent then
+ * Cards enter Build by a board rule, not a person, so only the phase's start rule decides
+ * whether their run starts. Build ends when its agent has listed the work items; the agent then
  * moves the card itself.
  */
 const release = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   phases: {
-    queued: {
-      name: 'Queued',
+    backlog: {
+      name: 'Backlog',
       kind: 'resting',
-      nextPhases: ['shipping'],
+      nextPhases: ['build'],
       onEnter: {
         issue: context => ({
           type: 'transition',
           idempotencyKey: `${context.ingress.id}:ship`,
           board: 'release',
-          stage: 'shipping',
+          stage: 'build',
         }),
       },
     },
-    shipping: {
-      name: 'Shipping',
+    build: {
+      name: 'Build',
       kind: 'working',
       runner: { context: 'publisher', instructions: 'Keep it short.' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
       exitTool: 'factory_list_work_items',
-      nextPhases: ['shipped', 'queued'],
+      nextPhases: ['done', 'backlog'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
@@ -78,7 +78,7 @@ const release = defineBoard({
         }),
       },
     },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    done: { name: 'Done', kind: 'terminal' },
   },
 });
 
@@ -243,15 +243,15 @@ describe('board phase fields at runtime', () => {
       // The low-effort card starts on its own and its run carries the phase instructions. The
       // factory-phase signal names the exit tool and where the card may go; after the exit tool
       // the agent moves the card with factory_transition_work_item.
-      await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['shipped']), { timeout: 15_000 });
+      await vi.waitFor(async () => expect(await stagesOf(quick)).toEqual(['done']), { timeout: 15_000 });
       const publishRequest = requests.find(text => text.includes('Publish quick fix.'));
       expect(publishRequest).toContain('Keep it short.');
       expect(publishRequest).toContain(
-        'This phase ends when factory_list_work_items succeeds. Then move the card with factory_transition_work_item to one of: shipped, queued.',
+        'This phase ends when factory_list_work_items succeeds. Then move the card with factory_transition_work_item to one of: done, backlog.',
       );
 
-      // The high-effort card reaches Shipping too, but its run waits for a person: nothing ran.
-      expect(await stagesOf(large)).toEqual(['shipping']);
+      // The high-effort card reaches Build too, but its run waits for a person: nothing ran.
+      expect(await stagesOf(large)).toEqual(['build']);
       expect((await decisionsFor(large)).map(record => [record.decision.type, record.status])).toEqual(
         expect.arrayContaining([['invokeSkill', 'proposed']]),
       );

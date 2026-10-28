@@ -67,11 +67,11 @@ import { defineBoard } from '@mastra/factory/boards';
 const releaseBoard = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
-    shipped: {
-      name: 'Shipped',
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+    done: {
+      name: 'Done',
       kind: 'terminal',
       onEnter: {
         manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
@@ -127,11 +127,11 @@ When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is
 const releaseBoard = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
-  sourceClosed: { completed: 'shipped', canceled: 'dropped' },
+  initialPhase: 'backlog',
+  sourceClosed: { completed: 'done', canceled: 'dropped' },
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped', 'dropped'] },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done', 'dropped'] },
+    done: { name: 'Done', kind: 'terminal' },
     dropped: { name: 'Dropped', kind: 'terminal' },
   },
 });
@@ -148,17 +148,17 @@ import { defineBoard } from '@mastra/factory/boards';
 import type { BoardToolResultRuleHandler } from '@mastra/factory/boards';
 
 const shipIt: BoardToolResultRuleHandler = context => {
-  if (context.result.status !== 'success' || context.item.stages[0] !== 'queued') return;
+  if (context.result.status !== 'success' || context.item.stages[0] !== 'backlog') return;
   return { type: 'notify', idempotencyKey: `${context.ingress.id}:shipped`, title: 'Release shipped' };
 };
 
 const releaseBoard = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
   },
   tools: { ship_it: { onResult: shipIt } },
 });
@@ -249,7 +249,7 @@ import { defineBoard } from '@mastra/factory/boards';
 import type { BoardTransitionPolicy } from '@mastra/factory/boards';
 
 const releasePolicy: BoardTransitionPolicy = context => {
-  if (context.toStage === 'shipped' && !context.isHumanTransition) {
+  if (context.toStage === 'build' && !context.isHumanTransition) {
     return { type: 'reject', code: 'approval_required', reason: 'A person must approve this release.' };
   }
 };
@@ -260,8 +260,8 @@ const releaseBoard = defineBoard({
   initialPhase: 'approval',
   transitionPolicy: releasePolicy,
   phases: {
-    approval: { name: 'Approval', kind: 'resting', nextPhases: ['shipped'] },
-    shipped: { name: 'Shipped', kind: 'working', runner: { context: 'release' } },
+    approval: { name: 'Approval', kind: 'resting', nextPhases: ['build'] },
+    build: { name: 'Build', kind: 'working', runner: { context: 'release' } },
   },
 });
 // Install through new MastraFactory({ storage, boards: [releaseBoard] }).
@@ -287,11 +287,11 @@ Every phase declares what it _is_ with a required `kind`; `defineBoard()` reject
 const releaseBoard = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-    shipping: { name: 'Shipping', kind: 'working', runner: { context: 'release' }, nextPhases: ['shipped'] },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+    build: { name: 'Build', kind: 'working', runner: { context: 'release' }, nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
   },
 });
 ```
@@ -306,11 +306,11 @@ Unknown semantics fail closed. When the board is not installed or the phase is n
 
 ```typescript
 // before
-phases: { queued: { title: 'Queued', next: 'shipped' }, shipped: { title: 'Shipped' } }
+phases: { backlog: { title: 'Backlog', next: 'done' }, done: { title: 'Done' } }
 // after
 phases: {
-  queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
-  shipped: { name: 'Shipped', kind: 'terminal' },
+  backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['done'] },
+  done: { name: 'Done', kind: 'terminal' },
 }
 ```
 
@@ -335,20 +335,20 @@ const LOW_EFFORT = {
 const releaseBoard = defineBoard({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning'] },
-    planning: {
-      name: 'Planning',
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['plan'] },
+    plan: {
+      name: 'Plan',
       kind: 'working',
-      runner: { context: 'release', skill: 'release-plan' },
+      runner: { context: 'build', skill: 'plan' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
-      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
-      nextPhases: ['shipping', 'canceled'],
+      exitTool: { id: 'submit_plan', autoApprove: true },
+      nextPhases: ['build', 'canceled'],
     },
-    shipping: { name: 'Shipping', kind: 'working', runner: { context: 'release' }, nextPhases: ['shipped'] },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    build: { name: 'Build', kind: 'working', runner: { context: 'build' }, nextPhases: ['done'] },
+    done: { name: 'Done', kind: 'terminal' },
     canceled: { name: 'Canceled', kind: 'terminal' },
   },
 });
@@ -360,7 +360,7 @@ const releaseBoard = defineBoard({
 
 Installed custom boards can create linked items, start working roles, transition through bound tools, and react to completed tool results. Board and phase identifiers contain 1–128 letters, digits, underscores, or hyphens and start with a letter or digit. Identifiers are case-sensitive and cannot contain surrounding whitespace.
 
-This configuration runs a release rehearsal through `queued → preparing → shipping → shipped`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
+This configuration runs a release rehearsal through `backlog → preparing → build → done`. Add it to an existing Factory host with configured storage, a GitHub integration, a connected project repository, a sandbox, and organization-scoped model credentials. Enable automatic runs for the project. The repository must contain a `release:check` package script; it should validate the release without publishing it.
 
 ```typescript
 import { MastraFactory } from '@mastra/factory';
@@ -368,14 +368,14 @@ import type { MastraFactoryConfig } from '@mastra/factory';
 import { defineBoard } from '@mastra/factory/boards';
 import type { BoardPhaseDefinition } from '@mastra/factory/boards';
 
-type ReleasePhase = 'queued' | 'preparing' | 'shipping' | 'shipped';
+type ReleasePhase = 'backlog' | 'preparing' | 'build' | 'done';
 
 const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefinition<ReleasePhase>>>({
   id: 'release',
   name: 'Release',
-  initialPhase: 'queued',
+  initialPhase: 'backlog',
   transitionPolicy: context => {
-    if (context.fromStage === 'queued' && context.toStage === 'preparing' && !context.isHumanTransition) {
+    if (context.fromStage === 'backlog' && context.toStage === 'preparing' && !context.isHumanTransition) {
       return {
         type: 'reject',
         code: 'approval_required',
@@ -384,27 +384,27 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
     }
   },
   phases: {
-    queued: { name: 'Queued', kind: 'resting', nextPhases: ['preparing'] },
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['preparing'] },
     preparing: {
       name: 'Preparing',
       kind: 'working',
       runner: { context: 'release-preparer' },
-      nextPhases: ['shipping'],
+      nextPhases: ['build'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
           idempotencyKey: `${context.ingress.id}:prepare`,
           role: 'release-preparer',
           prompt:
-            'Inspect the release changes. When ready, call factory_transition_work_item with stage shipping and the current expectedRevision from the Factory phase signal.',
+            'Inspect the release changes. When ready, call factory_transition_work_item with stage build and the current expectedRevision from the Factory phase signal.',
         }),
       },
     },
-    shipping: {
-      name: 'Shipping',
+    build: {
+      name: 'Build',
       kind: 'working',
       runner: { context: 'release-publisher' },
-      nextPhases: ['shipped'],
+      nextPhases: ['done'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
@@ -415,13 +415,13 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
         }),
       },
     },
-    shipped: { name: 'Shipped', kind: 'terminal' },
+    done: { name: 'Done', kind: 'terminal' },
   },
   tools: {
     execute_command: {
       onResult: context => {
         if (
-          context.item.stages[0] !== 'shipping' ||
+          context.item.stages[0] !== 'build' ||
           context.result.status !== 'success' ||
           typeof context.result.value !== 'string' ||
           !context.result.value.trimEnd().endsWith('RELEASE_CHECK_PASSED')
@@ -432,7 +432,7 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
           type: 'transition',
           idempotencyKey: `${context.ingress.id}:checked`,
           board: 'release',
-          stage: 'shipped',
+          stage: 'done',
         };
       },
     },
@@ -446,7 +446,7 @@ export function createFactory(config: Omit<MastraFactoryConfig, 'boards' | 'incl
 
 Use the host's normal `prepare()`, `new Mastra(...)`, and `finalize()` sequence. Change the hardcoded `includeDefaultBoards: true` in `createFactory` to `false` to run without Work or Review. Working roles name bindings on the shared Code Agent; they do not register separate agents. Factory has no per-role agent configuration option. The board's kickoff prompts supply the role-specific instructions.
 
-Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `queued`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `shipping`; the publisher's completed check produces a deferred transition to `shipped`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
+Create a card with `POST /web/factory/projects/:id/work-items`, passing `board: 'release'`, a title, and the GitHub issue's `externalSource`. The card starts in `backlog`. Then use `POST /web/factory/projects/:id/work-items/:workItemId/transition` with `board: 'release'`, `stage: 'preparing'`, the returned `expectedRevision`, a unique `requestId`, and a `cause`. Send these requests as an authorized user using the host's authentication. The human transition satisfies this board's policy and starts the preparer. Its bound tool advances to `build`; the publisher's completed check produces a deferred transition to `done`. Terminal entry revokes the binding and releases the sandbox. The Factory UI performs the same operations against installed boards (see below); verify the persisted card's board, phase, and deferred decision status either way.
 
 Lifecycle, tool-result, and integration handlers may return `upsertLinkedWorkItem` targeting a different installed board. Linked cards enter that board's declared initial phase before moving to the requested phase. Existing cards cannot be reassigned to another board through either decision type. Targets are validated against their own installed board before acceptance and again before uncommitted deferred effects execute; a phase declared only on another board is not valid. Committed replay retains its recorded result and original `configVersion`.
 

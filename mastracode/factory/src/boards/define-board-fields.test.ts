@@ -18,52 +18,52 @@ function stageContext(stage: string): Readonly<FactoryStageRuleContext> {
     item: { id: 'item-1', title: 'Fix retries', url: 'https://github.test/acme/repo/issues/7', stages: [stage] },
     source: 'issue',
     stage,
-    fromStage: 'queued',
+    fromStage: 'backlog',
     toStage: stage,
   } as unknown as FactoryStageRuleContext;
 }
 
 const release = (phases: Record<string, unknown>) =>
-  defineBoard({ id: 'release', name: 'Release', initialPhase: 'queued', phases: phases as never });
+  defineBoard({ id: 'release', name: 'Release', initialPhase: 'backlog', phases: phases as never });
 
 describe('defineBoard phase fields', () => {
   it('migrates an old-style board to the same board as its new-style declaration', () => {
     const legacy = defineBoard({
       id: 'release',
       title: 'Release',
-      initialPhase: 'queued',
+      initialPhase: 'backlog',
       phases: {
-        queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
-        shipping: { title: 'Shipping', kind: 'working', role: 'review', next: 'shipped' },
-        shipped: { title: 'Shipped', kind: 'terminal' },
+        backlog: { title: 'Backlog', kind: 'resting', next: 'build' },
+        build: { title: 'Build', kind: 'working', role: 'review', next: 'done' },
+        done: { title: 'Done', kind: 'terminal' },
       },
     });
     const current = defineBoard({
       id: 'release',
       name: 'Release',
-      initialPhase: 'queued',
+      initialPhase: 'backlog',
       phases: {
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-        shipping: { name: 'Shipping', kind: 'working', runner: { context: 'review' }, nextPhases: ['shipped'] },
-        shipped: { name: 'Shipped', kind: 'terminal' },
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: { name: 'Build', kind: 'working', runner: { context: 'review' }, nextPhases: ['done'] },
+        done: { name: 'Done', kind: 'terminal' },
       },
     });
 
     for (const board of [legacy, current]) {
       expect(board.name).toBe('Release');
       expect(board).not.toHaveProperty('title');
-      expect(board.phases.shipping).not.toHaveProperty('title');
-      expect(board.phases.shipping).not.toHaveProperty('role');
-      expect(board.phases.queued).not.toHaveProperty('next');
-      expect(board.phases.shipping).toMatchObject({
-        name: 'Shipping',
+      expect(board.phases.build).not.toHaveProperty('title');
+      expect(board.phases.build).not.toHaveProperty('role');
+      expect(board.phases.backlog).not.toHaveProperty('next');
+      expect(board.phases.build).toMatchObject({
+        name: 'Build',
         runner: { agentId: 'code-agent', context: 'review' },
-        nextPhases: ['shipped'],
+        nextPhases: ['done'],
       });
-      expect(board.allowsTransition('queued', 'shipping')).toBe(true);
-      expect(board.allowsTransition('queued', 'shipped')).toBe(false);
-      expect(board.roleForPhase('shipping')).toBe('review');
-      expect(board.phaseForRole('review')).toBe('shipping');
+      expect(board.allowsTransition('backlog', 'build')).toBe(true);
+      expect(board.allowsTransition('backlog', 'done')).toBe(false);
+      expect(board.roleForPhase('build')).toBe('review');
+      expect(board.phaseForRole('review')).toBe('build');
     }
     expect(current.transitions).toEqual(legacy.transitions);
   });
@@ -81,28 +81,26 @@ describe('defineBoard phase fields', () => {
 
   it('runs a working phase in the work context unless it names one, and rejects conflicting names', () => {
     const board = release({
-      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-      shipping: { name: 'Shipping', kind: 'working' },
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: { name: 'Build', kind: 'working' },
     });
-    expect(board.roleForPhase('shipping')).toBe('work');
+    expect(board.roleForPhase('build')).toBe('work');
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
-        shipping: { name: 'Shipping', kind: 'working', role: 'plan', runner: { context: 'build' } },
+        backlog: { name: 'Backlog', kind: 'resting' },
+        build: { name: 'Build', kind: 'working', role: 'plan', runner: { context: 'build' } },
       }),
-    ).toThrow(
-      new BoardDefinitionError('Phase "shipping" sets both role and runner.context; drop the deprecated role.'),
+    ).toThrow(new BoardDefinitionError('Phase "build" sets both role and runner.context; drop the deprecated role.'));
+    expect(() => release({ backlog: { name: 'Backlog', title: 'Waiting', kind: 'resting' } })).toThrow(
+      new BoardDefinitionError('Phase "backlog" sets both name and title; drop the deprecated title.'),
     );
-    expect(() => release({ queued: { name: 'Queued', title: 'Waiting', kind: 'resting' } })).toThrow(
-      new BoardDefinitionError('Phase "queued" sets both name and title; drop the deprecated title.'),
-    );
-    expect(() => release({ queued: { kind: 'resting' } })).toThrow(
-      new BoardDefinitionError('Phase "queued" must declare a name.'),
+    expect(() => release({ backlog: { kind: 'resting' } })).toThrow(
+      new BoardDefinitionError('Phase "backlog" must declare a name.'),
     );
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
-        shipping: { name: 'Shipping', kind: 'working', runner: { agentId: 'other-agent' } },
+        backlog: { name: 'Backlog', kind: 'resting' },
+        build: { name: 'Build', kind: 'working', runner: { agentId: 'other-agent' } },
       }),
     ).toThrow(/names unknown agent "other-agent"; Factory runs "code-agent"/);
   });
@@ -114,15 +112,15 @@ describe('defineBoard phase fields', () => {
       { autoStartWhen: LOW_EFFORT },
       { exitTool: 'ship_it' },
     ]) {
-      expect(() => release({ queued: { name: 'Queued', kind: 'resting', ...field } })).toThrow(
-        `Phase "queued" is resting and cannot declare ${Object.keys(field)[0]}.`,
+      expect(() => release({ backlog: { name: 'Backlog', kind: 'resting', ...field } })).toThrow(
+        `Phase "backlog" is resting and cannot declare ${Object.keys(field)[0]}.`,
       );
     }
   });
 
   it('starts a phase on its own only when autoStart is set and its condition matches the card', () => {
     const board = release({
-      queued: { name: 'Queued', kind: 'resting', nextPhases: ['always', 'lowEffort', 'manual'] },
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['always', 'lowEffort', 'manual'] },
       always: { name: 'Always', kind: 'working', autoStart: true },
       lowEffort: { name: 'Low effort', kind: 'working', autoStart: true, autoStartWhen: LOW_EFFORT },
       manual: { name: 'Manual', kind: 'working' },
@@ -135,16 +133,16 @@ describe('defineBoard phase fields', () => {
     expect(board.startsAutomatically('lowEffort', highEffort)).toBe(false);
     expect(board.startsAutomatically('lowEffort')).toBe(false);
     expect(board.startsAutomatically('manual', lowEffort)).toBe(false);
-    expect(board.startsAutomatically('queued', lowEffort)).toBe(false);
+    expect(board.startsAutomatically('backlog', lowEffort)).toBe(false);
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
+        backlog: { name: 'Backlog', kind: 'resting' },
         lowEffort: { name: 'Low effort', kind: 'working', autoStartWhen: LOW_EFFORT },
       }),
     ).toThrow('Phase "lowEffort" autoStartWhen needs autoStart.');
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
+        backlog: { name: 'Backlog', kind: 'resting' },
         lowEffort: {
           name: 'Low effort',
           kind: 'working',
@@ -157,13 +155,13 @@ describe('defineBoard phase fields', () => {
 
   it('keeps the exit tool on the phase and adds no rule that moves the card', async () => {
     const board = release({
-      queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning'] },
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['planning'] },
       planning: {
         name: 'Planning',
         kind: 'working',
         runner: { context: 'build' },
         exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
-        nextPhases: ['building', 'queued'],
+        nextPhases: ['building', 'backlog'],
       },
       building: {
         name: 'Building',
@@ -183,7 +181,7 @@ describe('defineBoard phase fields', () => {
 
     // The exit tool does not move the card; the agent does, with factory_transition_work_item.
     expect(board.tools).toEqual({});
-    expect(board.phases.planning.nextPhases).toEqual(['building', 'queued']);
+    expect(board.phases.planning.nextPhases).toEqual(['building', 'backlog']);
   });
 
   it('lets a board that keeps the built-in Work tool rules end Planning with submit_plan', () => {
@@ -207,24 +205,24 @@ describe('defineBoard phase fields', () => {
   it('rejects exit tools that cannot end a phase', () => {
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
+        backlog: { name: 'Backlog', kind: 'resting' },
         stuck: { name: 'Stuck', kind: 'working', exitTool: 'ship_it' },
       }),
     ).toThrow('Phase "stuck" exit tool needs a next phase to move the card to.');
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['moving'] },
-        moving: { name: 'Moving', kind: 'working', exitTool: 'factory_transition_work_item', nextPhases: ['queued'] },
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['moving'] },
+        moving: { name: 'Moving', kind: 'working', exitTool: 'factory_transition_work_item', nextPhases: ['backlog'] },
       }),
     ).toThrow('Phase "moving" cannot end with factory_transition_work_item: that tool already moves the card.');
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['one'] },
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['one'] },
         one: {
           name: 'One',
           kind: 'working',
           exitTool: { id: 'ship_it', autoApproveWhen: LOW_EFFORT },
-          nextPhases: ['queued'],
+          nextPhases: ['backlog'],
         },
       }),
     ).toThrow('Phase "one" exitTool.autoApproveWhen needs autoApprove.');
@@ -232,9 +230,9 @@ describe('defineBoard phase fields', () => {
 
   it('starts the runner skill for sources without a handler and adds instructions to every run', async () => {
     const board = release({
-      queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-      shipping: {
-        name: 'Shipping',
+      backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+      build: {
+        name: 'Build',
         kind: 'working',
         runner: { context: 'release', skill: 'release-notes', instructions: 'Keep it short.' },
         onEnter: {
@@ -243,28 +241,28 @@ describe('defineBoard phase fields', () => {
       },
     });
 
-    expect(await board.rules.shipping!.issue!.onEnter!(stageContext('shipping'))).toEqual({
+    expect(await board.rules.build!.issue!.onEnter!(stageContext('build'))).toEqual({
       type: 'invokeSkill',
       idempotencyKey: 'ingress-1:release-notes',
       role: 'release',
       skillName: 'release-notes',
       arguments: 'Work item (https://github.test/acme/repo/issues/7)\n\nKeep it short.',
     });
-    expect(await board.rules.shipping!.manual!.onEnter!(stageContext('shipping'))).toMatchObject({
+    expect(await board.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
       prompt: 'Ship it.\n\nKeep it short.',
     });
 
     // Declaring the defined phase again, as a board that extends this one does, keeps one copy.
-    const again = release({ queued: board.phases.queued, shipping: board.phases.shipping });
-    expect(await again.rules.shipping!.manual!.onEnter!(stageContext('shipping'))).toMatchObject({
+    const again = release({ backlog: board.phases.backlog, build: board.phases.build });
+    expect(await again.rules.build!.manual!.onEnter!(stageContext('build'))).toMatchObject({
       prompt: 'Ship it.\n\nKeep it short.',
     });
     expect(() =>
       release({
-        queued: { name: 'Queued', kind: 'resting' },
-        shipping: { name: 'Shipping', kind: 'working', runner: { skill: 'Not A Skill' } },
+        backlog: { name: 'Backlog', kind: 'resting' },
+        build: { name: 'Build', kind: 'working', runner: { skill: 'Not A Skill' } },
       }),
-    ).toThrow('Phase "shipping" runner.skill must be a skill name.');
+    ).toThrow('Phase "build" runner.skill must be a skill name.');
   });
 
   it('warns once per board that still uses deprecated fields', () => {
@@ -273,11 +271,11 @@ describe('defineBoard phase fields', () => {
     const legacy = {
       id: 'legacy-release',
       title: 'Release',
-      initialPhase: 'queued',
+      initialPhase: 'backlog',
       phases: {
-        queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
-        shipping: { title: 'Shipping', kind: 'working', role: 'publisher', outcomes: { shipped: 'shipped' } },
-        shipped: { title: 'Shipped', kind: 'terminal' },
+        backlog: { title: 'Backlog', kind: 'resting', next: 'build' },
+        build: { title: 'Build', kind: 'working', role: 'publisher', outcomes: { done: 'done' } },
+        done: { title: 'Done', kind: 'terminal' },
       },
     } as const;
 
@@ -286,9 +284,9 @@ describe('defineBoard phase fields', () => {
 
     expect(warn).toHaveBeenCalledTimes(1);
     expect(warn.mock.calls[0]![0]).toBe(
-      '[Mastra Factory] Board "legacy-release" uses deprecated fields: title → name, phases.queued.title → name, ' +
-        'phases.queued.next → nextPhases, phases.shipping.title → name, phases.shipping.role → runner.context, ' +
-        'phases.shipped.title → name. They still work but will be removed in a future release.',
+      '[Mastra Factory] Board "legacy-release" uses deprecated fields: title → name, phases.backlog.title → name, ' +
+        'phases.backlog.next → nextPhases, phases.build.title → name, phases.build.role → runner.context, ' +
+        'phases.done.title → name. They still work but will be removed in a future release.',
     );
   });
 
@@ -299,16 +297,16 @@ describe('defineBoard phase fields', () => {
     defineBoard({
       id: 'current-release',
       name: 'Release',
-      initialPhase: 'queued',
+      initialPhase: 'backlog',
       phases: {
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
-        shipping: {
-          name: 'Shipping',
+        backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['build'] },
+        build: {
+          name: 'Build',
           kind: 'working',
           runner: { context: 'publisher' },
-          outcomes: { shipped: 'shipped' },
+          outcomes: { done: 'done' },
         },
-        shipped: { name: 'Shipped', kind: 'terminal' },
+        done: { name: 'Done', kind: 'terminal' },
       },
     });
     defineBoard({ id: 'work-again', name: 'Work', initialPhase: 'intake', phases: workBoard.phases });
