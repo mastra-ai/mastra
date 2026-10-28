@@ -42,6 +42,18 @@ describe('native execution outcomes (OBS-724)', () => {
     expect(child.exportSpan()).toMatchObject({ outcome: 'unknown' });
   });
 
+  it('retains known stop details when an ongoing span is bare-ended', () => {
+    const { tracing } = setup();
+    const span = tracing.startSpan({ name: 'stopped', type: SpanType.AGENT_RUN, outcome: null });
+    span.update({ stopReason: 'runtime_error', stopReasonContext: { message: 'Recorded before cleanup' } });
+    span.end();
+    expect(span.exportSpan()).toMatchObject({
+      outcome: 'unknown',
+      stopReason: 'runtime_error',
+      stopReasonContext: { message: 'Recorded before cleanup' },
+    });
+  });
+
   it('replaces provisional stop details when the execution recovers', () => {
     const { tracing } = setup();
     const span = tracing.startSpan({ name: 'retry', type: SpanType.MODEL_GENERATION, outcome: null });

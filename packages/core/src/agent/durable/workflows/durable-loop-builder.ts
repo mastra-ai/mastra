@@ -1153,6 +1153,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     })),
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
+                  // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
                   modelSpan?.createTracker()?.endGeneration({
                     ...(finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
                       ? reg.tracingTermination

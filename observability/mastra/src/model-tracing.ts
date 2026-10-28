@@ -1145,13 +1145,14 @@ export class ModelSpanTracker {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
+          const isResponseChunk =
+            MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type) ||
+            ['text-end', 'reasoning-end', 'tool-call-input-streaming-end', 'object', 'object-result'].includes(
+              chunk.type,
+            );
           if (
-            !inferenceOnly &&
-            this.#tracksProviderStream &&
-            (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type) ||
-              ['text-end', 'reasoning-end', 'tool-call-input-streaming-end', 'object', 'object-result'].includes(
-                chunk.type,
-              ))
+            (inferenceOnly && !isResponseChunk && chunk.type !== 'finish') ||
+            (!inferenceOnly && this.#tracksProviderStream && isResponseChunk)
           ) {
             controller.enqueue(chunk);
             return;

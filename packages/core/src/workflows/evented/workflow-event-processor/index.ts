@@ -1758,16 +1758,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
-    // Finish locally owned spans even when another replica handled the result.
-    await this.endRunSpans(
-      args,
-      args.prevResult?.status === 'failed'
-        ? 'failed'
-        : args.prevResult?.status === 'suspended'
-          ? 'suspended'
-          : 'success',
-    );
-
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
 

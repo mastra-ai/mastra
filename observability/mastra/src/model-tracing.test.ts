@@ -91,6 +91,21 @@ describe('ModelSpanTracker', () => {
     });
   });
 
+  it('provider lifecycle chunks leave the logical step to the downstream tracker', async () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep({ messageId: 'owner-message' });
+    const chunks = [
+      { type: 'step-start', payload: { messageId: 'provider-message' } },
+      { type: 'tripwire', payload: { reason: 'Provider extension', processorId: 'provider' } },
+    ];
+    expect(await consumeStream(tracker.wrapInferenceStream(createMockStream(chunks)))).toEqual(chunks);
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(0);
+    expect(tracker.exportCurrentStep()?.attributes?.messageId).toBe('owner-message');
+    await consumeStream(tracker.wrapStream(createMockStream(chunks)));
+    expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
+  });
+
   describe('gateway routing', () => {
     it('exports which provider served each step when the model ran through Vercel AI Gateway', async () => {
       const modelSpan = tracing.startSpan({

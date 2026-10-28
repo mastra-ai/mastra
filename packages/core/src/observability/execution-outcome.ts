@@ -37,10 +37,11 @@ export function executionFailureTermination(
       current = value.error;
       continue;
     }
-    // TripWire's existing serialized error shape retains its processor and options,
-    // even on transports whose public workflow status remains `failed`.
+    // TripWire's serialized name distinguishes it from user errors with similar fields.
+    // Durable transports may still report the public workflow status as `failed`.
     if (
-      typeof value.processorId === 'string' &&
+      value.name === 'TripWire' &&
+      (value.processorId === undefined || typeof value.processorId === 'string') &&
       value.options &&
       typeof value.options === 'object' &&
       typeof value.message === 'string'

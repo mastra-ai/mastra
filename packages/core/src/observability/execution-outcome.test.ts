@@ -1,5 +1,7 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
+import { TripWire } from '../agent/trip-wire';
+import { getErrorFromUnknown } from '../error';
 import { executionFailureTermination, tripwireTermination } from './execution-outcome';
 
 function providerError(statusCode: number, code: string) {
@@ -16,7 +18,7 @@ describe('execution failure cause precedence', () => {
   it('classifies the existing serialized processor error without changing workflow status', () => {
     const failure = {
       status: 'failed',
-      error: { name: 'Error', message: 'Policy rejected', processorId: 'policy', options: {} },
+      error: JSON.parse(JSON.stringify(getErrorFromUnknown(new TripWire('Policy rejected', {}, 'policy')))),
     };
     const before = JSON.stringify(failure);
     expect(executionFailureTermination(failure)).toMatchObject({
@@ -25,6 +27,10 @@ describe('execution failure cause precedence', () => {
       stopReasonContext: { tripwire: { reason: 'Policy rejected', processorId: 'policy' } },
     });
     expect(JSON.stringify(failure)).toBe(before);
+  });
+  it('does not mistake a user error with processor fields for a tripwire', () => {
+    const error = Object.assign(new Error('User processor failed'), { processorId: 'custom', options: {} });
+    expect(executionFailureTermination(error)).toMatchObject({ outcome: 'error', stopReason: 'runtime_error' });
   });
   it('does not treat context-limit wording in a runtime exception as a provider limit', () => {
     expect(executionFailureTermination(new Error('context_length_exceeded'))).toMatchObject({

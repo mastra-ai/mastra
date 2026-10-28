@@ -992,7 +992,12 @@ export class CoreToolBuilder extends MastraBase {
             mastra: options.mastra && 'observability' in options.mastra ? (options.mastra as Mastra) : undefined,
           });
 
-      await this.requireToolExecuteFGA(options, mcpMeta, toolRequestContext, execOptions?.actor);
+      try {
+        await this.requireToolExecuteFGA(options, mcpMeta, toolRequestContext, execOptions?.actor);
+      } catch (error) {
+        toolSpan?.error({ error: error as Error, ...executionFailureTermination(error) });
+        throw error;
+      }
 
       try {
         logger.debug(start, { ...logData, ...rest, model: logModelObject });
