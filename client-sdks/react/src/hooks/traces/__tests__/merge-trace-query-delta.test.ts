@@ -85,14 +85,14 @@ describe('mergeTraceQueryDelta', () => {
 
       const merged = mergeTraceQueryDelta(
         data,
-        [timed(field, 'trace-no-chunk', null), timed(field, 'trace-medium', 500)],
+        [timed(field, 'trace-no-chunk', null), timed(field, 'trace-medium', 500), timed(field, 'trace-instant', 0)],
         orderBy,
       );
 
       expect(ids(merged)[0]).toEqual(
         direction === 'asc'
-          ? ['trace-fast', 'trace-medium', 'trace-slow', 'trace-no-chunk']
-          : ['trace-slow', 'trace-medium', 'trace-fast', 'trace-no-chunk'],
+          ? ['trace-instant', 'trace-fast', 'trace-medium', 'trace-slow', 'trace-no-chunk']
+          : ['trace-slow', 'trace-medium', 'trace-fast', 'trace-instant', 'trace-no-chunk'],
       );
     });
   });
