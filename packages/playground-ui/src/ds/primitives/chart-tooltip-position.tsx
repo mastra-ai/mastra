@@ -6,6 +6,11 @@ const OFFSET = 10;
 /** Room kept between the tooltip and the window's edge. */
 const EDGE = 8;
 
+/** `value` within `[min, max]`; `min` wins when the range is empty. */
+function clamp(value: number, min: number, max: number) {
+  return Math.max(min, Math.min(value, max));
+}
+
 /**
  * Places a chart tooltip next to the hovered point, free to leave the chart, flipping only at the
  * window's edges. Measured and moved in a layout effect, before the browser paints, by writing the
@@ -35,7 +40,10 @@ export function ChartTooltipPosition({
     const flipY = box.top + below + el.offsetHeight > window.innerHeight - EDGE;
     const x = flipX ? coordinate.x - OFFSET - el.offsetWidth : right;
     const y = flipY ? coordinate.y - OFFSET - el.offsetHeight : below;
-    el.style.transform = `translate(${Math.round(x)}px, ${Math.round(y)}px)`;
+    // Neither side fits (a narrow window): keep it inside the window, left and top edges first.
+    const left = clamp(x, EDGE - box.left, window.innerWidth - EDGE - box.left - el.offsetWidth);
+    const top = clamp(y, EDGE - box.top, window.innerHeight - EDGE - box.top - el.offsetHeight);
+    el.style.transform = `translate(${Math.round(left)}px, ${Math.round(top)}px)`;
   });
   return <div ref={ref}>{cloneElement(children, { ...contentProps, coordinate })}</div>;
 }
