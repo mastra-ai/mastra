@@ -317,7 +317,7 @@ interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Structured details behind stopReason, such as the limit that was hit */
   stopReasonContext?: Record<string, unknown>
 
-  /** Milliseconds from the first model inference's start to its first streamed chunk */
+  /** Milliseconds from the start of the model inference that streamed the first chunk to that chunk */
   timeToFirstTokenMs?: number
 
   /** Errors in this span and all nested spans */

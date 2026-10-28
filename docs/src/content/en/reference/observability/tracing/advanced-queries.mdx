@@ -148,7 +148,7 @@ Stores advertise the sort through the `trace-query-time-to-first-chunk-sort` fea
 
 #### Filter and sort by time to first token
 
-`timeToFirstTokenMs` is the time in milliseconds from the start of the first model inference, the provider call itself, to its first streamed chunk. It leaves out the work Mastra does before calling the model, such as input processors. A model inference span measures from its own start. Model step, model generation, and agent run spans copy the start of their first inference up the tree and measure from it, so on each of those spans `timeToFirstTokenMs` is never larger than `timeToFirstChunkMs`. At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
+`timeToFirstTokenMs` is the time in milliseconds from the start of a model call, the provider request itself, to the first chunk that call streams. It leaves out the work Mastra does before calling the model, such as input processors. A model inference span measures from its own start. Model step, model generation, and agent run spans measure from the start of the model call that streamed their first chunk, so on each of those spans `timeToFirstTokenMs` is normally not larger than `timeToFirstChunkMs`. In a durable run, clock differences between workers can make it larger. At trace scope, the field reads the current root span's value. Inside `spans.some` or `spans.none`, it reads each related span.
 
 This predicate finds traces whose root agent waited more than 2 seconds for the model's first token:
 
