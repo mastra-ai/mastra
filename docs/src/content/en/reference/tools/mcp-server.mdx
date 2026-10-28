@@ -2023,7 +2023,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '86400000',
     description:
-      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks until the server closes.',
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks until the server closes. With the in-memory store, finished results stay in memory until their TTL ends, so lower `ttlMs` to limit memory use and avoid `null`.',
   },
   {
     name: 'store',
