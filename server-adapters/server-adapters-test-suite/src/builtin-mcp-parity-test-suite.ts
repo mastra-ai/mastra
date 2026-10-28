@@ -310,6 +310,23 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
         const viaStudioHeader = await listTools('viewer-token', { headers: { 'x-mastra-client-type': 'studio' } });
         expect(Object.keys(viaStudioHeader)).toEqual([]);
       });
+
+      it('leaves Studio and cookie auth of ordinary routes unchanged', async () => {
+        const execute = (headers: Record<string, string>) =>
+          fetch(`${server.url}/api/tools/test-tool/execute`, {
+            method: 'POST',
+            headers: { 'content-type': 'application/json', ...headers },
+            body: JSON.stringify({ data: { text: 'x' } }),
+          });
+        // viewer has server role `viewer` but Studio role `owner`.
+        expect((await execute({ authorization: 'Bearer viewer-token' })).status).toBe(403);
+        expect((await execute({ authorization: 'Bearer viewer-token', 'x-mastra-client-type': 'studio' })).status).toBe(
+          200,
+        );
+        expect(
+          (await fetch(`${server.url}/api/agents`, { headers: { cookie: 'mastra-token=owner-token' } })).status,
+        ).toBe(200);
+      });
     });
 
     describe('catalogue', () => {
