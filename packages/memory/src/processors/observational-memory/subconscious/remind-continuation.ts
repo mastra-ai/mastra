@@ -240,8 +240,9 @@ export class RemindContinuationProcessor implements Processor<'remind-continuati
       ifIdle: { behavior: 'persist' },
     });
     const accepted = await persisted.accepted;
-    if (accepted.action !== 'persist')
+    if (accepted.action !== 'persist') {
       throw new Error(`Terminal reminder failure was not persisted (${accepted.action}).`);
+    }
     await persisted.persisted;
 
     const delivery = this.options.parentAgent.sendSignal(signal, {

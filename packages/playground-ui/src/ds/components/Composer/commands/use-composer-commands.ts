@@ -10,8 +10,9 @@ function createSuggestionItems(
   commands: readonly ComposerCommand[],
   options?: readonly ComposerCommandOption[],
 ): ComposerSuggestionItem[] {
-  if (options)
+  if (options) {
     return options.map(option => ({ ...option, id: `${listId}-option-${encodeURIComponent(option.value)}` }));
+  }
   return commands.map(command => ({
     id: `${listId}-command-${encodeURIComponent(command.name)}`,
     label: `/${command.name}`,

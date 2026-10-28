@@ -342,11 +342,11 @@ describe('Agent signals: pending cancellation', () => {
           await pubsub.publish(topic, event);
           await pubsub.flush();
           await nextTick();
-          if (cancel)
+          if (cancel) {
             expect(
               runtime.cancelQueuedMessages(agent, { ...scope, signalIds: [signal.id] }, pubsub).cancelledSignalIds,
             ).toEqual([signal.id]);
-          else expect(runtime.drainPendingSignals(runId, pubsub).map(entry => entry.id)).toEqual([signal.id]);
+          } else expect(runtime.drainPendingSignals(runId, pubsub).map(entry => entry.id)).toEqual([signal.id]);
           await pubsub.publish(topic, event);
           await pubsub.flush();
           await nextTick();
@@ -575,7 +575,7 @@ describe('Agent signals: pending cancellation', () => {
             : agent.sendSignal({ type: 'user-message', contents: 'cancelled remote input' }, scope);
           await removed.accepted;
           // Model a pending copy routed to the execution owner, not an observer-only history entry.
-          if (localCopy)
+          if (localCopy) {
             await pubsub.publish(
               `agent.thread-stream.${encodeURIComponent(`${scope.resourceId}\u0000${scope.threadId}`)}`,
               {
@@ -588,6 +588,7 @@ describe('Agent signals: pending cancellation', () => {
                 },
               },
             );
+          }
           const ownerOnly = agent.queueMessage('cancelled owner-only input', scope);
           await ownerOnly.accepted;
           const survivor = agent.queueMessage('surviving input', scope);
@@ -1374,12 +1375,13 @@ describe('Agent signals: pending cancellation', () => {
           pubsub.onTransferLease = transferStarted;
           const acquireLease = vi.spyOn(pubsub, 'acquireLease');
           // Provider rejection falls back to acquisition, rather than entering failed-start recovery.
-          if (outcome === 'transfer-rejection')
+          if (outcome === 'transfer-rejection') {
             vi.spyOn(pubsub, 'transferLease').mockImplementationOnce(async () => {
               transferStarted();
               await gate;
               throw new Error('Lease unavailable');
             });
+          }
           expect(agent.abortThreadStream(scope)).toBe(true);
           releaseFirst();
           await output.text;
@@ -1423,10 +1425,11 @@ describe('Agent signals: pending cancellation', () => {
           await after.text;
           expect(model.doStreamCalls).toHaveLength(2);
           expect(JSON.stringify(model.doStreamCalls[1]?.prompt)).not.toContain('cancel during lease');
-          if (source === 'remote')
+          if (source === 'remote') {
             await vi.waitFor(() =>
               expect(pubsub.subscriberCount(`agent.thread-stream.${encodeURIComponent(key)}`)).toBe(0),
             );
+          }
         } finally {
           release();
           releaseFirst();

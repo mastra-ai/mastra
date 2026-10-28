@@ -532,8 +532,9 @@ describe('channels()', () => {
       'fetch',
       vi.fn(async (input: RequestInfo | URL) => {
         const url = String(input);
-        if (url.includes('/applications/@me'))
+        if (url.includes('/applications/@me')) {
           return Response.json({ id: B.id, name: 'App B', verify_key: B.verify_key });
+        }
         throw new Error(`unexpected fetch: ${url}`);
       }),
     );

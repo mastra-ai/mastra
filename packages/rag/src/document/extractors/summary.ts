@@ -31,8 +31,9 @@ export class SummaryExtractor extends BaseExtractor {
   constructor(options?: SummaryExtractArgs) {
     const summaries = options?.summaries ?? ['self'];
 
-    if (summaries && !summaries.some(s => ['self', 'prev', 'next'].includes(s)))
+    if (summaries && !summaries.some(s => ['self', 'prev', 'next'].includes(s))) {
       throw new Error("Summaries must be one of 'self', 'prev', 'next'");
+    }
 
     super();
 

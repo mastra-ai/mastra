@@ -159,8 +159,9 @@ describeForAllEngines('Concurrent conversations preserve replies and isolate can
             expect(answers).toHaveLength(variant === 'same-thread' ? 2 : 1);
             expect(JSON.stringify(users)).toContain(`run ${run}`);
             if (variant === 'same-resource') expect(JSON.stringify(messages)).not.toContain(`run ${1 - run}`);
-            if (serialized)
+            if (serialized) {
               expect(messages.map(message => message.role)).toEqual(['user', 'assistant', 'user', 'assistant']);
+            }
           }
         }
       } finally {

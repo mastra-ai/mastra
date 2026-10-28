@@ -260,8 +260,9 @@ function assertRelativePath(path: string, label: string): string {
   if (isAbsolute(path)) throw new Error(`${label} must be relative`);
   if (path.split(/[\\/]+/).includes('..')) throw new Error(`${label} escapes workspace`);
   const normalized = resolve('/', path).slice(1);
-  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`))
+  if (!normalized || normalized === '..' || normalized.startsWith(`..${sep}`)) {
     throw new Error(`${label} escapes workspace`);
+  }
   return normalized;
 }
 

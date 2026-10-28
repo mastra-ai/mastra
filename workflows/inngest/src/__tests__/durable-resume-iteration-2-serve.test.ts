@@ -83,8 +83,9 @@ async function drain(stream: AsyncIterable<any>, timeoutMs: number, stopOnSuspen
           if (
             chunk?.type === 'finish' ||
             (stopOnSuspension && (chunk?.type === 'tool-call-suspended' || chunk?.type === 'tool-call-approval'))
-          )
+          ) {
             return;
+          }
         }
       } catch (e) {
         errors.push(e);

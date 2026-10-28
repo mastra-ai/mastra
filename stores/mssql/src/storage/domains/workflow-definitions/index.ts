@@ -148,12 +148,15 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
     const existing = await this.get(input.id);
 
     if (!existing) {
-      if (!('inputSchema' in input) || input.inputSchema === undefined)
+      if (!('inputSchema' in input) || input.inputSchema === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": inputSchema is required.`);
-      if (!('outputSchema' in input) || input.outputSchema === undefined)
+      }
+      if (!('outputSchema' in input) || input.outputSchema === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": outputSchema is required.`);
-      if (!('graph' in input) || input.graph === undefined)
+      }
+      if (!('graph' in input) || input.graph === undefined) {
         throw new Error(`Cannot create workflow definition "${input.id}": graph is required.`);
+      }
 
       const record: Record<string, any> = {
         id: input.id,
@@ -197,8 +200,9 @@ export class WorkflowDefinitionsMSSQL extends WorkflowDefinitionsStorage {
     if ('inputSchema' in input && input.inputSchema !== undefined) data.inputSchema = input.inputSchema;
     if ('outputSchema' in input && input.outputSchema !== undefined) data.outputSchema = input.outputSchema;
     if ('stateSchema' in input && input.stateSchema !== undefined) data.stateSchema = input.stateSchema;
-    if ('requestContextSchema' in input && input.requestContextSchema !== undefined)
+    if ('requestContextSchema' in input && input.requestContextSchema !== undefined) {
       data.requestContextSchema = input.requestContextSchema;
+    }
     if ('graph' in input && input.graph !== undefined) data.graph = input.graph;
     if ('schedule' in input && input.schedule !== undefined) data.schedule = input.schedule;
     if ('status' in input && input.status !== undefined) data.status = input.status;

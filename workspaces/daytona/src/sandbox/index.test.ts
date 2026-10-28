@@ -908,8 +908,9 @@ describe('DaytonaSandbox', () => {
         if (
           command.includes("grep -Fq -- ' /data/retry ' /proc/mounts") &&
           command.includes('sudo mount --move /data/retry')
-        )
+        ) {
           attached = false;
+        }
         return { exitCode: 0, result: command === 'id -u && id -g' ? '1000\n1000' : '' };
       });
       const filesystem = new S3Filesystem({

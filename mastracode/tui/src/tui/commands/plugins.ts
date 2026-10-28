@@ -197,10 +197,12 @@ function showPluginDetail(ctx: SlashCommandContext, plugin: LoadedPlugin): void 
     container.addChild(new Text(`config: ${configEntries.map(([key]) => key).join(', ')}`, 0, 0));
   }
   if (plugin.error) container.addChild(new Text(theme.fg('error', `error: ${plugin.error}`), 0, 0));
-  if (plugin.status === 'blocked')
+  if (plugin.status === 'blocked') {
     container.addChild(new Text(theme.fg('warning', 'blocked by plugins.json disabledPlugins'), 0, 0));
-  if (plugin.conflicts?.length)
+  }
+  if (plugin.conflicts?.length) {
     container.addChild(new Text(theme.fg('warning', `conflicts: ${plugin.conflicts.join(', ')}`), 0, 0));
+  }
   container.addChild(new Spacer(1));
 
   const actionLabel = plugin.enabled ? 'Deactivate' : 'Activate';

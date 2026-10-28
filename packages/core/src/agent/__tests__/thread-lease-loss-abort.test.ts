@@ -86,8 +86,9 @@ class ReplicaPubSub extends EventEmitterPubSub {
     const current = this.shared.owner(key);
     if (current && current !== owner) return { acquired: false, owner: current };
     this.shared.leases.set(key, { owner, expiresAt: Date.now() + ttlMs });
-    if (key.startsWith(`${RESOURCE}\u0000`))
+    if (key.startsWith(`${RESOURCE}\u0000`)) {
       this.shared.confirmedSentAt = Math.max(this.shared.confirmedSentAt, sentAt);
+    }
     return { acquired: true, owner };
   }
   override async getLeaseOwner(key: string) {

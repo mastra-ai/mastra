@@ -41,6 +41,7 @@ export default defineConfig({
     'ee/**',
   ],
   rules: {
+    curly: ['error', 'multi-line'],
     'no-dupe-keys': 'error',
     'no-useless-return': 'error',
     'no-else-return': 'error',

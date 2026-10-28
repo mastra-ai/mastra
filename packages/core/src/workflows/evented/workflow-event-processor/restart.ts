@@ -27,8 +27,9 @@ export function resolveCompletedRestartEntry(
       !ids.every(
         id => results[id]?.status === 'success' || (entry.type === 'conditional' && results[id]?.status === 'skipped'),
       )
-    )
+    ) {
       return;
+    }
     const outputs: Record<string, unknown> = {};
     nextState = { ...nextState };
     stepResults = { ...results };

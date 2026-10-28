@@ -1831,8 +1831,9 @@ function normalizeLiteral(
 function normalizeSet(values: TraceQueryLiteral[], rule: FieldRule): Array<string | number> | undefined {
   const normalized = values.map(value => normalizeLiteral(value, rule));
   if (normalized.some(value => value === undefined)) return undefined;
-  if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0]))
+  if (rule.valueKind === 'stringOrNumber' && normalized.some(value => typeof value !== typeof normalized[0])) {
     return undefined;
+  }
   return normalized as Array<string | number>;
 }
 

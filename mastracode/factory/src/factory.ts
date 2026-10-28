@@ -1079,8 +1079,9 @@ export class MastraFactory {
                 !gitlabIntegration?.intake ||
                 !gitlabIntegration.versionControl ||
                 integrationId !== gitlabIntegration.id
-              )
+              ) {
                 return null;
+              }
               const handle = sourceControlStorage.forIntegration(gitlabIntegration.id);
               const installation = await handle.installations.get({ orgId, id: installationId });
               if (!installation) return null;
@@ -1344,8 +1345,9 @@ export class MastraFactory {
                 const { sessionId, row } = storage.isDomainReady('source-control')
                   ? await resolveWakeSession({ resourceId, threadId, thread })
                   : { sessionId: threadId, row: null };
-                if (!row?.factoryProjectId)
+                if (!row?.factoryProjectId) {
                   return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['session-not-found']);
+                }
                 if (!hasResolvedOrg(row.orgId)) {
                   return failWake({ sessionId, threadId }, WAKE_OWNER_UNRESOLVED['organization-unresolved']);
                 }

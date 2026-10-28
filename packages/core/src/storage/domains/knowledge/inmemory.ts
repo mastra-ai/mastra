@@ -208,10 +208,12 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       for (const edge of addedGrantEdges) this.#structureGrants.delete(edge);
       for (const address of createdAddresses) this.#structureScopes.delete(address);
       for (const id of createdScopeIds) {
-        for (const edge of this.#structureParents)
+        for (const edge of this.#structureParents) {
           if (edge.startsWith(`${id}\u0000`)) this.#structureParents.delete(edge);
-        for (const grant of this.#structureGrants)
+        }
+        for (const grant of this.#structureGrants) {
           if (grant.startsWith(`${id}\u0000`)) this.#structureGrants.delete(grant);
+        }
       }
       throw error;
     }
@@ -516,7 +518,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
         const sourceId = key.slice(separator + 1);
         if (sourceType === 'record') {
           const record = this.#db.knowledgeRecords.get(sourceId);
-          if (record)
+          if (record) {
             this.#enqueue(
               'record',
               sourceId,
@@ -524,6 +526,7 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
               createKnowledgeUlid(),
               record.scope,
             );
+          }
         } else {
           const sourceNode = this.#db.knowledgeNodes.get(sourceId);
           if (sourceNode) this.#enqueue('node', sourceId, 'upsert', createKnowledgeUlid(), sourceNode.scope);

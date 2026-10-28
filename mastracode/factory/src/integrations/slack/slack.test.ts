@@ -1192,8 +1192,9 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
         .mockResolvedValueOnce([{ id: 'conn-github', integrationId: 'github', createdByUserId: 'owner-1' }])
         .mockRejectedValueOnce(outage);
     }
-    if (failure === 'project repository read')
+    if (failure === 'project repository read') {
       sourceControl.projectRepositories.listByProject.mockRejectedValue(outage);
+    }
     if (failure === 'repository read') sourceControl.repositories.get.mockRejectedValue(outage);
     if (failure === 'session lookup') sourceControl.sessions.getForBranch.mockRejectedValue(outage);
     if (failure === 'session creation') sourceControl.sessions.create.mockRejectedValue(outage);
@@ -1208,8 +1209,9 @@ describe('repo-backed thread sessions (resolveResourceId)', () => {
         })
         .mockRejectedValueOnce(outage);
     }
-    if (failure === 'project reread')
+    if (failure === 'project reread') {
       deps.projects.get.mockResolvedValueOnce({ id: 'fp-1' }).mockRejectedValueOnce(outage);
+    }
     const resolverDeps =
       failure === 'multiple providers'
         ? { ...deps, sourceControls: [sourceControl, makeSourceControl({ integrationId: 'gitlab' })] }

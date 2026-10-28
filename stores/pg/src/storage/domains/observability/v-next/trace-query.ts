@@ -735,8 +735,9 @@ export function compilePostgresTraceQuery(
   let deltaWindow: { xactId: string; cursorId: string; safeHorizon: string } | undefined;
   if (plan.paginationMode === 'delta') {
     const watermark = coreStorage.getTraceQueryDeltaWatermark(plan, 'pg');
-    if (watermark === undefined || safeHorizon === undefined)
+    if (watermark === undefined || safeHorizon === undefined) {
       throw new Error('Delta query requires a cursor and safe horizon');
+    }
     deltaWindow = { ...decodeTraceDeltaWatermark(watermark), safeHorizon };
   }
   const { ctes, values } = compilePostgresTraceCandidates(
@@ -1038,8 +1039,9 @@ function decodeTraceDeltaWatermark(watermark: string) {
 
 function emptyDeltaWatermark(horizon: string, watermark?: string): string {
   // Preserve monotonicity if a query envelope contains a future native watermark.
-  if (watermark !== undefined && BigInt(decodeTraceDeltaWatermark(watermark).xactId) >= BigInt(horizon))
+  if (watermark !== undefined && BigInt(decodeTraceDeltaWatermark(watermark).xactId) >= BigInt(horizon)) {
     return watermark;
+  }
   return encodeDeltaCursor(horizon, 0);
 }
 
@@ -1199,8 +1201,9 @@ export async function queryTraces(
   const deadline = performance.now() + coreStorage.resolveTraceQueryTimeoutMs(timeoutMs);
   const rows = await runWithPostgresTraceQueryTimeout(client, timeoutMs, async transaction => {
     const rows = await transaction.any<Record<string, unknown>>(query.text, query.values);
-    if (plan.result === 'traces')
+    if (plan.result === 'traces') {
       await fillMissingTracePreviews(transaction, schema, rows.slice(0, plan.limit), deadline);
+    }
     return rows;
   });
   const visibleRows = rows.slice(0, plan.limit);

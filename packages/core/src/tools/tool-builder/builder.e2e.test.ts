@@ -186,10 +186,11 @@ async function runStructuredOutputSchemaTest(
     // });
 
     const prompt = inputSchema?.description || allSchemas[schemaName].description;
-    if (!prompt)
+    if (!prompt) {
       throw new Error(
         `Could not find description for test prompt from input schema or all schemas object with schema name ${schemaName}`,
       );
+    }
     // Check if model is V1 or V2/V3 and use appropriate method
     const response = isSupportedLanguageModel(model)
       ? await agent.generate(prompt, generateOptions)

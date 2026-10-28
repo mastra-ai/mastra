@@ -180,8 +180,9 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
         if (!existing.modifiedTime) throw new StaleFileError(path, options.expectedMtime, new Date(0));
 
         const actual = new Date(existing.modifiedTime);
-        if (actual.getTime() !== options.expectedMtime.getTime())
+        if (actual.getTime() !== options.expectedMtime.getTime()) {
           throw new StaleFileError(path, options.expectedMtime, actual);
+        }
       }
       await this.upload(existing.id, content, options?.mimeType, 'PATCH');
       return;
@@ -601,8 +602,9 @@ export class GoogleDriveFilesystem extends MastraFilesystem {
         assertion: `${unsigned}.${signature}`,
       }),
     });
-    if (!response.ok)
+    if (!response.ok) {
       throw new Error(`Google service account token request failed (${response.status}): ${await response.text()}`);
+    }
     const json = (await response.json()) as { access_token: string; expires_in: number };
     this.accessToken = json.access_token;
     this.tokenExpiresAt = Date.now() + json.expires_in * 1000;

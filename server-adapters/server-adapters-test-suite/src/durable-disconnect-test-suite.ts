@@ -496,8 +496,9 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
       'decline-tool-call',
     ] as const) {
       for (const explicitAbort of [false, true, 'run', 'threadless'] as const) {
-        if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route)))
+        if (typeof explicitAbort === 'string' && (kind === 'plain' || !['stream', 'stream-alias'].includes(route))) {
           continue;
+        }
         const threadless = explicitAbort === 'threadless';
         it(`${route}: disconnect ${explicitAbort ? `then explicit ${explicitAbort === true ? 'thread' : explicitAbort} abort stops execution` : 'preserves durable execution and replay'}`, async () => {
           fixture = await config.setupModel();
@@ -581,14 +582,16 @@ export function createDurableDisconnectTestSuite(config: DurableDisconnectTestCo
             if (!resumed || !path.endsWith('/stream')) disconnected.resolve();
           });
           const base = `${server.baseUrl}/api/agents/agent`;
-          if (resumed)
+          if (resumed) {
             fixture.addResponse(0, {
               toolCalls: [{ id: 'authorize-1', name: 'authorize', arguments: {} }],
             });
-          for (let n = 1; n <= 3; n++)
+          }
+          for (let n = 1; n <= 3; n++) {
             fixture.addResponse(offset + n - 1, {
               toolCalls: [{ id: `slow-${n}`, name: 'slow', arguments: { n } }],
             });
+          }
           fixture.addResponse(offset + 3, { content: 'done: 3 results' });
           const runId = `disconnect-${kind}-${route}-${explicitAbort}`;
           const thread = { thread: runId, resource: 'disconnect-user' };

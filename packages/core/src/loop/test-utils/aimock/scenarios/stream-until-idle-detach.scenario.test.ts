@@ -281,10 +281,11 @@ describeForAllEngines('AIMock loop scenario: durable untilIdle observer detach (
             agent.abortThreadStream({ threadId: thread.thread, resourceId: thread.resource, localOnly: true });
           }
           gate.resolve();
-          if (action === 'read')
+          if (action === 'read') {
             while (!(await reader.read()).done) {
               /* drain continuations */
             }
+          }
           await vi.waitFor(async () => {
             expect(await mastra.backgroundTaskManager!.getTask(taskId!)).toMatchObject({ status: 'completed' });
           });

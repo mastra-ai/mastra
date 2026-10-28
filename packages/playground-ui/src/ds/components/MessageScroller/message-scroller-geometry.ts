@@ -53,8 +53,9 @@ export const getScrollTarget = ({
   const visibleHeight = Math.max(0, viewportElement.clientHeight - contentPadding.start - contentPadding.end);
 
   if (align === 'center') return elementTop - contentPadding.start - (visibleHeight - elementHeight) / 2 - scrollMargin;
-  if (align === 'end')
+  if (align === 'end') {
     return elementTop - viewportElement.clientHeight + elementHeight + contentPadding.end + scrollMargin;
+  }
 
   if (align === 'nearest') {
     const elementBottom = elementTop + elementHeight;

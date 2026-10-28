@@ -60,8 +60,9 @@ export function hydrateRunScopeFromInternal(mastra: Mastra, runId: string, inter
   if (internal.transportRef) scope.set(TRANSPORT_REF_KEY, internal.transportRef);
   if (internal.backgroundTaskManager) scope.set(BACKGROUND_TASK_MANAGER_KEY, internal.backgroundTaskManager);
   if (internal.agentBackgroundConfig) scope.set(AGENT_BACKGROUND_CONFIG_KEY, internal.agentBackgroundConfig);
-  if (internal.backgroundTaskManagerConfig)
+  if (internal.backgroundTaskManagerConfig) {
     scope.set(BACKGROUND_TASK_MANAGER_CONFIG_KEY, internal.backgroundTaskManagerConfig);
+  }
   if (internal.skipBgTaskWait !== undefined) scope.set(SKIP_BG_TASK_WAIT_KEY, internal.skipBgTaskWait);
   if (internal.drainPendingSignals) scope.set(DRAIN_PENDING_SIGNALS_KEY, internal.drainPendingSignals);
   if (internal.subscribePendingSignals) scope.set(SUBSCRIBE_PENDING_SIGNALS_KEY, internal.subscribePendingSignals);

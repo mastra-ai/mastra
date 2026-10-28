@@ -131,8 +131,9 @@ export class PlatformJiraIntegration implements FactoryIntegration {
   }
 
   get projects(): FactoryProjectsStorage {
-    if (!this.#projects)
+    if (!this.#projects) {
       throw new Error('PlatformJiraIntegration is not initialized — the factory binds storage during prepare().');
+    }
     return this.#projects;
   }
 

@@ -462,8 +462,9 @@ describe('evented workflow cancel with workers on both replicas', () => {
     const ends = new Map<string, number>();
     const publish = pubsub.publish.bind(pubsub);
     vi.spyOn(pubsub, 'publish').mockImplementation(async (topic, event, ...rest) => {
-      if (topic === 'workflows' && event.type === 'workflow.end')
+      if (topic === 'workflows' && event.type === 'workflow.end') {
         ends.set(event.runId, (ends.get(event.runId) ?? 0) + 1);
+      }
       return (publish as any)(topic, event, ...rest);
     });
 

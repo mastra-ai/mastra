@@ -161,7 +161,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
                 controller.enqueue({ type: 'stream-start', warnings: [] });
                 controller.enqueue({ type: 'reasoning-start', id: 'discarded' });
                 controller.enqueue({ type: 'reasoning-delta', id: 'discarded', delta: 'STALE_REASONING_FINGERPRINT' });
-                if (phase === 'signed' || phase === 'encrypted')
+                if (phase === 'signed' || phase === 'encrypted') {
                   controller.enqueue({
                     type: 'reasoning-end',
                     id: 'discarded',
@@ -170,6 +170,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
                         ? { anthropic: { signature: 'STALE_SIGNATURE' } }
                         : { openai: { itemId: 'STALE_ITEM_ID', reasoningEncryptedContent: 'STALE_ENCRYPTED' } },
                   });
+                }
                 abortSignal.addEventListener('abort', () => controller.error(abortSignal.reason), { once: true });
                 started = true;
               },
@@ -203,24 +204,28 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       })();
       try {
         await vi.waitFor(() => expect(started).toBe(true));
-        if (phase !== 'ttfb')
+        if (phase !== 'ttfb') {
           await vi.waitFor(() => expect(chunks.some(chunk => chunk.type === 'reasoning-delta')).toBe(true));
+        }
         const entry = globalRunRegistry.get(stream.runId)!;
         const admissions = await Promise.all([
           agent.sendSignal({ type: 'user', contents: 'SIGNAL_MARKER_A' }, scope),
           agent.sendSignal({ type: 'user', contents: 'SIGNAL_MARKER_B' }, scope),
         ]);
-        for (const admission of admissions)
+        for (const admission of admissions) {
           await expect(admission.accepted).resolves.toMatchObject({ action: 'deliver', runId: stream.runId });
+        }
         await vi.waitFor(() => expect(providerAborted).toBe(true));
         await within(consumption);
         await within(entry.workflowExecution);
         expect(prompts).toHaveLength(2);
         const replacement = JSON.stringify(prompts[1]);
-        for (const marker of ['SIGNAL_MARKER_A', 'SIGNAL_MARKER_B'])
+        for (const marker of ['SIGNAL_MARKER_A', 'SIGNAL_MARKER_B']) {
           expect(replacement.match(new RegExp(marker, 'g'))).toHaveLength(1);
-        for (const marker of ['STALE_REASONING_FINGERPRINT', 'STALE_SIGNATURE', 'STALE_ITEM_ID', 'STALE_ENCRYPTED'])
+        }
+        for (const marker of ['STALE_REASONING_FINGERPRINT', 'STALE_SIGNATURE', 'STALE_ITEM_ID', 'STALE_ENCRYPTED']) {
           expect(replacement).not.toContain(marker);
+        }
         expect(signals[0]?.aborted).toBe(true);
         expect(signals[1]?.aborted).toBe(false);
         expect(runController.signal.aborted).toBe(false);
@@ -236,8 +241,9 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           expect((await memory.recall(scope)).messages.some(message => message.role === 'assistant')).toBe(true),
         );
         const history = JSON.stringify((await memory.recall(scope)).messages);
-        for (const marker of ['STALE_REASONING_FINGERPRINT', 'STALE_SIGNATURE', 'STALE_ITEM_ID', 'STALE_ENCRYPTED'])
+        for (const marker of ['STALE_REASONING_FINGERPRINT', 'STALE_SIGNATURE', 'STALE_ITEM_ID', 'STALE_ENCRYPTED']) {
           expect(history).not.toContain(marker);
+        }
         expect(history).toContain('SIGNAL_MARKER_A');
         expect(history).toContain('SIGNAL_MARKER_B');
         if (phase === 'reasoning') expect(chunks.filter(chunk => chunk.type === 'reasoning-end')).toHaveLength(1);
@@ -469,7 +475,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         doStream: async ({ prompt, abortSignal }) => {
           prompts.push(prompt);
           calls++;
-          if (calls === 2)
+          if (calls === 2) {
             return {
               warnings: [],
               stream: new ReadableStream<LanguageModelV2StreamPart>({
@@ -481,6 +487,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
                 },
               }),
             };
+          }
           if (calls === 4) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
           return {
             warnings: [],
@@ -815,8 +822,9 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
       await within(consumption);
       await within(entry.workflowExecution);
       expect(prompts).toHaveLength(6);
-      for (let index = 0; index < 5; index++)
+      for (let index = 0; index < 5; index++) {
         expect(JSON.stringify(prompts[index + 1])).toContain(`BUDGET_SIGNAL_${index}`);
+      }
       expect(requestOrdinals).toEqual([0, 0, 0, 0, 0, 0]);
       expect(requestRetryCounts).toEqual(requestOrdinals);
       expect(requestStepCounts).toEqual(requestOrdinals);
@@ -885,7 +893,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
           doStream: async ({ prompt, abortSignal }) => {
             prompts.push(prompt);
             requestSignal = abortSignal;
-            if (priorAccepted && prompts.length === 1)
+            if (priorAccepted && prompts.length === 1) {
               return {
                 warnings: [],
                 stream: convertArrayToReadableStream([
@@ -901,6 +909,7 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
                   },
                 ]),
               };
+            }
             if (prompts.length > 2) return { warnings: [], stream: convertArrayToReadableStream(answer()) };
             return {
               warnings: [],
@@ -964,11 +973,12 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
         expect(prompts).toHaveLength(priorAccepted ? 2 : 1);
         expect(toolCalls).toBe(priorAccepted ? 1 : 0);
         expect(onStepFinish).toHaveBeenCalledTimes(priorAccepted ? 1 : 0);
-        if (priorAccepted)
+        if (priorAccepted) {
           expect(onStepFinish.mock.calls[0]?.[0]).toMatchObject({
             text: 'EARLIER_ACCEPTED',
             usage: { inputTokens: 5, outputTokens: 3, totalTokens: 8 },
           });
+        }
         expect(judge).not.toHaveBeenCalled();
         expect(await agent.getObjective({ threadId: scope.threadId })).toMatchObject({ status: 'active', runsUsed: 0 });
         expect(chunks.filter(chunk => chunk.type === 'goal')).toHaveLength(0);
@@ -1436,13 +1446,14 @@ describe.each(['durable', 'evented', 'evented-split', 'evented-json'] as const)(
                 start(controller) {
                   controller.enqueue({ type: 'stream-start', warnings: [] });
                   if (boundary === 'text') controller.enqueue({ type: 'text-start', id: 'protected' });
-                  else
+                  else {
                     controller.enqueue({
                       type: 'tool-call',
                       toolCallId: 'protected-tool',
                       toolName: 'counter',
                       input: '{}',
                     });
+                  }
                   void held.promise.then(() => {
                     if (boundary === 'text') {
                       controller.enqueue({ type: 'text-delta', id: 'protected', delta: 'PROTECTED_TEXT' });

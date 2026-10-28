@@ -266,7 +266,7 @@ export class SkillsMySQL extends SkillsStorage {
     const { id, ...updates } = input;
     try {
       const existing = await this.getById(id);
-      if (!existing)
+      if (!existing) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_SKILL', 'NOT_FOUND'),
           domain: ErrorDomain.STORAGE,
@@ -274,6 +274,7 @@ export class SkillsMySQL extends SkillsStorage {
           text: `Skill ${id} not found`,
           details: { skillId: id },
         });
+      }
 
       const { authorId, visibility, activeVersionId, status, ...configFields } = updates;
       const configFieldNames = SNAPSHOT_FIELDS as readonly string[];
@@ -292,7 +293,7 @@ export class SkillsMySQL extends SkillsStorage {
 
       if (hasConfigUpdate) {
         const latestVersion = await this.getLatestVersion(id);
-        if (!latestVersion)
+        if (!latestVersion) {
           throw new MastraError({
             id: createStorageErrorId('MYSQL', 'UPDATE_SKILL', 'NO_VERSIONS'),
             domain: ErrorDomain.STORAGE,
@@ -300,6 +301,7 @@ export class SkillsMySQL extends SkillsStorage {
             text: `No versions found for skill ${id}`,
             details: { skillId: id },
           });
+        }
 
         const {
           id: _versionId,
@@ -334,7 +336,7 @@ export class SkillsMySQL extends SkillsStorage {
       }
 
       const updated = await this.getById(id);
-      if (!updated)
+      if (!updated) {
         throw new MastraError({
           id: createStorageErrorId('MYSQL', 'UPDATE_SKILL', 'NOT_FOUND_AFTER_UPDATE'),
           domain: ErrorDomain.STORAGE,
@@ -342,6 +344,7 @@ export class SkillsMySQL extends SkillsStorage {
           text: `Skill ${id} not found after update`,
           details: { id },
         });
+      }
       return updated;
     } catch (error) {
       if (error instanceof MastraError) throw error;

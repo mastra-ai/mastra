@@ -130,8 +130,9 @@ export class ToolApprovalDialogComponent implements Component, Focusable {
    */
   private targetArgRows(width: number): string[] {
     const args = this.args;
-    if (args === null || args === undefined || typeof args !== 'object')
+    if (args === null || args === undefined || typeof args !== 'object') {
       return [escapeControls(String(args ?? '(none)'))];
+    }
     const entries = Object.entries(args as Record<string, unknown>).filter(([, v]) => v !== null && v !== undefined);
     if (entries.length === 0) return ['(none)'];
     const rows: string[] = [];

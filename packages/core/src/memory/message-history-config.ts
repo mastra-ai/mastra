@@ -68,14 +68,16 @@ export function getMemoryTokenBoundary(
 ): MemoryTokenBoundary | undefined {
   const value = thread?.metadata?.memoryTokenLimiter;
   if (!value || typeof value !== 'object') return;
-  if (!('createdAt' in value) || typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt)))
+  if (!('createdAt' in value) || typeof value.createdAt !== 'string' || !Number.isFinite(Date.parse(value.createdAt))) {
     return;
+  }
   if (
     !('messageIds' in value) ||
     !Array.isArray(value.messageIds) ||
     !value.messageIds.every(id => typeof id === 'string')
-  )
+  ) {
     return;
+  }
   if (!('maxTokens' in value) || typeof value.maxTokens !== 'number') return;
   if (!('atMaxRemoveTokens' in value) || typeof value.atMaxRemoveTokens !== 'number') return;
   return {

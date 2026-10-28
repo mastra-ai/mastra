@@ -103,8 +103,9 @@ function AttachmentComposer({
 
 function AttachmentPreview({ name, ...previewProps }: { name: string } & AttachmentPreviewProps) {
   if (name.endsWith('.png')) return <ImageEntry src={imageSrc} name={name} {...previewProps} />;
-  if (name.endsWith('.csv') || name.endsWith('.txt'))
+  if (name.endsWith('.csv') || name.endsWith('.txt')) {
     return <TxtEntry name={name} data={'name,score\nZoë,12\n日本語,20'} {...previewProps} />;
+  }
   if (name.endsWith('.pdf')) return <PdfEntry data="" url="https://example.com/brief.pdf" {...previewProps} />;
   if (name.endsWith('.mp4')) return <FileChipEntry name={name} contentType="video/mp4" />;
   if (name.endsWith('.mp3')) return <FileChipEntry name={name} contentType="audio/mpeg" />;

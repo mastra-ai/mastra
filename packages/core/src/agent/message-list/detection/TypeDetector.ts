@@ -188,8 +188,9 @@ export class TypeDetector {
       'annotations' in msg
       // Don't check `content` here. That would fully narrow to v5 and is more
       // likely to misclassify a loosely constructed v5/v6 UI message.
-    )
+    ) {
       return false;
+    }
 
     if (!msg.parts) return false; // likely an AIV4 Message
 

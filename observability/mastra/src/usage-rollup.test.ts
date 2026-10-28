@@ -193,8 +193,9 @@ describe('internal MODEL_GENERATION usage rollup', () => {
     const byUsage = new Map<string, number[]>();
     for (const m of tokenRows) {
       expect(m.usageId).toEqual(expect.any(String));
-      if (m.name === 'mastra_model_total_input_tokens')
+      if (m.name === 'mastra_model_total_input_tokens') {
         byUsage.set(m.usageId!, [...(byUsage.get(m.usageId!) ?? []), m.value]);
+      }
     }
     expect([...byUsage.values()].sort()).toEqual([[10], [30]]);
     expect(new Set(tokenRows.map(m => m.usageId)).size).toBe(2);

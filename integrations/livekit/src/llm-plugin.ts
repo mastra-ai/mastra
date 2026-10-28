@@ -300,7 +300,7 @@ class MastraLLMStream extends llm.LLMStream {
         const { done, value } = await reader.read();
         if (done) break;
         if (this.abortController.signal.aborted) break;
-        if (value)
+        if (value) {
           this.queue.put({
             id,
             delta: {
@@ -309,6 +309,7 @@ class MastraLLMStream extends llm.LLMStream {
               extra: { [VOICE_TURN_METADATA]: identity, [VOICE_FLUSH_METADATA]: typeof value !== 'string' },
             },
           });
+        }
       }
     } catch (error) {
       // Barge-in tears down the reply stream; that surfaces as a read rejection but is not a failure.

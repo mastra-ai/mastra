@@ -307,8 +307,9 @@ describe('session.model.switch', () => {
     await session.thread.create();
     const pairs: unknown[] = [];
     session.subscribe(event => {
-      if (event.type === 'model_changed')
+      if (event.type === 'model_changed') {
         pairs.push([event.modelId, event.thinkingLevel, session.state.get().thinkingLevel]);
+      }
     });
     await Promise.all([
       session.model.switch('openai/gpt-5.5', { thinkingLevel: 'high' }),

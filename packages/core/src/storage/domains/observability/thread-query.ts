@@ -116,12 +116,13 @@ export const threadQueryResponseSchema = z
   .strict()
   .superRefine((response, context) => {
     const keys = response.threads.map(row => JSON.stringify([row.organizationId, row.threadId]));
-    if (new Set(keys).size !== keys.length)
+    if (new Set(keys).size !== keys.length) {
       context.addIssue({
         code: 'custom',
         path: ['threads'],
         message: 'A page must contain unique scoped thread identities',
       });
+    }
   });
 
 export type ThreadQueryRequest = z.input<typeof requestSchema>;

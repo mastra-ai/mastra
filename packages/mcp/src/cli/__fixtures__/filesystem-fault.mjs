@@ -15,8 +15,9 @@ fs.rename = async (...args) => {
   return rename(...args);
 };
 fs.rm = async (path, ...args) => {
-  if (String(path).includes('.mastra-mcp-') && process.env.MCP_TEST_FS_FAULT === 'cleanup')
+  if (String(path).includes('.mastra-mcp-') && process.env.MCP_TEST_FS_FAULT === 'cleanup') {
     throw new Error('SENTINEL_CLEANUP_SECRET');
+  }
   return rm(path, ...args);
 };
 syncBuiltinESMExports();

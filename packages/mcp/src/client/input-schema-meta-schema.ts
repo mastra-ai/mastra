@@ -280,8 +280,9 @@ function getStructuralInputSchemaError(schema: object): string | undefined {
     for (const keyword of SCHEMA_MAP_KEYWORDS) {
       const schemas = record[keyword];
       if (schemas === undefined) continue;
-      if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas))
+      if (!schemas || typeof schemas !== 'object' || Array.isArray(schemas)) {
         return `${path}/${keyword}: must be an object`;
+      }
       for (const [key, child] of Object.entries(schemas)) {
         // draft-07 `dependencies` entries may also list required property names.
         if (keyword === 'dependencies' && isStringArray(child)) continue;

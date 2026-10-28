@@ -427,8 +427,9 @@ export class FactoryPhaseStateProcessor implements Processor<'factory-phase'> {
           }
         : { ...baseValue, board };
     const cacheKey = await phaseCacheKey(value, linked);
-    if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey)
+    if (hasBase && (args.tracking?.currentCacheKey ?? args.lastSnapshot?.metadata?.state?.cacheKey) === cacheKey) {
       return;
+    }
 
     const linkedText = linked.length
       ? `\nLinked items: ${linked.map(candidate => `${workItemSource(candidate.externalSource)} ${candidate.title}`).join('; ')}`

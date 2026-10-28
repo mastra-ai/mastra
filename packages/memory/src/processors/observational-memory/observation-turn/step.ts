@@ -653,8 +653,9 @@ export class ObservationStep {
         om.config.observation.failurePolicy !== 'continue' ||
         !isOmModelExecutionError(error) ||
         error.failureKind !== 'observer-model'
-      )
+      ) {
         throw error;
+      }
       return {
         succeeded: activated,
         record: this.turn.record,

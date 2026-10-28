@@ -16,8 +16,9 @@ describe('built MCP package', () => {
     expect(manifest.dependencies['json-schema-to-typescript']).toBe('16.0.0');
     expect(await readFile(join(root, manifest.bin['mastra-mcp']), 'utf8')).toMatch(/^#!\/usr\/bin\/env node\n/);
     expect((await stat(join(root, manifest.bin['mastra-mcp']))).mode & 0o111).not.toBe(0);
-    for (const file of ['index.js', 'index.cjs', 'index.d.ts'])
+    for (const file of ['index.js', 'index.cjs', 'index.d.ts']) {
       expect((await stat(join(root, 'dist', file))).isFile()).toBe(true);
+    }
   });
 
   it.each(['esm', 'cjs'])('imports the actual %s library while CLI dependency loading is blocked', format => {

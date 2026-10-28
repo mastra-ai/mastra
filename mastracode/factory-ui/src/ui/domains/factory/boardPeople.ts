@@ -43,8 +43,9 @@ export function boardPersonIdentity(
   currentUserId: string | undefined,
   githubLogin: string | null | undefined,
 ): PersonIdentity {
-  if (!currentUserId || !githubLogin)
+  if (!currentUserId || !githubLogin) {
     return { fold: participantId => participantId, aliases: participantId => [participantId] };
+  }
   const githubId = `github:${githubLogin.toLowerCase()}`;
   const factoryId = factoryParticipantId(currentUserId);
   return {

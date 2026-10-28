@@ -145,8 +145,9 @@ export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
       await storage.deleteItem({ id: item.id, datasetId: dataset.id });
       const history = await storage.getItemHistory(item.id);
       expect(history).toHaveLength(3);
-      for (const row of history)
+      for (const row of history) {
         expect(row).toMatchObject({ input: value, groundTruth: value, expectedTrajectory: value });
+      }
 
       const [batched] = await storage.batchInsertItems({
         datasetId: dataset.id,
@@ -156,8 +157,9 @@ export function createDatasetFidelityTests(getStorage: () => DatasetsStorage) {
       const batchHistory = await storage.getItemHistory(batched!.id);
       expect(batchHistory).toHaveLength(2);
       expect(batchHistory[0]?.isDeleted).toBe(true);
-      for (const row of batchHistory)
+      for (const row of batchHistory) {
         expect(row).toMatchObject({ input: value, groundTruth: value, expectedTrajectory: value });
+      }
     },
   );
 

@@ -5586,8 +5586,9 @@ export class Session<TState = unknown> {
 
   ensureFollowUpBinding(agent: Agent, resourceId: string, threadId: string) {
     const existing = this.#followUpBinding;
-    if (existing?.agent === agent && existing.resourceId === resourceId && existing.threadId === threadId)
+    if (existing?.agent === agent && existing.resourceId === resourceId && existing.threadId === threadId) {
       return existing;
+    }
     this.cleanupFollowUpBinding();
     const binding: {
       agent: Agent;
@@ -5888,8 +5889,9 @@ export class Session<TState = unknown> {
         address.threadId === this.thread.getId() && address.resourceId === this.identity.getResourceId();
       if (!sourceIsActive) throw err;
       this.emit({ type: 'error', error: err });
-      if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId)
+      if (!this.suspensions.has(address) && this.getCurrentRunId() === address.runId) {
         await this.finishAgentRun('error');
+      }
     }
   }
 
@@ -6250,7 +6252,7 @@ export class Session<TState = unknown> {
               approvalDisposed = true;
               this.approval.cancel(next);
             });
-            if (policy === 'ask')
+            if (policy === 'ask') {
               context.emitEvent?.({
                 type: 'tool_approval_required',
                 threadId: address.threadId,
@@ -6258,6 +6260,7 @@ export class Session<TState = unknown> {
                 toolName: chunk.payload.toolName,
                 args: chunk.payload.args,
               });
+            }
             void (async () => {
               let pendingDecision = decision;
               while (!approvalDisposed) {
@@ -6311,8 +6314,9 @@ export class Session<TState = unknown> {
                     dispatchAttempted ||
                     accepted ||
                     observer?.dispatched()
-                  )
+                  ) {
                     throw error;
+                  }
                   pendingDecision = this.approval.arm({ ...next, toolName: chunk.payload.toolName });
                   context.emitEvent?.({
                     type: 'tool_approval_required',
@@ -6436,8 +6440,9 @@ export class Session<TState = unknown> {
       // A tool call can stay parked after its run was aborted. Resuming it reuses
       // the aborted run id, so stop dropping that run's chunks on this subscription.
       restoreAbortedRun = this.stream.clearAbortedRun({ runId: suspension.runId });
-      if (sourceIsActive())
+      if (sourceIsActive()) {
         resumedSubscriptionBoundary = this.createSubscribedResumeBoundaryWaiter({ toolCallId, resolveOnToolEnd });
+      }
     }
     let observer: Awaited<ReturnType<Session<TState>['observeSourceResume']>> | undefined;
     const prompt = [...this.displayState.get().pendingSuspensions.values()].find(

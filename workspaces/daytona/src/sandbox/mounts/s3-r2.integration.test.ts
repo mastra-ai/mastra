@@ -17,8 +17,9 @@ describe.skipIf(process.env.RUN_R2_ISOLATION_TEST !== '1')('R2 temporary-credent
       if (!process.env[name]) throw new Error(`Missing ${name}`);
     }
     const endpoint = new URL(process.env.S3_ENDPOINT!);
-    if (!endpoint.hostname.endsWith('.r2.cloudflarestorage.com'))
+    if (!endpoint.hostname.endsWith('.r2.cloudflarestorage.com')) {
       throw new Error('This signer requires an R2 endpoint');
+    }
     const bucket = process.env.S3_BUCKET!;
     const accessKeyId = process.env.S3_ACCESS_KEY_ID!;
     const secretAccessKey = process.env.S3_SECRET_ACCESS_KEY!;

@@ -50,8 +50,9 @@ export async function resolveFactoryModelPolicy(
         })
       : null;
   if (!sourceSession) {
-    if (!binding && (resourceId === principal.userId || resourceId.startsWith('channel:')))
+    if (!binding && (resourceId === principal.userId || resourceId.startsWith('channel:'))) {
       return { tenant: principal };
+    }
     // Session-less Factory pages address the Factory itself: session and resource are both the
     // project id. A run session under its Factory's resource whose row is gone is not a page.
     const factoryProject =

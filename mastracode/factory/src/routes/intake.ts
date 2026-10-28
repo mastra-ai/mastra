@@ -228,8 +228,9 @@ function cardInRepository(
     repository.externalId !== undefined &&
     repositoryId !== undefined &&
     String(repositoryId) === repository.externalId
-  )
+  ) {
     return true;
+  }
   const match = /^https?:\/\/[^/]+\/(.+)\/(?:issues|pull)\/\d+(?:[/?#]|$)/.exec(item.externalSource?.url ?? '');
   return match?.[1]?.toLowerCase() === repository.slug;
 }
@@ -398,8 +399,9 @@ export function parseIntakeConfig(body: unknown): IntakeConfig | null {
       integrationId === 'linear' &&
       selection.repositoryByLinearProject !== undefined &&
       repositoryByLinearProject === undefined
-    )
+    ) {
       return null;
+    }
     config[integrationId] = {
       enabled: selection.enabled,
       sourceIds,

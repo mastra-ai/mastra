@@ -135,8 +135,9 @@ function withoutStaleToolStates(stored: MastraDBMessage, live: MastraDBMessage):
   const parts = live.content.parts.map(part => {
     if (part.type !== 'tool-invocation') return part;
     const storedPart = storedParts.get(part.toolInvocation.toolCallId);
-    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state))
+    if (!storedPart || advancesToolInvocationState(storedPart.toolInvocation.state, part.toolInvocation.state)) {
       return part;
+    }
     const storedTask = storedPart.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
     const liveTask = part.providerMetadata?.mastra?.backgroundTask as { status?: string } | undefined;
     if (storedTask?.status === 'running' && (liveTask?.status === 'completed' || liveTask?.status === 'failed')) {

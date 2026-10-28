@@ -306,8 +306,9 @@ describe('PostgresStoreVNext / shared observability suite', () => {
   });
 
   it('retains changed-timestamp feedback versions while querying only the latest accepted write', async () => {
-    if (!sharedStorage || !sharedClient || !sharedSchema)
+    if (!sharedStorage || !sharedClient || !sharedSchema) {
       throw new Error('shared observability storage was not initialized');
+    }
     await sharedStorage.dangerouslyClearAll();
     try {
       await sharedStorage.createSpan({

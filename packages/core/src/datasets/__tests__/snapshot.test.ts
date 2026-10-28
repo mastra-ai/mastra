@@ -329,8 +329,9 @@ describe('dataset snapshots', () => {
       { ...snapshot, provenance: { ...snapshot.provenance, itemVersion: 13 } },
       { ...snapshot, digest: '0'.repeat(64) },
     ];
-    for (const variant of variants)
+    for (const variant of variants) {
       expect(() => parseDatasetSnapshot(JSON.stringify(variant))).toThrow('digest mismatch');
+    }
     expect(datasetSnapshotSchema.safeParse({ ...snapshot, digest: 'not-a-hash' }).success).toBe(false);
   });
 

@@ -396,9 +396,9 @@ describe('Agent signals: idle and active behaviors', () => {
           type: 'data-signal',
           data: expect.objectContaining({ type: 'reactive', contents: 'retained reminder' }),
         });
-        if (exclusions === true || (Array.isArray(exclusions) && exclusions.length))
+        if (exclusions === true || (Array.isArray(exclusions) && exclusions.length)) {
           expect(direct).not.toContainEqual(reminder);
-        else expect(direct).toContainEqual(reminder);
+        } else expect(direct).toContainEqual(reminder);
         const state = expect.objectContaining({
           type: 'data-signal',
           data: expect.objectContaining({ type: 'state' }),

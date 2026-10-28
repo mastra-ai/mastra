@@ -47,8 +47,9 @@ export function ModelProviderFactoryStep({
           initialModelId={initialChoice?.providerId === connectedProvider.provider ? initialChoice.modelId : undefined}
           provider={connectedProvider}
           onContinue={modelId => {
-            if (connection.method)
+            if (connection.method) {
               onComplete({ providerId: connectedProvider.provider, modelId, method: connection.method });
+            }
           }}
           onPreviewModel={onPreviewModel}
           onChangeProvider={() => {

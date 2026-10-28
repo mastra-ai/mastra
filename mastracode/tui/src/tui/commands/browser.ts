@@ -557,8 +557,9 @@ export async function handleBrowserCommand(ctx: SlashCommandContext, args: strin
       lines.push(`  Viewport: ${formatViewport(activeSettings.viewport)}`);
       if (activeSettings.executablePath) lines.push(`  Executable: ${activeSettings.executablePath}`);
       if (activeSettings.profile) lines.push(`  Profile: ${activeSettings.profile}`);
-      if (activeSettings.agentBrowser?.storageState)
+      if (activeSettings.agentBrowser?.storageState) {
         lines.push(`  Storage State: ${activeSettings.agentBrowser.storageState}`);
+      }
       if (activeSettings.cdpUrl) lines.push(`  CDP URL: ${activeSettings.cdpUrl}`);
 
       lines.push('');

@@ -169,10 +169,11 @@ export class Subconscious {
         if (resolved) extractors.push(new SubconsciousRemindExtractor(resolved, omModel));
       } else if (name === 'curate') {
         const resolved = this.resolved.observation.find(agent => agent.name === name);
-        if (resolved)
+        if (resolved) {
           extractors.push(
             new SubconsciousCurateExtractor(resolved, this.resolved, getCuratorMemory, omModel, this.#trackCuration),
           );
+        }
       } else if (!BUILT_IN_OBSERVATION.has(name)) {
         const custom = entry as SubconsciousCustomObservationConfig;
         extractors.push(

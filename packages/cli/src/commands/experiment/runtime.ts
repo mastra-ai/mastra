@@ -254,8 +254,9 @@ function validateRunRequest(value: unknown, build: ExperimentWorkerBuildIdentity
   ) {
     return 'dataset attestation mismatch';
   }
-  if (!isRecord(packet.artifacts) || packet.artifacts.buildId !== build.buildId)
+  if (!isRecord(packet.artifacts) || packet.artifacts.buildId !== build.buildId) {
     return 'worker build identity mismatch';
+  }
   if (!isRecord(packet.tenant) || !isRecord(packet.environment)) return 'invalid artifact provenance';
   if (
     !isRecord(packet.target) ||

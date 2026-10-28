@@ -119,8 +119,9 @@ async function configure(): Promise<FactoryDevSettings> {
   const projects = await apiJson<{ projects: Project[] }>(`${MASTRA_PLATFORM_API_URL}/v1/projects`, token, orgId).then(
     result => result.projects,
   );
-  if (projects.length === 0)
+  if (projects.length === 0) {
     throw new Error('The selected organization has no projects. Create one in Mastra Cloud first.');
+  }
   const projectId =
     projects.length === 1
       ? projects[0]!.id

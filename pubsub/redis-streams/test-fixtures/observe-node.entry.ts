@@ -96,12 +96,13 @@ async function main() {
       if (chunk.type === 'tool-call-approval') {
         emit({ type: 'approval', runId: run.runId, toolCallId: chunk.payload.toolCallId });
       }
-      if (chunk.type === 'error')
+      if (chunk.type === 'error') {
         emit({
           type: 'run-error',
           runId: run.runId,
           message: String(chunk.payload?.error?.stack ?? chunk.payload?.error ?? JSON.stringify(chunk.payload)),
         });
+      }
       if (chunk.type === 'finish') finishReason = chunk.payload?.stepResult?.reason;
     }
     emit({ type: 'stream-done', runId: run.runId, finishReason });

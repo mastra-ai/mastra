@@ -179,8 +179,9 @@ function validateOptions(options: DeployWorkerToSandboxOptions): void {
     ['executionTimeoutMs', options.executionTimeoutMs],
     ['terminationGraceMs', options.terminationGraceMs],
   ] as const) {
-    if (value !== undefined && (!Number.isFinite(value) || value <= 0))
+    if (value !== undefined && (!Number.isFinite(value) || value <= 0)) {
       throw new Error(`${name} must be greater than zero.`);
+    }
   }
   const resourceLimits = options.resourceLimits;
   if (resourceLimits) {

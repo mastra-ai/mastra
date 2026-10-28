@@ -57,8 +57,9 @@ export const profileCommandScenario: McE2eScenario = {
     await runtime.waitForScreenText(/Process memory diagnostics stopped/i, terminal);
 
     const profileParent = process.env.MASTRACODE_PROFILE_DIR;
-    if (!profileParent || !existsSync(profileParent))
+    if (!profileParent || !existsSync(profileParent)) {
       throw new Error('Expected the profile parent directory to exist.');
+    }
     const runDirectories = readdirSync(profileParent);
     expect(runDirectories).toHaveLength(1);
     const runDirectory = join(profileParent, runDirectories[0]!);

@@ -997,10 +997,11 @@ describe('CachingPubSub', () => {
         // Deliver to existing listeners
         const cbs = this.listeners.get(_topic);
         if (cbs) {
-          for (const cb of cbs)
+          for (const cb of cbs) {
             cb(full, async () => {
               this.acked.push(full);
             });
+          }
         }
       }
 

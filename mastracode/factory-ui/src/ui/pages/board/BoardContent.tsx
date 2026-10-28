@@ -121,7 +121,7 @@ export function BoardContent({
       stage,
       slug => {
         if (payload.kind === 'work-item') items.move(payload.id, stage, { cause, repositorySlug: slug });
-        else
+        else {
           items.handleDrop(
             {
               ...payload,
@@ -130,6 +130,7 @@ export function BoardContent({
             stage,
             cause,
           );
+        }
       },
       () => items.handleDrop(payload, stage, cause),
     );

@@ -1409,8 +1409,9 @@ describe('session tools on a turn nobody signed in started', () => {
       ).execute({ sessionId: crypto.randomUUID(), toolCallId: 'call-1', decision: 'approve' }, {});
 
     const woken = createFactoryTools({ scope: env.scope, deps });
-    for (const name of ['factory_answer_approval', 'factory_start_session', 'factory_switch_session_model'])
+    for (const name of ['factory_answer_approval', 'factory_start_session', 'factory_switch_session_model']) {
       expect(woken).toHaveProperty(name);
+    }
     await expect(answer(env.scope)).rejects.toThrow('Only a person can answer an approval');
     // A person's turn gets past the gate and fails on the lookup instead.
     await expect(answer({ ...env.scope, interactive: true })).rejects.toThrow('was not found in this Factory');

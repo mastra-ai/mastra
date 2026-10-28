@@ -233,8 +233,9 @@ export const useGetTemplateInstallRun = ({
 const normalizeError = (error: unknown): string => {
   if (typeof error === 'string') return error;
   if (error == null) return 'Unknown error';
-  if (error instanceof Error)
+  if (error instanceof Error) {
     return typeof error.message === 'string' && error.message.length > 0 ? error.message : 'Unknown error';
+  }
   if (typeof error === 'object') {
     try {
       return JSON.stringify(error);

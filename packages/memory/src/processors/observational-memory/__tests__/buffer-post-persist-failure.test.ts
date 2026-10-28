@@ -107,8 +107,9 @@ describe('failures after a buffered chunk is stored', () => {
     await om.waitForBuffering(threadId, resourceId, 5000);
 
     if (failIndexing) expect(onIndexObservations).toHaveBeenCalled();
-    if (failThreadPatch)
+    if (failThreadPatch) {
       expect(storage.patchThread).toHaveBeenCalledWith(expect.objectContaining({ title: expect.any(String) }));
+    }
     expect(await bufferingMarkers(storage)).toEqual(['data-om-buffering-end']);
     expect((await om.getStatus({ threadId, resourceId })).bufferedChunkCount).toBe(1);
 

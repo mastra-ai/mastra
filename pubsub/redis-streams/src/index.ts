@@ -974,8 +974,9 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
               retainTerminalEvents &&
               event.data?.status !== 'suspended' &&
               ['run-registered', 'run-completed', 'run-failed', 'run-aborted'].includes(event.data?.type ?? '')
-            )
+            ) {
               continue;
+            }
             if (producedBefore !== undefined) {
               const producedAt = event.data?.producedAt;
               if (typeof producedAt !== 'number' || producedAt > producedBefore || event.data?.pinned) continue;

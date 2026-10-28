@@ -358,9 +358,9 @@ describe.each(['plain', 'durable', 'evented'] as const)('%s inbound channel exec
         attachment === 'replacement' ||
         attachment === 'id-late' ||
         attachment === 'rebind'
-      )
+      ) {
         agent.setChannels(channels);
-      else channels = agent.getChannels()!;
+      } else channels = agent.getChannels()!;
       if (attachment === 'rebind') inner.setChannels(channels);
       const mastra = new Mastra({
         logger: false,

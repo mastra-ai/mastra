@@ -25,8 +25,9 @@ export function isSignalChunkExcluded(
   if (
     !('type' in chunk) ||
     (chunk.type !== 'data-signal' && chunk.type !== 'data-user-message' && chunk.type !== 'data-user-message-pending')
-  )
+  ) {
     return false;
+  }
   if (!('data' in chunk) || !chunk.data || typeof chunk.data !== 'object' || Array.isArray(chunk.data)) return false;
   if (!('type' in chunk.data)) return false;
   const type = canonicalSignalType(chunk.data.type);

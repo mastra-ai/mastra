@@ -109,7 +109,7 @@ function ToolFactoryComponent({
     // A call core rejected (too long, blank, extra keys) also ends as a result, so only the tool's own
     // `posted` flag says the text reached the thread.
     const replyStatus = status === 'done' && record(output)?.posted !== true ? 'error' : status;
-    if (text)
+    if (text) {
       return (
         <ChannelReplyMessage
           text={text}
@@ -117,6 +117,7 @@ function ToolFactoryComponent({
           footer={replyStatus === 'done' ? replyFooter?.(text) : undefined}
         />
       );
+    }
   }
 
   if (toolName === 'skill') {

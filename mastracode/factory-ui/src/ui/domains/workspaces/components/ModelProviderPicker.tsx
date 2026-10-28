@@ -24,7 +24,7 @@ export function ModelProviderPicker({
   const [search, setSearch] = useState('');
   const [tab, setTab] = useState<ProviderPickerTab>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
-  if (connection.isPending)
+  if (connection.isPending) {
     return (
       <div role="status" aria-label="Loading model providers">
         <div aria-hidden>
@@ -40,7 +40,8 @@ export function ModelProviderPicker({
         </div>
       </div>
     );
-  if (connection.catalogError)
+  }
+  if (connection.catalogError) {
     return (
       <div className="flex flex-col items-start gap-3">
         <Txt variant="caption" role="alert">
@@ -49,6 +50,7 @@ export function ModelProviderPicker({
         <Button onClick={connection.retry}>Retry</Button>
       </div>
     );
+  }
 
   const visible = connection.keyProviders.filter(provider => matchesProviderQuery(provider, search));
   const restore = () => onPreviewProvider?.(connection.provider?.provider, connection.method);

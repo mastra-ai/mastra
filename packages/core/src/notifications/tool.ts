@@ -202,8 +202,9 @@ export function createNotificationInboxTool({ storage }: { storage: Notification
               source: input.source,
               limit: input.limit ?? DEFAULT_LIST_LIMIT,
             });
-        if (input.id && !notifications[0])
+        if (input.id && !notifications[0]) {
           throw new Error(`Notification ${input.id} was not found for thread ${threadId}`);
+        }
         return deliverNotifications({
           notifications: notifications.filter((notification): notification is NotificationRecord =>
             Boolean(notification),

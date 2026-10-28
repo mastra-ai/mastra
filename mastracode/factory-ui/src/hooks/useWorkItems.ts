@@ -255,8 +255,9 @@ interface PendingTransitionVariables {
 function isPendingTransitionVariables(value: unknown): value is PendingTransitionVariables {
   if (typeof value !== 'object' || value === null || Array.isArray(value)) return false;
   if (!('stage' in value) || typeof value.stage !== 'string') return false;
-  if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item))
+  if (!('item' in value) || typeof value.item !== 'object' || value.item === null || !('id' in value.item)) {
     return false;
+  }
   return typeof value.item.id === 'string';
 }
 

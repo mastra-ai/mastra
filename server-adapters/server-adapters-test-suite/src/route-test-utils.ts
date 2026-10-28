@@ -459,8 +459,9 @@ export function getDefaultValidPathParams(route: ServerRoute): Record<string, an
   if (route.path.includes(':storedWorkspaceId')) params.storedWorkspaceId = 'test-stored-workspace';
   if (route.path.includes(':storedSkillId')) params.storedSkillId = 'test-stored-skill';
   if (route.path.includes(':dynamicWorkflowId')) params.dynamicWorkflowId = 'test-dynamic-workflow';
-  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/'))
+  if (route.path.includes(':scorerId') && route.path.includes('/stored/scorers/')) {
     params.scorerId = 'test-stored-scorer';
+  }
 
   // Dataset route params
   if (route.path.includes(':datasetId')) params.datasetId = 'test-dataset';

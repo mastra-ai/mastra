@@ -55,12 +55,13 @@ export const STEP_META: Record<OnboardingStep, { label: string; title: string; d
 };
 
 export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModelScope, local = false) {
-  if (step === 'model-provider')
+  if (step === 'model-provider') {
     return {
       ...STEP_META[step],
       description: companyModelDescription(scope, local),
     };
-  if (step === 'personal-provider')
+  }
+  if (step === 'personal-provider') {
     return {
       ...STEP_META[step],
       title: scope === 'hybrid' ? 'Set up your sessions.' : 'Choose your model.',
@@ -69,6 +70,7 @@ export function onboardingStepMeta(step: OnboardingStep, scope?: OnboardingModel
           ? 'Your account · your default model for sessions.'
           : 'Your account · your default model for Factory work and sessions.',
     };
+  }
   return STEP_META[step];
 }
 

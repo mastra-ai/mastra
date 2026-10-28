@@ -36,7 +36,7 @@ export function FactoryDefaultModelForm({
     ? (choice.models.find(model => model.id === selectedModelId)?.id ?? '')
     : (choice.suggestedModelId ?? '');
 
-  if (choice.isPending)
+  if (choice.isPending) {
     return (
       <div role="status" aria-label="Loading models">
         <div aria-hidden className="flex flex-col gap-4">
@@ -53,6 +53,7 @@ export function FactoryDefaultModelForm({
         </div>
       </div>
     );
+  }
   if (choice.catalogError || choice.models.length === 0) {
     return (
       <div className="flex flex-col items-start gap-3">

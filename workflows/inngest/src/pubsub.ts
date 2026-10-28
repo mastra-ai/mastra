@@ -74,8 +74,9 @@ function fitErrorEvent(event: Omit<Event, 'id' | 'createdAt'>): Omit<Event, 'id'
   const message = typeof error?.message === 'string' ? error.message : OVERSIZED_ERROR_MESSAGE;
   const reduced = { type: event.type, runId: event.runId, data: { error: { name, message } } };
   const excess = byteSize(reduced) - REALTIME_MAX_BYTES;
-  if (excess > 0)
+  if (excess > 0) {
     reduced.data.error.message = message.slice(0, Math.max(0, message.length - excess - 64)) + '… [truncated]';
+  }
   return byteSize(reduced) <= REALTIME_MAX_BYTES
     ? reduced
     : { ...reduced, data: { error: { name, message: OVERSIZED_ERROR_MESSAGE } } };

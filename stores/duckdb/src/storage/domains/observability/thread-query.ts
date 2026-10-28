@@ -88,7 +88,7 @@ export function compileDuckDBThreadRowsQuery(
     ${strategy === 'probe' ? 'LIMIT 100001' : ''}
   )`;
   if (strategy !== 'full') values.push(plan.timeRange.from, plan.timeRange.to);
-  if (strategy === 'probe')
+  if (strategy === 'probe') {
     return {
       sql: `WITH ${scopedEvents}, ${candidates}
       SELECT (SELECT count(*) FROM candidate_threads) AS threadCount,
@@ -97,6 +97,7 @@ export function compileDuckDBThreadRowsQuery(
       FROM candidate_traces`,
       values,
     };
+  }
   values.push(plan.timeRange.from, plan.timeRange.to);
   const qualify =
     plan.timeRange.mode === 'traces'
@@ -200,8 +201,9 @@ export async function queryThreadRows(
       return await db.query<T>(sql, values, remaining);
     } catch (error) {
       if (error instanceof DuckDBQueryTimeoutError) throw new coreStorage.TraceQueryExecutionError();
-      if (error instanceof Error && /out of memory/i.test(error.message))
+      if (error instanceof Error && /out of memory/i.test(error.message)) {
         throw new coreStorage.TraceQueryResourceLimitError();
+      }
       throw error;
     }
   };

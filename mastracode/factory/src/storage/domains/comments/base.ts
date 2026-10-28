@@ -160,8 +160,9 @@ export const MAX_COMMENT_MENTIONS = 20;
 /** The one body policy: HTTP parsing and the service both reject on it. */
 export function commentBodyError(body: string): string | undefined {
   if (!body.trim()) return 'Comment body must not be empty.';
-  if (body.length > MAX_COMMENT_BODY_LENGTH)
+  if (body.length > MAX_COMMENT_BODY_LENGTH) {
     return `Comment body must be at most ${MAX_COMMENT_BODY_LENGTH} characters.`;
+  }
   return undefined;
 }
 

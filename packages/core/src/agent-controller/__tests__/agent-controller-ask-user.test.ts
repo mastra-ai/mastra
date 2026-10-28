@@ -47,8 +47,9 @@ function createAskUserToolCallStream(
         input,
         providerExecuted: false,
       });
-      if (siblingCallId)
+      if (siblingCallId) {
         controller.enqueue({ type: 'tool-call', toolCallId: siblingCallId, toolName, input, providerExecuted: false });
+      }
       controller.enqueue({
         type: 'finish',
         finishReason: 'tool-calls',

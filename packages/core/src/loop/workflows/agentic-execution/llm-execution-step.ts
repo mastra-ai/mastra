@@ -1335,8 +1335,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
       const interruption = new AbortController();
       let interruptible = false;
       const stopListening = subscribePendingSignals?.(runId, () => {
-        if (interruptible && !options?.abortSignal?.aborted)
+        if (interruptible && !options?.abortSignal?.aborted) {
           interruption.abort(new Error('Interrupted by a queued signal'));
+        }
       });
       const throwIfInterrupted = () => {
         if (interruption.signal.aborted) throw interruption.signal.reason;

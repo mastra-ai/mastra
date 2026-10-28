@@ -259,8 +259,9 @@ export async function querySpans(client: DbClient, schema: string, plan: Trusted
           LIMIT ${coreStorage.SPAN_QUERY_MAX_COST_METRICS + 1}`,
           metricValues,
         );
-        if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS)
+        if (metrics.length > coreStorage.SPAN_QUERY_MAX_COST_METRICS) {
           throw new coreStorage.TraceQueryResourceLimitError();
+        }
       }
       return buildSpanQueryResponse(plan, hydrated, payloads, metrics);
     },

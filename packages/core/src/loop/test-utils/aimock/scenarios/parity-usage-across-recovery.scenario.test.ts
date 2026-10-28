@@ -28,9 +28,11 @@ describeParity('usage-across-recovery fault-free parity', target => {
       ];
       for (const [index, tape] of tapes.entries()) {
         if ((variant === 'known-then-omitted' && index > 0) || (variant === 'omitted-then-known' && index === 0)) {
-          for (const chunk of tape)
-            if (chunk.type === 'finish')
+          for (const chunk of tape) {
+            if (chunk.type === 'finish') {
               chunk.usage = { inputTokens: undefined, outputTokens: undefined, totalTokens: undefined };
+            }
+          }
         }
       }
       const observations = await expectParity(target, {

@@ -422,8 +422,9 @@ export function createSpanQueryTests(
     it('does not return cost or legacy truncation flags', async () => {
       await getStorage().batchCreateSpans({ records: [span('summary')] });
       const row = (await query()).spans[0]!;
-      for (const field of ['cost', 'inputTruncated', 'outputTruncated', 'errorTruncated'])
+      for (const field of ['cost', 'inputTruncated', 'outputTruncated', 'errorTruncated']) {
         expect(row).not.toHaveProperty(field);
+      }
     });
   });
 }

@@ -23,8 +23,9 @@ function lanceStringLiteral(value: string): string {
 /** Builds a trailing SQL AND clause for the multi-tenant scope filters (empty when none). */
 function tenancyClause(filters?: ScoreTenancyFilters): string {
   const parts: string[] = [];
-  if (filters?.organizationId !== undefined)
+  if (filters?.organizationId !== undefined) {
     parts.push(`\`organizationId\` = ${lanceStringLiteral(filters.organizationId)}`);
+  }
   if (filters?.projectId !== undefined) parts.push(`\`projectId\` = ${lanceStringLiteral(filters.projectId)}`);
   return parts.length ? ` AND ${parts.join(' AND ')}` : '';
 }

@@ -254,8 +254,9 @@ export function planSpanQuery(input: unknown, options: TraceQueryPlanOptions = {
     if (!envelope.success) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
     if (envelope.data.binding !== binding) throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_CONFLICT');
     const { sortValue } = envelope.data.values;
-    if (!isTraceQuerySortValueFor(orderBy.field, sortValue))
+    if (!isTraceQuerySortValueFor(orderBy.field, sortValue)) {
       throw new TraceQueryCursorError('TRACE_QUERY_CURSOR_MALFORMED');
+    }
     cursor = {
       ...envelope.data.values,
       sortValue: typeof sortValue === 'string' ? new Date(sortValue).toISOString() : sortValue,
@@ -335,8 +336,9 @@ export function resolveSpanQueryCost(metrics: SpanQueryCostMetric[]): z.infer<ty
         !Number.isFinite(metric.estimatedCost) ||
         metric.estimatedCost < 0,
     )
-  )
+  ) {
     return { state: 'unavailable' };
+  }
   const amount = selected.reduce((sum, metric) => sum + metric.estimatedCost!, 0);
   return Number.isFinite(amount) ? { state: 'available', amount, currency } : { state: 'unavailable' };
 }

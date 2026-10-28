@@ -106,8 +106,9 @@ function scoreBuild(execResults: ExtractedToolCall[]): DimensionResult {
   if (last.isError) return { score: 0, detail: 'Build/typecheck tool errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode !== null && exitCode !== 0)
+  if (exitCode !== null && exitCode !== 0) {
     return { score: 0, detail: `Build failed (exit ${exitCode})`, applicable: true };
+  }
   if (typeof last.result === 'string') return { score: 1, detail: 'Build/typecheck passed', applicable: true };
 
   const text = JSON.stringify(last.result ?? '');
@@ -132,8 +133,9 @@ function scoreTests(execResults: ExtractedToolCall[]): DimensionResult {
   if (last.isError) return { score: 0, detail: 'Test command errored', applicable: true };
 
   const exitCode = getExitCode(last.result);
-  if (exitCode !== null && exitCode !== 0)
+  if (exitCode !== null && exitCode !== 0) {
     return { score: 0, detail: `Tests failed (exit ${exitCode})`, applicable: true };
+  }
   if (typeof last.result === 'string') return { score: 1, detail: 'Tests passed', applicable: true };
 
   const text = JSON.stringify(last.result ?? '');

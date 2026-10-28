@@ -65,8 +65,9 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
         existing.disabled === tab.disabled &&
         existing.onClick === tab.onClick &&
         existing.onClose === tab.onClose
-      )
+      ) {
         return previous;
+      }
       const next = existing ? previous.map(item => (item.value === tab.value ? tab : item)) : [...previous, tab];
       return next.sort((a, b) => {
         if (a.element === b.element) return 0;
@@ -274,7 +275,7 @@ export const TabList = ({ children, className, variant, size = 'md', sticky, sty
                             render={
                               <DropdownMenu.Item
                                 data-slot="tabs-overflow-close"
-                                className="pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0 hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground"
+                                className="hover:text-destructive-foreground data-[highlighted]:text-destructive-foreground pointer-events-none z-10 m-1 size-6 self-center justify-self-end p-0 opacity-0"
                                 style={{ gridArea: `${index + 1} / 1` }}
                                 onClick={tab.onClose}
                               />

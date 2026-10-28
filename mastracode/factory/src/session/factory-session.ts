@@ -144,10 +144,11 @@ export async function resolveFactorySourceControl(args: {
     }
     if (hasLinkedRepository) linked.push(sourceControl);
   }
-  if (linked.length > 1)
+  if (linked.length > 1) {
     throw new FactorySourceControlConflictError(
       'Factory project has repositories linked through multiple source-control providers.',
     );
+  }
   return linked[0];
 }
 

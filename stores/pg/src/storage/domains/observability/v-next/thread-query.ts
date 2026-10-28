@@ -83,7 +83,7 @@ export function compilePostgresThreadRowsQuery(
     SELECT DISTINCT "organizationId", "traceId" FROM scoped_roots WHERE ${threadFilter}
     ${strategy === 'probe' ? 'LIMIT 100001' : ''}
   )`;
-  if (strategy === 'probe')
+  if (strategy === 'probe') {
     return {
       text: `WITH ${scopedRoots}, ${candidates}
       SELECT (SELECT count(*) FROM candidate_threads) AS "threadCount",
@@ -92,6 +92,7 @@ export function compilePostgresThreadRowsQuery(
       FROM candidate_traces`,
       values,
     };
+  }
   const predicate = plan.where
     ? compileThreadQueryPredicate(plan.where, values.length + 1)
     : { sql: 'TRUE', values: [] };

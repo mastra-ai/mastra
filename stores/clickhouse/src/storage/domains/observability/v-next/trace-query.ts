@@ -698,8 +698,9 @@ function keysetCursorCondition(
 ): string {
   if (plan.paginationMode !== 'keyset' || !plan.cursor) return '';
   // Empty values sort last in both directions: after an empty value only empty values remain.
-  if (plan.cursor.sortValue === null)
+  if (plan.cursor.sortValue === null) {
     return `(isNull(sortValue) AND traceId > ${parameters.add(plan.cursor.traceId, 'String')})`;
+  }
   const numeric = order.field === 'timeToFirstChunkMs';
   const comparison = order.direction === 'ASC' ? '>' : '<';
   const sortValue = parameters.add(plan.cursor.sortValue, numeric ? 'Float64' : "DateTime64(3, 'UTC')");
@@ -1263,8 +1264,9 @@ export async function queryTraces(
     if (
       BigInt(previous.cursorId) > BigInt(watermark.cursorId) ||
       (previous.cursorId === watermark.cursorId && previous.traceId > watermark.traceId)
-    )
+    ) {
       watermark = previous;
+    }
     return coreStorage.traceQueryResponseSchema.parse({
       traces,
       delta: { limit: plan.limit, hasMore: rows.length > plan.limit },

@@ -266,8 +266,9 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
         { type: 'run-completed', status: 'success' },
         { type: 'run-failed', error: 'failed' },
         { type: 'run-aborted' },
-      ])
+      ]) {
         await ps.publish(topic, makeEvent({ runId: 'a', data }));
+      }
       await ps.publish(topic, makeEvent({ runId: 'b', data: { type: 'stream-part' } }));
       await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });
       await ps.trimTopic(topic, { runId: 'a', retainTerminalEvents: true });

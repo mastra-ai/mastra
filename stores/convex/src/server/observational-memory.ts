@@ -447,8 +447,9 @@ export async function handleObservationalMemoryOperation(
                 // Bound generations in the index so the row cap applies to the requested range and direction.
                 let range = q.eq('lookupKey', request.lookupKey);
                 if (request.afterGeneration !== undefined) range = range.gt('generationCount', request.afterGeneration);
-                if (request.beforeGeneration !== undefined)
+                if (request.beforeGeneration !== undefined) {
                   range = range.lt('generationCount', request.beforeGeneration);
+                }
                 return range;
               })
               .order(request.sortDirection === 'ASC' ? 'asc' : 'desc')

@@ -29,12 +29,14 @@ if (!bytes || createHash('sha256').update(bytes).digest('hex') !== schemaSha256)
   const response = await fetch(schemaUrl, { signal: AbortSignal.timeout(30000) });
   if (!response.ok) throw new Error(`Schema download failed: HTTP ${response.status}`);
   bytes = Buffer.from(await response.arrayBuffer());
-  if (createHash('sha256').update(bytes).digest('hex') !== schemaSha256)
+  if (createHash('sha256').update(bytes).digest('hex') !== schemaSha256) {
     throw new Error('Upstream schema checksum mismatch');
+  }
   await writeFile(schemaPath, bytes);
 }
-for (const name of ['package.json', 'package-lock.json'])
+for (const name of ['package.json', 'package-lock.json']) {
   await copyFile(new URL(`acp-validator/${name}`, import.meta.url), resolve(tools, name));
+}
 await run(
   process.platform === 'win32' ? 'npm.cmd' : 'npm',
   ['ci', '--ignore-scripts', '--no-audit', '--no-fund', '--cache', resolve(cache, 'npm-cache')],

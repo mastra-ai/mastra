@@ -146,8 +146,9 @@ describe('client-file generation', () => {
     const result = await launch(['generate', 'first.ts', 'second.ts'], { VERBOSE: '1' }).done;
     expect(result.code).not.toBe(0);
     expect(result.output).not.toContain('SENTINEL');
-    for (const file of ['first.generated.ts', 'second.generated.ts'])
+    for (const file of ['first.generated.ts', 'second.generated.ts']) {
       expect(await readFile(join(directory, file), 'utf8')).toBe('before');
+    }
     expect((await readdir(directory)).some(name => name.endsWith('.tmp'))).toBe(false);
     expect((await events()).some(item => item.event === 'exit')).toBe(true);
   });
@@ -197,8 +198,9 @@ describe('client-file generation', () => {
     const result = await launch(['generate', 'first.ts', 'second.ts', 'bad.ts']).done;
     expect(result.code).not.toBe(0);
     expect(result.output).not.toContain('SENTINEL');
-    for (const path of ['first.closed', 'second.closed'])
+    for (const path of ['first.closed', 'second.closed']) {
       expect(await readFile(join(directory, path), 'utf8')).toBe('yes');
+    }
   });
 
   it.each(['stage', 'rename', 'cleanup'])(
@@ -206,14 +208,16 @@ describe('client-file generation', () => {
     async fault => {
       await client('first.ts', 'first.generated.ts');
       await client('second.ts', 'second.generated.ts');
-      for (const name of ['first.generated.ts', 'second.generated.ts'])
+      for (const name of ['first.generated.ts', 'second.generated.ts']) {
         await writeFile(join(directory, name), 'before');
+      }
       const result = await launch(['generate', 'first.ts', 'second.ts'], { MCP_TEST_FS_FAULT: fault }).done;
       expect(result.code).not.toBe(0);
       expect(result.output).not.toContain('SENTINEL');
       if (fault === 'stage') {
-        for (const name of ['first.generated.ts', 'second.generated.ts'])
+        for (const name of ['first.generated.ts', 'second.generated.ts']) {
           expect(await readFile(join(directory, name), 'utf8')).toBe('before');
+        }
       } else if (fault === 'rename') {
         expect(await readFile(join(directory, 'first.generated.ts'), 'utf8')).toContain('MCPServers');
         expect(await readFile(join(directory, 'second.generated.ts'), 'utf8')).toBe('before');

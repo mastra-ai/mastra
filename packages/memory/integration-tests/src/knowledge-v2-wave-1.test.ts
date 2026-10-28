@@ -314,8 +314,9 @@ afterEach(async () => {
       const schemaName = postgresSchemas.pop();
       if (schemaName) {
         try {
-          if (!schemaName.startsWith('knowledge_w1_'))
+          if (!schemaName.startsWith('knowledge_w1_')) {
             throw new Error(`Refusing to drop non-proof schema ${schemaName}`);
+          }
           await storage.db.none(`DROP SCHEMA IF EXISTS "${schemaName}" CASCADE`);
         } catch (error) {
           cleanupErrors.push(error);
@@ -461,8 +462,9 @@ describe.each(adapters)('Knowledge v2 Wave 1 linked-workspace proof (%s)', adapt
       const domain = storage.stores.knowledge!;
       expect(await domain.inspectSchema()).toMatchObject({ status: 'incompatible-reset-required' });
 
-      if (!databasePath.startsWith(tmpdir()))
+      if (!databasePath.startsWith(tmpdir())) {
         throw new Error(`Refusing to reset non-temporary database ${databasePath}`);
+      }
       await domain.dangerouslyReset();
       expect(await domain.inspectSchema()).toEqual({ status: 'compatible', schemaVersion: 2 });
       expect(await new Memory({ storage }).getThreadById({ threadId: 'preserved-thread' })).toMatchObject({

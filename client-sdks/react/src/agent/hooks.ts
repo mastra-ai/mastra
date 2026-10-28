@@ -1251,8 +1251,9 @@ export const useChat = ({
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!currentRunId)
+    if (!currentRunId) {
       return console.info('[approveToolCall] approveToolCall can only be called after a stream has started');
+    }
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
@@ -1322,8 +1323,9 @@ export const useChat = ({
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!currentRunId)
+    if (!currentRunId) {
       return console.info('[declineToolCall] declineToolCall can only be called after a stream has started');
+    }
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
@@ -1373,10 +1375,11 @@ export const useChat = ({
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!currentRunId)
+    if (!currentRunId) {
       return console.info(
         '[approveToolCallGenerate] approveToolCallGenerate can only be called after a generate has started',
       );
+    }
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'approved' } }));
@@ -1400,10 +1403,11 @@ export const useChat = ({
     const currentRunId = _currentRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!currentRunId)
+    if (!currentRunId) {
       return console.info(
         '[declineToolCallGenerate] declineToolCallGenerate can only be called after a generate has started',
       );
+    }
 
     setIsRunning(true);
     setToolCallApprovals(prev => ({ ...prev, [toolCallId]: { status: 'declined' } }));
@@ -1428,10 +1432,11 @@ export const useChat = ({
     const networkRunId = runId || _networkRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!networkRunId)
+    if (!networkRunId) {
       return console.info(
         '[approveNetworkToolCall] approveNetworkToolCall can only be called after a network stream has started',
       );
+    }
 
     _currentRunId.current = networkRunId;
     setIsRunning(true);
@@ -1464,10 +1469,11 @@ export const useChat = ({
     const networkRunId = runId || _networkRunId.current;
     const continuation = _activeContinuation.current;
 
-    if (!networkRunId)
+    if (!networkRunId) {
       return console.info(
         '[declineNetworkToolCall] declineNetworkToolCall can only be called after a network stream has started',
       );
+    }
 
     _currentRunId.current = networkRunId;
     setIsRunning(true);

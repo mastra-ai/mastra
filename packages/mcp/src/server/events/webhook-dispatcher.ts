@@ -412,9 +412,9 @@ export class WebhookDispatcher {
           this.createState(record, event, event.buffer!.cursorFor(entry.seq - 1), entry.seq - 1);
       }
       if (entry.seq <= state.horizon) continue;
-      if (this.matches(event, record.arguments, entry.occurrence.data))
+      if (this.matches(event, record.arguments, entry.occurrence.data)) {
         this.enqueue(state, entry.occurrence, entry.cursor);
-      else this.skip(state, entry.cursor);
+      } else this.skip(state, entry.cursor);
     }
   }
 

@@ -9,10 +9,11 @@ import { tmpdir } from 'node:os';
 import { createHash } from 'node:crypto';
 const [serverPath, schemaPath, validatorDirectory, reportDirectory, shutdownMode = 'eof'] = process.argv.slice(2);
 assert(['eof', 'SIGINT', 'SIGTERM'].includes(shutdownMode), 'Unknown shutdown mode');
-if (!reportDirectory)
+if (!reportDirectory) {
   throw new Error(
     'Usage: check-acp-conformance.mjs <server.mjs> <schema.json> <validator-directory> <report-directory> [eof|SIGINT|SIGTERM]',
   );
+}
 const require = createRequire(import.meta.url);
 const validatorRequire = createRequire(resolve(validatorDirectory, 'package.json'));
 const Ajv = validatorRequire('ajv/dist/2020.js').default;
@@ -21,11 +22,12 @@ const schemaBytes = await readFile(schemaPath);
 const schema = JSON.parse(schemaBytes);
 const ajv = new Ajv({ strict: false, allErrors: true });
 addFormats(ajv);
-for (const bits of [16, 32, 64])
+for (const bits of [16, 32, 64]) {
   ajv.addFormat('uint' + bits, {
     type: 'number',
     validate: value => Number.isInteger(value) && value >= 0 && value < 2 ** bits,
   });
+}
 ajv.addSchema(schema, 'acp');
 const validators = new Map();
 const validate = (definition, value) => {
@@ -184,13 +186,13 @@ const remoteMcp = createServer((req, res) => {
       return;
     }
     let result;
-    if (request.method === 'initialize')
+    if (request.method === 'initialize') {
       result = {
         protocolVersion: request.params.protocolVersion,
         capabilities: { tools: {} },
         serverInfo: { name: transport + '-fixture', version: '1' },
       };
-    else if (request.method === 'tools/list')
+    } else if (request.method === 'tools/list') {
       result = {
         tools: [
           {
@@ -200,8 +202,9 @@ const remoteMcp = createServer((req, res) => {
           },
         ],
       };
-    else if (request.method === 'tools/call')
+    } else if (request.method === 'tools/call') {
       result = { content: [{ type: 'text', text: transport + ' ACP_REMOTE_OK' }] };
+    }
     const reply = JSON.stringify({
       jsonrpc: '2.0',
       id: request.id,
@@ -361,14 +364,17 @@ const client = new ClientSideConnection(
         return;
       }
       updates.push(update);
-      if (update.update.sessionUpdate === 'agent_message_chunk' && update.update.content.text === 'ACP_STREAMING')
+      if (update.update.sessionUpdate === 'agent_message_chunk' && update.update.content.text === 'ACP_STREAMING') {
         streamingSeen.resolve();
+      }
     },
     requestPermission: async request => {
-      if (permissionDecision !== 'wait' || request.options.some(option => option.name === 'Allow access'))
+      if (permissionDecision !== 'wait' || request.options.some(option => option.name === 'Allow access')) {
         permissionSeen?.();
-      if (permissionDecision === 'wait' && request.options.some(option => option.name === 'Allow access'))
+      }
+      if (permissionDecision === 'wait' && request.options.some(option => option.name === 'Allow access')) {
         return new Promise(() => {});
+      }
       return {
         outcome: {
           outcome: 'selected',
@@ -438,14 +444,15 @@ async function runChecks() {
     { type: 'image', data: 'AA==', mimeType: 'image/png' },
     { type: 'audio', data: 'AA==', mimeType: 'audio/wav' },
     { type: 'resource', resource: { uri: 'file:///binary', blob: 'AA==' } },
-  ])
+  ]) {
     await assert.rejects(client.prompt({ sessionId, prompt: [block] }), { code: -32602 });
+  }
   passed('unsupported prompt content rejected without dropping attachments');
 
   const config = await client.setSessionConfigOption({ sessionId, configId: 'thought_level', value: 'high' });
   assert.equal(config.configOptions.find(option => option.id === 'thought_level').currentValue, 'high');
-  for (const option of config.configOptions)
-    if (option.type === 'select')
+  for (const option of config.configOptions) {
+    if (option.type === 'select') {
       assert(
         option.options.some(item => item.value === option.currentValue),
         option.id +
@@ -454,6 +461,8 @@ async function runChecks() {
           ' is absent from options ' +
           JSON.stringify(option.options.slice(0, 3)),
       );
+    }
+  }
   await assert.rejects(client.setSessionConfigOption({ sessionId, configId: 'thought_level', value: 'invalid' }), {
     code: -32602,
   });
@@ -596,7 +605,7 @@ async function runChecks() {
   );
   assert(answers.every(answer => answer.stopReason === 'end_turn'));
   assert.equal(concurrentArrivals, 2);
-  for (const id of [sessionId, second.sessionId])
+  for (const id of [sessionId, second.sessionId]) {
     assert(
       updates
         .slice(startUpdates)
@@ -607,6 +616,7 @@ async function runChecks() {
             update.update.content.text === 'ACP_RUNTIME_OK',
         ),
     );
+  }
 
   assert(
     updates.some(

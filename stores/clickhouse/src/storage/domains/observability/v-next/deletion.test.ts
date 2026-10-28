@@ -193,8 +193,9 @@ describe('ClickHouse deletion lifecycle', () => {
           const appliedOnly = args.query.includes('lastAppliedAt > toDateTime64(0, 3)');
           return queryResult(state === 'applied' || (state === 'pending' && !appliedOnly) ? [{ found: 1 }] : []);
         }
-        if (args.query.includes('max(writeVersion)'))
+        if (args.query.includes('max(writeVersion)')) {
           return queryResult([{ feedbackId: 'feedback-1', writeVersion: '1' }]);
+        }
         return queryResult([existingRow]);
       });
       return mocks;

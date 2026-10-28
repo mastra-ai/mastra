@@ -14,14 +14,16 @@ export function getVisibleSearchExcerpts(messages: readonly MastraDBMessage[]): 
     for (const part of message.content.parts) {
       if (part.type !== 'tool-invocation') continue;
       const invocation = part.toolInvocation;
-      if (invocation.toolName !== 'recall' || invocation.state !== 'result' || invocation.args?.mode !== 'search')
+      if (invocation.toolName !== 'recall' || invocation.state !== 'result' || invocation.args?.mode !== 'search') {
         continue;
+      }
       const resolved = resolveToolResultValue(part, invocation.result);
       let value = resolved.value;
       if (resolved.usingStoredModelOutput) {
         // A custom model output can hide the original result. Never dedupe against that hidden value.
-        if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'json' || !('value' in value))
+        if (!value || typeof value !== 'object' || !('type' in value) || value.type !== 'json' || !('value' in value)) {
           continue;
+        }
         value = value.value;
       }
       if (!value || typeof value !== 'object' || !('results' in value) || typeof value.results !== 'string') continue;

@@ -18,11 +18,12 @@ function boardColumnEmptyCopy(
   isInitialPhase: boolean,
 ): BoardColumnEmptyCopy {
   if (isInitialPhase) {
-    if (kind === 'review')
+    if (kind === 'review') {
       return {
         title: 'No change requests waiting',
         description: 'Open change requests from connected repositories appear here.',
       };
+    }
     if (!hasIntakeSource) {
       return {
         title: 'No intake sources',
@@ -51,21 +52,23 @@ function boardColumnEmptyCopy(
         description: 'Drag planned work here when implementation starts.',
       };
     case 'review':
-      if (kind === 'review')
+      if (kind === 'review') {
         return {
           title: 'No active reviews',
           description: 'Drag a change request here when review starts.',
         };
+      }
       return {
         title: 'Nothing awaiting review',
         description: 'Drag built work here when it is ready for review.',
       };
     case 'done':
-      if (kind === 'review')
+      if (kind === 'review') {
         return {
           title: 'No completed reviews',
           description: 'Drag a reviewed pull request here when it is complete.',
         };
+      }
       return {
         title: 'Nothing completed yet',
         description: 'Drag finished work here to close it out.',

@@ -93,8 +93,9 @@ export const customProviderModalValidationScenario = {
     }
     if (!existing) throw new Error(`Expected existing provider ${existingProviderName} to persist`);
     if (!created) throw new Error(`Expected created provider ${createdProviderName} to persist`);
-    if (existing.models.length !== 0)
+    if (existing.models.length !== 0) {
       throw new Error(`Expected existing provider models to be empty, got ${existing.models.join('|')}`);
+    }
     if (
       created.name !== createdProviderName ||
       created.url !== 'https://created-modal.example.test/v1' ||

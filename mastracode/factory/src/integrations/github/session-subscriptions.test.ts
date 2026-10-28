@@ -572,12 +572,13 @@ describe('GitHub subscription entry points', () => {
   it('serializes concurrent publications so the second call observes the first result', async () => {
     let published = false;
     mocks.upsertTriageComment.mockImplementation(async () => {
-      if (published)
+      if (published) {
         return {
           action: 'updated' as const,
           commentId: '42',
           url: 'https://github.com/mastra-ai/mastra/issues/7#issuecomment-42',
         };
+      }
       await new Promise(resolve => setTimeout(resolve, 5));
       published = true;
       return {

@@ -16,7 +16,8 @@ export function telemetryPage(pathname: string): FactoryWebActivity['page'] | un
   // These are redirects or categories represented by the patterns above.
   if (
     ['onboarding', 'settings', 'workspace', 'thread', 'slack_connection', 'new_session', 'new_factory'].includes(screen)
-  )
+  ) {
     return undefined;
+  }
   return FACTORY_WEB_PAGES.find(page => page === screen);
 }

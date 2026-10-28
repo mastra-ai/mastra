@@ -118,8 +118,9 @@ export const retainOmTerminalExtractionData = (
     const nextCached = { ...(cached ?? {}) };
     if (hasExtractionData(cycle.end?.data)) nextCached.end = getExtractionData(cycle.end?.data);
     if (hasExtractionData(cycle.failed?.data)) nextCached.failed = getExtractionData(cycle.failed?.data);
-    if (hasExtractionData(cycle.bufferingEnd?.data))
+    if (hasExtractionData(cycle.bufferingEnd?.data)) {
       nextCached.bufferingEnd = getExtractionData(cycle.bufferingEnd?.data);
+    }
     if (hasExtractionData(cycle.bufferingFailed?.data)) {
       nextCached.bufferingFailed = getExtractionData(cycle.bufferingFailed?.data);
     }

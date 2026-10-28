@@ -193,9 +193,9 @@ describe.each(['observer', 'multi-thread-observer', 'reflector'] as const)('%s t
       expect(parent.createChildSpan).toHaveBeenCalledTimes(1);
       const spanOptions = parent.createChildSpan.mock.calls[0]!;
       expect(spanOptions[0].metadata).not.toHaveProperty('sessionId');
-      if (hasIdentity)
+      if (hasIdentity) {
         expect(spanOptions[0].metadata.__mastraObservationalMemoryCallerThreadId).toBe('invoking-caller');
-      else expect(spanOptions[0].metadata).not.toHaveProperty('__mastraObservationalMemoryCallerThreadId');
+      } else expect(spanOptions[0].metadata).not.toHaveProperty('__mastraObservationalMemoryCallerThreadId');
       expect(requestContext.get(MASTRA_THREAD_ID_KEY)).toBe(hasIdentity ? 'parent-thread' : undefined);
       expect(caller.tracingContext).toBe(tracing);
       expect(caller.tracingContext?.currentSpan).toBe(parent);

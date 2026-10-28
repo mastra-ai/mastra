@@ -151,11 +151,12 @@ async function pageGroups({
   countNewerMessages,
 }: PageOptions): Promise<PageResult> {
   const home = await findGroupTimeline(om, threadId, resourceId, groupId, recordId);
-  if (!home)
+  if (!home) {
     return {
       results: `No original observation group ${JSON.stringify(groupId)} was found in the active or buffered observations of thread ${JSON.stringify(threadId)} across its retained history. Check the threadId and groupId from the search hit, or use mode="messages" with a message ID from its source range.`,
       count: 0,
     };
+  }
   const direction = requestedDirection ?? 'after';
   let current = home;
   let position = home.indexById.get(groupId)! - (requestedDirection === undefined ? 1 : 0);

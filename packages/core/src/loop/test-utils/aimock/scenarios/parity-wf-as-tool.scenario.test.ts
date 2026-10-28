@@ -107,8 +107,9 @@ async function drive(engine: ParityEngine, variant: 'run' | 'suspend') {
     const types: string[] = [];
     for await (const chunk of output.fullStream) {
       types.push(chunk.type);
-      if (chunk.type === 'tool-result')
+      if (chunk.type === 'tool-result') {
         statuses.push(z.object({ status: z.string() }).parse(chunk.payload.result).status);
+      }
     }
     const status = variant === 'run' ? 'success' : 'suspended';
     expect(statuses).toEqual([status]);

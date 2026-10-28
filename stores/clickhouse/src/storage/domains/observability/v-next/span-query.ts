@@ -119,8 +119,9 @@ function predicateFields(
 }
 
 function fieldExpression(field: string): string {
-  if (field === 'model' || field === 'provider')
+  if (field === 'model' || field === 'provider') {
     return `if(JSONType(e.attributes, '${field}') = 'String', JSONExtractString(e.attributes, '${field}'), NULL)`;
+  }
   if (field === 'durationMs') return "dateDiff('millisecond', e.startedAt, e.endedAt)";
   if (field === 'status') return "if(isNull(e.error), 'success', 'error')";
   if (field === 'error') return "if(isNull(e.error), NULL, 'error')";
@@ -236,10 +237,12 @@ function positiveSpanConjuncts(where: TrustedTraceQueryScalarPredicate | undefin
   return conjuncts.flatMap(conjunct => {
     if (conjunct.type !== 'comparison' && conjunct.type !== 'membership') return [];
     if (conjunct.field !== 'spanType' && conjunct.field !== 'name') return [];
-    if (conjunct.type === 'comparison' && conjunct.operator === 'eq')
+    if (conjunct.type === 'comparison' && conjunct.operator === 'eq') {
       return [{ field: conjunct.field, values: [conjunct.value] }];
-    if (conjunct.type === 'membership' && conjunct.operator === 'in')
+    }
+    if (conjunct.type === 'membership' && conjunct.operator === 'in') {
       return [{ field: conjunct.field, values: conjunct.values }];
+    }
     return [];
   });
 }
@@ -282,8 +285,9 @@ export function compileClickHouseSpanSelection(
   let tenant = '';
   if (plan.scope) {
     tenant += `\n      AND e.organizationId = ${parameters.add(plan.scope.organizationId, 'String')}`;
-    if (plan.scope.resourceId !== undefined)
+    if (plan.scope.resourceId !== undefined) {
       tenant += `\n      AND e.resourceId = ${parameters.add(plan.scope.resourceId, 'String')}`;
+    }
   }
   const selectionFields = [
     ...new Set(['startedAt', 'endedAt', 'status', ...fields, ...predicateFields(plan.where)]),

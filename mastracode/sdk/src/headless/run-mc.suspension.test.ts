@@ -143,8 +143,9 @@ describe('runMC suspension lifecycle', () => {
     const fake = createFakeSession();
     const events: string[] = [];
     const handle = run(fake.session);
-    for await (const event of handle)
+    for await (const event of handle) {
       events.push(event.type === 'agent_end' ? `agent_end:${event.reason}` : event.type);
+    }
     const result = await handle.result;
 
     expect(fake.responses).toEqual([{ toolCallId: 'access-1', resumeData: 'Yes', parked: true }]);

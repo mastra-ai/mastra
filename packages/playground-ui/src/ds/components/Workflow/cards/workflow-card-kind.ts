@@ -26,16 +26,21 @@ export function getWorkflowCardBadge(props: WorkflowTypeBadgeProps): {
   indicator?: string;
 } {
   if (props.isForEach) return { label: 'For each', tone: 'orange', Icon: Repeat2, indicator: 'foreach' };
-  if (props.isNestedWorkflowStep || props.stepGraph)
+  if (props.isNestedWorkflowStep || props.stepGraph) {
     return { label: 'Workflow', tone: 'purple', Icon: Workflow, indicator: 'workflow' };
-  if (props.isParallel && !props.nodeKind)
+  }
+  if (props.isParallel && !props.nodeKind) {
     return { label: 'Parallel', tone: 'blue', Icon: GitFork, indicator: 'parallel' };
-  if (props.nodeKind === 'map' || props.mapConfig)
+  }
+  if (props.nodeKind === 'map' || props.mapConfig) {
     return { label: 'Map', tone: 'orange', Icon: ArrowRightLeft, indicator: 'map' };
-  if (props.nodeKind === 'wait-until' || props.date)
+  }
+  if (props.nodeKind === 'wait-until' || props.date) {
     return { label: 'Wait until', tone: 'purple', Icon: CalendarClock, indicator: 'sleep-until' };
-  if (props.nodeKind === 'delay' || props.duration !== undefined)
+  }
+  if (props.nodeKind === 'delay' || props.duration !== undefined) {
     return { label: 'Delay', tone: 'purple', Icon: Timer, indicator: 'sleep' };
+  }
   if (props.nodeKind === 'agent') return { label: 'Agent', tone: 'cyan', Icon: Bot };
   if (props.nodeKind === 'tool') return { label: 'Tool', tone: 'pink', Icon: Wrench };
   if (props.nodeKind === 'classifier') return { label: 'Classifier', tone: 'blue', Icon: GitBranch };

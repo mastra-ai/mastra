@@ -708,8 +708,9 @@ describe('readSessionWorkspaceFile', () => {
       const check = treeCheck(args);
       if (check) return check;
       if (script.includes(`p='${abs}'`)) return { exitCode: 0, stdout: `${WORKDIR}\n${abs}` };
-      if (script.startsWith('stat -L -c'))
+      if (script.startsWith('stat -L -c')) {
         return { exitCode: 0, stdout: `regular file|${content.length}|1700000000|0\n` };
+      }
       if (script.includes('base64 <')) return { exitCode: 0, stdout: Buffer.from(content, 'utf8').toString('base64') };
       return { exitCode: 1, stdout: '', stderr: `unexpected script: ${script}` };
     };
@@ -1278,8 +1279,9 @@ describe('workspace changes across environment repositories', () => {
       if (check) return check;
       const match = /p='([^']+)'/.exec(script);
       const abs = match?.[1];
-      if (abs && files[abs] !== undefined && script.includes('readlink'))
+      if (abs && files[abs] !== undefined && script.includes('readlink')) {
         return { exitCode: 0, stdout: `${ROOT}\n${abs}` };
+      }
       if (script.startsWith('stat -L -c')) return { exitCode: 0, stdout: 'regular file|8|1700000000|0\n' };
       const read = /base64 < '([^']+)'/.exec(script);
       if (read && files[read[1]!] !== undefined) {

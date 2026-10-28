@@ -133,13 +133,14 @@ describe('actor recall guidance', () => {
       scope: 'thread',
       config: {},
     });
-    if (populated)
+    if (populated) {
       await storage.updateActiveObservations({
         id: record.id,
         observations: 'A fact.',
         tokenCount: 3,
         lastObservedAt: new Date(),
       });
+    }
     const om = new ObservationalMemory({ storage, model: 'test-model' });
     const text = await om.buildContextSystemMessage({ threadId: 'thread', resourceId: 'resource' });
     expect(text ?? '').not.toContain('## Recall');

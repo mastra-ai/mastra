@@ -9,7 +9,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
   const query = useLinearStatusQuery();
   if (query.isPending) return <OnboardingConnectionSkeleton label="Loading Linear status" />;
   const status = query.data;
-  if (status?.connected)
+  if (status?.connected) {
     return (
       <OnboardingConnectionRow
         compact
@@ -23,7 +23,8 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         }
       />
     );
-  if (status?.reason === 'missing_config')
+  }
+  if (status?.reason === 'missing_config') {
     return (
       <OnboardingConnectionRow
         compact
@@ -32,7 +33,8 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         description="Unavailable for this deployment."
       />
     );
-  if (status?.reason === 'organization_required')
+  }
+  if (status?.reason === 'organization_required') {
     return (
       <OnboardingConnectionRow
         compact
@@ -41,7 +43,8 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         description="Join an organization to connect Linear."
       />
     );
-  if (status?.reason === 'auth_required')
+  }
+  if (status?.reason === 'auth_required') {
     return (
       <OnboardingConnectionRow
         compact
@@ -55,7 +58,8 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         }
       />
     );
-  if (status?.reason === 'not_connected')
+  }
+  if (status?.reason === 'not_connected') {
     return (
       <OnboardingConnectionRow
         compact
@@ -69,6 +73,7 @@ export function OnboardingLinearConnection({ onConnect }: { onConnect: () => voi
         }
       />
     );
+  }
   return (
     <OnboardingConnectionRow
       compact

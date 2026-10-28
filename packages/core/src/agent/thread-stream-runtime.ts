@@ -1545,8 +1545,9 @@ export class AgentThreadStreamRuntime {
         if (
           (data.sourceId === this.#id && this.#isLocalSignalEcho(state, key, data.signal.id, data.runId)) ||
           subscription.admittedSignalIds.has(data.signal.id)
-        )
+        ) {
           return;
+        }
         // Keep predecessor routing through a handoff, but never promote observer copies into execution.
         if (state.threadKeysByRunId.get(data.runId) !== key && !subscription.ownedRunIds.has(data.runId)) {
           return;
@@ -1556,8 +1557,9 @@ export class AgentThreadStreamRuntime {
           [state.preRunSignalsByThread.get(key), state.pendingSignalsByThread.get(key)].some(queue =>
             queue?.some(signal => signal.id === data.signal.id),
           )
-        )
+        ) {
           return;
+        }
         const queue = queues.get(key) ?? [];
         const signal = createSignal(data.signal);
         queue.push(signal);
@@ -1644,8 +1646,9 @@ export class AgentThreadStreamRuntime {
             this.#localActiveRunId(state, key) !== undefined)
         ) &&
         !((type === 'run-aborted' || type === 'run-discarded') && this.#localActiveRunId(state, key) !== undefined)
-      )
+      ) {
         return ack?.();
+      }
       // Finish acknowledging the delivery before an empty queue can release its listener.
       subscription.references++;
       const handled = tail.then(() => handleEvent(event));
@@ -1692,8 +1695,9 @@ export class AgentThreadStreamRuntime {
       state.drainingIdleSignalsByThread.has(key) ||
       [...state.threadKeysByRunId.values()].includes(key) ||
       [...state.preparedRunsById.values()].some(run => run.threadKey === key)
-    )
+    ) {
       return;
+    }
     subscription.ownedRunIds.clear();
     subscription.admittedSignalIds.clear();
     state.locallyQueuedSignalIdsByThread.delete(key);
@@ -2273,8 +2277,9 @@ export class AgentThreadStreamRuntime {
           .then(async renewed => {
             if (renewed || !active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) return;
             const reacquired = await leaseProvider.acquireLease(claimLeaseKey, sourceId, AGENT_THREAD_LEASE_TTL_MS);
-            if (reacquired.acquired || !active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe)
+            if (reacquired.acquired || !active || state.claimedThreadOwners.get(key)?.unsubscribe !== unsubscribe) {
               return;
+            }
             unsubscribe();
             options.onOwnershipLost?.();
           })
@@ -6537,8 +6542,9 @@ export class AgentThreadStreamRuntime {
               }
               statuses.splice(i, 1);
               if (supersededStreamIds.has(status.streamId)) continue;
-              if (status.chunk.payload.status === 'suspended' && isAnsweredHalf(status.chunk.runId, status.streamId))
+              if (status.chunk.payload.status === 'suspended' && isAnsweredHalf(status.chunk.runId, status.streamId)) {
                 continue;
+              }
               yield status.chunk;
             }
             yield* takePresentations();

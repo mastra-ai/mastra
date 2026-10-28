@@ -14,10 +14,12 @@ export async function createAcpSession(
 ): Promise<AcpSessionRuntime> {
   const names = new Set<string>();
   const servers = request.mcpServers.map(server => {
-    if ('type' in server && server.type === 'sse')
+    if ('type' in server && server.type === 'sse') {
       throw RequestError.invalidParams(undefined, 'Legacy SSE MCP servers are unsupported; use HTTP or stdio');
-    if (names.has(server.name))
+    }
+    if (names.has(server.name)) {
       throw RequestError.invalidParams(undefined, `Duplicate MCP server name: ${server.name}`);
+    }
     names.add(server.name);
     const config: McpServerConfig =
       'command' in server
@@ -101,11 +103,12 @@ export async function createAcpSession(
   try {
     const status = await result.mcpManager?.initInBackground();
     const failed = status?.failed.filter(server => names.has(server.name)) ?? [];
-    if (failed.length)
+    if (failed.length) {
       throw RequestError.internalError(
         undefined,
         failed.map(server => `MCP server ${server.name}: ${server.error ?? 'connection failed'}`).join('; '),
       );
+    }
 
     return runtime;
   } catch (error) {

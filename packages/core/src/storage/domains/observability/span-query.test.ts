@@ -234,16 +234,19 @@ describe('span query contract', () => {
     'rootEntityId',
     'rootEntityName',
   ])('accepts dedicated string filters for %s', field => {
-    for (const op of ['eq', 'ne'])
+    for (const op of ['eq', 'ne']) {
       expect(
         planSpanQuery({ timeRange, where: { op, left: { path: field }, right: { literal: 'example' } } }).where,
       ).toMatchObject({ field, operator: op });
-    for (const op of ['in', 'notIn'])
+    }
+    for (const op of ['in', 'notIn']) {
       expect(planSpanQuery({ timeRange, where: { op, value: { path: field }, set: ['example'] } }).where).toMatchObject(
         { field, operator: op },
       );
-    for (const op of ['exists', 'notExists'])
+    }
+    for (const op of ['exists', 'notExists']) {
       expect(planSpanQuery({ timeRange, where: { op, path: field } }).where).toMatchObject({ field, operator: op });
+    }
     expect(() =>
       planSpanQuery({ timeRange, where: { op: 'matches', left: { path: field }, right: { literal: 'example' } } }),
     ).toThrow();

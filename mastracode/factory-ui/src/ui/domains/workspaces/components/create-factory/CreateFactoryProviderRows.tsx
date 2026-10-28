@@ -18,8 +18,9 @@ export function CreateFactoryProviderRows({ connection, query, error }: CreateFa
   if (connection.isPending) {
     return <PaletteRowsSkeleton label="Loading model providers" rows={3} />;
   }
-  if (connection.catalogError)
+  if (connection.catalogError) {
     return <CreateFactoryPaletteAlert>{connection.catalogError.message}</CreateFactoryPaletteAlert>;
+  }
 
   const signIn = connection.signInProviders.filter(provider => matchesProviderQuery(provider, query));
   const withKey = connection.keyProviders.filter(

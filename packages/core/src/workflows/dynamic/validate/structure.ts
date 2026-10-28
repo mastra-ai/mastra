@@ -21,9 +21,9 @@ export function validateWorkflowStructure(def: WorkflowValidationInput): Workflo
     const id = leafEntryId(entry);
     const idPath = entry.type === 'step' ? `${path}.step.id` : `${path}.id`;
     if (!id) issues.push({ code: 'missing-step-id', path: idPath, message: 'Step id is required.' });
-    else if (seenIds.has(id))
+    else if (seenIds.has(id)) {
       issues.push({ code: 'duplicate-step-id', path: idPath, message: `Step id "${id}" is duplicated.` });
-    else seenIds.add(id);
+    } else seenIds.add(id);
 
     if (entry.type === 'mapping' && !TOP_LEVEL_PATH.test(path)) {
       issues.push({

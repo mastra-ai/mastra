@@ -223,8 +223,9 @@ function StatusUnavailableNotice({
 
 function githubUnavailableMessage(status: GithubStatus | undefined): string {
   if (status?.authRequired || status?.reason === 'auth_required') return 'Sign in again to manage repository access.';
-  if (status?.organizationRequired || status?.reason === 'organization_required')
+  if (status?.organizationRequired || status?.reason === 'organization_required') {
     return 'Select an organization to connect repositories.';
+  }
   if (status?.reason === 'missing_config') {
     const missing = status.diagnostics?.missingGithubAppEnvVars ?? [];
     return missing.length > 0

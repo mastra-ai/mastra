@@ -201,8 +201,9 @@ function createScenarioTerminal(terminal: EmulatedTerminal): McE2eTerminal {
             await terminal.flushInput();
             const matches = countMatches(terminal.serialize().view, text);
             if (matches > 0) {
-              if (options?.strict !== false && matches > 1)
+              if (options?.strict !== false && matches > 1) {
                 throw new Error(`strict mode violation: ${matches} matches`);
+              }
               return { text };
             }
             await sleep(100);

@@ -72,10 +72,11 @@ export function useChatCommandRegistry(prefillComposer: (draft: string) => void)
   const { thinkingDefault } = useChatThinking();
 
   const openSessionDefaults = () => {
-    if (factoryId)
+    if (factoryId) {
       void navigate(settingsSectionPath(factoryId, 'models', sessionDefaultsAnchor(modelScope)), {
         state: { from: location },
       });
+    }
   };
 
   const currentThinkingLevel = settingsQuery.data?.thinkingLevel;

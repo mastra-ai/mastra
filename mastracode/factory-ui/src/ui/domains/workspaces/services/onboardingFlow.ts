@@ -93,14 +93,16 @@ export function onboardingModelPlan(setup: CompleteOnboardingSetup): {
   factoryModelId: string;
   personalModelId?: string;
 } {
-  if (setup.modelScope === 'factory')
+  if (setup.modelScope === 'factory') {
     return { checks: [{ scope: 'org', choice: setup.model }], factoryModelId: setup.model.modelId };
-  if (setup.modelScope === 'user')
+  }
+  if (setup.modelScope === 'user') {
     return {
       checks: [{ scope: 'user', choice: setup.personal }],
       factoryModelId: setup.personal.modelId,
       personalModelId: setup.personal.modelId,
     };
+  }
   return {
     checks: [
       { scope: 'org', choice: setup.model },

@@ -83,8 +83,9 @@ runPeer<SelfTestArgs>(async peer => {
       const durable = createDurableAgent({ agent });
       const storage = new LibSQLStore({ id: 'self-test-registry', url: peer.dbUrl });
       const mastra = new Mastra({ agents: { durable }, storage, pubsub: peer.pubsub(), logger: false });
-      if ((mastra.getAgent('durable') as unknown) !== durable)
+      if ((mastra.getAgent('durable') as unknown) !== durable) {
         throw new Error('Mastra replaced the registered durable agent');
+      }
 
       const result = await durable.stream('Go', { runId: args.runId });
       await parked.promise;
