@@ -13,7 +13,7 @@ import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-
 import { Agent } from '@mastra/core/agent';
 import { createDurableAgent, createEventedAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
-import { SpanType } from '@mastra/core/observability';
+import { SpanType, getTimeToFirstChunkMs } from '@mastra/core/observability';
 import type { Processor, ProcessOutputStreamArgs } from '@mastra/core/processors';
 import { MockStore } from '@mastra/core/storage';
 import type { ChunkType } from '@mastra/core/stream';
@@ -192,6 +192,17 @@ class DeclaringStreamProcessor implements Processor {
 
   async processOutputStream(args: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
     return args.part;
+  }
+}
+
+/** Blocks the response at its first text delta, as a moderation processor would. */
+class AbortOnTextProcessor implements Processor {
+  readonly id = 'abort-on-text';
+  readonly name = 'Abort on text';
+
+  async processOutputStream({ part, abort }: ProcessOutputStreamArgs): Promise<ChunkType | null | undefined> {
+    if (part.type === 'text-delta') abort('blocked');
+    return part;
   }
 }
 
@@ -457,6 +468,30 @@ describe('durable-agent observability — full span tree (real exporter)', () =>
 
     const agentRun = testExporter.getSpansByType('agent_run' as any)[0] as any;
     expect(agentRun.timeToFirstTokenMs).toBeLessThan(failAfterMs);
+  });
+
+  it('DurableAgent output processor abort: the ended generation and AGENT_RUN keep both timings', async () => {
+    const agent = new Agent({
+      id: 'a',
+      name: 'a',
+      instructions: 'x',
+      model: textModel('Hello') as any,
+      outputProcessors: [new AbortOnTextProcessor()],
+    });
+    const { wrapped } = buildMastra(testExporter, agent, 'durable');
+    await runToCompletion(wrapped, 'hi', testExporter);
+
+    const spanOf = (type: string) => testExporter.getAllSpans().find(span => span.type === type) as any;
+    const inferenceStart = startOf(spanOf('model_inference'));
+    const first = clockOf(spanOf('model_step'));
+    expect(first).toBeTypeOf('number');
+    for (const type of ['model_generation', 'agent_run']) {
+      const ended = testExporter.getSpansByType(type as any)[0] as any;
+      expect(clockOf(ended)).toBe(first);
+      expect(inferenceClockOf(ended)).toBe(inferenceStart);
+      expect(ended.timeToFirstTokenMs).toBe(first! - inferenceStart);
+      expect(getTimeToFirstChunkMs(ended)).toBe(first! - startOf(ended));
+    }
   });
 
   it('DurableAgent fatal model error: root, generation, step AND inference all closed (no dangling)', async () => {

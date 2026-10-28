@@ -583,6 +583,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
       const openReasoningIds = new Set<string>();
       // Each durable attempt opens its own MODEL_STEP; a cancelled one ends both its spans here.
       let endAttemptSpans: (() => void) | undefined;
+      // The attempt's first-chunk clocks. Every step output returned after the model call
+      // carries them, since the finalizer ends the rebuilt spans with the loop state's copy.
+      let recordClocks: (() => { completionStartTime?: Date; inferenceStartTime?: Date }) | undefined;
       const finishInterruptedRequest = async (error: unknown, modelId: string): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
         stopListening?.();
@@ -617,6 +620,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           },
           metadata: { modelId },
           state: typedInput.state,
+          ...recordClocks?.(),
         };
       };
       // Processor retries are read from the step history: each rejected step is recorded with
@@ -808,7 +812,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 ? { ...data, attributes: { ...data.attributes, ...Object.fromEntries(missing) } }
                 : data;
             };
-            const recordClocks = () => {
+            recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
               const inferenceStartTime = modelSpanTracker?.getInferenceStartTime?.();
               if (resumeRegistry?.resumeModelSpanData) {
@@ -2496,6 +2500,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   metadata: { modelId: currentModel.modelId },
                   state: typedInput.state,
                   deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
+                  ...recordClocks(),
                 } satisfies DurableLLMStepOutput;
               }
 
@@ -2587,6 +2592,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   metadata: { modelId: currentModel.modelId },
                   state: typedInput.state,
                   deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
+                  ...recordClocks(),
                 } satisfies DurableLLMStepOutput;
               }
 
@@ -2631,6 +2637,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                   reason: 'tripwire',
                   isContinued: false,
                 }),
+                ...recordClocks(),
               } satisfies DurableLLMStepOutput;
             }
 
@@ -2696,6 +2703,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       reason: 'tripwire',
                       isContinued: false,
                     }),
+                    ...recordClocks(),
                   } satisfies DurableLLMStepOutput;
                 }
                 logger?.error?.('Error in processLLMResponse processors:', error);
@@ -2969,6 +2977,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                 metadata: { modelId: modelEntry.config.modelId },
                 state: typedInput.state,
                 deferredStepFinishChunk: prepareDeferredStepFinishChunk({ reason: 'abort', isContinued: false }),
+                ...recordClocks?.(),
               } satisfies DurableLLMStepOutput;
             }
 
