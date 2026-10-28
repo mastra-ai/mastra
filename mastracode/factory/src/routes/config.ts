@@ -1274,7 +1274,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/default-model/apply', {
         method: 'POST',
-        requiresAuth: false,
         handler: async c => {
           const context = await resolveModelDefaultsContext({
             c: loose(c),
@@ -1382,7 +1381,6 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
 
       registerApiRoute('/web/config/default-model/thinking', {
         method: 'PUT',
-        requiresAuth: false,
         handler: async c => {
           const context = await resolveModelDefaultsContext({
             c: loose(c),

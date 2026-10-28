@@ -335,7 +335,7 @@ describe('Factory server auth with an explicit custom provider', () => {
   it('SSO callback also expires legacy session cookies (SP-5)', async () => {
     const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
     const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
-    const { app } = buildApp(provider);
+    const { app } = await buildApp(provider);
 
     const res = await app.request('/auth/callback?code=abc');
 
@@ -345,7 +345,7 @@ describe('Factory server auth with an explicit custom provider', () => {
   it('SSO logout also expires legacy session cookies (SP-5)', async () => {
     const legacy = ['wos-session=; Path=/; Max-Age=0; Secure; Domain=.mastra.cloud'];
     const provider = fakeProvider(ssoCapability({ getLegacySessionClearCookies: vi.fn(() => legacy) }));
-    const { app } = buildApp(provider);
+    const { app } = await buildApp(provider);
 
     const res = await app.request('/auth/logout');
 

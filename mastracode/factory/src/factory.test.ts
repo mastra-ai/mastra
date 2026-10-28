@@ -5,7 +5,6 @@ import { join } from 'node:path';
 import type * as authStudioModule from '@mastra/auth-studio';
 import { resolveCustomProviders } from '@mastra/code-sdk/agents/custom-provider-source';
 import { getDynamicInstructions } from '@mastra/code-sdk/agents/instructions';
-import { Mastra } from '@mastra/core';
 import { Agent } from '@mastra/core/agent';
 import { AgentController } from '@mastra/core/agent-controller';
 import type { MastraBrowser } from '@mastra/core/browser';
@@ -18,7 +17,6 @@ import type { ApiRoute, AuthInitContext, IMastraAuthProvider, Middleware, Server
 import { createSkill } from '@mastra/core/skills';
 import { InMemoryStore } from '@mastra/core/storage';
 import type { MastraWorker } from '@mastra/core/worker';
-
 import {
   FactorySandbox,
   FACTORY_SANDBOX_BRAND,
