@@ -17,7 +17,7 @@ Security testing needs a reproducible execution boundary before it can handle au
 ## Quickstart 🚀
 
 1. **Open this template directory**
-   - Use the Security Scanner directory in your checkout and run `npm ci --workspaces=false` to install its locked dependencies independently of the parent workspace.
+   - Use the Security Scanner directory in your checkout and run `npm install --workspaces=false` to install its dependencies independently of the parent workspace.
 2. **Configure the local runtime**
    - Run `test -f .env || cp .env.example .env`, then edit the settings described under Prerequisites. Existing exported shell variables take precedence over `.env`.
 3. **Set up the runtime**

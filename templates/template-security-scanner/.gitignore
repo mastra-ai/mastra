@@ -10,4 +10,4 @@ data/
 !.env.example
 *.log
 .DS_Store
-!package-lock.json
+/package-lock.json
