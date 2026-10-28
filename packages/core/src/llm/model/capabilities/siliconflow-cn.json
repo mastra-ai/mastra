@@ -92,18 +92,12 @@
     "zai-org/GLM-5.2"
   ],
   "reasoning": {
-    "tencent/Hunyuan-A13B-Instruct": [
+    "Pro/deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
     ],
-    "zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
-      }
-    ],
-    "Pro/zai-org/GLM-5": [
+    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
       {
         "type": "toggle"
       }
@@ -115,12 +109,12 @@
         "max": 32768
       }
     ],
-    "Pro/deepseek-ai/DeepSeek-V3.1-Terminus": [
+    "Pro/zai-org/GLM-5": [
       {
         "type": "toggle"
       }
     ],
-    "Pro/deepseek-ai/DeepSeek-V3.2": [
+    "deepseek-ai/DeepSeek-V3.2": [
       {
         "type": "toggle"
       }
@@ -129,6 +123,11 @@
       {
         "type": "effort",
         "values": ["high", "max"]
+      }
+    ],
+    "deepseek-ai/DeepSeek-V3.1-Terminus": [
+      {
+        "type": "toggle"
       }
     ],
     "deepseek-ai/DeepSeek-R1": [
@@ -144,30 +143,7 @@
         "values": ["high", "max"]
       }
     ],
-    "deepseek-ai/DeepSeek-V3.1-Terminus": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "deepseek-ai/DeepSeek-V3.2": [
-      {
-        "type": "toggle"
-      }
-    ],
-    "Qwen/Qwen3.5-9B": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3.5-35B-A3B": [
-      {
-        "type": "toggle"
-      },
+    "Qwen/Qwen3-VL-32B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -194,10 +170,17 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3.5-27B": [
+    "Qwen/Qwen3-32B": [
       {
         "type": "toggle"
       },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
       {
         "type": "budget_tokens",
         "min": 128,
@@ -214,21 +197,7 @@
         "max": 32768
       }
     ],
-    "Qwen/Qwen3-VL-32B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-VL-30B-A3B-Thinking": [
-      {
-        "type": "budget_tokens",
-        "min": 128,
-        "max": 32768
-      }
-    ],
-    "Qwen/Qwen3-32B": [
+    "Qwen/Qwen3.5-35B-A3B": [
       {
         "type": "toggle"
       },
@@ -246,6 +215,37 @@
         "type": "budget_tokens",
         "min": 128,
         "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-9B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "Qwen/Qwen3.5-27B": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 128,
+        "max": 32768
+      }
+    ],
+    "tencent/Hunyuan-A13B-Instruct": [
+      {
+        "type": "toggle"
+      }
+    ],
+    "zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ]
   }
