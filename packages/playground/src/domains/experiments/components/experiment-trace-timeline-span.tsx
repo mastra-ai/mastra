@@ -103,41 +103,6 @@ export function ExperimentTraceTimelineSpan({
         numOfChildren={numOfChildren}
       />
 
-      {/* <ExperimentTraceTimelineNameCol
-        span={span}
-        spanUI={spanUI}
-        isFaded={isFaded}
-        depth={depth}
-        onSpanClick={onSpanClick}
-        selectedSpanId={selectedSpanId}
-        isLastChild={isLastChild}
-        hasChildren={hasChildren}
-        isRootSpan={isRootSpan}
-        isExpanded={isExpanded}
-        toggleChildren={toggleChildren}
-      />
-
-      <ExperimentTraceTimelineExpandCol
-        isSelected={selectedSpanId === span.id}
-        isFaded={isFaded}
-        isExpanded={isExpanded}
-        toggleChildren={toggleChildren}
-        expandAllDescendants={expandAllDescendants}
-        totalDescendants={totalDescendants}
-        allDescendantsExpanded={allDescendantsExpanded}
-        numOfChildren={numOfChildren}
-      />
-
-      <ExperimentTraceTimelineTimingCol
-        span={span}
-        selectedSpanId={selectedSpanId}
-        isFaded={isFaded}
-        overallLatency={overallLatency}
-        overallStartTime={overallStartTime}
-        overallEndTime={overallEndTime}
-        color={spanUI?.color}
-      /> */}
-
       {hasChildren &&
         isExpanded &&
         span.spans?.map((childSpan: ExperimentUISpan, idx: number, array: ExperimentUISpan[]) => {

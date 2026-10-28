@@ -2,8 +2,7 @@ import { cleanProviderId } from '@mastra/playground-ui/domains/llm';
 import { useAgents } from '@mastra/react/hooks/agents';
 import { useWorkflows } from '@mastra/react/hooks/workflows';
 import { toTargetValue } from './experiment-trigger-options';
-import type { AgentModel, TargetOption } from './experiment-trigger-options';
-import type { TargetType } from './target-selector';
+import type { AgentModel, TargetOption, TargetType } from './experiment-trigger-options';
 import { useScorers } from '@/domains/scores/hooks/use-scorers';
 
 const toTargetOption = (type: TargetType, id: string, label: string, defaultModel?: AgentModel): TargetOption => ({
