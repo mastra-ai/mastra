@@ -190,6 +190,43 @@ describe('AGGREGATE_SPANS', () => {
     expect(observabilityStore.aggregateSpans).toHaveBeenCalledOnce();
   });
 
+  it('returns 501 before calling a store without time to first token support for its predicates', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-aggregate', 'trace-query-time-to-first-chunk']);
+    const error = await captureHttpException(
+      AGGREGATE_SPANS.handler(
+        params(mastra, {
+          timeRange: TIME_RANGE,
+          where: { op: 'gt', left: { path: 'timeToFirstTokenMs' }, right: { literal: 100 } },
+          measures: ['count'],
+        }),
+      ),
+    );
+
+    expect(error.status).toBe(501);
+    expect(getDeclaredErrorSchema(501).parse(await error.getResponse().json())).toEqual({
+      code: 'SPAN_AGGREGATE_UNSUPPORTED',
+      message: 'Time to first token predicates are not supported by the configured observability store',
+    });
+    expect(observabilityStore.aggregateSpans).not.toHaveBeenCalled();
+  });
+
+  it('passes time to first token predicates to stores that advertise support', async () => {
+    const { mastra, observabilityStore } = createHarness(['span-aggregate', 'trace-query-time-to-first-token']);
+    await AGGREGATE_SPANS.handler(
+      params(mastra, {
+        timeRange: TIME_RANGE,
+        where: { op: 'lte', left: { path: 'timeToFirstTokenMs' }, right: { literal: 0 } },
+        measures: ['count'],
+      }),
+    );
+
+    expect(observabilityStore.aggregateSpans).toHaveBeenCalledWith(
+      expect.objectContaining({
+        where: { type: 'comparison', field: 'timeToFirstTokenMs', operator: 'lte', value: 0 },
+      }),
+    );
+  });
+
   it('scopes the plan to the trusted tenant and never runs a scoped request unscoped', async () => {
     const scopedParams = (mastra: Mastra) => {
       const context = params(mastra, { timeRange: TIME_RANGE, measures: ['count'] });

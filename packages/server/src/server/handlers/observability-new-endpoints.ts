@@ -630,8 +630,10 @@ export const AGGREGATE_SPANS = createNewRoute(NEW_ROUTE_DEFS.AGGREGATE_SPANS, {
     let observabilityStore: Awaited<ReturnType<typeof getObservabilityStore>>;
     try {
       observabilityStore = await getObservabilityStore(mastra);
-      // `span-aggregate` covers every span query field, so no per-field gates apply.
+      // `span-aggregate` covers every span query field that shipped before it, time to first
+      // chunk included, so only the newer timing field needs a gate.
       assertObservabilitySpanAggregateSupported(observabilityStore);
+      assertObservabilityTraceQueryTimingFieldsSupported(observabilityStore, plan.where, ['timeToFirstTokenMs']);
       assertObservabilityTraceQueryTenantScopeSupported(observabilityStore, plan.scope);
     } catch (error) {
       if (error instanceof HTTPException && error.status === 501) {
