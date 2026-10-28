@@ -333,8 +333,8 @@ describe('defineBoard tool-result rules', () => {
     expect(() => define({ ship_it: () => undefined })).toThrow(BoardDefinitionError);
   });
 
-  it('declares Work’s submit_plan rule and nothing on Review', () => {
-    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
+  it('declares only Work’s review-verdict rule and nothing on Review', () => {
+    expect(Object.keys(workBoard.tools)).toEqual(['factory_record_review_verdict']);
     expect(Object.keys(reviewBoard.tools)).toEqual([]);
   });
 });

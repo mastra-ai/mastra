@@ -155,32 +155,24 @@ export const reviewBoard = defineBoard({
     intake: {
       name: 'Intake',
       kind: 'resting',
-      outcomes: {
-        reviewRequested: 'review',
-        merged: 'done',
-        closed: 'canceled',
-      },
+      nextPhases: ['review', 'done', 'canceled'],
     },
     review: {
       name: 'Reviewing',
       kind: 'working',
       runner: { context: 'review' },
-      outcomes: {
-        parked: 'intake',
-        merged: 'done',
-        closed: 'canceled',
-      },
+      nextPhases: ['intake', 'done', 'canceled'],
       onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
     },
     done: {
       name: 'Done',
       kind: 'terminal',
-      outcomes: { updated: 'review' },
+      nextPhases: ['review'],
     },
     canceled: {
       name: 'Canceled',
       kind: 'terminal',
-      outcomes: { reviewRequested: 'review' },
+      nextPhases: ['review'],
     },
   },
 });

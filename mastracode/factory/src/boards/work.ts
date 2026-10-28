@@ -3,7 +3,6 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
-import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
@@ -259,15 +258,8 @@ function completeIssue(context: FactoryStageRuleContext) {
 
 export type WorkBoardPhase = 'intake' | 'triage' | 'planning' | 'execute' | 'review' | 'done' | 'canceled';
 
-const allOtherPhases = {
-  intake: 'intake',
-  triage: 'triage',
-  planning: 'planning',
-  execute: 'execute',
-  review: 'review',
-  done: 'done',
-  canceled: 'canceled',
-} as const;
+/** Every Work phase: a card may move from any phase to any other. */
+const ALL_PHASES: readonly WorkBoardPhase[] = ['intake', 'triage', 'planning', 'execute', 'review', 'done', 'canceled'];
 
 export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDefinition<WorkBoardPhase>>>({
   id: 'work',
@@ -276,20 +268,19 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: {
-    submit_plan: { onResult: advanceApprovedPlan },
     factory_record_review_verdict: { onResult: openApprovedChangeRequest },
   },
   phases: {
     intake: {
       name: 'Intake',
       kind: 'resting',
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
     },
     triage: {
       name: 'Triage',
       kind: 'working',
       runner: { context: 'triage' },
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
       onEnter: {
         issue: triageIssueEntry,
         gitlabIssue: investigateTriagedGitLabIssue,
@@ -302,7 +293,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       name: 'Planning',
       kind: 'working',
       runner: { context: 'plan' },
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
       onEnter: {
         issue: planWorkItem,
         gitlabIssue: planWorkItem,
@@ -316,7 +307,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       name: 'Building',
       kind: 'working',
       runner: { context: 'work' },
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
       onEnter: {
         issue: buildWorkItem,
         gitlabIssue: buildWorkItem,
@@ -333,7 +324,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
       // review seat on the pushed branch; on approve the builder opens the change request here.
       kind: 'working',
       runner: { context: 'work' },
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
       onEnter: {
         issue: selfReviewWorkItem,
         gitlabIssue: selfReviewWorkItem,
@@ -346,13 +337,13 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
     done: {
       name: 'Done',
       kind: 'terminal',
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
       onEnter: { issue: completeIssue },
     },
     canceled: {
       name: 'Canceled',
       kind: 'terminal',
-      outcomes: allOtherPhases,
+      nextPhases: ALL_PHASES,
     },
   },
 });
