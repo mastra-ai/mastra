@@ -2,6 +2,7 @@ import type { JournalEntry, LLMock } from '@copilotkit/aimock';
 import type { AgentConfig, ToolsInput } from '../../../agent';
 import type { MessageListInput } from '../../../agent/message-list';
 import type { MastraServerCache } from '../../../cache';
+import type { ObservabilityEntrypoint } from '../../../observability';
 import type { PubSub } from '../../../events/pubsub';
 import type { MastraMemory } from '../../../memory';
 import type { MemoryConfigInternal } from '../../../memory/types';
@@ -132,6 +133,8 @@ export interface RunLoopScenarioOptions {
    * Runs once before the loop starts.
    */
   fixtures: (llm: LLMock) => void;
+  /** Real observability implementation for exported-span assertions. */
+  observability?: ObservabilityEntrypoint;
   /** The input that kicks off the loop: a user prompt, or messages (e.g. ending on an assistant prefill). */
   prompt: string | MessageListInput;
   /**
@@ -451,7 +454,15 @@ export interface RunLoopScenarioOptions {
  */
 export interface RunApprovalScenarioOptions extends Pick<
   RunLoopScenarioOptions,
-  'llm' | 'fixtures' | 'prompt' | 'tools' | 'instructions' | 'stopWhen' | 'requireToolApproval' | 'engine'
+  | 'llm'
+  | 'fixtures'
+  | 'prompt'
+  | 'tools'
+  | 'instructions'
+  | 'stopWhen'
+  | 'requireToolApproval'
+  | 'engine'
+  | 'observability'
 > {
   /**
    * Decide whether to approve (`true`) or decline (`false`) each suspended tool

@@ -6,13 +6,14 @@ import { MastraError, MastraNonRetryableError, ErrorDomain, ErrorCategory } from
 import type { SerializedError } from '../error';
 import { getErrorFromUnknown } from '../error/utils.js';
 import type { PubSub } from '../events/pubsub';
-import type { ObservabilityContext, Span, SpanType, TracingPolicy } from '../observability';
+import type { ObservabilityContext, Span, SpanType, TracingPolicy, SpanOutcomeFields } from '../observability';
 import { createObservabilityContext, resolveExportedSpanId } from '../observability';
 import { MASTRA_AUTH_TOKEN_KEY } from '../request-context';
 import { deepEqual } from '../utils/deep-equal';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
 import type { ExecutionGraph } from './execution-engine';
 import { ExecutionEngine } from './execution-engine';
+import { workflowTermination } from './execution-outcome';
 import type {
   ExecuteConditionalParams,
   ExecuteForeachParams,
@@ -349,7 +350,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     parentSpan: Span<SpanType> | undefined;
     stepId: string;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: SpanType;
       input?: unknown;
@@ -376,7 +377,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async endStepSpan(params: {
     span: Span<SpanType> | undefined;
     operationId: string;
-    endOptions: {
+    endOptions: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -396,7 +397,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async errorStepSpan(params: {
     span: Span<SpanType> | undefined;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -417,7 +418,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async createChildSpan(params: {
     parentSpan: Span<SpanType> | undefined;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: SpanType;
       input?: unknown;
@@ -441,7 +442,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async endChildSpan(params: {
     span: Span<SpanType> | undefined;
     operationId: string;
-    endOptions?: {
+    endOptions?: SpanOutcomeFields & {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -461,7 +462,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
   async errorChildSpan(params: {
     span: Span<SpanType> | undefined;
     operationId: string;
-    errorOptions: {
+    errorOptions: SpanOutcomeFields & {
       error: Error;
       attributes?: Record<string, unknown>;
     };
@@ -537,6 +538,11 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           this.logger?.error(`Error executing step ${stepId}: ` + errorInstance?.stack);
 
           params.stepSpan?.error({
+            ...workflowTermination(
+              e instanceof TripWire
+                ? { status: 'tripwire', tripwire: { reason: e.message, processorId: e.processorId } }
+                : { status: 'failed', error: errorInstance },
+            ),
             error: mastraError,
             attributes: { status: 'failed' },
           });
@@ -662,9 +668,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
     if (lastOutput.status === 'success') {
       base.result = lastOutput.output;
-    } else if (lastOutput.status === 'failed') {
-      // Check if the failure was due to a TripWire
-      const tripwireData = lastOutput?.tripwire;
+    } else if (lastOutput.status === 'failed' || ('tripwire' in lastOutput && lastOutput.tripwire)) {
+      // Nested engines can return an already-classified tripwire result. Preserve
+      // its explicit cause as well as tripwires represented by failed leaf steps.
+      const tripwireData = (lastOutput as { tripwire?: StepTripwireInfo | TripWire<Record<string, unknown>> }).tripwire;
       if (tripwireData instanceof TripWire) {
         // Use 'tripwire' status instead of 'failed' for tripwire errors (TripWire instance)
         base.status = 'tripwire';
@@ -841,7 +848,10 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         category: ErrorCategory.USER,
       });
 
-      workflowSpan?.error({ error: empty_graph_error });
+      workflowSpan?.error({
+        error: empty_graph_error,
+        ...workflowTermination({ status: 'failed', error: empty_graph_error }),
+      });
       throw empty_graph_error;
     }
 
@@ -911,7 +921,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           if (!this.writeRejectedByCancellation(runId, 'waiting')) {
-            workflowSpan?.end({ attributes: { status: 'waiting' } });
+            // The executor stopped; the logical run remains available for another worker.
+            workflowSpan?.end({ outcome: 'interrupted', stopReason: null, attributes: { status: 'waiting' } });
 
             const formattedResult = await this.fmtReturnValue<any>(
               params.pubsub,
@@ -954,6 +965,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         });
 
         workflowSpan?.end({
+          ...workflowTermination({ status: 'canceled' }),
           attributes: {
             status: 'canceled',
           },
@@ -1010,27 +1022,37 @@ export class DefaultExecutionEngine extends ExecutionEngine {
       };
       lastExecutionContext = executionContext;
 
-      lastOutput = await this.executeEntry({
-        workflowId,
-        runId,
-        resourceId,
-        entry,
-        executionContext,
-        serializedStepGraph: params.serializedStepGraph,
-        prevStep: steps[i - 1]!,
-        stepResults,
-        resume,
-        timeTravel,
-        restart: entryRestart,
-        ...createObservabilityContext({ currentSpan: workflowSpan }),
-        abortController: params.abortController,
-        pubsub: params.pubsub,
-        requestContext: currentRequestContext,
-        actor: params.actor,
-        outputWriter: params.outputWriter,
-        disableScorers,
-        perStep,
-      });
+      try {
+        lastOutput = await this.executeEntry({
+          workflowId,
+          runId,
+          resourceId,
+          entry,
+          executionContext,
+          serializedStepGraph: params.serializedStepGraph,
+          prevStep: steps[i - 1]!,
+          stepResults,
+          resume,
+          timeTravel,
+          restart: entryRestart,
+          ...createObservabilityContext({ currentSpan: workflowSpan }),
+          abortController: params.abortController,
+          pubsub: params.pubsub,
+          requestContext: currentRequestContext,
+          actor: params.actor,
+          outputWriter: params.outputWriter,
+          disableScorers,
+          perStep,
+        });
+      } catch (error) {
+        // A thrown control-flow error bypasses settled-result finalization. End
+        // this execution and any still-open children without rewriting completed
+        // body spans, then preserve the caller's existing rejection behavior.
+        const termination = workflowTermination({ status: 'failed', error });
+        workflowSpan?.error({ ...termination, error: getErrorFromUnknown(error), endSpan: false });
+        workflowSpan?.endTree(termination);
+        throw error;
+      }
 
       // Apply mutable context changes from entry execution
       this.applyMutableContext(executionContext, lastOutput.mutableContext);
@@ -1055,7 +1077,8 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         params.abortController.signal.aborted &&
         params.abortController.signal.reason !== WORKFLOW_CANCELLED_SYMBOL
       ) {
-        workflowSpan?.end({ attributes: { status: 'waiting' } });
+        // The executor stopped; the logical run remains available for another worker.
+        workflowSpan?.end({ outcome: 'interrupted', stopReason: null, attributes: { status: 'waiting' } });
 
         const formattedResult = await this.fmtReturnValue<any>(
           params.pubsub,
@@ -1100,6 +1123,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
 
           workflowSpan?.end({
+            ...workflowTermination({ status: 'paused' }),
             attributes: {
               status: 'paused',
             },
@@ -1181,6 +1205,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
 
         if (result.error) {
           workflowSpan?.error({
+            ...workflowTermination(result),
             error: result.error,
             attributes: {
               status: result.status,
@@ -1188,6 +1213,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
           });
         } else {
           workflowSpan?.end({
+            ...workflowTermination(result),
             output: result.result,
             attributes: {
               status: result.status,
@@ -1307,6 +1333,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
     }
 
     workflowSpan?.end({
+      ...workflowTermination(result),
       output: result.result,
       attributes: {
         status: result.status,

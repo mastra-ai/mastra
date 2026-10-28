@@ -23,3 +23,5 @@ export * from './state-reader';
 export * from './create';
 export * from './dynamic';
 export * from './predicate';
+
+export { workflowTermination } from './execution-outcome';

@@ -1,4 +1,6 @@
 import { expect, it } from 'vitest';
+import { SpanType } from '../../../../observability';
+import { captureOutcomeEvents } from '../outcome-test-utils';
 import type { ChunkType } from '../../../../stream';
 import { MockMemory } from '../../../../memory/mock';
 import type { Processor } from '../../../../processors';
@@ -81,5 +83,37 @@ describeForAllEngines('Output processors release held parts when the stream ends
     expect(streamedText(chunks), 'released batch skipped the downstream processor').toBe(REPLY.toUpperCase());
     expect(await output.text).toBe(REPLY.toUpperCase());
     expect(await savedText(memory)).toBe(REPLY.toUpperCase());
+  });
+  it('a policy blocks a buffered reply after the provider completes (OBS-724)', async () => {
+    const { observability, ended } = captureOutcomeEvents();
+    const { output, chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      prompt: QUESTION,
+      observability,
+      collectChunks: true,
+      outputProcessors: [
+        new BatchPartsProcessor({ batchSize: 200, emitOnNonText: false }),
+        {
+          id: 'buffer-policy',
+          processOutputStream: ({ part, abort }) => {
+            if (part.type === 'text-delta') abort('Buffered reply rejected');
+            return part;
+          },
+        },
+      ],
+      fixtures: llm => llm.on({ endpoint: 'chat' }, { content: REPLY }, { chunkSize: 5 }),
+    });
+    expect(streamedText(chunks)).toBe('');
+    expect(output.tripwire).toMatchObject({ reason: 'Buffered reply rejected', processorId: 'buffer-policy' });
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
+      expect(ended(type).at(-1)).toMatchObject({
+        outcome: 'blocked',
+        stopReason: 'guardrail',
+        stopReasonContext: { tripwire: { reason: 'Buffered reply rejected', processorId: 'buffer-policy' } },
+      });
+    }
+    expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success', stopReason: null }]);
+    expect(requests).toHaveLength(1);
   });
 });

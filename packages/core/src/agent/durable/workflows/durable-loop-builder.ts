@@ -5,6 +5,7 @@ import type { LoopContinuationPredicate } from '../../../loop/loop-builder';
 import { AgenticLoopBuilder } from '../../../loop/loop-builder';
 import type { LoopIterationState, LoopRuntime } from '../../../loop/loop-runtime';
 import { decideContinuation } from '../../../loop/shared/continuation-core';
+import { agentLoopTermination } from '../../../loop/shared/execution-outcome';
 import { drainSignalsToTranscript } from '../../../loop/shared/steps/signal-drain-core';
 import { getAbortReason, isMastraTimeoutError } from '../../../loop/timeout';
 import { pruneAgentLoopSnapshot } from '../../../loop/workflows/prune-snapshot';
@@ -896,6 +897,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
+      if (state.lastStepResult) state.lastStepResult.continuationStopCause = decision.stopCause;
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
@@ -1058,7 +1060,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               finalText = finishResult.outputText;
             }
 
-            const tripwire = finishResult.tripwire;
+            const tripwire = finishResult.tripwire ?? state.lastStepResult?.tripwire;
             if (tripwire && pubsub) {
               await emitChunkEvent(pubsub, state.runId, {
                 type: 'tripwire',
@@ -1134,9 +1136,11 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const completionStartTime = clock ? new Date(clock) : undefined;
               if (observability) {
                 if (modelSpanData) {
-                  const modelSpan = observability.rebuildSpan(
-                    modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>,
-                  ) as AIModelGenerationSpan | undefined;
+                  const modelSpan =
+                    reg?.resumeModelSpan ??
+                    reg?.modelSpan ??
+                    (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
+                      AIModelGenerationSpan | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = state.accumulatedSteps.flatMap(step =>
@@ -1148,6 +1152,12 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
+                    ...agentLoopTermination({
+                      stopCause: state.lastStepResult?.continuationStopCause,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: initData.options?.maxSteps,
+                    }),
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
@@ -1158,8 +1168,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   });
                 }
                 if (agentSpanData) {
-                  const agentSpan = observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
+                  const agentSpan =
+                    reg?.resumeAgentSpan ??
+                    reg?.agentSpan ??
+                    observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
+                    ...agentLoopTermination({
+                      stopCause: state.lastStepResult?.continuationStopCause,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: initData.options?.maxSteps,
+                    }),
                     output: { text: finalText },
                     ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
                   });

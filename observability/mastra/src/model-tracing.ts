@@ -14,6 +14,7 @@
 
 import { TransformStream } from 'node:stream/web';
 import { coreFeatures } from '@mastra/core/features';
+import * as coreObservability from '@mastra/core/observability';
 import { SpanType } from '@mastra/core/observability';
 import type {
   EndGenerationOptions,
@@ -22,6 +23,7 @@ import type {
   ModelSpanTrackerOptions,
   ModelStepInput,
   Span,
+  SpanTermination,
   TracingContext,
   UpdateSpanOptions,
 } from '@mastra/core/observability';
@@ -385,6 +387,7 @@ export class ModelSpanTracker {
   #modelSpan?: Span<SpanType.MODEL_GENERATION>;
   #currentStepSpan?: Span<SpanType.MODEL_STEP>;
   #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
+  #stepHasInference = false;
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -457,12 +460,16 @@ export class ModelSpanTracker {
    * doesn't leave them dangling. No-op if they were already closed.
    */
   reportGenerationError(options: ErrorSpanOptions<SpanType.MODEL_GENERATION>): void {
+    const termination =
+      options.outcome != null
+        ? { outcome: options.outcome, stopReason: options.stopReason, stopReasonContext: options.stopReasonContext }
+        : coreObservability.executionFailureTermination?.(options.error);
     if (this.#currentInferenceSpan) {
-      this.#currentInferenceSpan.error({ error: options.error, endSpan: true });
+      this.#currentInferenceSpan.error({ error: options.error, ...termination, endSpan: true });
       this.#currentInferenceSpan = undefined;
     }
     if (this.#currentStepSpan) {
-      this.#currentStepSpan.error({ error: options.error, endSpan: true });
+      this.#currentStepSpan.error({ error: options.error, ...termination, endSpan: true });
       this.#currentStepSpan = undefined;
     }
     this.#modelSpan?.error(options);
@@ -496,6 +503,20 @@ export class ModelSpanTracker {
       }
     }
 
+    // Cancellation and deadlines terminate work that is still active. A loop
+    // limit such as max_steps must not relabel a completed logical step.
+    if (spanOptions.outcome === 'abort' || spanOptions.stopReason === 'timeout') {
+      const termination = {
+        outcome: spanOptions.outcome,
+        stopReason: spanOptions.stopReason,
+        stopReasonContext: spanOptions.stopReasonContext,
+      };
+      this.#endChunkSpan();
+      this.#currentStepSpan?.endTree(termination);
+      this.#currentStepSpan = undefined;
+      this.#currentInferenceSpan = undefined;
+      this.#currentStepInputIsFinal = false;
+    }
     this.#modelSpan?.end(spanOptions);
   }
 
@@ -566,10 +587,12 @@ export class ModelSpanTracker {
       return;
     }
 
+    this.#stepHasInference = false;
     const input = extractStepInput(payload);
     this.#currentStepSpan = this.#modelSpan?.createChildSpan({
       name: `step: ${this.#stepIndex}`,
       type: SpanType.MODEL_STEP,
+      outcome: null,
       attributes: {
         stepIndex: this.#stepIndex,
         ...(payload?.messageId ? { messageId: payload.messageId } : {}),
@@ -600,6 +623,15 @@ export class ModelSpanTracker {
     const responseModel = typeof payload.metadata?.modelId === 'string' ? payload.metadata.modelId : undefined;
 
     this.#currentInferenceSpan.end({
+      // This is the provider stream's completion boundary, before tool work
+      // or a later continuation decision can change the enclosing run's result.
+      ...coreObservability.agentLoopTermination?.({
+        stopCause: 'model_finished',
+        finishReason: payload.stepResult.reason,
+      }),
+      ...(payload.stepResult.reason === 'error'
+        ? { outcome: 'error' as const, stopReason: 'model_error' as const }
+        : {}),
       output: otherOutput,
       attributes: {
         usage,
@@ -639,6 +671,12 @@ export class ModelSpanTracker {
     this.#openInference(payload);
   }
 
+  /** Finish only the provider request; the logical step may still run processors or tools. */
+  finishInference(payload: StepFinishPayload): void {
+    this.#endChunkSpan();
+    this.#endInferenceSpan(payload);
+  }
+
   #openInference(payload?: StepStartPayload): void {
     if (!supportsModelInference()) {
       return;
@@ -651,9 +689,11 @@ export class ModelSpanTracker {
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;
+    this.#stepHasInference = true;
     this.#currentInferenceSpan = this.#currentStepSpan.createChildSpan({
       name: `inference: ${this.#stepIndex}`,
       type: SpanType.MODEL_INFERENCE,
+      outcome: null,
       attributes: {
         stepIndex: this.#stepIndex,
         model: generationAttrs?.model,
@@ -675,10 +715,15 @@ export class ModelSpanTracker {
    * End the open MODEL_INFERENCE span as interrupted while keeping MODEL_STEP open,
    * so a replacement request for the same step gets its own inference span.
    */
-  interruptInference(): void {
+  interruptInference(
+    termination: SpanTermination = { outcome: 'interrupted', stopReason: null, stopReasonContext: null },
+  ): void {
     this.#endChunkSpan();
     if (!this.#currentInferenceSpan) return;
-    this.#currentInferenceSpan.end({ attributes: { finishReason: 'interrupted' } });
+    this.#currentInferenceSpan.end({
+      attributes: { finishReason: 'interrupted' },
+      ...termination,
+    });
     this.#currentInferenceSpan = undefined;
   }
 
@@ -710,7 +755,7 @@ export class ModelSpanTracker {
   /**
    * End the current Model execution step with token usage, finish reason, output, and metadata
    */
-  #endStepSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>) {
+  #endStepSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>, termination?: SpanTermination) {
     // Flush any pending chunk span before ending the step
     // (handles case where text-delta arrives without text-end)
     this.#endChunkSpan();
@@ -746,6 +791,12 @@ export class ModelSpanTracker {
     this.#endInferenceSpan(payload);
 
     this.#currentStepSpan.end({
+      ...(termination ??
+        coreObservability.agentLoopTermination?.({
+          stopCause: 'model_finished',
+          finishReason: stepResult.reason,
+          tripwire: output.steps?.at(-1)?.tripwire,
+        })),
       output: otherOutput,
       attributes: {
         usage,
@@ -773,11 +824,21 @@ export class ModelSpanTracker {
     if (!usage) return;
 
     this.#inModelResponse = false;
-    this.#endStepSpan({
-      output: { usage },
-      stepResult: { reason: 'suspended', isContinued: false, warnings: [] },
-      metadata: {},
-    } as unknown as StepFinishPayload<any, OUTPUT>);
+    this.#endStepSpan(
+      {
+        output: { usage },
+        stepResult: { reason: 'suspended', isContinued: false, warnings: [] },
+        metadata: {},
+      } as unknown as StepFinishPayload<any, OUTPUT>,
+      coreObservability.agentLoopTermination?.({
+        finishReason: 'suspended',
+        suspension: {
+          approvalRequired: chunk.type === 'tool-call-approval',
+          toolCallId: chunk.payload.toolCallId,
+          toolName: chunk.payload.toolName,
+        },
+      }),
+    );
   }
 
   /**
@@ -800,7 +861,9 @@ export class ModelSpanTracker {
     if (!this.#currentStepSpan) {
       this.startStep();
     }
-    if (!this.#currentInferenceSpan) {
+    // Post-provider tool events belong to the logical step. They must not
+    // fabricate another inference; real replacement requests open explicitly.
+    if (!this.#currentInferenceSpan && !this.#stepHasInference) {
       this.#openInference();
     }
   }
@@ -1124,6 +1187,23 @@ export class ModelSpanTracker {
               }
               break;
 
+            case 'tripwire': {
+              // A tripwire chunk is a terminal runtime boundary; unlike a retry
+              // step it closes the consumer without an onFinish callback.
+              const termination = coreObservability.agentLoopTermination?.({ tripwire: chunk.payload });
+              // Older supported core versions do not supply native outcomes.
+              if (!termination) break;
+              this.#endChunkSpan();
+              this.#currentInferenceSpan?.end(termination);
+              this.#currentInferenceSpan = undefined;
+              this.#currentStepSpan?.end(termination);
+              this.#currentStepSpan = undefined;
+              this.#currentStepInputIsFinal = false;
+              this.#modelSpan?.end({ ...termination, endTree: true });
+              this.#agentRunSpan?.end({ ...termination, endTree: true });
+              break;
+            }
+
             // Infrastructure chunks - skip creating spans for these
             // They are either redundant, metadata-only, or error/control flow
             case 'raw': // Redundant raw data
@@ -1134,7 +1214,6 @@ export class ModelSpanTracker {
             case 'file': // Binary file data (too large/not semantic)
             case 'error': // Error handling
             case 'abort': // Abort signal
-            case 'tripwire': // Processor rejection
             case 'watch': // Internal watch event
             case 'tool-error': // Tool error handling
             case 'reasoning-signature': // Signature metadata

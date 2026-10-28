@@ -18,7 +18,8 @@ export type NestedWorkflowResult =
   | Pick<WorkflowResultWithStatus<'failed'>, 'status' | 'state' | 'error'>
   | Pick<WorkflowResultWithStatus<'tripwire'>, 'status' | 'state' | 'tripwire'>
   | Pick<WorkflowResultWithStatus<'suspended'>, 'status' | 'state' | 'steps' | 'resumeLabels'>
-  | Pick<WorkflowResultWithStatus<'paused'>, 'status' | 'state'>;
+  | Pick<WorkflowResultWithStatus<'paused'>, 'status' | 'state'>
+  | { status: 'canceled'; state: AnyWorkflowResult['state'] };
 
 /**
  * Normalizes an optional nested workflow output mode to an explicit mode.

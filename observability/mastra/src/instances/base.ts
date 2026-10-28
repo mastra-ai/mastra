@@ -374,6 +374,13 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.restoreEntityLineage(cached);
     }
 
+    // Rebuilding an existing completed segment must not reopen its outcome.
+    if (cached.endTime) {
+      span.endTime = cached.endTime instanceof Date ? cached.endTime : new Date(cached.endTime);
+      span.output = cached.output;
+      span.errorInfo = cached.errorInfo;
+    }
+
     // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
     this.wireSpanLifecycle(span);
 

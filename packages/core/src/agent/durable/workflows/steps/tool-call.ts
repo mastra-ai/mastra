@@ -19,7 +19,7 @@ import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-exec
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
-import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
+import { EntityType, SpanType, createObservabilityContext, agentLoopTermination } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
@@ -132,6 +132,14 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when an output processor dropped the tool-result chunk. The model still
   // gets the result; callbacks must not report a result the stream never emitted.
   resultHidden: z.boolean().optional(),
+  tripwire: z
+    .object({
+      reason: z.string(),
+      retry: z.boolean().optional(),
+      metadata: z.unknown().optional(),
+      processorId: z.string().optional(),
+    })
+    .optional(),
   error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
@@ -452,13 +460,38 @@ export function createDurableToolCallStep() {
             : (initData.completionStartTime ?? typedInput.completionStartTime);
           const attributes = clock ? { completionStartTime: new Date(clock) } : undefined;
           if (typedInput.stepSpanData) {
-            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({ output });
+            obs.rebuildSpan(typedInput.stepSpanData as ExportedSpan<SpanType.MODEL_STEP>)?.end({
+              output,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
+            });
           }
           if (modelSpanData) {
-            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({ output, attributes });
+            obs.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>)?.end({
+              output,
+              attributes,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval' ? { toolCallId: info.toolCallId, toolName: info.toolName } : null,
+            });
           }
           if (agentSpanData) {
-            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({ output, attributes });
+            obs.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)?.end({
+              output,
+              attributes,
+              outcome: 'suspend',
+              stopReason: info.reason === 'approval' ? 'approval_required' : null,
+              stopReasonContext:
+                info.reason === 'approval'
+                  ? {
+                      toolCallId: info.toolCallId,
+                      toolName: info.toolName,
+                    }
+                  : null,
+            });
           }
         } catch (error) {
           // Span bookkeeping must never break suspension.
@@ -2050,18 +2083,31 @@ export function createDurableToolCallStep() {
               // `resultBlocked` entries the way it skips `aborted` ones, so
               // the invocation stays in 'call' state — mirroring the main
               // loop, where a tripwire skips both commit and emission.
+              const tripwire = {
+                reason: processorError.message || 'Tool result blocked by processor',
+                retry: processorError.options?.retry,
+                metadata: processorError.options?.metadata,
+                processorId: processorError.processorId,
+              };
+              // The consumer can finish as soon as the tripwire is published. Close
+              // the affected execution first, preserving completed tool/provider spans.
+              const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
+              const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+              const termination = agentLoopTermination({ finishReason: 'tripwire', tripwire });
+              for (const spanData of [
+                typedInput.stepSpanData,
+                reg?.resumeModelSpanData ?? initData.modelSpanData,
+                reg?.resumeAgentSpanData ?? initData.agentSpanData,
+              ]) {
+                if (spanData) obs?.rebuildSpan(spanData as ExportedSpan<SpanType>)?.end(termination);
+              }
               if (pubsub) {
                 try {
                   await emitChunkEvent(pubsub, runId, {
                     type: 'tripwire',
                     runId,
                     from: ChunkFrom.AGENT,
-                    payload: {
-                      reason: processorError.message || 'Tool result blocked by processor',
-                      retry: processorError.options?.retry,
-                      metadata: processorError.options?.metadata,
-                      processorId: processorError.processorId,
-                    },
+                    payload: tripwire,
                   } as ChunkType);
                 } catch (emitError) {
                   logger?.warn?.(`[DurableAgent] Failed to emit tripwire chunk for ${toolName}: ${emitError}`);
@@ -2070,6 +2116,7 @@ export function createDurableToolCallStep() {
               return {
                 ...typedInput,
                 resultBlocked: true,
+                tripwire,
                 ...(processorDataParts.length ? { processorDataParts } : {}),
               };
             }

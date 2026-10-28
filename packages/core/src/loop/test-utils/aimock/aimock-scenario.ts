@@ -122,6 +122,7 @@ export async function createSharedAgent(
     | 'defaultOptions'
     | 'pubsub'
     | 'cache'
+    | 'observability'
     | 'engine'
     | 'inputProcessors'
   > = {},
@@ -157,6 +158,7 @@ async function buildScenarioAgent({
   defaultOptions,
   pubsub,
   cache,
+  observability,
   engine,
   inputProcessors,
   fsRouted,
@@ -181,6 +183,7 @@ async function buildScenarioAgent({
   | 'defaultOptions'
   | 'pubsub'
   | 'cache'
+  | 'observability'
   | 'engine'
   | 'inputProcessors'
   | 'fsRouted'
@@ -270,6 +273,22 @@ async function buildScenarioAgent({
   // An external engine's worker resolves agents from the host's Mastra, so register there.
   if (engineHost && engine === engineHost.engine) {
     const hostMastra = engineHost.getMastra();
+    // Remote-engine scenarios execute against the host, including their real exporters.
+    const instance = observability?.getDefaultInstance();
+    const exporter = instance?.getExporters()[0];
+    if (instance && exporter && observability) {
+      if (!hostMastra.observability.getDefaultInstance()) {
+        // registerExporter bootstraps a no-op host by registering its own
+        // "default" name. Free that alias on the supplied entrypoint first.
+        observability.unregisterInstance('default');
+        hostMastra.registerExporter(exporter, instance, observability);
+      } else {
+        hostMastra.observability.registerInstance(agentId, instance, true);
+      }
+      // Registration above may happen after the host's initial context setup.
+      // Initialize the scenario's exporters against the actual worker storage.
+      observability.setMastraContext({ mastra: hostMastra });
+    }
     hostMastra.addAgent(registrableAgent, agentId);
     return { agent: hostMastra.getAgent(agentId), mastra: hostMastra };
   }
@@ -286,6 +305,7 @@ async function buildScenarioAgent({
     ...(backgroundTasks ? { backgroundTasks } : {}),
     ...(eventedPubsub ? { pubsub: eventedPubsub } : pubsub ? { pubsub } : {}),
     ...(cache ? { cache } : {}),
+    ...(observability ? { observability } : {}),
   });
 
   if (isFs) {
@@ -373,6 +393,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     sharedAgent,
     pubsub,
     cache,
+    observability,
     engine = 'normal',
     fsRouted,
   } = opts;
@@ -428,6 +449,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
       defaultOptions,
       pubsub,
       cache,
+      observability,
       engine,
       inputProcessors,
       fsRouted,
@@ -651,10 +673,11 @@ export async function runApprovalScenario({
   decision,
   requireToolApproval = true,
   engine,
+  observability,
 }: RunApprovalScenarioOptions): Promise<LoopScenarioResult & { chunks: ChunkType[]; approvals: string[] }> {
   fixtures(llm);
 
-  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine });
+  const { agent } = await buildScenarioAgent({ llm, tools, instructions, engine, observability });
   const isDurable = isDurableEngineVariant(engine);
 
   const chunks: ChunkType[] = [];

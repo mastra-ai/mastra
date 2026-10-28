@@ -24,6 +24,7 @@ import type { ModelConfigModelSettings } from '../llm/model/model-settings';
 import type { MastraLanguageModel, SharedProviderOptions } from '../llm/model/shared.types';
 import type { IMastraLogger } from '../logger';
 import type { ScorerResult } from '../loop';
+import type { ContinuationStopCause } from '../loop/shared/continuation-core';
 import type { ClientObservabilityCarrier, ObservabilityContext } from '../observability';
 import type { OutputProcessorOrWorkflow } from '../processors';
 import type { RequestContext } from '../request-context';
@@ -261,6 +262,7 @@ interface ToolCallInputStreamingEndPayload {
 
 interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   stepResult: {
+    continuationStopCause?: ContinuationStopCause;
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
     /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */
@@ -1203,6 +1205,10 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 ) => Promise<void> | void;
 
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+  /** Present when execution ends at a tool suspension boundary. */
+  suspendReason?: 'tool-call-approval' | 'tool-call-suspended';
+  toolCallId?: string;
+  toolName?: string;
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
   /**
@@ -1238,6 +1244,8 @@ export type CustomChunkWriter = {
 
 /** Context passed as the second argument to `MastraOnFinishCallback`. */
 export type MastraOnFinishCallbackContext = {
+  /** @internal Authoritative loop decision, retained separately from provider finishReason. */
+  continuationStopCause?: ContinuationStopCause;
   writer?: CustomChunkWriter;
   /**
    * Set when an output processor aborted the run from `processOutputResult`. The run-level

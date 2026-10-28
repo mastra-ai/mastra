@@ -129,6 +129,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       // exporters that wait for the root still see it end last.
       this.endOpenDescendants();
     }
+    if (options) this.applyOutcome(options);
     this.endTime = new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
@@ -160,6 +161,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
     }
 
     const { error, endSpan = true, endTree, attributes, metadata } = options;
+    this.applyOutcome(options);
 
     if (metadata) {
       this.metadata = {
@@ -216,6 +218,8 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       return;
     }
 
+    this.applyOutcome(options);
+
     if (options.name !== undefined) {
       this.name = options.name;
     }
@@ -263,7 +267,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
 /**
  * Generate OpenTelemetry-compatible span ID (64-bit, 16 hex chars)
  */
-function fillRandomBytes(bytes: Uint8Array): void {
+function fillRandomBytes(bytes: Uint8Array<ArrayBuffer>): void {
   try {
     // Use Web Crypto API with proper this binding
     const webCrypto = globalThis.crypto;

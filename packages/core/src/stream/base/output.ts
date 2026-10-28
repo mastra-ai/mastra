@@ -1996,6 +1996,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
                 if (!self.#finishCallbackSent) {
                   self.#finishCallbackSent = true;
                   await options?.onFinish?.(onFinishPayload, {
+                    continuationStopCause: chunk.payload.stepResult.continuationStopCause,
                     writer: outputResultWriter,
                     ...(outputResultTripwire && { outputResultTripwire }),
                   });
