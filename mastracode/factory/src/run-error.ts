@@ -86,7 +86,8 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
     case 'rate_limited':
       return {
         title: 'Provider rate limit reached',
-        message: 'Wait a moment, then send a message to continue the run, or use another credential or model.',
+        message:
+          'The provider account behind this session’s credential hit a rate or usage limit. Continue once it resets, or use another credential or model.',
         recoveries: ['continue', 'credentials', 'model'],
       };
     case 'unavailable':
