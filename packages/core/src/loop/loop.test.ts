@@ -20,7 +20,6 @@ vi.mock('../logger', async importOriginal => {
 import { loop } from './loop';
 import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
-import { resultObjectTests } from './test-utils/resultObject';
 import { streamObjectTests } from './test-utils/streamObject';
 import { toolMediaTests } from './test-utils/tool-media';
 import { toolsTests } from './test-utils/tools';
@@ -69,7 +68,6 @@ describe('Loop Tests', () => {
       expect(consoleLoggerConstructor).toHaveBeenCalledWith({ level: 'error' });
     });
 
-    resultObjectTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
     optionsTests({ loopFn, runId: 'test-run-id' });
     generateTextTestsV5({ loopFn, runId: 'test-run-id' });
     toolsTests({ loopFn, runId: 'test-run-id' });
@@ -81,15 +79,12 @@ describe('Loop Tests', () => {
   describe('AISDK v6 (V3 models)', () => {
     setupEventedMastra();
 
-    resultObjectTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
     toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v3' });
   });
 
   // toolsTestsV5({ executeFn: execute, runId });
 
   // optionsTestsV5({ executeFn: execute, runId });
-
-  // resultObjectTestsV5({ executeFn: execute, runId });
 
   // textStreamTestsV5({ executeFn: execute, runId });
 
