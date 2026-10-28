@@ -1,5 +1,10 @@
 // @vitest-environment jsdom
-import type { AggregateSpansResponse, GetObservabilityCapabilitiesResponse, QuerySpansResult } from '@mastra/client-js';
+import type {
+  AggregateSpansResponse,
+  GetObservabilityCapabilitiesResponse,
+  QuerySpansInput,
+  QuerySpansResult,
+} from '@mastra/client-js';
 import { planSpanAggregate, spanAggregateRequestSchema } from '@mastra/core/storage';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
@@ -26,6 +31,7 @@ import { DEFAULT_TRACE_COLUMN_PREFERENCES } from '@/domains/traces/trace-list-co
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
 const SPANS_AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
@@ -46,6 +52,32 @@ const renderBody = (selection?: SpanSelection) => {
     <SpansExplorerBody selection={selection} onSelectionChange={onSelectionChange} renderPanel={renderPanel} />,
   );
   return { onSelectionChange, renderPanel };
+};
+
+/** The body inside a stand-in router whose URL starts as `initial`; returns each list query sent. */
+const renderBodyAtUrl = (initial: string) => {
+  const queries: QuerySpansInput[] = [];
+  server.use(
+    http.post(SPANS_QUERY_URL, async ({ request }) => {
+      const body = (await request.json()) as QuerySpansInput;
+      // The poll for newly ended spans orders by endedAt; only the list query is kept.
+      if (body.orderBy?.[0]?.field !== 'endedAt') queries.push(body);
+      return HttpResponse.json(spanRowsPage);
+    }),
+  );
+  renderWithProviders(
+    <SearchParamsHost initial={initial}>
+      {urlState => (
+        <SpansExplorerBody
+          selection={undefined}
+          onSelectionChange={() => {}}
+          renderPanel={() => null}
+          urlState={urlState}
+        />
+      )}
+    </SearchParamsHost>,
+  );
+  return { queries };
 };
 
 /** The spans body next to a readout of the traces page's saved columns, which live under their own key. */
@@ -234,6 +266,37 @@ describe('SpansExplorerBody', () => {
       expect(await screen.findByText('gpt-5.6')).toBeTruthy();
       expect(screen.getByTestId('traces-columns').textContent).toBe(
         DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.join(','),
+      );
+    });
+  });
+
+  describe('when the URL holds a filter, a sort and a time range', () => {
+    it('queries spans with them', async () => {
+      setHandlers(spanRowsPage);
+
+      const { queries } = renderBodyAtUrl('filter.name=tool%3A+get-weather&sort=startedAt&dir=asc&datePreset=last-24h');
+      await screen.findByText('agent run: weather');
+
+      const [query] = queries;
+      expect(JSON.stringify(query?.where)).toContain('"tool: get-weather"');
+      expect(query?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      const from = new Date(query?.timeRange?.from ?? NaN).getTime();
+      expect(Date.now() - from).toBeGreaterThan(23 * 60 * 60 * 1000);
+      expect(Date.now() - from).toBeLessThan(25 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('when the user sorts the list by start time', () => {
+    it('writes the sort to the URL and keeps the other params', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBodyAtUrl('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather');
+      fireEvent.click(await screen.findByRole('button', { name: /^Start, sorted descending/ }));
+
+      await waitFor(() =>
+        expect(new URLSearchParams(screen.getByTestId('search-params').textContent ?? '')).toEqual(
+          new URLSearchParams('traceId=trace-1&spanId=span-2&filter.name=tool%3A+get-weather&sort=startedAt&dir=asc'),
+        ),
       );
     });
   });

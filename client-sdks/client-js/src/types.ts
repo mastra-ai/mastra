@@ -2564,3 +2564,16 @@ export type SendNotificationInput = GeneratedRequest<
 
 export type SendNotificationResult =
   GeneratedResponse<'POST /agent-controller/:controllerId/sessions/:sessionId/notifications'>;
+
+// Saved views: a named copy of an observability list page's URL state.
+export type {
+  FilterGroup,
+  FilterNode,
+  FilterOperatorId,
+  FilterToken,
+  SavedViewColumn,
+  SavedViewDateRange,
+  SavedViewPage,
+  SavedViewSort,
+  SavedViewState,
+} from '@mastra/core/storage';
