@@ -2084,7 +2084,7 @@ export class MastraFactory {
     const shutdownPromise = (async () => {
       const results = await Promise.allSettled([
         this.#dispatcher?.stop() ?? Promise.resolve(),
-        ...channelShutdowns.map(shutdown => shutdown()),
+        ...channelShutdowns.map(async shutdown => shutdown()),
       ]);
       results.slice(1).forEach((result, index) => {
         if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);

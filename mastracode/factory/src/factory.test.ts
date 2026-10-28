@@ -2754,10 +2754,21 @@ describe('MastraFactory.prepare integrations', () => {
       expect(disconnect).toHaveBeenCalledOnce();
     });
 
-    it('retries a channel disconnect that failed during shutdown', async () => {
+    it('settles synchronous disconnect failures and retries them during the next shutdown', async () => {
       withController();
-      const disconnect = vi.fn().mockRejectedValueOnce(new Error('disconnect failed')).mockResolvedValueOnce(undefined);
-      const channels = vi.fn((_ctx: IntegrationContext) => fakeChannelsConfig({ name: 'fake', disconnect }));
+      const disconnect = vi
+        .fn()
+        .mockImplementationOnce(() => {
+          throw new Error('disconnect failed');
+        })
+        .mockResolvedValueOnce(undefined);
+      const otherDisconnect = vi.fn().mockResolvedValue(undefined);
+      const channels = vi.fn((_ctx: IntegrationContext) => ({
+        adapters: {
+          fake: { adapter: { name: 'fake', disconnect } as never },
+          other: { adapter: { name: 'other', disconnect: otherDisconnect } as never },
+        },
+      }));
       const factory = new MastraFactory({
         secretEncryption,
         storage: fakeStorage(),
@@ -2766,9 +2777,11 @@ describe('MastraFactory.prepare integrations', () => {
 
       await factory.prepare();
       await expect(factory.shutdown()).rejects.toThrow('disconnect failed');
+      expect(otherDisconnect).toHaveBeenCalledOnce();
       await expect(factory.shutdown()).resolves.toBeUndefined();
 
       expect(disconnect).toHaveBeenCalledTimes(2);
+      expect(otherDisconnect).toHaveBeenCalledOnce();
     });
 
     it('exposes the source-control owner on the channels context when github is registered', async () => {
