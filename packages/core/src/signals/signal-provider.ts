@@ -436,8 +436,12 @@ export abstract class SignalProvider<TId extends string = string> {
    *       method: 'POST',
    *       requiresAuth: false,
    *       handler: async c => {
-   *         // Public route: handleWebhook() must verify the sender's signature
-   *         const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() });
+   *         // Public route: verify the sender before handling the payload
+   *         const rawBody = await c.req.text();
+   *         if (!verifyAcmeSignature(rawBody, c.req.header('x-acme-signature'))) {
+   *           return c.json({ error: 'invalid signature' }, 401);
+   *         }
+   *         const result = await this.handleWebhook({ body: JSON.parse(rawBody), headers: c.req.header() });
    *         return c.json(result.body ?? {}, result.status ?? 200);
    *       },
    *     }),

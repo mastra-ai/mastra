@@ -357,7 +357,7 @@ Returns: `Promise<{ status?: number; body?: unknown }>`
 
 Return API routes this provider needs on the Mastra server, such as webhook receivers or OAuth callbacks. Optional. When the provider's agent is registered, Mastra adds these routes to `server.apiRoutes`, so you don't add them by hand.
 
-Routes are collected when the agent is registered. If you add an agent with `addAgent()` after the server has started, its provider routes aren't served until the server restarts.
+Routes are collected when the agent is registered. If you add an agent with `addAgent()` after the server has started, its provider routes aren't served until the server restarts. `removeAgent()` removes the agent's provider routes, unless another registered agent uses the same provider instance.
 
 If a route with the same method and path is already registered, the existing route wins:
 
@@ -372,8 +372,12 @@ getRoutes() {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
-        // Public route: handleWebhook() must verify the sender's signature
-        const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() })
+        // Public route: verify the sender before handling the payload
+        const rawBody = await c.req.text()
+        if (!verifyAcmeSignature(rawBody, c.req.header('x-acme-signature'))) {
+          return c.json({ error: 'invalid signature' }, 401)
+        }
+        const result = await this.handleWebhook({ body: JSON.parse(rawBody), headers: c.req.header() })
         return c.json(result.body ?? {}, result.status ?? 200)
       },
     }),

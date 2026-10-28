@@ -6,6 +6,8 @@ Added an optional `getRoutes()` method to `SignalProvider`. Routes it returns ar
 
 ```ts
 class AcmeSignals extends SignalProvider<'acme'> {
+  readonly id = 'acme' as const;
+
   getRoutes() {
     return [registerApiRoute('/acme/webhook', { method: 'POST', handler: async c => c.json({ ok: true }) })];
   }

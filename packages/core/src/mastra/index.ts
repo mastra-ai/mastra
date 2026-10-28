@@ -3152,6 +3152,35 @@ export class Mastra<
   }
 
   /**
+   * Remove routes added by a removed agent's signal providers, unless another
+   * registered agent still uses the same provider instance.
+   */
+  #unregisterSignalProviderRoutes(removedAgent: Agent<any, any, any> | undefined): void {
+    const routes = this.#server?.apiRoutes;
+    const removedProviders = new Set(this.#listAgentSignalProviders(removedAgent));
+    if (!routes || removedProviders.size === 0) return;
+
+    const providersInUse = new Set(
+      Object.values(this.#agents as Record<string, Agent<any, any, any>>).flatMap(agent =>
+        this.#listAgentSignalProviders(agent),
+      ),
+    );
+    const keptRoutes = routes.filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      return !provider || !removedProviders.has(provider) || providersInUse.has(provider);
+    });
+
+    if (keptRoutes.length !== routes.length) {
+      this.#server = { ...this.#server, apiRoutes: keptRoutes };
+    }
+  }
+
+  #listAgentSignalProviders(agent: Agent<any, any, any> | undefined): SignalProvider[] {
+    const target = agent && isDurableAgentLike(agent) ? (agent as DurableAgentLike).agent : agent;
+    return target?.listSignalProviders?.() ?? [];
+  }
+
+  /**
    * Push an agent's declared schedules into an already-running scheduler.
    *
    * Agents registered before `startWorkers()` are picked up by
@@ -3455,8 +3484,10 @@ export class Mastra<
 
     // Try direct key lookup first
     if (agents[keyOrId]) {
-      const agentId = agents[keyOrId]?.id;
+      const removedAgent = agents[keyOrId];
+      const agentId = removedAgent?.id;
       delete agents[keyOrId];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);
@@ -3467,8 +3498,10 @@ export class Mastra<
     // Try finding by ID
     const key = Object.keys(agents).find(k => agents[k]?.id === keyOrId);
     if (key) {
-      const agentId = agents[key]?.id;
+      const removedAgent = agents[key];
+      const agentId = removedAgent?.id;
       delete agents[key];
+      this.#unregisterSignalProviderRoutes(removedAgent);
       // Clear from stored agents cache to prevent stale data
       if (agentId) {
         this.#storedAgentsCache.delete(agentId);

@@ -115,6 +115,32 @@ describe('signal provider routes', () => {
     expect(warn).toHaveBeenCalledWith(expect.stringContaining('overridden by a file-system route'));
   });
 
+  it('serves a replacement agent route after the original agent is removed', () => {
+    const replacementRoute = { ...webhookRoute };
+    const mastra = new Mastra({ logger: false });
+
+    mastra.addAgent(createAgent('agent', [new RoutedSignalProvider([webhookRoute])]));
+    mastra.removeAgent('agent');
+    mastra.addAgent(createAgent('agent', [new RoutedSignalProvider([replacementRoute])]));
+
+    expect(mastra.getServer()?.apiRoutes).toHaveLength(1);
+    expect(mastra.getServer()?.apiRoutes?.[0]).toBe(replacementRoute);
+  });
+
+  it('keeps a shared provider route while another agent still uses the provider', () => {
+    const provider = new RoutedSignalProvider([webhookRoute]);
+    const mastra = new Mastra({
+      logger: false,
+      agents: { first: createAgent('first', [provider]), second: createAgent('second', [provider]) },
+    });
+
+    mastra.removeAgent('first');
+    expect(mastra.getServer()?.apiRoutes).toEqual([webhookRoute]);
+
+    mastra.removeAgent('second');
+    expect(mastra.getServer()?.apiRoutes).toEqual([]);
+  });
+
   it('leaves server config untouched when providers have no routes', () => {
     const mastra = new Mastra({
       logger: false,
