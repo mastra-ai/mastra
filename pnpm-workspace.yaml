@@ -353,8 +353,8 @@ overrides:
   # >=1.6.13 fixes stored XSS via javascript: redirect_uri in oidc-provider/mcp
   # (GHSA Dependabot alert #2266).
   # Vanta 2026-10-12: AIKIDO-2026-373183 critical (better-auth) fixed 1.7.7; pulls drizzle-adapter 1.7.7 (AIKIDO-2026-261025)
-  better-auth: ^1.7.7
-  '@better-auth/drizzle-adapter@<1.7.7': 1.7.7
+  better-auth: ^1.7.13
+  '@better-auth/drizzle-adapter@<1.7.7': 1.7.13
   js-yaml@>=5.0.0 <5.4.1: 5.4.1
   glob@<=10.5.0: 10.5.0
   body-parser@<2.4.0: 2.4.0
