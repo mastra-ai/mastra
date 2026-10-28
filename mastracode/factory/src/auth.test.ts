@@ -1,6 +1,5 @@
 import { Mastra } from '@mastra/core';
-import { RequestContext } from '@mastra/core/request-context';
-import { MASTRA_MESSAGE_AUTHOR_KEY } from '@mastra/core/request-context';
+import { MASTRA_MESSAGE_AUTHOR_KEY, RequestContext } from '@mastra/core/request-context';
 import { registerApiRoute } from '@mastra/core/server';
 import type { IMastraAuthProvider } from '@mastra/core/server';
 import { MastraServer } from '@mastra/hono';
