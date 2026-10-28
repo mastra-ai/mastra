@@ -671,7 +671,7 @@ export class AgentChannels {
               threadId: (event.thread as Thread | null)?.id,
               messageId,
               actionId,
-              toolCallId: actionId.split(':')[1],
+              toolCallId: actionId.slice(actionId.indexOf(':') + 1),
               actorId: event.user?.userId,
             };
             try {
