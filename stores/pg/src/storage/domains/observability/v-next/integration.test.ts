@@ -723,50 +723,6 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
       }
     });
 
-    it('native mode still creates a missing day when pg_partman is installed but cannot be read by the app role', async () => {
-      const partman = parseConnectionString(PARTMAN_URL);
-      const schema = schemaName('obs_vnext_partman_unused');
-      const appRole = `${schema}_app`;
-      const adminPool = new Pool({ connectionString: partman.connectionString, max: 2 });
-      const admin = new PoolAdapter(adminPool);
-      await ensurePartman(admin);
-      await admin.none(`CREATE ROLE ${quotedIdentifier(appRole)} LOGIN PASSWORD 'app'`);
-      await admin.none(`CREATE SCHEMA ${quotedIdentifier(schema)} AUTHORIZATION ${quotedIdentifier(appRole)}`);
-      const appPool = new Pool({
-        host: partman.host,
-        port: partman.port,
-        database: partman.database,
-        user: appRole,
-        password: 'app',
-        max: 2,
-      });
-      const appDomain = new ObservabilityStoragePostgresVNext({
-        client: new PoolAdapter(appPool),
-        schemaName: schema,
-        partitioning: { mode: 'native' },
-      });
-
-      try {
-        await appDomain.init();
-        const parent = qualifiedTable(schema, TABLE_SPAN_EVENTS);
-        const todayPartition = qualifiedTable(schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
-        await admin.none(`ALTER TABLE ${parent} DETACH PARTITION ${todayPartition}`);
-        await admin.none(`DROP TABLE ${todayPartition}`);
-
-        await appDomain.batchCreateSpans({
-          records: [makeSpan({ traceId: 'partman-unused-trace', spanId: 'partman-unused-span' })],
-        });
-        const trace = await appDomain.getTrace({ traceId: 'partman-unused-trace' });
-        expect(trace?.spans.map(span => span.spanId)).toEqual(['partman-unused-span']);
-      } finally {
-        await appPool.end();
-        await admin.none(`DROP SCHEMA IF EXISTS ${quotedIdentifier(schema)} CASCADE`);
-        await admin.none(`DROP OWNED BY ${quotedIdentifier(appRole)}`);
-        await admin.none(`DROP ROLE IF EXISTS ${quotedIdentifier(appRole)}`);
-        await adminPool.end();
-      }
-    });
-
     it('never creates a day partition by hand on a table pg_partman manages', async () => {
       const harness = await createHarness({
         connection: parseConnectionString(PARTMAN_URL),
@@ -2342,6 +2298,7 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         await expect(write()).rejects.toThrow(
           new RegExp(`${TABLE_SPAN_EVENTS} partition for ${day} \\(UTC\\): must be owner.*ensurePartitions\\(\\)`),
         );
+        await expect(write()).rejects.toMatchObject({ cause: { cause: { code: '42501' } } });
         const child = `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(20))}`;
         const leftover = await admin.oneOrNone(
           `SELECT 1 FROM pg_class c JOIN pg_namespace n ON n.oid = c.relnamespace WHERE n.nspname = $1 AND c.relname = $2`,

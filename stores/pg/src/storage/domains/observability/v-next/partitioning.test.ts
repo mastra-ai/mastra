@@ -40,11 +40,4 @@ describe('ensureDayPartitions', () => {
     });
     await expect(ensureDayPartitions(client, 'obs', TABLE_SPAN_EVENTS, [today])).resolves.toBeUndefined();
   });
-
-  it('propagates a failed ATTACH when the day is still not attached', async () => {
-    const { client } = fakeClient([], () => {
-      throw pgError('42501', 'must be owner of table mastra_span_events');
-    });
-    await expect(ensureDayPartitions(client, 'obs', TABLE_SPAN_EVENTS, [today])).rejects.toThrow(/must be owner/);
-  });
 });

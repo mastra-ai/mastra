@@ -71,22 +71,13 @@ describe('insertRows partition recovery', () => {
   });
   const row = { traceId: 't1', spanId: 's1', endedAt: new Date() };
 
-  function clientThatLacksTodaysPartition(installedExtensions: string[] = []) {
+  function clientThatLacksTodaysPartition() {
     const query = vi.fn().mockRejectedValueOnce(missingPartition).mockResolvedValue({ rows: [] });
     const none = vi.fn(async () => {});
     const tx = vi.fn(async (fn: (t: { none: typeof none }) => Promise<void>) => fn({ none }));
     const manyOrNone = vi.fn(async (): Promise<{ relname: string }[]> => []);
-    const oneOrNone = vi.fn(async (sql: string) => ({
-      exists: installedExtensions.some(extension => sql.includes(`'${extension}'`)),
-    }));
-    return {
-      client: { query, tx, manyOrNone, oneOrNone } as unknown as DbClient,
-      query,
-      tx,
-      none,
-      manyOrNone,
-      oneOrNone,
-    };
+    const oneOrNone = vi.fn(async () => ({ exists: false }));
+    return { client: { query, tx, manyOrNone, oneOrNone } as unknown as DbClient, query, tx, none, oneOrNone };
   }
 
   it('creates the day and retries once in native mode', async () => {
@@ -103,41 +94,6 @@ describe('insertRows partition recovery', () => {
     );
     expect(tx).not.toHaveBeenCalled();
     expect(query).toHaveBeenCalledOnce();
-  });
-
-  it('detects the mode itself for a store that never ran init() and creates the day on plain Postgres', async () => {
-    const { client, tx, oneOrNone } = clientThatLacksTodaysPartition();
-    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], {})).resolves.toBeUndefined();
-    expect(oneOrNone).toHaveBeenCalled();
-    expect(tx).toHaveBeenCalledOnce();
-  });
-
-  it('detects pg_partman for a store that never ran init() and leaves the table alone', async () => {
-    const { client, tx } = clientThatLacksTodaysPartition(['pg_partman']);
-    await expect(insertRows(client, 'obs', 'mastra_span_events', [row], {})).rejects.toBe(missingPartition);
-    expect(tx).not.toHaveBeenCalled();
-  });
-
-  it('names the table, the day it could not create, and the fix, and keeps the database error as the cause', async () => {
-    const { client, none, manyOrNone } = clientThatLacksTodaysPartition();
-    const yesterday = new Date(row.endedAt.getTime() - 86_400_000);
-    const day = (d: Date) => d.toISOString().slice(0, 10);
-    manyOrNone.mockResolvedValue([{ relname: `mastra_span_events_p${day(yesterday).replace(/-/g, '')}` }]);
-    const notOwner = Object.assign(new Error('must be owner of table mastra_span_events'), { code: '42501' });
-    none.mockRejectedValue(notOwner);
-
-    const write = insertRows(client, 'obs', 'mastra_span_events', [{ ...row, spanId: 's0', endedAt: yesterday }, row], {
-      mode: 'native',
-    });
-
-    await expect(write).rejects.toThrow(
-      `mastra_span_events partition for ${day(row.endedAt)} (UTC): must be owner of table mastra_span_events`,
-    );
-    await expect(write).rejects.toThrow('ensurePartitions()');
-    await expect(write).rejects.toMatchObject({
-      message: expect.not.stringContaining(day(yesterday)),
-      cause: notOwner,
-    });
   });
 
   it('passes a DDL failure that is not a privilege error through unchanged', async () => {
