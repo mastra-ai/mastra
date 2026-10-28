@@ -890,7 +890,7 @@ Configures the [built-in MCP server](/docs/server/mcp) that exposes your agents,
 | Property | Type | Default | Description |
 | - | - | - | - |
 | `enabled` | `boolean \| 'dev'` | `'dev'` | `'dev'` serves the endpoint under `mastra dev`, and in production only when `server.auth` is configured. `true` always serves it and logs a warning when no auth is configured. `false` never serves it. |
-| `path` | `string` | `'/mcp'` | Path of the endpoint, mounted under the API prefix. Paths that collide with the `MCPServer` routes fall back to `/mcp`. |
+| `path` | `string` | `'/mcp'` | Path of the endpoint, mounted under the API prefix. Paths that collide with the `MCPServer` routes or any other server route fall back to `/mcp` and log an error. |
 | `toolsets` | `('agents' \| 'workflows' \| 'tools')[]` | `['agents', 'workflows', 'tools']` | Toolsets to serve. Clients can narrow this per request with `?toolsets=` or the `X-MCP-Toolsets` header. |
 | `enumLimit` | `number` | `25` | Up to this many visible agents or workflows are listed as an enum on the id argument, and up to this many tools get an individual `tool_<id>` tool. |
 | `featured` | `{ agents?: string[]; workflows?: string[] }` | `undefined` | Agents and workflows that also get a dedicated `agent_<id>` or `workflow_<id>` tool. |

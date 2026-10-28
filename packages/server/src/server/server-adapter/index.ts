@@ -1605,7 +1605,9 @@ export abstract class MastraServer<TApp, TRequest, TResponse> extends MastraServ
     // more specific routes (e.g., /versions/compare) must be registered before
     // parameterized routes (e.g., /versions/:versionId)
     for (const route of SERVER_ROUTES) {
-      await this.registerRoute(this.app, resolveServerRoute(route, this.mastra), { prefix: this.prefix });
+      await this.registerRoute(this.app, resolveServerRoute(route, this.mastra, SERVER_ROUTES), {
+        prefix: this.prefix,
+      });
     }
 
     if (this.openapiPath) {

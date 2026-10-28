@@ -60,7 +60,6 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     if (!isBuiltinMCPEnabled(mastra)) {
       throw new HTTPException(404, { message: 'Not Found' });
     }
-    warnOnReservedMCPServerId(mastra);
     const config = resolveBuiltinMCPConfig(mastra, request);
     const { MCPServer, buildBuiltinMCPTools } = await loadBuiltinMCP();
     const tools = await buildBuiltinMCPTools(
@@ -90,18 +89,52 @@ export const BUILTIN_MCP_HTTP_ROUTE: ServerRoute = createRoute({
     server.__setLogger(mastra.getLogger());
     return {
       server,
-      httpPath: resolveBuiltinMCPPath(mastra),
+      httpPath: mountedPaths.get(mastra) ?? resolveBuiltinMCPPath(mastra),
       mcpOptions: getBuiltinMCPTransportOptions(mastra),
     };
   },
 });
 
+const mountedPaths = new WeakMap<Mastra, string>();
+const warnedCollision = new WeakSet<Mastra>();
+
+/** Whether `path` would be served by `route` (`:param` matches one segment, `*` the rest). */
+function routeMatches(route: ServerRoute, path: string): boolean {
+  const pattern = route.path
+    .split('/')
+    .map(segment =>
+      segment === '*' ? '.*' : segment.startsWith(':') ? '[^/]+' : segment.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'),
+    )
+    .join('/');
+  return new RegExp(`^${pattern}/?$`).test(path);
+}
+
 /**
  * Returns the route as it is mounted for this Mastra instance: the built-in MCP route moves to
- * `server.mcp.path`; every other route is returned unchanged.
+ * `server.mcp.path`; every other route is returned unchanged. Adapters call this while registering
+ * `routes`, so the reserved-id warning and path collisions are reported at startup. A `server.mcp.path`
+ * that any of `routes` would also serve falls back to `/mcp`.
  */
-export function resolveServerRoute(route: ServerRoute, mastra: Mastra): ServerRoute {
+export function resolveServerRoute(
+  route: ServerRoute,
+  mastra: Mastra,
+  routes: readonly ServerRoute[] = [],
+): ServerRoute {
   if (route !== BUILTIN_MCP_HTTP_ROUTE) return route;
-  const path = resolveBuiltinMCPPath(mastra);
+  warnOnReservedMCPServerId(mastra);
+  let path = resolveBuiltinMCPPath(mastra);
+  const taken = routes.find(other => other !== BUILTIN_MCP_HTTP_ROUTE && routeMatches(other, path));
+  if (taken && path !== DEFAULT_BUILTIN_MCP_PATH) {
+    if (!warnedCollision.has(mastra)) {
+      warnedCollision.add(mastra);
+      mastra
+        .getLogger()
+        ?.error(
+          `server.mcp.path "${path}" collides with the ${taken.method} ${taken.path} route; using "${DEFAULT_BUILTIN_MCP_PATH}".`,
+        );
+    }
+    path = DEFAULT_BUILTIN_MCP_PATH;
+  }
+  mountedPaths.set(mastra, path);
   return path === route.path ? route : { ...route, path };
 }

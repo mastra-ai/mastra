@@ -109,7 +109,7 @@ export class RouteHandlerService {
     // Build a map of path+method to route for fast lookup
     this.routeMap = new Map();
     for (const route of SERVER_ROUTES) {
-      this.registerRoute(resolveServerRoute(route, mastra));
+      this.registerRoute(resolveServerRoute(route, mastra, SERVER_ROUTES));
     }
   }
 

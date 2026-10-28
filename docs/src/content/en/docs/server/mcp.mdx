@@ -115,7 +115,7 @@ With [RBAC](/docs/auth/overview) configured, MCP access needs two permissions on
 - `mcp:read` to connect and list tools.
 - `mcp:execute` to see and call any tool. A caller without it gets an empty tool list, even when it may run the same operations over HTTP.
 
-Each call also needs the backing route's permission, for example `agents:execute` for `call_agent` and `workflows:execute` for `start_workflow`. The default `viewer` role has `mcp:read` but not `mcp:execute`; `member`, `admin`, and `owner` have both.
+Each call also needs the backing route's permission, for example `agents:execute` for `call_agent` and `workflows:execute` for `start_workflow`. The default `viewer` role has `mcp:read` but not `mcp:execute`; `member`, `admin`, and `owner` have both. These are the same permissions that guard the routes of `MCPServer` instances you register, so a role granted them for your own MCP servers can also use the built-in one.
 
 The tool list is filtered per caller. Agents and workflows appear when the caller would see them in `GET /agents` or `GET /workflows`, including [FGA](/docs/auth/fga) read checks. Tools the caller would get a 403 for are hidden. Every call is checked again when it runs, so a stale list can't be used to bypass a permission.
 
