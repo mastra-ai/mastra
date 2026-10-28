@@ -180,6 +180,34 @@ export class MyAuthProvider extends MastraAuthProvider<MyUser> {
 
 If no `id` can be derived from the user object, the normalized user is omitted and callbacks receive `user: undefined`. The raw user object remains available on the request context.
 
+## Optional methods for MCP OAuth
+
+The [built-in MCP server](/docs/server/mcp#oauth-discovery) uses two optional methods for OAuth discovery and audience checks.
+
+`getOAuthMetadata()` returns the authorization servers, and optionally scopes, that MCP clients should use. `server.mcp.oauth.authorizationServers` and `server.mcp.oauth.scopesSupported` take precedence.
+
+```typescript oxfmt:false
+getOAuthMetadata(): { authorizationServers?: string[]; scopesSupported?: string[] } | undefined
+```
+
+`verifyAudience()` runs on `/api/mcp` when `server.mcp.oauth.resource` is set. It receives the value `authenticateToken()` returned and the `resource` URL, and returns whether the token was issued for it. Returning `false` rejects the request with a `401`. Without this method the audience isn't checked, and Mastra logs a warning.
+
+```typescript oxfmt:false
+verifyAudience(user: TUser, audience: string): boolean | Promise<boolean>
+```
+
+For a JWT provider whose `authenticateToken()` returns the verified payload:
+
+```typescript oxfmt:false
+getOAuthMetadata() {
+  return { authorizationServers: ['https://auth.example.com/'] }
+}
+
+verifyAudience(user: JwtPayload, audience: string) {
+  return Array.isArray(user.aud) ? user.aud.includes(audience) : user.aud === audience
+}
+```
+
 ## Configuration options
 
 The `MastraAuthProviderOptions` interface supports these options:
