@@ -3,7 +3,7 @@ import { startLocalServer } from '../src/http/server.js';
 
 try {
   const runtime = await startLocalServer(loadSettings());
-  console.log(`Runtime diagnostics: ${runtime.url}/api/runtime`);
+  console.log(`Local API: ${runtime.url}/api/runtime`);
   let stopping = false;
   const stop = async () => {
     if (stopping) return;

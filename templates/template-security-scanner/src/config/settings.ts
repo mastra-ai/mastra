@@ -35,6 +35,17 @@ const environmentSchema = z.object({
   SANDBOX_PIDS: integerSetting(64, 512, '256'),
   COMMAND_TIMEOUT_MS: integerSetting(1000, 60000, '20000'),
   OUTPUT_LIMIT_BYTES: integerSetting(1024, 65536, '8192'),
+  CONTROL_SESSION_TTL_SECONDS: integerSetting(1, 3600, '1800'),
+  CONTROL_BOOTSTRAP_SECRET: z
+    .string()
+    .min(32)
+    .max(256)
+    .regex(/^[a-zA-Z0-9_-]+$/)
+    .optional(),
+  SCANNER_ENCRYPTION_KEY: z
+    .string()
+    .regex(/^[a-f0-9]{64}$/)
+    .optional(),
   PORT: integerSetting(1024, 65535, '4111'),
   EXPLORER_MODEL: z.literal('morph-dsv41flash-abliterated').default('morph-dsv41flash-abliterated'),
   JUDGE_MODEL: z.literal('morph/morph-glm53-744b').default('morph/morph-glm53-744b'),

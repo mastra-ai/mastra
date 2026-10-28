@@ -1,6 +1,6 @@
 # Security Scanner
 
-Security Scanner currently provides local runtime setup and diagnostics for a future website and API security scanner. Supply local configuration to check Docker prerequisites, build a pinned Katana image, and exercise an isolated sandbox. Website scanning, target management, model inference, and an operational console are not available yet.
+Security Scanner stores authorized website and API scopes, versioned policies, and isolated identity profiles behind a protected local API. Credentials are encrypted in local libSQL storage. It also prepares and checks the isolated Katana/Docker runtime. Scanning and remote identity requests remain disabled.
 
 ## Why we built this
 
@@ -12,7 +12,9 @@ Security testing needs a reproducible execution boundary before it can handle au
 - Set `DOCKER_PLATFORM` to the daemon's native architecture: `linux/arm64` is the default, and `linux/amd64` is also selectable. Emulation is rejected. Platform support requires a successful local capability probe.
 - The initial image build requires registry access to download the pinned Katana base. Images are built locally and are never published.
 - Chromium must start with its browser sandbox enabled under the pinned runtime policy described below. Setup fails if the host cannot support that combination; it does not enable unsafe browser flags or extra capabilities.
-- No API key is required for these diagnostics. `EXPLORER_MODEL` and `JUDGE_MODEL` declare the intended Morph configuration without making a model request.
+- To manage targets and profiles, set `CONTROL_BOOTSTRAP_SECRET` to an independent random secret and `SCANNER_ENCRYPTION_KEY` to a 32-byte key encoded as 64 lowercase hex characters. Keep the key outside source control. A lost or replaced key requires credential re-registration. [Local API setup](CONTROL_PLANE.md) includes generation and usage commands.
+- `CONTROL_SESSION_TTL_SECONDS` sets local session lifetime from 1 to 3600 seconds (default 1800). Sessions are discarded on restart. Without a bootstrap secret, only runtime diagnostics are exposed.
+- No API key is required for these diagnostics or the local control plane. `EXPLORER_MODEL` and `JUDGE_MODEL` declare the intended Morph configuration without making a model request.
 
 ## Quickstart 🚀
 
@@ -23,16 +25,17 @@ Security testing needs a reproducible execution boundary before it can handle au
 3. **Set up the runtime**
    - Run `npm run setup`. It builds the local image, checks fixed harmless commands and offline browser startup, provisions a private test header file, initializes local storage, and awaits sandbox cleanup.
    - A successful run prints a sanitized receipt and saves `data/runtime-image.json` with the immutable local image ID, platform, image size, configured bounds, and observed memory usage. This memory observation is not a peak-memory benchmark.
-4. **Open runtime diagnostics**
-   - Run `npm run dev`, then open [runtime diagnostics](http://127.0.0.1:4111/api/runtime). The response reports `diagnostics-only` with scanning and native execution disabled.
+4. **Open the local API**
+   - Run `npm run dev`, then open [runtime diagnostics](http://127.0.0.1:4111/api/runtime). The response reports `control-plane` when a bootstrap secret is configured, or `diagnostics-only` otherwise, with scanning and native execution disabled. Follow the [local API example](CONTROL_PLANE.md#first-interaction) to create and retrieve a lab policy and target.
    - Stop the listener and workers with Ctrl+C.
 
 ## Try it out
 
 - Run `npm run doctor` to check the configured drivers, selected runtime, and Docker daemon without creating an image, sandbox, or database.
-- Run `npm run setup` again to repeat the same capability checks. By default, the managed derived image is removed after its final consumer exits; later setup runs can rebuild it from the pinned base.
-- Set `DOCKER_RETAIN_SHARED_BASE_IMAGE=true` to retain the managed derived image between setup runs. Images still in use by another container are preserved regardless of this setting.
-- Open `/native/agents` on the diagnostic server to observe execution denial. Only the read-only runtime diagnostic route is exposed, and it rejects other origins and host headers.
+- Run `npm run setup` again to repeat the capability checks. Set `DOCKER_RETAIN_SHARED_BASE_IMAGE=true` to retain the managed derived image between runs; otherwise it is removed after its final consumer exits. Images still in use by another container are preserved.
+- Create a lab policy, target, and public profile using the [local API example](CONTROL_PLANE.md#first-interaction), restart the server, then retrieve their persisted metadata.
+- Try an update with an old `If-Match` revision or without the session CSRF token. The API rejects the mutation and preserves the stored revision.
+- Register a header or bearer profile through the protected API and retrieve it again. Responses include role and credential revision metadata without the credential value. Remote identity checks report `UNAVAILABLE`; scan requests never enqueue work.
 
 ## Customization
 
@@ -47,7 +50,7 @@ The nonroot user stages files in the owned ephemeral container layer; `/tmp` and
 
 Setup serializes image ownership with `data/setup.lock`. Cancellation waits for owned sandbox cleanup. A later setup removes abandoned probe containers belonging to this installation; it preserves unrelated containers and images. If a terminated process leaves the setup lock, inspect its recorded PID and confirm that process has stopped before removing that lock. Cleanup failures produce an actionable diagnostic and prevent a successful setup result. No command uses global Docker pruning.
 
-The file-backed database and runtime receipt live under the private local `data/` directory. The diagnostic server initializes the official Mastra Hono adapter, starts workers after listening, and stops them on shutdown. All native execution routes remain blocked until the authorization and admission services are implemented.
+The file-backed database and runtime receipt live under the private local `data/` directory. The diagnostic server initializes the official Mastra Hono adapter, starts workers after listening, and stops them on shutdown. Authenticated sessions can read allowlisted native agent, workflow, OpenAPI, and authentication-capability metadata. All native execution routes and scan dispatch remain blocked. Domain migrations use separate application-owned tables through the public libSQL client; Mastra retains its native runtime storage. See [local API operation](CONTROL_PLANE.md) for authorization, revisions, identity states, and key-loss behavior.
 
 ## About Mastra templates
 

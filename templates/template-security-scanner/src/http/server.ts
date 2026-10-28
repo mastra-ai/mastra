@@ -6,6 +6,12 @@ import { open } from 'node:fs/promises';
 import type { Server } from 'node:http';
 import { RuntimeDiagnostic, type Settings } from '../config/settings.js';
 import { createMastra } from '../mastra/index.js';
+import { DomainStore } from '../core/store.js';
+import { CredentialVault } from '../core/credentials.js';
+import { ControlPlane } from '../core/control-plane.js';
+import type { IdentityTransport } from '../core/identity.js';
+import { protectControlPlane } from './security.js';
+import { registerDomainRoutes } from './routes.js';
 import { preflight } from '../runtime/docker.js';
 import { prepareDataDirectory } from '../runtime/files.js';
 
@@ -40,30 +46,45 @@ function closeListener(server: Server) {
 
 export async function startLocalServer(settings: Settings, port = settings.PORT) {
   await preflight(settings);
+  return startControlPlane(settings, port);
+}
+
+export async function startControlPlane(
+  settings: Settings,
+  port = settings.PORT,
+  identityTransport?: IdentityTransport,
+) {
   const { mastra, storage } = await initializeStorage(settings);
+  const domainStore = new DomainStore(settings.databaseUrl);
   const app = new Hono();
   let boundPort = port;
-  // Register outside adapter middleware so framework-public routes cannot skip this boundary.
-  app.use('*', async (context, next) => {
-    const authority = `127.0.0.1:${boundPort}`;
-    const origin = context.req.header('origin');
-    if (context.req.header('host') !== authority || (origin !== undefined && origin !== `http://${authority}`)) {
-      return context.json({ code: 'LOCAL_ORIGIN_REQUIRED' }, 403);
-    }
-    if (context.req.method !== 'GET' || context.req.path !== '/api/runtime') {
-      return context.json({ code: 'EXECUTION_DISABLED' }, 403);
-    }
-    await next();
-  });
+  const protection = protectControlPlane(
+    app,
+    () => `127.0.0.1:${boundPort}`,
+    settings.CONTROL_BOOTSTRAP_SECRET,
+    settings.CONTROL_SESSION_TTL_SECONDS,
+  );
+  const service = new ControlPlane(
+    domainStore,
+    new CredentialVault(settings.SCANNER_ENCRYPTION_KEY),
+    identityTransport,
+  );
+  registerDomainRoutes(app, service);
   app.get('/api/runtime', context =>
-    context.json({ status: 'diagnostics-only', scanningEnabled: false, nativeExecutionEnabled: false }),
+    context.json({
+      status: settings.CONTROL_BOOTSTRAP_SECRET ? 'control-plane' : 'diagnostics-only',
+      scanningEnabled: false,
+      nativeExecutionEnabled: false,
+    }),
   );
   let listener: Server | undefined;
   try {
+    await domainStore.initialize();
     const adapter = new MastraServer({
       app,
       mastra,
       prefix: '/native',
+      openapiPath: '/openapi.json',
       bodyLimitOptions: { maxSize: 16384, onError: () => ({ code: 'BODY_TOO_LARGE' }) },
     });
     await adapter.init();
@@ -81,7 +102,9 @@ export async function startLocalServer(settings: Settings, port = settings.PORT)
       mastra,
       storage,
       close: async () => {
+        protection.close();
         const results = await Promise.allSettled([closeListener(listener!), mastra.shutdown()]);
+        domainStore.close();
         await storage.close();
         if (results.some(result => result.status === 'rejected')) {
           throw new RuntimeDiagnostic('SERVER_CLEANUP_FAILED', 'The local listener or workers did not stop cleanly.');
@@ -89,6 +112,8 @@ export async function startLocalServer(settings: Settings, port = settings.PORT)
       },
     };
   } catch (error) {
+    protection.close();
+    domainStore.close();
     const cleanup = await Promise.allSettled([
       ...(listener?.listening ? [closeListener(listener)] : []),
       mastra.shutdown(),
