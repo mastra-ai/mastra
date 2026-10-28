@@ -11,6 +11,7 @@ import {
 import { SegmentedControl, SegmentedControlItem } from '@mastra/playground-ui/components/SegmentedControl';
 import { InfoTooltip } from '@mastra/playground-ui/components/Tooltip';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import type { ReactNode } from 'react';
 import { useState } from 'react';
 
@@ -21,7 +22,6 @@ import {
   useUpdateOMThresholds,
 } from '../../../../hooks/use-om';
 import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
 import { ModelCombobox } from './ModelCombobox';
 
 type AttachmentChoice = 'auto' | 'on' | 'off';
@@ -134,7 +134,30 @@ export function OMSection({
   };
 
   if (omQuery.isPending) {
-    return <SkeletonRows label="Loading observational-memory settings" rows={2} rowClassName="h-14 w-full" />;
+    return (
+      <div role="status" aria-label="Loading observational-memory settings">
+        <div aria-hidden className="@container flex flex-col gap-3">
+          <ol className="flex flex-col">
+            <OMRow as="li" rail="node" label="Messages" />
+            <OMRow as="li" rail="edge" label="Observe after">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="node" label="Observer">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="edge" label="Reflect after">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+            <OMRow as="li" rail="node" label="Reflector">
+              <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+            </OMRow>
+          </ol>
+          <OMRow rail="none" label="Attachments">
+            <Skeleton className="h-control-sm w-full rounded-full motion-reduce:before:animate-none" />
+          </OMRow>
+        </div>
+      </div>
+    );
   }
 
   if (omQuery.data === undefined) {
