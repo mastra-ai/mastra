@@ -18,7 +18,6 @@ vi.mock('../logger', async importOriginal => {
 });
 
 import { loop } from './loop';
-import { generateTextTestsV5 } from './test-utils/generateText';
 import { optionsTests } from './test-utils/options';
 import { streamObjectTests } from './test-utils/streamObject';
 import { toolMediaTests } from './test-utils/tool-media';
@@ -68,7 +67,6 @@ describe('Loop Tests', () => {
     });
 
     optionsTests({ loopFn, runId: 'test-run-id' });
-    generateTextTestsV5({ loopFn, runId: 'test-run-id' });
     toolMediaTests({ loopFn, runId: 'test-run-id', modelVersion: 'v2' });
 
     streamObjectTests({ loopFn, runId: 'test-run-id' });
@@ -85,6 +83,4 @@ describe('Loop Tests', () => {
   // textStreamTestsV5({ executeFn: execute, runId });
 
   // toUIMessageStreamTests({ executeFn: execute, runId });
-
-  // generateTextTestsV5({ executeFn: execute, runId });
 });

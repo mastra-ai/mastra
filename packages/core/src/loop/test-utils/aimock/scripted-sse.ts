@@ -7,7 +7,9 @@ import { LLMock } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll } from 'vitest';
 
 /**
- * Serves one scripted SSE body per request on a mounted path. AIMock's own
+ * Serves one scripted SSE body per streaming request on a mounted path, and
+ * one scripted JSON body per non-streaming request (`generated`), which is
+ * what the plain agent sends for `generate()`. AIMock's own
  * fixtures cannot express provider-native content (Gemini grounding/inlineData,
  * OpenAI Responses reasoning items interleaved with text), which is what the
  * ported AI SDK v6 stream suites asserted. The real v6 provider still parses
@@ -15,15 +17,32 @@ import { afterAll, afterEach, beforeAll } from 'vitest';
  */
 export class ScriptedSSE implements Mountable {
   responses: unknown[][] = [];
+  generated: unknown[] = [];
   requests: any[] = [];
 
-  constructor(private readonly pathSuffix: string) {}
+  /**
+   * `generatePathSuffix` is for providers that use a separate path for
+   * non-streaming calls (Gemini); the others send `stream: true` in the body.
+   */
+  constructor(
+    private readonly pathSuffix: string,
+    private readonly generatePathSuffix?: string,
+  ) {}
 
   async handleRequest(req: IncomingMessage, res: ServerResponse, pathname: string): Promise<boolean> {
-    if (req.method !== 'POST' || !pathname.endsWith(this.pathSuffix)) return false;
+    const onGeneratePath = !!this.generatePathSuffix && pathname.endsWith(this.generatePathSuffix);
+    if (req.method !== 'POST' || !(pathname.endsWith(this.pathSuffix) || onGeneratePath)) return false;
     let body = '';
     for await (const chunk of req) body += chunk;
-    this.requests.push(JSON.parse(body));
+    const parsed = JSON.parse(body);
+    this.requests.push(parsed);
+    if (onGeneratePath || (!this.generatePathSuffix && parsed.stream !== true)) {
+      const json = this.generated.shift();
+      if (!json) throw new Error(`No scripted generate response left for request ${this.requests.length}`);
+      res.writeHead(200, { 'Content-Type': 'application/json' });
+      res.end(JSON.stringify(json));
+      return true;
+    }
     const events = this.responses.shift();
     if (!events) throw new Error(`No scripted response left for request ${this.requests.length}`);
     res.writeHead(200, { 'Content-Type': 'text/event-stream' });
@@ -38,7 +57,7 @@ export class ScriptedSSE implements Mountable {
  * enclosing describe block.
  */
 export function useScriptedProviders() {
-  const gemini = new ScriptedSSE(':streamGenerateContent');
+  const gemini = new ScriptedSSE(':streamGenerateContent', ':generateContent');
   const openai = new ScriptedSSE('/responses');
   const anthropic = new ScriptedSSE('/messages');
   const llm = new LLMock({ port: 0 }).mount('/gemini', gemini).mount('/openai', openai).mount('/anthropic', anthropic);
@@ -49,6 +68,7 @@ export function useScriptedProviders() {
   afterEach(() => {
     for (const endpoint of [gemini, openai, anthropic]) {
       endpoint.responses = [];
+      endpoint.generated = [];
       endpoint.requests = [];
     }
   });
