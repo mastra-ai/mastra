@@ -18,7 +18,7 @@ import {
   TABLE_SPAN_EVENTS,
 } from './ddl';
 import * as discoveryOps from './discovery';
-import { ensurePartmanHypertables } from './partitioning';
+import { ensurePartmanHypertables, listPartitions } from './partitioning';
 import { decodeDeltaCursor } from './polling';
 import { compilePostgresTraceQuery, runWithPostgresTraceQueryTimeout } from './trace-query';
 import { ObservabilityStoragePostgresVNext } from './index';
@@ -2029,6 +2029,59 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         );
 
         expect(Number(row.count)).toBe(0);
+      } finally {
+        await harness.close();
+      }
+    });
+  });
+
+  describe('native partition maintenance', () => {
+    it('keeps storing signals after the pre-created day partitions run out', async () => {
+      const harness = await createHarness({ schemaPrefix: 'obs_vnext_partition_runout' });
+
+      try {
+        const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
+        const todayPartition = qualifiedTable(harness.schema, `${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
+        await harness.baseClient.none(`ALTER TABLE ${parent} DETACH PARTITION ${todayPartition}`);
+        await harness.baseClient.none(`DROP TABLE ${todayPartition}`);
+
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'runout-today-trace', spanId: 'runout-today-span' })],
+        });
+        const today = await harness.domain.getTrace({ traceId: 'runout-today-trace' });
+        expect(today?.spans.map(span => span.spanId)).toEqual(['runout-today-span']);
+
+        const future = dayAt(20, 11);
+        await harness.domain.batchCreateSpans({
+          records: [makeSpan({ traceId: 'runout-future-trace', spanId: 'runout-future-span', startedAt: future })],
+        });
+        await harness.domain.batchCreateMetrics({
+          metrics: [makeMetric({ metricId: 'runout-metric', timestamp: future })],
+        });
+        await harness.domain.batchCreateLogs({ logs: [makeLog({ logId: 'runout-log', timestamp: future })] });
+        await harness.domain.batchCreateScores({ scores: [makeScore({ scoreId: 'runout-score', timestamp: future })] });
+        await harness.domain.batchCreateFeedback({
+          feedbacks: [makeFeedback({ feedbackId: 'runout-feedback', timestamp: future })],
+        });
+
+        const futureDay = { timestamp: { start: dayAt(20, 0), end: dayAt(21, 0) } };
+        const trace = await harness.domain.getTrace({ traceId: 'runout-future-trace' });
+        expect(trace?.spans.map(span => span.spanId)).toEqual(['runout-future-span']);
+        const metrics = await harness.domain.listMetrics({ filters: futureDay });
+        expect(metrics.metrics.map(metric => metric.metricId)).toEqual(['runout-metric']);
+        const logs = await harness.domain.listLogs({ filters: futureDay });
+        expect(logs.logs.map(log => log.logId)).toEqual(['runout-log']);
+        const scores = await harness.domain.listScores({ filters: futureDay });
+        expect(scores.scores.map(score => score.scoreId)).toEqual(['runout-score']);
+        const feedback = await harness.domain.listFeedback({ filters: futureDay });
+        expect(feedback.feedback.map(item => item.feedbackId)).toEqual(['runout-feedback']);
+
+        const spanPartitions = await listPartitions(harness.baseClient, harness.schema, TABLE_SPAN_EVENTS);
+        expect(spanPartitions).toContain(`${harness.schema}.${TABLE_SPAN_EVENTS}_p${yyyymmdd(dayAt(0))}`);
+        for (const table of ALL_SIGNAL_TABLES) {
+          const partitions = await listPartitions(harness.baseClient, harness.schema, table);
+          expect(partitions).toContain(`${harness.schema}.${table}_p${yyyymmdd(dayAt(20))}`);
+        }
       } finally {
         await harness.close();
       }
