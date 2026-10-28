@@ -1,12 +1,13 @@
-import type { DashboardQuery } from '@mastra/client-js';
+import type { DashboardQuery, MastraClient } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
+import { buildTableRows, listedRows, previousTableFigures, rowDrilldown, breakdownIssues } from './breakdown';
+import type { BreakdownColumn, BreakdownOptions } from './breakdown';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
-import { buildPreviousRequest, buildRequest } from './requests';
+import { intersectFilters } from './filters';
+import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
 import type { DashboardPageContext } from './requests';
-import { buildTableRows, listedRows, previousTableFigures, rowDrilldown, tableIssues } from './table';
-import type { TableColumn, TableOptions } from './table';
 import { evaluate, matchesGroups, outOfRangeQueries, valueExprSchema } from './values';
-import type { ValueRef } from './values';
+import type { ValueExpr, ValueRef } from './values';
 
 const window = { start: new Date('2026-10-27T12:00:00Z'), end: new Date('2026-10-28T12:00:00Z') };
 const page: DashboardPageContext = {
@@ -19,9 +20,9 @@ describe('value expressions', () => {
   const values: Record<number, number | undefined> = { 0: 100, 1: 30, 2: undefined };
   const read = (ref: ValueRef) => values[ref.query];
 
-  it('sums, subtracts down to zero, and divides', () => {
+  it('sums, subtracts and divides', () => {
     expect(evaluate({ sum: [{ query: 0 }, { query: 1 }] }, read)).toBe(130);
-    expect(evaluate({ minus: [{ query: 1 }, { query: 0 }] }, read)).toBe(0);
+    expect(evaluate({ minus: [{ query: 1 }, { query: 0 }] }, read)).toBe(-70);
     expect(evaluate({ ratio: { of: { query: 1 }, over: { query: 0 } } }, read)).toBe(0.3);
   });
 
@@ -29,17 +30,30 @@ describe('value expressions', () => {
     expect(evaluate({ query: 2 }, read)).toBeUndefined();
     expect(evaluate({ sum: [{ query: 2 }, { query: 2 }] }, read)).toBeUndefined();
     expect(evaluate({ sum: [{ query: 2 }, { query: 1 }] }, read)).toBe(30);
+    expect(evaluate({ minus: [{ query: 2 }, { query: 2 }] }, read)).toBeUndefined();
   });
 
-  it('reads a ratio over nothing as zero', () => {
-    expect(evaluate({ ratio: { of: { query: 1 }, over: { query: 2 } } }, read)).toBe(0);
+  it('gives a ratio no value when dividing by zero or nothing', () => {
+    expect(evaluate({ ratio: { of: { query: 1 }, over: { query: 2 } } }, read)).toBeUndefined();
+    expect(evaluate({ ratio: { of: { query: 1 }, over: { const: 0 } } }, read)).toBeUndefined();
   });
 
-  it('matches series names case-insensitively', () => {
-    const failed = { query: 0, groupsIncluding: ['error', 'fail'] };
-    const completed = { query: 0, groupsExcluding: ['error', 'fail'] };
-    expect(matchesGroups(failed, 'FAILED')).toBe(true);
-    expect(matchesGroups(completed, 'success')).toBe(true);
+  it("states the cards' clamp and 0% rules explicitly", () => {
+    const input: ValueExpr = { max: [{ minus: [{ query: 1 }, { query: 0 }] }, { const: 0 }] };
+    expect(evaluate(input, read)).toBe(0);
+    const rate: ValueExpr = { coalesce: [{ ratio: { of: { query: 1 }, over: { query: 2 } } }, { const: 0 }] };
+    expect(evaluate(rate, read)).toBe(0);
+    expect(evaluate({ coalesce: [{ query: 2 }, { query: 1 }] }, read)).toBe(30);
+    expect(evaluate({ max: [{ query: 2 }] }, read)).toBeUndefined();
+  });
+
+  it('matches group keys exactly', () => {
+    const failed = { query: 0, groups: ['error'] };
+    const completed = { query: 0, notGroups: ['error'] };
+    expect(matchesGroups(failed, 'error')).toBe(true);
+    expect(matchesGroups(failed, 'Error')).toBe(false);
+    expect(matchesGroups(failed, 'error-handler')).toBe(false);
+    expect(matchesGroups(completed, 'ok')).toBe(true);
     expect(matchesGroups(completed, 'error')).toBe(false);
   });
 
@@ -66,24 +80,43 @@ describe('buildRequest', () => {
     });
   });
 
-  it('merges metrics filters, the widget winning, and compares an aggregate in the same request', () => {
+  it("ANDs metrics filters with the page's and compares an aggregate in the same request", () => {
     const query: DashboardQuery = {
       source: 'metrics',
       request: 'aggregate',
       name: ['mastra_agent_duration_ms'],
       aggregation: 'count',
-      filters: { environment: 'staging' },
+      filters: { entityType: 'agent', environment: 'production' },
       compare: 'previousWindow',
     };
-    expect(buildRequest(query, page, {}).args).toEqual({
+    const request = buildRequest(query, page, {});
+    expect(request.unsatisfiable).toBeUndefined();
+    expect(request.args).toEqual({
       name: ['mastra_agent_duration_ms'],
       aggregation: 'count',
-      filters: { environment: 'staging', timestamp: window },
+      filters: { environment: 'production', entityType: 'agent', timestamp: window },
       comparePeriod: 'previous_period',
     });
     expect(buildPreviousRequest(query, page, {})).toBeUndefined();
   });
 
+  it('marks a request whose filters contradict the page as unsatisfiable, and answers it empty unsent', async () => {
+    const query: DashboardQuery = {
+      source: 'metrics',
+      request: 'timeSeries',
+      name: ['mastra_agent_duration_ms'],
+      aggregation: 'count',
+      filters: { environment: 'staging' },
+    };
+    const request = buildRequest(query, page, {});
+    expect(request.unsatisfiable).toBe(true);
+    const client = new Proxy({} as MastraClient, {
+      get: () => {
+        throw new Error('sent');
+      },
+    });
+    await expect(sendRequest(client, request)).resolves.toEqual({ series: [] });
+  });
   it('sends anything else over the previous window as a request of its own, last', () => {
     const query: DashboardQuery = {
       source: 'metrics',
@@ -105,6 +138,34 @@ describe('buildRequest', () => {
     const previous = buildPreviousRequest(query, page, {});
     expect(previous?.priority).toBe(2);
     expect(previous?.args).toMatchObject({ timeRange: { to: window.start.toISOString() } });
+  });
+});
+
+describe('intersectFilters', () => {
+  it('keeps fields set on one side and equal values set on both', () => {
+    expect(intersectFilters({ environment: 'prod' }, { entityType: 'agent', environment: 'prod' })).toEqual({
+      environment: 'prod',
+      entityType: 'agent',
+    });
+  });
+
+  it('intersects lists of alternatives, and contradicts when nothing is shared', () => {
+    expect(intersectFilters({ name: ['a', 'b'] }, { name: ['b', 'c'] })).toEqual({ name: ['b'] });
+    expect(intersectFilters({ scorerId: 'a' }, { scorerId: ['a', 'b'] })).toEqual({ scorerId: ['a'] });
+    expect(intersectFilters({ name: ['a'] }, { name: ['c'] })).toBeUndefined();
+  });
+
+  it('requires every tag from both, since tags must all match', () => {
+    expect(intersectFilters({ tags: ['x'] }, { tags: ['y', 'x'] })).toEqual({ tags: ['x', 'y'] });
+  });
+
+  it('merges per-key maps, contradicting on a key set differently', () => {
+    expect(intersectFilters({ labels: { a: '1' } }, { labels: { b: '2' } })).toEqual({ labels: { a: '1', b: '2' } });
+    expect(intersectFilters({ labels: { a: '1' } }, { labels: { a: '2' } })).toBeUndefined();
+  });
+
+  it('contradicts on different single values', () => {
+    expect(intersectFilters({ environment: 'prod' }, { environment: 'dev' })).toBeUndefined();
   });
 });
 
@@ -157,9 +218,9 @@ describe('definition helpers', () => {
   });
 });
 
-describe('table rows', () => {
-  const options: TableOptions = { groupBy: ['projectId', 'entityName'], emptyMessage: 'None.' };
-  const columns: TableColumn[] = [
+describe('breakdown rows', () => {
+  const options: BreakdownOptions = { groupBy: ['projectId', 'entityName'], emptyMessage: 'None.' };
+  const columns: BreakdownColumn[] = [
     { id: 'project', options: {} },
     { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
     { id: 'p95', options: { query: 0, measure: 'duration.p95' } },
@@ -185,7 +246,7 @@ describe('table rows', () => {
   it('joins every query on groupBy, keeping a group that only has usage', () => {
     expect(buildTableRows(options, columns, [aggregate, usage])).toEqual([
       {
-        key: 'p1|Code Agent',
+        key: '["p1","Code Agent"]',
         projectId: 'p1',
         name: 'Code Agent',
         count: 4,
@@ -196,7 +257,7 @@ describe('table rows', () => {
         costUnit: 'usd',
       },
       {
-        key: 'p2|Idle Agent',
+        key: '["p2","Idle Agent"]',
         projectId: 'p2',
         name: 'Idle Agent',
         count: 0,
@@ -207,8 +268,22 @@ describe('table rows', () => {
     ]);
   });
 
+  it("keeps a dimension value containing '|' whole", () => {
+    const piped = {
+      rows: [{ dimensions: { projectId: 'p1', entityName: 'a|b' }, measures: { 'countDistinct.traceId': 1 } }],
+    };
+    const [row] = buildTableRows(options, columns, [piped, { groups: [] }]);
+    expect(row).toMatchObject({ projectId: 'p1', name: 'a|b' });
+    const previous = previousTableFigures(options, columns, [
+      { rows: [{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }] },
+      { groups: [] },
+    ]);
+    const dropped = listedRows(options, [], previous, false, true);
+    expect(dropped).toMatchObject([{ projectId: 'p|2', name: 'x', count: 0 }]);
+  });
+
   it('names resources through a lookup query', () => {
-    const threads: TableOptions = { groupBy: ['threadId'], emptyMessage: 'None.' };
+    const threads: BreakdownOptions = { groupBy: ['threadId'], emptyMessage: 'None.' };
     const rows = buildTableRows(
       threads,
       [
@@ -235,7 +310,7 @@ describe('table rows', () => {
   });
 
   it('drills into a row by its project and its spans or name', () => {
-    const row = { key: 'p1|Code Agent', projectId: 'p1', name: 'Code Agent', count: 1 };
+    const row = { key: '["p1","Code Agent"]', projectId: 'p1', name: 'Code Agent', count: 1 };
     expect(rowDrilldown({ ...options, rowScope: { spanTypes: ['agent_run'] } }, row)).toEqual({
       projectId: 'p1',
       span: { spanTypes: ['agent_run'], entityName: 'Code Agent' },
@@ -247,7 +322,7 @@ describe('table rows', () => {
 
   it('reports columns the view cannot fill', () => {
     expect(
-      tableIssues(
+      breakdownIssues(
         [
           { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
           { id: 'sparkline', options: {} },
@@ -257,7 +332,7 @@ describe('table rows', () => {
       ),
     ).toEqual([
       "columns.1: unknown column 'sparkline'",
-      "columns: a table needs a 'count' column",
+      "columns: a breakdown needs a 'count' column",
       "columns: 'errorRate' and 'p95' come together",
       "columns: 'tokens' and 'cost' come together",
       "columns: 'tokens' reads query 4, which the view doesn't have",

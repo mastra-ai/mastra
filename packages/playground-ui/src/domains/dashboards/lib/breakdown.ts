@@ -5,12 +5,12 @@ import type { BreakdownRow, PreviousFigures } from '../../metrics/lib/breakdown'
 import { withDropped } from '../../metrics/lib/breakdown';
 
 /**
- * The `table` kind: one row per group, joined across the view's queries on `groupBy`. Columns come
+ * The `breakdown` kind: one row per group, joined across the view's queries on `groupBy`. Columns come
  * from a fixed vocabulary, each naming the query (and measure, field or dimension) it reads.
  */
 
-export const TABLE_COLUMN_IDS = ['project', 'resource', 'errorRate', 'p95', 'tokens', 'cost', 'count'] as const;
-export type TableColumnId = (typeof TABLE_COLUMN_IDS)[number];
+export const BREAKDOWN_COLUMN_IDS = ['project', 'resource', 'errorRate', 'p95', 'tokens', 'cost', 'count'] as const;
+export type BreakdownColumnId = (typeof BREAKDOWN_COLUMN_IDS)[number];
 
 const columnOptionsSchema = z.strictObject({
   /** Index into the view's `queries`; unset for `project`, which reads the row's own key. */
@@ -27,10 +27,10 @@ const columnOptionsSchema = z.strictObject({
   unit: z.enum(['traces', 'spans']).optional(),
 });
 
-export type TableColumnOptions = z.infer<typeof columnOptionsSchema>;
-export type TableColumn = { id: TableColumnId; label?: string; options: TableColumnOptions };
+export type BreakdownColumnOptions = z.infer<typeof columnOptionsSchema>;
+export type BreakdownColumn = { id: BreakdownColumnId; label?: string; options: BreakdownColumnOptions };
 
-export const tableOptionsSchema = z.strictObject({
+export const breakdownOptionsSchema = z.strictObject({
   /** The dimensions a row is keyed on; the last one names the row. */
   groupBy: z.array(z.string().min(1)).min(1),
   /** `project` labels rows with the page's project name for their key. */
@@ -53,14 +53,14 @@ export const tableOptionsSchema = z.strictObject({
   openWhen: z.literal('twoOrMoreRows').optional(),
 });
 
-export type TableOptions = z.infer<typeof tableOptionsSchema>;
+export type BreakdownOptions = z.infer<typeof breakdownOptionsSchema>;
 
 /** The view's columns, checked against the vocabulary; `issues` reports what doesn't parse. */
-export function parseColumns(columns: DashboardColumn[] | undefined): { columns: TableColumn[]; issues: string[] } {
-  const parsed: TableColumn[] = [];
+export function parseColumns(columns: DashboardColumn[] | undefined): { columns: BreakdownColumn[]; issues: string[] } {
+  const parsed: BreakdownColumn[] = [];
   const issues: string[] = [];
   for (const [i, column] of (columns ?? []).entries()) {
-    if (!(TABLE_COLUMN_IDS as readonly string[]).includes(column.id)) {
+    if (!(BREAKDOWN_COLUMN_IDS as readonly string[]).includes(column.id)) {
       issues.push(`columns.${i}: unknown column '${column.id}'`);
       continue;
     }
@@ -70,7 +70,7 @@ export function parseColumns(columns: DashboardColumn[] | undefined): { columns:
       continue;
     }
     parsed.push({
-      id: column.id as TableColumnId,
+      id: column.id as BreakdownColumnId,
       ...(column.label === undefined ? {} : { label: column.label }),
       options: options.data,
     });
@@ -79,11 +79,11 @@ export function parseColumns(columns: DashboardColumn[] | undefined): { columns:
 }
 
 /** What the schema can't say: a count column, query indexes in range, and Errors with P95. */
-export function tableIssues(columns: DashboardColumn[] | undefined, queries: DashboardQuery[]): string[] {
+export function breakdownIssues(columns: DashboardColumn[] | undefined, queries: DashboardQuery[]): string[] {
   const parsed = parseColumns(columns);
   const issues = [...parsed.issues];
   const ids = new Set(parsed.columns.map(c => c.id));
-  if (!ids.has('count')) issues.push(`columns: a table needs a 'count' column`);
+  if (!ids.has('count')) issues.push(`columns: a breakdown needs a 'count' column`);
   if (ids.has('errorRate') !== ids.has('p95')) issues.push(`columns: 'errorRate' and 'p95' come together`);
   if (ids.has('tokens') !== ids.has('cost')) issues.push(`columns: 'tokens' and 'cost' come together`);
   for (const column of parsed.columns) {
@@ -103,27 +103,30 @@ type BreakdownGroup = {
   costUnit?: string | null;
 };
 /** A trace or span aggregate's answer, or a metrics breakdown's. */
-export type TableResponse = { rows: AggregateRow[]; truncated?: boolean } | { groups: BreakdownGroup[] };
+export type BreakdownResponse = { rows: AggregateRow[]; truncated?: boolean } | { groups: BreakdownGroup[] };
 
 const text = (value: unknown) => (value == null ? '' : String(value));
+/** A row's key: its `groupBy` values, kept apart however they're spelled. */
+const rowKey = (values: string[]) => JSON.stringify(values);
+const keyValues = (key: string) => JSON.parse(key) as string[];
 const finite = (value: unknown) => (typeof value === 'number' && Number.isFinite(value) ? value : undefined);
 
 /** One response's rows as key, dimensions and readings. */
-function entries(response: TableResponse | undefined, groupBy: readonly string[]) {
+function entries(response: BreakdownResponse | undefined, groupBy: readonly string[]) {
   if (!response) return [];
   if ('groups' in response) {
     return response.groups.map(g => ({
-      key: groupBy.map(d => text(g.dimensions[d])).join('|'),
+      key: rowKey(groupBy.map(d => text(g.dimensions[d]))),
       dimensions: g.dimensions,
-      read: (o: TableColumnOptions) =>
+      read: (o: BreakdownColumnOptions) =>
         o.field === 'estimatedCost' ? (g.estimatedCost ?? undefined) : o.field === 'value' ? g.value : undefined,
       costUnit: g.costUnit ?? undefined,
     }));
   }
   return response.rows.map(r => ({
-    key: groupBy.map(d => text(r.dimensions?.[d])).join('|'),
+    key: rowKey(groupBy.map(d => text(r.dimensions?.[d]))),
     dimensions: r.dimensions ?? {},
-    read: (o: TableColumnOptions) => (o.measure ? finite(r.measures[o.measure]) : undefined),
+    read: (o: BreakdownColumnOptions) => (o.measure ? finite(r.measures[o.measure]) : undefined),
     costUnit: undefined,
   }));
 }
@@ -132,11 +135,11 @@ function entries(response: TableResponse | undefined, groupBy: readonly string[]
 const FIGURES = ['count', 'errorRate', 'p95', 'tokens', 'cost'] as const;
 type Figure = (typeof FIGURES)[number];
 
-const figureColumns = (columns: TableColumn[]) =>
-  FIGURES.flatMap(id => columns.filter(c => c.id === id)) as (TableColumn & { id: Figure })[];
+const figureColumns = (columns: BreakdownColumn[]) =>
+  FIGURES.flatMap(id => columns.filter(c => c.id === id)) as (BreakdownColumn & { id: Figure })[];
 
 /** The queries the figures come from; the table waits on these, and not on lookups. */
-export const figureQueries = (columns: TableColumn[]) => [
+export const figureQueries = (columns: BreakdownColumn[]) => [
   ...new Set(figureColumns(columns).flatMap(c => (c.options.query === undefined ? [] : [c.options.query]))),
 ];
 
@@ -145,9 +148,9 @@ export const figureQueries = (columns: TableColumn[]) => [
  * Breakdown card builds them. A lookup column (`resource`) fills in by the row's name.
  */
 export function buildTableRows(
-  options: TableOptions,
-  columns: TableColumn[],
-  responses: (TableResponse | undefined)[],
+  options: BreakdownOptions,
+  columns: BreakdownColumn[],
+  responses: (BreakdownResponse | undefined)[],
 ): BreakdownRow[] {
   const { groupBy } = options;
   const rows = new Map<string, BreakdownRow>();
@@ -156,7 +159,7 @@ export function buildTableRows(
   const rowFor = (key: string) => {
     let row = rows.get(key);
     if (!row) {
-      const values = key.split('|');
+      const values = keyValues(key);
       row = {
         key,
         ...(projectAt >= 0 ? { projectId: values[projectAt] ?? '' } : {}),
@@ -171,7 +174,7 @@ export function buildTableRows(
 
   // A query feeds several columns (count, errors and P95 come from one aggregate): visit each once,
   // in the order of its first column, so rows are created in the card's order.
-  const byQuery = new Map<number, (TableColumn & { id: Figure })[]>();
+  const byQuery = new Map<number, (BreakdownColumn & { id: Figure })[]>();
   for (const column of figureColumns(columns)) {
     const query = column.options.query;
     if (query === undefined) continue;
@@ -208,9 +211,9 @@ export function buildTableRows(
 
 /** The previous window's figures per row key, from the same columns. */
 export function previousTableFigures(
-  options: TableOptions,
-  columns: TableColumn[],
-  responses: (TableResponse | undefined)[],
+  options: BreakdownOptions,
+  columns: BreakdownColumn[],
+  responses: (BreakdownResponse | undefined)[],
 ): Map<string, PreviousFigures> {
   const figures = new Map<string, PreviousFigures>();
   for (const column of figureColumns(columns)) {
@@ -228,7 +231,7 @@ export function previousTableFigures(
 
 /** The rows to list: unnamed ones left out when asked, dropped ones added when the list is whole. */
 export function listedRows(
-  options: TableOptions,
+  options: BreakdownOptions,
   built: BreakdownRow[],
   previous: Map<string, PreviousFigures> | undefined,
   truncated: boolean,
@@ -236,11 +239,11 @@ export function listedRows(
 ) {
   const rows = options.hideUnnamed ? built.filter(r => r.name !== '') : built;
   if (options.dropped === false || !previous || truncated) return rows;
-  return withDropped(rows, previous, options.groupBy, usage);
+  return withDropped(rows, previous, options.groupBy, usage, keyValues);
 }
 
 /** A row's drilldown: its project, then its spans or its name. */
-export function rowDrilldown(options: TableOptions, row: BreakdownRow): DrilldownScope {
+export function rowDrilldown(options: BreakdownOptions, row: BreakdownRow): DrilldownScope {
   const project = row.projectId ? { projectId: row.projectId } : {};
   const scope = options.rowScope;
   if (!scope) return project;
@@ -249,7 +252,7 @@ export function rowDrilldown(options: TableOptions, row: BreakdownRow): Drilldow
 }
 
 /** A row's label: its project's name, its own, or what an unnamed row reads as. */
-export function tableRowLabel(options: TableOptions, row: BreakdownRow, projectLabel?: (id: string) => string) {
-  if (options.rowLabel === 'project') return projectLabel?.(row.key) ?? row.key;
+export function tableRowLabel(options: BreakdownOptions, row: BreakdownRow, projectLabel?: (id: string) => string) {
+  if (options.rowLabel === 'project') return projectLabel?.(row.name) ?? row.name;
   return row.name || (options.unnamed ?? 'Unnamed');
 }

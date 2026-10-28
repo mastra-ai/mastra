@@ -67,6 +67,9 @@ export function kpiFigures(expr: ValueExpr, responses: (Aggregate | undefined)[]
   };
 }
 
+const readsAggregates = (expr: ValueExpr): boolean =>
+  'query' in expr || ('sum' in expr && expr.sum.every(readsAggregates));
+
 /** What the schema can't say: query indexes in range, and only aggregates or sums. */
 export const kpisIssues = (view: ResolvedView<KpisOptions>) => [
   ...outOfRangeQueries(
@@ -74,6 +77,6 @@ export const kpisIssues = (view: ResolvedView<KpisOptions>) => [
     view.queries.length,
   ).map(r => `options reference query ${r.query}, which the view doesn't have`),
   ...view.options.items
-    .filter(i => 'minus' in i.value || 'ratio' in i.value)
+    .filter(i => !readsAggregates(i.value))
     .map(i => `KPI '${i.label}' can only read an aggregate or sum several`),
 ];

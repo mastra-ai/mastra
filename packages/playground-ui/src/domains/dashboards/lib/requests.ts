@@ -4,14 +4,14 @@ import { AGGREGATE_PRIORITY } from '../../metrics/lib/request-limiter';
 import type { AggregatePriority } from '../../metrics/lib/request-limiter';
 import { previousWindow } from '../../metrics/lib/time-window';
 import { toTraceAggregateTimeRange } from '../../metrics/lib/trace-aggregate';
+import { intersectFilters } from './filters';
 
 type Window = { start: Date; end: Date };
 type Args<M extends keyof MastraClient> = MastraClient[M] extends (args: infer A, ...rest: never[]) => unknown
   ? A
   : never;
 
-/** One call a dashboard query makes, with the args it sends. */
-export type DashboardRequest =
+type Call =
   | { method: 'aggregateTraces'; args: AggregateTracesArgs; priority?: AggregatePriority }
   | { method: 'aggregateSpans'; args: AggregateSpansArgs; priority?: AggregatePriority }
   | { method: 'getMetricAggregate'; args: Args<'getMetricAggregate'> }
@@ -22,6 +22,12 @@ export type DashboardRequest =
   | { method: 'getScoreBreakdown'; args: Args<'getScoreBreakdown'> }
   | { method: 'getScoreTimeSeries'; args: Args<'getScoreTimeSeries'> }
   | { method: 'getScorePercentiles'; args: Args<'getScorePercentiles'> };
+
+/** One call a dashboard query makes, with the args it sends. */
+export type DashboardRequest = Call & {
+  /** Its filters contradict the page's, so nothing can match: it isn't sent and answers empty. */
+  unsatisfiable?: true;
+};
 
 export type DashboardRequestMethod = DashboardRequest['method'];
 
@@ -67,9 +73,10 @@ const SCORES_METHOD = {
 const BUCKETED_REQUESTS = new Set(['timeSeries', 'percentiles']);
 
 /**
- * The request a query sends over `window`. Trace and span predicates are ANDed with the page's;
- * metrics and scores filters are merged into the page's, the widget's value winning on a clash.
- * Scores queries without a scorer are expanded by the `scores` kind before they get here.
+ * The request a query sends over `window`, the page's filters ANDed with the widget's: trace and span
+ * predicates are joined with `and`; metrics and scores filters intersect (`intersectFilters`), and a
+ * contradiction marks the request unsatisfiable. Scores queries without a scorer are expanded by the
+ * `scores` kind before they get here.
  */
 export function buildRequest(
   query: DashboardQuery,
@@ -103,14 +110,15 @@ export function buildRequest(
   const bucket = own ?? (BUCKETED_REQUESTS.has(request) ? interval : undefined);
   // An aggregate compares in the same request; anything else sends a second one over `window`.
   const comparePeriod = request === 'aggregate' && compare === 'previousWindow' ? 'previous_period' : undefined;
+  const combined = intersectFilters(page.filters, filters);
   const args = {
     ...rest,
     ...(bucket ? { interval: bucket } : {}),
-    filters: { ...page.filters, ...filters, timestamp: window },
+    filters: { ...(combined ?? page.filters), timestamp: window },
     ...(comparePeriod ? { comparePeriod } : {}),
   };
   const method = source === 'metrics' ? METRICS_METHOD[request] : SCORES_METHOD[request];
-  return { method, args } as DashboardRequest;
+  return { method, args, ...(combined ? {} : { unsatisfiable: true }) } as DashboardRequest;
 }
 
 /** Whether a query asks for the previous window as a request of its own. */
@@ -129,8 +137,22 @@ export function buildPreviousRequest(
   return buildRequest(query, page, options, previousWindow(page.window), AGGREGATE_PRIORITY.last);
 }
 
-/** Runs a request on the client. */
+const EMPTY_ANSWER: Record<DashboardRequestMethod, unknown> = {
+  aggregateTraces: { rows: [] },
+  aggregateSpans: { rows: [] },
+  getMetricAggregate: { value: null },
+  getMetricBreakdown: { groups: [] },
+  getMetricTimeSeries: { series: [] },
+  getMetricPercentiles: { series: [] },
+  getScoreAggregate: { value: null },
+  getScoreBreakdown: { groups: [] },
+  getScoreTimeSeries: { series: [] },
+  getScorePercentiles: { series: [] },
+};
+
+/** Runs a request on the client; an unsatisfiable one answers empty without a call. */
 export function sendRequest(client: MastraClient, request: DashboardRequest): Promise<unknown> {
+  if (request.unsatisfiable) return Promise.resolve(EMPTY_ANSWER[request.method]);
   switch (request.method) {
     case 'aggregateTraces':
       return client.aggregateTraces(request.args);
@@ -159,6 +181,7 @@ export function sendRequest(client: MastraClient, request: DashboardRequest): Pr
 export function requestKey(request: DashboardRequest): readonly unknown[] {
   if (request.method === 'aggregateTraces') return ['trace-aggregate', request.args];
   if (request.method === 'aggregateSpans') return ['span-aggregate', request.args];
+  if (request.unsatisfiable) return ['dashboards', 'unsatisfiable', request.method];
   return ['dashboards', request.method, request.args];
 }
 

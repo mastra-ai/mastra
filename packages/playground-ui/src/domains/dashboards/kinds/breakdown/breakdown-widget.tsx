@@ -11,9 +11,6 @@ import { BREAKDOWN_COLUMN_LABELS, COUNT_DESCRIPTION } from '../../../metrics/lib
 import { useDrilldown, useViewTabs } from '../../components/widget-hooks';
 import { useDashboardRequests } from '../../hooks/use-dashboard-requests';
 import type { DashboardQueryResult } from '../../hooks/use-dashboard-requests';
-import { unsupportedMessage, viewHeading } from '../../lib/chrome';
-import { aggregateSource, buildPreviousRequest, buildRequest } from '../../lib/requests';
-import type { DashboardPageContext } from '../../lib/requests';
 import {
   buildTableRows,
   figureQueries,
@@ -22,12 +19,15 @@ import {
   previousTableFigures,
   rowDrilldown,
   tableRowLabel,
-} from '../../lib/table';
-import type { TableColumn, TableOptions, TableResponse } from '../../lib/table';
+} from '../../lib/breakdown';
+import type { BreakdownColumn, BreakdownOptions, BreakdownResponse } from '../../lib/breakdown';
+import { unsupportedMessage, viewHeading } from '../../lib/chrome';
+import { aggregateSource, buildPreviousRequest, buildRequest } from '../../lib/requests';
+import type { DashboardPageContext } from '../../lib/requests';
 import type { ResolvedView, WidgetKindProps } from '../../widget-kind';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 
-type Props = WidgetKindProps<TableOptions>;
+type Props = WidgetKindProps<BreakdownOptions>;
 type TraceGate = ReturnType<typeof useTraceAggregateGate>;
 type SpanGate = ReturnType<typeof useSpanAggregateGate>;
 
@@ -47,7 +47,7 @@ const isAggregate = (query: DashboardQuery | undefined) => query !== undefined &
  * A table of groups with tabs. Like the Breakdown card, it waits on the aggregate gates every tab
  * needs, so tabs don't come and go; a tab whose gate can't apply the page's filters says so.
  */
-export function TableWidget(props: Props) {
+export function BreakdownWidget(props: Props) {
   const queries = props.views.flatMap(v => v.queries);
   const needs = new Set(queries.map(aggregateSource));
   const traceGate = useTraceAggregateGate();
@@ -62,10 +62,10 @@ export function TableWidget(props: Props) {
       </ChartCard>
     );
   }
-  return <TableTabs {...props} traceGate={traceGate} spanGate={spanGate} />;
+  return <BreakdownTabs {...props} traceGate={traceGate} spanGate={spanGate} />;
 }
 
-function TableTabs({ traceGate, spanGate, ...props }: Props & { traceGate: TraceGate; spanGate: SpanGate }) {
+function BreakdownTabs({ traceGate, spanGate, ...props }: Props & { traceGate: TraceGate; spanGate: SpanGate }) {
   const { filters, timestamp } = useMetricsFilters();
   const page: DashboardPageContext = {
     window: timestamp,
@@ -73,7 +73,7 @@ function TableTabs({ traceGate, spanGate, ...props }: Props & { traceGate: Trace
     ...(traceGate.status === 'ready' && traceGate.scope.where ? { traceWhere: traceGate.scope.where } : {}),
     ...(spanGate.status === 'ready' && spanGate.scope.where ? { spanWhere: spanGate.scope.where } : {}),
   };
-  const unsupported = (view: ResolvedView<TableOptions>) => {
+  const unsupported = (view: ResolvedView<BreakdownOptions>) => {
     const sources = new Set(view.queries.map(aggregateSource));
     const blocked = [...(sources.has('trace') ? [traceGate] : []), ...(sources.has('span') ? [spanGate] : [])];
     const fields = blocked.flatMap(g => (g.status === 'unsupported-filter' ? g.unsupportedFields : []));
@@ -96,30 +96,30 @@ function TableTabs({ traceGate, spanGate, ...props }: Props & { traceGate: Trace
   const blocked = unsupported(view);
   if (blocked) {
     return (
-      <TableFrame {...props} view={view} tabs={tabs}>
+      <BreakdownFrame {...props} view={view} tabs={tabs}>
         <MetricsCard.NoData message={unsupportedMessage(blocked, FILTER_NAMES)} />
-      </TableFrame>
+      </BreakdownFrame>
     );
   }
-  return <TableView key={index} {...props} view={view} tabs={tabs} page={page} />;
+  return <BreakdownView key={index} {...props} view={view} tabs={tabs} page={page} />;
 }
 
 /** Rows with a count above zero in the opener's answer, once it has one. */
-function countRows(result: DashboardQueryResult | undefined, column: TableColumn | undefined) {
-  const data = result?.data as TableResponse | undefined;
+function countRows(result: DashboardQueryResult | undefined, column: BreakdownColumn | undefined) {
+  const data = result?.data as BreakdownResponse | undefined;
   if (!data || !column) return undefined;
   if ('groups' in data) return data.groups.filter(g => g.value > 0).length;
   const measure = column.options.measure ?? 'count';
   return data.rows.filter(r => Number(r.measures[measure] ?? 0) > 0).length;
 }
 
-function TableFrame({
+function BreakdownFrame({
   widget,
   view,
   tabs,
   isUpdating,
   children,
-}: Props & { view: ResolvedView<TableOptions>; tabs: ReactNode; isUpdating?: boolean; children: ReactNode }) {
+}: Props & { view: ResolvedView<BreakdownOptions>; tabs: ReactNode; isUpdating?: boolean; children: ReactNode }) {
   return (
     <ChartCard
       {...viewHeading(widget, view)}
@@ -132,7 +132,9 @@ function TableFrame({
   );
 }
 
-function TableView(props: Props & { view: ResolvedView<TableOptions>; tabs: ReactNode; page: DashboardPageContext }) {
+function BreakdownView(
+  props: Props & { view: ResolvedView<BreakdownOptions>; tabs: ReactNode; page: DashboardPageContext },
+) {
   const { view, page, widget, onDrilldown } = props;
   const { options, queries } = view;
   const { projectLabel } = useMetricsScope();
@@ -145,7 +147,7 @@ function TableView(props: Props & { view: ResolvedView<TableOptions>; tabs: Reac
   const previous = useDashboardRequests(queries.map(q => buildPreviousRequest(q, page, {})));
 
   const waited = current.filter((r, i): r is DashboardQueryResult => r !== undefined && waitedOn.has(i));
-  const has = (id: TableColumn['id']) => columns.some(c => c.id === id);
+  const has = (id: BreakdownColumn['id']) => columns.some(c => c.id === id);
   const count = columns.find(c => c.id === 'count');
   const countQuery = count?.options.query;
   const countResult = countQuery === undefined ? undefined : current[countQuery];
@@ -153,14 +155,14 @@ function TableView(props: Props & { view: ResolvedView<TableOptions>; tabs: Reac
 
   if (waited.some(r => r.isError)) {
     return (
-      <TableFrame {...props}>
+      <BreakdownFrame {...props}>
         <ChartCardError onRetry={() => waited.forEach(r => r.isError && void r.refetch())} />
-      </TableFrame>
+      </BreakdownFrame>
     );
   }
 
   const isLoading = waited.some(r => r.isLoading);
-  const responses = current.map(r => r?.data as TableResponse | undefined);
+  const responses = current.map(r => r?.data as BreakdownResponse | undefined);
   const truncated =
     countIsAggregate && (responses[countQuery ?? -1] as { truncated?: boolean } | undefined)?.truncated === true;
   const built = isLoading ? [] : buildTableRows(options, columns, responses);
@@ -171,17 +173,17 @@ function TableView(props: Props & { view: ResolvedView<TableOptions>; tabs: Reac
       ? previousTableFigures(
           options,
           columns,
-          previous.map(r => r?.data as TableResponse | undefined),
+          previous.map(r => r?.data as BreakdownResponse | undefined),
         )
       : undefined;
   const usage = has('tokens');
   const countLimit = countIsAggregate
     ? (queries[countQuery ?? -1] as { limit?: number } | undefined)?.limit
     : undefined;
-  const label = (id: TableColumn['id']) => columns.find(c => c.id === id)?.label;
+  const label = (id: BreakdownColumn['id']) => columns.find(c => c.id === id)?.label;
 
   return (
-    <TableFrame {...props} isUpdating={countIsAggregate ? countResult?.isPlaceholderData : undefined}>
+    <BreakdownFrame {...props} isUpdating={countIsAggregate ? countResult?.isPlaceholderData : undefined}>
       <BreakdownShareTable
         rows={listedRows(options, built, previousFigures, truncated, usage)}
         previous={previousFigures}
@@ -203,6 +205,6 @@ function TableView(props: Props & { view: ResolvedView<TableOptions>; tabs: Reac
         isLoading={isLoading}
         {...(truncated && countLimit !== undefined ? { truncatedAt: countLimit } : {})}
       />
-    </TableFrame>
+    </BreakdownFrame>
   );
 }
