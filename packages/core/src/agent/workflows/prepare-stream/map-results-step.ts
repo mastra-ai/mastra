@@ -267,9 +267,13 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
+    // The total-timeout save needs the configured processors. Resolve them once
+    // and pass them on as overrides so a function-form resolver runs only once.
+    let outputProcessorOverrides = options.outputProcessors;
     if (memory && memoryData.thread?.id && options.modelSettings?.timeout?.totalMs) {
       configuredOutputProcessors =
         options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
+      outputProcessorOverrides = configuredOutputProcessors;
     }
 
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
@@ -277,7 +281,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
       ? typeof capabilities.outputProcessors === 'function'
         ? await capabilities.outputProcessors({
             requestContext: result.requestContext!,
-            overrides: options.outputProcessors,
+            overrides: outputProcessorOverrides,
           })
         : options.outputProcessors || capabilities.outputProcessors
       : options.outputProcessors || [];
