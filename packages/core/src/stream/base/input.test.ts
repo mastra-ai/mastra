@@ -339,6 +339,28 @@ describe('MastraModelInput', () => {
       reader.releaseLock();
     });
 
+    it.each([
+      ['omits warnings', undefined],
+      ['returns an empty warnings array', []],
+    ])('collects stream-start warnings when the stream result %s', async (_label, resultWarnings) => {
+      const streamWarning = { type: 'unsupported-setting', setting: 'seed' };
+      mockCreateStream.mockResolvedValue({
+        stream: createMockStream([{ type: 'stream-start', warnings: [streamWarning], id: 'm', content: 'x' }]),
+        warnings: resultWarnings,
+      } as any);
+      let seen: unknown[] | undefined;
+      mockOnResult.mockImplementation(({ warnings }) => {
+        seen = warnings;
+      });
+
+      const reader = testInput
+        .initialize({ runId: 'r', createStream: mockCreateStream, onResult: mockOnResult })
+        .getReader();
+      while (!(await reader.read()).done) {}
+
+      expect(seen).toEqual([streamWarning]);
+    });
+
     // Regression test for https://github.com/mastra-ai/mastra/issues/13107
     // When the output stream is cancelled while transform() is still running,
     // controller.enqueue() throws "Controller is already closed" which can

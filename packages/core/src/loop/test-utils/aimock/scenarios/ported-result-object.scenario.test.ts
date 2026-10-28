@@ -1,7 +1,12 @@
 import { expect, it } from 'vitest';
 import { z } from 'zod/v4';
 import { createTool } from '../../../../tools';
-import { describeForAllEngines, runLoopScenario, useLoopScenarioAimock } from '../aimock-scenario';
+import {
+  describeForAllEngines,
+  isDurableEngineVariant,
+  runLoopScenario,
+  useLoopScenarioAimock,
+} from '../aimock-scenario';
 import { geminiChunk, geminiFinal, useScriptedProviders } from '../scripted-sse';
 
 /**
@@ -71,7 +76,7 @@ describeForAllEngines('AIMock loop scenario: ported result object (v6 providers)
     expect(await output.providerMetadata).toEqual({ openai: { responseId: 'resp_1', serviceTier: 'default' } });
 
     const request: any = await output.request;
-    if (engine === 'durable' || engine === 'evented') {
+    if (isDurableEngineVariant(engine)) {
       // Durable engines deliberately keep the provider request echo out of the
       // event stream and snapshots (see the step-start note in
       // agent/durable/workflows/steps/llm-execution.ts and #26462).

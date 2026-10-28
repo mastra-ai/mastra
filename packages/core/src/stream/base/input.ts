@@ -84,9 +84,11 @@ export abstract class MastraModelInput extends MastraBase {
           // AI SDK providers report call warnings on the `stream-start` part, not on the
           // doStream result. Collect them into the same array handed to onResult so the
           // step result (built after the stream drains) carries them.
-          const warnings = stream.warnings ?? [];
+          // An empty result array (e.g. a wrapper defaulting to `[]`) still collects stream-start.
+          const collect = !stream.warnings || (Array.isArray(stream.warnings) && stream.warnings.length === 0);
+          const warnings = collect || !stream.warnings ? [] : stream.warnings;
           if (!stream.warnings) streamStartWarnings.add(warnings);
-          const modelStream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>> = stream.warnings
+          const modelStream: ReadableStream<LanguageModelV2StreamPart | Record<string, unknown>> = !collect
             ? stream.stream
             : stream.stream.pipeThrough(
                 new TransformStream({
