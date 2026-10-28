@@ -161,6 +161,42 @@ describe('MastraBrowser.setCookies', () => {
     }
   }
 
+  class QueueingBrowser extends NoCookieBrowser {
+    open = false;
+    added: string[] = [];
+    protected override async addCookiesToOpenBrowser(cookies: { name: string }[]) {
+      if (!this.open) return false;
+      this.added.push(...cookies.map(cookie => cookie.name));
+      return true;
+    }
+    async openThread(threadId: string) {
+      this.open = true;
+      await this.addPendingCookies(threadId);
+    }
+  }
+
+  it('drops cookies queued for a thread that closes before its browser opens', async () => {
+    const browser = new QueueingBrowser({ headless: true });
+    await browser.setCookies([{ name: 'kept', value: 'v', url: 'https://example.com' }], 'thread-1');
+    await browser.setCookies([{ name: 'dropped', value: 'v', url: 'https://example.com' }], 'thread-2');
+
+    await browser.closeThreadSession('thread-2');
+    await browser.openThread('thread-1');
+    await browser.openThread('thread-2');
+
+    expect(browser.added).toEqual(['kept']);
+  });
+
+  it('drops every queued cookie when the browser closes', async () => {
+    const browser = new QueueingBrowser({ headless: true });
+    await browser.setCookies([{ name: 'dropped', value: 'v', url: 'https://example.com' }], 'thread-1');
+
+    await browser.close();
+    await browser.openThread('thread-1');
+
+    expect(browser.added).toEqual([]);
+  });
+
   it('fails for a provider that cannot set cookies', async () => {
     const browser = new NoCookieBrowser({ headless: true });
 

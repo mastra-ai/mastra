@@ -769,6 +769,7 @@ export abstract class MastraBrowser extends MastraBase {
    * Race-condition-safe - handles concurrent calls, status management, and lifecycle hooks.
    */
   async close(): Promise<void> {
+    this.pendingCookies.clear();
     // Already closed
     if (this.status === 'closed') {
       return;
@@ -1417,6 +1418,7 @@ export abstract class MastraBrowser extends MastraBase {
    * @param threadId - The thread ID whose session should be closed
    */
   async closeThreadSession(threadId: string): Promise<void> {
+    this.pendingCookies.delete(threadId);
     if (!this.threadManager) {
       return;
     }
