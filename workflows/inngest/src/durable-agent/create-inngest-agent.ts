@@ -46,7 +46,6 @@ import {
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
-  endRunSpansWithError,
   emitAbortEvent,
   runDurableStreamUntilIdle,
   runResumeDurableStreamUntilIdle,
@@ -74,6 +73,7 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
+import { endRunSpansWithError } from '../observability-compat';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';

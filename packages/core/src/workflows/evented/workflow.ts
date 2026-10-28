@@ -2886,7 +2886,8 @@ export class EventedRun<
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    this.workflowRunSpan?.endTree({
+    this.workflowRunSpan?.end({
+      endTree: true,
       outcome: 'abort',
       stopReason: 'caller_cancelled',
       stopReasonContext: null,

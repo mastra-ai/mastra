@@ -6,7 +6,7 @@ import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { Workflow, getEntryWorkflow, isSingleStepEntry, workflowTermination } from '@mastra/core/workflows';
+import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
 import type {
   Step,
   StepResult,
@@ -25,6 +25,7 @@ import {
   NESTED_WORKFLOW_OUTPUT_MODE,
   resolveNestedWorkflowOutputMode,
 } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
 import type {

@@ -1,6 +1,5 @@
 import { buildDeferredStepFinishChunk, expandDurableSteps } from '@internal/core/durable';
 import {
-  agentLoopTermination,
   createDurableBackgroundTaskCheckStep,
   createDurableGoalStep,
   createDurableIsTaskCompleteStep,
@@ -41,8 +40,9 @@ import { ChunkFrom } from '@mastra/core/stream';
 import { PUBSUB_SYMBOL } from '@mastra/core/workflows/_constants';
 import type { BaseContext, Inngest } from 'inngest';
 import { z } from 'zod';
-
 import { init } from '../index';
+
+import { agentLoopTermination } from '../observability-compat';
 import type { InngestFlowControlConfig } from '../types';
 
 // Suspended snapshots back human-in-the-loop resume. Terminal statuses are also
@@ -573,6 +573,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 ? registry.tracingTermination
                 : agentLoopTermination({
                     stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
                     finishReason: finalOutput.stepResult?.reason,
                     tripwire,
                     maxSteps: state.options?.maxSteps ?? maxSteps,
@@ -597,6 +598,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                 ? registry.tracingTermination
                 : agentLoopTermination({
                     stopCause: registry?.tracingStopCause,
+                    delegationFailure: registry?.tracingDelegationFailure,
                     finishReason: finalOutput.stepResult?.reason,
                     tripwire,
                     maxSteps: state.options?.maxSteps ?? maxSteps,

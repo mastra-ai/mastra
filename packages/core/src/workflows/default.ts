@@ -1050,7 +1050,7 @@ export class DefaultExecutionEngine extends ExecutionEngine {
         // body spans, then preserve the caller's existing rejection behavior.
         const termination = workflowTermination({ status: 'failed', error });
         workflowSpan?.error({ ...termination, error: getErrorFromUnknown(error), endSpan: false });
-        workflowSpan?.endTree(termination);
+        workflowSpan?.end({ ...termination, endTree: true });
         throw error;
       }
 

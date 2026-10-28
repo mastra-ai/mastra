@@ -7,7 +7,6 @@ import type { PubSub } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import type { EntityType, SpanOutcomeFields } from '@mastra/core/observability';
 import { DefaultExecutionEngine, createTimeTravelExecutionParams } from '@mastra/core/workflows';
-import * as coreWorkflows from '@mastra/core/workflows';
 import type {
   ExecutionContext,
   Step,
@@ -20,6 +19,7 @@ import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
+import { workflowTermination } from './observability-compat';
 
 import { InngestWorkflow } from './workflow';
 
@@ -157,7 +157,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               span: params.stepSpan,
               operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
               errorOptions: {
-                ...coreWorkflows.workflowTermination({
+                ...workflowTermination({
                   status: 'failed',
                   error: cause.error,
                   tripwire: cause.tripwire,
@@ -188,7 +188,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             span: params.stepSpan,
             operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
             errorOptions: {
-              ...coreWorkflows.workflowTermination({ status: 'failed', error: errorInstance }),
+              ...workflowTermination({ status: 'failed', error: errorInstance }),
               error: errorInstance,
               attributes: { status: 'failed' },
             },
