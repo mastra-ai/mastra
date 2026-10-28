@@ -23,25 +23,19 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "qwen3.8-27b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "xhigh"]
-      }
-    ],
-    "deepseek-v4.1-flash-552b": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "mistral4-119b": [
+    "qwen3.6-35b": [
       {
         "type": "effort",
         "values": ["none", "high"]
       }
     ],
-    "qwen3.6-35b": [
+    "gpt-oss-120b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "mistral4-119b": [
       {
         "type": "effort",
         "values": ["none", "high"]
@@ -53,10 +47,16 @@
         "values": ["none", "high"]
       }
     ],
-    "gpt-oss-120b": [
+    "deepseek-v4.1-flash-552b": [
       {
         "type": "effort",
-        "values": ["low", "medium", "high"]
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.8-27b": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "xhigh"]
       }
     ]
   }

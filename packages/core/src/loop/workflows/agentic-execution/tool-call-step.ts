@@ -52,6 +52,7 @@ import { applyBackgroundToolResult } from '../../shared/steps/background-task-re
 import { executeToolCall } from '../../shared/steps/execute-tool-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../shared/suspended-tool-run-id';
+import { TOOL_ABORT_NOTICE } from '../../shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../shared/tool-payload-transform';
 import { dehydrateStreamState } from '../../suspended-stream-state';
 import type { OuterLLMRun } from '../../types';
@@ -1434,6 +1435,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           toolCallId: inputData.toolCallId,
           toolName: inputData.toolName,
           abortSignal,
+          settleSignal: isEagerExecution ? callerAbortSignal : undefined,
           // The tool asked to suspend or bail and then swallowed the throw. Its return value
           // is the return value of a call that was never supposed to complete here, so bail
           // before it is published: `onOutput` is a side effect the foreach will produce
@@ -1457,7 +1459,7 @@ export function createToolCallStep<Tools extends ToolSet = ToolSet, OUTPUT = und
           logger,
         }).finally(settleRunTool);
         if (outcome.status === 'aborted') {
-          return { aborted: true, ...inputData };
+          return { ...inputData, aborted: true, result: TOOL_ABORT_NOTICE };
         }
         if (outcome.status === 'error') {
           return { error: serializeToolError(outcome.error), ...inputData };

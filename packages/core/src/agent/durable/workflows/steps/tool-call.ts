@@ -13,6 +13,7 @@ import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
@@ -128,6 +129,9 @@ const durableToolCallOutputSchema = durableToolCallInputSchema.extend({
   // Set when a processToolResult processor blocked the result via tripwire; no result
   // crosses the boundary and the mapping step leaves the call incomplete.
   resultBlocked: z.boolean().optional(),
+  // Set when an output processor dropped the tool-result chunk. The model still
+  // gets the result; callbacks must not report a result the stream never emitted.
+  resultHidden: z.boolean().optional(),
   error: serializedErrorSchema.optional(),
   // Approval decision for a `requireApproval` tool; a declined call carries its
   // `output-denied` marker across the boundary in this field.
@@ -237,7 +241,8 @@ class DurableChunkPublishError extends Error {
 /**
  * Run a tool-result or tool-error chunk through the run's output processor
  * pipeline and emit it (or a tripwire when blocked) via pubsub. Returns the
- * processed chunk, or `null` if a processor blocked it.
+ * processed chunk, or `null` if a processor blocked it. `onEmit` sees every
+ * chunk emitted, including parts a processor stashed for reprocessing.
  *
  * Thin glue over the shared per-chunk pipeline core; mirrors the regular
  * agent's `processAndEnqueueChunk` in llm-mapping-step.ts.
@@ -252,6 +257,7 @@ async function processChunkThroughOutputProcessors(
   messageList?: MessageList,
   observabilityContext?: ObservabilityContext,
   collectDataPart?: (part: { type: string; data?: unknown; messageId?: string }) => void,
+  onEmit?: (chunk: ChunkType) => void,
 ): Promise<ChunkType | null> {
   const runner =
     registryEntry?.outputProcessors?.length && registryEntry.processorStates
@@ -302,6 +308,7 @@ async function processChunkThroughOutputProcessors(
           throw new DurableChunkPublishError(error);
         }
       }
+      onEmit?.(c);
     },
     onProcessorError: error => {
       // Publication failures keep the callers' non-fatal emission path.
@@ -1927,23 +1934,13 @@ export function createDurableToolCallStep() {
         }).finally(settleRunTool);
 
         ownership?.throwIfLost();
-        if (outcome.status === 'aborted') {
-          // Mid-flight cancellation: leave the call incomplete (no result/error,
-          // no chunk emission) so the mapping step doesn't fake-complete it on
-          // resume. Mirrors the non-durable tool-call step.
-          return {
-            ...typedInput,
-            aborted: true,
-          };
-        }
-
         if (outcome.status === 'error') {
           // Route through the catch below so error serialization and the
           // tool-error chunk emission stay on the single existing path.
           throw outcome.error;
         }
 
-        let result = outcome.result;
+        let result = outcome.status === 'aborted' ? TOOL_ABORT_NOTICE : outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
@@ -1953,7 +1950,7 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput) {
+        if (toModelOutput && outcome.status === 'success') {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
@@ -2097,6 +2094,8 @@ export function createDurableToolCallStep() {
         // tool-result with undefined would produce a spurious entry that
         // confuses downstream consumers (e.g. MastraModelOutput.toolResults).
         let transformMetadata: DurableToolCallOutput['transformMetadata'];
+        let resultEmitted = false;
+        let resultHidden = false;
         if (pubsub && !wasSuspended) {
           try {
             const resultChunk = await applyToolPayloadTransformToChunk(
@@ -2130,6 +2129,9 @@ export function createDurableToolCallStep() {
               messageList,
               processorObservabilityContext,
               collectProcessorDataPart,
+              chunk => {
+                if (chunk.type === 'tool-result' && chunk.payload.toolCallId === toolCallId) resultEmitted = true;
+              },
             );
           } catch (emitError) {
             ownership?.throwIfLost();
@@ -2138,13 +2140,18 @@ export function createDurableToolCallStep() {
             }
             logger?.warn?.(`[DurableAgent] Failed to emit tool-result chunk for ${toolName}: ${emitError}`);
           }
+          // A processor can drop the result or stash it and emit it right
+          // after, and publishing can fail; only a published result counts.
+          resultHidden = !resultEmitted;
         }
 
         return {
           ...typedInput,
           providerMetadata,
           result,
+          ...(outcome.status === 'aborted' ? { aborted: true } : {}),
           modelOutputComputed,
+          ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),
           ...(processorDataParts.length ? { processorDataParts } : {}),
           ...(transformMetadata ? { transformMetadata } : {}),

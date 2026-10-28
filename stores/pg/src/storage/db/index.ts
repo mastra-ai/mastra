@@ -2160,6 +2160,56 @@ export class PgDB extends MastraBase {
     }
   }
 
+  /**
+   * Runs one UPDATE per record in a transaction, changing a row only while every
+   * column in `nullColumns` is still NULL. Never inserts. Returns, in input order,
+   * whether each update changed a row.
+   */
+  async batchUpdateWhereNull({
+    tableName,
+    updates,
+    nullColumns,
+  }: {
+    tableName: TABLE_NAMES;
+    updates: Array<{
+      keys: Record<string, any>;
+      data: Record<string, any>;
+    }>;
+    nullColumns: string[];
+  }): Promise<boolean[]> {
+    const nullConditions = nullColumns
+      .map(column => ` AND "${parseSqlIdentifier(column, 'column name')}" IS NULL`)
+      .join('');
+    try {
+      return await this.client.tx(async tx => {
+        const applied: boolean[] = [];
+        for (const update of updates) {
+          const query = await this.buildUpdateQuery({ tableName, ...update });
+          if (!query) {
+            applied.push(false);
+            continue;
+          }
+          const rows = await tx.any(`${query.sql}${nullConditions} RETURNING 1`, query.values);
+          applied.push(rows.length > 0);
+        }
+        return applied;
+      });
+    } catch (error) {
+      throw new MastraError(
+        {
+          id: createStorageErrorId('PG', 'BATCH_UPDATE_WHERE_NULL', 'FAILED'),
+          domain: ErrorDomain.STORAGE,
+          category: ErrorCategory.THIRD_PARTY,
+          details: {
+            tableName,
+            numberOfRecords: updates.length,
+          },
+        },
+        error,
+      );
+    }
+  }
+
   async batchDelete({ tableName, keys }: { tableName: TABLE_NAMES; keys: Record<string, any>[] }): Promise<void> {
     try {
       if (keys.length === 0) {
@@ -2330,19 +2380,30 @@ export class PgDB extends MastraBase {
 
   private async executeUpdate(
     client: Pick<DbClient, 'none'> | Pick<TxClient, 'none'>,
-    {
-      tableName,
-      keys,
-      data,
-    }: {
+    args: {
       tableName: TABLE_NAMES;
       keys: Record<string, any>;
       data: Record<string, any>;
     },
   ): Promise<void> {
+    const query = await this.buildUpdateQuery(args);
+    if (!query) return; // Nothing to update after filtering
+
+    await client.none(query.sql, query.values);
+  }
+
+  private async buildUpdateQuery({
+    tableName,
+    keys,
+    data,
+  }: {
+    tableName: TABLE_NAMES;
+    keys: Record<string, any>;
+    data: Record<string, any>;
+  }): Promise<{ sql: string; values: QueryValues } | null> {
     // Filter out columns that don't exist in the actual database table
     const filteredData = await this.filterRecordToKnownColumns(tableName, data);
-    if (Object.keys(filteredData).length === 0) return; // Nothing to update after filtering
+    if (Object.keys(filteredData).length === 0) return null;
 
     const setColumns: string[] = [];
     const setValues: QueryValues = [];
@@ -2369,8 +2430,6 @@ export class PgDB extends MastraBase {
     });
 
     const sql = `UPDATE ${tableName_} SET ${setColumns.join(', ')} WHERE ${whereConditions.join(' AND ')}`;
-    const values = [...setValues, ...whereValues];
-
-    await client.none(sql, values);
+    return { sql, values: [...setValues, ...whereValues] };
   }
 }

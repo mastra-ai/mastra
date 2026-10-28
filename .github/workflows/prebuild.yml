@@ -256,6 +256,8 @@ jobs:
             file.startsWith('packages/core/src/mcp/') ||
             file.startsWith('packages/core/src/tools/') ||
             file.startsWith('packages/mcp/integration-tests/') ||
+            // e2e-softwarefactory scaffolds, builds, and boots the factory templates.
+            file.startsWith('templates/template-factory') ||
             file === '.github/workflows/e2e-tests.yml' ||
             file === 'pnpm-lock.yaml'
           );

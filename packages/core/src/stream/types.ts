@@ -303,6 +303,8 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
+  /** Run holding the thread lease at hydration, or null when idle. */
+  activeRunId: string | null;
 }
 
 interface StartPayload {
@@ -919,6 +921,12 @@ export type NetworkChunkType<OUTPUT = undefined> =
 // Strongly typed chunk type (currently only OUTPUT is strongly typed, tools use dynamic types)
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
+
+/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+export type ThreadRunStatusChunk = BaseChunkType & {
+  type: 'thread-run-status';
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+};
 
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })

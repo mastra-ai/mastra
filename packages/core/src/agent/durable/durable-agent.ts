@@ -129,6 +129,7 @@ const localRecoveryClaims = new Map<string, string>();
 const RECOVER_ALREADY_IN_PROGRESS_ERROR_ID = 'DURABLE_AGENT_RECOVER_ALREADY_IN_PROGRESS';
 const RECOVER_SHUTDOWN_ERROR_ID = 'DURABLE_AGENT_RECOVER_SHUTDOWN';
 const RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID = 'DURABLE_AGENT_RECOVER_SNAPSHOT_NOT_FOUND';
+const RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID = 'DURABLE_AGENT_RECOVER_CHECKPOINT_NOT_AVAILABLE';
 const RECOVER_RUN_SUSPENDED_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_SUSPENDED';
 const OBSERVED_MESSAGE_LIST_REFRESH_TIMEOUT_MS = 5_000;
 const RECOVER_RUN_NOT_ACTIVE_ERROR_ID = 'DURABLE_AGENT_RECOVER_RUN_NOT_ACTIVE';
@@ -204,6 +205,7 @@ function shouldReportRecoveryFailure(error: unknown): boolean {
   const errorId = (error as { id?: unknown })?.id;
   return (
     errorId !== RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID &&
+    errorId !== RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID &&
     errorId !== RECOVER_RUN_SUSPENDED_ERROR_ID &&
     errorId !== RECOVER_RUN_NOT_ACTIVE_ERROR_ID &&
     errorId !== RECOVER_SHUTDOWN_ERROR_ID
@@ -906,6 +908,7 @@ export class DurableAgent<
       instructions: ({ requestContext }) => agent.getInstructions({ requestContext }),
       // Preserve dynamic model resolution until a request context is available.
       model: ({ requestContext }) => agent.getModel({ requestContext }),
+      notifications: agent.__getNotificationConfig(),
     });
 
     this.#wrappedAgent = agent;
@@ -1101,6 +1104,25 @@ export class DurableAgent<
       typeof persisted.snapshot === 'string'
         ? (JSON.parse(persisted.snapshot) as WorkflowRunState)
         : persisted.snapshot;
+    if (
+      snapshot?.status === 'pending' &&
+      snapshot.context != null &&
+      typeof snapshot.context === 'object' &&
+      !Array.isArray(snapshot.context) &&
+      !Object.prototype.hasOwnProperty.call(snapshot.context, 'input')
+    ) {
+      throw new MastraError({
+        id: RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID,
+        domain: ErrorDomain.AGENT,
+        category: ErrorCategory.USER,
+        text:
+          `DurableAgent "${this.name}" recover(${runId}): no restartable checkpoint has been persisted yet. ` +
+          `Enable recovery: { durableAgents: 'auto' } or a shouldPersistSnapshot policy that includes ` +
+          `"running" before starting the run. Even with persistence enabled, recovery is unavailable ` +
+          `until the first running checkpoint is saved.`,
+        details: { agentName: this.name, runId, snapshotStatus: snapshot.status },
+      });
+    }
     const workflowInput = snapshot?.context?.input as DurableAgenticWorkflowInput | undefined;
     if (!workflowInput || workflowInput.__workflowKind !== 'durable-agent') {
       throw new MastraError({
@@ -1150,7 +1172,7 @@ export class DurableAgent<
           `DurableAgent "${this.name}" recover(${runId}): run status is "${snapshot.status}", ` +
           `so the run cannot be recovered. Runs suspended on a tool call or an approval are ` +
           `continued with resume(${runId}, ...), not recover().`,
-        details: { agentName: this.name, runId, status: snapshot.status },
+        details: { agentName: this.name, runId, snapshotStatus: snapshot.status },
       });
     }
 
@@ -2277,6 +2299,7 @@ export class DurableAgent<
     // wired inner pubsub, e.g. mastra.pubsub) without re-triggering registration
     // side effects — mirrors Agent.__fork().
     if (this.#mastra) {
+      fork.__inheritMastraForFork(this.#mastra);
       fork.#mastra = this.#mastra;
     }
     fork.#innerPubsub = this.#innerPubsub;
@@ -5233,8 +5256,13 @@ export class DurableAgent<
               return { runId: targetRunId, status: 'skipped' };
             }
             if (!started) {
-              // The run finished or suspended between discovery and its recovery.
-              if (errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID || errorId === RECOVER_RUN_SUSPENDED_ERROR_ID) return;
+              // The checkpoint disappeared or the run suspended between discovery and recovery.
+              if (
+                errorId === RECOVER_SNAPSHOT_NOT_FOUND_ERROR_ID ||
+                errorId === RECOVER_CHECKPOINT_NOT_AVAILABLE_ERROR_ID ||
+                errorId === RECOVER_RUN_SUSPENDED_ERROR_ID
+              )
+                return;
               const skipped = recoverySkip(error);
               if (skipped) {
                 if (skipped.reason === 'transient-error') {
@@ -5395,11 +5423,12 @@ export class DurableAgent<
   }
 
   /**
-   * Subscribe to the raw events of a run's stream, for servers that forward
-   * them as they are. Unlike a plain subscription to the run's topic, it drops
-   * what an execution that lost the run still publishes and the marker
-   * announcing the takeover, so a client never sees either. Resolves once
-   * subscribed, with a function that unsubscribes.
+   * Subscribe to a run's raw AgentStreamEvents, filtering out events from
+   * executions that lost ownership and takeover markers. Callers must map
+   * these events to the public frame contract produced by stream-adapter.ts's
+   * createDurableAgentStream before sending them to clients; raw event
+   * envelopes are not public stream frames. Resolves once subscribed, with
+   * a function that unsubscribes.
    *
    * @internal
    */

@@ -1,4 +1,5 @@
 import type { ProcessInputStepArgs, Processor } from '@mastra/core/processors';
+import { factorySettingsUrl, factoryUiOrigin } from '../../links.js';
 
 /** Mirrors `REPLY_TOOL_NAME` in `reply-tool.ts`, which imports this module. */
 const REPLY_TOOL = 'reply_in_thread';
@@ -15,6 +16,7 @@ export const SESSION_LINK_LABEL = 'Open session ↗';
 const LINK_REFERENCES = [
   'Write every pull request, issue, commit, Linear ticket or other reference you mention in the thread as a markdown link to its page, with the ID as plain link text: [#28467](https://github.com/<owner>/<repo>/pull/28467), [52db47cd](https://github.com/<owner>/<repo>/commit/52db47cd), [FACT-526](<the ticket URL>). Never leave one as a bare ID or wrap it in code formatting.',
   "Build GitHub and GitLab links from the repository the reference belongs to, from the repositories listed in your environment or a tool result; with more than one repository, don't assume which one a bare number belongs to. Build Linear links from the workspace URL pattern in the `linear_get_issue` tool description, or from a URL a tool returned. Don't guess a URL; leave a reference unlinked only when you can't work out its URL.",
+  'Link Factory work items and sessions the same way, with the `url` the Factory tools return: [#123](<item url>). When something needs a person, ask them for it here and link the item; only send them to the web UI when the channel cannot do it, and then link the exact page.',
 ].join('\n');
 
 /**
@@ -88,7 +90,7 @@ export function sessionLink({
   resourceId,
   factoryProjectId,
 }: SessionLinkTarget): string | undefined {
-  const origin = process.env.MASTRACODE_PUBLIC_URL;
+  const origin = factoryUiOrigin();
   if (!origin) return undefined;
   const isChatOnly = resourceId.startsWith('channel:');
   const sessionParam = `?sessionId=${encodeURIComponent(sessionId)}`;
@@ -98,6 +100,5 @@ export function sessionLink({
 }
 
 export function modelSettingsLink(factoryProjectId: string): string | undefined {
-  const origin = process.env.MASTRACODE_PUBLIC_URL;
-  return origin ? `${origin}/factories/${encodeURIComponent(factoryProjectId)}/settings/models` : undefined;
+  return factorySettingsUrl(factoryProjectId, 'models');
 }
