@@ -32,7 +32,7 @@ import {
   MAX_TOOL_NAME_LENGTH,
   SKILL_NAME_RE,
 } from '../rules/validation.js';
-import { addInstructions, exitToolRule, startSkill } from './phase-runner.js';
+import { addInstructions, startSkill } from './phase-runner.js';
 import type { BoardTransitionPolicy } from './transition-policy.js';
 
 type BoardPhaseHandlers = Partial<Record<FactoryRuleSource, FactoryRuleHandler<FactoryStageRuleContext>>>;
@@ -119,10 +119,16 @@ export interface BoardPhaseRunner {
   readonly instructions?: string;
 }
 
-/** The tool whose successful call ends a working phase and moves the card to its first next phase. */
+/**
+ * The tool whose successful call ends a working phase. The agent then moves the card itself with
+ * `factory_transition_work_item`, to one of the phase's `nextPhases`.
+ */
 export interface BoardPhaseExitTool {
   readonly id: string;
-  /** Approve the tool's call without a person. Defaults to false. */
+  /**
+   * Answer the approval the tool waits for without a person. Factory sessions run other tools
+   * without asking, so today this applies to `submit_plan`. Defaults to false.
+   */
   readonly autoApprove?: boolean;
   /** With `autoApprove`, only cards this matches are approved without a person. */
   readonly autoApproveWhen?: RuleGroup;
@@ -151,7 +157,7 @@ type WorkingPhaseFields = {
   readonly autoStart?: boolean;
   /** With `autoStart`, only cards this matches start on their own. */
   readonly autoStartWhen?: RuleGroup;
-  /** A bare tool name is shorthand for `{ id }`: a person approves it. */
+  /** A bare tool name is shorthand for `{ id }`, with nothing approved on a person's behalf. */
   readonly exitTool?: string | BoardPhaseExitTool;
 };
 
@@ -216,7 +222,7 @@ export interface BoardDefinition<BoardId extends string, PhaseId extends string>
   readonly phases: Readonly<Record<PhaseId, BoardPhase<PhaseId>>>;
   readonly transitions: Readonly<Record<PhaseId, readonly BoardTransition<PhaseId>[]>>;
   readonly rules: ReadonlyFactoryBoardRules;
-  /** Tool-result rules keyed by tool name, including phase exit tools; empty when there are none. */
+  /** Tool-result rules keyed by tool name; empty when the board declares none. */
   readonly tools: BoardToolRules;
   /** Integration event handlers for cards on this board; empty when the board declares none. */
   readonly events: BoardEventRules;
@@ -561,7 +567,6 @@ export function defineBoard<
     }),
   ) as Record<PhaseId, readonly BoardTransition<PhaseId>[]>;
 
-  const exitTools = new Map<string, BoardToolRule>();
   const phases = Object.freeze(
     Object.fromEntries(
       Object.entries(config.phases).map(([phaseId, phase]) => {
@@ -580,22 +585,8 @@ export function defineBoard<
           throw new BoardDefinitionError(`${label} autoStartWhen needs autoStart.`);
         }
         const exitTool = resolveExitTool(phaseId, working?.exitTool);
-        if (exitTool && runner) {
-          const to = nextPhases[0];
-          if (to === undefined) {
-            throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
-          }
-          if (exitTools.has(exitTool.id) || Object.hasOwn(tools, exitTool.id)) {
-            throw new BoardDefinitionError(
-              `Tool "${exitTool.id}" already has a rule on this board; ${label} cannot end with it.`,
-            );
-          }
-          exitTools.set(
-            exitTool.id,
-            Object.freeze(
-              exitToolRule({ board: config.id, phase: phaseId, context: runner.context, tool: exitTool.id, to }),
-            ),
-          );
+        if (exitTool && nextPhases.length === 0) {
+          throw new BoardDefinitionError(`${label} exit tool needs a next phase to move the card to.`);
         }
         const onEnter = runner ? phaseEnterHandlers(phase.onEnter, runner) : phase.onEnter;
         const name = resolveName(phase.name, phase.title, label);
@@ -666,7 +657,7 @@ export function defineBoard<
     phases,
     transitions: Object.freeze(transitions),
     rules: Object.freeze(rules),
-    tools: exitTools.size === 0 ? tools : Object.freeze({ ...tools, ...Object.fromEntries(exitTools) }),
+    tools,
     events,
     ...(config.transitionPolicy ? { transitionPolicy: config.transitionPolicy } : {}),
     ...(sourceClosed ? { sourceClosed } : {}),

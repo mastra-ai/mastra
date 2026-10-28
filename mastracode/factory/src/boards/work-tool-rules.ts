@@ -1,6 +1,6 @@
 import type { FactoryToolResultRuleContext } from '../rules/types.js';
 
-export function resultContent(value: unknown): string | undefined {
+function resultContent(value: unknown): string | undefined {
   if (typeof value === 'string') return value;
   if (!value || typeof value !== 'object' || Array.isArray(value)) return;
   const content = (value as { content?: unknown }).content;

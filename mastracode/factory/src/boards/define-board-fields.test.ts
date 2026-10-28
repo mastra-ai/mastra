@@ -1,7 +1,7 @@
 import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
-import type { FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
+import type { FactoryStageRuleContext } from '../rules/types.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
 import { reviewBoard } from './review.js';
@@ -21,21 +21,6 @@ function stageContext(stage: string): Readonly<FactoryStageRuleContext> {
     fromStage: 'queued',
     toStage: stage,
   } as unknown as FactoryStageRuleContext;
-}
-
-function toolContext(
-  stage: string,
-  role: string,
-  value: string,
-  status: 'success' | 'error' = 'success',
-): Readonly<FactoryToolResultRuleContext> {
-  return {
-    ingress: { type: 'toolResult', id: 'call-1' },
-    item: { id: 'item-1', title: 'Fix retries', stages: [stage] },
-    actor: { type: 'agent', bindingId: 'binding-1', role },
-    toolName: 'submit_plan',
-    result: { status, value },
-  } as unknown as FactoryToolResultRuleContext;
 }
 
 const release = (phases: Record<string, unknown>) =>
@@ -170,7 +155,7 @@ describe('defineBoard phase fields', () => {
     ).toThrow(/autoStartWhen is not a valid condition/);
   });
 
-  it('moves the card to the first next phase when its context completes the exit tool', async () => {
+  it('keeps the exit tool on the phase and adds no rule that moves the card', async () => {
     const board = release({
       queued: { name: 'Queued', kind: 'resting', nextPhases: ['planning'] },
       planning: {
@@ -196,20 +181,27 @@ describe('defineBoard phase fields', () => {
     });
     expect(board.phases.building.exitTool).toEqual({ id: 'ship_it', autoApprove: false });
 
-    const planned = board.tools.submit_plan!.onResult;
-    expect(await planned(toolContext('planning', 'build', 'Plan approved. Build it.'))).toEqual({
-      type: 'transition',
-      idempotencyKey: 'call-1:exit-planning',
-      board: 'release',
-      stage: 'building',
+    // The exit tool does not move the card; the agent does, with factory_transition_work_item.
+    expect(board.tools).toEqual({});
+    expect(board.phases.planning.nextPhases).toEqual(['building', 'queued']);
+  });
+
+  it('lets a board that keeps the built-in Work tool rules end Planning with submit_plan', () => {
+    const board = defineBoard({
+      id: 'work-plus',
+      name: 'Work plus',
+      initialPhase: 'intake',
+      tools: workBoard.tools,
+      phases: {
+        ...workBoard.phases,
+        planning: {
+          ...workBoard.phases.planning,
+          exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
+        },
+      },
     });
-    expect(await planned(toolContext('planning', 'build', 'Plan rejected: add tests.'))).toBeUndefined();
-    expect(await planned(toolContext('planning', 'review', 'Plan approved.'))).toBeUndefined();
-    expect(await planned(toolContext('building', 'build', 'Plan approved.'))).toBeUndefined();
-    expect(await board.tools.ship_it!.onResult(toolContext('building', 'build', 'shipped'))).toMatchObject({
-      stage: 'done',
-    });
-    expect(await board.tools.ship_it!.onResult(toolContext('building', 'build', 'boom', 'error'))).toBeUndefined();
+    expect(board.tools).toEqual(workBoard.tools);
+    expect(board.phases.planning).toMatchObject({ exitTool: { id: 'submit_plan', autoApprove: true } });
   });
 
   it('rejects exit tools that cannot end a phase', () => {
@@ -225,13 +217,6 @@ describe('defineBoard phase fields', () => {
         moving: { name: 'Moving', kind: 'working', exitTool: 'factory_transition_work_item', nextPhases: ['queued'] },
       }),
     ).toThrow('Phase "moving" cannot end with factory_transition_work_item: that tool already moves the card.');
-    expect(() =>
-      release({
-        queued: { name: 'Queued', kind: 'resting', nextPhases: ['one'] },
-        one: { name: 'One', kind: 'working', exitTool: 'ship_it', nextPhases: ['two'] },
-        two: { name: 'Two', kind: 'working', exitTool: 'ship_it', nextPhases: ['queued'] },
-      }),
-    ).toThrow('Tool "ship_it" already has a rule on this board; Phase "two" cannot end with it.');
     expect(() =>
       release({
         queued: { name: 'Queued', kind: 'resting', nextPhases: ['one'] },

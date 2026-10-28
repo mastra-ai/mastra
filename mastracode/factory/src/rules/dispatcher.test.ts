@@ -191,7 +191,7 @@ function createSession(
       getId: vi.fn(() => 'session-1'),
       getOwnerId: vi.fn(() => 'user-1'),
     },
-    permissions: { setForTool: vi.fn(async () => {}), getRules: vi.fn(() => ({ tools: {} })) },
+    permissions: { setForTool: vi.fn(async () => {}) },
     sendMessage: vi.fn(async () => {}),
     sendSignal: vi.fn((input: { id: string }, _options: { requestContext: { get(key: string): unknown } }) => {
       signalSends += 1;
@@ -7048,35 +7048,5 @@ describe('board phase automation', () => {
         expect(session.respondToToolSuspension).not.toHaveBeenCalled();
       }
     }
-  });
-
-  it('allows any other auto-approved exit tool on the session, unless the session already decided', async () => {
-    const boards = boardsWithBuilding({ exitTool: { id: 'open_pull_request', autoApprove: true } });
-    const storage = (await createFactoryStorageForTests()).workItems;
-    const { transitionService } = await queueBuild(storage, [], 'exit-tool-allowed');
-    const { controller, session } = createSession();
-    await new FactoryDecisionDispatcher({
-      controller: controller as never,
-      transitionService,
-      storage,
-      boards,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-    }).runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect(session.permissions.setForTool).toHaveBeenCalledWith({ toolName: 'open_pull_request', policy: 'allow' });
-
-    const decided = (await createFactoryStorageForTests()).workItems;
-    const second = await queueBuild(decided, [], 'exit-tool-decided');
-    const other = createSession();
-    other.session.permissions.getRules.mockReturnValue({ tools: { open_pull_request: 'ask' } } as never);
-    await new FactoryDecisionDispatcher({
-      controller: other.controller as never,
-      transitionService: second.transitionService,
-      storage: decided,
-      boards,
-      ownerId: 'worker-1',
-      isAutoRunEnabled: async () => true,
-    }).runOnce(new Date('2030-01-01T00:00:00Z'));
-    expect(other.session.permissions.setForTool).not.toHaveBeenCalled();
   });
 });
