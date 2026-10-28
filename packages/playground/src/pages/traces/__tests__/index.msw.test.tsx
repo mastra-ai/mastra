@@ -498,7 +498,7 @@ describe('Traces page view switch', () => {
       expect(within(breadcrumb).getByText('Traces')).toBeTruthy();
       expect(breadcrumb.closest('header')).not.toBeNull();
       expect(views.closest('header')).toBeNull();
-      expect(views.closest('main')).toBeNull();
+      expect(views.closest('[data-slot="page-layout-action-row"]')).not.toBeNull();
     });
 
     it('puts the filter bar in the page body, above the list', async () => {
@@ -546,7 +546,7 @@ describe('Traces page view switch', () => {
 
       const placeholder = await screen.findByRole('status', { name: 'Loading views' });
       expect(placeholder.closest('header')).toBeNull();
-      expect(placeholder.closest('main')).toBeNull();
+      expect(placeholder.closest('[data-slot="page-layout-action-row"]')).not.toBeNull();
       expect(screen.getByRole('navigation', { name: 'Breadcrumb' }).closest('header')).not.toBeNull();
     });
   });

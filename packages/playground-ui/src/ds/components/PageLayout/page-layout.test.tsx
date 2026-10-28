@@ -28,9 +28,23 @@ describe('PageLayout', () => {
   });
 
   describe('when an action row is provided', () => {
-    it('pins it between the header and the scrollable body', () => {
+    it('scrolls it with the body, above the content', () => {
       render(
         <PageLayout breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      const row = screen.getByLabelText('Filter').closest('[data-slot="page-layout-action-row"]');
+      expect(row).not.toBeNull();
+      if (!row) return;
+      expect(row.closest('[style*="overflow"]')).toBe(viewportOf('Body'));
+      expect(row.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
+    it.each(['fit', 'narrow'] as const)('keeps it above the scrollable body (%s)', variant => {
+      render(
+        <PageLayout variant={variant} breadcrumbs={<span>Crumbs</span>} actionRow={<input aria-label="Filter" />}>
           <p>Body</p>
         </PageLayout>,
       );

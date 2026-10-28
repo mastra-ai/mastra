@@ -20,7 +20,7 @@ export type ObservabilityPageLayoutProps = {
 };
 
 /**
- * The header shared by the traces, spans and threads pages: breadcrumbs plus the view switch pinned
+ * The header shared by the traces, spans and threads pages: breadcrumbs plus the view switch
  * under them. Router-agnostic: the host passes the current view, navigation and its page body.
  */
 export function ObservabilityPageLayout({
