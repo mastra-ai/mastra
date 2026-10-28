@@ -1,5 +1,14 @@
 # @mastra/observability
 
+## 1.22.0-alpha.4
+
+### Patch Changes
+
+- Spans keep the native `resumedFromSpanId`, `outcome`, `stopReason` and `stopReasonContext` fields when they are exported, snapshotted and rebuilt, so values set by a producer survive durable and multi-worker runs. ([#28389](https://github.com/mastra-ai/mastra/pull/28389))
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+
 ## 1.22.0-alpha.3
 
 ### Minor Changes

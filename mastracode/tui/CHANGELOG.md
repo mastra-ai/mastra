@@ -1,5 +1,18 @@
 # mastracode
 
+## 0.48.1-alpha.8
+
+### Patch Changes
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`3e5ca12`](https://github.com/mastra-ai/mastra/commit/3e5ca12f7c941e92e242f2dd08c7018644b0cbbd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+  - @mastra/code-sdk@1.16.0-alpha.9
+  - @mastra/duckdb@1.16.0-alpha.3
+  - @mastra/observability@1.22.0-alpha.4
+  - @mastra/pg@1.33.0-alpha.4
+  - @mastra/mcp@2.6.0-alpha.3
+  - @mastra/libsql@1.27.1-alpha.1
+
 ## 0.48.1-alpha.7
 
 ### Patch Changes

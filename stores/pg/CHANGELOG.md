@@ -1,5 +1,16 @@
 # @mastra/pg
 
+## 1.33.0-alpha.4
+
+### Minor Changes
+
+- Spans now store nine native fields in their own columns: `externalParentSpanId`, `resumedFromSpanId`, `model`, `provider`, `outcome`, `stopReason`, `stopReasonContext`, `timeToFirstTokenMs` and `errorCount`. Existing databases get the columns automatically when the store starts. The columns stay empty for spans written before the upgrade, with an older `@mastra/core`, or by producers that do not set them yet. ([#28389](https://github.com/mastra-ai/mastra/pull/28389))
+
+### Patch Changes
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+
 ## 1.33.0-alpha.3
 
 ### Patch Changes

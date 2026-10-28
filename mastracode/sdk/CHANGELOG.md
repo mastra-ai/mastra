@@ -1,5 +1,20 @@
 # @mastra/code-sdk
 
+## 1.16.0-alpha.9
+
+### Patch Changes
+
+- Fixed saved thread-scope observation thresholds at or below 2,000 tokens stopping observational memory from starting. Resource scope still uses its saved threshold because it has no activation buffer. ([#27450](https://github.com/mastra-ai/mastra/pull/27450))
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+  - @mastra/client-js@1.57.0-alpha.8
+  - @mastra/duckdb@1.16.0-alpha.3
+  - @mastra/observability@1.22.0-alpha.4
+  - @mastra/pg@1.33.0-alpha.4
+  - @mastra/mcp@2.6.0-alpha.3
+  - @mastra/libsql@1.27.1-alpha.1
+
 ## 1.16.0-alpha.8
 
 ### Patch Changes

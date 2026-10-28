@@ -1,5 +1,34 @@
 # @mastra/factory
 
+## 0.25.0-alpha.9
+
+### Minor Changes
+
+- Added Slack Socket Mode support to Factory integrations, including transport-specific credential validation and clean connection shutdown. ([#28449](https://github.com/mastra-ai/mastra/pull/28449))
+
+  ```ts
+  new SlackIntegration({
+    mode: 'socket',
+    appToken: process.env.SLACK_APP_TOKEN!,
+    botToken: process.env.SLACK_APP_BOT_TOKEN!,
+  });
+  ```
+
+### Patch Changes
+
+- The Factory activity summary now loads only the events it shows, through a new `actions` filter on the project audit route. Unknown action names are ignored, and a request naming only unknown actions returns a 400 `unknown_actions` error instead of every event. ([#28394](https://github.com/mastra-ai/mastra/pull/28394))
+
+- The memory settings preview now shows the Auto memory model a run will actually use, instead of one that needs a credential the run cannot reach. Accounts whose runs authenticate with the organization's credentials no longer see a model that only their personal Google key can reach, and the other way round. ([#27450](https://github.com/mastra-ai/mastra/pull/27450))
+
+  A chat's preview follows the policy its own runs follow: a thread bound to a work-item run previews the Factory's credentials, and a session shared with a teammate previews the credentials of the person who owns it, not those of whoever is reading the page.
+
+  Rejects an observational memory threshold of 2000 tokens or fewer with a 400 that names the 2000-token floor, rather than saving a value that aborts memory on the next run.
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`3e5ca12`](https://github.com/mastra-ai/mastra/commit/3e5ca12f7c941e92e242f2dd08c7018644b0cbbd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+  - @mastra/code-sdk@1.16.0-alpha.9
+  - @mastra/mcp@2.6.0-alpha.3
+
 ## 0.25.0-alpha.8
 
 ### Patch Changes

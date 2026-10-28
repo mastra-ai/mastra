@@ -1,5 +1,15 @@
 # @mastra/core
 
+## 1.80.0-alpha.8
+
+### Minor Changes
+
+- Span records now carry nine native fields in their own columns: `externalParentSpanId`, `resumedFromSpanId`, `model`, `provider`, `outcome`, `stopReason`, `stopReasonContext`, `timeToFirstTokenMs` and `errorCount`. Exported spans can supply them, the storage exporters copy them as given, and a field the span does not set is stored as `null`. This release only adds the fields; later releases fill them in. ([#28389](https://github.com/mastra-ai/mastra/pull/28389))
+
+### Patch Changes
+
+- Fixed token usage being reported as `undefined` in `onFinish` when a structured-output run fails schema validation. The model's final chunk, which carries the usage, is now still read after the validation error. ([#28671](https://github.com/mastra-ai/mastra/pull/28671))
+
 ## 1.80.0-alpha.7
 
 ### Patch Changes

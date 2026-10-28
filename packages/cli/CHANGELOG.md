@@ -1,5 +1,27 @@
 # mastra
 
+## 1.36.0-alpha.8
+
+### Patch Changes
+
+- The Auto memory preview on the memory settings page shows the model runs use, and a threshold at or below 2,000 tokens is rejected with an explanation instead of breaking memory on the next run. ([#27450](https://github.com/mastra-ai/mastra/pull/27450))
+
+- Work Intake now shows each source's Factory and board on its own row, instead of repeating every source in a second searchable list. Linear repository mappings list only mapped projects; add one from a searchable drawer with **Add repository mapping**. In **Repositories**, the build-failure badge now sits before the expand chevron, so chevrons line up across rows. ([#28662](https://github.com/mastra-ai/mastra/pull/28662))
+
+- Added board suggestions and an activity summary to the page the sidebar's **New session** button opens, once a model and its credential are set up. The page now asks "What should we ship?" with your first name. ([#28394](https://github.com/mastra-ai/mastra/pull/28394))
+
+  **Suggestion cards**
+
+  Cards under the composer show what waits on your board, such as failed runs, pull requests with changes requested, untriaged Intake cards or stale pull requests, each with a count and a one-click action. Pointing at a card previews its prompt in the composer. Clicking it, or pressing Enter while the prompt shows, starts the session. Prompts that change board cards act on at most five cards.
+
+  **Activity summary**
+
+  One line totals what came in, how many agent runs started and what shipped this week, today or this month. Clicking it opens a chart of the period, and a recap prompt is offered when something shipped.
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+  - @mastra/deployer@1.80.0-alpha.8
+
 ## 1.36.0-alpha.7
 
 ### Patch Changes

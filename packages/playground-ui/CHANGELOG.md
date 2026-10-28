@@ -1,5 +1,26 @@
 # @mastra/playground-ui
 
+## 66.0.0-alpha.8
+
+### Patch Changes
+
+- Fixed `MetricsTable` row content sitting 1px low: the separator line is drawn inside each row's bottom edge, so rows now get one more pixel of bottom padding and their content is centered between the lines above and below it. ([#28616](https://github.com/mastra-ai/mastra/pull/28616))
+
+- Renamed the Model filter to Span Model on the Traces, Spans and Threads pages, so it is clear the filter matches the model recorded on spans. ([#28682](https://github.com/mastra-ai/mastra/pull/28682))
+
+- `ProviderLogo` now draws the Typesafe mark in its brand magenta for the `typesafe` provider (Jev Router) instead of the generic models.dev fallback. ([#28684](https://github.com/mastra-ai/mastra/pull/28684))
+
+  ```tsx
+  <ProviderLogo providerId="typesafe" />
+  ```
+
+- Fixed the sort icon on right-aligned sortable columns (such as TTFC in the traces list) appearing before the column label. It now sits after the label, matching the other sortable columns. ([#28681](https://github.com/mastra-ai/mastra/pull/28681))
+
+- Updated dependencies [[`551189d`](https://github.com/mastra-ai/mastra/commit/551189d6b6737a928b61335ce80cbe19e1b53bdd), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae), [`fe73073`](https://github.com/mastra-ai/mastra/commit/fe73073027b4884d1a301e6d6cc4f0bf168b43ae)]:
+  - @mastra/core@1.80.0-alpha.8
+  - @mastra/client-js@1.57.0-alpha.8
+  - @mastra/react@1.13.0-alpha.8
+
 ## 66.0.0-alpha.7
 
 ### Patch Changes
