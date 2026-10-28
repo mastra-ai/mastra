@@ -88,57 +88,83 @@ describe('Factory tool body', () => {
       vi.unstubAllGlobals();
     });
 
-    function loadImage(image: HTMLElement, sizes: { offsetHeight: number; naturalHeight: number }) {
-      Object.defineProperty(image, 'offsetHeight', { configurable: true, value: sizes.offsetHeight });
-      Object.defineProperty(image, 'naturalHeight', { configurable: true, value: sizes.naturalHeight });
+    type Sizes = { offsetWidth: number; offsetHeight: number; naturalWidth: number; naturalHeight: number };
+
+    function setSizes(image: HTMLElement, sizes: Partial<Sizes>) {
+      for (const [name, value] of Object.entries(sizes)) {
+        Object.defineProperty(image, name, { configurable: true, value });
+      }
+    }
+
+    function loadImage(image: HTMLElement, sizes: Sizes) {
+      setSizes(image, sizes);
       fireEvent.load(image);
     }
 
-    it('opens a capped screenshot to full size and back', async () => {
+    it('opens a tall screenshot to full size and back', async () => {
       renderWithProviders(<ToolCard tool={screenshotTool} />);
       await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
       const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
-      loadImage(image, { offsetHeight: 480, naturalHeight: 8000 });
+      loadImage(image, { offsetWidth: 27, offsetHeight: 480, naturalWidth: 450, naturalHeight: 8000 });
       expect(image).toHaveClass('max-h-[480px]');
 
       await userEvent.click(screen.getByRole('button', { name: 'Show full size' }));
       expect(image).not.toHaveClass('max-h-[480px]');
+      expect(image).not.toHaveClass('max-w-full');
 
       await userEvent.click(screen.getByRole('button', { name: 'Show smaller' }));
       expect(image).toHaveClass('max-h-[480px]');
     });
 
-    it("doesn't offer full size for a screenshot that already fits", async () => {
+    it('opens a wide screenshot that was shrunk to the transcript width', async () => {
+      renderWithProviders(<ToolCard tool={screenshotTool} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+      const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
+      loadImage(image, { offsetWidth: 600, offsetHeight: 169, naturalWidth: 2560, naturalHeight: 720 });
+
+      await userEvent.click(screen.getByRole('button', { name: 'Show full size' }));
+
+      expect(image).not.toHaveClass('max-w-full');
+    });
+
+    it("doesn't offer full size for a screenshot shown at its own size", async () => {
       renderWithProviders(<ToolCard tool={screenshotTool} />);
       await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
       loadImage(screen.getByRole('img', { name: "Screenshot of the agent's browser" }), {
+        offsetWidth: 400,
         offsetHeight: 300,
+        naturalWidth: 400,
         naturalHeight: 300,
       });
 
       expect(screen.queryByRole('button', { name: 'Show full size' })).not.toBeInTheDocument();
     });
 
-    it('offers full size once a wider transcript makes the cap cut the screenshot off', async () => {
-      const resized: ResizeObserverCallback[] = [];
+    it('offers full size once a narrower transcript shrinks the screenshot', async () => {
+      const observers: { callback: ResizeObserverCallback; targets: Element[] }[] = [];
       vi.stubGlobal(
         'ResizeObserver',
         class {
+          targets: Element[] = [];
           constructor(callback: ResizeObserverCallback) {
-            resized.push(callback);
+            observers.push({ callback, targets: this.targets });
           }
-          observe() {}
+          observe(target: Element) {
+            this.targets.push(target);
+          }
           disconnect() {}
         },
       );
       renderWithProviders(<ToolCard tool={screenshotTool} />);
       await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
       const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
-      loadImage(image, { offsetHeight: 300, naturalHeight: 900 });
+      loadImage(image, { offsetWidth: 800, offsetHeight: 300, naturalWidth: 800, naturalHeight: 300 });
       expect(screen.queryByRole('button', { name: 'Show full size' })).not.toBeInTheDocument();
+      const observer = observers.at(-1)!;
+      expect(observer.targets).toContain(image);
 
-      Object.defineProperty(image, 'offsetHeight', { configurable: true, value: 480 });
-      act(() => resized.at(-1)!([], {} as ResizeObserver));
+      setSizes(image, { offsetWidth: 600, offsetHeight: 225 });
+      act(() => observer.callback([], {} as ResizeObserver));
 
       expect(screen.getByRole('button', { name: 'Show full size' })).toBeVisible();
     });
