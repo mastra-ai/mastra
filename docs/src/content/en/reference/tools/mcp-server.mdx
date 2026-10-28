@@ -2072,6 +2072,7 @@ The Studio page of a server with `tasks` shows which tools run as tasks (`always
 
 - Studio identifies a task by a hash of its id, and the caller by a hash of its identity. Neither can be used over MCP, and the raw values are never sent to Studio. A task id you paste is sent in the request body and hashed on the server.
 - The client is shown as its client id with the token's subject or user id. A caller identified only by its token is shown with a short prefix of the token's hash instead. The label is never a credential.
+- With an RBAC provider, the list and task lookup need `mcp:read`. Cancelling and answering need `mcp:write`, which the default `admin` role has and `member` and `viewer` don't. Without it, Studio shows the task without those actions.
 - Only Studio sessions without a resource scope get the list. MCP callers and Mastra resources are separate identities, so a session scoped to a resource gets no tasks and can't cancel or answer one.
 - The built-in task stores support the list. A custom `store` must also implement `MCPTaskStoreAdmin` (`list`, `updateByKey`, `cancelByKey`); otherwise Studio says the store can't be listed.
 

@@ -266,6 +266,10 @@ describe('MCP task routes', () => {
       expect(await find(makeMastra(makeServer(undefined)).mastra, 'raw-task-id')).toBe(404);
     });
 
+    it('needs only mcp:read, like the list', () => {
+      expect(FIND_MCP_SERVER_TASK_ROUTE.requiresPermission).toBe('mcp:read');
+    });
+
     it('takes the task id in the body, never the URL', () => {
       expect(FIND_MCP_SERVER_TASK_ROUTE.method).toBe('POST');
       expect(FIND_MCP_SERVER_TASK_ROUTE.path).not.toContain(':taskId');
@@ -306,9 +310,9 @@ describe('MCP task routes', () => {
       ).toBe(404);
     });
 
-    it('needs mcp:execute', () => {
+    it('needs mcp:write', () => {
       expect(CANCEL_MCP_SERVER_TASK_ROUTE.requiresAuth).toBe(true);
-      expect(CANCEL_MCP_SERVER_TASK_ROUTE.requiresPermission).toBe('mcp:execute');
+      expect(CANCEL_MCP_SERVER_TASK_ROUTE.requiresPermission).toBe('mcp:write');
     });
   });
 
@@ -351,7 +355,7 @@ describe('MCP task routes', () => {
       expect(answerMcpServerTaskBodySchema.safeParse({ inputResponses }).success).toBe(true);
       expect(answerMcpServerTaskBodySchema.safeParse({}).success).toBe(false);
       expect(answerMcpServerTaskBodySchema.safeParse({ inputResponses: { approve: 'yes' } }).success).toBe(false);
-      expect(ANSWER_MCP_SERVER_TASK_ROUTE.requiresPermission).toBe('mcp:execute');
+      expect(ANSWER_MCP_SERVER_TASK_ROUTE.requiresPermission).toBe('mcp:write');
     });
   });
 });

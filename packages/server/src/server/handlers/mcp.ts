@@ -730,6 +730,8 @@ export const FIND_MCP_SERVER_TASK_ROUTE = createRoute({
     'Finds a task by its MCP task id, as a client sees it. The id is hashed before the lookup and is not kept or returned (experimental)',
   tags: ['MCP'],
   requiresAuth: true,
+  // A lookup, not a change: POST only keeps the raw id out of URLs, so it needs read like the list.
+  requiresPermission: 'mcp:read',
   handler: async ({
     mastra,
     serverId,
@@ -759,7 +761,7 @@ export const CANCEL_MCP_SERVER_TASK_ROUTE = createRoute({
   description: 'Cancels a running task by key, like the tasks/cancel MCP request (experimental)',
   tags: ['MCP'],
   requiresAuth: true,
-  requiresPermission: 'mcp:execute',
+  requiresPermission: 'mcp:write',
   handler: async ({
     mastra,
     serverId,
@@ -791,7 +793,7 @@ export const ANSWER_MCP_SERVER_TASK_ROUTE = createRoute({
     "Answers a task's open input requests by key, like the tasks/update MCP request; 404 unless the task is waiting for one of them (experimental)",
   tags: ['MCP'],
   requiresAuth: true,
-  requiresPermission: 'mcp:execute',
+  requiresPermission: 'mcp:write',
   handler: async ({
     mastra,
     serverId,

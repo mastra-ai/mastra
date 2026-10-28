@@ -5,7 +5,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import { McpTaskDrawer } from '../mcp-task-drawer/mcp-task-drawer';
 import { MCPDetail } from '../MCPDetail';
-import { v2Server } from './fixtures/mcp-servers';
+import { authDisabled, rbacUser, v2Server } from './fixtures/mcp-servers';
 import {
   aliceKey,
   bobFailedTask,
@@ -52,9 +52,14 @@ const listTasks = (tasks: () => McpServerTask[], onList?: (query: URLSearchParam
 
 const useTasks = (...tasks: McpServerTask[]) =>
   server.use(
+    http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(authDisabled)),
     http.get(`${TEST_BASE_URL}/api/mcp/:serverId/tools`, () => HttpResponse.json(reportTools)),
     listTasks(() => tasks),
   );
+
+/** Signs Studio in under RBAC with exactly `permissions`; call after `useTasks`. */
+const signInWith = (permissions: string[]) =>
+  server.use(http.get(`${TEST_BASE_URL}/api/auth/capabilities`, () => HttpResponse.json(rbacUser(permissions))));
 
 const renderDetail = (detailServer = tasksServer, initialEntry = '/mcps/reports') =>
   renderWithProviders(
@@ -351,6 +356,7 @@ describe('MCP task drawer', () => {
 
       const request = await screen.findByRole('region', { name: 'Input request approve' });
       expect(within(request).getByText('Send "hello"?')).not.toBeNull();
+      await within(request).findByRole('button', { name: 'Accept' });
       fireEvent.change(within(request).getByLabelText(/Note/), { target: { value: 'ship it' } });
       fireEvent.click(within(request).getByRole('button', { name: 'Accept' }));
 
@@ -373,11 +379,47 @@ describe('MCP task drawer', () => {
       renderDrawer(inputTask.taskKey);
 
       const request = await screen.findByRole('region', { name: 'Input request approve' });
-      fireEvent.click(within(request).getByRole('button', { name: 'Decline' }));
+      fireEvent.click(await within(request).findByRole('button', { name: 'Decline' }));
 
       await waitFor(() =>
         expect(onAnswer).toHaveBeenCalledWith({ inputResponses: { approve: { action: 'decline' } } }),
       );
+    });
+  });
+
+  describe('when the user can read MCP but not write it', () => {
+    it('offers no cancel for a working task, and says why', async () => {
+      useTasks(workingTask);
+      signInWith(['mcp:read', 'mcp:execute']);
+      renderDrawer(workingTask.taskKey);
+
+      expect(await screen.findByText('Cancelling or answering a task needs the mcp:write permission.')).not.toBeNull();
+      expect(screen.queryByRole('button', { name: 'Cancel task' })).toBeNull();
+    });
+
+    it('shows an elicitation read-only, without Accept or Decline', async () => {
+      useTasks(inputTask);
+      signInWith(['mcp:read', 'mcp:execute']);
+      renderDrawer(inputTask.taskKey);
+
+      await screen.findByText('Cancelling or answering a task needs the mcp:write permission.');
+      const request = screen.getByRole('region', { name: 'Input request approve' });
+      expect(within(request).getByText('Send "hello"?')).not.toBeNull();
+      expect(within(request).getByRole('heading', { name: 'Request' })).not.toBeNull();
+      expect(within(request).queryByRole('button', { name: 'Accept' })).toBeNull();
+      expect(within(request).queryByRole('button', { name: 'Decline' })).toBeNull();
+    });
+  });
+
+  describe('when the user can write MCP', () => {
+    it('offers cancel and the answer form', async () => {
+      useTasks(inputTask);
+      signInWith(['mcp:read', 'mcp:write']);
+      renderDrawer(inputTask.taskKey);
+
+      expect(await screen.findByRole('button', { name: 'Cancel task' })).not.toBeNull();
+      const request = screen.getByRole('region', { name: 'Input request approve' });
+      expect(within(request).getByRole('button', { name: 'Accept' })).not.toBeNull();
     });
   });
 

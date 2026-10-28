@@ -19,6 +19,7 @@ import {
 } from '../../hooks/use-mcp-server-tasks';
 import { shortTaskKey, useTaskDrawerParam } from '../../hooks/use-task-drawer-param';
 import { McpTaskStatusBadge } from './mcp-task-status-badge';
+import { usePermissions } from '@/domains/auth/hooks/use-permissions';
 import { toZodInputSchema } from '@/domains/tools/utils/to-zod-input-schema';
 
 /** The side drawer a task opens in, driven by `?task=`. */
@@ -52,6 +53,10 @@ export function McpTaskDrawer({ serverId }: { serverId: string }) {
 
 function McpTaskDrawerBody({ serverId, task }: { serverId: string; task: McpServerTask }) {
   const cancel = useCancelMcpServerTask(serverId);
+  // Cancelling and answering act on another client's task, so they need mcp:write, like the routes.
+  // Until permissions load, show neither the actions nor the note, so neither flashes.
+  const { canEdit, isLoading: permissionsLoading } = usePermissions();
+  const canAct = !permissionsLoading && canEdit('mcp');
   const inputRequests = Object.entries(task.inputRequests ?? {});
 
   return (
@@ -102,10 +107,23 @@ function McpTaskDrawerBody({ serverId, task }: { serverId: string; task: McpServ
       </Txt>
 
       {inputRequests.map(([key, request]) => (
-        <McpTaskInputRequest key={key} serverId={serverId} taskKey={task.taskKey} inputKey={key} request={request} />
+        <McpTaskInputRequest
+          key={key}
+          serverId={serverId}
+          taskKey={task.taskKey}
+          inputKey={key}
+          request={request}
+          canAnswer={canAct}
+        />
       ))}
 
-      {!isTerminalTask(task) && (
+      {!isTerminalTask(task) && !permissionsLoading && !canAct && (
+        <Txt tone="muted" variant="caption">
+          Cancelling or answering a task needs the mcp:write permission.
+        </Txt>
+      )}
+
+      {!isTerminalTask(task) && canAct && (
         <div className="flex flex-col gap-2">
           <Button
             variant="destructive-ghost"
@@ -135,11 +153,13 @@ function McpTaskInputRequest({
   taskKey,
   inputKey,
   request,
+  canAnswer,
 }: {
   serverId: string;
   taskKey: string;
   inputKey: string;
   request: NonNullable<McpServerTask['inputRequests']>[string];
+  canAnswer: boolean;
 }) {
   const answer = useAnswerMcpServerTask(serverId);
   const elicitation = request.method === 'elicitation/create' ? elicitationSchema.safeParse(request.params) : undefined;
@@ -151,7 +171,12 @@ function McpTaskInputRequest({
       <Txt as="h3" variant="subheading">
         Input requested
       </Txt>
-      {elicitation?.success ? (
+      {elicitation?.success && !canAnswer ? (
+        <>
+          {elicitation.data.message && <Txt>{elicitation.data.message}</Txt>}
+          <JsonSection label="Request" value={request} />
+        </>
+      ) : elicitation?.success ? (
         <>
           {elicitation.data.message && <Txt>{elicitation.data.message}</Txt>}
           <DynamicForm

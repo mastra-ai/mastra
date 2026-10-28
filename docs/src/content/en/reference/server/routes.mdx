@@ -726,7 +726,7 @@ How a supplied `id` is treated depends on the storage adapter. Some adapters ups
 | `ALL` | `/api/mcp/:serverId/sse` | Legacy MCP SSE transport |
 | `POST` | `/api/mcp/:serverId/messages` | Legacy MCP SSE messages |
 
-All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
+All MCP routes declare `requiresAuth: true`. Authentication is enforced only when `server.auth` is configured. With an RBAC provider, listing and finding tasks need `mcp:read`. Cancelling and answering a task need `mcp:write`, since they act on a task another client started. Paths use the default `/api` prefix. The legacy SSE routes return `404` for MCP v2 servers.
 
 ## Responses API
 

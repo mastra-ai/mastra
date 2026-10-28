@@ -2,7 +2,7 @@
 '@mastra/client-js': minor
 ---
 
-Added `getMcpServerTasks()`, `findMcpServerTask()`, `cancelMcpServerTask()` and `answerMcpServerTaskInput()` for a MCP server's tasks.
+Added `getMcpServerTasks()`, `findMcpServerTask()`, `cancelMcpServerTask()` and `answerMcpServerTaskInput()` for an MCP server's tasks.
 
 ```ts
 const { tasks, nextCursor } = await client.getMcpServerTasks('reports', { status: 'input_required' });
