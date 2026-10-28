@@ -36,13 +36,23 @@ function SidebarShortcuts() {
 }
 
 // The delay keeps fast navigations from flashing the loader.
-function PageLoading() {
-  if (useNavigation().state !== 'loading') return null;
+function RoutedPage() {
+  const loading = useNavigation().state === 'loading';
 
   return (
-    <div className="absolute inset-0 z-10 flex items-center justify-center bg-background transition-opacity delay-150 starting:opacity-0">
-      <BrandLoader size="lg" aria-label="Loading page" />
-    </div>
+    <>
+      <div
+        className={loading ? 'contents invisible transition-[visibility] delay-150 duration-0' : 'contents'}
+        inert={loading}
+      >
+        <Outlet />
+      </div>
+      {loading ? (
+        <div className="absolute inset-0 flex items-center justify-center transition-opacity delay-150 starting:opacity-0">
+          <BrandLoader size="lg" aria-label="Loading page" />
+        </div>
+      ) : null}
+    </>
   );
 }
 
@@ -53,8 +63,7 @@ function AppFrame() {
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
-        <PageLoading />
+        <RoutedPage />
       </MainCard>
     </AppShell>
   );
