@@ -503,4 +503,42 @@ describe('chat run errors on an account limit', () => {
     expect(screen.getByText('Provider rate limit reached')).toBeVisible();
     expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
   });
+
+  it('names no credential when another provider serves the same model name the session moved to', async () => {
+    stubCredential('organization');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+        HttpResponse.json({
+          models: [
+            {
+              id: 'openai-codex/gpt-5.5',
+              provider: 'openai-codex',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'ChatGPT Plus/Pro',
+              credentialHolder: 'organization',
+            },
+            {
+              id: 'openai/gpt-5.5',
+              provider: 'openai',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'OpenAI API key',
+              credentialHolder: 'organization',
+            },
+          ],
+          modelScope: 'factory',
+          defaultModelId: null,
+        }),
+      ),
+    );
+    const codexLimited = failedReply('Rate limit reached for gpt-5.5.', 'AI_APICallError', {
+      statusCode: 429,
+      modelId: 'gpt-5.5',
+    });
+    renderWithProviders(<ErrorSession messages={[codexLimited]} modelId="openai/gpt-5.5" />);
+
+    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
+  });
 });
