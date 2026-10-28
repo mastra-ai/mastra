@@ -322,7 +322,7 @@ phases: {
 
 Boards and phases take `name` and an optional `description`. A phase lists the phases a card may move to in `nextPhases`. A working phase can also declare:
 
-- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
+- `runner` — `{ agentId?, skill?, context?, instructions? }`. `context` names the session the phase runs in (defaults to `work`); phases that share a context share a session. When the agent moves its own card into another phase of its context, that phase's `skill` still starts: its prompt is queued onto the agent's run. `skill` starts that skill when a card enters the phase from a source the phase has no `onEnter` handler for. It names a built-in Factory skill or one of your app's skills (see [Skills for custom boards](#skills-for-custom-boards)). `instructions` (up to 1,000 characters) are added to every run the phase starts. `agentId` defaults to `code-agent`, the only agent Factory runs today.
 - `autoStart` and `autoStartWhen` — the phase's runs start without a person's approval, for every card or only for cards matching the rule. Cards from outside the write-access circle still wait for a person.
 - `exitTool` — a tool name, or `{ id, autoApprove, autoApproveWhen }`, that ends the phase. The factory-phase signal tells the agent the phase ends when that tool succeeds and lists `nextPhases`; the agent then moves the card itself with `factory_transition_work_item`, so it picks where the card goes. The phase needs at least one next phase. `autoApprove` answers the person's approval the tool waits for, for every card or only cards matching `autoApproveWhen`. Factory sessions already run tools without asking, so today this matters for `submit_plan`: an auto-approved plan is accepted without a person. `defineBoard()` accepts `autoApprove` on any exit tool, and the catalog reports it, but on other tools it has no effect yet.
 
@@ -343,7 +343,7 @@ const releaseBoard = defineBoard({
     plan: {
       name: 'Plan',
       kind: 'working',
-      runner: { context: 'build', skill: 'plan' },
+      runner: { context: 'build', skill: 'factory-plan' },
       autoStart: true,
       autoStartWhen: LOW_EFFORT,
       exitTool: { id: 'submit_plan', autoApprove: true },
@@ -357,6 +357,65 @@ const releaseBoard = defineBoard({
 ```
 
 **Migration:** `defineBoard()` still accepts the old field names and maps them to the new ones straight away: `title` → `name`, `role` → `runner.context`, `next` → `nextPhases`. It logs one warning per board that still uses them. Setting both `title` and `name`, or `role` and `runner.context`, to different values is rejected. `outcomes` is not deprecated: its targets are added to `nextPhases` and outcome names keep working. The board `defineBoard()` returns, and the one `new MastraFactory({ boards })` takes, has only the new fields, so code that reads `board.title`, `phase.title`, `phase.role` or `phase.next` must switch to `name`, `runner.context` and `nextPhases`. The board catalog (`GET /web/factory/projects/:id/boards`) still sends `title` and `role` beside the new fields for older clients. Card session keys do not change: a phase's context is its old role.
+
+### Skills for custom boards
+
+A phase's `runner.skill` runs a skill when a card enters the phase. Use a built-in skill such as `factory-plan`, or write your own. Factory finds a skill in this order; the first match wins:
+
+1. **Code skills** — passed to `new MastraFactory({ skills })`, created with `createSkill()` from `@mastra/core/skills`.
+2. **Folder skills** — `factory-skills/<name>/SKILL.md` in your app. Factory looks in `src/mastra/public/factory-skills`, `public/factory-skills`, `factory-skills` and `output/factory-skills` under the working directory, and uses the first that exists. Supporting files, such as `references/`, can sit next to `SKILL.md`.
+3. **Built-in skills** shipped with `@mastra/factory`.
+
+A skill with the same name as a built-in skill replaces it, for the built-in boards too. A code skill replaces the whole folder skill of the same name, including its supporting files. Repository skills in a project's own repository never replace these.
+
+Skill names use 1–64 lowercase letters, digits and single hyphens, such as `release-notes`. A folder skill's `name` must match its directory name. Names in `skills` must be unique, or the constructor throws.
+
+```typescript
+import { createSkill } from '@mastra/core/skills';
+import { MastraFactory } from '@mastra/factory';
+import { defineBoard } from '@mastra/factory/boards';
+
+const releaseNotes = createSkill({
+  name: 'release-notes',
+  description: 'Draft release notes for a work item',
+  instructions: 'Group the release notes by package and end with a one-line summary. Then move the card to Published.',
+});
+
+const notesBoard = defineBoard({
+  id: 'notes',
+  name: 'Notes',
+  initialPhase: 'backlog',
+  phases: {
+    backlog: { name: 'Backlog', kind: 'resting', nextPhases: ['drafting'] },
+    drafting: {
+      name: 'Drafting',
+      kind: 'working',
+      runner: { context: 'writer', skill: 'release-notes' },
+      nextPhases: ['published'],
+    },
+    published: { name: 'Published', kind: 'terminal' },
+  },
+});
+
+const factory = new MastraFactory({ ...config, boards: [notesBoard], skills: [releaseNotes] });
+```
+
+The same skill as a folder skill is `factory-skills/release-notes/SKILL.md`:
+
+```markdown
+---
+name: release-notes
+description: Draft release notes for a work item
+---
+
+Group the release notes by package and end with a one-line summary. Then move the card to Published.
+```
+
+The skill receives the card's link, or its title when it has none, as arguments. Every Factory session can also load your skills on request, like the built-in ones.
+
+When a card enters the phase and the skill does not exist, no run starts and the card stays in the phase. The start fails with `Skill not found: <name>.`; after a few quick retries it stays failed, and you can retry it once the skill exists. The constructor logs a warning for each phase that names a missing skill. It also warns when a phase outside the `review` context runs a review skill (`factory-review`, `factory-rereview`, `factory-self-review`, `factory-gitlab-review`, `factory-gitlab-rereview`), because sessions only load those for reviews.
+
+Settings › Skills shows the skill each custom phase runs, marks a phase whose skill is missing, marks built-in skills your app replaces, and lists your other skills under **App skills**.
 
 ### Execute a custom board
 
@@ -456,12 +515,12 @@ Custom phase signals and persisted tool-result ingestion use the item's installe
 
 ### Custom boards in the Factory UI
 
-`GET /web/factory/projects/:id/boards` returns the installed board catalog for an authorized project: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind` and working `role`), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
+`GET /web/factory/projects/:id/boards` returns the installed board catalog for an authorized project: each board's `id`, `title`, `initialPhase`, declaration-ordered `phases` (with `kind`, and for working phases `role` and the `skill` the runner starts), and transition topology. Handlers, policies, and prompts are never serialized. The Factory UI reads this catalog instead of assuming Work and Review:
 
 - Installed boards appear in the sidebar — built-ins first, then custom boards in registry order. Work and Review keep `/factories/:id/work` and `/factories/:id/review`; custom boards open at `/factories/:id/boards/:boardId`. An unknown board ID or a failed catalog request shows an explicit unavailable state rather than falling back to Work.
 - Columns, phase labels, and working/terminal presentation come from the phase definitions. Card creation sends the selected `board`, so the server picks the initial phase. Card menus offer only moves the topology declares; the server still enforces policy, authorization, and revisions.
 - A card's persisted `board` decides which board it belongs to. UI actions cannot move a card to a different board.
-- Settings › Skills groups built-in skills under Work and Review and lists each custom board's declared roles. Custom-board kickoff instructions live in code; there is no skill or per-role agent configuration for them.
+- Settings › Skills groups built-in skills under Work and Review. For each custom board it shows the skill each phase runs (`runner.skill`) and the roles of phases that run no skill; those phases' kickoff instructions live in the board definition. Your app's other skills appear under App skills.
 - Not yet board-aware: the Overview funnel and stage-hold metrics (Work-only), search scopes (Work/Review sessions), and the automation toggles that are specific to Work triage and Review. Custom-board cards still count toward in-flight totals and appear in activity and audit logs.
 
 ### Route intake to custom boards

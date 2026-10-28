@@ -1,11 +1,16 @@
 import { randomUUID } from 'node:crypto';
+import { mkdirSync, mkdtempSync, rmSync, writeFileSync } from 'node:fs';
+import { tmpdir } from 'node:os';
+import { join } from 'node:path';
 
 import { Mastra } from '@mastra/core/mastra';
+import { createSkill } from '@mastra/core/skills';
+import type { InlineSkill } from '@mastra/core/skills';
 import { MastraSandbox } from '@mastra/core/workspace';
 import type { ProviderStatus } from '@mastra/core/workspace';
 import { LibSQLFactoryStorage } from '@mastra/libsql';
 import { Hono } from 'hono';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { defineBoard } from '../boards/index.js';
 import { MastraFactory } from '../factory.js';
@@ -171,7 +176,7 @@ function publisher(): (text: string) => ToolCall | undefined {
 }
 
 /** A real Factory on in-memory storage with one linked GitHub repository, driven over HTTP. */
-async function startFactory(board: ReturnType<typeof defineBoard>) {
+async function startFactory(board: ReturnType<typeof defineBoard>, skills?: InlineSkill[]) {
   vi.stubEnv('OPENAI_API_KEY', 'sk-phase-test');
   const storage = new LibSQLFactoryStorage({ id: 'phase-runtime', url: ':memory:' });
   const github = new GithubIntegration({
@@ -188,6 +193,7 @@ async function startFactory(board: ReturnType<typeof defineBoard>) {
     sandbox: () => new TestSandbox(),
     stateSecret: 'phase-runtime-test-state-secret',
     boards: [board],
+    ...(skills ? { skills } : {}),
     configVersion: 'phase-runtime-v1',
     secretEncryption: createFactorySecretEncryption({ primary: { id: 'test', key: Buffer.alloc(32, 7) } }),
   });
@@ -394,4 +400,115 @@ describe('board phase fields at runtime', () => {
       await runtime.close();
     }
   }, 60_000);
+
+  describe('a custom phase that runs an app skill', () => {
+    /** Cards move from Backlog into Drafting by a board rule; Drafting runs only `runner.skill`. */
+    const notes = defineBoard({
+      id: 'notes',
+      name: 'Notes',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: {
+          name: 'Backlog',
+          kind: 'resting',
+          nextPhases: ['drafting'],
+          onEnter: {
+            issue: context => ({
+              type: 'transition',
+              idempotencyKey: `${context.ingress.id}:draft`,
+              board: 'notes',
+              stage: 'drafting',
+            }),
+          },
+        },
+        drafting: {
+          name: 'Drafting',
+          kind: 'working',
+          runner: { context: 'writer', skill: 'release-notes' },
+          autoStart: true,
+          nextPhases: ['published'],
+        },
+        published: { name: 'Published', kind: 'terminal' },
+      },
+    });
+    const SKILL_RULE = 'Group the release notes by package and end with a one-line summary.';
+
+    /** Following the release-notes skill, the agent moves the card to Published. */
+    function writer(): (text: string) => ToolCall | undefined {
+      let moved = false;
+      return text => {
+        if (moved || !text.includes(SKILL_RULE)) return undefined;
+        moved = true;
+        return {
+          name: 'factory_transition_work_item',
+          args: { stage: 'published', expectedRevision: latestRevision(text), rationale: 'Notes drafted.' },
+        };
+      };
+    }
+
+    /** Creates a card, waits for Drafting's skill start to settle, and returns what the model received. */
+    async function draftNotes(skills?: InlineSkill[]) {
+      const requests: string[] = [];
+      fakeModel(requests, writer());
+      const runtime = await startFactory(notes, skills);
+      try {
+        const item = await runtime.card('v2 notes', []);
+        // Capture the start the moment it settles: a missing skill keeps retrying in the background.
+        const settled = await vi.waitFor(
+          async () => {
+            const start = (await runtime.decisionsFor(item)).find(record => record.decision.type === 'invokeSkill');
+            const stages = (await runtime.read(item)).stages;
+            if (start?.status === 'succeeded') expect(stages).toEqual(['published']);
+            else expect(start?.lastError).toContain('Skill not found');
+            return { start: start!, stages };
+          },
+          { timeout: 15_000 },
+        );
+        return { requests, ...settled };
+      } finally {
+        await runtime.close();
+      }
+    }
+
+    it('runs a skill passed to MastraFactory({ skills }) when a card enters the phase', async () => {
+      const { requests, start, stages } = await draftNotes([
+        createSkill({ name: 'release-notes', description: 'Draft release notes', instructions: SKILL_RULE }),
+      ]);
+      expect(start).toMatchObject({ status: 'succeeded', decision: { skillName: 'release-notes' } });
+      // The model received the app skill's instructions, then moved the card.
+      expect(requests.find(text => text.includes(SKILL_RULE))).toContain('release-notes');
+      expect(stages).toEqual(['published']);
+    }, 60_000);
+
+    describe('from the app factory-skills folder', () => {
+      let appRoot: string;
+
+      beforeEach(() => {
+        appRoot = mkdtempSync(join(tmpdir(), 'factory-app-skills-'));
+        mkdirSync(join(appRoot, 'factory-skills', 'release-notes'), { recursive: true });
+        writeFileSync(
+          join(appRoot, 'factory-skills', 'release-notes', 'SKILL.md'),
+          `---\nname: release-notes\ndescription: Draft release notes\n---\n\n${SKILL_RULE}\n`,
+        );
+      });
+
+      afterEach(() => rmSync(appRoot, { recursive: true, force: true }));
+
+      it('runs a folder skill when a card enters the phase', async () => {
+        vi.spyOn(process, 'cwd').mockReturnValue(appRoot);
+        const { requests, start, stages } = await draftNotes();
+        expect(start).toMatchObject({ status: 'succeeded', decision: { skillName: 'release-notes' } });
+        expect(requests.some(text => text.includes(SKILL_RULE))).toBe(true);
+        expect(stages).toEqual(['published']);
+      }, 60_000);
+    });
+
+    it('starts no run, and leaves the card in the phase, when the skill does not exist', async () => {
+      const { requests, start, stages } = await draftNotes();
+      expect(start).toMatchObject({ status: 'retry', decision: { skillName: 'release-notes' } });
+      expect(start.lastError).toContain('Skill not found: release-notes.');
+      expect(requests.some(text => text.includes(SKILL_RULE))).toBe(false);
+      expect(stages).toEqual(['drafting']);
+    }, 60_000);
+  });
 });
