@@ -245,7 +245,13 @@ describe('handleBrowserCommand', () => {
 
   it('does not let a /browser clear still creating its browser replace one a later /browser command attached', async () => {
     const { ctx, settings, browserInstance, staticAgent } = createContext();
-    browserMocks.loadSettings.mockReturnValue(settings);
+    // Each load gets its own copy of what was last saved, so the clear's in-memory
+    // reset can't leak into the later /browser on.
+    let persisted = structuredClone(settings);
+    browserMocks.loadSettings.mockImplementation(() => structuredClone(persisted));
+    browserMocks.saveSettings.mockImplementation(next => {
+      persisted = structuredClone(next);
+    });
     browserMocks.checkProfileProviderMismatch.mockReturnValue(undefined);
     const cleared = { id: 'cleared', close: vi.fn(async () => {}) };
     const second = { id: 'second', close: vi.fn(async () => {}) };
@@ -269,6 +275,11 @@ describe('handleBrowserCommand', () => {
     expect(staticAgent.setBrowser).not.toHaveBeenCalledWith(cleared);
     expect(staticAgent.setBrowser).toHaveBeenLastCalledWith(second);
     expect(browserMocks.saveSettings).toHaveBeenCalledOnce();
+    expect(persisted.browser).toMatchObject({
+      enabled: true,
+      provider: 'stagehand',
+      profile: '/tmp/mastracode-browser-profile',
+    });
     expect(ctx.showInfo).toHaveBeenCalledWith('Another /browser command replaced this browser.');
   });
 
