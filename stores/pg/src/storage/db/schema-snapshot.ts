@@ -47,8 +47,6 @@ export interface SchemaSnapshot {
    * excluded so init rebuilds them instead of treating them as present.
    */
   indexes: Set<string>;
-  /** Invalid index names, which init drops and rebuilds. */
-  invalidIndexes: Set<string>;
   /** Names of indexes that are the replica identity of their table. */
   replicaIdentityIndexes: Set<string>;
   /**
@@ -154,10 +152,8 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
   const indexes = new Set<string>();
   const replicaIdentityIndexes = new Set<string>();
   const primaryKeyIndexes = new Set<string>();
-  const invalidIndexes = new Set<string>();
   for (const row of indexRows) {
     if (row.is_valid) indexes.add(row.indexname);
-    else invalidIndexes.add(row.indexname);
     if (row.is_replica_identity) {
       replicaIdentityIndexes.add(row.indexname);
     }
@@ -175,6 +171,5 @@ export async function loadSchemaSnapshot(client: DbClient, schemaName: string | 
     indexes,
     replicaIdentityIndexes,
     primaryKeyIndexes,
-    invalidIndexes,
   };
 }
