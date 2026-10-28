@@ -36,7 +36,7 @@ import type { ObservabilityStorage, TraceQueryTenantScope } from '@mastra/core/s
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import { DuckDBConnection } from '../../db/index';
 import { DuckDBStore } from '../../index';
-import { ALL_DDL, ALL_MIGRATIONS, SPAN_EVENTS_DDL } from './ddl';
+import { ALL_DDL, ALL_MIGRATIONS } from './ddl';
 import { aggregateTraces as aggregateDuckDBTraces } from './trace-aggregate';
 import type { ObservabilityStorageDuckDB } from './index';
 import { ObservabilityStorageDuckDB as ConcreteObservabilityStorageDuckDB } from './index';
@@ -293,51 +293,6 @@ describe('ObservabilityStorageDuckDB', () => {
       expect(response).toEqual({ threads: [], page: { next: null } });
     } finally {
       await lazyStore.db.close();
-    }
-  });
-
-  it('upgrades persisted native span columns without assigning outcomes to old rows', async () => {
-    const directory = await mkdtemp(join(tmpdir(), 'obs-724-upgrade-'));
-    const path = join(directory, 'legacy.duckdb');
-    const fields = {
-      externalParentSpanId: 'external-parent',
-      resumedFromSpanId: 'prior-segment',
-      model: 'gpt-4o-mini',
-      provider: 'openai',
-      outcome: 'limit' as const,
-      stopReason: 'max_steps' as const,
-      stopReasonContext: { reason: 'max_steps' as const, maxSteps: 2, completedSteps: 2 },
-      timeToFirstTokenMs: 123.5,
-      errorCount: 2,
-    };
-    const columns = Object.keys(fields);
-    let db = new DuckDBConnection({ path });
-    try {
-      const legacyDDL = SPAN_EVENTS_DDL.split('\n')
-        .filter(line => !columns.some(column => line.trim().startsWith(column + ' ')))
-        .join('\n');
-      await db.execute(legacyDDL);
-      await db.execute(`INSERT INTO span_events (eventType, timestamp, traceId, spanId, name, spanType, isEvent, endedAt)
-        VALUES ('end', TIMESTAMP '2026-01-01 00:00:00', 'old-trace', 'root', 'old execution', 'agent_run', false, TIMESTAMP '2026-01-01 00:00:01')`);
-      await db.close();
-      db = new DuckDBConnection({ path });
-      const upgraded = new ConcreteObservabilityStorageDuckDB({ db });
-      await upgraded.init();
-      await upgraded.init();
-      const old = (await upgraded.getSpan({ traceId: 'old-trace', spanId: 'root' }))!.span;
-      expect(old).toMatchObject(Object.fromEntries(columns.map(column => [column, null])));
-      await upgraded.batchCreateSpans({ records: [{ ...old, traceId: 'new-trace', ...fields }] });
-      await db.close();
-      db = new DuckDBConnection({ path });
-      const reopened = new ConcreteObservabilityStorageDuckDB({ db });
-      await reopened.init();
-      expect((await reopened.getSpan({ traceId: 'new-trace', spanId: 'root' }))!.span).toMatchObject(fields);
-      expect((await reopened.getSpan({ traceId: 'old-trace', spanId: 'root' }))!.span).toMatchObject(
-        Object.fromEntries(columns.map(column => [column, null])),
-      );
-    } finally {
-      await db.close();
-      await rm(directory, { recursive: true, force: true });
     }
   });
 

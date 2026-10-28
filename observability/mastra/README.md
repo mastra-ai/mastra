@@ -40,11 +40,11 @@ The package automatically derives duration, status, model token, and cache token
 
 ## Native execution outcomes (OBS-724, implementation in progress)
 
-[OBS-724](https://linear.app/kepler-crm/issue/OBS-724) is the authoritative proposal. This implementation builds on the eight supplied fields in [OBS-722](https://linear.app/kepler-crm/issue/OBS-722), incorporating its draft PR #28389 at `c67bd0f718c5861a9d8193d2354371200727d494`. Earlier local six-field proposals are historical context. Platform integration and proposal updates in Linear are separate, outstanding work.
+[OBS-724](https://linear.app/kepler-crm/issue/OBS-724) is the authoritative proposal. This branch defines and captures the three termination fields in tracing and exports them through `MastraStorageExporter` and `MastraPlatformExporter`. Native-column storage support and all query support belong to separate work. Earlier local proposals are historical context.
 
 ### Contract and scope
 
-The shared [outcome contract](../../packages/core/src/observability/types/outcome.ts) defines `outcome`, nullable `stopReason`, and nullable, strongly typed `stopReasonContext`. Lifecycle options, exports, snapshots, storage records, SDK responses, and CLI query contracts carry these fields.
+The shared [outcome contract](../../packages/core/src/observability/types/outcome.ts) defines `outcome`, nullable `stopReason`, and nullable, strongly typed `stopReasonContext`. Lifecycle options, exports, snapshots, and the shared exporter record contract carry these fields.
 
 | Outcome       | Meaning                                                                                    |
 | ------------- | ------------------------------------------------------------------------------------------ |
@@ -126,21 +126,11 @@ Evented guarded status writes prevent delayed cancellation from rewriting comple
 
 Handoff requires persisted parent/child workflow snapshots, a checkpoint-capable store, and observability completion support. Snapshot opt-outs, unsupported stores, and spans created outside these lifecycle hooks do not gain the same guarantees.
 
-### Export, storage, and queries
+### Export boundary
 
-The eight OBS-722 fields are `externalParentSpanId`, `resumedFromSpanId`, `model`, `provider`, `outcome`, `stopReason`, `timeToFirstTokenMs`, and `errorCount`. Supplied values survive ordinary round trips; enabling the contract does not automatically populate every field. OBS-724 adds typed `stopReasonContext` alongside them. No `hasError`, `duration`, or `guardrailTriggered` column is introduced.
+`MastraStorageExporter` and `MastraPlatformExporter` use shared record builders that preserve `outcome`, `stopReason`, and `stopReasonContext`. Creates serialize absent values as null; updates omit absent fields and retain explicit nulls. Context remains a strongly typed, serializable object containing reason-specific facts and relevant agent signals.
 
-The storage and Platform exporters preserve native fields in their OSS payloads. In-memory, DuckDB, PostgreSQL vNext, and ClickHouse vNext storage preserve nested observer causes and signal context. Context is nullable JSON detail (JSON text in ClickHouse). Existing sorting/partition keys remain unchanged. Additive schema upgrades must precede new-column writes; Platform collector/writer/schema deployment has not been performed here.
-
-Trace and branch list filters accept exact native `outcome` and `stopReason`. A trace filter applies to its root; a branch filter applies to its anchor. Combined fields must both match. Advanced queries support root/related-span predicates, direct span queries, thread qualification, and value discovery. Missing values never inherit legacy success status. Context is detail-only, not a filtering dimension.
-
-```typescript
-const limited = await observabilityStore.listBranches({
-  filters: { outcome: 'limit', stopReason: 'context_window_exceeded' },
-});
-```
-
-Lightweight lists/timelines include outcome and reason; `getSpan` provides context. SDK and CLI contracts expose the filters and typed responses. DuckDB reconstructs mutable fields before matching, including explicit nulls that clear provisional failures. ClickHouse matches current span versions and restricts reconciliation to candidate traces. Equal-version conflicting writes remain unresolved.
+The storage exporter passes these records to the configured storage domain. The Platform exporter serializes them in its HTTP payload. Backend native columns, migrations, read mappings, query filters, value discovery, and generated query API changes are intentionally excluded from this branch. Their implementation and deployment are coordinated separately; exporter support alone does not establish backend persistence.
 
 ### Validation and remaining work
 
@@ -151,20 +141,19 @@ Relevant suites:
 - [Agent outcomes](../../packages/core/src/loop/test-utils/aimock/scenarios/native-outcomes.scenario.test.ts), [observer causes](../../packages/core/src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts), and [signal context](../../packages/core/src/loop/test-utils/aimock/scenarios/signal-outcomes.scenario.test.ts), shared across five engines.
 - [Workflow control-flow scenarios](src/test-utils/workflow-control-flow-suite.ts) and [evented process handoff](src/workflow-remote-tracing.test.ts).
 - [Inngest native workflows](../../workflows/inngest/src/__tests__/workflow-native-outcomes.test.ts) and [cross-process continuation/cancellation](../../workflows/inngest/src/__tests__/workflow-cross-process-outcomes.test.ts).
-- [Shared storage round trips](../../stores/_test-utils/src/domains/observability-vnext/index.ts), native query suites, and adapter migration tests.
 - [Workflow checkpoint storage contract](../../stores/_test-utils/src/domains/workflows/span-checkpoints.ts), including concurrent full-snapshot writes.
 
-The final storage audit passes 439 DuckDB observability/query/migration tests and 213 lifecycle/export/rebuild checks. The real HTTP exporter agreement suite checks all eight native fields plus nested observer context and signals under all three storage export strategies. Removing context from the Platform payload makes all three cases fail at the received-payload assertion.
+The HTTP exporter agreement suite checks the three termination fields, nested observer context, and signals under all three storage export strategies. Removing context from the Platform payload makes all three cases fail at the received-payload assertion. Backend storage/query validation belongs to the separate storage work.
 
 The final agent audit passes 115 core scenario/classification checks and 27 Inngest scenarios after correcting an observer capture exporter's missing `flush()` method. The latest nested-workflow validation passes 351 local/process workflow cases and 103 PostgreSQL cases. Three replacement-worker nested scenarios plus delayed-dispatch cancellation passed 20 repetitions each locally; PostgreSQL delayed-dispatch cancellation passed 20 repetitions. These results establish the covered boundaries, not arbitrary cross-worker reconciliation.
 
 Remaining work before claiming full OBS-724 completion:
 
 - Update the authoritative Linear proposal with final reason codes and design decisions after review; no Linear changes have been made by this implementation.
-- Integrate and deploy Platform ingestion/storage with the nullable native fields and context, and coordinate rollout with OBS-722. Validate third-party exporter mappings separately where their backends support these fields.
+- Integrate the separate OSS/Platform native-column work and query work. Validate third-party exporter mappings separately where their backends support these fields.
 - Complete active ownership-transfer and concurrent mixed-cause reconciliation coverage. Restoring unfinished timers is not implemented; replacement-worker cancellation is covered. External-placeholder creation and trace/thread representative selection remain coordinated with OBS-607/608 rather than inferred here.
 - Extend signal attribution and provider/observer cases beyond the tested boundaries, and audit spans created outside instrumented lifecycle hooks.
-- Validate TimescaleDB/pg_partman-specific upgrades and additional adapters. The separate memory integration harness remains unavailable because its lockfile/configuration and unpublished internal dependency prevent installation; the observer scenarios use real in-memory storage.
+- The separate memory integration harness remains unavailable because its lockfile/configuration and unpublished internal dependency prevent installation; the observer scenarios use real in-memory storage.
 - Resolve the existing public Inngest polling race that can expose an intermediate failed step before final tripwire status. Native tests await finalized storage/exports; they do not claim that public-status race is fixed.
 
 ## Changelog

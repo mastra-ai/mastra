@@ -78,12 +78,6 @@ describe.each(['realtime', 'batch-with-updates', 'insert-only'] as const)('expor
         expect((await store!.getSpan({ traceId: 'trace', spanId: 'span' }))?.span.outputPreview).toBe('');
       }
       const nativeFields = {
-        externalParentSpanId: 'external-parent',
-        resumedFromSpanId: 'earlier-segment',
-        model: 'gpt-4o-mini',
-        provider: 'openai',
-        timeToFirstTokenMs: 25.5,
-        errorCount: 1,
         outcome: 'interrupted' as const,
         stopReason: 'observer_failed' as const,
         stopReasonContext: {

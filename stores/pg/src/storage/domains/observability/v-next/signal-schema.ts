@@ -1,5 +1,4 @@
-type ColumnType =
-  'bigserial' | 'boolean' | 'double precision' | 'integer' | 'jsonb' | 'text' | 'text[]' | 'timestamptz' | 'xid8';
+type ColumnType = 'bigserial' | 'boolean' | 'double precision' | 'jsonb' | 'text' | 'text[]' | 'timestamptz' | 'xid8';
 
 interface SignalColumn {
   name: string;
@@ -83,16 +82,6 @@ export const SPAN_EVENT_COLUMNS = [
   { name: 'startedAt', type: 'timestamptz' },
   { name: 'endedAt', type: 'timestamptz' },
   { name: 'timeToFirstChunkMs', type: 'double precision', nullable: true },
-  // Native span fields, stored as supplied (NULL when the producer set none).
-  { name: 'externalParentSpanId', type: 'text', nullable: true },
-  { name: 'resumedFromSpanId', type: 'text', nullable: true },
-  { name: 'model', type: 'text', nullable: true },
-  { name: 'provider', type: 'text', nullable: true },
-  { name: 'outcome', type: 'text', nullable: true },
-  { name: 'stopReason', type: 'text', nullable: true },
-  { name: 'stopReasonContext', type: 'jsonb', nullable: true },
-  { name: 'timeToFirstTokenMs', type: 'double precision', nullable: true },
-  { name: 'errorCount', type: 'integer', nullable: true },
   { name: 'tags', type: 'text[]', defaultSql: "'{}'" },
   { name: 'metadataSearch', type: 'jsonb', defaultSql: "'{}'::jsonb" },
   { name: 'attributes', type: 'jsonb', nullable: true },
@@ -197,8 +186,6 @@ export const SPAN_LIGHT_SELECT_COLUMN_NAMES = [
   'isPending',
   'startedAt',
   'endedAt',
-  'outcome',
-  'stopReason',
 ] as const;
 
 function quotedColumnName(name: string): string {

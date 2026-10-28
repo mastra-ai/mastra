@@ -143,7 +143,6 @@ describe.each(['batch-with-updates', 'realtime', 'insert-only'] as const)(
         const store = (await storage.getStore('observability'))!;
         expect(store.observabilityStrategy.supported).toContain(strategy);
         const primary = tracing.startSpan({ name: 'primary', type: SpanType.AGENT_RUN, outcome: null });
-        const delayedStart = structuredClone(primary.exportSpan());
         const recovered = tracing.startSpan({
           name: 'recovered',
           type: SpanType.AGENT_RUN,
@@ -170,11 +169,6 @@ describe.each(['batch-with-updates', 'realtime', 'insert-only'] as const)(
         };
         primary.end({ outcome: 'interrupted', stopReason: 'observer_failed', stopReasonContext: context });
         recovered.end({ outcome: 'success', stopReason: null, stopReasonContext: null });
-        await tracing.flush();
-        // Replay a real exported start after the terminal event was persisted.
-        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_STARTED, exportedSpan: delayedStart });
-        await tracing.flush();
-        await exporter.exportTracingEvent({ type: TracingEventType.SPAN_UPDATED, exportedSpan: delayedStart });
         await tracing.flush();
         expect((await store.getSpan({ traceId: primary.traceId, spanId: primary.id }))?.span).toMatchObject({
           outcome: 'interrupted',

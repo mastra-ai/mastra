@@ -28,8 +28,8 @@ import type {
   ListBranchesResponse,
   SpanRecord,
 } from '@mastra/core/storage';
-import type { ClickhouseReplicationConfig } from '../../../db/replication';
 
+import type { ClickhouseReplicationConfig } from '../../../db/replication';
 import {
   TABLE_FEEDBACK_EVENTS,
   TABLE_LOG_EVENTS,
@@ -42,7 +42,6 @@ import {
   TABLE_TRACE_ROOTS,
 } from './ddl';
 import { markDeletionRequestApplied, recordDeletionRequest } from './deletion-requests';
-import { latestOutcomePredicate } from './filters';
 import { CH_SETTINGS, CH_INSERT_SETTINGS, spanRecordToRow, rowToSpanRecord } from './helpers';
 import type { ClickHouseDeltaCursorStrategy } from './polling';
 import { appendWhere, assertDeltaPollingSupported, deltaPollingSupported, validateCursorId } from './polling';
@@ -178,7 +177,7 @@ export async function getTraceLight(
     query: `
       SELECT traceId, spanId, parentSpanId, name,
         entityType, entityId, entityName,
-        spanType, error, isEvent, outcome, stopReason,
+        spanType, error, isEvent,
         startedAt, endedAt
       FROM (
         SELECT *
@@ -373,8 +372,6 @@ export async function listBranches(
   // All other filters apply to the anchor span itself.
   type EqDef = { col: string; value: unknown; param: string };
   const eq: EqDef[] = [
-    { col: 'outcome', value: filters?.outcome, param: 'outcome' },
-    { col: 'stopReason', value: filters?.stopReason, param: 'stopReason' },
     { col: 'traceId', value: filters?.traceId, param: 'traceId' },
     { col: 'entityType', value: filters?.entityType, param: 'entityType' },
     { col: 'entityId', value: filters?.entityId, param: 'entityId' },
@@ -458,9 +455,6 @@ export async function listBranches(
     conditions.push('1 = 0');
   }
 
-  if (filters?.outcome !== undefined || filters?.stopReason !== undefined) {
-    conditions.push(latestOutcomePredicate(TABLE_TRACE_BRANCHES, 'b', conditions));
-  }
   const whereClause = conditions.length > 0 ? `WHERE ${conditions.join(' AND ')}` : '';
   const deltaCursorEnabled = deltaPollingSupported(strategy);
 

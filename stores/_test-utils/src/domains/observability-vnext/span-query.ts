@@ -37,29 +37,6 @@ export function createSpanQueryTests(
       expect(await query()).toEqual({ spans: [], page: { next: null } });
     });
 
-    it('filters native outcomes without deriving them from legacy success status', async () => {
-      await getStorage().batchCreateSpans({
-        records: [
-          span('limited', { outcome: 'limit', stopReason: 'max_tokens' }),
-          span('success', { outcome: 'success', stopReason: null }),
-          span('unavailable'),
-        ],
-      });
-      const limited = await query({
-        where: {
-          op: 'and',
-          args: [
-            { op: 'eq', left: { path: 'outcome' }, right: { literal: 'limit' } },
-            { op: 'eq', left: { path: 'stopReason' }, right: { literal: 'max_tokens' } },
-          ],
-        },
-      });
-      expect(limited.spans.map(row => row.spanId)).toEqual(['limited']);
-      expect(limited.spans[0]).toMatchObject({ status: 'success', outcome: 'limit', stopReason: 'max_tokens' });
-      const missing = await query({ where: { op: 'notExists', path: 'outcome' } });
-      expect(missing.spans.map(row => row.spanId)).toEqual(['unavailable']);
-    });
-
     it('returns matching child spans, bounded previews, and identifiers for existing detail reads', async () => {
       const input = 'x'.repeat(300);
       await getStorage().batchCreateSpans({

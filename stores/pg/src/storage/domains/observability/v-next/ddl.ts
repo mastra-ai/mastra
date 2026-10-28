@@ -362,27 +362,6 @@ export function allTableDDL(schema: string, mode: TableDDLMode): string[] {
 }
 
 /**
- * Span event columns added after the table first shipped, with their types. All
- * nullable with no default, so each ALTER is a catalog-only change; rows written
- * before it read NULL and readers fall back to the payload or attributes.
- */
-export const ADDED_SPAN_COLUMNS = [
-  ['inputPreview', 'text'],
-  ['outputPreview', 'text'],
-  ['errorPreview', 'text'],
-  ['timeToFirstChunkMs', 'double precision'],
-  ['externalParentSpanId', 'text'],
-  ['resumedFromSpanId', 'text'],
-  ['model', 'text'],
-  ['provider', 'text'],
-  ['outcome', 'text'],
-  ['stopReason', 'text'],
-  ['stopReasonContext', 'jsonb'],
-  ['timeToFirstTokenMs', 'double precision'],
-  ['errorCount', 'integer'],
-] as const;
-
-/**
  * Additive column migrations for tables created by an older version of this
  * schema. `CREATE TABLE IF NOT EXISTS` is a no-op on an existing table, so new
  * columns have to be added out of band.
@@ -399,11 +378,18 @@ export function additiveColumns(schema: string): { table: string; column: string
       column: 'isPending',
       ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "isPending" boolean NOT NULL DEFAULT false`,
     },
-    ...ADDED_SPAN_COLUMNS.map(([column, type]) => ({
+    // Stored previews. Nullable with no default, so the ALTER is a catalog-only change; rows
+    // written before it read NULL and readers fall back to the payload for them.
+    ...(['inputPreview', 'outputPreview', 'errorPreview'] as const).map(column => ({
       table: TABLE_SPAN_EVENTS,
       column,
-      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" ${type}`,
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "${column}" text`,
     })),
+    {
+      table: TABLE_SPAN_EVENTS,
+      column: 'timeToFirstChunkMs',
+      ddl: `ALTER TABLE ${qualifiedTable(schema, TABLE_SPAN_EVENTS)} ADD COLUMN IF NOT EXISTS "timeToFirstChunkMs" double precision`,
+    },
     {
       table: TABLE_FEEDBACK_EVENTS,
       column: 'reviewStatus',

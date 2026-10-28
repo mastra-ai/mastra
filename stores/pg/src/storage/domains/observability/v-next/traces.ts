@@ -147,12 +147,6 @@ function buildListTracesFilters(
     conditions.push(`r."spanType" = $${i++}`);
     params.push(filters.spanType);
   }
-  for (const field of ['outcome', 'stopReason'] as const) {
-    if (filters[field] !== undefined) {
-      conditions.push(`r."${field}" = $${i++}`);
-      params.push(filters[field]);
-    }
-  }
   if (filters.entityType !== undefined) {
     conditions.push(`r."entityType" = $${i++}`);
     params.push(filters.entityType);
@@ -539,12 +533,6 @@ function buildListBranchesFilters(
   if (filters.traceId !== undefined) {
     conditions.push(`r."traceId" = $${i++}`);
     params.push(filters.traceId);
-  }
-  for (const field of ['outcome', 'stopReason'] as const) {
-    if (filters[field] !== undefined) {
-      conditions.push(`r."${field}" = $${i++}`);
-      params.push(filters[field]);
-    }
   }
   if (filters.entityType !== undefined) {
     conditions.push(`r."entityType" = $${i++}`);

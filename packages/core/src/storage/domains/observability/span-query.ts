@@ -131,8 +131,6 @@ export const spanQueryRowSchema = spanQueryIdentitySchema
      * streamed one. Absent when the store lacks the `trace-query-time-to-first-chunk` feature.
      */
     timeToFirstChunkMs: z.number().nullable().optional(),
-    outcome: z.string().nullish(),
-    stopReason: z.string().nullish(),
   })
   .superRefine((row, context) => {
     const duration = Date.parse(row.endedAt) - Date.parse(row.startedAt);

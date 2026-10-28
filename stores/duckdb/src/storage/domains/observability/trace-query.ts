@@ -66,8 +66,6 @@ const TRACE_FIELDS = {
   entityType: { sql: 'r.entityType', parameterType: 'scalar' },
   name: { sql: 'r.name', parameterType: 'scalar' },
   spanType: { sql: 'r.spanType', parameterType: 'scalar' },
-  outcome: { sql: 'r.outcome', parameterType: 'scalar' },
-  stopReason: { sql: 'r.stopReason', parameterType: 'scalar' },
   environment: { sql: 'r.environment', parameterType: 'scalar' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'scalar' },
   tags: { sql: 'r.tags', parameterType: 'scalar' },
@@ -76,8 +74,6 @@ const TRACE_FIELDS = {
 const SPAN_FIELDS = {
   name: { sql: 's.name', parameterType: 'scalar' },
   spanType: { sql: 's.spanType', parameterType: 'scalar' },
-  outcome: { sql: 's.outcome', parameterType: 'scalar' },
-  stopReason: { sql: 's.stopReason', parameterType: 'scalar' },
   model: { sql: 's.model', parameterType: 'scalar' },
   provider: { sql: 's.provider', parameterType: 'scalar' },
   startedAt: { sql: 's.startedAt', parameterType: 'timestamp' },
@@ -559,8 +555,6 @@ function compileDuckDBTraceScope(
         traceId,
         name,
         spanType,
-        outcome,
-        stopReason,
         CASE
           WHEN json_type(attributes, '$.model') = 'VARCHAR' THEN json_extract_string(attributes, '$.model')
         END AS model,

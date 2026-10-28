@@ -1630,11 +1630,6 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
   externalParentSpanId?: string;
   /** Initial invocation continued by this execution; supplied by the producer. */
   resumedFromSpanId?: string;
-  /** Export-time model identity; these fields are not carried on live spans. */
-  model?: string;
-  provider?: string;
-  timeToFirstTokenMs?: number;
-  errorCount?: number;
   /** `TRUE` if the span is the root span of a trace */
   isRootSpan: boolean;
   /**

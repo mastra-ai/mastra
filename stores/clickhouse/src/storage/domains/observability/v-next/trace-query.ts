@@ -85,8 +85,6 @@ const TRACE_FIELDS = {
   entityType: { sql: 'r.entityType', parameterType: 'String' },
   name: { sql: 'r.name', parameterType: 'String' },
   spanType: { sql: 'r.spanType', parameterType: 'String' },
-  outcome: { sql: 'r.outcome', parameterType: 'String' },
-  stopReason: { sql: 'r.stopReason', parameterType: 'String' },
   environment: { sql: 'r.environment', parameterType: 'String' },
   status: { sql: TRACE_STATUS_SQL, parameterType: 'String' },
   tags: { sql: 'r.tags', parameterType: 'String' },
@@ -95,8 +93,6 @@ const TRACE_FIELDS = {
 const SPAN_FIELDS = {
   name: { sql: 's.name', parameterType: 'String' },
   spanType: { sql: 's.spanType', parameterType: 'String' },
-  outcome: { sql: 's.outcome', parameterType: 'String' },
-  stopReason: { sql: 's.stopReason', parameterType: 'String' },
   model: { sql: 's.model', parameterType: 'String' },
   provider: { sql: 's.provider', parameterType: 'String' },
   startedAt: { sql: 's.startedAt', parameterType: "DateTime64(3, 'UTC')" },
@@ -430,21 +426,9 @@ export const ROOT_VERSION_ORDER = `endedAt DESC, isNotNull(threadId) DESC, toUIn
 export type TraceScopeOptions = {
   oneRootPerTrace?: boolean;
   spanExistence?: boolean;
-  /** Native termination predicates require the latest version of each span, including explicit nulls. */
-  currentTermination?: boolean;
   /** Delta mode: the delta index rows to page over; emits `delta_candidates` and seeds the scope with its traces. */
   delta?: string;
 };
-
-function readsNativeTermination(
-  predicate: TrustedTraceQueryPredicate | TrustedTraceQueryScalarPredicate | TrustedThreadPredicate | undefined,
-): boolean {
-  if (!predicate) return false;
-  if (predicate.type === 'boolean') return predicate.args.some(readsNativeTermination);
-  if (predicate.type === 'not') return readsNativeTermination(predicate.arg);
-  if (predicate.type === 'relation') return readsNativeTermination(predicate.predicate);
-  return predicate.field === 'outcome' || predicate.field === 'stopReason';
-}
 
 function compileClickHouseTraceScope(
   selection: TraceSelection,
@@ -454,7 +438,6 @@ function compileClickHouseTraceScope(
   seedConjuncts: TrustedTraceQueryPredicate[] = [],
   options: TraceScopeOptions = {},
 ): string[] {
-  const currentTermination = options.currentTermination || readsNativeTermination(selection.where);
   const from = parameters.add(selection.timeRange.from, "DateTime64(3, 'UTC')");
   const to = parameters.add(selection.timeRange.to, "DateTime64(3, 'UTC')");
   const tenant = compileTenantScope(scope, parameters);
@@ -541,8 +524,6 @@ function compileClickHouseTraceScope(
       traceId,
       name,
       spanType,
-      outcome,
-      stopReason,
       if(JSONType(attributes, 'model') = 'String', JSONExtractString(attributes, 'model'), NULL) AS model,
       if(JSONType(attributes, 'provider') = 'String', JSONExtractString(attributes, 'provider'), NULL) AS provider,
       startedAt,
@@ -568,13 +549,9 @@ function compileClickHouseTraceScope(
         // traces are a large enough seed without the root filters.
         options.spanExistence && options.oneRootPerTrace ? windowTraces(bound) : 'SELECT traceId FROM root_scope'
       })${tenant}${
-        currentTermination
-          ? `
-    ORDER BY traceId, spanId, ${ROOT_VERSION_ORDER}
-    LIMIT 1 BY traceId, spanId`
-          : options.spanExistence
-            ? ''
-            : `
+        options.spanExistence
+          ? ''
+          : `
     ORDER BY dedupeKey
     LIMIT 1 BY dedupeKey`
       }
@@ -949,9 +926,7 @@ export function compileClickHouseThreadQuery(plan: TrustedThreadQueryPlan): Comp
   const parameters = new ParameterBuilder();
   const relationCollections = collectRelationCollections(plan.traces.where);
   collectThreadRelationCollections(plan.where, relationCollections);
-  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters, plan.scope, [], {
-    currentTermination: readsNativeTermination(plan.where),
-  });
+  const ctes = compileClickHouseTraceScope(plan.traces, relationCollections, parameters, plan.scope);
 
   const eligibility = plan.traces.where ? compilePredicate(plan.traces.where, parameters) : '1';
   ctes.push(`eligible_roots AS (
@@ -1041,16 +1016,7 @@ LIMIT ${limit}`,
 
 export function compileClickHouseTraceQueryValues(plan: TrustedTraceQueryValuesPlan): CompiledClickHouseTraceQuery {
   const parameters = new ParameterBuilder();
-  const ctes = compileClickHouseTraceScope(
-    plan,
-    discoveryCollections(plan.predicateScope),
-    parameters,
-    plan.scope,
-    [],
-    {
-      currentTermination: plan.path === 'outcome' || plan.path === 'stopReason',
-    },
-  );
+  const ctes = compileClickHouseTraceScope(plan, discoveryCollections(plan.predicateScope), parameters, plan.scope);
   let field: string;
   if (plan.predicateScope === 'trace' && plan.path.startsWith('metadata.')) {
     const key = parameters.add(plan.path.slice('metadata.'.length), 'String');

@@ -2,7 +2,7 @@
 '@mastra/core': minor
 ---
 
-Added native execution outcomes and typed stop-reason context to agents, model calls, tools, and workflows. Adopted producers report ongoing execution as `null`; unavailable producer values remain unavailable. Outcome and stop reason are independently filterable, while context preserves provider, guardrail, observer, and serialized signal details.
+Added native execution outcomes and typed stop-reason context to agents, model calls, tools, and workflows. Adopted producers report ongoing execution as `null`; unavailable producer values remain unavailable. The shared exporter record contract preserves outcome, stop reason, and typed provider, guardrail, observer, and serialized signal detail. Storage implementations and query support are separate work.
 
 ```ts
 span.end({ outcome: 'abort', stopReason: 'caller_cancelled', stopReasonContext: null });
@@ -14,4 +14,4 @@ Added outcomes for workflow roots, steps, nested invocations, parallel/condition
 
 Added workflow span checkpoints for in-memory, LibSQL, and PostgreSQL storage. Evented workers can restore the caller's root and complete it after caller loss. Cancellation on a replacement worker closes checkpointed steps, waits, containers, evaluations, and nested children through their original exporter. Pending child snapshots prevent delayed dispatch from reopening canceled runs. This requires persisted snapshots and checkpoint-capable storage; it does not restore timers or transfer active ownership.
 
-Preserved active execution identity separately from resume lineage. Delayed terminal events addressed to an older segment cannot settle the resumed caller when checkpoint identity is available. Guarded terminal writes preserve completed workflow state, and late span starts cannot reopen completed in-memory records. Export delivery remains replayable rather than exactly-once.
+Preserved active execution identity separately from resume lineage. Delayed terminal events addressed to an older segment cannot settle the resumed caller when checkpoint identity is available. Guarded terminal writes preserve completed workflow state, while completed live spans retain their outcomes. Export delivery remains replayable rather than exactly-once.

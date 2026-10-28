@@ -22,7 +22,6 @@ import type {
 import {
   BRANCH_SPAN_TYPES,
   computeTraceStatus,
-  getStringAttribute,
   listBranchesArgsSchema,
   listTracesArgsSchema,
   toTraceSpans,
@@ -62,15 +61,6 @@ const COLUMNS = [
   'isEvent',
   'endedAt',
   'timeToFirstChunkMs',
-  'externalParentSpanId',
-  'resumedFromSpanId',
-  'model',
-  'provider',
-  'outcome',
-  'stopReason',
-  'stopReasonContext',
-  'timeToFirstTokenMs',
-  'errorCount',
   'experimentId',
   'entityType',
   'entityId',
@@ -124,11 +114,6 @@ const PAYLOAD_COLUMN_SET: ReadonlySet<string> = new Set(SPAN_PAYLOAD_COLUMNS);
 function argMaxNonNull(col: string): string {
   const placeholder = PAYLOAD_COLUMN_SET.has(col) ? ` AND ${col} <> '${JSON_NULL_PLACEHOLDER}'` : '';
   return `arg_max(${col}, timestamp) FILTER (WHERE ${col} IS NOT NULL${placeholder}) as ${col}`;
-}
-
-/** Keep termination fields from the same latest event, including explicit NULL clears. */
-function argMaxTermination(col: 'outcome' | 'stopReason' | 'stopReasonContext'): string {
-  return `(arg_max(struct_pack(value := ${col}), timestamp)).value as ${col}`;
 }
 
 /** The payload column each stored preview column describes, and its payload-presence flag. */
@@ -190,16 +175,7 @@ const SPAN_RECONSTRUCT_SELECT = `
     ${argMaxNonNull('input')},
     ${argMaxNonNull('output')},
     ${argMaxNonNull('error')},
-    ${argMaxNonNull('requestContext')},
-    ${argMaxNonNull('externalParentSpanId')},
-    ${argMaxNonNull('resumedFromSpanId')},
-    ${argMaxNonNull('model')},
-    ${argMaxNonNull('provider')},
-    ${argMaxTermination('outcome')},
-    ${argMaxTermination('stopReason')},
-    ${argMaxTermination('stopReasonContext')},
-    ${argMaxNonNull('timeToFirstTokenMs')},
-    ${argMaxNonNull('errorCount')}
+    ${argMaxNonNull('requestContext')}
   FROM span_events
 `;
 
@@ -213,8 +189,6 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT = `
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
-    ${argMaxTermination('outcome')},
-    ${argMaxTermination('stopReason')},
     ${argMaxNonNull('entityType')},
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
@@ -236,8 +210,6 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
     ${argMaxNonNull('isEvent')},
     coalesce(min(timestamp) FILTER (WHERE eventType = 'start'), min(timestamp)) as startedAt,
     ${argMaxNonNull('endedAt')},
-    ${argMaxTermination('outcome')},
-    ${argMaxTermination('stopReason')},
     ${argMaxNonNull('entityType')},
     ${argMaxNonNull('entityId')},
     ${argMaxNonNull('entityName')},
@@ -254,8 +226,6 @@ const SPAN_RECONSTRUCT_SELECT_LIGHT_LIST = `
  * `status` is derived from endedAt + error (see buildWhereClause).
  */
 const POSTAGG_FILTER_COLUMNS: Record<string, string[]> = {
-  outcome: ['outcome'],
-  stopReason: ['stopReason'],
   status: ['endedAt', 'error'],
   endedAt: ['endedAt'],
   tags: ['tags'],
@@ -279,9 +249,7 @@ function buildPostAggReconstructSelect(postAgg: Record<string, unknown>, orderBy
       columns.add(column);
     }
   }
-  const argMaxCols = [...columns]
-    .map(col => `${col === 'outcome' || col === 'stopReason' ? argMaxTermination(col) : argMaxNonNull(col)},`)
-    .join('\n    ');
+  const argMaxCols = [...columns].map(col => `${argMaxNonNull(col)},`).join('\n    ');
   return `
   SELECT
     traceId, spanId,
@@ -378,8 +346,6 @@ function rowToLightSpanRecord(row: Record<string, unknown>): LightSpanRecord {
   return {
     traceId: row.traceId as string,
     spanId: row.spanId as string,
-    outcome: (row.outcome as string) ?? null,
-    stopReason: (row.stopReason as string) ?? null,
     name: row.name as string,
     spanType: row.spanType as LightSpanRecord['spanType'],
     parentSpanId: (row.parentSpanId as string) ?? null,
@@ -437,7 +403,6 @@ function rowToLightSpanRecordWithPreview(row: Record<string, unknown>): LightSpa
 }
 
 function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
-  const attributes = parseJson(row.attributes) as Record<string, unknown> | null;
   return {
     traceId: row.traceId as string,
     spanId: row.spanId as string,
@@ -447,15 +412,6 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     isEvent: row.isEvent as boolean,
     startedAt: toDate(row.startedAt),
     endedAt: rowEndedAt(row),
-    externalParentSpanId: (row.externalParentSpanId as string) ?? null,
-    resumedFromSpanId: (row.resumedFromSpanId as string) ?? null,
-    model: (row.model as string) ?? getStringAttribute(attributes, 'model'),
-    provider: (row.provider as string) ?? getStringAttribute(attributes, 'provider'),
-    outcome: (row.outcome as string) ?? null,
-    stopReason: (row.stopReason as string) ?? null,
-    stopReasonContext: parseJson(row.stopReasonContext) as SpanRecord['stopReasonContext'],
-    timeToFirstTokenMs: (row.timeToFirstTokenMs as number) ?? null,
-    errorCount: (row.errorCount as number) ?? null,
     experimentId: (row.experimentId as string) ?? null,
     entityType: (row.entityType as SpanRecord['entityType']) ?? null,
     entityId: (row.entityId as string) ?? null,
@@ -479,7 +435,7 @@ function rowToSpanRecord(row: Record<string, unknown>): SpanRecord {
     environment: (row.environment as string) ?? null,
     source: (row.source as string) ?? null,
     serviceName: (row.serviceName as string) ?? null,
-    attributes,
+    attributes: parseJson(row.attributes) as Record<string, unknown> | null,
     metadata: parseJson(row.metadata) as Record<string, unknown> | null,
     tags: parseJsonArray(row.tags) as string[] | null,
     scope: parseJson(row.scope) as Record<string, unknown> | null,
@@ -678,15 +634,6 @@ interface SpanEventRow {
   isEvent: boolean | null;
   endedAt: Date | null;
   timeToFirstChunkMs: number | null;
-  externalParentSpanId: string | null;
-  resumedFromSpanId: string | null;
-  model: string | null;
-  provider: string | null;
-  outcome: string | null;
-  stopReason: string | null;
-  stopReasonContext: string | null;
-  timeToFirstTokenMs: number | null;
-  errorCount: number | null;
   experimentId: string | null;
   entityType: string | null;
   entityId: string | null;
@@ -769,15 +716,6 @@ function toValuesTuple(row: SpanEventRow): string {
     v(row.isEvent),
     v(row.endedAt),
     v(row.timeToFirstChunkMs),
-    v(row.externalParentSpanId),
-    v(row.resumedFromSpanId),
-    v(row.model),
-    v(row.provider),
-    v(row.outcome),
-    v(row.stopReason),
-    v(row.stopReasonContext),
-    v(row.timeToFirstTokenMs),
-    v(row.errorCount),
     v(row.experimentId),
     v(row.entityType),
     v(row.entityId),
@@ -829,25 +767,6 @@ async function insertSpanEvents(db: DuckDBConnection, rows: SpanEventRow[]): Pro
 // Public API
 // ============================================================================
 
-/**
- * Columns copied as supplied onto both event rows (NULL when unset). Previews
- * stay out: the start row derives them from the payload it keeps.
- */
-function copiedSpanColumns(s: CreateSpanArgs['span']) {
-  return {
-    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
-    externalParentSpanId: s.externalParentSpanId ?? null,
-    resumedFromSpanId: s.resumedFromSpanId ?? null,
-    model: s.model ?? null,
-    provider: s.provider ?? null,
-    outcome: s.outcome ?? null,
-    stopReason: s.stopReason ?? null,
-    stopReasonContext: serializePayload(s.stopReasonContext),
-    timeToFirstTokenMs: s.timeToFirstTokenMs ?? null,
-    errorCount: s.errorCount ?? null,
-  };
-}
-
 function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
   // An ended non-event record also gets an 'end' row carrying the full payload,
   // and reconstruction takes the latest non-null value per column, so the start
@@ -865,7 +784,7 @@ function createStartSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     isEvent: s.isEvent,
     // Event spans are point-in-time: they end at the instant they start.
     endedAt: s.isEvent ? s.startedAt : null,
-    ...copiedSpanColumns(s),
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
@@ -921,7 +840,7 @@ function createEndSpanRow(s: CreateSpanArgs['span']): SpanEventRow {
     spanType: s.spanType,
     isEvent: s.isEvent,
     endedAt: s.endedAt ?? null,
-    ...copiedSpanColumns(s),
+    timeToFirstChunkMs: s.timeToFirstChunkMs ?? null,
     experimentId: s.experimentId ?? null,
     entityType: s.entityType ?? null,
     entityId: s.entityId ?? null,
