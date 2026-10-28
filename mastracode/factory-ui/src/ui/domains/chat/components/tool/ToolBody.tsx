@@ -8,7 +8,7 @@ import {
   toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
 
-import { useState } from 'react';
+import { useEffect, useRef, useState } from 'react';
 
 import type { ToolCall } from '../../services/transcript';
 
@@ -37,8 +37,23 @@ const SCREENSHOT_MAX_HEIGHT = 480;
  * cuts down opens to full size on click; a small one is just an image.
  */
 function Screenshot({ src }: { src: string }) {
+  const imageRef = useRef<HTMLImageElement>(null);
   const [capped, setCapped] = useState(false);
   const [fullSize, setFullSize] = useState(false);
+
+  // The cap depends on the transcript's width, so measure again when the image is resized.
+  const measure = () => {
+    const img = imageRef.current;
+    if (img && !fullSize) setCapped(img.offsetHeight >= SCREENSHOT_MAX_HEIGHT && img.naturalHeight > img.offsetHeight);
+  };
+  useEffect(() => {
+    const img = imageRef.current;
+    if (!img || typeof ResizeObserver === 'undefined') return;
+    const observer = new ResizeObserver(measure);
+    observer.observe(img);
+    return () => observer.disconnect();
+  });
+
   return (
     <button
       type="button"
@@ -49,12 +64,10 @@ function Screenshot({ src }: { src: string }) {
       className={capped ? (fullSize ? 'cursor-zoom-out' : 'cursor-zoom-in') : 'cursor-default'}
     >
       <img
+        ref={imageRef}
         src={src}
         alt="Screenshot of the agent's browser"
-        onLoad={event => {
-          const img = event.currentTarget;
-          if (!fullSize) setCapped(img.offsetHeight >= SCREENSHOT_MAX_HEIGHT && img.naturalHeight > img.offsetHeight);
-        }}
+        onLoad={measure}
         className={`border-border max-w-full rounded-md border ${fullSize ? '' : 'max-h-[480px]'}`}
       />
     </button>

@@ -1,6 +1,7 @@
 import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
-import { describe, expect, it } from 'vitest';
+import { act } from 'react';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
 import { ToolCard } from '../tool/ToolCard';
 import { commandTool, editTool, longResultTool } from './fixtures/tool-bodies';
@@ -83,6 +84,10 @@ describe('Factory tool body', () => {
     });
 
     // jsdom has no layout, so give the loaded image the sizes a browser would.
+    afterEach(() => {
+      vi.unstubAllGlobals();
+    });
+
     function loadImage(image: HTMLElement, sizes: { offsetHeight: number; naturalHeight: number }) {
       Object.defineProperty(image, 'offsetHeight', { configurable: true, value: sizes.offsetHeight });
       Object.defineProperty(image, 'naturalHeight', { configurable: true, value: sizes.naturalHeight });
@@ -112,6 +117,30 @@ describe('Factory tool body', () => {
       });
 
       expect(screen.queryByRole('button', { name: 'Show full size' })).not.toBeInTheDocument();
+    });
+
+    it('offers full size once a wider transcript makes the cap cut the screenshot off', async () => {
+      const resized: ResizeObserverCallback[] = [];
+      vi.stubGlobal(
+        'ResizeObserver',
+        class {
+          constructor(callback: ResizeObserverCallback) {
+            resized.push(callback);
+          }
+          observe() {}
+          disconnect() {}
+        },
+      );
+      renderWithProviders(<ToolCard tool={screenshotTool} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+      const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
+      loadImage(image, { offsetHeight: 300, naturalHeight: 900 });
+      expect(screen.queryByRole('button', { name: 'Show full size' })).not.toBeInTheDocument();
+
+      Object.defineProperty(image, 'offsetHeight', { configurable: true, value: 480 });
+      act(() => resized.at(-1)!([], {} as ResizeObserver));
+
+      expect(screen.getByRole('button', { name: 'Show full size' })).toBeVisible();
     });
 
     it('shows the failure message when no image came back', async () => {
