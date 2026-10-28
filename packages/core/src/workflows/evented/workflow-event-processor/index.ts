@@ -1,5 +1,5 @@
 import EventEmitter from 'node:events';
-import type { ActorSignal } from '../../../auth/ee';
+import type { ActorSignal, RequireFGAOptions } from '../../../auth/ee';
 import { MastraFGAPermissions, getWorkflowFGAResourceId, requireFGA } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
@@ -1974,6 +1974,44 @@ export class WorkflowEventProcessor extends EventProcessor {
     );
   }
 
+  async #authorizeNestedDispatch({
+    args,
+    workflow,
+    fgaProvider,
+    nestedWorkflowStep,
+    nestedRunId,
+    continueRedelivery,
+  }: {
+    args: ProcessorArgs;
+    workflow: Workflow;
+    fgaProvider: RequireFGAOptions['fgaProvider'];
+    nestedWorkflowStep: Workflow;
+    nestedRunId: string;
+    continueRedelivery: () => Promise<boolean>;
+  }): Promise<boolean> {
+    const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
+    const parentRun = await workflowsStore?.getWorkflowRunById({ runId: args.runId, workflowName: workflow.id });
+    const rc = new RequestContext(Object.entries(args.requestContext ?? {}));
+    try {
+      await requireFGA({
+        fgaProvider,
+        user: rc.get('user'),
+        resource: { type: 'workflow', id: getWorkflowFGAResourceId(nestedWorkflowStep.id) },
+        permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
+        requestContext: rc,
+        actor: args.actor,
+        context: { resourceId: parentRun?.resourceId },
+        metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
+      });
+      return true;
+    } catch (error) {
+      // A concurrent delivery may have finished while authorization was pending.
+      if (await continueRedelivery()) return false;
+      await this.errorWorkflow(args, getErrorFromUnknown(error));
+      return false;
+    }
+  }
+
   protected async runLeafStep(
     args: ProcessorArgs & {
       step: Extract<StepFlowEntry, { type: 'step' | 'agent' | 'tool' | 'mapping' | 'loop' | 'foreach' }>;
@@ -2094,25 +2132,16 @@ export class WorkflowEventProcessor extends EventProcessor {
       }
       const fgaProvider = this.mastra.getServer()?.fga;
       if (fgaProvider && !nestedWorkflowStep.isInternal) {
-        const parentRun = await workflowsStore?.getWorkflowRunById({ runId, workflowName: workflow.id });
-        const rc = new RequestContext(Object.entries(requestContext ?? {}));
-        try {
-          // Nested evented dispatch bypasses Workflow.execute, including its FGA gate.
-          await requireFGA({
-            fgaProvider,
-            user: rc.get('user'),
-            resource: { type: 'workflow', id: getWorkflowFGAResourceId(nestedWorkflowStep.id) },
-            permission: MastraFGAPermissions.WORKFLOWS_EXECUTE,
-            requestContext: rc,
-            actor,
-            context: { resourceId: parentRun?.resourceId },
-            metadata: { workflowId: nestedWorkflowStep.id, runId: nestedRunId, resourceId: parentRun?.resourceId },
-          });
-        } catch (error) {
-          // A concurrent delivery may have finished while authorization was pending.
-          if (await continueRedelivery()) return;
-          return this.errorWorkflow(args, getErrorFromUnknown(error));
-        }
+        // Nested evented dispatch bypasses Workflow.execute, including its FGA gate.
+        const authorized = await this.#authorizeNestedDispatch({
+          args,
+          workflow,
+          fgaProvider,
+          nestedWorkflowStep,
+          nestedRunId,
+          continueRedelivery,
+        });
+        if (!authorized) return;
       }
     }
 
