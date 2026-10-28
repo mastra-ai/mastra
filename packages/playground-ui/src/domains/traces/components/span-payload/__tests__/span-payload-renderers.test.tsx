@@ -31,17 +31,25 @@ afterAll(() => vi.unstubAllGlobals());
 afterEach(cleanup);
 
 const slot = (name: string) => document.querySelector(`[data-slot="${name}"]`);
+const sectionTitles = () =>
+  [...document.querySelectorAll('[data-slot="span-payload-section"]')].map(
+    section => section.firstElementChild?.firstElementChild?.textContent,
+  );
 
 describe('Span metadata JSON sections', () => {
-  it.each([SpanDataPanelView, SpanDetailsView])('uses the standard JSON renderer without a preview toggle', View => {
+  it.each([SpanDataPanelView, SpanDetailsView])('shows them folded, and as JSON only once opened', View => {
     const span = { ...emptySpan, metadata: { origin: 'metadata-value' }, attributes: { custom: 'attribute-value' } };
     render(<View span={span} spanId={span.spanId} traceId={span.traceId} onClose={() => {}} />);
+    expect(document.body.textContent).not.toContain('metadata-value');
+    expect(document.body.textContent).not.toContain('attribute-value');
 
     for (const title of ['Metadata', 'Attributes']) {
-      const section = screen.getByText(title).closest('[data-slot="span-payload-section"]');
+      const trigger = screen.getByRole('button', { name: title });
+      fireEvent.click(trigger);
+      const section = trigger.closest('[data-slot="span-payload-section"]');
       expect(section?.querySelector('[data-slot="span-payload-json"] .cm-foldGutter')).not.toBeNull();
       expect(section?.querySelector('[data-slot="span-payload-view-toggle"]')).toBeNull();
-      expect(section?.querySelector('button')).not.toBeNull();
+      expect(section?.querySelector('[data-slot="collapsible-box"]')).toBeNull();
     }
     expect(document.body.textContent).toContain('metadata-value');
     expect(document.body.textContent).toContain('attribute-value');
@@ -119,10 +127,10 @@ describe('SpanOutputRenderer', () => {
     expect(screen.getByText('Prompt injection detected')).toBeTruthy();
   });
 
-  it('renders model generation results with tool calls and chat reasoning', () => {
+  it('renders model generation results with chat reasoning, leaving tool calls to their own section', () => {
     render(<SpanOutputRenderer span={modelGenerationSpan} />);
     expect(slot('span-model-generation-result')).not.toBeNull();
-    expect(slot('span-payload-tool-calls')).not.toBeNull();
+    expect(slot('span-payload-tool-calls')).toBeNull();
     expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
   });
 
@@ -208,6 +216,40 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
 });
 
 describe('SpanDataPanelView integration', () => {
+  it('sums up a tool call in one line and reads it as its input, then its output', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={toolCallSpan.spanId} span={toolCallSpan} />);
+    expect(slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]')).toBeNull();
+    expect(sectionTitles()).toEqual(['Input', 'Output']);
+  });
+
+  it('reads a successful root span as its input, then its output, with no summary on top', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunMessagesSpan.spanId} span={agentRunMessagesSpan} />);
+    expect(slot('span-outcome')).toBeNull();
+    expect(sectionTitles().slice(0, 2)).toEqual(['Input', 'Output']);
+  });
+
+  it('still sums up a root span whose run was stopped', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={agentRunTripwireSpan.spanId} span={agentRunTripwireSpan} />);
+    expect(slot('span-outcome')).not.toBeNull();
+  });
+
+  it('shows the error of a failed span once, in the summary at the top', () => {
+    render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
+    const outcome = slot('span-outcome');
+    expect(outcome?.textContent).toContain('getWeather failed');
+    expect(outcome?.querySelector('[data-slot="span-error"]')?.textContent).toContain('City not found: Atlantis');
+    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+    expect(screen.getAllByText('City not found: Atlantis')).toHaveLength(1);
+    expect(sectionTitles()).not.toContain('Error');
+  });
+
+  it('leads a failed root span with its error too', () => {
+    const failedRoot = { ...errorSpan, parentSpanId: null };
+    render(<SpanDataPanelView traceId="trace-1" spanId={failedRoot.spanId} span={failedRoot} />);
+    expect(slot('span-outcome')?.querySelector('[data-slot="span-error"]')).not.toBeNull();
+    expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
+  });
+
   it('shows rich payloads and the error banner for a span', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
     expect(slot('span-error')).not.toBeNull();

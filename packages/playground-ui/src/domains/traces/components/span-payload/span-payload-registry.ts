@@ -1,4 +1,4 @@
-import { SpanType, describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
+import { SpanType, describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import type { ProcessorRunInputByPhase, ProcessorSpanPayload } from '@mastra/core/observability';
 import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
@@ -43,6 +43,38 @@ export function hasSpanInputPreview(span: SpanRecord): boolean {
   return getSpanSignal(span) !== undefined || describeSpanInput(asCoreSpan(span))?.type !== 'json';
 }
 
+const hasText = (value: unknown) => typeof value === 'string' && value.length > 0;
+
+/**
+ * Whether a span's output has a rendered preview, rather than only its raw JSON.
+ * A model result that only asked for tools has nothing to preview: its calls are listed under Tool calls.
+ */
+export function hasSpanOutputPreview(span: SpanRecord): boolean {
+  const description = describeSpanOutput(asCoreSpan(span));
+  switch (description?.type) {
+    case 'json':
+      return false;
+    case 'model-step-result': {
+      const { text, object, steps } = description.value;
+      return hasText(text) || object !== undefined || hasItems(steps);
+    }
+    case 'model-generation-result': {
+      const { text, reasoningText, reasoning, object, sources, files, warnings } = description.value;
+      return (
+        hasText(text) ||
+        typeof reasoningText === 'string' ||
+        reasoning !== undefined ||
+        object !== undefined ||
+        hasItems(sources) ||
+        hasItems(files) ||
+        hasItems(warnings)
+      );
+    }
+    default:
+      return true;
+  }
+}
+
 const isEmptyObject = (value: unknown) =>
   typeof value === 'object' && value !== null && !Array.isArray(value) && Object.keys(value).length === 0;
 
@@ -62,33 +94,6 @@ export function getSpanOutputPayload(span: SpanRecord): unknown {
     return undefined;
   }
   return span.output;
-}
-
-const isCount = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
-
-export interface ProcessorRunContext {
-  stepNumber?: number;
-  retryCount?: number;
-  /** The assistant message the step is producing, not the user message that started the run. */
-  messageId?: string;
-}
-
-/**
- * Where in the generation the hook ran. The runner hands these values to every
- * hook, so they are recorded in `input`, but they describe the run rather than
- * what the processor read: Attributes shows them and the input preview skips them.
- * A key is present only when it holds a well-formed value, so a malformed one stays in the input.
- */
-export function getProcessorRunContext(input: ProcessorSpanPayload<ProcessorRunInputByPhase>): ProcessorRunContext {
-  const { data } = input;
-  const stepNumber = 'stepNumber' in data ? data.stepNumber : undefined;
-  const retryCount = 'retryCount' in data ? data.retryCount : undefined;
-  const messageId = 'messageId' in data ? data.messageId : undefined;
-  return {
-    ...(isCount(stepNumber) ? { stepNumber } : {}),
-    ...(isCount(retryCount) ? { retryCount } : {}),
-    ...(typeof messageId === 'string' && messageId.length > 0 ? { messageId } : {}),
-  };
 }
 
 /** A tool offered to the model, with the id the tool registry knows it by. */
