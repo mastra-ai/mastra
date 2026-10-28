@@ -18,6 +18,15 @@ export function useKnowledgeInstances() {
   });
 }
 
+/** The distinct scope tag sets the instance's nodes and records carry; idle until an instance is chosen. */
+export function useKnowledgeScopes(knowledgeKey: string | undefined) {
+  const client = useMastraClient();
+  return useQuery({
+    queryKey: ['knowledge', knowledgeKey, 'scopes'],
+    queryFn: knowledgeKey ? async () => client.getKnowledge(knowledgeKey).scopes() : skipToken,
+  });
+}
+
 /** The graph visible from `scope`; idle until an instance and at least one scope tag are chosen. */
 export function useKnowledgeGraph(knowledgeKey: string | undefined, scope: string[]) {
   const client = useMastraClient();

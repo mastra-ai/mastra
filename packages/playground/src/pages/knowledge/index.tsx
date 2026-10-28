@@ -11,9 +11,11 @@ import { is401UnauthorizedError, is403ForbiddenError, is404NotFoundError } from 
 import { useState } from 'react';
 import { useSearchParams } from 'react-router';
 import { PageBreadcrumbs } from '@/components/ui/page-breadcrumbs';
+import { KnowledgeScopeNavigator } from '@/domains/knowledge/components/knowledge-scope-navigator';
 import {
   useKnowledgeGraph,
   useKnowledgeInstances,
+  useKnowledgeScopes,
   useStudioKnowledgeDataSource,
 } from '@/domains/knowledge/use-studio-knowledge';
 import { navCrumb } from '@/domains/navigation/crumbs';
@@ -45,6 +47,7 @@ export default function KnowledgePage() {
 
   const dataSource = useStudioKnowledgeDataSource(knowledgeKey, scope);
   const graph = useKnowledgeGraph(knowledgeKey, scope);
+  const scopes = useKnowledgeScopes(knowledgeKey);
 
   const error = instances.error ?? graph.error;
   if (error && is401UnauthorizedError(error)) {
@@ -98,13 +101,17 @@ export default function KnowledgePage() {
     );
   }
 
-  const apply = (event: React.FormEvent) => {
-    event.preventDefault();
+  const viewScope = (tags: string[]) => {
     const next = new URLSearchParams(searchParams);
     next.delete('scope');
-    for (const tag of parseScopeInput(scopeText)) next.append('scope', tag);
+    for (const tag of tags) next.append('scope', tag);
     setSelectedNodeId(null);
     setSearchParams(next);
+  };
+
+  const apply = (event: React.FormEvent) => {
+    event.preventDefault();
+    viewScope(parseScopeInput(scopeText));
   };
 
   return (
@@ -144,53 +151,69 @@ export default function KnowledgePage() {
             {scope.length > 0 ? <KnowledgeSearch onSelect={result => setSelectedNodeId(result.id)} /> : null}
           </form>
 
-          {scope.length === 0 ? (
-            <EmptyState
-              variant="fill"
-              titleSlot="Choose a scope"
-              descriptionSlot="Knowledge shows a record only when every one of its scope tags is in the set you enter. Enter the tags of the view you want to browse."
-            />
-          ) : graph.isPending ? (
-            <p className="p-4 text-body text-muted-foreground">Loading knowledge…</p>
-          ) : graph.isError && is403ForbiddenError(graph.error) ? (
-            <EmptyState
-              tone="error"
-              variant="fill"
-              titleSlot="That scope is not available to you"
-              descriptionSlot="The server refused one or more of these scope tags. Edit the tags above and press View."
-            />
-          ) : graph.isError ? (
-            <EmptyState
-              tone="error"
-              variant="fill"
-              titleSlot="Failed to load the graph"
-              descriptionSlot={graph.error.message}
-            />
-          ) : (
-            <div className="flex min-h-0 flex-1">
-              <div className="relative min-h-0 min-w-0 flex-1" data-testid="knowledge-graph-container">
-                <KnowledgeGraph
-                  payload={graph.data}
-                  focusedId={selectedNodeId}
-                  onFocusChange={id => {
-                    if (!id) setSelectedNodeId(null);
-                  }}
-                  onNodeClick={node => setSelectedNodeId(node.id)}
+          <div className="flex min-h-0 flex-1 gap-3">
+            {/* A server without the scopes route, or a caller refused it, still browses by typed tags. */}
+            {scopes.data && scopes.data.sets.length > 0 ? (
+              <KnowledgeScopeNavigator
+                sets={scopes.data.sets}
+                truncated={scopes.data.truncated}
+                current={scope}
+                onSelect={tags => {
+                  setScopeText(tags.join(' '));
+                  viewScope(tags);
+                }}
+              />
+            ) : null}
+            <div className="flex min-h-0 min-w-0 flex-1 flex-col">
+              {scope.length === 0 ? (
+                <EmptyState
+                  variant="fill"
+                  titleSlot="Choose a scope"
+                  descriptionSlot="Knowledge shows a record only when every one of its scope tags is in the set you enter. Enter the tags of the view you want to browse."
                 />
-              </div>
-              {selectedNodeId ? (
-                <KnowledgeFlyout
-                  nodeId={selectedNodeId}
-                  scopeLevel="org"
-                  onClose={() => setSelectedNodeId(null)}
-                  onNodeRef={name => {
-                    const target = graph.data.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
-                    if (target) setSelectedNodeId(target.id);
-                  }}
+              ) : graph.isPending ? (
+                <p className="p-4 text-body text-muted-foreground">Loading knowledge…</p>
+              ) : graph.isError && is403ForbiddenError(graph.error) ? (
+                <EmptyState
+                  tone="error"
+                  variant="fill"
+                  titleSlot="That scope is not available to you"
+                  descriptionSlot="The server refused one or more of these scope tags. Edit the tags above and press View."
                 />
-              ) : null}
+              ) : graph.isError ? (
+                <EmptyState
+                  tone="error"
+                  variant="fill"
+                  titleSlot="Failed to load the graph"
+                  descriptionSlot={graph.error.message}
+                />
+              ) : (
+                <div className="flex min-h-0 flex-1">
+                  <div className="relative min-h-0 min-w-0 flex-1" data-testid="knowledge-graph-container">
+                    <KnowledgeGraph
+                      payload={graph.data}
+                      focusedId={selectedNodeId}
+                      onFocusChange={id => {
+                        if (!id) setSelectedNodeId(null);
+                      }}
+                      onNodeClick={node => setSelectedNodeId(node.id)}
+                    />
+                  </div>
+                  {selectedNodeId ? (
+                    <KnowledgeFlyout
+                      nodeId={selectedNodeId}
+                      scopeLevel="org"
+                      onClose={() => setSelectedNodeId(null)}
+                      onNodeRef={name => {
+                        const target = graph.data.nodes.find(node => node.name.toLowerCase() === name.toLowerCase());
+                        if (target) setSelectedNodeId(target.id);
+                      }}
+                    />
+                  ) : null}
+                </div>
+              )}
             </div>
-          )}
+          </div>
         </div>
       </KnowledgeDataSourceProvider>
     </Shell>
