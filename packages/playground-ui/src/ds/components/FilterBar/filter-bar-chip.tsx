@@ -26,7 +26,7 @@ import { Kbd } from '@/ds/components/Kbd/kbd';
 import { controlHeight } from '@/ds/primitives/control-size';
 import type { ControlSize } from '@/ds/primitives/control-size';
 import { FLOATING_POSITION_METHOD } from '@/ds/primitives/floating';
-import { inputSurfaceAndFocusVisibleWithinStyle } from '@/ds/primitives/form-element';
+import { inputSurfaceAndFocusWithinStyle } from '@/ds/primitives/form-element';
 import './filter-bar-chip.css';
 import { MENU_SIDE_OFFSET } from '@/ds/primitives/menu-item';
 import { passwordManagerOptOutProps } from '@/ds/primitives/password-manager-autofill';
@@ -64,7 +64,7 @@ export const alwaysHighlightProps = { autoHighlight: 'always', keepHighlight: tr
 // crossing them stacks its alpha and the joint reads brighter. Vertical only, so the width holds.
 export const chipClass = cn(
   'filter-bar-chip relative flex max-w-full items-stretch divide-x divide-border overflow-hidden rounded-full py-px',
-  inputSurfaceAndFocusVisibleWithinStyle,
+  inputSurfaceAndFocusWithinStyle,
   controlHeight[FILTER_BAR_CONTROL_SIZE],
 );
 

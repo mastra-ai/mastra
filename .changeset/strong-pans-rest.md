@@ -2,4 +2,4 @@
 '@mastra/playground-ui': patch
 ---
 
-Fixed a focus ring appearing on the neighbouring filter after removing a filter with the mouse in `FilterBar`. The ring now shows only when the filter is removed with the keyboard.
+Fixed focus rings showing after mouse clicks. Removing a `FilterBar` filter with the mouse no longer outlines the neighbouring filter, and clicking a button inside an `InputGroup` no longer outlines the group. Keyboard focus still shows the ring.

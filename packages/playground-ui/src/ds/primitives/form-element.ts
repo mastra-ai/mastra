@@ -50,12 +50,12 @@ export const surfaceRimFocus = 'focus-visible:outline-hidden focus-visible:[--su
 
 // The wrapper itself is never `:disabled` — the control it wraps is — so both
 // guards have to ask about descendants.
-const surfaceTintHoverWithin = '[&:hover:not(:focus-within):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
-const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
-const fieldRimFocusWithin = 'focus-within:[--surface-rim:var(--field-rim-focus)]';
-const surfaceTintHoverVisibleWithin =
+const surfaceTintHoverWithin =
   '[&:hover:not(:has(:focus-visible)):not(:has(:disabled))]:[--surface-tint:var(--fill-subtle)]';
-const fieldRimFocusVisibleWithin = 'has-[:focus-visible]:[--surface-rim:var(--field-rim-focus)]';
+const fieldRimFocus = 'focus-visible:outline-hidden focus-visible:[--surface-rim:var(--field-rim-focus)]';
+// `:has(:focus-visible)`, not `:focus-within`: focus moved in code after a click (a filter chip's
+// neighbour once it is removed) must not light the rim. Text fields always match `:focus-visible`.
+const fieldRimFocusWithin = 'has-[:focus-visible]:[--surface-rim:var(--field-rim-focus)]';
 export const fieldErrorRim =
   'aria-invalid:[--field-rim:var(--destructive-indicator)] aria-invalid:[--field-rim-focus:var(--destructive-indicator)]';
 export const fieldErrorRimWithin =
@@ -86,14 +86,6 @@ export const inputSurfaceAndFocusWithinStyle =
   surfaceTintHoverWithin +
   ' outline-hidden focus-within:outline-hidden ' +
   fieldRimFocusWithin;
-
-// For a wrapper whose nested controls are buttons, not a text field (a filter chip): its rim
-// follows keyboard focus only, so focus moved in code after a click doesn't light it up.
-export const inputSurfaceAndFocusVisibleWithinStyle =
-  'bg-field shadow-input text-foreground has-[:disabled]:bg-field-disabled ' +
-  surfaceTintHoverVisibleWithin +
-  ' outline-hidden focus-within:outline-hidden ' +
-  fieldRimFocusVisibleWithin;
 
 // The same material, for a neutral control that is a button rather than a field: `Button`'s
 // `default` variant, and with it every trigger built on it (Select, Combobox, DateTimePicker).
