@@ -802,15 +802,18 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // registry beside them.
             const resumeRegistry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
             const carriedClocks = carriedSpanClocks(resumeRegistry, inputData);
-            const withCarriedClock = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
+            const withCarriedClocks = <T extends ExportedSpan<SpanType.MODEL_GENERATION | SpanType.AGENT_RUN>>(
               data: T,
             ): T => {
-              const missing = Object.entries(carriedClocks ?? {}).filter(
-                ([key]) => !data.attributes?.[key as keyof typeof carriedClocks],
-              );
-              return missing.length
-                ? { ...data, attributes: { ...data.attributes, ...Object.fromEntries(missing) } }
-                : data;
+              if (!carriedClocks) return data;
+              const attributes: NonNullable<T['attributes']> = { ...data.attributes };
+              if (carriedClocks.completionStartTime) {
+                attributes.completionStartTime ??= carriedClocks.completionStartTime;
+              }
+              if (carriedClocks.inferenceStartTime) {
+                attributes.inferenceStartTime ??= carriedClocks.inferenceStartTime;
+              }
+              return { ...data, attributes };
             };
             recordClocks = () => {
               const completionStartTime = modelSpanTracker?.getCompletionStartTime?.();
@@ -822,7 +825,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
               return { completionStartTime, inferenceStartTime };
             };
             const modelSpan = inputModelSpanData
-              ? (observability?.rebuildSpan(withCarriedClock(inputModelSpanData)) as AIModelGenerationSpan | undefined)
+              ? (observability?.rebuildSpan(withCarriedClocks(inputModelSpanData)) as AIModelGenerationSpan | undefined)
               : undefined;
 
             // On remote engines (Inngest) the step's tracingContext span is not part of the
@@ -830,7 +833,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             const inputAgentSpanData = (getRunRegistryEntry(runId, mastra as Mastra | undefined)?.resumeAgentSpanData ??
               inputData.agentSpanData) as ExportedSpan<SpanType.AGENT_RUN> | undefined;
             const agentRunSpan = inputAgentSpanData
-              ? (observability?.rebuildSpan(withCarriedClock(inputAgentSpanData)) as AnySpan | undefined)
+              ? (observability?.rebuildSpan(withCarriedClocks(inputAgentSpanData)) as AnySpan | undefined)
               : undefined;
 
             // Create model span tracker for MODEL_STEP and MODEL_CHUNK spans
