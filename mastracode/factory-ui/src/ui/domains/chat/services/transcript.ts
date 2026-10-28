@@ -92,7 +92,12 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
+  | MessageEntry
+  | NoticeEntry
+  | PromptEntry
+  | NotificationEntry
+  | NotificationSummaryEntry
+  | SubagentEntry;
 
 export interface TranscriptState {
   entries: TimelineEntry[];
