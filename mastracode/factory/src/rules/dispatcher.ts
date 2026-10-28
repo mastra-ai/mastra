@@ -120,7 +120,10 @@ function runErrorCode(error: unknown): FactoryDispatchFailureCode {
   const status = httpStatus(error) ?? httpStatus(causeOf(error));
   if (status === 401 || status === 403) return 'run_credentials_unavailable';
   const providerCall = isProviderCallError(error) || isProviderCallError(causeOf(error));
-  return providerCall && classifyProviderError(error) === 'auth' ? 'run_credentials_unavailable' : 'run_failed';
+  if (!providerCall) return 'run_failed';
+  const kind = classifyProviderError(error);
+  if (kind === 'auth') return 'run_credentials_unavailable';
+  return kind === 'rate_limited' || kind === 'quota' ? 'run_provider_limited' : 'run_failed';
 }
 
 function runErrorFailure(label: string, error: unknown): RunEndedInError {
@@ -131,7 +134,8 @@ function runErrorFailure(label: string, error: unknown): RunEndedInError {
 
 // Rescheduling a failure that can never succeed only delays the moment a person sees why.
 function isTerminalFailure(attempts: number, failureCode: FactoryDispatchFailureCode): boolean {
-  return attempts >= MAX_ATTEMPTS || !factoryDispatchFailureMetadata(failureCode).canRetry;
+  const { canRetry, manualRetryOnly = false } = factoryDispatchFailureMetadata(failureCode);
+  return attempts >= MAX_ATTEMPTS || !canRetry || manualRetryOnly;
 }
 
 /**
@@ -703,8 +707,8 @@ export class FactoryDecisionDispatcher {
             })
           : [];
       dispatches.push(
-        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start, now))),
-        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision, now))),
+        ...starts.map(start => this.#track(this.#runInFlight, this.#dispatchPendingStart(start))),
+        ...decisions.map(decision => this.#track(this.#runInFlight, this.#dispatchDecision(decision))),
       );
     }
     const bookkeepingCapacity = BOOKKEEPING_MAX_IN_FLIGHT - this.#bookkeepingInFlight.size;
@@ -717,7 +721,7 @@ export class FactoryDecisionDispatcher {
         decisionFilter: isBookkeepingDecision,
       });
       dispatches.push(
-        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision, now))),
+        ...decisions.map(decision => this.#track(this.#bookkeepingInFlight, this.#dispatchDecision(decision))),
       );
     }
     return dispatches;
@@ -803,7 +807,7 @@ export class FactoryDecisionDispatcher {
     }
   }
 
-  async #dispatchDecision(record: FactoryDeferredDecisionRecord, now: Date): Promise<void> {
+  async #dispatchDecision(record: FactoryDeferredDecisionRecord): Promise<void> {
     let executionCompleted = false;
     try {
       const decision = validateFactoryRuleDecision(record.decision, record.causalChain.length);
@@ -829,10 +833,11 @@ export class FactoryDecisionDispatcher {
       }
       const failureCode = factoryDispatchFailureCode(error);
       const terminal = isTerminalFailure(record.attempts, failureCode);
+      const failedAt = new Date();
       const failed = await this.#storage.failDeferredDecision({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: retryAt(failedAt, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
         terminal,
@@ -1753,7 +1758,7 @@ export class FactoryDecisionDispatcher {
     });
   }
 
-  async #dispatchPendingStart(record: FactoryPendingStartRecord, now: Date): Promise<void> {
+  async #dispatchPendingStart(record: FactoryPendingStartRecord): Promise<void> {
     try {
       await this.#withLease(
         async leaseExpiresAt =>
@@ -1850,10 +1855,11 @@ export class FactoryDecisionDispatcher {
       if (!completed) throw new Error('Factory kickoff lease was lost before completion.');
     } catch (error) {
       const failureCode = factoryDispatchFailureCode(error);
+      const failedAt = new Date();
       await this.#storage.failPendingStart({
         ...leaseIdentity(record, this.#ownerId),
-        now: new Date(),
-        availableAt: retryAt(now, record.attempts),
+        now: failedAt,
+        availableAt: retryAt(failedAt, record.attempts),
         lastError: sanitizeDispatchError(error),
         failureCode,
         terminal: isTerminalFailure(record.attempts, failureCode),

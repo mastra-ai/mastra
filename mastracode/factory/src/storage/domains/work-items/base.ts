@@ -196,6 +196,7 @@ const FACTORY_DISPATCH_FAILURE_CODES = [
   'run_credentials_unavailable',
   'run_user_organization_invalid',
   'run_user_unauthenticated',
+  'run_provider_limited',
   'run_failed',
   'unknown',
 ] as const;

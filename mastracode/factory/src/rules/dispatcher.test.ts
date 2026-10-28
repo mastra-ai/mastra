@@ -18,11 +18,16 @@ import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '.
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
 import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import type { FactoryRunEndReporter } from '../tools/reports.js';
+import { retryFactoryDecision } from '../work-items/decision-actions.js';
 import { FACTORY_DISPATCH_CONSTANTS, FactoryDecisionDispatcher } from './dispatcher.js';
 import { FactoryTransitionService } from './transition-service.js';
 import type { FactoryCommitDecision } from './types.js';
 
 const PROJECT_ID = '11111111-2222-4333-8444-555555555555';
+// The wording Shipyard saw on a Factory skill run (#28696).
+const PROVIDER_RATE_LIMIT = Object.assign(new Error("This request would exceed your account's rate limit."), {
+  statusCode: 429,
+});
 
 async function createItem(storage: WorkItemsStorage, sourceKey = 'github-issue:1') {
   return (
@@ -286,7 +291,7 @@ async function queueDecision(
     cause: 'rule_decision',
   });
   expect(result.status).toBe('accepted');
-  return { item, transitionService };
+  return { item, transitionService, boards };
 }
 
 /** Give a card the live `work` session an `invokeSkill` effect kicks off into. */
@@ -5801,6 +5806,63 @@ describe('FactoryDecisionDispatcher', () => {
     });
   });
 
+  it('parks a kickoff whose run hit a provider rate limit after one attempt', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller } = createSession(undefined, { agentEndReason: 'error', runError: PROVIDER_RATE_LIMIT });
+    const { transitionService } = await preparePromptKickoff(storage);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+    await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'failed',
+      attempts: 1,
+      failureCode: 'run_provider_limited',
+    });
+  });
+
+  it('schedules the next kickoff attempt a backoff after a long run failed, not after it started', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { controller, consumeStream, emitAgentEnd } = createSession(undefined, {
+      runError: 'Provider stream closed unexpectedly (ECONNRESET)',
+    });
+    const { transitionService } = await preparePromptKickoff(storage);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      isAutoRunEnabled: async () => true,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+    const failedAt = start + 45_000;
+    consumeStream.mockImplementationOnce(async () => {
+      vi.setSystemTime(failedAt);
+      emitAgentEnd('error');
+    });
+
+    vi.useFakeTimers({ now: start, toFake: ['Date'] });
+    try {
+      await dispatcher.runOnce(new Date(start));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect((await storage.listPendingStarts('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      availableAt: new Date(failedAt + 1_000),
+    });
+  });
+
   it('dispatches a pending start on the first tick even when the deferred-decision queue exceeds the batch size', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
     // Deeper than one tick's claim limit: without starts-first claiming these
@@ -6790,6 +6852,103 @@ describe('a skill run that ends in error (#27740)', () => {
       expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
     },
   );
+
+  it.each([
+    ['a rate limit', PROVIDER_RATE_LIMIT],
+    [
+      'an exhausted quota',
+      Object.assign(new Error('You exceeded your current quota, please check your plan and billing details.'), {
+        statusCode: 429,
+        responseBody: '{"error":{"code":"insufficient_quota"}}',
+      }),
+    ],
+  ])('parks a run that hit %s for a person on the first attempt, who can still retry it', async (_case, runError) => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService, boards } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-provider-limit',
+    });
+    await bindWorkRun(storage, item.id);
+    const sessionOptions: NonNullable<Parameters<typeof createSession>[1]> = { agentEndReason: 'error', runError };
+    const { controller } = createSession(undefined, sessionOptions);
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+      staleBindingTtlMs: Number.MAX_SAFE_INTEGER,
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+
+    await dispatcher.runOnce(new Date(start));
+    await dispatcher.runOnce(new Date(start + 2 * 60 * 60_000));
+
+    const [failed] = await storage.listDeferredDecisions('org-1', PROJECT_ID);
+    expect(failed).toMatchObject({ status: 'failed', attempts: 1, failureCode: 'run_provider_limited' });
+    expect(failed!.lastError).toContain(runError.message);
+    const provider = new DecisionAttentionProvider({ workItems: storage }, failedDecisionAttentionSpec);
+    expect(await provider.counts({ orgId: 'org-1', factoryProjectId: PROJECT_ID })).toMatchObject({ open: 1 });
+
+    sessionOptions.agentEndReason = 'complete';
+    const retried = await retryFactoryDecision({
+      workItems: storage,
+      boards,
+      orgId: 'org-1',
+      factoryProjectId: PROJECT_ID,
+      decisionId: failed!.id,
+    });
+    expect(retried).toMatchObject({ ok: true });
+    await dispatcher.runOnce(new Date(start + 4 * 60 * 60_000));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      id: failed!.id,
+      status: 'succeeded',
+    });
+  });
+
+  it('schedules the next attempt a backoff after a long run failed, not after it started', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: 'skill-long-run-error',
+    });
+    await bindWorkRun(storage, item.id);
+    const { controller, session } = createSession(undefined, {
+      agentEndReason: 'error',
+      runError: 'Provider stream closed unexpectedly (ECONNRESET)',
+    });
+    const dispatcher = new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    });
+    const start = Date.parse('2030-01-01T00:00:00Z');
+    const failedAt = start + 45_000;
+    session.subscribe(event => {
+      if (event.type === 'error') vi.setSystemTime(failedAt);
+    });
+
+    vi.useFakeTimers({ now: start, toFake: ['Date'] });
+    try {
+      await dispatcher.runOnce(new Date(start));
+    } finally {
+      vi.useRealTimers();
+    }
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]).toMatchObject({
+      status: 'retry',
+      attempts: 1,
+      failureCode: 'run_failed',
+      availableAt: new Date(failedAt + 1_000),
+    });
+  });
 
   it('keeps a non-credential run error as a retryable run failure with its message', async () => {
     const storage = (await createFactoryStorageForTests()).workItems;
