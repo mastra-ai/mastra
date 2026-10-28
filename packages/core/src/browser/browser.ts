@@ -201,6 +201,37 @@ export async function releaseStaleProfileLock(
   cleanupProfileLockFiles(profilePath, logger);
 }
 
+/**
+ * Log files chrome-launcher writes into the profile directory. It opens them in
+ * append mode and takes Chrome's DevTools port from the first match in
+ * `chrome-err.log`, so on a reused profile it reads the port of the first
+ * launch ever recorded and fails with ECONNREFUSED on that dead port.
+ */
+const CHROME_LAUNCHER_LOG_FILES = ['chrome-err.log', 'chrome-out.log'];
+
+/**
+ * Remove chrome-launcher's log files from a profile so the next launch reads
+ * the DevTools port of the Chrome it just started. Safe to call when the files
+ * don't exist.
+ */
+export function clearChromeLauncherLogs(
+  profilePath: string,
+  logger?: { debug?: (message: string) => void; warn?: (message: string) => void },
+): void {
+  if (!profilePath) return;
+  for (const file of CHROME_LAUNCHER_LOG_FILES) {
+    const fullPath = join(profilePath, file);
+    try {
+      unlinkSync(fullPath);
+      logger?.debug?.(`Removed stale launcher log: ${fullPath}`);
+    } catch (err) {
+      if ((err as NodeJS.ErrnoException).code !== 'ENOENT') {
+        logger?.warn?.(`Failed to remove launcher log ${fullPath}: ${err}`);
+      }
+    }
+  }
+}
+
 // =============================================================================
 // Process Group Cleanup
 // =============================================================================
@@ -843,6 +874,7 @@ export abstract class MastraBrowser extends MastraBase {
         const localProfile = this.getLocalProfilePath();
         if (localProfile) {
           await releaseStaleProfileLock(localProfile, this.logger);
+          clearChromeLauncherLogs(localProfile, this.logger);
         }
         await this.doLaunch();
         this.status = 'ready';

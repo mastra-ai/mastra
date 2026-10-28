@@ -1,5 +1,7 @@
 import {
+  appendFileSync,
   existsSync,
+  readFileSync,
   writeFileSync,
   symlinkSync,
   readdirSync,
@@ -233,6 +235,75 @@ describe('MastraBrowser launch with a locked profile', () => {
 
     expect(browser.doLaunch).toHaveBeenCalledTimes(1);
     expect(existsSync(join(profileDir, 'Preferences'))).toBe(true);
+  });
+
+  // Issue #28664: chrome-launcher appends Chrome's stderr to <profile>/chrome-err.log
+  // and takes the DevTools port from the first match in the whole file. On a reused
+  // profile that is the first launch's port, which is dead, so the launch fails with
+  // ECONNREFUSED on the old port even though no lock files are left behind.
+  describe('relaunching on a reused profile', () => {
+    const DEVTOOLS_PORT = /DevTools listening on ws:\/\/.*?:(\d+)\//;
+
+    /** Behaves like chrome-launcher: append Chrome's stderr, then discover the port from the file. */
+    class LauncherLikeBrowser extends FakeBrowser {
+      discoveredPort?: number;
+      constructor(
+        profile: string,
+        private readonly chromePort: number,
+      ) {
+        super({ profile });
+      }
+      doLaunch = vi.fn(async () => {
+        const errLog = join(profileDir, 'chrome-err.log');
+        appendFileSync(errLog, `\nDevTools listening on ws://127.0.0.1:${this.chromePort}/devtools/browser/abc\n`);
+        appendFileSync(join(profileDir, 'chrome-out.log'), 'out\n');
+        this.discoveredPort = Number(readFileSync(errLog, 'utf-8').match(DEVTOOLS_PORT)![1]);
+      });
+    }
+
+    it('reads the new DevTools port when launching again after a clean close', async () => {
+      const first = new LauncherLikeBrowser(profileDir, 50047);
+      await first.launch();
+      expect(first.discoveredPort).toBe(50047);
+      await first.close();
+
+      const second = new LauncherLikeBrowser(profileDir, 61234);
+      await second.launch();
+
+      expect(second.discoveredPort).toBe(61234);
+    });
+
+    it('clears launcher logs left by an earlier launch before launching', async () => {
+      writeFileSync(
+        join(profileDir, 'chrome-err.log'),
+        'DevTools listening on ws://127.0.0.1:50047/devtools/browser/old\n',
+      );
+      writeFileSync(join(profileDir, 'chrome-out.log'), 'old\n');
+      writeFileSync(join(profileDir, 'Preferences'), '{}');
+      const browser = new FakeBrowser({ profile: profileDir });
+      browser.doLaunch.mockImplementation(async () => {
+        expect(existsSync(join(profileDir, 'chrome-err.log'))).toBe(false);
+        expect(existsSync(join(profileDir, 'chrome-out.log'))).toBe(false);
+      });
+
+      await browser.launch();
+
+      expect(browser.doLaunch).toHaveBeenCalledTimes(1);
+      expect(existsSync(join(profileDir, 'Preferences'))).toBe(true);
+    });
+
+    it.skipIf(process.platform === 'win32')(
+      'leaves launcher logs alone when a live browser holds the profile',
+      async () => {
+        writeFileSync(join(profileDir, 'chrome-err.log'), 'live\n');
+        await lockProfile(`${hostname()}-4242`, { listening: true });
+        const browser = new FakeBrowser({ profile: profileDir });
+
+        await expect(browser.launch()).rejects.toBeInstanceOf(BrowserProfileInUseError);
+
+        expect(readFileSync(join(profileDir, 'chrome-err.log'), 'utf-8')).toBe('live\n');
+      },
+    );
   });
 });
 
