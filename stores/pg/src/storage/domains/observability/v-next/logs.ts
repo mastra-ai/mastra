@@ -12,7 +12,7 @@ import type { FilterAccumulator } from './filters';
 import { logRecordToRow, rowToLogRecord } from './helpers';
 import { listSignalDelta, listSignalPage } from './listing';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
-import { buildInsert, LOG_SELECT_COLUMNS } from './sql';
+import { insertRows, LOG_SELECT_COLUMNS } from './sql';
 
 function applyLogFilters(acc: FilterAccumulator, filters: ListLogsArgs['filters']): void {
   applyCommonFilters(acc, filters);
@@ -22,8 +22,7 @@ function applyLogFilters(acc: FilterAccumulator, filters: ListLogsArgs['filters'
 export async function batchCreateLogs(client: DbClient, schema: string, args: BatchCreateLogsArgs): Promise<void> {
   if (args.logs.length === 0) return;
   const rows = args.logs.map(logRecordToRow);
-  const insert = buildInsert(schema, TABLE_LOG_EVENTS, rows);
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_LOG_EVENTS, rows);
 }
 
 export async function listLogs(client: DbClient, schema: string, args: ListLogsArgs): Promise<ListLogsResponse> {

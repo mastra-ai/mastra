@@ -47,7 +47,7 @@ import {
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { SCORE_TYPED_COLUMNS } from './signal-schema';
-import { buildInsert, SCORE_SELECT_COLUMNS } from './sql';
+import { insertRows, SCORE_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the score signal
@@ -112,15 +112,13 @@ function collapseExactScoreConflicts(rows: Record<string, unknown>[]): Record<st
 
 export async function createScore(client: DbClient, schema: string, args: CreateScoreArgs): Promise<void> {
   const row = scoreRecordToRow(args.score);
-  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, [row], scoreRewriteConflict(row));
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_SCORE_EVENTS, [row], scoreRewriteConflict(row));
 }
 
 export async function batchCreateScores(client: DbClient, schema: string, args: BatchCreateScoresArgs): Promise<void> {
   if (args.scores.length === 0) return;
   const rows = collapseExactScoreConflicts(args.scores.map(scoreRecordToRow));
-  const insert = buildInsert(schema, TABLE_SCORE_EVENTS, rows, scoreRewriteConflict(rows[0]!));
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_SCORE_EVENTS, rows, scoreRewriteConflict(rows[0]!));
 }
 
 // ---------------------------------------------------------------------------

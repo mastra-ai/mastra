@@ -7,8 +7,11 @@
  */
 
 import { parseSqlIdentifier } from '@mastra/core/utils';
+import type { DbClient } from '../../../client';
 import { toPgJson } from '../../../db/sanitize-json';
-import { qualifiedTable, TABLE_SPAN_EVENTS } from './ddl';
+import { qualifiedTable, SIGNAL_TIME_COLUMN, TABLE_SPAN_EVENTS } from './ddl';
+import type { SignalTable } from './ddl';
+import { ensureDayPartitions, isMissingPartitionError, isPartmanManaged } from './partitioning';
 import {
   buildNamedSelectColumns,
   buildSelectColumns,
@@ -100,6 +103,38 @@ VALUES ${rowPlaceholders.join(', ')}
 ${onConflict}`;
 
   return { text, values };
+}
+
+/** Insert into a signal table. A row whose day has no partition yet gets one created, then the insert runs once more. */
+export async function insertRows(
+  client: DbClient,
+  schema: string,
+  table: SignalTable,
+  records: Record<string, unknown>[],
+  onConflict?: string,
+): Promise<void> {
+  const insert = buildInsert(schema, table, records, onConflict);
+  if (!insert) return;
+  try {
+    await client.query(insert.text, insert.values);
+  } catch (error) {
+    if (!isMissingPartitionError(error) || (await isPartmanManaged(client, schema, table))) throw error;
+    await ensureDayPartitions(client, schema, table, recordDays(records, SIGNAL_TIME_COLUMN[table]));
+    await client.query(insert.text, insert.values);
+  }
+}
+
+function recordDays(records: Record<string, unknown>[], timeColumn: string): Date[] {
+  const days = new Map<string, Date>();
+  for (const record of records) {
+    const value = record[timeColumn];
+    if (value == null) continue;
+    const d = new Date(value as string | number | Date);
+    if (isNaN(d.getTime())) continue;
+    const day = new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), d.getUTCDate()));
+    days.set(day.toISOString(), day);
+  }
+  return [...days.values()];
 }
 
 /** Primary key of the span table; also the conflict target for span upserts. */

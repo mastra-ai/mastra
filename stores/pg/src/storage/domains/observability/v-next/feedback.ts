@@ -49,7 +49,7 @@ import {
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { parseUpdateFeedbackReviewStatusArgs } from './review-status';
 import { FEEDBACK_EVENT_COLUMNS, FEEDBACK_TYPED_COLUMNS } from './signal-schema';
-import { buildInsert, FEEDBACK_SELECT_COLUMNS } from './sql';
+import { insertRows, FEEDBACK_SELECT_COLUMNS } from './sql';
 
 const FEEDBACK_CONFLICT_KEYS = new Set(['feedbackId', 'timestamp']);
 const FEEDBACK_UPSERT_CLAUSE = `ON CONFLICT ("feedbackId", "timestamp") DO UPDATE SET ${FEEDBACK_EVENT_COLUMNS.map(
@@ -107,8 +107,7 @@ function pushFeedbackIdentity(
 
 export async function createFeedback(client: DbClient, schema: string, args: CreateFeedbackArgs): Promise<void> {
   const row = feedbackRecordToRow(args.feedback);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, [row], FEEDBACK_UPSERT_CLAUSE);
 }
 
 export async function batchCreateFeedback(
@@ -119,8 +118,7 @@ export async function batchCreateFeedback(
   if (args.feedbacks.length === 0) return;
   const currentFeedback = new Map(args.feedbacks.map(feedback => [feedback.feedbackId, feedback]));
   const rows = [...currentFeedback.values()].map(feedbackRecordToRow);
-  const insert = buildInsert(schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_FEEDBACK_EVENTS, rows, FEEDBACK_UPSERT_CLAUSE);
 }
 
 export async function updateFeedbackReviewStatus(

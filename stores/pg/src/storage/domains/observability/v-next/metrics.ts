@@ -50,7 +50,7 @@ import {
 } from './olap';
 import { assertDeltaPollingEnabled, deltaPollingFeatureEnabled } from './polling';
 import { METRIC_TYPED_COLUMNS } from './signal-schema';
-import { buildInsert, METRIC_SELECT_COLUMNS } from './sql';
+import { insertRows, METRIC_SELECT_COLUMNS } from './sql';
 
 // ---------------------------------------------------------------------------
 // Filter helpers specific to the metric signal
@@ -92,8 +92,7 @@ export async function batchCreateMetrics(
 ): Promise<void> {
   if (args.metrics.length === 0) return;
   const rows = args.metrics.map(metricRecordToRow);
-  const insert = buildInsert(schema, TABLE_METRIC_EVENTS, rows);
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_METRIC_EVENTS, rows);
 }
 
 // ---------------------------------------------------------------------------

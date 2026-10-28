@@ -31,7 +31,7 @@ import {
 } from './ddl';
 import { rowToLightSpanRecord, rowToSpanRecord, spanRecordToRow } from './helpers';
 import {
-  buildInsert,
+  insertRows,
   spanConflictClause,
   SPAN_COLLAPSE_ORDER,
   SPAN_LIGHT_SELECT_COLUMNS,
@@ -44,8 +44,7 @@ import {
 
 async function writeSpanRows(client: DbClient, schema: string, rows: Record<string, unknown>[]): Promise<void> {
   const deduped = dedupeSpanRows(rows);
-  const insert = buildInsert(schema, TABLE_SPAN_EVENTS, deduped, spanConflictClause(Object.keys(deduped[0] ?? {})));
-  if (insert) await client.query(insert.text, insert.values);
+  await insertRows(client, schema, TABLE_SPAN_EVENTS, deduped, spanConflictClause(Object.keys(deduped[0] ?? {})));
 }
 
 /**
