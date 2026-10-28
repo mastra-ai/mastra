@@ -1,4 +1,4 @@
-/** How a stretch header words one kind of tool: while running, done alone, and once or many times in a summary. */
+/** How a line words one kind of tool: while it runs, done alone, and once or many times in a summary. */
 export interface ToolPhrases {
   live: string;
   done: string;
@@ -6,8 +6,7 @@ export interface ToolPhrases {
   many: string;
 }
 
-/** Keyed by `presentTool(...).label`, the stable name of each kind of tool. */
-const PHRASES: Record<string, ToolPhrases> = {
+const KIND_PHRASES = {
   Read: { live: 'Reading', done: 'Read', one: 'read a file', many: 'read files' },
   Write: { live: 'Writing', done: 'Wrote', one: 'wrote a file', many: 'wrote files' },
   Edit: { live: 'Editing', done: 'Edited', one: 'edited a file', many: 'edited files' },
@@ -36,12 +35,8 @@ const PHRASES: Record<string, ToolPhrases> = {
   'Inspect code': { live: 'Inspecting', done: 'Inspected', one: 'inspected code', many: 'inspected code' },
   'File info': { live: 'Checking', done: 'Checked', one: 'checked a file', many: 'checked files' },
   Delete: { live: 'Deleting', done: 'Deleted', one: 'deleted a file', many: 'deleted files' },
-  'New folder': {
-    live: 'Creating folder',
-    done: 'Created folder',
-    one: 'created a folder',
-    many: 'created folders',
-  },
+  'New folder': { live: 'Creating folder', done: 'Created folder', one: 'created a folder', many: 'created folders' },
+  Skill: { live: 'Using skill', done: 'Used skill', one: 'used a skill', many: 'used skills' },
   'Search skills': {
     live: 'Searching skills',
     done: 'Searched skills',
@@ -54,10 +49,16 @@ const PHRASES: Record<string, ToolPhrases> = {
     one: 'read a skill file',
     many: 'read skill files',
   },
-};
+} satisfies Record<string, ToolPhrases>;
+
+/** The kinds `presentTool` labels a call with; each one has its phrases. */
+export type ToolKind = keyof typeof KIND_PHRASES;
+
+function isToolKind(label: string): label is ToolKind {
+  return Object.hasOwn(KIND_PHRASES, label);
+}
 
 export function toolPhrases(label: string): ToolPhrases {
-  return (
-    PHRASES[label] ?? { live: `Using ${label}`, done: `Used ${label}`, one: `used ${label}`, many: `used ${label}` }
-  );
+  if (isToolKind(label)) return KIND_PHRASES[label];
+  return { live: `Using ${label}`, done: `Used ${label}`, one: `used ${label}`, many: `used ${label}` };
 }

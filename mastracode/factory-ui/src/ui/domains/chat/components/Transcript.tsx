@@ -18,10 +18,10 @@ import {
 import { AGENT_CONTROLLER_ID } from '../services/constants';
 import { replySteps } from '../services/turns';
 import { ArrivalScope, useArriving } from '@mastra/playground-ui/components/Arrival';
+import { ActivityDisclosureProvider } from '@mastra/playground-ui/domains/chat/activity';
 import { MessageBubble } from './MessageBubble';
 import { planTurnActivity, sameEntryActivity } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
-import { ActivityViewContext, ActivityViewStore } from './activity/activity-view';
 import { RunErrorNotice } from './RunErrorNotice';
 import { draws, messageText, renderableParts } from './transcript-parts';
 import { isRecord } from './transcript-shared';
@@ -129,10 +129,9 @@ export function TranscriptEntries({
 
   const turnGroups = groupTurns(entries, { key: entry => entry.id, opensTurn, introduces: isTurnDivider });
   const [restoredTurnKey] = useState(() => (restoredHistory ? turnGroups.at(-1)?.key : undefined));
-  const [activityViews] = useState(() => new ActivityViewStore());
 
   return (
-    <ActivityViewContext value={activityViews}>
+    <ActivityDisclosureProvider>
       {turnGroups.map((group, index) => {
         const isLiveTurn = index === turnGroups.length - 1;
         const runningTurn = isLiveTurn && running;
@@ -187,7 +186,7 @@ export function TranscriptEntries({
         );
       })}
       {turnGroups.length === 0 && tail}
-    </ActivityViewContext>
+    </ActivityDisclosureProvider>
   );
 }
 

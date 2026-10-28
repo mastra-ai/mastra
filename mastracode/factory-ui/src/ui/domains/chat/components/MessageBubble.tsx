@@ -34,7 +34,7 @@ import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolFactory } from './ToolFactory';
 import { draws, hasVisibleText, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
-import { ActivityStretchLine } from './activity/ActivityStretchLine';
+import { HostedStretch } from './activity/HostedStretch';
 import { activityPartKey, reasoningWithState } from './activity/activity-plan';
 import type { EntryActivity } from './activity/activity-plan';
 import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
@@ -194,14 +194,14 @@ export function MessageBubble({
     Reasoning: (part: ReasoningPart) => {
       const key = keyOfPart.get(part);
       const stretch = key === undefined ? undefined : activity?.hosts.get(key);
-      if (stretch) return <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
       if (key !== undefined && activity?.hidden.has(key)) return null;
       return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
     },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
       const stretch = activity?.hosts.get(toolCallId);
-      if (stretch) return <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
+      if (stretch) return <HostedStretch stretch={stretch} hostEntryId={entry.id} revealed={revealed} />;
       if (activity?.hidden.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];

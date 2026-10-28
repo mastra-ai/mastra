@@ -1,35 +1,36 @@
 import { Activity, ActivityContent, ActivityHeadline } from '@mastra/playground-ui/components/ai/activity';
 import { presentTool } from '@mastra/playground-ui/components/ai/tool-call';
+import { ActivityTimedTrigger } from '@mastra/playground-ui/domains/chat/activity';
 
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
-import { TimedTrigger } from '../activity/TimedTrigger';
 import { ToolBody, toolHasBody } from './ToolBody';
 
 export function ToolCard({
   tool,
-  defaultOpen,
+  open,
   onOpenChange,
 }: {
   tool: ToolCall;
-  defaultOpen?: boolean;
+  open?: boolean;
   onOpenChange?: (open: boolean) => void;
 }) {
   const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
+  const foldable = toolHasBody(tool, command);
 
   return (
     <Activity
       appearance="inline"
-      foldable={toolHasBody(tool, command)}
+      foldable={foldable}
       status={toolCallStatus(tool.status)}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
-      defaultOpen={defaultOpen}
+      open={open && foldable}
       onOpenChange={onOpenChange}
     >
-      <TimedTrigger at={tool.createdAt}>
+      <ActivityTimedTrigger at={tool.createdAt}>
         <ActivityHeadline icon={<ToolIcon aria-hidden />} label={label} detail={detail} description={description} />
-      </TimedTrigger>
+      </ActivityTimedTrigger>
       <ActivityContent>
         <ToolBody tool={tool} command={command} />
       </ActivityContent>

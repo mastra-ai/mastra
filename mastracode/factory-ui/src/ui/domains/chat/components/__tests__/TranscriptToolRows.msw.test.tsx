@@ -40,8 +40,9 @@ function layOutPanels(): () => void {
   ) {
     if (this.matches('[data-id$="-viewport"]')) return rect(0, 2 * ROW_HEIGHT);
     const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
-    if (!viewport || !this.dataset.activityKey) return rect(0, 0);
-    const index = Array.from(viewport.querySelectorAll('[data-activity-key]')).indexOf(this);
+    const rows = Array.from(viewport?.querySelectorAll('[aria-label^="Tool: "]') ?? [], tool => tool.parentElement);
+    const index = rows.indexOf(this);
+    if (!viewport || index < 0) return rect(0, 0);
     return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
   });
   return () => {
