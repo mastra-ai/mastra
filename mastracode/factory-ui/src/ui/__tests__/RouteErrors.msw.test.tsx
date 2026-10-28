@@ -1,14 +1,11 @@
 import { screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { isValidElement } from 'react';
-import { createMemoryRouter, RouterProvider } from 'react-router';
-import type { RouteObject } from 'react-router';
+import { createMemoryRouter, matchRoutes, RouterProvider } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../e2e/ui/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '../../../e2e/ui/render';
-import { AppRouteErrorPage } from '../layouts/RouteErrorPage';
 import { createAppRoutes } from '../router';
 
 function FailingPage(): never {
@@ -33,18 +30,14 @@ beforeEach(() => {
   );
 });
 
-function withFailingPage(routes: RouteObject[]): RouteObject[] {
-  return routes.map(route => {
-    if (route.index) return route;
-    if (isValidElement(route.errorElement) && route.errorElement.type === AppRouteErrorPage) {
-      return { ...route, children: [...(route.children ?? []), { path: 'error', Component: FailingPage }] };
-    }
-    return route.children ? { ...route, children: withFailingPage(route.children) } : route;
-  });
-}
+const RULES_PATH = '/factories/fp-1/rules';
 
 function renderFailingPage() {
-  const router = createMemoryRouter(withFailingPage(createAppRoutes()), { initialEntries: ['/factories/fp-1/error'] });
+  const routes = createAppRoutes();
+  const rules = matchRoutes(routes, RULES_PATH)?.at(-1)?.route;
+  if (!rules) throw new Error(`No route renders ${RULES_PATH}`);
+  rules.element = <FailingPage />;
+  const router = createMemoryRouter(routes, { initialEntries: [RULES_PATH] });
   renderWithProviders(<RouterProvider router={router} />);
 }
 
