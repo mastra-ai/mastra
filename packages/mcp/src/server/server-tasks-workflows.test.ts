@@ -629,6 +629,61 @@ describe.each([
     });
   });
 
+  describe('open task caps', () => {
+    const perClientError = 'Too many open tasks for this client (limit 2). Wait for one to finish or cancel one.';
+
+    it('counts workflow and agent tasks against the cap, refusing one past it without starting a run', async () => {
+      const { workflows } = await start({
+        workflows: { hang: 'always' },
+        agents: { ponderer: 'always' },
+        maxOpenTasksPerClient: 2,
+      });
+      expect((await call('run_hang')).result).toMatchObject({ resultType: 'task' });
+      expect((await call('ask_ponderer', { message: 'Think' })).result).toMatchObject({ resultType: 'task' });
+
+      for (const [name, args] of [
+        ['run_hang', {}],
+        ['ask_ponderer', { message: 'Think' }],
+      ] as const) {
+        const refused = (await call(name, args)).result;
+        expect(refused).toMatchObject({ isError: true, content: [{ type: 'text', text: perClientError }] });
+        expect(refused.resultType).not.toBe('task');
+      }
+      expect((await workflows.hang.listWorkflowRuns()).total).toBe(1);
+      expect((await call('run_hang', {}, { user: 'bob' })).result).toMatchObject({ resultType: 'task' });
+    });
+
+    it("answers an 'auto' run synchronously when it outlives its window at the cap, letting it finish", async () => {
+      const { workflows } = await start({
+        workflows: { hang: 'always', report: { mode: 'auto', syncWindowMs: 50 } },
+        maxOpenTasksPerClient: 1,
+      });
+      expect((await call('run_hang')).result).toMatchObject({ resultType: 'task' });
+      const answered = (await call('run_report', { topic: 'tides' })).result;
+      expect(answered.resultType).not.toBe('task');
+      expect(answered.isError).toBeFalsy();
+      expect(JSON.parse(answered.content[0].text)).toMatchObject({
+        status: 'success',
+        result: { report: 'report on tides' },
+      });
+      expect((await onlyRun(workflows.report)).status).toBe('success');
+    });
+
+    it("cancels an 'auto' run that suspends at the cap, since only a task could answer it", async () => {
+      const { workflows } = await start({
+        workflows: { hang: 'always', approval: 'auto' },
+        maxOpenTasksPerClient: 1,
+      });
+      expect((await call('run_hang')).result).toMatchObject({ resultType: 'task' });
+      const refused = (await call('run_approval', { release: 'v1' })).result;
+      expect(refused).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: expect.stringContaining('Too many open tasks for this client (limit 1)') }],
+      });
+      await vi.waitFor(async () => expect((await onlyRun(workflows.approval)).status).toBe('canceled'));
+    });
+  });
+
   it('rejects task configs naming workflows or agents the server does not serve', () => {
     const make = (tasks: unknown) => () =>
       new MCPServer({

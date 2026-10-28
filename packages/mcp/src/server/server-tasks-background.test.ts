@@ -442,6 +442,37 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     });
   });
 
+  it('caps open tasks per client across instances sharing storage', async () => {
+    const tasks = { tools: { waits: 'always' as const }, maxOpenTasksPerClient: 2 };
+    const a = await instance(tasks);
+    const b = await instance(tasks);
+    const first = await call(a.url, 'waits');
+    await call(a.url, 'waits');
+
+    const refused = await rawRequest(b.url, {
+      method: 'tools/call',
+      params: { name: 'waits', arguments: {} },
+      capabilities: { extensions: tasksCapabilityEntry() },
+      headers: { 'x-test-user': 'alice', 'mcp-name': 'waits' },
+    });
+    expect(refused.json().result).toMatchObject({
+      isError: true,
+      content: [
+        {
+          type: 'text',
+          text: 'Too many open tasks for this client (limit 2). Wait for one to finish or cancel one.',
+        },
+      ],
+    });
+    expect((await rows(b.mastra)).filter(row => row.toolName === 'mcp-server:tasks:waits')).toHaveLength(2);
+    // Another client still gets a task on either instance.
+    await call(b.url, 'waits', {}, { 'x-test-user': 'bob' });
+
+    // A finished task frees its slot, on whichever instance the next call lands.
+    await waitFor(await requester(b.url), first, 'completed');
+    await call(b.url, 'waits');
+  });
+
   it('stops a run on one instance when another instance cancels its task', async () => {
     const a = await instance({ tools: { hang: 'always' } });
     const b = await instance({ tools: { hang: 'always' } });

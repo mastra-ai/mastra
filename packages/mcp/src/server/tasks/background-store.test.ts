@@ -146,8 +146,12 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.close();
   });
 
-  async function setup(work: MCPTaskWork, recover = false) {
-    mastra = new Mastra({ logger: false, storage: new InMemoryStore(), backgroundTasks: { enabled: true } });
+  async function setup(work: MCPTaskWork, recover = false, backgroundTasks: Record<string, unknown> = {}) {
+    mastra = new Mastra({
+      logger: false,
+      storage: new InMemoryStore(),
+      backgroundTasks: { enabled: true, ...backgroundTasks },
+    });
     const manager = mastra.backgroundTaskManager!;
     const store = new BackgroundTaskMCPTaskStore({
       manager,
@@ -344,6 +348,30 @@ describe('BackgroundTaskMCPTaskStore', () => {
     store.close();
   });
 
+  it('stops counting a task waiting for input once its TTL passes, before the sweep fails it', async () => {
+    const ask: MCPTaskWork = async () => ({
+      status: 'input_required',
+      inputRequests: { k: { method: 'elicitation/create', params: {} } },
+    });
+    const { store, manager } = await setup(ask);
+    const limits = { perPrincipal: 1, total: 1 };
+    const task = await store.create({ ttlMs: 150, principal: 'alice', context: { toolName: 'tool' }, limits });
+    store.run(task.taskId, ask);
+    await until(
+      () => rowOf(manager),
+      row => row.status === 'suspended',
+    );
+    await expect(
+      store.create({ ttlMs: 60_000, principal: 'bob', context: { toolName: 'tool' }, limits }),
+    ).rejects.toMatchObject({ scope: 'total', limit: 1 });
+    await sleep(160);
+    expect((await rowOf(manager)).status).toBe('suspended');
+    const next = await store.create({ ttlMs: 60_000, principal: 'alice', context: { toolName: 'tool' }, limits });
+    store.run(next.taskId, ask);
+    expect(next.status).toBe('working');
+    store.close();
+  });
+
   it.each([
     { recover: false, status: 'failed', runs: 1 },
     { recover: true, status: 'completed', runs: 2 },
@@ -383,4 +411,76 @@ describe('BackgroundTaskMCPTaskStore', () => {
       store.close();
     },
   );
+
+  /** Rows queued by an instance that died before dispatching them: pending, unowned, a while old. */
+  async function abandon(
+    storage: Awaited<ReturnType<NonNullable<Mastra['backgroundTaskManager']>['getStorage']>>,
+    n: number,
+  ) {
+    const createdAt = new Date(Date.now() - 10 * 60_000);
+    for (let i = 0; i < n; i++) {
+      const taskKey = `abandoned-${i}`;
+      await storage.createTask(
+        row({
+          id: taskKey,
+          status: 'pending',
+          toolName: 'mcp-server:s:tool',
+          toolCallId: taskKey,
+          runId: taskKey,
+          resourceId: `mcp-server:s:${envelope.principalKey}`,
+          args: { taskKey, context: { toolName: 'tool' } },
+          createdAt: new Date(createdAt.getTime() + i),
+          expiresAt: new Date(Date.now() + 60_000),
+          metadata: { ...envelope } as unknown as Record<string, unknown>,
+        }),
+      );
+    }
+  }
+
+  it('restarts abandoned rows a batch per sweep, and drains them over sweeps', async () => {
+    const work: MCPTaskWork = async () => ({ status: 'completed', result: { content: [] } });
+    const { store, manager, storage } = await setup(work, false, {
+      globalConcurrency: 1_000,
+      perAgentConcurrency: 1_000,
+    });
+    await abandon(storage, 250);
+    const restart = vi.spyOn(manager, 'restart');
+
+    const perSweep: number[] = [];
+    for (let i = 0; i < 20; i++) {
+      const { total } = await manager.listTasks({ agentId: 'mcp-server:s', status: ['pending', 'running'] });
+      if (total === 0) break;
+      const before = restart.mock.calls.length;
+      await store.sweep();
+      perSweep.push(restart.mock.calls.length - before);
+      await sleep(100);
+    }
+    expect(Math.max(...perSweep)).toBeLessThanOrEqual(100);
+    const { total: done } = await manager.listTasks({ agentId: 'mcp-server:s', status: 'completed' });
+    expect(done).toBe(250);
+    store.close();
+  });
+
+  it('restarts only as many abandoned rows as there are free slots', async () => {
+    const release: Array<() => void> = [];
+    const work: MCPTaskWork = async () => {
+      await new Promise<void>(resolve => release.push(resolve));
+      return { status: 'completed', result: { content: [] } };
+    };
+    const { store, manager, storage } = await setup(work, false, { perAgentConcurrency: 3 });
+    await abandon(storage, 20);
+    const restart = vi.spyOn(manager, 'restart');
+
+    await store.sweep();
+    expect(restart).toHaveBeenCalledTimes(3);
+    await until(
+      async () => release.length,
+      n => n === 3,
+    );
+    // Every slot is taken: the next sweep restarts nothing.
+    await store.sweep();
+    expect(restart).toHaveBeenCalledTimes(3);
+    release.forEach(resolve => resolve());
+    store.close();
+  });
 });

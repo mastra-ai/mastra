@@ -103,6 +103,7 @@ import type {
   MCPTaskTrace,
   MCPTaskWork,
 } from './tasks/store';
+import { MCPTaskLimitError } from './tasks/store';
 import {
   firstSuspendedStep,
   isFinalRunStatus,
@@ -1025,10 +1026,15 @@ export class MCPServer extends MCPServerBase {
           });
         }
         if (asTask && taskMode.mode === 'always') {
-          return this.startToolTask(ctx, requestContext, name, args, taskMode, {
-            resume,
-            rootSpan: trace.requestSpan,
-          });
+          try {
+            return await this.startToolTask(ctx, requestContext, name, args, taskMode, {
+              resume,
+              rootSpan: trace.requestSpan,
+            });
+          } catch (error) {
+            if (error instanceof MCPTaskLimitError) return errorResult(openTaskLimitMessage(error));
+            throw error;
+          }
         }
         const options = {
           requestContext,
@@ -1137,12 +1143,6 @@ export class MCPServer extends MCPServerBase {
       if ('error' in winner) throw winner.error;
       return winner;
     }
-    const first = settled.then(
-      (outcome): MCPTaskAttemptOutcome =>
-        'error' in outcome
-          ? this.toolErrorOutcome(name, outcome.error)
-          : this.toTaskOutcome(name, tool, outcome.execution),
-    );
     try {
       return {
         task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
@@ -1151,19 +1151,38 @@ export class MCPServer extends MCPServerBase {
             options.resumeData === undefined
               ? undefined
               : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
-          initialAttempt: { outcome: first, abort: reason => controller.abort(reason) },
+          initialAttempt: () => ({
+            outcome: settled.then(
+              (outcome): MCPTaskAttemptOutcome =>
+                'error' in outcome
+                  ? this.toolErrorOutcome(name, outcome.error)
+                  : this.toTaskOutcome(name, tool, outcome.execution),
+            ),
+            abort: reason => controller.abort(reason),
+          }),
         }),
       };
     } catch (error) {
-      // No task owns the execution, so nothing could ever cancel it.
-      controller.abort(error);
-      throw error;
+      if (!(error instanceof MCPTaskLimitError)) {
+        // No task owns the execution, so nothing could ever cancel it.
+        controller.abort(error);
+        throw error;
+      }
     }
+    // At the open task cap: the tool already started, so answer this call synchronously instead.
+    this.logger.debug(`Tool '${name}' outlived its sync window at the open task cap; answering synchronously.`);
+    if (requestSignal.aborted) followRequest();
+    else requestSignal.addEventListener('abort', followRequest, { once: true });
+    const outcome = await settled;
+    requestSignal.removeEventListener('abort', followRequest);
+    if ('error' in outcome) throw outcome.error;
+    return outcome;
   }
 
   /**
    * Creates the task (durably, before answering) and hands its work to the store. `initialAttempt`
-   * is an execution that already started under the request; it stays in this process.
+   * builds the run of an execution that already started under the request; it stays in this
+   * process. Rejects with {@link MCPTaskLimitError}, creating nothing, at the open task cap.
    */
   private async startToolTask(
     ctx: ServerContext,
@@ -1179,7 +1198,8 @@ export class MCPServer extends MCPServerBase {
       resume?: ToolTaskContext['resume'];
       /** The request's span, which becomes the task's root. */
       rootSpan?: Span<SpanType.MCP_SERVER_REQUEST>;
-    } & MCPTaskRunOptions,
+      initialAttempt?: () => NonNullable<MCPTaskRunOptions['initialAttempt']>;
+    },
   ): Promise<CallToolResult> {
     const context: ToolTaskContext = {
       toolName: name,
@@ -1191,6 +1211,7 @@ export class MCPServer extends MCPServerBase {
       ttlMs: taskMode.ttlMs,
       principal: principalOf(ctx, requestContext),
       context,
+      limits: this.tasks.limits,
       ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
     };
     const { store, task } = await this.createTask(ctx, requestContext, params, initialAttempt !== undefined);
@@ -1198,7 +1219,7 @@ export class MCPServer extends MCPServerBase {
       initialAttempt:
         initialAttempt &&
         // The store awaits this attempt instead of calling `work`, so it gets its span here.
-        this.tracedInitialAttempt(name, initialAttempt, params.trace, task.taskId, requestContext),
+        this.tracedInitialAttempt(name, initialAttempt(), params.trace, task.taskId, requestContext),
     });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
@@ -1471,6 +1492,7 @@ export class MCPServer extends MCPServerBase {
       ttlMs: taskMode.ttlMs,
       principal: principalOf(ctx, requestContext),
       context,
+      limits: this.tasks.limits,
       ...(rootSpan && { trace: { traceId: rootSpan.traceId, spanId: rootSpan.id } }),
     };
     // The run's span persists with its snapshot, so its resumes and restarts can join the same trace.
@@ -1490,8 +1512,15 @@ export class MCPServer extends MCPServerBase {
     };
 
     if (taskMode.mode === 'always') {
-      // The task exists before the run does: if creating it fails, nothing ran.
-      const { store, task } = await this.createTask(ctx, requestContext, params, true);
+      // The task exists before the run does: if creating it fails, at the open task cap say, nothing ran.
+      let created: Awaited<ReturnType<typeof this.createTask>>;
+      try {
+        created = await this.createTask(ctx, requestContext, params, true);
+      } catch (error) {
+        if (error instanceof MCPTaskLimitError) return errorResult(openTaskLimitMessage(error));
+        throw error;
+      }
+      const { store, task } = created;
       // The run is the task's first attempt, so it runs under that attempt's span.
       const span =
         params.trace && this.openTaskSpan(`task attempt ${name} #1`, params.trace, firstAttemptSpan(name, task.taskId));
@@ -1547,9 +1576,24 @@ export class MCPServer extends MCPServerBase {
       this.logger.debug(`Workflow tool '${name}' continues as task.`);
       return taskHandleResult(task);
     } catch (error) {
-      // No task owns the run, so nothing could ever cancel it.
+      if (!(error instanceof MCPTaskLimitError)) {
+        // No task owns the run, so nothing could ever cancel it.
+        live.cancel();
+        throw error;
+      }
+      // At the open task cap: the run already started, so follow it under this request instead, as
+      // an 'auto' tool does. A run that suspends could only be answered through a task, so it is
+      // cancelled rather than left waiting for input nobody can give.
+      this.logger.debug(`Workflow tool '${name}' outlived its sync window at the open task cap.`);
+      if (requestSignal.aborted) followRequest();
+      else requestSignal.addEventListener('abort', followRequest, { once: true });
+      const late = await settled;
+      requestSignal.removeEventListener('abort', followRequest);
+      if ('error' in late) throw late.error;
+      const outcome = this.workflowRunOutcome(workflow, context, late.view);
+      if (outcome?.status === 'completed') return outcome.result;
       live.cancel();
-      throw error;
+      return errorResult(openTaskLimitMessage(error));
     }
   }
 
@@ -2386,6 +2430,12 @@ export class MCPServer extends MCPServerBase {
 /** Tools with an intrinsic id are also registered on the Mastra instance, like `__registerMastra` does. */
 function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, any, any, any> {
   return !!tool && typeof tool === 'object' && 'id' in tool && typeof tool.id === 'string';
+}
+
+function openTaskLimitMessage({ scope, limit }: MCPTaskLimitError): string {
+  return scope === 'principal'
+    ? `Too many open tasks for this client (limit ${limit}). Wait for one to finish or cancel one.`
+    : `Too many open tasks on this server (limit ${limit}). Try again later.`;
 }
 
 function errorResult(text: string): CallToolResult {

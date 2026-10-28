@@ -5,11 +5,13 @@ import type { BackgroundTasksStorage } from '@mastra/core/storage';
 import type { CallToolResult } from '@modelcontextprotocol/server';
 import { createTaskId, suggestedPollIntervalMs, taskKeyOf, TASKS_ERROR_CODES } from '../../shared/tasks';
 import type { MCPDetailedTask, MCPTask, MCPTaskInputRequests, MCPTaskInputResponses } from '../../shared/tasks';
+import { MCPTaskLimitError } from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAttempt,
   MCPTaskAttemptTrace,
   MCPTaskCreateParams,
+  MCPTaskLimits,
   MCPTaskRunOptions,
   MCPTaskStore,
   MCPTaskTrace,
@@ -88,7 +90,10 @@ const CORE_LOST_MESSAGE = 'Worker process terminated before task completed';
 export const TASK_LOST_MESSAGE = 'task lost: the server restarted while it was running';
 export const TASK_EXPIRED_MESSAGE = 'Task expired before it finished';
 const TERMINAL_ROW_STATUSES = new Set<BackgroundTask['status']>(['completed', 'failed', 'cancelled', 'timed_out']);
+const OPEN_ROW_STATUSES: BackgroundTask['status'][] = ['pending', 'running', 'suspended'];
 const UPDATE_ATTEMPTS = 3;
+/** The most rows one sweep reads, in each of its two listings. */
+const SWEEP_BATCH = 100;
 
 /** How a principal is stored. Principals can carry user and subject ids, so only their hash is kept. */
 export function principalKeyOf(principal: string): string {
@@ -217,6 +222,8 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
   readonly #onCancel: BackgroundTaskMCPTaskStoreOptions['onCancel'];
   #sweepTimer?: ReturnType<typeof setInterval>;
   #sweeping?: Promise<void>;
+  /** The page of open rows the next sweep checks. */
+  #sweepPage = 0;
 
   constructor(options: BackgroundTaskMCPTaskStoreOptions) {
     this.#manager = options.manager;
@@ -273,6 +280,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     const taskKey = taskKeyOf(taskId);
     const recover = this.#recoverFor(context.toolName);
     const principalKey = principalKeyOf(params.principal);
+    if (params.limits) await this.#checkLimits(params.limits, principalKey);
     const envelope: BackgroundTaskEnvelope = {
       v: ENVELOPE_VERSION,
       principalKey,
@@ -339,6 +347,26 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       ttlMs: params.ttlMs,
       pollIntervalMs: params.pollIntervalMs ?? suggestedPollIntervalMs(createdAt, createdAt),
     };
+  }
+
+  /**
+   * Counts open rows (not finished and not past their TTL) in storage, so the limits hold across
+   * every instance sharing it. Counting and inserting are separate writes, so creates racing on
+   * different instances can each pass the count and overshoot a limit by up to their number.
+   */
+  async #checkLimits(limits: MCPTaskLimits, principalKey: string): Promise<void> {
+    const open = {
+      agentId: this.#owner,
+      status: OPEN_ROW_STATUSES,
+      dateFilterBy: 'expiresAt' as const,
+      // Rows past their TTL are already reported failed, sweep or not.
+      fromDate: new Date(Date.now() + 1),
+      perPage: 1,
+    };
+    const mine = await this.#manager.listTasks({ ...open, resourceId: `${this.#owner}:${principalKey}` });
+    if (mine.total >= limits.perPrincipal) throw new MCPTaskLimitError('principal', limits.perPrincipal);
+    const all = await this.#manager.listTasks(open);
+    if (all.total >= limits.total) throw new MCPTaskLimitError('total', limits.total);
   }
 
   run(taskId: string, work: MCPTaskWork, options: MCPTaskRunOptions = {}): void {
@@ -495,21 +523,12 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     this.#sweepTimer.unref?.();
   }
 
+  /**
+   * Bounded per tick, however many rows are open: it expires at most {@link SWEEP_BATCH} rows past
+   * their TTL, and checks one page of {@link SWEEP_BATCH} other open rows, moving to the next page
+   * on the next tick. Rows that need a restart are restarted only while slots are free.
+   */
   async #sweep(): Promise<void> {
-    const rows: BackgroundTask[] = [];
-    const perPage = 100;
-    for (let page = 0; ; page++) {
-      const { tasks, total } = await this.#manager.listTasks({
-        agentId: this.#owner,
-        status: ['pending', 'running', 'suspended'],
-        orderBy: 'createdAt',
-        orderDirection: 'asc',
-        page,
-        perPage,
-      });
-      rows.push(...tasks);
-      if (tasks.length < perPage || rows.length >= total) break;
-    }
     const storage = await this.#manager.getStorage();
     const now = Date.now();
     const lease = this.#manager.config.leaseDurationMs;
@@ -518,25 +537,64 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       const current = await storage.getTask(rowId).catch(() => undefined);
       if (current && isTerminalRow(current)) this.#abortFirstAttempt(rowId, new Error('Task cancelled'));
     }
+
+    const { tasks: expired } = await this.#manager.listTasks({
+      agentId: this.#owner,
+      status: OPEN_ROW_STATUSES,
+      dateFilterBy: 'expiresAt',
+      toDate: new Date(now + 1),
+      perPage: SWEEP_BATCH,
+    });
+    for (const row of expired) {
+      if (!envelopeOf(row)) continue;
+      await this.#expire(storage, row).catch(error =>
+        this.#getLogger?.().debug('Could not expire MCP task', { error }),
+      );
+    }
+
+    const { tasks: rows } = await this.#manager.listTasks({
+      agentId: this.#owner,
+      status: OPEN_ROW_STATUSES,
+      orderBy: 'createdAt',
+      orderDirection: 'asc',
+      page: this.#sweepPage,
+      perPage: SWEEP_BATCH,
+    });
+    this.#sweepPage = rows.length < SWEEP_BATCH ? 0 : this.#sweepPage + 1;
+    const restarts: string[] = [];
     for (const row of rows) {
       const envelope = envelopeOf(row);
-      if (!envelope) continue;
+      if (!envelope || isExpired(row, now)) continue;
       try {
-        if (isExpired(row, now)) await this.#expire(storage, row);
-        else if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
+        if (isFullyAnswered(row, envelope)) await this.#resume(row, envelope);
         // No lease at all: a worker that shut down gracefully handed it back, leaving the row running.
         else if (isOwned(row) && (!row.leaseExpiresAt || row.leaseExpiresAt.getTime() <= now)) {
-          await this.#reclaim(storage, row, envelope);
+          if (await this.#reclaim(storage, row, envelope)) restarts.push(row.id);
         } else if (row.status === 'pending' && !row.ownerId && now - row.createdAt.getTime() >= lease) {
           // Never started, or reclaimed for another attempt, and still waiting a lease on: it may
           // be queued in a process that died, and the manager only dispatches such rows when it
           // starts. Nothing of it ran, and the dispatch claim is fenced, so this is safe either way.
-          await this.#restart(row.id);
+          restarts.push(row.id);
         }
       } catch (error) {
         this.#getLogger?.().debug('Could not sweep MCP task', { error });
       }
     }
+    if (restarts.length === 0) return;
+    // Rows without a slot stay pending for a later sweep, instead of each costing a failed restart.
+    const free = await this.#freeSlots(storage);
+    for (const rowId of restarts.slice(0, free)) await this.#restart(rowId);
+  }
+
+  /** Slots this server's rows can take now, by the manager's global and per-owner limits. */
+  async #freeSlots(storage: BackgroundTasksStorage): Promise<number> {
+    const { globalConcurrency, perAgentConcurrency, perOwnerConcurrency } = this.#manager.config;
+    const ownerLimit =
+      perOwnerConcurrency && Object.hasOwn(perOwnerConcurrency, this.#owner)
+        ? perOwnerConcurrency[this.#owner]!
+        : perAgentConcurrency;
+    const [running, mine] = await Promise.all([storage.getRunningCount(), storage.getRunningCountByAgent(this.#owner)]);
+    return Math.max(0, Math.min(globalConcurrency - running, ownerLimit - mine));
   }
 
   /** Aborts the work, then records the task as failed until its retention ends. */
@@ -561,13 +619,13 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
    * A running row, or a pending row pinned to the worker running its first attempt, whose lease
    * lapsed or was released: its worker died, or shut down, with the attempt in flight. Fenced like
    * the manager's own recovery, so of all instances (and managers) noticing it, exactly one
-   * settles it.
+   * settles it. Returns whether it won the row back to pending, for the sweep to restart.
    */
   async #reclaim(
     storage: BackgroundTasksStorage,
     row: BackgroundTask,
     envelope: BackgroundTaskEnvelope,
-  ): Promise<void> {
+  ): Promise<boolean> {
     const fence = {
       expectedStatus: row.status,
       expectedOwnerId: row.ownerId ?? null,
@@ -579,9 +637,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
         { status: 'pending', retryCount: row.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
         fence,
       );
-      if (!won) return;
-      await this.#restart(row.id);
-      return;
+      return won;
     }
     await storage.updateTask(
       row.id,
@@ -594,6 +650,7 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       },
       fence,
     );
+    return false;
   }
 
   /** Dispatches a reclaimed row; the dispatch claim is fenced, so it runs once however often this is called. */

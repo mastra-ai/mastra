@@ -4,7 +4,14 @@ import type { MCPToolType } from '@mastra/core/tools';
 import { DEFAULT_TASK_TTL_MS, taskKeyOf } from '../../shared/tasks';
 import type { MCPDetailedTask } from '../../shared/tasks';
 import type { InMemoryMCPTaskStore } from './in-memory-store';
-import type { MCPTaskAccess, MCPTaskCreateParams, MCPTaskRunOptions, MCPTaskStore, MCPTaskWork } from './store';
+import type {
+  MCPTaskAccess,
+  MCPTaskCreateParams,
+  MCPTaskLimits,
+  MCPTaskRunOptions,
+  MCPTaskStore,
+  MCPTaskWork,
+} from './store';
 
 /**
  * How a tool answers `tools/call` for a client that declared the Tasks extension.
@@ -90,6 +97,14 @@ export interface MCPServerTasksOptions {
    */
   store?: MCPTaskStore;
   /**
+   * Most open (`working` or `input_required`) tasks one client may hold. Past it, a call that
+   * would start a task answers with `isError: true` instead. Default 100. A custom `store` that
+   * ignores `limits` in `create` enforces no cap.
+   */
+  maxOpenTasksPerClient?: number;
+  /** Most open tasks across all clients. Default 1000. Enforced the same way as `maxOpenTasksPerClient`. */
+  maxOpenTasks?: number;
+  /**
    * Decides whether the caller may read, answer or cancel a task. Tasks are always bound to the
    * principal that created them; this narrows access further. A refusal answers as an unknown task.
    */
@@ -109,6 +124,7 @@ export interface ResolvedTasksConfig {
   enabled: boolean;
   /** The store passed in, if any. */
   store?: MCPTaskStore;
+  limits: MCPTaskLimits;
   required: ReadonlySet<string>;
   authorize?: MCPServerTasksOptions['authorize'];
   modeFor(name: string, toolType: MCPToolType | undefined): ResolvedToolTaskMode;
@@ -116,6 +132,8 @@ export interface ResolvedTasksConfig {
 
 const MODES: readonly MCPServerTaskMode[] = ['off', 'auto', 'always'];
 const DEFAULT_SYNC_WINDOW_MS = 2_000;
+const DEFAULT_MAX_OPEN_TASKS_PER_CLIENT = 100;
+const DEFAULT_MAX_OPEN_TASKS = 1_000;
 
 function invalid(text: string): MastraError {
   return new MastraError({
@@ -152,6 +170,12 @@ export interface TasksConfigSurfaces {
   agents?: readonly string[];
 }
 
+function positiveInteger(owner: string, value: number | undefined, fallback: number): number {
+  if (value === undefined) return fallback;
+  if (!Number.isSafeInteger(value) || value < 1) throw invalid(`${owner} must be a positive integer, got ${value}.`);
+  return value;
+}
+
 /** Validates `tasks` against the configured tools, workflows and agents. Throws on anything a server could not serve. */
 export function resolveTasksConfig(
   options: MCPServerTasksOptions | undefined,
@@ -164,6 +188,14 @@ export function resolveTasksConfig(
   const ttlMs = config.ttlMs === undefined ? DEFAULT_TASK_TTL_MS : config.ttlMs;
   assertBoolean('tasks.recover', config.recover);
   const recover = config.recover ?? false;
+  const limits: MCPTaskLimits = {
+    perPrincipal: positiveInteger(
+      'tasks.maxOpenTasksPerClient',
+      config.maxOpenTasksPerClient,
+      DEFAULT_MAX_OPEN_TASKS_PER_CLIENT,
+    ),
+    total: positiveInteger('tasks.maxOpenTasks', config.maxOpenTasks, DEFAULT_MAX_OPEN_TASKS),
+  };
 
   /** Resolves one surface's per-key entries, keyed by the tool name each key is exposed as. */
   const resolveSurface = (
@@ -253,6 +285,7 @@ export function resolveTasksConfig(
   return {
     enabled,
     store: config.store,
+    limits,
     required,
     authorize: config.authorize,
     modeFor,

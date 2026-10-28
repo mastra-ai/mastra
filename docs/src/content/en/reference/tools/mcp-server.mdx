@@ -2041,6 +2041,21 @@ The server creates the task before it answers, so a `tasks/get` sent right after
       'Where tasks are kept. By default, a server registered on a Mastra instance with background tasks keeps them in Mastra storage (see [Tasks across instances](#tasks-across-instances)); any other server keeps them in memory, in this process.',
   },
   {
+    name: 'maxOpenTasksPerClient',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description:
+      'Most open tasks (`working` or `input_required`) one caller can hold. See [open task caps](#open-task-caps).',
+  },
+  {
+    name: 'maxOpenTasks',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Most open tasks across all callers. See [open task caps](#open-task-caps).',
+  },
+  {
     name: 'authorize',
     type: '(context: { principal: string; task: MCPDetailedTask; requestContext: RequestContext }) => boolean | Promise<boolean>',
     isOptional: true,
@@ -2067,6 +2082,16 @@ The server creates the task before it answers, so a `tasks/get` sent right after
 ### Access to tasks
 
 A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Tasks can't be listed.
+
+### Open task caps
+
+A task counts as open while it's `working` or `input_required`. It stops counting when it completes, fails, is cancelled or expires. When a call would go over `maxOpenTasksPerClient` or `maxOpenTasks`, the server creates no task:
+
+- An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
+- An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, as if its mode were `'off'`. Cancelling the request still aborts it.
+- `run_<workflow>` and `ask_<agent>` tasks count against the same caps. An `'always'` workflow starts no run, and an `'always'` agent doesn't run. An `'auto'` workflow run that suspends can only be answered through a task, so at the cap the server cancels it and answers with `isError: true`.
+
+Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
 
 ### Asking for input inside a task
 
@@ -2148,7 +2173,8 @@ export const mastra = new Mastra({
 - Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks, and fails them instead. Set the id with `id`, or register the server under a key in `mcpServers`: a generated id changes on every start, and the server logs a warning.
 - Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
 - An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
-- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance.
+- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance. Each sweep handles at most 100 expired tasks and checks 100 other open tasks, moving on to the next 100 on the following sweep. It restarts a task left waiting by a stopped instance only when a slot is free. The rest wait for a later sweep.
+- `maxOpenTasksPerClient` and `maxOpenTasks` count open tasks in storage across every instance, so they hold for the whole deployment. Each call counts before it adds its task, so calls arriving at the same moment on different instances can go over a cap by up to the number of those calls.
 - `tasks/cancel` can reach any instance. If the task's first attempt is still waiting for a slot on the instance that started it, that instance stops it on its next sweep, up to one lease (`leaseDurationMs`) later.
 
 Tasks are rows in the background tasks storage, owned by agent id `mcp-server:<server id>` with resource id `mcp-server:<server id>:<caller>`:
