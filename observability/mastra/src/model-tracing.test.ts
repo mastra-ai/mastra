@@ -106,6 +106,20 @@ describe('ModelSpanTracker', () => {
     expect(testExporter.getSpansByType(SpanType.MODEL_STEP)).toHaveLength(1);
   });
 
+  it('forwards every chunk when tracing bookkeeping throws', async () => {
+    const model = tracing.startSpan({ type: SpanType.MODEL_GENERATION, name: 'generation' });
+    const tracker = new ModelSpanTracker(model);
+    tracker.startStep();
+    vi.spyOn(tracker, 'updateStep').mockImplementation(() => {
+      throw new Error('exporter failed');
+    });
+    const chunks = [
+      { type: 'step-start', payload: { messageId: 'message' } },
+      { type: 'text-delta', payload: { id: 'text', text: 'Still delivered' } },
+    ];
+    expect(await consumeStream(tracker.wrapStream(createMockStream(chunks)))).toEqual(chunks);
+  });
+
   describe('gateway routing', () => {
     it('exports which provider served each step when the model ran through Vercel AI Gateway', async () => {
       const modelSpan = tracing.startSpan({
