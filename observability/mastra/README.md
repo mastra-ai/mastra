@@ -38,16 +38,6 @@ The package automatically derives duration, status, model token, and cache token
 
 - [Observability documentation](https://mastra.ai/docs/studio/observability)
 
-## Execution outcomes
-
-Spans record `outcome`, `stopReason`, and `stopReasonContext` for agents, model calls, tools, and workflows. These fields distinguish normal completion, failures, cancellation, interruptions, suspension, limits, and guardrail blocks. Both Mastra exporters preserve the details, including tripwires and observer causes.
-
-```ts
-span.end({ endTree: true, outcome: 'abort', stopReason: 'caller_cancelled' });
-```
-
-See the [tracing documentation](https://mastra.ai/docs/observability/tracing/overview#execution-outcomes) for the outcome contract.
-
 ## Changelog
 
 See the [package changelog](https://github.com/mastra-ai/mastra/blob/main/observability/mastra/CHANGELOG.md) for version history and release notes.
