@@ -445,6 +445,23 @@ export interface KeyboardEventParams {
   windowsVirtualKeyCode?: number;
 }
 
+/**
+ * A cookie for {@link MastraBrowser.setCookies}. Give either `url`, or
+ * `domain` and `path`. A `domain` with a leading dot also covers subdomains.
+ */
+export interface BrowserCookie {
+  name: string;
+  value: string;
+  url?: string;
+  domain?: string;
+  path?: string;
+  /** Unix time in seconds. Omit for a session cookie. */
+  expires?: number;
+  httpOnly?: boolean;
+  secure?: boolean;
+  sameSite?: 'Strict' | 'Lax' | 'None';
+}
+
 // =============================================================================
 // MastraBrowser Base Class
 // =============================================================================
@@ -1520,6 +1537,47 @@ export abstract class MastraBrowser extends MastraBase {
    */
   async injectKeyboardEvent(_event: KeyboardEventParams, _threadId?: string): Promise<void> {
     throw new Error('Keyboard event injection not supported by this provider');
+  }
+
+  // ---------------------------------------------------------------------------
+  // Cookies
+  // ---------------------------------------------------------------------------
+
+  /** Cookies waiting for a thread's browser to open, by thread. */
+  private readonly pendingCookies = new Map<string, BrowserCookie[]>();
+
+  /**
+   * Add cookies to a thread's browser, so its pages can open a site your app
+   * signed in to some other way. Cookies set before the browser opens are
+   * added when it does. With `scope: 'shared'` every thread uses one browser,
+   * so the cookies reach every thread.
+   *
+   * @param cookies - Cookies to add
+   * @param threadId - Optional thread ID (defaults to the current thread)
+   * @throws If this provider can't set cookies
+   */
+  async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
+    const effectiveThreadId = threadId ?? this.getCurrentThread();
+    if (await this.addCookiesToOpenBrowser(cookies, effectiveThreadId)) return;
+    this.pendingCookies.set(effectiveThreadId, [...(this.pendingCookies.get(effectiveThreadId) ?? []), ...cookies]);
+  }
+
+  /**
+   * Add cookies to the thread's browser if it's open. Override to support
+   * {@link setCookies}, and call {@link addPendingCookies} once a thread's
+   * browser opens, before it loads a page.
+   *
+   * @returns false when the thread has no open browser yet
+   */
+  protected async addCookiesToOpenBrowser(_cookies: BrowserCookie[], _threadId: string): Promise<boolean> {
+    throw new Error(`${this.provider} does not support setting cookies`);
+  }
+
+  /** Add the cookies {@link setCookies} queued while the thread's browser wasn't open. */
+  protected async addPendingCookies(threadId: string): Promise<void> {
+    const pending = this.pendingCookies.get(threadId);
+    if (!pending) return;
+    if (await this.addCookiesToOpenBrowser(pending, threadId)) this.pendingCookies.delete(threadId);
   }
 
   // ---------------------------------------------------------------------------

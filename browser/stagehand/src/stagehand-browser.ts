@@ -18,6 +18,7 @@ import {
   DEFAULT_BROWSER_VIEWPORT,
 } from '@mastra/core/browser';
 import type {
+  BrowserCookie,
   BrowserState,
   BrowserTabState,
   BrowserToolError,
@@ -107,6 +108,7 @@ export class StagehandBrowser extends MastraBrowser {
       // This will create the Stagehand instance for this thread if needed
       await this.getManagerForThread(threadId);
     }
+    await this.addPendingCookies(threadId);
   }
 
   // ---------------------------------------------------------------------------
@@ -442,11 +444,8 @@ export class StagehandBrowser extends MastraBrowser {
   async getManagerForThread(threadId?: string): Promise<Stagehand | null> {
     const scope = this.getScope();
 
-    if (scope === 'shared') {
-      return this.sharedManager;
-    }
-
-    if (!threadId || threadId === DEFAULT_THREAD_ID) {
+    if (scope === 'shared' || !threadId || threadId === DEFAULT_THREAD_ID) {
+      await this.addPendingCookies(threadId ?? this.getCurrentThread());
       return this.sharedManager;
     }
 
@@ -458,8 +457,20 @@ export class StagehandBrowser extends MastraBrowser {
       await this.threadManager.getManagerForThread(threadId);
       stagehand = this.threadManager.getExistingManagerForThread(threadId);
     }
+    await this.addPendingCookies(threadId);
 
     return stagehand ?? null;
+  }
+
+  protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
+    const stagehand =
+      this.getScope() === 'shared' || threadId === DEFAULT_THREAD_ID
+        ? this.sharedManager
+        : this.threadManager.getExistingManagerForThread(threadId);
+    const context = stagehand?.context;
+    if (!context) return false;
+    await context.addCookies(cookies);
+    return true;
   }
 
   /**

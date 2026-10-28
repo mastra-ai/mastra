@@ -2,7 +2,13 @@ import { existsSync, writeFileSync, symlinkSync, readdirSync, mkdtempSync, rmSyn
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { describe, it, expect, beforeEach, afterEach, vi } from 'vitest';
-import { cleanupProfileLockFiles, killProcessGroup, resolveLaunchViewport, resolveViewportSize } from './browser';
+import {
+  MastraBrowser,
+  cleanupProfileLockFiles,
+  killProcessGroup,
+  resolveLaunchViewport,
+  resolveViewportSize,
+} from './browser';
 
 describe('cleanupProfileLockFiles', () => {
   let profileDir: string;
@@ -134,5 +140,32 @@ describe('resolveLaunchViewport', () => {
 
   it('leaves the viewport unset when unconfigured', () => {
     expect(resolveLaunchViewport(undefined)).toEqual({ viewport: undefined });
+  });
+});
+
+describe('MastraBrowser.setCookies', () => {
+  class NoCookieBrowser extends MastraBrowser {
+    readonly id = 'no-cookies';
+    readonly name = 'NoCookieBrowser';
+    readonly provider = 'no-cookies';
+    protected async doLaunch() {}
+    protected async doClose() {}
+    protected async getActivePage() {
+      return null;
+    }
+    protected getBrowserStateForThread() {
+      return null;
+    }
+    getTools() {
+      return {};
+    }
+  }
+
+  it('fails for a provider that cannot set cookies', async () => {
+    const browser = new NoCookieBrowser({ headless: true });
+
+    await expect(browser.setCookies([{ name: 'a', value: 'b', url: 'https://example.com' }])).rejects.toThrow(
+      'no-cookies does not support setting cookies',
+    );
   });
 });

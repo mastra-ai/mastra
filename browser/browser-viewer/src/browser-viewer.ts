@@ -13,6 +13,7 @@
 
 import { MastraBrowser, ScreencastStreamImpl } from '@mastra/core/browser';
 import type {
+  BrowserCookie,
   BrowserState,
   BrowserTabState,
   ScreencastOptions,
@@ -164,6 +165,7 @@ export class BrowserViewer extends MastraBrowser {
     }
 
     await super.ensureReady();
+    await this.addPendingCookies(threadId);
   }
 
   /**
@@ -195,6 +197,14 @@ export class BrowserViewer extends MastraBrowser {
       // (base class launch() does this, but we bypass it for thread scope)
       this.status = 'ready';
     }
+    await this.addPendingCookies(effectiveThreadId);
+  }
+
+  protected override async addCookiesToOpenBrowser(cookies: BrowserCookie[], threadId: string): Promise<boolean> {
+    const context = this.threadManager.getContextForThread(threadId);
+    if (!context) return false;
+    await context.addCookies(cookies);
+    return true;
   }
 
   /**

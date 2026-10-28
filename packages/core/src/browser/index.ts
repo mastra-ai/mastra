@@ -17,6 +17,7 @@ export type {
   ScreencastEvents,
   MouseEventParams,
   KeyboardEventParams,
+  BrowserCookie,
 } from './browser';
 
 // ============================================================================

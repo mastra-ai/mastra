@@ -107,34 +107,6 @@ then interact with elements using their refs (e.g., @e5).`,
 ]}
 />
 
-## Methods
-
-`AgentBrowser` has every method of [`MastraBrowser`](/reference/browser/mastra-browser#methods), plus:
-
-### `setCookies(cookies, threadId?)`
-
-Adds cookies to a thread's browser. Use it when your app can sign in to a site but the agent can't, such as a preview behind your own login. The cookie value never passes through the model. If the thread's browser hasn't started yet, the cookies are added when it launches.
-
-```typescript
-await browser.setCookies(
-  [
-    {
-      name: 'session',
-      value: sessionToken,
-      domain: 'app.example.com',
-      path: '/',
-      httpOnly: true,
-      secure: true,
-    },
-  ],
-  threadId,
-)
-```
-
-Cookies use Playwright's [`addCookies`](https://playwright.dev/docs/api/class-browsercontext#browser-context-add-cookies) shape, exported as `BrowserCookie`. To cover subdomains, start `domain` with a dot (`.example.com`). When `threadId` is omitted, the current thread is used.
-
-**Returns:** `Promise<void>`
-
 ## Tools
 
 `AgentBrowser` provides 16 deterministic tools for browser automation. All tools that interact with elements use refs from the accessibility tree snapshot.

@@ -242,6 +242,36 @@ Closes a specific thread's browser session. With 'thread' scope, it closes that 
 await browser.closeThreadSession('thread-123')
 ```
 
+### Cookies
+
+#### `setCookies(cookies, threadId?)`
+
+Adds cookies to a thread's browser. Use it when your app can sign in to a site but the agent can't, such as a preview behind your own login. The cookie value never passes through the model. If the thread's browser hasn't opened yet, the cookies are added when it does. When `threadId` is omitted, the current thread is used.
+
+```typescript
+await browser.setCookies(
+  [
+    {
+      name: 'session',
+      value: sessionToken,
+      domain: 'app.example.com',
+      path: '/',
+      httpOnly: true,
+      secure: true,
+    },
+  ],
+  threadId,
+)
+```
+
+Each cookie is a `BrowserCookie` from `@mastra/core/browser`: `name` and `value`, plus either `url` or `domain` and `path`, and optionally `expires` (Unix time in seconds), `httpOnly`, `secure` and `sameSite`. To cover subdomains, start `domain` with a dot (`.example.com`).
+
+With `'thread'` scope, the cookies reach only that thread's browser. With `'shared'` scope every thread uses one browser, so they reach every thread.
+
+`AgentBrowser`, `BrowserViewer`, `FirecrawlBrowser` and `StagehandBrowser` support cookies. Other providers throw.
+
+**Returns:** `Promise<void>`
+
 ### Tools
 
 #### `getTools()`
