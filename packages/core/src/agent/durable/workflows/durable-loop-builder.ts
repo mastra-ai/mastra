@@ -1135,6 +1135,17 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               // registry's for a resumed segment's fresh spans.
               const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
               const completionStartTime = clock ? new Date(clock) : undefined;
+              // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
+              const termination =
+                finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
+                  ? reg.tracingTermination
+                  : agentLoopTermination({
+                      stopCause: reg?.tracingStopCause,
+                      delegationFailure: reg?.tracingDelegationFailure,
+                      finishReason: finalOutput.stepResult?.reason,
+                      tripwire,
+                      maxSteps: initData.options?.maxSteps,
+                    });
               if (observability) {
                 if (modelSpanData) {
                   const modelSpan =
@@ -1153,17 +1164,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     })),
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
-                  // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
                   modelSpan?.createTracker()?.endGeneration({
-                    ...(finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
-                      ? reg.tracingTermination
-                      : agentLoopTermination({
-                          stopCause: reg?.tracingStopCause,
-                          delegationFailure: reg?.tracingDelegationFailure,
-                          finishReason: finalOutput.stepResult?.reason,
-                          tripwire,
-                          maxSteps: initData.options?.maxSteps,
-                        })),
+                    ...termination,
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
@@ -1179,15 +1181,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     reg?.agentSpan ??
                     observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
-                    ...(finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
-                      ? reg.tracingTermination
-                      : agentLoopTermination({
-                          stopCause: reg?.tracingStopCause,
-                          delegationFailure: reg?.tracingDelegationFailure,
-                          finishReason: finalOutput.stepResult?.reason,
-                          tripwire,
-                          maxSteps: initData.options?.maxSteps,
-                        })),
+                    ...termination,
                     output: { text: finalText },
                     ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
                   });

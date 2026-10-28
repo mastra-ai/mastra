@@ -192,8 +192,9 @@ describe('workflow resume span linkage', () => {
     },
   );
 
+  // Evented control-flow spans were split out of this change, so only the default engine emits them.
   it.each(
-    (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
+    (['default'] as Array<'default' | 'evented' | 'evented-async'>).flatMap(engine =>
       controlFlowResumeKinds.flatMap(kind => resumeActions.map(action => ({ engine, kind, action }))),
     ),
   )('$engine gives resumed $kind blocks separate $action executions', async ({ engine, kind, action }) => {
