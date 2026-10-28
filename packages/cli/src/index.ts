@@ -29,6 +29,7 @@ import { unifiedDeployAction } from './commands/deploy/index.js';
 import { envSuggestionsAction } from './commands/env/deploy-suggestions.js';
 import { registerEnvCommands } from './commands/env/index.js';
 import { buildExperimentWorker } from './commands/experiment/build';
+import { gatewayCreditsAction } from './commands/gateway/command';
 import { COMPONENTS, LLMProvider } from './commands/init/utils';
 import { serverDeployAction } from './commands/server/deploy';
 import { serverSuggestionsAction } from './commands/server/deploy-suggestions';
@@ -384,6 +385,12 @@ connectCommand
   .action(wrapAction(removeConnectionAction));
 
 // ---- Auth commands ----
+
+const gatewayCommand = program.command('gateway').description('Manage the Mastra Gateway');
+gatewayCommand
+  .command('credits')
+  .description('Show your Gateway balance and add credits')
+  .action(wrapAction(gatewayCreditsAction));
 
 const authCommand = program.command('auth').description('Manage authentication');
 

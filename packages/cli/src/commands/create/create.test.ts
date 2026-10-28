@@ -80,6 +80,18 @@ vi.mock('./coding-agents', () => ({
 
 vi.mock('./provider-adapter', () => ({
   adaptDefaultTemplate: vi.fn(),
+  writeManagedApiKey: vi.fn(),
+}));
+
+vi.mock('../gateway/api.js', () => ({
+  GATEWAY_API_KEY_ENV: 'MASTRA_GATEWAY_API_KEY',
+  createGatewayApiKey: vi.fn(),
+  getGatewayCredits: vi.fn(),
+}));
+
+vi.mock('../gateway/credits.js', () => ({
+  formatCredits: (amount: number) => `$${amount.toFixed(2)}`,
+  offerGatewayCredits: vi.fn(),
 }));
 
 vi.mock('./utils', () => ({
@@ -178,7 +190,19 @@ beforeEach(async () => {
   vi.mocked(createUtils.publishStagedProject).mockResolvedValue();
   vi.mocked(createUtils.writeEmptyScaffold).mockResolvedValue();
 
+  const gatewayApi = await import('../gateway/api.js');
+  vi.mocked(gatewayApi.createGatewayApiKey).mockResolvedValue('gateway-key');
+  vi.mocked(gatewayApi.getGatewayCredits).mockResolvedValue({
+    remaining: 0,
+    unlimited: false,
+    featureId: 'gateway_credits',
+    topupPlanId: 'gateway_credit_topup',
+  });
+  const gatewayCredits = await import('../gateway/credits.js');
+  vi.mocked(gatewayCredits.offerGatewayCredits).mockResolvedValue({ remaining: 25, added: 25 });
+
   const adapter = await import('./provider-adapter');
+  vi.mocked(adapter.writeManagedApiKey).mockResolvedValue(true);
   vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
     displayName: 'OpenAI',
     apiKeyEnv: 'OPENAI_API_KEY',
@@ -426,6 +450,175 @@ describe('create preflight and mode orchestration', () => {
     });
 
     expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ branch: 'beta' }));
+  });
+});
+
+describe('managed Gateway', () => {
+  async function mockGatewayAdapter() {
+    const adapter = await import('./provider-adapter');
+    vi.mocked(adapter.adaptDefaultTemplate).mockResolvedValue({
+      displayName: 'Mastra Gateway',
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKeyWritten: false,
+      adaptationFailed: false,
+    });
+    return adapter;
+  }
+
+  it('signs in instead of asking for a key, creates one, and writes it after publish', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const credentials = await import('../auth/credentials.js');
+    const gatewayApi = await import('../gateway/api.js');
+    const gatewayCredits = await import('../gateway/credits.js');
+    const observability = await import('../init/observability-provision');
+    const { cloneTemplate } = await import('../../utils/clone-template');
+    const { publishStagedProject } = await import('./utils');
+    const adapter = await mockGatewayAdapter();
+    const trackEvent = vi.fn();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+
+    await create({
+      projectName: 'my-project',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
+    });
+
+    expect(prompts.select).toHaveBeenCalledTimes(2);
+    expect(prompts.password).not.toHaveBeenCalled();
+    expect(credentials.getToken).toHaveBeenCalledOnce();
+    expect(cloneTemplate).toHaveBeenCalledWith(expect.objectContaining({ silent: true }));
+    expect(adapter.adaptDefaultTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'mastra', apiKey: undefined }),
+    );
+    expect(gatewayApi.createGatewayApiKey).toHaveBeenCalledWith('auth-token', 'org-id', 'my-project');
+    expect(gatewayCredits.offerGatewayCredits).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'auth-token', orgId: 'org-id' }),
+    );
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith({
+      projectPath: path.resolve('my-project'),
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: 'gateway-key',
+    });
+    expect(publishStagedProject).toHaveBeenCalledBefore(vi.mocked(adapter.writeManagedApiKey));
+    expect(observability.provisionObservabilityProject).not.toHaveBeenCalled();
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Your Gateway key was written to .env as MASTRA_GATEWAY_API_KEY.'),
+    );
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Balance: $25.00 in Test Org.'));
+    expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('npx mastra gateway credits'));
+    expect(trackEvent).toHaveBeenCalledWith('cli_gateway_outcome', {
+      command: 'create',
+      outcome: 'completed',
+      credits_added: 25,
+    });
+    expect(JSON.stringify(trackEvent.mock.calls)).not.toContain('gateway-key');
+  });
+
+  it('points at the credits command when credits were skipped', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayCredits = await import('../gateway/credits.js');
+    await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayCredits.offerGatewayCredits).mockResolvedValueOnce({ remaining: 0 });
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Balance: $0.00 in Test Org.'));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Model calls fail until you add credits: npx mastra gateway credits'),
+    );
+  });
+
+  it('shares one sign-in between the Gateway key and observability', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const credentials = await import('../auth/credentials.js');
+    const orgs = await import('../auth/orgs.js');
+    const observability = await import('../init/observability-provision');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('yes');
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(credentials.getToken).toHaveBeenCalledOnce();
+    expect(orgs.resolveCurrentOrg).toHaveBeenCalledOnce();
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledOnce();
+    expect(observability.provisionObservabilityProject).toHaveBeenCalledWith(
+      expect.objectContaining({ token: 'auth-token', org: { orgId: 'org-id', orgName: 'Test Org' } }),
+    );
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Mastra platform enabled.'));
+  });
+
+  it('keeps the project and explains how to add a key when key creation fails', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayApi = await import('../gateway/api.js');
+    const { publishStagedProject } = await import('./utils');
+    const adapter = await mockGatewayAdapter();
+    const trackEvent = vi.fn();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayApi.createGatewayApiKey).mockRejectedValueOnce(new Error('Gateway unavailable'));
+
+    await create({
+      projectName: 'my-project',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+      analytics: { trackEvent } as never,
+    });
+
+    expect(publishStagedProject).toHaveBeenCalledOnce();
+    expect(adapter.writeManagedApiKey).not.toHaveBeenCalled();
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Could not create a Gateway key: Gateway unavailable'),
+    );
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Get a key at https://gateway.mastra.ai and set MASTRA_GATEWAY_API_KEY in .env.'),
+    );
+    expect(trackEvent).toHaveBeenCalledWith('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
+  });
+
+  it('explains how to add a key when sign-in is skipped', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const credentials = await import('../auth/credentials.js');
+    const gatewayApi = await import('../gateway/api.js');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(credentials.getToken).mockRejectedValueOnce(new credentials.LoginCancelledError());
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(gatewayApi.createGatewayApiKey).not.toHaveBeenCalled();
+    expect(adapter.writeManagedApiKey).not.toHaveBeenCalled();
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Get a key at https://gateway.mastra.ai and set MASTRA_GATEWAY_API_KEY in .env.'),
+    );
+    expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Could not create a Gateway key'));
+  });
+
+  it('uses a Gateway key passed on the command line without signing in', async () => {
+    const { create } = await import('./create');
+    const credentials = await import('../auth/credentials.js');
+    const adapter = await mockGatewayAdapter();
+
+    await create({
+      projectName: 'my-project',
+      llmProvider: 'mastra',
+      llmApiKey: 'msk_existing',
+      resolveVersionTag: vi.fn().mockResolvedValue('latest'),
+    });
+
+    expect(credentials.getToken).not.toHaveBeenCalled();
+    expect(adapter.adaptDefaultTemplate).toHaveBeenCalledWith(
+      expect.objectContaining({ provider: 'mastra', apiKey: 'msk_existing' }),
+    );
+    expect(adapter.writeManagedApiKey).not.toHaveBeenCalled();
   });
 });
 
