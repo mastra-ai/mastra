@@ -423,25 +423,34 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** End the span */
   abstract end(options?: EndSpanOptions<TType>): void;
 
-  /** End this execution and interrupt affected descendants that are still open. */
+  /** Forward options to open descendants, with interruption outcomes for cascading termination. */
   endTree(options?: EndSpanOptions<TType>): void {
-    this.end({ ...options, endTree: true });
+    this.endOpenDescendants(options, true);
+    this.end(options);
   }
 
   /** Preserve completed children; only known cascading termination interrupts open work. */
-  protected endOpenDescendants(options?: EndSpanOptions<TType>): void {
+  protected endOpenDescendants(options?: EndSpanOptions<TType>, forwardOptions = false): void {
     const outcome = options?.outcome !== undefined ? options.outcome : this.outcome;
     const stopReason = options?.stopReason !== undefined ? options.stopReason : this.stopReason;
     const stopReasonContext =
       options?.stopReasonContext !== undefined ? options.stopReasonContext : this.stopReasonContext;
     const interrupts =
       outcome === 'abort' || outcome === 'interrupted' || (outcome === 'limit' && stopReason === 'timeout');
+    // endTree(options) forwards payload/attributes; end({ endTree: true }) does not.
+    // Native outcomes follow their own rules: generic cleanup never copies a parent's result.
+    const forwarded = forwardOptions ? { ...options } : {};
+    delete forwarded.outcome;
+    delete forwarded.stopReason;
+    delete forwarded.stopReasonContext;
     if (this.#openChildren) {
       for (const child of [...this.#openChildren]) {
-        child.end({
-          endTree: true,
+        const childOptions = {
+          ...forwarded,
           ...(interrupts ? { outcome: 'interrupted', stopReason, stopReasonContext } : {}),
-        } as EndSpanOptions<SpanType>);
+        } as EndSpanOptions<SpanType>;
+        if (forwardOptions) child.endTree(childOptions);
+        else child.end({ ...childOptions, endTree: true });
       }
     }
   }

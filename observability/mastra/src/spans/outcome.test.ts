@@ -34,13 +34,17 @@ describe('native execution outcomes (OBS-724)', () => {
     expect(legacy.exportSpan()).not.toHaveProperty('outcome');
   });
 
-  it('marks unfinished executions unknown when a parent cleans them up', () => {
-    const { tracing } = setup();
-    const root = tracing.startSpan({ name: 'root', type: SpanType.AGENT_RUN, outcome: null });
-    const child = root.createChildSpan({ name: 'unfinished', type: SpanType.TOOL_CALL, outcome: null });
-    root.end({ outcome: 'success', endTree: true });
-    expect(child.exportSpan()).toMatchObject({ outcome: 'unknown' });
-  });
+  it.each(['method', 'option'] as const)(
+    '%s: marks unfinished executions unknown when a parent cleans them up',
+    api => {
+      const { tracing } = setup();
+      const root = tracing.startSpan({ name: 'root', type: SpanType.AGENT_RUN, outcome: null });
+      const child = root.createChildSpan({ name: 'unfinished', type: SpanType.TOOL_CALL, outcome: null });
+      if (api === 'method') root.endTree({ outcome: 'success' });
+      else root.end({ outcome: 'success', endTree: true });
+      expect(child.exportSpan()).toMatchObject({ outcome: 'unknown' });
+    },
+  );
 
   it.each(['method', 'option'] as const)('%s: distinguishes cancellation from consequential interruption', api => {
     const { tracing } = setup();

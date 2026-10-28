@@ -137,6 +137,7 @@ describe('workflow run cancellation tracing', () => {
     expect(root).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
 
     const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
+    expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
 
     expect(deaf).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
 
@@ -1045,6 +1046,7 @@ describe('workflow run cancellation tracing', () => {
       expect(root).toMatchObject({ outcome: 'abort', stopReason: 'caller_cancelled' });
 
       const deaf = endedSpans().find(span => span.name === "workflow step: 'deaf'");
+      expect(deaf?.attributes).toMatchObject({ status: 'canceled' });
 
       expect(deaf).toMatchObject({ outcome: 'interrupted', stopReason: 'caller_cancelled' });
     } finally {
