@@ -10,7 +10,7 @@ import type { Template } from '../../utils/template-utils';
 import { getToken, LoginCancelledError } from '../auth/credentials.js';
 import type { LoginSource } from '../auth/credentials.js';
 import { OrgSelectionCancelledError, resolveCurrentOrg } from '../auth/orgs.js';
-import { createGatewayApiKey, GATEWAY_API_KEY_ENV, getGatewayCredits } from '../gateway/api.js';
+import { createGatewayApiKey, creditsPageUrl, GATEWAY_API_KEY_ENV, getGatewayCredits } from '../gateway/api.js';
 import { formatCredits, offerGatewayCredits } from '../gateway/credits.js';
 import { provisionObservabilityProject } from '../init/observability-provision';
 import { installMastraSkills } from '../init/skills-install';
@@ -99,7 +99,15 @@ export interface CreateOptions {
 /** The Gateway key and credits, set up during the shared Mastra sign-in. */
 type GatewaySetupResult =
   /** `remaining` is undefined when the balance couldn't be read. */
-  | { status: 'ready'; apiKey: string; orgName: string; remaining?: number; added?: number; unlimited?: boolean }
+  | {
+      status: 'ready';
+      apiKey: string;
+      orgName: string;
+      creditsUrl: string;
+      remaining?: number;
+      unlimited?: boolean;
+      openedDashboard?: boolean;
+    }
   | { status: 'failed'; error: unknown };
 
 type PlatformSetupResult =
@@ -563,7 +571,7 @@ async function setUpGateway({
   let spinning = true;
   try {
     const apiKey = await createGatewayApiKey(token, org.orgId, projectName, signal);
-    // Credits are optional: a failed balance read or purchase still keeps the new key.
+    // Credits are optional: a failed balance read still keeps the new key.
     let credits: Awaited<ReturnType<typeof getGatewayCredits>> | undefined;
     try {
       credits = await getGatewayCredits(token, org.orgId, signal);
@@ -573,17 +581,16 @@ async function setUpGateway({
     spinner.stop(`Created a Gateway key in ${org.orgName}.`);
     spinning = false;
 
-    let outcome: { remaining?: number; added?: number; unlimited?: boolean } = {};
-    if (credits) {
-      try {
-        outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
-      } catch (error) {
-        if (signal.aborted) throw error;
-        p.log.warn(`Could not add credits: ${error instanceof Error ? error.message : 'Unknown error'}`);
-        outcome = { remaining: credits.remaining };
-      }
-    }
-    return { status: 'ready', apiKey, orgName: org.orgName, ...outcome };
+    const openedDashboard = credits ? await offerGatewayCredits({ orgId: org.orgId, credits, signal }) : false;
+    return {
+      status: 'ready',
+      apiKey,
+      orgName: org.orgName,
+      creditsUrl: creditsPageUrl(org.orgId),
+      remaining: credits?.remaining,
+      unlimited: credits?.unlimited,
+      openedDashboard,
+    };
   } catch (error) {
     if (spinning) spinner.stop('Could not set up a Gateway key.');
     if (signal.aborted) throw error;
@@ -625,20 +632,20 @@ async function finishGatewaySetup({
   analytics?.trackEvent('cli_gateway_outcome', {
     command: 'create',
     outcome: 'completed',
-    credits_added: gateway.added ?? 0,
+    opened_dashboard: gateway.openedDashboard ?? false,
   });
   const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.`;
-  const creditsCommand = color.cyan('npx mastra gateway credits');
+  const creditsUrl = color.cyan(gateway.creditsUrl);
   if (gateway.unlimited) {
     return `${written}\n${gateway.orgName} has unlimited Gateway credits.`;
   }
   if (gateway.remaining === undefined) {
-    return `${written}\nModel calls are paid per token from Gateway credits. Check your balance with ${creditsCommand}`;
+    return `${written}\nModel calls are paid per token from Gateway credits. Check your balance in the Mastra dashboard: ${creditsUrl}`;
   }
-  const balance = `Balance: ${formatCredits(gateway.remaining)} in ${gateway.orgName}. Model calls are paid per token from these credits.`;
-  const topUp =
-    gateway.remaining > 0 ? '' : `\n${color.yellow('Model calls fail until you add credits:')} ${creditsCommand}`;
-  return `${written}\n${balance}${topUp}`;
+  if (gateway.remaining === 0) {
+    return `${written}\n${color.yellow('Model calls fail until you add Gateway credits:')} ${creditsUrl}`;
+  }
+  return `${written}\nBalance: ${formatCredits(gateway.remaining)} in ${gateway.orgName}. Model calls are paid per token from these credits.`;
 }
 
 interface PostCreateSetupResult {

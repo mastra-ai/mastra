@@ -211,7 +211,7 @@ function callbackPage({ success }: { success: boolean }): string {
 </html>`;
 }
 
-export function listenForSkipInput(onSkip: () => void): () => void {
+function listenForSkipInput(onSkip: () => void): () => void {
   const stdin = process.stdin;
   if (!stdin.isTTY || typeof stdin.setRawMode !== 'function') return () => {};
 
