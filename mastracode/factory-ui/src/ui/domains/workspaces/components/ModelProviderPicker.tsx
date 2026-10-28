@@ -2,13 +2,17 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components/Tabs';
 import { Txt } from '@mastra/playground-ui/components/Txt';
-import { Check, KeyRound, LogIn } from 'lucide-react';
+import { Check, KeyRound, LogIn, ServerCog } from 'lucide-react';
 import { useId, useState } from 'react';
 import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
+
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
+import { CustomProviderForm } from '../../settings/components/CustomProviderForm';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
 import { ProviderBrandIcon } from './ProviderBrandIcon';
+
+type ProviderPickerTab = ProviderConnectionMethod | 'custom';
 
 export function ModelProviderPicker({
   connection,
@@ -18,7 +22,7 @@ export function ModelProviderPicker({
   onPreviewProvider?: PreviewProvider;
 }) {
   const [search, setSearch] = useState('');
-  const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
+  const [tab, setTab] = useState<ProviderPickerTab>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
   if (connection.isPending)
     return (
@@ -57,10 +61,10 @@ export function ModelProviderPicker({
     >
       <Tabs
         defaultTab="api_key"
-        value={method}
+        value={tab}
         onValueChange={next => {
-          setMethod(next);
-          onPreviewProvider?.(undefined, next);
+          setTab(next);
+          onPreviewProvider?.(undefined, next === 'custom' ? undefined : next);
         }}
       >
         <TabList variant="pill-ghost" size="sm">
@@ -71,6 +75,10 @@ export function ModelProviderPicker({
           <Tab value="oauth">
             <LogIn aria-hidden="true" />
             {CONNECTION_METHOD_LABEL.oauth}
+          </Tab>
+          <Tab value="custom">
+            <ServerCog aria-hidden="true" />
+            Custom provider
           </Tab>
         </TabList>
         <TabContent value="api_key">
@@ -140,6 +148,17 @@ export function ModelProviderPicker({
                 Provider sign-in isn’t available on this deployment. Use an API key.
               </Txt>
             )}
+          </div>
+        </TabContent>
+        <TabContent value="custom">
+          <div className="pt-2">
+            <CustomProviderForm
+              requireModels
+              onSaved={provider => {
+                connection.chooseCustomProvider(provider.id);
+                onPreviewProvider?.(provider.id, 'api_key');
+              }}
+            />
           </div>
         </TabContent>
       </Tabs>

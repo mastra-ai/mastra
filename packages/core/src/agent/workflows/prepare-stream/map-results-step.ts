@@ -6,15 +6,22 @@ import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-f
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
 import { DELEGATION_FAILURE_KEY } from '../../../loop/run-scope-keys';
 import { agentLoopTermination, executionFailureTermination } from '../../../loop/shared/execution-outcome';
+import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
+import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
+import { isObservationalMemoryEnabled } from '../../../memory/types';
 import type { MemoryConfigInternal } from '../../../memory/types';
 import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
+import type { OutputProcessorOrWorkflow } from '../../../processors';
+import { isProcessorWorkflow } from '../../../processors/is-processor-workflow';
+import type { MessageHistory } from '../../../processors/memory/message-history';
 import type { RequestContext } from '../../../request-context';
 import type { StepTripwireData, MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
+import { filterMessagesForPersistence } from '../../filter-messages-for-persistence';
 import type { MastraDBMessage, MessageList } from '../../message-list';
 import type { SaveQueueManager } from '../../save-queue';
 import { undoSavedResponseMessages } from '../../save-queue/undo-saved-response-messages';
@@ -91,6 +98,59 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // snapshotted for undoSavedResponseMessages, after client tool output mapping has enriched it.
     let earlierTurnSnapshot: MastraDBMessage | undefined;
 
+    const ensureThreadExists = async () => {
+      if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
+        await memory.createThread({
+          threadId: memoryData.thread?.id,
+          title: memoryData.thread?.title,
+          metadata: memoryData.thread?.metadata,
+          resourceId: memoryData.thread?.resourceId,
+          memoryConfig,
+        });
+
+        threadCreatedByStep = true;
+      }
+    };
+
+    // Configured output processors as resolved for this run, captured before execution so the
+    // total-timeout save sees the same selection the run used.
+    let configuredOutputProcessors: OutputProcessorOrWorkflow[] = [];
+
+    const saveInputAfterTotalTimeout = async () => {
+      if (!memory || !memoryData.thread?.id) return;
+      // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
+      // configured one always runs; memory adds one only when history is enabled and observational
+      // memory does not own the writes (see Memory.getOutputProcessors).
+      const effectiveConfig = memory.getMergedThreadConfig(memoryConfig);
+      if (effectiveConfig.readOnly) return;
+      const hasConfiguredProcessor = (id: string) =>
+        configuredOutputProcessors.some(p => !isProcessorWorkflow(p) && p.id === id);
+      const configuredHistory = configuredOutputProcessors.find(
+        p => !isProcessorWorkflow(p) && p.id === 'message-history',
+      ) as Partial<Pick<MessageHistory, 'persistMessages'>> | undefined;
+      const memoryAddsMessageHistory =
+        normalizeMessageHistoryConfig(effectiveConfig.lastMessages, effectiveConfig.messageHistory).enabled &&
+        !hasConfiguredProcessor('observational-memory') &&
+        !isObservationalMemoryEnabled(effectiveConfig.observationalMemory);
+      if (!configuredHistory && !memoryAddsMessageHistory) return;
+      // A custom processor using the message-history id replaces the built-in one, and the finish path
+      // only saves through it. Without persistMessages there is nothing equivalent to call here.
+      if (configuredHistory && typeof configuredHistory.persistMessages !== 'function') return;
+      const input = filterMessagesForPersistence(messageList.get.input.db());
+      if (input.length === 0) return;
+
+      await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
+      const messages = messageList.transformMessagesForTranscript(input);
+      // A configured MessageHistory may use its own storage and creates its own thread there; save
+      // where the finish path would.
+      if (configuredHistory?.persistMessages) {
+        await configuredHistory.persistMessages({ messages, threadId: memoryData.thread.id, resourceId });
+        return;
+      }
+      await ensureThreadExists();
+      await memory.saveMessages({ messages, memoryConfig });
+    };
+
     const result = {
       ...options,
       agentId,
@@ -112,17 +172,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           if (memoryData.thread?.id) {
             await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
           }
-          if (!memoryData.threadExists && !threadCreatedByStep && memory && memoryData.thread) {
-            await memory.createThread({
-              threadId: memoryData.thread?.id,
-              title: memoryData.thread?.title,
-              metadata: memoryData.thread?.metadata,
-              resourceId: memoryData.thread?.resourceId,
-              memoryConfig,
-            });
-
-            threadCreatedByStep = true;
-          }
+          await ensureThreadExists();
 
           if (saveQueueManager && memoryData.thread?.id) {
             await saveQueueManager.flushMessages(messageList, memoryData.thread.id, memoryConfig);
@@ -235,12 +285,21 @@ export function createMapResultsStep<OUTPUT = undefined>({
     const latestMessage = messageList.get.all.db().at(-1);
     earlierTurnSnapshot = latestMessage?.role === 'assistant' ? structuredClone(latestMessage) : undefined;
 
+    // The total-timeout save needs the configured processors. Resolve them once
+    // and pass them on as overrides so a function-form resolver runs only once.
+    let outputProcessorOverrides = options.outputProcessors;
+    if (memory && memoryData.thread?.id && options.modelSettings?.timeout?.totalMs) {
+      configuredOutputProcessors =
+        options.outputProcessors ?? (await capabilities.agent.listConfiguredOutputProcessors(result.requestContext));
+      outputProcessorOverrides = configuredOutputProcessors;
+    }
+
     // Resolve output processors - overrides replace user-configured but auto-derived (memory) are kept
     let effectiveOutputProcessors = capabilities.outputProcessors
       ? typeof capabilities.outputProcessors === 'function'
         ? await capabilities.outputProcessors({
             requestContext: result.requestContext!,
-            overrides: options.outputProcessors,
+            overrides: outputProcessorOverrides,
           })
         : options.outputProcessors || capabilities.outputProcessors
       : options.outputProcessors || [];
@@ -504,12 +563,22 @@ export function createMapResultsStep<OUTPUT = undefined>({
         },
         onStepFinish: result.onStepFinish,
         onChunk: options.onChunk,
-        onError: async (event: { error: Error | string }) => {
-          // Terminal stream failures (including total deadlines) can close without
-          // an onFinish callback. Provider/processor retries settle inside the loop.
-          const error = event.error instanceof Error ? event.error : new Error(String(event.error));
-          agentSpan?.error({ error, ...executionFailureTermination(error), endTree: true });
-          await options.onError?.(event);
+        onError: async ({ error }: { error: Error | string }) => {
+          // A run that hits `timeout.totalMs` ends without a `finish` chunk, so the output
+          // processors that normally persist the turn never run. Save the accepted user
+          // message; completed steps are only saved by `savePerStep`, and the unfinished
+          // step is never saved after the deadline.
+          if (isMastraTimeoutError(error) && error.timeoutType === 'total') {
+            try {
+              await saveInputAfterTotalTimeout();
+            } catch (e) {
+              capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
+            }
+          }
+          // Retries have settled by this terminal error path. Finish tracing after persistence.
+          const spanError = error instanceof Error ? error : new Error(String(error));
+          agentSpan?.error({ error: spanError, ...executionFailureTermination(spanError), endTree: true });
+          await options.onError?.({ error });
         },
         onAbort: options.onAbort,
         abortSignal: options.abortSignal,
