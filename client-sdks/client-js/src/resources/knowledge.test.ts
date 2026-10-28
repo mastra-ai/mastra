@@ -35,4 +35,11 @@ describe('Knowledge resource', () => {
       'http://localhost:4111/api/knowledge/kb/activity?scope=org%3Aa&cursor=c1&limit=10',
     );
   });
+
+  it('lists scope tag sets', async () => {
+    const body = { sets: [{ scope: ['org:a'], nodeCount: 1, recordCount: 2 }], truncated: false };
+    const fetchMock = mockFetch(body);
+    expect(await client.getKnowledge('my kb').scopes()).toEqual(body);
+    expect(fetchMock.mock.calls[0]![0]).toBe('http://localhost:4111/api/knowledge/my%20kb/scopes');
+  });
 });

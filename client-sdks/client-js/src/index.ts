@@ -16,6 +16,7 @@ export type {
   GetAgentCardOptions,
   VerifyAgentCardSignatureOptions,
 } from './resources/a2a';
+export type { KnowledgeScopeSetSummary, KnowledgeScopesResponse } from './resources/knowledge';
 export { agentControllerMessageText, isKnownAgentControllerEvent } from './resources/agent-controller';
 export type {
   MastraDBMessage,

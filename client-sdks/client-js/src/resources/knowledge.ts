@@ -19,6 +19,18 @@ export interface KnowledgeActivityResponse {
   truncated?: true;
 }
 
+export interface KnowledgeScopeSetSummary {
+  scope: string[];
+  nodeCount: number;
+  recordCount: number;
+}
+
+export interface KnowledgeScopesResponse {
+  /** Fewest tags first. */
+  sets: KnowledgeScopeSetSummary[];
+  truncated: boolean;
+}
+
 export interface KnowledgeInstanceSummary {
   key: string;
   id: string;
@@ -69,5 +81,10 @@ export class Knowledge extends BaseResource {
   /** A newest-first page of activity on nodes visible from `scope`. */
   activity(scope: string[], params: { cursor?: string; limit?: number } = {}): Promise<KnowledgeActivityResponse> {
     return this.request(`${this.base}/activity${scopeQuery(scope, params)}`);
+  }
+
+  /** The distinct scope tag sets stored nodes and records carry, with counts; only sets inside a bound caller scope. */
+  scopes(): Promise<KnowledgeScopesResponse> {
+    return this.request(`${this.base}/scopes`);
   }
 }
