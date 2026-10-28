@@ -6,8 +6,11 @@ import type {
   ListKnowledgeScopeMembersOutput,
   ListKnowledgeScopeNodesInput,
   ListKnowledgeScopeNodesOutput,
+  ListKnowledgeScopeSetsInput,
+  ListKnowledgeScopeSetsOutput,
 } from '@internal/core/knowledge-compat';
 import {
+  knowledgeScopeSetsLimit,
   pageKnowledgeScopeMembers,
   pageKnowledgeScopeNodes,
   parseListKnowledgeScopeMembersInput,
@@ -695,6 +698,23 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
       limit,
       input,
     );
+  }
+
+  override async listScopeSets(input: ListKnowledgeScopeSetsInput = {}): Promise<ListKnowledgeScopeSetsOutput> {
+    const limit = knowledgeScopeSetsLimit(input.limit);
+    const keys = input.within ? visibleScopeKeys(input.within) : undefined;
+    const filter = keys ? ` AND ${visibleSql(keys)}` : '';
+    // Grouped on the indexed scopeKey; every row in a group carries the same scope, so MAX picks it.
+    const result = await this.#client.execute({
+      sql: `SELECT scopeKey, json(MAX(scope)) AS scopeJson, SUM(isNode) AS nodeCount, SUM(1 - isNode) AS recordCount FROM (SELECT scopeKey, scope, 1 AS isNode FROM "${TABLE_KNOWLEDGE_NODES}" WHERE type = 'node' AND NOT isScope AND deletedAt IS NULL AND mergedInto IS NULL AND scopeKey IS NOT NULL${filter} UNION ALL SELECT scopeKey, scope, 0 AS isNode FROM "${TABLE_KNOWLEDGE_RECORDS}" WHERE deletedAt IS NULL AND scopeKey IS NOT NULL${filter}) GROUP BY scopeKey ORDER BY json_array_length(MAX(scope)), scopeKey LIMIT ?`,
+      args: [...(keys ?? []), ...(keys ?? []), limit + 1],
+    });
+    const sets = result.rows.map(row => ({
+      scope: parseJson<KnowledgeScope>(row.scopeJson),
+      nodeCount: Number(row.nodeCount),
+      recordCount: Number(row.recordCount),
+    }));
+    return { sets: sets.slice(0, limit), truncated: sets.length > limit };
   }
 
   override async listScopeMembers(input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {

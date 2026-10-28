@@ -604,6 +604,52 @@ describe('KnowledgeLibSQL initialization', () => {
     }
   });
 
+  it('lists distinct live scope tag sets with node and record counts', async () => {
+    const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-scope-sets-'));
+    const client = createClient({ url: `file:${join(directory, 'knowledge.db')}` });
+    try {
+      const store = new KnowledgeLibSQL({ client });
+      await store.init();
+      const base = ['resource:demo', 'org:local'];
+      const lee = [...base, 'team:LEE'];
+      const mob = [...base, 'team:MOB'];
+      // Structural scope nodes are not tag sets and stay out of the listing.
+      await store.reconcileStructure({ scopes: [{ address: 'org:local', name: 'local' }] });
+      const hub = await store.createNode({ name: 'hub', kind: 'team', scope: base });
+      const leeDoc = await store.createNode({ name: 'lee doc', kind: 'doc', scope: lee });
+      const merged = await store.createNode({ name: 'lee dup', kind: 'doc', scope: lee });
+      await store.mergeNodes({ sourceId: merged.id, targetId: leeDoc.id, sourceVersion: merged.version });
+      await store.createNode({ name: 'mob doc', kind: 'doc', scope: mob });
+      const append = (node: string, text: string, scope: string[]) =>
+        store.appendKnowledge({ node, text, scope, sourceThreadId: 't1', resolutionScope: scope, defaultScope: scope });
+      await append(hub.id, 'hub fact', base);
+      await append(leeDoc.id, 'lee fact 1', lee);
+      await append(leeDoc.id, 'lee fact 2', lee);
+      const removed = await append(leeDoc.id, 'lee fact removed', lee);
+      await store.removeKnowledge({ id: removed.id, deletedBy: 'test' });
+
+      const all = await store.listScopeSets();
+      expect(all).toEqual({
+        truncated: false,
+        sets: [
+          { scope: ['org:local', 'resource:demo'], nodeCount: 1, recordCount: 1 },
+          { scope: ['org:local', 'resource:demo', 'team:LEE'], nodeCount: 1, recordCount: 2 },
+          { scope: ['org:local', 'resource:demo', 'team:MOB'], nodeCount: 1, recordCount: 0 },
+        ],
+      });
+
+      expect(await store.listScopeSets({ limit: 2 })).toEqual({ truncated: true, sets: all.sets.slice(0, 2) });
+      expect((await store.listScopeSets({ within: mob })).sets.map(set => set.scope)).toEqual([
+        ['org:local', 'resource:demo'],
+        ['org:local', 'resource:demo', 'team:MOB'],
+      ]);
+      expect(await store.listScopeSets({ within: ['team:LEE'] })).toEqual({ sets: [], truncated: false });
+    } finally {
+      client.close();
+      rmSync(directory, { recursive: true, force: true });
+    }
+  });
+
   it('serializes reconciliation across clients sharing one database', async () => {
     const directory = mkdtempSync(join(tmpdir(), 'knowledge-v2-reconcile-concurrent-'));
     const url = `file:${join(directory, 'knowledge.db')}`;
