@@ -94,7 +94,7 @@ jobs:
     name: Affected UNIT Test
     if: inputs.has_code == 'true' && inputs.run_full == 'false' && inputs.has_unit_tests == 'true'
     runs-on: starsling-ubuntu-26.04
-    timeout-minutes: 20
+    timeout-minutes: 40
     env:
       TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
       TURBO_TEAM: ${{ secrets.TURBO_TEAM }}
