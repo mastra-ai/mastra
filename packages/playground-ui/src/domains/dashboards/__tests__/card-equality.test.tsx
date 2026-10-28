@@ -1,9 +1,29 @@
 // @vitest-environment jsdom
-import type { DashboardWidget } from '@mastra/client-js';
+import type { AggregateTracesResponse, DashboardWidget } from '@mastra/client-js';
 import { act, fireEvent, waitFor, within } from '@testing-library/react';
+import { http, HttpResponse } from 'msw';
 import type { ReactElement } from 'react';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
+  agentRunsByName,
+  agentRunsByProjectAndName,
+  agentTokensByName,
+  modelSpansByModel,
+  previousAgentUsage,
+  previousWithRetiredAgent,
+  threadResourcesFixture,
+  tokensByEnvironment,
+  toolCallsByName,
+  tracesByEnvironment,
+  tracesByProject,
+  tracesByProjectAndThread,
+  tracesByThread,
+  usageByModel,
+  usageByThread,
+} from '../../metrics/components/__tests__/fixtures/breakdown';
+import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtures/metrics';
+import {
+  aggregateCapabilities,
   distinctIdsSeriesFixture,
   distinctIdsTotalsFixture,
   traceAggregateCapabilities,
@@ -15,6 +35,7 @@ import {
   serveTraceAggregate,
 } from '../../metrics/components/__tests__/metrics-msw';
 import { AgentRunsCard } from '../../metrics/components/agent-runs-card';
+import { BreakdownCard } from '../../metrics/components/breakdown-card';
 import { DistinctIdsCard } from '../../metrics/components/distinct-ids-card';
 import { FailureRateCard } from '../../metrics/components/failure-rate-card';
 import { LatencyCard } from '../../metrics/components/latency-card';
@@ -23,8 +44,10 @@ import { ScoresCard } from '../../metrics/components/scores-card';
 import { TokenUsageCard } from '../../metrics/components/token-usage-card';
 import type { MetricsScope } from '../../metrics/hooks/use-metrics';
 import { DashboardRenderer } from '../components/dashboard-renderer';
+import type { OnDashboardDrilldown } from '../lib/definition';
 import {
   agentRunsWidget,
+  breakdownWidget,
   distinctIdsWidget,
   failureRateWidget,
   kpisWidget,
@@ -33,6 +56,7 @@ import {
   tokenUsageWidget,
 } from './fixtures/metrics-widgets';
 import { server } from '@/test/msw-server';
+import { TEST_BASE_URL } from '@/test/render';
 
 /**
  * Each of today's Metrics cards next to the widget describing it: both must send the same requests
@@ -129,10 +153,14 @@ async function renderCard(ui: ReactElement, scope: MetricsScope | undefined): Pr
   return { root: find(container, '[data-testid="card"]'), sent: recorder.sent };
 }
 
-async function renderWidget(widget: DashboardWidget, scope: MetricsScope | undefined): Promise<Rendered> {
+async function renderWidget(
+  widget: DashboardWidget,
+  scope: MetricsScope | undefined,
+  onDrilldown: OnDashboardDrilldown = () => {},
+): Promise<Rendered> {
   const recorder = recordRequests();
   const { container } = renderInMetrics(
-    <DashboardRenderer definition={{ schemaVersion: 1, rows: [{ widgets: [widget] }] }} onDrilldown={() => {}} />,
+    <DashboardRenderer definition={{ schemaVersion: 1, rows: [{ widgets: [widget] }] }} onDrilldown={onDrilldown} />,
     { scope },
   );
   await settle(recorder);
@@ -200,6 +228,60 @@ async function expectSameTab(card: Rendered, widget: Rendered, tab: string) {
 
 const noop = () => {};
 
+const API = `${TEST_BASE_URL}/api/observability`;
+const now = new Date('2026-10-28T12:00:00Z').getTime();
+/** Whether a window ends now (the page's) rather than a window earlier (the previous one). */
+const endsNow = (end: unknown) => Math.abs(now - new Date(String(end)).getTime()) < 3_600_000;
+const record = (value: unknown): Record<string, unknown> =>
+  value && typeof value === 'object' && !Array.isArray(value) ? (value as Record<string, unknown>) : {};
+const noRows: AggregateTracesResponse = { rows: [] };
+
+/**
+ * Breakdown's answers, by what a request groups on and which window it covers. Neither card nor
+ * widget is told which tab asked: the same body gets the same answer.
+ */
+function serveBreakdown() {
+  serveCapabilities(aggregateCapabilities);
+  server.use(
+    http.post(`${API}/traces/aggregate`, async ({ request }) => {
+      const body = record(await request.json());
+      const by = (body.groupBy as string[]).join();
+      if (by === 'projectId') return HttpResponse.json(tracesByProject(['p1', 'p2']));
+      if (by.endsWith('environment')) return HttpResponse.json(tracesByEnvironment);
+      if (by === 'resourceId,threadId')
+        return HttpResponse.json((body.measures as string[]).length === 1 ? threadResourcesFixture : tracesByThread);
+      if (by === 'projectId,threadId') return HttpResponse.json(tracesByProjectAndThread);
+      return HttpResponse.json(noRows);
+    }),
+    http.post(`${API}/spans/aggregate`, async ({ request }) => {
+      const body = record(await request.json());
+      const current = endsNow(record(body.timeRange).to);
+      if (JSON.stringify(body.where).includes('tool_call'))
+        return HttpResponse.json(current ? toolCallsByName : noRows);
+      if (!JSON.stringify(body.where).includes('agent_run')) return HttpResponse.json(noRows);
+      if ((body.groupBy as string[])[0] === 'projectId') return HttpResponse.json(agentRunsByProjectAndName);
+      return HttpResponse.json(current ? agentRunsByName : previousWithRetiredAgent);
+    }),
+    http.post(`${API}/metrics/breakdown`, async ({ request }) => {
+      const body = record(await request.json());
+      const current = endsNow(record(record(body.filters).timestamp).end);
+      const by = (body.groupBy as string[]).at(-1);
+      if (body.aggregation === 'count')
+        return HttpResponse.json(by === 'model' ? modelSpansByModel : emptyBreakdownFixture);
+      if (by === 'entityName') return HttpResponse.json(current ? agentTokensByName : previousAgentUsage);
+      if (by === 'environment') return HttpResponse.json(tokensByEnvironment);
+      if (by === 'model') return HttpResponse.json(usageByModel);
+      if (by === 'threadId') return HttpResponse.json(usageByThread);
+      return HttpResponse.json(emptyBreakdownFixture);
+    }),
+  );
+}
+
+const BREAKDOWN_TABS = {
+  project: ['Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Agents'],
+  org: ['Agents', 'Workflows', 'Tools', 'Models', 'Threads', 'Environments', 'Projects'],
+};
+
 beforeEach(() => {
   vi.useFakeTimers({ toFake: ['Date'] });
   vi.setSystemTime(new Date('2026-10-28T12:00:00Z'));
@@ -264,6 +346,37 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     const widget = await renderWidget(distinctIdsWidget, scope);
     expect(within(card.root).getByText('Resources')).toBeDefined();
     expectSame(card, widget);
+  });
+
+  it('Breakdown, every tab', async () => {
+    serveBreakdown();
+    const card = await renderCard(<BreakdownCard onRowClick={noop} />, scope);
+    const widget = await renderWidget(breakdownWidget, scope);
+    // Org-wide it opens on Projects, with two to compare; a project opens on Agents.
+    expect(within(card.root).getByRole('tab', { selected: true }).textContent).toBe(scope ? 'Projects' : 'Agents');
+    expectSame(card, widget);
+    for (const tab of BREAKDOWN_TABS[scope ? 'org' : 'project']) {
+      await expectSameTab(card, widget, tab);
+    }
+  });
+
+  it('Breakdown row clicks', async () => {
+    serveBreakdown();
+    const onRowClick = vi.fn();
+    const onDrilldown = vi.fn();
+    const card = await renderCard(<BreakdownCard onRowClick={onRowClick} />, scope);
+    const widget = await renderWidget(breakdownWidget, scope, onDrilldown);
+    for (const tab of ['Agents', 'Tools', 'Models', 'Threads', 'Environments', ...(scope ? ['Projects'] : [])]) {
+      await expectSameTab(card, widget, tab);
+      for (const side of [card, widget]) {
+        const [first] = within(side.root).getAllByRole('listitem');
+        const label = first?.querySelector('[title]');
+        if (!label) throw new Error(`No rows on ${tab}`);
+        fireEvent.click(label);
+      }
+      expect(onDrilldown).toHaveBeenLastCalledWith('traces', onRowClick.mock.lastCall?.[0]);
+    }
+    expect(onRowClick).toHaveBeenCalledTimes(scope ? 6 : 5);
   });
 
   it('Scores', async () => {
