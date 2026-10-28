@@ -24,6 +24,8 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   traceQueryRootSpanFields: false,
   traceQueryRootEntityId: false,
   traceQueryTimeToFirstChunkSort: false,
+  traceQueryTimeToFirstToken: false,
+  traceQueryTimeToFirstTokenSort: false,
   traceQueryDiscovery: false,
   traceQueryTenantScope: false,
   traceAggregate: false,
@@ -689,6 +691,31 @@ describe('System Handlers', () => {
           traceQueryTimeToFirstChunk: true,
         });
         expect(await capabilitiesFor(new NoQueryStore())).toEqual(NO_OBSERVABILITY_CAPABILITIES);
+      });
+
+      it('reports time to first token and its sort apart from time to first chunk', async () => {
+        class TokenStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['span-query', 'trace-query-time-to-first-token', 'trace-query-time-to-first-token-sort'] as const;
+          }
+        }
+        class ThreadOnlyStore extends BaseObservabilityStore {
+          getFeatures() {
+            return ['thread-query', 'trace-query-time-to-first-token', 'trace-query-time-to-first-token-sort'] as const;
+          }
+        }
+
+        expect(await capabilitiesFor(new TokenStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          spanQuery: true,
+          traceQueryTimeToFirstToken: true,
+          traceQueryTimeToFirstTokenSort: true,
+        });
+        expect(await capabilitiesFor(new ThreadOnlyStore())).toEqual({
+          ...NO_OBSERVABILITY_CAPABILITIES,
+          threadQuery: true,
+          traceQueryTimeToFirstToken: true,
+        });
       });
 
       it('reports the time to first chunk sort only when the store also serves a trace or span query', async () => {
