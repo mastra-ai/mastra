@@ -2096,7 +2096,7 @@ The Studio page of a server with `tasks` shows which tools run as tasks (`always
 A task counts as open while it's `working` or `input_required`. It stops counting when it completes, fails, is cancelled or expires. When a call would go over `maxOpenTasksPerClient` or `maxOpenTasks`, the server creates no task:
 
 - An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
-- An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, as if it weren't served as a task. Cancelling the request still aborts it.
+- An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, the same way it would without tasks. Cancelling the request still aborts it.
 
 Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
 
@@ -2145,7 +2145,7 @@ export const mastra = new Mastra({
 - Register the same server, with the same id and tools, on every instance. An instance without it can't run that server's tasks, and fails them instead. Set the id with `id`, or register the server under a key in `mcpServers`: a generated id changes on every start, and the server logs a warning.
 - Each task counts against `perOwnerConcurrency` for `mcp-server:<server id>` (or `perAgentConcurrency` when unset) and against `globalConcurrency`. Keep `backpressure` at its default, `'queue'`. With other values a full queue fails the call.
 - An answer sent with `tasks/update` is stored before it's acknowledged. The task resumes even if the instance that took the answer stops before running it.
-- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance. Each sweep handles at most 100 expired tasks and checks 100 other open tasks, moving on to the next 100 on the following sweep. It restarts a task left waiting by a stopped instance only when a slot is free; the rest wait for a later sweep.
+- Expired tasks are failed, and answered tasks still waiting are resumed, by a periodic sweep on each instance. Each sweep handles at most 100 expired tasks and checks 100 other open tasks, moving on to the next 100 on the following sweep. It restarts a task left waiting by a stopped instance only when a slot is free. The rest wait for a later sweep.
 - `maxOpenTasksPerClient` and `maxOpenTasks` count open tasks in storage across every instance, so they hold for the whole deployment. Each call counts before it adds its task, so calls arriving at the same moment on different instances can go over a cap by up to the number of those calls.
 - `tasks/cancel` can reach any instance. If the task's first attempt is still waiting for a slot on the instance that started it, that instance stops it on its next sweep, up to one lease (`leaseDurationMs`) later.
 
