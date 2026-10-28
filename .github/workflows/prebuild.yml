@@ -4,6 +4,7 @@ on:
   pull_request:
     types: [opened, synchronize, reopened]
     branches: [main, 0.x]
+  workflow_dispatch:
   # Lets other workflows (e.g. the alpha cron, which publishes without a PR) gate on the
   # full suite without duplicating these jobs. A call always runs the full suite on the
   # caller's commit.
