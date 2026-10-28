@@ -59,6 +59,17 @@ const NACK_IF_OWNED_SCRIPT = `
  * per-command errors (e.g. BUSYGROUP) live in `err.replies`, so those are
  * folded in too.
  */
+/**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
+
 function errorText(err: unknown): string {
   const parts: string[] = [err instanceof Error ? err.message : String(err)];
   if (err instanceof Error && 'replies' in err && Array.isArray((err as { replies?: unknown[] }).replies)) {
@@ -206,6 +217,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Set<EventCallback>> = new Map();
   #closed = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: ValkeyStreamsPubSubConfig = {}) {
     super();
@@ -289,6 +301,31 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
   async #ensureWriterConnected(): Promise<void> {
     if (this.#writeClient.isOpen) return;
     await this.#writeClient.connect();
+    if (!this.#evictionPolicyChecked) {
+      this.#evictionPolicyChecked = true;
+      void this.#warnOnEvictingPolicy();
+    }
+  }
+
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed services often block CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const policy = evictingMaxmemoryPolicy(String(await this.#writeClient.command(['INFO', 'memory'])));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `valkey-streams: maxmemory-policy is "${policy}". Under memory pressure the server will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('valkey-streams: maxmemory-policy check failed', { err: errorText(err) });
+    }
   }
 
   #streamKey(topic: string): string {

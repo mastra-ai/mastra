@@ -86,6 +86,17 @@ function compareStreamIds(a: string, b: string): number {
  * it instead. A cluster's `quit()` quits every node client, so one
  * reconnecting node is enough to hang it.
  */
+/**
+ * Parse `maxmemory` / `maxmemory_policy` out of an `INFO memory` reply and
+ * return the policy when the server can evict keys under memory pressure.
+ */
+function evictingMaxmemoryPolicy(info: string): string | undefined {
+  const field = (name: string) => info.match(new RegExp(`^${name}:(.*)$`, 'm'))?.[1]?.trim();
+  const policy = field('maxmemory_policy');
+  if (!policy || policy === 'noeviction' || Number(field('maxmemory') ?? 0) <= 0) return undefined;
+  return policy;
+}
+
 async function disconnect(client: RedisClientType): Promise<void> {
   const reconnecting = (c?: { isOpen: boolean; isReady?: boolean }) => !!c && c.isOpen && c.isReady === false;
   const cluster = client as unknown as Partial<Pick<RedisClusterType, 'masters' | 'replicas'>>;
@@ -266,6 +277,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
   // get consistent semantics across transports.
   #localCallbacks: Map<string, Map<EventCallback, Set<ReturnType<typeof setTimeout>>>> = new Map();
   #closed = false;
+  #evictionPolicyChecked = false;
 
   constructor(options: RedisStreamsPubSubConfig = {}) {
     super();
@@ -394,13 +406,45 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     if (!this.#writerConnecting) {
       this.#writerConnecting = this.#writeClient
         .connect()
-        .then(() => undefined)
+        .then(() => {
+          if (!this.#evictionPolicyChecked) {
+            this.#evictionPolicyChecked = true;
+            void this.#warnOnEvictingPolicy();
+          }
+        })
         .finally(() => {
           // Clear so a failed initial connect can be retried on the next call.
           this.#writerConnecting = undefined;
         });
     }
     return this.#writerConnecting;
+  }
+
+  /**
+   * Consumer-group state, lease keys and TTL'd streams are all live data. A
+   * server with `maxmemory` set and any policy other than `noeviction` deletes
+   * them under memory pressure (silently losing events and leases), so warn
+   * once. INFO rather than CONFIG GET because managed Redis often blocks CONFIG.
+   */
+  async #warnOnEvictingPolicy(): Promise<void> {
+    try {
+      const client = this.#writeClient as unknown as Partial<Pick<RedisClusterType, 'masters'>>;
+      const reply = Array.isArray(client.masters)
+        ? await (this.#writeClient as unknown as RedisClusterType).sendCommand(undefined, true, ['INFO', 'memory'])
+        : await this.#writeClient.sendCommand(['INFO', 'memory']);
+      const policy = evictingMaxmemoryPolicy(String(reply));
+      if (!policy) return;
+      const warn = this.#logger?.warn ? this.#logger.warn.bind(this.#logger) : console.warn;
+      warn(
+        `redis-streams: Redis maxmemory-policy is "${policy}". Under memory pressure Redis will evict ` +
+          `pubsub keys (TTL'd streams, consumer groups, lease keys), losing events and leases. ` +
+          `Set maxmemory-policy to "noeviction".`,
+      );
+    } catch (err) {
+      this.#logger?.debug?.('redis-streams: maxmemory-policy check failed', {
+        err: err instanceof Error ? err.message : String(err),
+      });
+    }
   }
 
   #streamKey(topic: string): string {
