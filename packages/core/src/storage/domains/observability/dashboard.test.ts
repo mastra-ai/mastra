@@ -74,16 +74,23 @@ const metricsDashboard: DashboardDefinition = {
           views: [
             {
               queries: [
-                { source: 'traceAggregate', measures: ['count', 'errorRate', 'cost.sum'], compare: 'previousWindow' },
                 {
+                  id: 'runs',
+                  source: 'traceAggregate',
+                  measures: ['count', 'errorRate', 'cost.sum'],
+                  compare: 'previousWindow',
+                },
+                {
+                  id: 'input-tokens',
                   source: 'metrics',
                   request: 'aggregate',
                   name: ['mastra_model_total_input_tokens'],
                   aggregation: 'sum',
                   compare: 'previousWindow',
                 },
-                { source: 'spanAggregate', measures: ['count'], compare: 'previousWindow' },
+                { id: 'span_count', source: 'spanAggregate', measures: ['count'], compare: 'previousWindow' },
                 {
+                  id: 'Relevance2',
                   source: 'scores',
                   request: 'aggregate',
                   scorerId: 'relevance',
@@ -101,7 +108,7 @@ const metricsDashboard: DashboardDefinition = {
         {
           id: 'agents',
           span: 6,
-          kind: 'table',
+          kind: 'breakdown',
           title: 'Agents',
           views: [
             {
@@ -307,7 +314,7 @@ describe('dashboardDefinitionSchema', () => {
     const result = dashboardDefinitionSchema.safeParse(input);
     expect(messages(result)).toEqual([]);
     expect(result.data?.rows[0]!.widgets[0]).toMatchObject({ kind: 'heatmap', views: [{ options }] });
-    expect(DASHBOARD_WIDGET_KINDS).toEqual(['kpis', 'table', 'timeseries', 'scores']);
+    expect(DASHBOARD_WIDGET_KINDS).toEqual(['kpis', 'breakdown', 'timeseries', 'scores']);
   });
 
   it('still validates the common widget shape and queries for any kind', () => {
@@ -334,6 +341,58 @@ describe('dashboardDefinitionSchema', () => {
     for (const input of cases) {
       expect(dashboardDefinitionSchema.safeParse(definition([[input]])).success).toBe(false);
     }
+  });
+
+  it('accepts query ids that start with a letter on every source and rejects others', () => {
+    const kpiQueries = metricsDashboard.rows[0]!.widgets[0]!.views[0]!.queries;
+    expect(kpiQueries.map(query => [query.source, query.id])).toEqual([
+      ['traceAggregate', 'runs'],
+      ['metrics', 'input-tokens'],
+      ['spanAggregate', 'span_count'],
+      ['scores', 'Relevance2'],
+    ]);
+    for (const id of ['', '1runs', '-runs', 'runs.total', 'runs total']) {
+      const result = dashboardDefinitionSchema.safeParse(
+        definition([[widget('w', { views: [{ queries: [{ ...countQuery, id }] }] })]]),
+      );
+      expect(result.error?.issues[0]?.path, id).toEqual(['rows', 0, 'widgets', 0, 'views', 0, 'queries', 0, 'id']);
+    }
+  });
+
+  it('rejects duplicate query ids within a view but allows them across views and when unset', () => {
+    const duplicate = dashboardDefinitionSchema.safeParse(
+      definition([
+        [
+          widget('w', {
+            views: [
+              {
+                queries: [
+                  { ...countQuery, id: 'a' },
+                  { ...countQuery, id: 'a' },
+                ],
+              },
+            ],
+          }),
+        ],
+      ]),
+    );
+    expect(messages(duplicate)).toEqual(["Duplicate query id 'a'"]);
+    expect(duplicate.error?.issues[0]?.path).toEqual(['rows', 0, 'widgets', 0, 'views', 0, 'queries', 1, 'id']);
+
+    const acrossViews = widget('w', {
+      views: [{ queries: [{ ...countQuery, id: 'a' }] }, { queries: [{ ...countQuery, id: 'a' }] }],
+    });
+    const unset = widget('v', { views: [{ queries: [countQuery, countQuery] }] });
+    expect(messages(dashboardDefinitionSchema.safeParse(definition([[acrossViews, unset]])))).toEqual([]);
+  });
+
+  it('rejects duplicate column ids within a view', () => {
+    const columns = [{ id: 'count' }, { id: 'errorCount' }, { id: 'count', label: 'Runs' }];
+    const result = dashboardDefinitionSchema.safeParse(
+      definition([[widget('w', { kind: 'breakdown', views: [{ queries: [countQuery], columns }] })]]),
+    );
+    expect(messages(result)).toEqual(["Duplicate column id 'count'"]);
+    expect(result.error?.issues[0]?.path).toEqual(['rows', 0, 'widgets', 0, 'views', 0, 'columns', 2, 'id']);
   });
 
   it('rejects malformed filter nodes', () => {

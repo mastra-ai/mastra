@@ -43,6 +43,11 @@ describe('DashboardQuery type', () => {
     expectTypeOf<DashboardQuery['source']>().toEqualTypeOf<'traceAggregate' | 'spanAggregate' | 'metrics' | 'scores'>();
   });
 
+  it('gives every source an optional query id', () => {
+    expectTypeOf<DashboardQuery['id']>().toEqualTypeOf<string | undefined>();
+    expectTypeOf<Extract<DashboardQuery, { source: 'scores' }>['id']>().toEqualTypeOf<string | undefined>();
+  });
+
   it('has no timeRange or comparePeriod on stored queries', () => {
     type Keys = DashboardQuery extends infer Q ? (Q extends unknown ? keyof Q : never) : never;
     expectTypeOf<'timeRange' extends Keys ? true : false>().toEqualTypeOf<false>();

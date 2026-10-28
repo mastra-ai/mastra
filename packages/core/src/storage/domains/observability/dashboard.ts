@@ -23,7 +23,8 @@ import { findPredicateComplexityIssue, TRACE_QUERY_PREDICATE_COMPLEXITY_MESSAGE 
  *
  * Queries reuse the observability request schemas minus what the page supplies at run time: the
  * time range always, and `interval` for time series (the renderer derives it from the range).
- * The page's filter bar is ANDed onto every query's own filters.
+ * The page's filters are intersected with each query's own: `where` is ANDed, and a metrics or scores
+ * filter field set by both must agree (arrays intersect). A contradiction yields no data.
  *
  * Core owns the common widget shape and the query sources. A widget's `kind` is any non-empty string
  * and `options` stay opaque here: each kind validates its own options where it renders, so a new kind
@@ -45,7 +46,8 @@ export const DASHBOARD_MAX_QUERIES_PER_VIEW = 8;
 export const DASHBOARD_MAX_BYTES = 64 * 1024;
 export const DASHBOARD_WIDGET_SPANS = [1, 2, 3, 4, 6, 12] as const;
 /** Kinds the built-in renderer ships. Not enforced: `kind` accepts any non-empty string. */
-export const DASHBOARD_WIDGET_KINDS = ['kpis', 'table', 'timeseries', 'scores'] as const;
+// 'table' is reserved for a future generic table kind.
+export const DASHBOARD_WIDGET_KINDS = ['kpis', 'breakdown', 'timeseries', 'scores'] as const;
 export const DASHBOARD_SCOPES = ['org', 'project'] as const;
 export const DASHBOARD_DRILLDOWN_PAGES = ['traces', 'spans', 'logs', 'threads'] as const;
 
@@ -56,13 +58,21 @@ export const DASHBOARD_DRILLDOWN_PAGES = ['traces', 'spans', 'logs', 'threads'] 
 /** Compares each value with the window of equal length right before the page's range. */
 const compareSchema = z.literal('previousWindow').optional();
 
+/** Lets options refer to a query by name instead of position. Unique within a view. */
+const queryIdSchema = z
+  .string()
+  .regex(/^[A-Za-z][\w-]*$/, 'Query ids start with a letter and contain only letters, digits, _ or -')
+  .optional();
+
 const traceAggregateDashboardQuerySchema = traceAggregateQueryObjectSchema.extend({
   source: z.literal('traceAggregate'),
+  id: queryIdSchema,
   compare: compareSchema,
 });
 
 const spanAggregateDashboardQuerySchema = spanAggregateQueryObjectSchema.extend({
   source: z.literal('spanAggregate'),
+  id: queryIdSchema,
   compare: compareSchema,
 });
 
@@ -70,14 +80,14 @@ const spanAggregateDashboardQuerySchema = spanAggregateQueryObjectSchema.extend(
 const metricsQueryFilters = metricsFilterSchema.omit({ timestamp: true }).strict().optional();
 const scoresQueryFilters = scoresFilterSchema.omit({ timestamp: true }).strict().optional();
 
-const metricsSource = { source: z.literal('metrics'), compare: compareSchema } as const;
-const scoresSource = { source: z.literal('scores'), compare: compareSchema } as const;
+const metricsSource = { source: z.literal('metrics'), id: queryIdSchema, compare: compareSchema } as const;
+const scoresSource = { source: z.literal('scores'), id: queryIdSchema, compare: compareSchema } as const;
 
 // Dashboards state comparison only through `compare`, so the aggregate args' `comparePeriod` is dropped.
 const { comparePeriod: _metricComparePeriod, ...metricAggregateShape } = getMetricAggregateArgsSchema.shape;
 const { comparePeriod: _scoreComparePeriod, ...scoreAggregateShape } = getScoreAggregateArgsSchema.shape;
 
-// Omitted means the widget discovers scorers at run time, like the Scores card.
+// Omitted means every scorer, one series per scorer (discovered at run time).
 const optionalScorerId = { scorerId: getScoreAggregateArgsSchema.shape.scorerId.optional() } as const;
 
 const metricsDashboardQuerySchema = z.discriminatedUnion('request', [
@@ -201,6 +211,17 @@ const withSizeLimit = <T extends z.ZodType>(schema: T) =>
     return input;
   }, schema);
 
+const refineUniqueIds = (items: readonly { id?: string }[], field: string, label: string, context: z.RefinementCtx) => {
+  const seen = new Set<string>();
+  items.forEach((item, index) => {
+    if (item.id === undefined) return;
+    if (seen.has(item.id)) {
+      context.addIssue({ code: 'custom', path: [field, index, 'id'], message: `Duplicate ${label} id '${item.id}'` });
+    }
+    seen.add(item.id);
+  });
+};
+
 const refineWidgets = (definition: { rows: { widgets: { id: string }[] }[] }, context: z.RefinementCtx) => {
   const seen = new Set<string>();
   let count = 0;
@@ -273,7 +294,11 @@ export const dashboardWidgetViewSchema = z
     /** Shown only at this scope. */
     scope: scopeSchema,
   })
-  .strict();
+  .strict()
+  .superRefine((view, context) => {
+    refineUniqueIds(view.queries, 'queries', 'query', context);
+    if (view.columns) refineUniqueIds(view.columns, 'columns', 'column', context);
+  });
 
 export const dashboardWidgetSchema = z
   .object({
