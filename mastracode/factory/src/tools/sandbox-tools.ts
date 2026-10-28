@@ -90,7 +90,10 @@ export function createFactorySandboxTools(
       // The browser tool can't sign in, so it gets the preview cookie directly.
       // The cookie never goes back to the model.
       const threadId = context?.agent?.threadId;
-      if (threadId && canSetCookies(deps.browser)) await deps.browser.setCookies([cookie], threadId);
+      if (threadId && canSetCookies(deps.browser)) {
+        // Browsers that can't take cookies throw; the link still works, the browser just has to sign in.
+        await deps.browser.setCookies([cookie], threadId).catch(() => {});
+      }
       return { url };
     },
   });

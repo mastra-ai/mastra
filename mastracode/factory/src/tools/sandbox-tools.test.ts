@@ -113,6 +113,15 @@ describe('factory_sandbox_port_url', () => {
     expect(setCookies).not.toHaveBeenCalled();
   });
 
+  it("still returns the link when the browser can't take cookies", async () => {
+    const setCookies = vi.fn(async () => {
+      throw new Error('no-cookies does not support setting cookies');
+    });
+    const { run } = portUrlTool({ getPortUrl: async () => links }, true, { setCookies });
+
+    await expect(run(3000)).resolves.toEqual({ url: links.url });
+  });
+
   it('tells the agent the link is safe to share and when to call again', () => {
     const { tool } = portUrlTool(undefined);
     expect(tool.description).toContain('so you can share it');
