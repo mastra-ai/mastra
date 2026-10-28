@@ -1897,6 +1897,15 @@ describe('live user-signal events render the same as their persisted copy', () =
     });
   });
 
+  it('removes a plain message whose send failed, since nothing tracks its delivery', () => {
+    let state = createInitialTranscript({ messages: [], threadId: 't1' });
+    state = transcriptReducer(state, { type: 'localUser', id: 'local-1', text: 'Continue from where you stopped.' });
+
+    state = transcriptReducer(state, { type: 'failLocalUser', id: 'local-1' });
+
+    expect(state.entries).toEqual([]);
+  });
+
   it('keeps non-user signals alone', () => {
     const reminder = signalMessage({ id: 'sig-2', type: 'system-reminder', tagName: 'reminder', text: 'stay on task' });
     let state = createInitialTranscript({ messages: [], threadId: 't1' });

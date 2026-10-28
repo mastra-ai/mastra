@@ -92,12 +92,7 @@ export interface SubagentEntry {
 
 export type PromptEntry = ApprovalPrompt | SuspensionPrompt;
 export type TimelineEntry =
-  | MessageEntry
-  | NoticeEntry
-  | PromptEntry
-  | NotificationEntry
-  | NotificationSummaryEntry
-  | SubagentEntry;
+  MessageEntry | NoticeEntry | PromptEntry | NotificationEntry | NotificationSummaryEntry | SubagentEntry;
 
 export interface TranscriptState {
   entries: TimelineEntry[];
@@ -187,11 +182,11 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'failLocalUser':
       return {
         ...state,
-        entries: state.entries.map(entry =>
-          entry.kind === 'message' && entry.id === action.id && entry.deliveryStatus === 'pending'
-            ? { ...entry, deliveryStatus: 'failed' }
-            : entry,
-        ),
+        entries: state.entries.flatMap(entry => {
+          if (entry.kind !== 'message' || entry.id !== action.id) return [entry];
+          if (entry.deliveryStatus === 'pending') return [{ ...entry, deliveryStatus: 'failed' as const }];
+          return entry.deliveryStatus === undefined ? [] : [entry];
+        }),
       };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
