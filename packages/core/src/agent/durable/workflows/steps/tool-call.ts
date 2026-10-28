@@ -13,6 +13,7 @@ import { executeToolCall } from '../../../../loop/shared/steps/execute-tool-core
 import { processAndEmitChunk } from '../../../../loop/shared/steps/process-chunk-core';
 import { resolveFrameworkSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
 import type { ResolvedSuspendedToolIdentity } from '../../../../loop/shared/suspended-tool-run-id';
+import { TOOL_ABORT_NOTICE } from '../../../../loop/shared/tool-abort-grace';
 import { applyToolPayloadTransformToChunk } from '../../../../loop/shared/tool-payload-transform';
 import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-execution/tool-approval-verdict';
 import type { Mastra } from '../../../../mastra';
@@ -1476,70 +1477,69 @@ export function createDurableToolCallStep() {
               },
               { resumeLabel: toolCallId },
             );
-          } else {
-            // General tool suspension (e.g., tool calls context.agent.suspend())
-            const suspendedEventData: AgentSuspendedEventData = {
+          }
+          // General tool suspension (e.g., tool calls context.agent.suspend())
+          const suspendedEventData: AgentSuspendedEventData = {
+            toolCallId,
+            toolName,
+            args,
+            suspendPayload,
+            type: 'suspension',
+            resumeSchema: suspendOptions?.resumeSchema,
+          };
+
+          // Add suspension metadata to message before persisting
+          addToolMetadata({
+            type: 'suspension',
+            suspendPayload,
+            resumeSchema: suspendOptions?.resumeSchema,
+            delegatedRunId,
+          });
+
+          await doFlush();
+
+          if (pubsub) {
+            const suspensionChunk = await applyToolPayloadTransformToChunk(
+              {
+                type: 'tool-call-suspended' as const,
+                runId,
+                from: ChunkFrom.AGENT,
+                payload: {
+                  toolCallId,
+                  toolName,
+                  suspendPayload,
+                  args,
+                  resumeSchema: suspendOptions?.resumeSchema,
+                  usage: typedInput.stepUsage,
+                },
+              },
+              {
+                policy: toolPayloadTransform,
+                tools: toolsForTransform,
+                logger: logger as any,
+              },
+            );
+            await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
+            await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
+          }
+
+          endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
+
+          return suspend(
+            {
+              type: 'suspension',
+              toolCallSuspended: suspendPayload,
               toolCallId,
               toolName,
-              args,
-              suspendPayload,
-              type: 'suspension',
-              resumeSchema: suspendOptions?.resumeSchema,
-            };
-
-            // Add suspension metadata to message before persisting
-            addToolMetadata({
-              type: 'suspension',
-              suspendPayload,
-              resumeSchema: suspendOptions?.resumeSchema,
-              delegatedRunId,
-            });
-
-            await doFlush();
-
-            if (pubsub) {
-              const suspensionChunk = await applyToolPayloadTransformToChunk(
-                {
-                  type: 'tool-call-suspended' as const,
-                  runId,
-                  from: ChunkFrom.AGENT,
-                  payload: {
-                    toolCallId,
-                    toolName,
-                    suspendPayload,
-                    args,
-                    resumeSchema: suspendOptions?.resumeSchema,
-                    usage: typedInput.stepUsage,
-                  },
-                },
-                {
-                  policy: toolPayloadTransform,
-                  tools: toolsForTransform,
-                  logger: logger as any,
-                },
-              );
-              await publishAfterPersist(() => emitChunkEvent(pubsub, runId, suspensionChunk));
-              await publishAfterPersist(() => emitSuspendedEvent(pubsub, runId, suspendedEventData));
-            }
-
-            endSpansAsSuspended({ toolCallId, toolName, reason: 'suspension' });
-
-            return suspend(
-              {
-                type: 'suspension',
-                toolCallSuspended: suspendPayload,
-                toolCallId,
-                toolName,
-                resumeLabel: suspendOptions?.resumeLabel,
-                // Persist the inner suspended run id in the workflow snapshot,
-                // partitioned per tool call (resumeLabel = toolCallId), so the
-                // resume leg continues the delegate's suspended run instead of
-                // restarting it (#20496; mirrors the approval branch above).
-                ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
-              },
-              { resumeLabel: toolCallId },
-            );
-          }
+              resumeLabel: suspendOptions?.resumeLabel,
+              // Persist the inner suspended run id in the workflow snapshot,
+              // partitioned per tool call (resumeLabel = toolCallId), so the
+              // resume leg continues the delegate's suspended run instead of
+              // restarting it (#20496; mirrors the approval branch above).
+              ...(delegatedRunId ? { suspendedToolRunId: delegatedRunId } : {}),
+            },
+            { resumeLabel: toolCallId },
+          );
         },
       };
       // Raw `Tool` instances resolved from the Mastra registry (the cross-process
@@ -1933,23 +1933,13 @@ export function createDurableToolCallStep() {
         }).finally(settleRunTool);
 
         ownership?.throwIfLost();
-        if (outcome.status === 'aborted') {
-          // Mid-flight cancellation: leave the call incomplete (no result/error,
-          // no chunk emission) so the mapping step doesn't fake-complete it on
-          // resume. Mirrors the non-durable tool-call step.
-          return {
-            ...typedInput,
-            aborted: true,
-          };
-        }
-
         if (outcome.status === 'error') {
           // Route through the catch below so error serialization and the
           // tool-error chunk emission stay on the single existing path.
           throw outcome.error;
         }
 
-        let result = outcome.result;
+        let result = outcome.status === 'aborted' ? TOOL_ABORT_NOTICE : outcome.result;
 
         // Compute model-facing output while invocation-scoped execution metadata is still available.
         // Durable step outputs are serialized before the LLM mapping step, which strips symbols and
@@ -1959,7 +1949,7 @@ export function createDurableToolCallStep() {
         let modelOutputComputed: boolean | undefined;
         const mappingTool = getRunRegistryEntry(runId, mastra as Mastra | undefined)?.tools?.[toolName] ?? tool;
         const toModelOutput = mappingTool.toModelOutput;
-        if (toModelOutput) {
+        if (toModelOutput && outcome.status === 'success') {
           modelOutputComputed = true;
           const mappingSpan = stepSpan?.createChildSpan({
             type: SpanType.MAPPING,
@@ -2158,6 +2148,7 @@ export function createDurableToolCallStep() {
           ...typedInput,
           providerMetadata,
           result,
+          ...(outcome.status === 'aborted' ? { aborted: true } : {}),
           modelOutputComputed,
           ...(resultHidden ? { resultHidden: true } : {}),
           ...(approvalGrant ?? {}),

@@ -1,4 +1,5 @@
 import { AgentControllerChannels } from '@mastra/core/channels';
+import { createSlackAdapter } from '@mastra/slack';
 import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 vi.mock('@mastra/slack', () => ({
@@ -13,6 +14,67 @@ function ctxWith(overrides: Record<string, unknown> = {}) {
     runtime: { workItems: { findRunBindingByThread: async () => null } },
   } as any;
 }
+
+const createSlackAdapterMock = vi.mocked(createSlackAdapter);
+
+beforeEach(() => {
+  createSlackAdapterMock.mockClear();
+});
+
+describe('SlackIntegration transport configuration', () => {
+  it('requires a signing secret in webhook mode', () => {
+    expect(() => new SlackIntegration({})).toThrow("'signingSecret' is required");
+    expect(() => new SlackIntegration({ mode: 'webhook' })).toThrow("'signingSecret' is required");
+  });
+
+  it('requires an app token and bot token in socket mode', () => {
+    expect(() => new SlackIntegration({ mode: 'socket' })).toThrow("'appToken' is required");
+    expect(() => new SlackIntegration({ mode: 'socket', appToken: 'xapp-test' })).toThrow("'botToken' is required");
+  });
+
+  it('keeps account-link credentials out of the socket mode adapter configuration', () => {
+    const integration = new SlackIntegration({
+      mode: 'socket',
+      appToken: 'xapp-test',
+      botToken: 'xoxb-test',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    integration.channels(ctxWith());
+
+    const adapterConfig = createSlackAdapterMock.mock.calls[0]?.[0];
+    expect(adapterConfig).toEqual(
+      expect.objectContaining({
+        mode: 'socket',
+        appToken: 'xapp-test',
+        botToken: 'xoxb-test',
+      }),
+    );
+    expect(adapterConfig).not.toHaveProperty('clientId');
+    expect(adapterConfig).not.toHaveProperty('clientSecret');
+  });
+
+  it('preserves webhook mode and forwards its transport and OAuth credentials', () => {
+    const integration = new SlackIntegration({
+      signingSecret: 'secret',
+      clientId: 'client-id',
+      clientSecret: 'client-secret',
+    });
+
+    integration.channels(ctxWith());
+
+    expect(createSlackAdapterMock).toHaveBeenCalledWith(
+      expect.objectContaining({
+        mode: undefined,
+        signingSecret: 'secret',
+        clientId: 'client-id',
+        clientSecret: 'client-secret',
+      }),
+    );
+  });
+
+});
 
 describe('SlackIntegration.channels', () => {
   it('returns a channels config (not a built instance) with the slack adapter entry in config form', () => {

@@ -486,8 +486,10 @@ const agent = new Agent({
         indexConfig: {
           type: 'hnsw', // Use HNSW for better performance
           metric: 'dotproduct', // Best for OpenAI embeddings
-          m: 16, // Number of bi-directional links (default: 16)
-          efConstruction: 64, // Size of candidate list during construction (default: 64)
+          hnsw: {
+            m: 16, // Number of bi-directional links (default: 16)
+            efConstruction: 64, // Size of candidate list during construction (default: 64)
+          },
         },
       },
     },

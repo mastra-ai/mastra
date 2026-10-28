@@ -214,28 +214,27 @@ export async function processWorkflowConditional(
               outputOptions,
             },
           });
-        } else {
-          return pubsub.publish('workflows', {
-            type: 'workflow.step.end',
-            runId,
-            data: {
-              workflowId,
-              runId,
-              executionPath: branchPath(idx),
-              resumeSteps,
-              stepResults,
-              prevResult: { status: 'skipped' },
-              resumeData,
-              parentWorkflow,
-              activeStepsPath,
-              requestContext,
-              actor,
-              perStep,
-              state: currentState,
-              outputOptions,
-            },
-          });
         }
+        return pubsub.publish('workflows', {
+          type: 'workflow.step.end',
+          runId,
+          data: {
+            workflowId,
+            runId,
+            executionPath: branchPath(idx),
+            resumeSteps,
+            stepResults,
+            prevResult: { status: 'skipped' },
+            resumeData,
+            parentWorkflow,
+            activeStepsPath,
+            requestContext,
+            actor,
+            perStep,
+            state: currentState,
+            outputOptions,
+          },
+        });
       }),
     );
   }

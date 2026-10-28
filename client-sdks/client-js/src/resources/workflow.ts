@@ -89,9 +89,8 @@ export class Workflow extends BaseResource {
 
     if (searchParams.size) {
       return this.request(`/workflows/${this.workflowId}/runs?${searchParams}`);
-    } else {
-      return this.request(`/workflows/${this.workflowId}/runs`);
     }
+    return this.request(`/workflows/${this.workflowId}/runs`);
   }
 
   /**

@@ -28,6 +28,7 @@ import { SessionGroupList } from './SessionGroupList';
 import { SessionGroupMenu } from './SessionGroupMenu';
 import { SessionListItem } from './SessionListItem';
 import { PropertiesMenu } from '../../../ui/PropertiesMenu';
+import { SidebarNavigationSkeleton } from '../../../ui/SidebarNavigationSkeleton';
 import {
   SESSION_SORT_MENU_OPTIONS,
   SESSION_STATUS_MENU_OPTIONS,
@@ -73,7 +74,7 @@ export function SessionsSection() {
     groupCount: groups.length,
   });
 
-  const nothingToList = !hasRepositories && rows.length === 0 && !loadFailed;
+  const nothingToList = loaded && !hasRepositories && rows.length === 0 && !loadFailed;
   if (!factoryId || nothingToList) return null;
 
   return (
@@ -132,6 +133,7 @@ export function SessionsSection() {
       </Sidebar.NavHeader>
 
       <div className="flex flex-col gap-4">
+        {!loaded && !loadFailed && rows.length === 0 && <SidebarNavigationSkeleton label="Loading sessions" />}
         {groups.map(group => (
           <SessionGroupList
             key={group.key}

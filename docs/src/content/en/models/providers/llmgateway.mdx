@@ -7,7 +7,7 @@ description: "Browse DevPass (LLM Gateway) model IDs, capabilities, context wind
 
 # <img src="https://models.dev/logos/llmgateway.svg" alt="DevPass (LLM Gateway) logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />DevPass (LLM Gateway)
 
-Access 207 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
+Access 195 DevPass (LLM Gateway) models through Mastra's model router. Authentication is handled automatically using the `LLMGATEWAY_API_KEY` environment variable.
 
 Learn more in the [DevPass (LLM Gateway) documentation](https://llmgateway.io/docs).
 
@@ -318,8 +318,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 1050000,
     "maxOutput": 384000,
-    "inputCost": 0.1,
-    "outputCost": 0.3
+    "inputCost": 0.135,
+    "outputCost": 0.54
   },
   {
     "model": "llmgateway/deepseek-v4.1-flash-1017",
@@ -332,18 +332,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 1050000,
     "inputCost": 0.15,
     "outputCost": 0.6
-  },
-  {
-    "model": "llmgateway/ernie-4.5-vl-424b-a47b",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": true,
-    "contextWindow": 123000,
-    "maxOutput": 123000,
-    "inputCost": 0.42,
-    "outputCost": 1.25
   },
   {
     "model": "llmgateway/fugu-max",
@@ -644,18 +632,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 131072,
     "inputCost": 0.45,
     "outputCost": 2
-  },
-  {
-    "model": "llmgateway/glm-4.7-flash",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 200000,
-    "maxOutput": 131072,
-    "inputCost": 0.06,
-    "outputCost": 0.4
   },
   {
     "model": "llmgateway/glm-4.7-flashx",
@@ -1222,18 +1198,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 15
   },
   {
-    "model": "llmgateway/grok-4-1-fast-non-reasoning",
-    "imageInput": true,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 2000000,
-    "maxOutput": 2000000,
-    "inputCost": 0.2,
-    "outputCost": 0.5
-  },
-  {
     "model": "llmgateway/grok-4-1-fast-reasoning",
     "imageInput": true,
     "audioInput": false,
@@ -1522,18 +1486,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.18
   },
   {
-    "model": "llmgateway/llama-3-70b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 8192,
-    "maxOutput": 8000,
-    "inputCost": 0.51,
-    "outputCost": 0.74
-  },
-  {
     "model": "llmgateway/llama-3.1-70b-instruct",
     "imageInput": false,
     "audioInput": false,
@@ -1556,18 +1508,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "maxOutput": 8192,
     "inputCost": 0.07,
     "outputCost": 0.33
-  },
-  {
-    "model": "llmgateway/llama-3.2-3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": false,
-    "reasoning": false,
-    "contextWindow": 32768,
-    "maxOutput": 32000,
-    "inputCost": 0.03,
-    "outputCost": 0.05
   },
   {
     "model": "llmgateway/llama-3.3-70b-instruct",
@@ -1698,8 +1638,8 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "reasoning": true,
     "contextWindow": 204800,
     "maxOutput": 131072,
-    "inputCost": 0.08,
-    "outputCost": 0.32
+    "inputCost": 0.3,
+    "outputCost": 1.2
   },
   {
     "model": "llmgateway/minimax-m2.7-highspeed",
@@ -2026,30 +1966,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.228
   },
   {
-    "model": "llmgateway/qwen3-235b-a22b-fp8",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 40960,
-    "maxOutput": 8192,
-    "inputCost": 0.2,
-    "outputCost": 0.8
-  },
-  {
-    "model": "llmgateway/qwen3-235b-a22b-thinking-2507",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262000,
-    "maxOutput": 8192,
-    "inputCost": 0.3,
-    "outputCost": 3
-  },
-  {
     "model": "llmgateway/qwen3-30b-a3b",
     "imageInput": false,
     "audioInput": false,
@@ -2074,30 +1990,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "outputCost": 0.87
   },
   {
-    "model": "llmgateway/qwen3-coder-30b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262000,
-    "maxOutput": 65536,
-    "inputCost": 0.07,
-    "outputCost": 0.27
-  },
-  {
-    "model": "llmgateway/qwen3-coder-480b-a35b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.38,
-    "outputCost": 1.55
-  },
-  {
     "model": "llmgateway/qwen3-coder-flash",
     "imageInput": false,
     "audioInput": false,
@@ -2107,42 +1999,6 @@ Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-sp
     "contextWindow": 997952,
     "maxOutput": 65536,
     "inputCost": 0.3,
-    "outputCost": 1.5
-  },
-  {
-    "model": "llmgateway/qwen3-coder-next",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": true,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.108,
-    "outputCost": 0.675
-  },
-  {
-    "model": "llmgateway/qwen3-max",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 262144,
-    "maxOutput": 65536,
-    "inputCost": 0.845,
-    "outputCost": 3.38
-  },
-  {
-    "model": "llmgateway/qwen3-next-80b-a3b-instruct",
-    "imageInput": false,
-    "audioInput": false,
-    "videoInput": false,
-    "toolUsage": true,
-    "reasoning": false,
-    "contextWindow": 131072,
-    "maxOutput": 32768,
-    "inputCost": 0.15,
     "outputCost": 1.5
   },
   {

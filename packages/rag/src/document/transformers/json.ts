@@ -132,12 +132,11 @@ export class RecursiveJsonTransformer {
           currentChunk: { ...currentChunk, ...testValue },
           chunks,
         };
-      } else {
-        return {
-          currentChunk: testValue,
-          chunks: [...chunks, currentChunk],
-        };
       }
+      return {
+        currentChunk: testValue,
+        chunks: [...chunks, currentChunk],
+      };
     } else if (typeof value === 'string') {
       const stringChunks = this.splitLongString(value);
       const newChunks = stringChunks

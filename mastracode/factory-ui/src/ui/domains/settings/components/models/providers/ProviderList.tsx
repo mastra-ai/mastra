@@ -1,6 +1,7 @@
 import { Button } from '@mastra/playground-ui/components/Button';
 import type { StatusPresentation } from '@mastra/playground-ui/components/StatusIndicators';
 import { Txt } from '@mastra/playground-ui/components/Txt';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { Plus } from 'lucide-react';
 import { useState } from 'react';
 
@@ -102,7 +103,20 @@ export function ProviderList({ credentialScope }: { credentialScope: CredentialS
   };
 
   if (providersQuery.isPending) {
-    return <SkeletonRows label="Loading providers" rows={2} rowClassName="h-9 w-full" />;
+    return (
+      <div className="border-border overflow-hidden rounded-lg border">
+        <SkeletonRows label="Loading providers" rows={3} className="divide-border gap-0 divide-y">
+          <div aria-hidden className="flex min-h-10 items-center gap-2.5 py-1.5 pr-1.5 pl-3">
+            <Skeleton className="size-4 shrink-0 motion-reduce:before:animate-none" />
+            <div className="min-w-0 flex-1">
+              <Skeleton className="h-3 w-28 max-w-full motion-reduce:before:animate-none" />
+            </div>
+            <Skeleton className="h-3 w-20 motion-reduce:before:animate-none" />
+            <Skeleton className="size-control-sm shrink-0 rounded-full motion-reduce:before:animate-none" />
+          </div>
+        </SkeletonRows>
+      </div>
+    );
   }
 
   return (

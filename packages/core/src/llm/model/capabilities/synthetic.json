@@ -33,25 +33,19 @@
     "hf:zai-org/GLM-5.3-Flash"
   ],
   "reasoning": {
-    "hf:zai-org/GLM-5.2": [
-      {
-        "type": "effort",
-        "values": ["none", "high", "xhigh"]
-      }
-    ],
-    "hf:zai-org/GLM-4.7-Flash": [
+    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:zai-org/GLM-5.3-Flash": [
+    "hf:openai/gpt-oss-120b": [
       {
         "type": "effort",
-        "values": ["low", "high", "max"]
+        "values": ["none", "low", "medium", "high"]
       }
     ],
-    "hf:zai-org/GLM-5.3": [
+    "hf:moonshotai/Kimi-K3": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
@@ -61,12 +55,6 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "hf:moonshotai/Kimi-K3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
       }
     ],
     "hf:Qwen/Qwen3.6-27B": [
@@ -81,16 +69,28 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "hf:nvidia/NVIDIA-Nemotron-3-Super-120B-A12B-NVFP4": [
+    "hf:zai-org/GLM-5.3": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hf:zai-org/GLM-5.3-Flash": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
+    "hf:zai-org/GLM-5.2": [
+      {
+        "type": "effort",
+        "values": ["none", "high", "xhigh"]
+      }
+    ],
+    "hf:zai-org/GLM-4.7-Flash": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high"]
-      }
-    ],
-    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
     "hf:deepseek-ai/DeepSeek-V4.1-Flash-1017": [
@@ -99,10 +99,10 @@
         "values": ["none", "low", "high", "xhigh", "max"]
       }
     ],
-    "hf:openai/gpt-oss-120b": [
+    "hf:deepseek-ai/DeepSeek-V4.1-Flash": [
       {
         "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "values": ["none", "low", "high", "xhigh", "max"]
       }
     ]
   }
