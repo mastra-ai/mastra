@@ -7,6 +7,7 @@ import { join } from 'node:path';
 import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { encode } from './codec';
+import { PublisherQueueLimitError } from './publisher-queue-limit-error';
 import type { Event } from './types';
 import { UnixSocketPubSub } from './unix-socket-pubsub';
 
@@ -125,7 +126,17 @@ describe('UnixSocketPubSub', () => {
           results.some(result => result.status === 'rejected' && /publisher queue limit/.test(String(result.reason))),
         ).toBe(true);
       });
+      const rejection = results.find(
+        (result): result is PromiseRejectedResult =>
+          result.status === 'rejected' &&
+          result.reason instanceof PublisherQueueLimitError &&
+          !!result.reason.waitForCapacity,
+      );
+      expect(rejection).toBeDefined();
+      const capacity = rejection!.reason.waitForCapacity();
       connections.forEach(socket => socket.resume());
+      await capacity;
+      await client.publish('topic-a', makeEvent({ type: 'small-notification' }));
       await Promise.all(writes);
       expect(results.some(result => result.status === 'fulfilled')).toBe(true);
       await client.close();

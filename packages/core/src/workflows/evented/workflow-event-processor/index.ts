@@ -2,10 +2,10 @@ import EventEmitter from 'node:events';
 import type { ActorSignal } from '../../../auth/ee';
 import { ErrorCategory, ErrorDomain, MastraError, getErrorFromUnknown } from '../../../error';
 import { EventProcessor } from '../../../events/processor';
+import { PublisherQueueLimitError } from '../../../events/publisher-queue-limit-error';
 import { NoopLeaseProvider, isLeaseProvider } from '../../../events/pubsub';
 import type { LeaseProvider, PubSub } from '../../../events/pubsub';
 import type { Event, EventCallback } from '../../../events/types';
-import { PublisherQueueLimitError } from '../../../events/unix-socket-pubsub';
 import type { Mastra } from '../../../mastra';
 import type { TracingContext } from '../../../observability';
 import { resolveExportedSpanId } from '../../../observability';
@@ -1238,16 +1238,33 @@ export class WorkflowEventProcessor extends EventProcessor {
     try {
       await this.mastra.pubsub.publish('workflows-finish', event);
     } catch (error) {
-      if (!(error instanceof PublisherQueueLimitError)) {
+      if (!(error instanceof PublisherQueueLimitError) || error.waitForCapacity) {
         throw error;
       }
-      // The result is too large to deliver. Notify the waiting caller without
-      // replaying the already-applied parent workflow transition.
-      await this.mastra.pubsub.publish('workflows-finish', {
+      // Only permanently oversized results need a compact notification. A
+      // temporarily full queue uses normal redelivery instead. If the broker
+      // stays stalled, even this notification cannot be delivered.
+      const notification = {
         type: 'workflow.publish-failed',
         runId: event.runId,
-        data: { message: error.message },
-      });
+        data: {
+          message: error.message,
+          workflowId: event.data.workflowId,
+          runId: event.runId,
+          requestContext: event.data.requestContext,
+        },
+      };
+      for (;;) {
+        try {
+          await this.mastra.pubsub.publish('workflows-finish', notification);
+          return;
+        } catch (notificationError) {
+          if (!(notificationError instanceof PublisherQueueLimitError) || !notificationError.waitForCapacity) {
+            throw notificationError;
+          }
+          await notificationError.waitForCapacity();
+        }
+      }
     }
   }
 

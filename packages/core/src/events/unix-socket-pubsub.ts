@@ -5,6 +5,7 @@ import net from 'node:net';
 import { basename, dirname, join, sep } from 'node:path';
 
 import { decode, encode } from './codec';
+import { PublisherQueueLimitError } from './publisher-queue-limit-error';
 import { PubSub } from './pubsub';
 import type { LeaseProvider, PubSubDeliveryMode } from './pubsub';
 import type { Event, EventCallback, SubscribeOptions } from './types';
@@ -68,8 +69,6 @@ type MembershipWaiter = {
   resolve: () => void;
   reject: (error: Error) => void;
 };
-
-export class PublisherQueueLimitError extends Error {}
 
 const DEFAULT_MAX_REMOTE_CLIENT_QUEUED_BYTES = 64 * 1024 * 1024;
 const DEFAULT_MAX_PUBLISHER_QUEUED_BYTES = 64 * 1024 * 1024;
@@ -354,6 +353,7 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
   #maxRemoteClientQueuedBytes: number;
   #maxPublisherQueuedBytes: number;
   #publisherQueuedBytes = 0;
+  #publisherCapacityWaiters = new Set<() => void>();
   #maxInboundFrameBytes: number;
   #membershipAckTimeoutMs: number;
   #leaseDirectoriesReady?: Promise<void>;
@@ -1822,13 +1822,22 @@ export class UnixSocketPubSub extends PubSub implements LeaseProvider {
     const serialized = serializeFrame(frame);
     const bytes = Buffer.byteLength(serialized);
     if (this.#publisherQueuedBytes + bytes > this.#maxPublisherQueuedBytes) {
-      throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded');
+      const waitForCapacity =
+        bytes <= this.#maxPublisherQueuedBytes
+          ? () =>
+              this.#publisherQueuedBytes + bytes <= this.#maxPublisherQueuedBytes
+                ? Promise.resolve()
+                : new Promise<void>(resolve => this.#publisherCapacityWaiters.add(resolve))
+          : undefined;
+      throw new PublisherQueueLimitError('UnixSocketPubSub publisher queue limit exceeded', waitForCapacity);
     }
     this.#publisherQueuedBytes += bytes;
     try {
       await writeSerializedFrame(socket, serialized);
     } finally {
       this.#publisherQueuedBytes -= bytes;
+      for (const resolve of this.#publisherCapacityWaiters) resolve();
+      this.#publisherCapacityWaiters.clear();
     }
   }
 

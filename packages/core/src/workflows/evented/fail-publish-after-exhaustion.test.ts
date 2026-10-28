@@ -3,11 +3,14 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { afterEach, describe, expect, it } from 'vitest';
 import { z } from 'zod/v4';
+import { isForeignExecutionContext, setExecutionClaim } from '../../agent/durable/execution-fence';
 import { EventEmitterPubSub } from '../../events/event-emitter';
+import { PublisherQueueLimitError } from '../../events/publisher-queue-limit-error';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
 import { PublisherQueueLimitError, UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
+import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
 import { createFlakyPublishPubSub } from './test-utils/flaky-publish-pubsub';
 import { createStep, createWorkflow } from '.';
@@ -34,6 +37,117 @@ const transports: Array<[string, () => Promise<{ pubsub: PubSub; close: () => Pr
 ];
 
 describe('workflow finish publication failure', () => {
+  it('ignores a competing execution’s failed finish for the same run', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const workflow = createWorkflow({
+      id: 'competing-finish',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(
+        createStep({
+          id: 'complete',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async () => ({ ok: true }),
+        }),
+      )
+      .commit();
+    workflow.options.isForeignExecution = isForeignExecutionContext;
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    const publish = pubsub.publish.bind(pubsub);
+    let receivedForeignFailure = false;
+    let ownFinish: Parameters<PubSub['publish']>[1] | undefined;
+    pubsub.publish = async (topic, event, options) => {
+      if (topic === 'workflows-finish' && event.type === 'workflow.end') {
+        ownFinish = { ...event, data: { ...event.data } };
+        setExecutionClaim(foreignContext, event.runId, { executionId: 'old' });
+        event.data.requestContext = foreignContext.toJSON();
+        throw new PublisherQueueLimitError();
+      }
+      if (topic === 'workflows-finish' && event.type === 'workflow.publish-failed') {
+        receivedForeignFailure = true;
+        await publish(topic, event, options);
+        await publish(topic, ownFinish!);
+        return;
+      }
+      return publish(topic, event, options);
+    };
+    const foreignContext = new RequestContext();
+    const ownContext = new RequestContext();
+    try {
+      const run = await workflow.createRun();
+      setExecutionClaim(ownContext, run.runId, { executionId: 'new' });
+      const result = await Promise.race([
+        run.start({ inputData: {}, requestContext: ownContext }).then(
+          value => value,
+          error => (error as Error).message,
+        ),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      expect(receivedForeignFailure).toBe(true);
+      expect(result).toMatchObject({ status: 'success', result: { ok: true } });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
+  it('resolves a successful run after temporary publisher saturation', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const publish = pubsub.publish.bind(pubsub);
+    let rejected = false;
+    const notifications: string[] = [];
+    pubsub.publish = async (topic, event, options) => {
+      if (topic === 'workflows-finish' && event.type === 'workflow.end' && !rejected) {
+        rejected = true;
+        throw new PublisherQueueLimitError(undefined, async () => {});
+      }
+      if (topic === 'workflows-finish' && event.type === 'workflow.publish-failed') {
+        notifications.push(event.type);
+      }
+      return publish(topic, event, options);
+    };
+    const workflow = createWorkflow({
+      id: 'temporary-finish-saturation',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(
+        createStep({
+          id: 'complete',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async () => ({ ok: true }),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = await Promise.race([
+        run.start({ inputData: {} }),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      expect(rejected).toBe(true);
+      expect(notifications).toEqual([]);
+      expect(result).toMatchObject({ status: 'success', result: { ok: true } });
+    } finally {
+      await mastra.stopWorkers();
+    }
+  });
+
   it('rejects the waiting caller when a real socket cannot publish an oversized finish event', async () => {
     const dir = await mkdtemp(join(tmpdir(), 'mastra-finish-cap-'));
     const path = join(dir, 'events.sock');
@@ -88,6 +202,82 @@ describe('workflow finish publication failure', () => {
       await pubsub.close();
       await broker.close();
       await rm(dir, { recursive: true, force: true });
+    }
+  });
+
+  it('defers a compact finish failure until publisher capacity is restored', async () => {
+    const pubsub = new EventEmitterPubSub();
+    const publish = pubsub.publish.bind(pubsub);
+    let resolveCapacity!: () => void;
+    const capacity = new Promise<void>(resolve => {
+      resolveCapacity = resolve;
+    });
+    let capacityAvailable = false;
+    const releaseCapacity = () => {
+      capacityAvailable = true;
+      resolveCapacity();
+    };
+    let attempts = 0;
+    let terminalAttempts = 0;
+    pubsub.publish = async (topic, event, options) => {
+      if (topic === 'workflows-finish' && event.type === 'workflow.end') {
+        terminalAttempts++;
+        throw new PublisherQueueLimitError();
+      }
+      if (topic === 'workflows-finish' && event.type === 'workflow.publish-failed') {
+        attempts++;
+        if (!capacityAvailable) throw new PublisherQueueLimitError(undefined, () => capacity);
+      }
+      return publish(topic, event, options);
+    };
+    const workflow = createWorkflow({
+      id: 'saturated-finish',
+      inputSchema: z.object({}),
+      outputSchema: z.object({ ok: z.boolean() }),
+    })
+      .then(
+        createStep({
+          id: 'complete',
+          inputSchema: z.object({}),
+          outputSchema: z.object({ ok: z.boolean() }),
+          execute: async () => ({ ok: true }),
+        }),
+      )
+      .commit();
+    const mastra = new Mastra({
+      workflows: { [workflow.id]: workflow },
+      storage: new MockStore(),
+      pubsub,
+      logger: false,
+    });
+    await mastra.startWorkers();
+    try {
+      const run = await workflow.createRun();
+      const result = Promise.race([
+        run.start({ inputData: {} }).then(
+          () => 'RESOLVED',
+          error => (error as Error).message,
+        ),
+        new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
+      ]);
+      await new Promise<void>((resolve, reject) => {
+        const timeout = setTimeout(() => reject(new Error('No saturated finish notification')), 3000);
+        const poll = () => {
+          if (attempts) {
+            clearTimeout(timeout);
+            resolve();
+          } else setTimeout(poll, 10);
+        };
+        poll();
+      });
+      expect(attempts).toBe(1);
+      releaseCapacity();
+      expect(await result).toMatch(/publisher queue limit exceeded/);
+      expect(attempts).toBe(2);
+      expect(terminalAttempts).toBe(1);
+    } finally {
+      releaseCapacity();
+      await mastra.stopWorkers();
     }
   });
 
