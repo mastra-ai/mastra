@@ -484,6 +484,45 @@ function phaseEnterHandlers(
   return Object.keys(handlers).length > 0 ? handlers : undefined;
 }
 
+const warnedBoards = new Set<string>();
+
+type DeclaredBoard = {
+  readonly id: string;
+  readonly name?: string;
+  readonly title?: string;
+  readonly phases: Readonly<Record<string, BoardPhaseDefinition<string>>>;
+};
+
+/**
+ * Old field names a board still relies on. A field set beside its replacement is not
+ * counted: a defined board carries both, so declaring its phases again stays quiet.
+ */
+function deprecatedFields(config: DeclaredBoard): string[] {
+  const found: string[] = [];
+  if (config.title !== undefined && config.name === undefined) found.push('title → name');
+  for (const [phaseId, phase] of Object.entries(config.phases)) {
+    if (phase.title !== undefined && phase.name === undefined) found.push(`phases.${phaseId}.title → name`);
+    if (phase.next !== undefined && phase.nextPhases === undefined) {
+      found.push(`phases.${phaseId}.next → nextPhases`);
+    }
+    if (phase.kind === 'working' && phase.role !== undefined && phase.runner?.context === undefined) {
+      found.push(`phases.${phaseId}.role → runner.context`);
+    }
+  }
+  return found;
+}
+
+function warnDeprecatedFields(config: DeclaredBoard): void {
+  if (warnedBoards.has(config.id)) return;
+  const found = deprecatedFields(config);
+  if (found.length === 0) return;
+  warnedBoards.add(config.id);
+  console.warn(
+    `[Mastra Factory] Board "${config.id}" uses deprecated fields: ${found.join(', ')}. ` +
+      'They still work but will be removed in a future release.',
+  );
+}
+
 export function defineBoard<
   const BoardId extends string,
   const Phases extends Record<string, BoardPhaseDefinition<keyof Phases & string>>,
@@ -509,6 +548,7 @@ export function defineBoard<
   if (config.phases[config.initialPhase]!.kind !== 'resting') {
     throw new BoardDefinitionError(`Initial phase "${config.initialPhase}" must be a resting phase.`);
   }
+  warnDeprecatedFields(config);
   const sourceClosed = validateSourceClosed(config.sourceClosed, config.phases) as
     | BoardSourceClosed<PhaseId>
     | undefined;

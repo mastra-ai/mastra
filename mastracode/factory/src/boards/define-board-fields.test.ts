@@ -1,9 +1,10 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, onTestFinished, vi } from 'vitest';
 
 import type { RuleGroup } from '../rules/rule-group.js';
 import type { FactoryStageRuleContext, FactoryToolResultRuleContext } from '../rules/types.js';
 import { cardRuleFacts } from './card-facts.js';
 import { BoardDefinitionError, defineBoard } from './define-board.js';
+import { reviewBoard } from './review.js';
 import { workBoard } from './work.js';
 
 const LOW_EFFORT: RuleGroup = {
@@ -278,5 +279,66 @@ describe('defineBoard phase fields', () => {
         shipping: { name: 'Shipping', kind: 'working', runner: { skill: 'Not A Skill' } },
       }),
     ).toThrow('Phase "shipping" runner.skill must be a skill name.');
+  });
+
+  it('warns once per board that still uses deprecated fields', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    const legacy = {
+      id: 'legacy-release',
+      title: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
+        shipping: { title: 'Shipping', kind: 'working', role: 'publisher', outcomes: { shipped: 'shipped' } },
+        shipped: { title: 'Shipped', kind: 'terminal' },
+      },
+    } as const;
+
+    defineBoard(legacy);
+    defineBoard(legacy);
+
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn.mock.calls[0]![0]).toBe(
+      '[Mastra Factory] Board "legacy-release" uses deprecated fields: title → name, phases.queued.title → name, ' +
+        'phases.queued.next → nextPhases, phases.shipping.title → name, phases.shipping.role → runner.context, ' +
+        'phases.shipped.title → name. They still work but will be removed in a future release.',
+    );
+  });
+
+  it('stays quiet for new fields, built-in boards and defined phases declared again', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+
+    defineBoard({
+      id: 'current-release',
+      name: 'Release',
+      initialPhase: 'queued',
+      phases: {
+        queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
+        shipping: {
+          name: 'Shipping',
+          kind: 'working',
+          runner: { context: 'publisher' },
+          outcomes: { shipped: 'shipped' },
+        },
+        shipped: { name: 'Shipped', kind: 'terminal' },
+      },
+    });
+    defineBoard({ id: 'work-again', name: 'Work', initialPhase: 'intake', phases: workBoard.phases });
+    defineBoard({ id: 'review-again', name: 'Review', initialPhase: 'intake', phases: reviewBoard.phases });
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('defines the built-in boards without deprecated fields', async () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    onTestFinished(() => warn.mockRestore());
+    vi.resetModules();
+
+    await import('./work.js');
+    await import('./review.js');
+
+    expect(warn).not.toHaveBeenCalled();
   });
 });

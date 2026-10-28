@@ -354,7 +354,7 @@ const releaseBoard = defineBoard({
 });
 ```
 
-**Migration:** Nothing breaks. The old fields keep working and are deprecated: `title` → `name`, `role` → `runner.context`, `next` and `outcomes` → `nextPhases`. `next` and `outcomes` may sit beside `nextPhases`; their targets are added to it, and outcome names keep working. Setting both `title` and `name`, or `role` and `runner.context`, is rejected. A defined board exposes both, so code reading `phase.title` or `phase.role` keeps working, and the board catalog (`GET /web/factory/projects/:id/boards`) returns the new fields beside the old ones. Card session keys do not change: a phase's context is its old role.
+**Migration:** Nothing breaks. The old fields keep working and are deprecated: `title` → `name`, `role` → `runner.context`, `next` and `outcomes` → `nextPhases`. `next` and `outcomes` may sit beside `nextPhases`; their targets are added to it, and outcome names keep working. Setting both `title` and `name`, or `role` and `runner.context`, is rejected. `defineBoard()` logs one warning per board that still uses `title`, `next` or `role` without its replacement. A defined board exposes both, so code reading `phase.title` or `phase.role` keeps working, and the board catalog (`GET /web/factory/projects/:id/boards`) returns the new fields beside the old ones. Card session keys do not change: a phase's context is its old role.
 
 ### Execute a custom board
 

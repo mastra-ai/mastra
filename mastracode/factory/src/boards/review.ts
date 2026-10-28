@@ -148,12 +148,12 @@ function reviewPullRequest(context: FactoryStageRuleContext) {
 
 export const reviewBoard = defineBoard({
   id: 'review',
-  title: 'Review',
+  name: 'Review',
   initialPhase: 'intake',
   transitionPolicy: reviewTransitionPolicy,
   phases: {
     intake: {
-      title: 'Intake',
+      name: 'Intake',
       kind: 'resting',
       outcomes: {
         reviewRequested: 'review',
@@ -162,9 +162,9 @@ export const reviewBoard = defineBoard({
       },
     },
     review: {
-      title: 'Reviewing',
+      name: 'Reviewing',
       kind: 'working',
-      role: 'review',
+      runner: { context: 'review' },
       outcomes: {
         parked: 'intake',
         merged: 'done',
@@ -173,12 +173,12 @@ export const reviewBoard = defineBoard({
       onEnter: { pullRequest: reviewPullRequest, gitlabPullRequest: reviewPullRequest },
     },
     done: {
-      title: 'Done',
+      name: 'Done',
       kind: 'terminal',
       outcomes: { updated: 'review' },
     },
     canceled: {
-      title: 'Canceled',
+      name: 'Canceled',
       kind: 'terminal',
       outcomes: { reviewRequested: 'review' },
     },
