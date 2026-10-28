@@ -80,8 +80,12 @@ function StretchedPlot({
       if (!entry) return;
       const width = Math.round(entry.contentRect.width);
       const height = Math.round(entry.contentRect.height);
-      if (width === drawn?.width && height === drawn?.height) return;
       clearTimeout(timer);
+      // Back at the drawn size before the redraw: drop the stretch, the drawn chart already fits.
+      if (width === drawn?.width && height === drawn?.height) {
+        el.removeAttribute('style');
+        return;
+      }
       const commit = () => {
         drawn = { width, height };
         draw(width, height);
