@@ -759,9 +759,8 @@ export class LanceVectorStore extends MastraVector<LanceVectorFilter> {
         // Table is now empty; index will be created when data is upserted and row count >= 256
         this.logger.debug(`Table ${resolvedTableName} created. Index creation deferred until data is available.`);
         return;
-      } else {
-        table = await this.lanceClient.openTable(resolvedTableName);
       }
+      table = await this.lanceClient.openTable(resolvedTableName);
 
       const metricType = this.mastraMetricToLance(metric);
 

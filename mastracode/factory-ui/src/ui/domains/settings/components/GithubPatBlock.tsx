@@ -10,7 +10,7 @@ import {
   useRemoveGithubPatMutation,
   useSaveGithubPatMutation,
 } from '../../../../hooks/useGithubPat';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import type { GithubPatKind } from '../../workspaces/services/github';
 import { SettingsContainer, SettingsRow } from '@mastra/playground-ui/new/settings';
 import { SettingsSubsection } from './SettingsSubsection';
@@ -34,7 +34,7 @@ function TokenRows() {
   const statusQuery = useGithubPatStatusQuery();
 
   if (statusQuery.isPending) {
-    return <SkeletonRows label="Loading GitHub CLI tokens" rows={2} rowClassName="h-16 w-full" />;
+    return <SettingsRowsSkeleton label="Loading GitHub CLI tokens" rows={2} />;
   }
   if (statusQuery.error) {
     return (

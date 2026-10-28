@@ -1,19 +1,24 @@
-import { describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
-import { BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { ArrowLeftRightIcon, BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
+import { Fragment } from 'react';
 import type { ReactNode } from 'react';
 import type { SpanRecord } from '../types';
 import { getTokenLimitMessage, isTokenLimitExceeded } from '../utils/span-utils';
+import { SpanOutcomeSummary } from './span-outcome';
+import { getSpanChanges, getSpanOutcome } from './span-outcome.utils';
 import {
+  SpanErrorDetails,
   SpanErrorRenderer,
   SpanInputRenderer,
   getSpanOutputPayload,
   hasSpanInputPreview,
+  hasSpanOutputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
+  SpanPayloadJsonSection,
   SpanProcessorAttributes,
+  SpanProcessorMutations,
 } from './span-payload';
-import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanToolsSection } from './span-payload/span-tools-section';
+import { SpanAvailableToolsSection, SpanToolCallsSection, SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
@@ -26,6 +31,12 @@ import { cn } from '@/lib/utils';
 
 // Mirrors `DataPanel.Content` padding without requiring the Drawer root (this view also renders standalone).
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-2';
+
+type SpanSection = 'error' | 'changes' | 'output' | 'input' | 'tools' | 'metadata' | 'attributes';
+// Every span reads the same way: how it failed, what it changed, what it received, what it returned,
+// then the rest, with the raw metadata and attributes last.
+const LEAD: SpanSection[] = ['error', 'changes', 'input', 'output'];
+const REST: SpanSection[] = ['tools', 'metadata', 'attributes'];
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -155,14 +166,95 @@ function SpanDataPanelContent({
   feedbackTabBadge?: ReactNode;
   isAnchor?: boolean;
 }) {
+  const isRoot = isAnchor ?? span.parentSpanId == null;
   const hasContext =
-    (isAnchor ?? span.parentSpanId == null) &&
+    isRoot &&
     Boolean(
       span.tags?.length || span.sessionId || span.requestId || span.userId || span.organizationId || span.experimentId,
     );
+  const outcome = getSpanOutcome(span);
+  // The root span's input and output already tell its story; only a failed or stopped run needs a summary on top.
+  const showOutcome = outcome != null && (!isRoot || outcome.tone === 'error' || outcome.tone === 'warning');
+  const outputPayload = getSpanOutputPayload(span);
+  const evidence = outcome?.evidence === 'output' && outputPayload == null ? undefined : outcome?.evidence;
+  const toolCallsInOutcome = showOutcome && evidence === 'toolCalls';
+  const changesInOutcome = showOutcome && evidence === 'changes';
+  const errorInOutcome = showOutcome && evidence === 'error';
+  const changes = getSpanChanges(span);
+
+  const sections: Record<SpanSection, ReactNode> = {
+    // A failed span says so in the summary on top, with its error; only spans with no summary need the section.
+    error: span.error != null && !errorInOutcome && (
+      <SpanPayloadSection title="Error" raw={span.error} framed={false}>
+        <SpanErrorRenderer span={span} />
+      </SpanPayloadSection>
+    ),
+    // A failed or stopped processor still shows what it changed before it stopped.
+    changes: changes.length > 0 && !changesInOutcome && (
+      <SpanPayloadSection
+        title="Changes"
+        icon={<ArrowLeftRightIcon />}
+        raw={changes}
+        hasPreview
+        emphasis={evidence === 'changes'}
+      >
+        <SpanProcessorMutations span={span} />
+      </SpanPayloadSection>
+    ),
+    output: (
+      <SpanPayloadSection
+        title="Output"
+        icon={<FileOutputIcon />}
+        raw={outputPayload}
+        hasPreview={hasSpanOutputPreview(span)}
+      >
+        <SpanOutputRenderer span={span} />
+      </SpanPayloadSection>
+    ),
+    input: (
+      <SpanPayloadSection
+        title="Input"
+        icon={<FileInputIcon />}
+        raw={span.input}
+        hasPreview={hasSpanInputPreview(span)}
+      >
+        <SpanInputRenderer span={span} />
+      </SpanPayloadSection>
+    ),
+    // The tool calls already sit in the summary; the tools the model could pick from still read here.
+    tools: toolCallsInOutcome ? <SpanAvailableToolsSection span={span} /> : <SpanToolsSection span={span} />,
+    metadata: <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} />,
+    attributes: <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} />,
+  };
 
   const detailsBody = (
     <>
+      {showOutcome && (
+        <SpanOutcomeSummary
+          outcome={outcome}
+          showDetail={!evidence}
+          className="mb-3"
+          // The error, changes or tool calls prove the headline, so they sit in the notice under it rather than in a section of their own.
+          renderProof={
+            errorInOutcome
+              ? headline => (
+                  <SpanPayloadSection title="Error" heading={headline} raw={span.error} framed={false} clip={false}>
+                    <SpanErrorDetails span={span} />
+                  </SpanPayloadSection>
+                )
+              : changesInOutcome
+                ? headline => (
+                    <SpanPayloadSection title="Changes" heading={headline} raw={changes} hasPreview>
+                      <SpanProcessorMutations span={span} />
+                    </SpanPayloadSection>
+                  )
+                : toolCallsInOutcome
+                  ? headline => <SpanToolCallsSection span={span} heading={headline} />
+                  : undefined
+          }
+        />
+      )}
+
       {isTokenLimitExceeded(span) && (
         <div className="mb-3">
           <Notice variant="warning" title="Token Limit Exceeded">
@@ -171,110 +263,84 @@ function SpanDataPanelContent({
         </div>
       )}
 
-      <SpanPayloadSection title="Error" raw={span.error} framed={false} className="mb-3">
-        <SpanErrorRenderer span={span} />
-      </SpanPayloadSection>
-
       <SpanModelSummary span={span} className="mb-4" />
+      <SpanProcessorAttributes span={span} className="mb-4" />
 
-      {hasContext && (
-        <DataKeysAndValues>
-          {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
-           *  lightweight payload, so they only have values once the full span is loaded. */}
-          {(isAnchor ?? span.parentSpanId == null) && (
-            <>
-              {span.tags && span.tags.length > 0 && (
-                <>
-                  <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
-                  <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
-                </>
-              )}
-              {span.sessionId && (
-                <>
-                  <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Session Id to clipboard"
-                    copyValue={span.sessionId}
-                  >
-                    {span.sessionId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.requestId && (
-                <>
-                  <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Request Id to clipboard"
-                    copyValue={span.requestId}
-                  >
-                    {span.requestId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.userId && (
-                <>
-                  <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
-                    {span.userId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.organizationId && (
-                <>
-                  <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Organization Id to clipboard"
-                    copyValue={span.organizationId}
-                  >
-                    {span.organizationId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-              {span.experimentId && (
-                <>
-                  <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
-                  <DataKeysAndValues.ValueWithCopyBtn
-                    copyTooltip="Copy Experiment Id to clipboard"
-                    copyValue={span.experimentId}
-                  >
-                    {span.experimentId}
-                  </DataKeysAndValues.ValueWithCopyBtn>
-                </>
-              )}
-            </>
-          )}
-        </DataKeysAndValues>
-      )}
-
-      <div className={cn('grid gap-4', hasContext && 'mt-4')}>
-        <SpanPayloadSection
-          title="Input"
-          icon={<FileInputIcon />}
-          raw={span.input}
-          hasPreview={hasSpanInputPreview(span)}
-        >
-          <SpanInputRenderer span={span} />
-        </SpanPayloadSection>
-        <SpanPayloadSection
-          title="Output"
-          icon={<FileOutputIcon />}
-          raw={getSpanOutputPayload(span)}
-          hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
-        >
-          <SpanOutputRenderer span={span} />
-        </SpanPayloadSection>
-        <SpanToolsSection span={span} />
-        <SpanPayloadSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} hasPreview={false}>
-          {null}
-        </SpanPayloadSection>
-        <SpanPayloadSection
-          title="Attributes"
-          icon={<BracesIcon />}
-          raw={span.attributes}
-          hasPreview={describeProcessorPipeline(asCoreSpan(span)) !== undefined}
-        >
-          <SpanProcessorAttributes span={span} />
-        </SpanPayloadSection>
+      <div className="grid gap-4">
+        {LEAD.map(section => (
+          <Fragment key={section}>{sections[section]}</Fragment>
+        ))}
+        {hasContext && (
+          <DataKeysAndValues>
+            {/* Anchor-only: rich trace-context fields. Live on the full SpanRecord, not on the
+             *  lightweight payload, so they only have values once the full span is loaded. */}
+            {isRoot && (
+              <>
+                {span.tags && span.tags.length > 0 && (
+                  <>
+                    <DataKeysAndValues.Key>Tags</DataKeysAndValues.Key>
+                    <DataKeysAndValues.Value>{span.tags.join(', ')}</DataKeysAndValues.Value>
+                  </>
+                )}
+                {span.sessionId && (
+                  <>
+                    <DataKeysAndValues.Key>Session Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueWithCopyBtn
+                      copyTooltip="Copy Session Id to clipboard"
+                      copyValue={span.sessionId}
+                    >
+                      {span.sessionId}
+                    </DataKeysAndValues.ValueWithCopyBtn>
+                  </>
+                )}
+                {span.requestId && (
+                  <>
+                    <DataKeysAndValues.Key>Request Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueWithCopyBtn
+                      copyTooltip="Copy Request Id to clipboard"
+                      copyValue={span.requestId}
+                    >
+                      {span.requestId}
+                    </DataKeysAndValues.ValueWithCopyBtn>
+                  </>
+                )}
+                {span.userId && (
+                  <>
+                    <DataKeysAndValues.Key>User Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueWithCopyBtn copyTooltip="Copy User Id to clipboard" copyValue={span.userId}>
+                      {span.userId}
+                    </DataKeysAndValues.ValueWithCopyBtn>
+                  </>
+                )}
+                {span.organizationId && (
+                  <>
+                    <DataKeysAndValues.Key>Organization Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueWithCopyBtn
+                      copyTooltip="Copy Organization Id to clipboard"
+                      copyValue={span.organizationId}
+                    >
+                      {span.organizationId}
+                    </DataKeysAndValues.ValueWithCopyBtn>
+                  </>
+                )}
+                {span.experimentId && (
+                  <>
+                    <DataKeysAndValues.Key>Experiment Id</DataKeysAndValues.Key>
+                    <DataKeysAndValues.ValueWithCopyBtn
+                      copyTooltip="Copy Experiment Id to clipboard"
+                      copyValue={span.experimentId}
+                    >
+                      {span.experimentId}
+                    </DataKeysAndValues.ValueWithCopyBtn>
+                  </>
+                )}
+              </>
+            )}
+          </DataKeysAndValues>
+        )}
+        {REST.map(section => (
+          <Fragment key={section}>{sections[section]}</Fragment>
+        ))}
       </div>
     </>
   );

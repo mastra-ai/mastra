@@ -2,7 +2,7 @@ import { Button } from '@mastra/playground-ui/components/Button';
 import { Link2, RotateCcw } from 'lucide-react';
 import { Link, useParams } from 'react-router';
 
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { SettingsRowsSkeleton } from '../../../ui/SettingsRowsSkeleton';
 import { useApiConfig } from '../../../../api/config';
 import { useChannelAccountsQuery } from '../../../../hooks/useChannelAccounts';
 import { connectSlackUrl } from '../services/channelAccounts';
@@ -37,7 +37,7 @@ export function ConnectedAccountsSection() {
   };
 
   if (accountsQuery.isPending) {
-    return <SkeletonRows label="Loading connected accounts" rows={1} rowClassName="h-16 w-full" />;
+    return <SettingsRowsSkeleton label="Loading connected accounts" rows={1} />;
   }
 
   if (accountsQuery.error) {

@@ -17,15 +17,6 @@
         "type": "toggle"
       }
     ],
-    "deepseek/deepseek-v4.1-flash": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
     "minimax/minimax-m3": [
       {
         "type": "toggle"
@@ -35,6 +26,15 @@
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "deepseek/deepseek-v4.1-flash": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
       }
     ]
   }

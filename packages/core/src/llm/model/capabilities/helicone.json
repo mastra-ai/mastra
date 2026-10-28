@@ -123,6 +123,62 @@
     "sonar-reasoning-pro"
   ],
   "reasoning": {
+    "claude-3.7-sonnet": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "claude-opus-4-1": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 31999
+      }
+    ],
+    "gpt-5.1-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "o3": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "sonar-deep-research": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-haiku-4-5-20251001": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024
+      }
+    ],
+    "claude-4.5-sonnet": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
     "gemini-2.5-flash": [
       {
         "type": "toggle"
@@ -133,7 +189,41 @@
         "max": 24576
       }
     ],
-    "claude-opus-4": [
+    "gpt-5-pro": [
+      {
+        "type": "effort",
+        "values": ["high"]
+      }
+    ],
+    "claude-4.5-opus": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 1024,
+        "max": 63999
+      }
+    ],
+    "sonar-reasoning-pro": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
+      }
+    ],
+    "o3-pro": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-1-20250805": [
       {
         "type": "toggle"
       },
@@ -149,29 +239,25 @@
         "values": ["low", "medium", "high"]
       }
     ],
-    "sonar-deep-research": [
+    "gpt-5-mini": [
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "claude-4.5-sonnet": [
+    "gpt-5": [
       {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high"]
       }
     ],
-    "gpt-5-codex": [
+    "o3-mini": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "claude-haiku-4-5-20251001": [
+    "claude-4.5-haiku": [
       {
         "type": "toggle"
       },
@@ -180,35 +266,19 @@
         "min": 1024
       }
     ],
-    "gpt-5-pro": [
+    "gemini-3-pro-preview": [
       {
         "type": "effort",
-        "values": ["high"]
+        "values": ["low", "high"]
       }
     ],
-    "gpt-oss-20b": [
+    "gpt-oss-120b": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
       }
     ],
-    "gemini-2.5-flash-lite": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 512,
-        "max": 24576
-      }
-    ],
-    "gpt-5-nano": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-4.5-opus": [
+    "claude-sonnet-4-5-20250929": [
       {
         "type": "toggle"
       },
@@ -218,13 +288,25 @@
         "max": 63999
       }
     ],
-    "gemini-3-pro-preview": [
+    "o4-mini": [
       {
         "type": "effort",
-        "values": ["low", "high"]
+        "values": ["low", "medium", "high"]
       }
     ],
-    "claude-sonnet-4-5-20250929": [
+    "o1": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5.1-codex-mini": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-4": [
       {
         "type": "toggle"
       },
@@ -241,7 +323,29 @@
         "max": 32768
       }
     ],
-    "claude-opus-4-1-20250805": [
+    "gemini-2.5-flash-lite": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "budget_tokens",
+        "min": 512,
+        "max": 24576
+      }
+    ],
+    "gpt-oss-20b": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "gpt-5-codex": [
+      {
+        "type": "effort",
+        "values": ["low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4": [
       {
         "type": "toggle"
       },
@@ -249,110 +353,6 @@
         "type": "budget_tokens",
         "min": 1024,
         "max": 31999
-      }
-    ],
-    "claude-3.7-sonnet": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "gpt-oss-120b": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-4": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 63999
-      }
-    ],
-    "gpt-5.1-codex": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "gpt-5": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "gpt-5.1-codex-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "sonar-reasoning-pro": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "o1": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-4.5-haiku": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024
-      }
-    ],
-    "gpt-5-mini": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high"]
-      }
-    ],
-    "o3": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-1": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "budget_tokens",
-        "min": 1024,
-        "max": 31999
-      }
-    ],
-    "o3-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "o3-pro": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
-      }
-    ],
-    "o4-mini": [
-      {
-        "type": "effort",
-        "values": ["low", "medium", "high"]
       }
     ]
   }

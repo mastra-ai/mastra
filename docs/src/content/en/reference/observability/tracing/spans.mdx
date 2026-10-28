@@ -254,7 +254,7 @@ createEventSpan<TChildType extends SpanType>(
 ): Span<TChildType>
 ```
 
-Creates an event span under this span. Event spans represent point-in-time occurrences with no duration. They're emitted as soon as they're created, with `isEvent: true` and an `endTime` equal to their `startTime`, so stored and exported records have `endedAt` equal to `startedAt`.
+Creates an event span under this span. Event spans represent point-in-time occurrences with no duration. They're emitted as soon as they're created, with `isEvent: true` and an `endTime` equal to their `startTime`, so stored and exported records have `endedAt` equal to `startedAt`. Event spans accept only `output` data and have no `input` option.
 
 <PropertiesTable
   props={[
@@ -283,12 +283,6 @@ Creates an event span under this span. Event spans represent point-in-time occur
     required: false,
   },
   {
-    name: 'input',
-    type: 'SpanInput<TChildType>',
-    description: 'Event input data',
-    required: false,
-  },
-  {
     name: 'output',
     type: 'SpanOutput<TChildType>',
     description: 'Event output data',
@@ -305,6 +299,29 @@ Exported Span interface, used for tracing exporters. A lightweight version of Sp
 interface ExportedSpan<TType extends SpanType> extends BaseSpan<TType> {
   /** Parent span id reference (undefined for root spans) */
   parentSpanId?: string
+
+  /** Parent span owned by an external tracing system, such as an ambient OpenTelemetry span */
+  externalParentSpanId?: string
+
+  /** Span id of the initial invocation a resumed execution continues */
+  resumedFromSpanId?: string
+
+  /** Model and provider for this span, where applicable */
+  model?: string
+  provider?: string
+
+  /** How this execution ended, and the machine-readable cause of stopping */
+  outcome?: string
+  stopReason?: string
+
+  /** Structured details behind stopReason, such as the limit that was hit */
+  stopReasonContext?: Record<string, unknown>
+
+  /** Milliseconds from the model call to the first token received */
+  timeToFirstTokenMs?: number
+
+  /** Errors in this span and all nested spans */
+  errorCount?: number
 
   /** TRUE if the span is the root span of a trace */
   isRootSpan: boolean

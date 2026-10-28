@@ -94,13 +94,15 @@ describe.each(KINDS)('$kind tools', ({ kind, label, key, page }) => {
   });
 
   describe.each(LAYOUTS)('%s', (_layout, renderSpan) => {
-    const renderWithLinks = (span: SpanRecord) =>
-      renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+    const renderWithLinks = (span: SpanRecord) => {
+      const view = renderWithProviders(<TestLinkProvider>{renderSpan(span)}</TestLinkProvider>);
+      return view;
+    };
 
     it(`links a ${kind} the span offered as a tool to its page`, () => {
       renderWithLinks(offeredSpan);
 
-      const tools = screen.getByText('Tools (2)').closest('[data-slot="span-payload-section"]');
+      const tools = screen.getByText('Available tools (2)').closest('[data-slot="span-payload-section"]');
       if (!(tools instanceof HTMLElement)) throw new Error('Missing Tools section');
       expect(within(tools).getByRole('link', { name: toolName }).getAttribute('href')).toBe(page);
       expect(within(tools).queryByRole('link', { name: `${kind}-` })).toBeNull();
