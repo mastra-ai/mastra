@@ -13,12 +13,12 @@ import type { TrustedTraceAggregatePlan } from './trace-aggregate-planner';
 import { TRACE_AGGREGATE_DIMENSION_REGISTRY, TRACE_AGGREGATE_IDENTITY_FIELDS } from './trace-aggregate-registry';
 import {
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryValidationError,
 } from './trace-query';
 import type { TraceQueryIssueCode, TraceQueryScalarPredicate } from './trace-query';
+import { planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-08-01T00:00:00Z', to: '2026-09-01T00:00:00Z' };
 const baseRequest = { timeRange, measures: ['count'] };

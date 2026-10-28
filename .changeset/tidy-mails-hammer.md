@@ -8,7 +8,7 @@ Added a schema for custom dashboard definitions. A definition lays out rows of w
 
 Widget `kind` accepts any non-empty string, and view `options` are passed through for each kind to validate, so new widget kinds need no `@mastra/core` upgrade. `DASHBOARD_WIDGET_KINDS` lists the built-in kinds (`kpis`, `breakdown`, `timeseries`, `scores`); `table` is reserved for a future generic table kind. Adding an optional field keeps `schemaVersion` the same; a breaking change bumps it and comes with an upgrade step in `migrateDashboardDefinition`, which brings any stored version up to the current one before parsing.
 
-The dashboard schemas are also exported from `@mastra/core/storage/dashboards`, which browser apps can import without loading the rest of `@mastra/core/storage` (that entry reaches agent code that reads `process` when it loads).
+The dashboard schemas are also exported from `@mastra/core/storage/dashboards`, which browser apps can import: it loads no Node built-ins and uses no Node globals such as `process` or `Buffer`, unlike `@mastra/core/storage`, which reaches agent code that reads `process` when it loads.
 
 ```ts
 import { dashboardDefinitionSchema } from '@mastra/core/storage/dashboards';

@@ -62,7 +62,9 @@ const dropBareBuiltinImports = {
 
 /**
  * Entries that browser apps import directly. Everything they load statically must not touch
- * `process` (it is undefined in the browser) or pull in agent/provider-registry chunks, which do.
+ * `process` or `Buffer` (undefined in the browser), import Node built-ins or other packages besides
+ * zod, or pull in agent/provider-registry chunks. `src/storage/dashboards-browser-entry.test.ts`
+ * also loads the dashboards entry in a context without Node globals.
  */
 const browserSafeEntries = ['storage/dashboards.js', 'storage/dashboards.cjs'];
 
@@ -75,10 +77,14 @@ function findBrowserUnsafeImports(distDir: string, entry: string): string[] {
     const name = path.relative(distDir, file);
     if (/(^|\/)(agent|provider-registry)[-./]/.test(name)) problems.push(`${from} imports ${name}`);
     const code = fs.readFileSync(file, 'utf-8');
-    if (/\bprocess\b/.test(code)) problems.push(`${name} (reached from ${entry}) references process`);
+    for (const global of ['process', 'Buffer']) {
+      if (new RegExp(`\\b${global}\\b`).test(code))
+        problems.push(`${name} (reached from ${entry}) references ${global}`);
+    }
     const specifiers = [...code.matchAll(/(?:\bfrom\s*|\bimport\s*|\brequire\()["']([^"']+)["']/g)].map(m => m[1]!);
     for (const specifier of specifiers) {
       if (specifier.startsWith('.')) visit(path.resolve(path.dirname(file), specifier), name);
+      else if (specifier !== 'zod/v4') problems.push(`${name} (reached from ${entry}) imports ${specifier}`);
     }
   };
   visit(path.join(distDir, entry), entry);

@@ -51,7 +51,7 @@ export const TRACE_AGGREGATE_FIXED_MEASURES = [
 export const TRACE_AGGREGATE_MIXED_COST_UNIT = 'mixed';
 export const TRACE_AGGREGATE_COUNT_DISTINCT_PREFIX = 'countDistinct.';
 
-const hasMaxUtf8Bytes = (value: string, maxBytes: number) => Buffer.byteLength(value, 'utf8') <= maxBytes;
+const hasMaxUtf8Bytes = (value: string, maxBytes: number) => new TextEncoder().encode(value).length <= maxBytes;
 
 export function isTraceAggregateCountDistinctMeasure(name: string): boolean {
   return getTraceAggregateCountDistinctField(name) !== undefined;

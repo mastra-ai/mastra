@@ -5,7 +5,8 @@ import {
   threadQueryRequestSchema,
   threadQueryRowSchema,
 } from './thread-query';
-import { planThreadQuery, queryThreadsInputSchema } from './trace-query';
+import { queryThreadsInputSchema } from './trace-query';
+import { planThreadQuery } from './trace-query-plan';
 
 const range = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const request = { timeRange: { traces: range } };
