@@ -80,7 +80,7 @@ export function valueYAxis({
   const tickCount = chartYTickCount(size.height);
   // Recharts rounds its step up to fit the tick count, so a $4.40 peak got an $8 axis.
   const ticks = domain || max === undefined ? undefined : niceYTicks(max, tickCount, integer);
-  const labels = (ticks ?? domain)?.map(formatter);
+  const labels = (ticks ?? (domain && domainTickCandidates(domain, tickCount)))?.map(formatter);
   return (
     <YAxis
       yAxisId={id}
@@ -110,6 +110,19 @@ function yAxisWidth(show: boolean, labels: string[] | undefined) {
   const widest = Math.max(0, ...labels.map(textWidth));
   // Plus the tick margin (4) and Recharts' default tick size (6), which it counts with hidden tick lines.
   return Math.ceil(widest + 4 + 6);
+}
+
+/**
+ * Values Recharts may label in a fixed `domain`: its ends and evenly spaced steps for every tick
+ * count up to `count`. Recharts picks its own in-between ticks (0.35, 0.7 for four in 0 to 1), so
+ * the axis is sized from all the candidates, never narrower than the labels it draws.
+ */
+function domainTickCandidates([min, max]: [number, number], count: number) {
+  const values = [min, max];
+  for (let n = 3; n <= count; n++) {
+    for (let i = 1; i < n - 1; i++) values.push(min + ((max - min) * i) / (n - 1));
+  }
+  return values;
 }
 
 let measureContext: CanvasRenderingContext2D | undefined;
