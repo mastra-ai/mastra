@@ -1769,16 +1769,21 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
             holdStreamOpenAfterFinish,
             text = '{ "invalid": "Hello, world!" }',
             schema = z.object({ content: z.string() }),
+            toolInputParts = [],
+            tools,
           }: {
             finishReason: 'stop' | 'length';
             holdStreamOpenAfterFinish: boolean;
             text?: string;
             schema?: z.ZodType;
+            toolInputParts?: LanguageModelV2StreamPart[];
+            tools?: Record<string, any>;
           }) => {
             let result: any;
             let closeUpstream: (() => void) | undefined;
             const parts: LanguageModelV2StreamPart[] = [
               { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+              ...toolInputParts,
               { type: 'text-start', id: 'text-1' },
               { type: 'text-delta', id: 'text-1', delta: text },
               { type: 'text-end', id: 'text-1' },
@@ -1804,6 +1809,7 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
                 },
               ],
               structuredOutput: { schema },
+              ...(tools ? { tools } : {}),
               options: {
                 onFinish: async event => {
                   result = event;
@@ -1845,6 +1851,26 @@ export function streamObjectTests({ loopFn, runId }: { loopFn: typeof loop; runI
 
             expect(error?.message).toContain('Invalid enum format');
             expect(result.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+          });
+
+          it('does not run a tool whose input never arrived before the validation error', async () => {
+            const execute = vi.fn(async () => 'ran');
+            const { result, error } = await runStructuredFailure({
+              finishReason: 'stop',
+              holdStreamOpenAfterFinish: false,
+              toolInputParts: [
+                { type: 'tool-input-start', id: 'call-1', toolName: 'update-status' },
+                { type: 'tool-input-end', id: 'call-1' },
+              ],
+              tools: {
+                'update-status': { inputSchema: z.object({}), execute },
+              },
+            });
+
+            expect(error).toMatchObject({ id: 'STRUCTURED_OUTPUT_SCHEMA_VALIDATION_FAILED' });
+            expect(result.usage).toMatchObject({ inputTokens: 3, outputTokens: 10, totalTokens: 13 });
+            expect(execute).not.toHaveBeenCalled();
+            expect(result.toolCalls ?? []).toEqual([]);
           });
 
           it('stops at the finish chunk without waiting for the upstream to close, and keeps the validation error', async () => {
