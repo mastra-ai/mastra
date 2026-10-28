@@ -300,7 +300,8 @@ async function planBundledReferences(sourceFile, fileDir, resolverParentFile, ro
   }
 
   let text = sourceFile.getFullText();
-  for (const edit of edits.reverse()) {
+  // Apply from the end of the file so earlier offsets stay valid. `edits` is in collection order, not source order.
+  for (const edit of edits.sort((a, b) => b.start - a.start)) {
     text = text.slice(0, edit.start) + edit.text + text.slice(edit.end);
   }
 
