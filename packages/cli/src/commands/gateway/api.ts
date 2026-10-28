@@ -75,7 +75,7 @@ export interface GatewayCredits {
 }
 
 export async function getGatewayCredits(token: string, orgId: string): Promise<GatewayCredits> {
-  const customer = await request<BillingCustomer | null>(token, orgId, '/v1/billing/customer');
+  const { customer } = await request<{ customer: BillingCustomer | null }>(token, orgId, '/v1/billing/customer');
   const featureId = customer?.creditPool?.featureId ?? STARTER_CREDIT_POOL;
   const topupPlanId = customer?.creditPool?.topupPlanId ?? STARTER_TOPUP_PLAN;
   const balance = customer?.balances?.[featureId];
@@ -110,6 +110,9 @@ export async function startCreditsCheckout(
     // Back to the Gateway dashboard after paying; checkout's own success page when that isn't allowed.
     result = await attach(`${MASTRA_PLATFORM_API_URL}/orgs/${orgId}/gateway`);
   } catch (error) {
+    if (error instanceof GatewayApiError && error.status === 403) {
+      throw new GatewayApiError('Only organization admins can buy credits', 403);
+    }
     if (!(error instanceof GatewayApiError) || error.status !== 400) throw error;
     result = await attach();
   }

@@ -559,8 +559,15 @@ async function setUpGateway({
   try {
     const apiKey = await createGatewayApiKey(token, org.orgId, projectName);
     signal.throwIfAborted();
-    const credits = await getGatewayCredits(token, org.orgId);
-    const outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
+    // Credits are optional: a failed balance read or checkout still keeps the new key.
+    let outcome: { remaining: number; added?: number } = { remaining: 0 };
+    try {
+      const credits = await getGatewayCredits(token, org.orgId);
+      outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
+    } catch (error) {
+      if (signal.aborted) throw error;
+      p.log.warn(`Could not add credits: ${error instanceof Error ? error.message : 'Unknown error'}`);
+    }
     return { status: 'ready', apiKey, orgName: org.orgName, ...outcome };
   } catch (error) {
     if (signal.aborted) throw error;

@@ -60,8 +60,10 @@ describe('getGatewayCredits', () => {
   it("reads the balance of the customer's credit pool", async () => {
     vi.mocked(platformFetch).mockResolvedValueOnce(
       respond(200, {
-        creditPool: { featureId: 'gateway_credits_teams', topupPlanId: 'gateway_credit_topup_teams' },
-        balances: { gateway_credits: { remaining: 3 }, gateway_credits_teams: { remaining: 12.5 } },
+        customer: {
+          creditPool: { featureId: 'gateway_credits_teams', topupPlanId: 'gateway_credit_topup_teams' },
+          balances: { gateway_credits: { remaining: 3 }, gateway_credits_teams: { remaining: 12.5 } },
+        },
       }),
     );
 
@@ -74,7 +76,7 @@ describe('getGatewayCredits', () => {
   });
 
   it('treats a new customer as an empty Starter balance', async () => {
-    vi.mocked(platformFetch).mockResolvedValueOnce(respond(200, null));
+    vi.mocked(platformFetch).mockResolvedValueOnce(respond(200, { customer: null }));
 
     await expect(getGatewayCredits('token', 'org-1')).resolves.toEqual(STARTER);
   });
@@ -106,6 +108,8 @@ describe('startCreditsCheckout', () => {
   it('explains when only admins can buy credits', async () => {
     vi.mocked(platformFetch).mockResolvedValueOnce(respond(403, { detail: 'Requires admin role' }));
 
-    await expect(startCreditsCheckout('token', 'org-1', STARTER, 25)).rejects.toThrow('Requires admin role');
+    await expect(startCreditsCheckout('token', 'org-1', STARTER, 25)).rejects.toThrow(
+      'Only organization admins can buy credits',
+    );
   });
 });

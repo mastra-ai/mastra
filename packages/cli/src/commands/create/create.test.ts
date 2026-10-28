@@ -582,6 +582,24 @@ describe('managed Gateway', () => {
     expect(trackEvent).toHaveBeenCalledWith('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
   });
 
+  it('keeps the new key when buying credits fails', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayCredits = await import('../gateway/credits.js');
+    const adapter = await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayCredits.offerGatewayCredits).mockRejectedValueOnce(new Error('Requires role: admin'));
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(prompts.log.warn).toHaveBeenCalledWith('Could not add credits: Requires role: admin');
+    expect(adapter.writeManagedApiKey).toHaveBeenCalledWith(expect.objectContaining({ apiKey: 'gateway-key' }));
+    expect(prompts.note).toHaveBeenCalledWith(
+      expect.stringContaining('Model calls fail until you add credits: npx mastra gateway credits'),
+    );
+  });
+
   it('explains how to add a key when sign-in is skipped', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');
