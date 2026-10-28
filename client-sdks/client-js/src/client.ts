@@ -8,7 +8,6 @@ import {
   Workflow,
   Vector,
   Knowledge,
-  type KnowledgeInstanceSummary,
   BaseResource,
   A2A,
   A2AV1,
@@ -29,6 +28,7 @@ import {
   Channels,
   AgentController,
 } from './resources';
+import type { KnowledgeInstanceSummary } from './resources';
 import type {
   LegacyGetTracesResponse,
   LegacyTracesPaginatedArg,
