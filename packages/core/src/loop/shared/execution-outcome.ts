@@ -32,7 +32,7 @@ export function agentLoopTermination(input: {
   if (finishReason === 'content-filter') return { outcome: 'blocked', stopReason: 'content_filter' };
   if (finishReason === 'abort' || finishReason === 'aborted')
     return { outcome: 'abort', stopReason: 'caller_cancelled' };
-  if (finishReason === 'error') return { outcome: 'error', stopReason: 'runtime_error' };
+  if (finishReason === 'error') return { outcome: 'error', stopReason: 'model_error' };
   switch (stopCause) {
     case 'max_steps':
       return { outcome: 'limit', stopReason: 'max_steps', stopReasonContext: { maxSteps } };
