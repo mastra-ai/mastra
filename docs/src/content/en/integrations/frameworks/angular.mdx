@@ -56,7 +56,7 @@ Angular's default `tsconfig.app.json` compiles every file under `src/`, includin
 
 Keep the server code out of the browser build by adding `src/mastra/**` to the `exclude` list in `tsconfig.app.json`:
 
-```json title="tsconfig.app.json"
+```json title="tsconfig.app.json" {7}
 {
   "extends": "./tsconfig.json",
   "compilerOptions": {
