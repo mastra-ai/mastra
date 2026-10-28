@@ -842,6 +842,23 @@ describe('Traces page columns menu', () => {
     globalThis.ResizeObserver = layoutStubs.resizeObserver;
   });
 
+  describe('when the page has loaded', () => {
+    it('puts the Columns button ahead of the filters', async () => {
+      setTracePageHandlers(metricsCapableCapabilities);
+
+      const { queryClient } = renderPage();
+      await waitFor(() => {
+        expect(screen.queryByTestId('traces-page-skeleton')).toBeNull();
+        expect(queryClient.isFetching()).toBe(0);
+      });
+
+      const columns = screen.getByRole('button', { name: 'Columns' });
+      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
+      if (!dateChip) throw new Error('date chip not rendered');
+      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+  });
+
   describe('when the columns menu enables Environment', () => {
     it('shows the header with each trace environment and keeps it after a reload', async () => {
       setTracePageHandlers(metricsCapableCapabilities);

@@ -1,6 +1,7 @@
 // @vitest-environment jsdom
-import type { QuerySpansResult } from '@mastra/client-js';
-import { act, fireEvent, screen, waitFor } from '@testing-library/react';
+import type { AggregateSpansResponse, GetObservabilityCapabilitiesResponse, QuerySpansResult } from '@mastra/client-js';
+import { planSpanAggregate, spanAggregateRequestSchema } from '@mastra/core/storage';
+import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
 import {
@@ -9,6 +10,9 @@ import {
   emptySpanRows,
   endedSpan,
   firstListedSpan,
+  spanAggregateCapabilities,
+  spanAggregateError,
+  spanCountsAggregate,
   spanHeadPage,
   spanQueryCapabilities,
   spanRowsPage,
@@ -24,6 +28,7 @@ import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
 
 const SPANS_QUERY_URL = `${TEST_BASE_URL}/api/observability/spans/query`;
+const SPANS_AGGREGATE_URL = `${TEST_BASE_URL}/api/observability/spans/aggregate`;
 
 const setHandlers = (spans: QuerySpansResult) =>
   server.use(
@@ -71,6 +76,17 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when the store returns span rows', () => {
+    it('puts the Columns button ahead of the filters', async () => {
+      setHandlers(spanRowsPage);
+
+      renderBody();
+      const columns = await screen.findByRole('button', { name: 'Columns' });
+
+      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
+      if (!dateChip) throw new Error('date chip not rendered');
+      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+    });
+
     it('lists each span', async () => {
       setHandlers(spanRowsPage);
 
@@ -219,6 +235,161 @@ describe('SpansExplorerBody', () => {
       expect(screen.getByTestId('traces-columns').textContent).toBe(
         DEFAULT_TRACE_COLUMN_PREFERENCES.visibleColumns.join(','),
       );
+    });
+  });
+});
+
+type SpanQueryBody = { timeRange: { from: string; to: string }; where?: unknown; orderBy?: Array<{ field: string }> };
+type AggregateBody = { timeRange: { from: string; to: string }; where?: unknown };
+
+describe('SpansExplorerBody histogram', () => {
+  useFixedChartSize(1200, 800);
+  beforeAll(() => {
+    Element.prototype.getAnimations ??= () => [];
+  });
+  beforeEach(() => {
+    window.localStorage.clear();
+  });
+
+  const onSpanQuery = vi.fn<(body: SpanQueryBody) => void>();
+  const onAggregate = vi.fn<(body: AggregateBody) => void>();
+  beforeEach(() => {
+    onSpanQuery.mockClear();
+    onAggregate.mockClear();
+  });
+
+  const setHistogramHandlers = ({
+    capabilities = spanAggregateCapabilities,
+    spans = spanRowsPage,
+    aggregate = body => HttpResponse.json<AggregateSpansResponse>(spanCountsAggregate(body.timeRange)),
+  }: {
+    capabilities?: GetObservabilityCapabilitiesResponse;
+    spans?: QuerySpansResult;
+    aggregate?: (body: AggregateBody) => Response;
+  } = {}) =>
+    server.use(
+      http.get(`${TEST_BASE_URL}/api/observability/capabilities`, () => HttpResponse.json(capabilities)),
+      http.get(`${TEST_BASE_URL}/api/observability/discovery/entity-names`, () => HttpResponse.json(emptyEntityNames)),
+      http.get(`${TEST_BASE_URL}/api/observability/discovery/environments`, () => HttpResponse.json(emptyEnvironments)),
+      http.post(SPANS_QUERY_URL, async ({ request }) => {
+        const body = (await request.json()) as SpanQueryBody;
+        // Head polls (`endedAt desc`) are the list's live updates, not its query.
+        if (body.orderBy?.[0]?.field !== 'endedAt') onSpanQuery(body);
+        return HttpResponse.json(spans);
+      }),
+      // Validated like the server does, so a request the store would reject fails the test.
+      http.post(SPANS_AGGREGATE_URL, async ({ request }) => {
+        const parsed = spanAggregateRequestSchema.safeParse(await request.json());
+        if (!parsed.success) return HttpResponse.json({ error: parsed.error.message }, { status: 400 });
+        try {
+          planSpanAggregate(parsed.data);
+        } catch (error) {
+          return HttpResponse.json({ error: String(error) }, { status: 400 });
+        }
+        onAggregate(parsed.data);
+        return aggregate(parsed.data);
+      }),
+    );
+
+  const renderSettled = async () => {
+    const { queryClient } = renderWithProviders(
+      <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
+    );
+    await screen.findByText('agent run: weather');
+    await waitFor(() => expect(queryClient.isFetching()).toBe(0));
+  };
+
+  const chart = () => screen.queryByRole('region', { name: 'Spans over time' });
+
+  describe('when the server cannot aggregate spans', () => {
+    it('does not render the chart', async () => {
+      setHistogramHandlers({ capabilities: spanQueryCapabilities });
+
+      await renderSettled();
+
+      expect(chart()).toBeNull();
+    });
+
+    it('never calls the aggregate endpoint', async () => {
+      setHistogramHandlers({ capabilities: spanQueryCapabilities });
+
+      await renderSettled();
+
+      expect(onAggregate).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('when the server aggregates spans', () => {
+    it('shows span and error totals', async () => {
+      setHistogramHandlers();
+
+      await renderSettled();
+
+      const region = await screen.findByRole('region', { name: 'Spans over time' });
+      expect(await within(region).findByText(/21 spans/i)).toBeTruthy();
+      expect(within(region).getByText(/3 errors/i)).toBeTruthy();
+    });
+
+    it('sends the same time range and filters as the list query', async () => {
+      setHistogramHandlers();
+
+      await renderSettled();
+
+      const list = onSpanQuery.mock.lastCall?.[0];
+      const aggregate = onAggregate.mock.lastCall?.[0];
+      expect(aggregate?.timeRange).toEqual(list?.timeRange);
+      expect(aggregate?.where).toEqual(list?.where);
+    });
+  });
+
+  describe('when the user picks another time range', () => {
+    it('refetches the chart with the new range', async () => {
+      setHistogramHandlers();
+      await renderSettled();
+      await screen.findByRole('region', { name: 'Spans over time' });
+      onAggregate.mockClear();
+
+      const dateChip = document.querySelector<HTMLElement>('[data-slot="filter-bar-chip"]');
+      if (!dateChip) throw new Error('date chip not rendered');
+      fireEvent.click(within(dateChip).getByRole('button', { name: 'Value: Last 7 days', hidden: true }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
+
+      await waitFor(() => expect(onAggregate).toHaveBeenCalled());
+      const timeRange = onAggregate.mock.lastCall?.[0].timeRange;
+      expect(Date.parse(timeRange?.to ?? '') - Date.parse(timeRange?.from ?? '')).toBe(24 * 60 * 60 * 1000);
+      expect(timeRange).toEqual(onSpanQuery.mock.lastCall?.[0].timeRange);
+    });
+  });
+
+  describe('when the aggregate request fails', () => {
+    it('shows an inline error in the chart', async () => {
+      setHistogramHandlers({ aggregate: () => HttpResponse.json(spanAggregateError, { status: 400 }) });
+
+      await renderSettled();
+
+      const region = await screen.findByRole('region', { name: 'Spans over time' });
+      expect(await within(region).findByText("Couldn't load the chart.")).toBeTruthy();
+    });
+
+    it('still lists the spans', async () => {
+      setHistogramHandlers({ aggregate: () => HttpResponse.json(spanAggregateError, { status: 400 }) });
+
+      await renderSettled();
+
+      expect(screen.getByText('tool: get-weather')).toBeTruthy();
+    });
+  });
+
+  describe('when the window has no spans', () => {
+    it('shows the empty state without the chart', async () => {
+      setHistogramHandlers({ spans: emptySpanRows });
+
+      renderWithProviders(
+        <SpansExplorerBody selection={undefined} onSelectionChange={() => {}} renderPanel={() => null} />,
+      );
+
+      expect(await screen.findByRole('heading', { name: 'No spans for the last 7 days' })).toBeTruthy();
+      expect(chart()).toBeNull();
     });
   });
 });

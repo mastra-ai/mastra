@@ -1,4 +1,5 @@
 import type {
+  AggregateTracesResponse,
   GetObservabilityCapabilitiesResponse,
   GetScoresScorers_Response,
   GetTraceQueryFieldsResponse,
@@ -76,6 +77,30 @@ export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = 
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, deltaPolling: false },
 };
+
+/** A store that answers `aggregateTraces()` next to the trace query API. */
+export const traceAggregateCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceAggregate: true },
+};
+
+const HOUR = 60 * 60 * 1000;
+
+const hourBefore = (timeRange: { to: string }, hoursAgo: number) =>
+  new Date((Math.floor(Date.parse(timeRange.to) / HOUR) - hoursAgo) * HOUR).toISOString();
+
+/** Two hourly buckets near the end of the window: 5 traces (1 failed), then 3 traces (1 failed). */
+export function traceCountsAggregate(timeRange: { to: string }): AggregateTracesResponse {
+  return {
+    rows: [
+      { bucket: hourBefore(timeRange, 3), measures: { count: 5, errorCount: 1 } },
+      { bucket: hourBefore(timeRange, 2), measures: { count: 3, errorCount: 1 } },
+    ],
+    truncated: false,
+  };
+}
+
+export const traceAggregateError = { error: 'Trace aggregation failed' };
 
 export const emptyTraceQueryFields: GetTraceQueryFieldsResponse = {
   canonicalFields: [],

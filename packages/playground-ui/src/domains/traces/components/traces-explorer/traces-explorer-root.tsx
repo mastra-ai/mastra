@@ -13,6 +13,7 @@ import {
   isSelectionEmpty,
   resolveTracesDateWindow,
   sanitizeTracesFilters,
+  selectsRunningStatus,
   selectScore,
   selectSpan,
   selectTrace,
@@ -228,6 +229,7 @@ export function TracesExplorerRoot({
 
   const contentFiltersApplied = filters.tokens.length > 0 || filters.groups.length > 0;
   const filtersApplied = contentFiltersApplied || filters.datePreset !== initialFilters.datePreset || !!dateTo;
+  const runningSelected = useMemo(() => selectsRunningStatus(rawFilters), [rawFilters]);
   const filtersValue = useMemo<TracesFiltersContextValue>(
     () => ({
       ...filtersActions,
@@ -236,8 +238,9 @@ export function TracesExplorerRoot({
       dateTo,
       filtersApplied,
       contentFiltersApplied,
+      runningSelected,
     }),
-    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied],
+    [filtersActions, filters, dateFrom, dateTo, filtersApplied, contentFiltersApplied, runningSelected],
   );
 
   // Not memoized: the selection consumers (Layout, List, Panel) also re-render on filter and list

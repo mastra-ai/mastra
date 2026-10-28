@@ -144,6 +144,8 @@ export type MetricsStackedBarChartProps = {
   /** Row field for the tooltip heading (e.g. a longer date); defaults to the x-axis label. */
   tooltipLabelKey?: string;
   columnLabelKey?: string;
+  /** Widest a column gets, in pixels. Defaults to 28; raise it for dense strips of many thin columns. */
+  maxBarSize?: number;
   /** Click a column (e.g. to open its traces); the plot shows a pointer cursor. */
   onBucketClick?: (row: Record<string, unknown>, index: number) => void;
   /** One dashed line over the bars, on its own hidden scale (e.g. a duration over counts). */
@@ -184,6 +186,7 @@ function BarPlot({
   xLabels = 'auto',
   tooltipLabelKey,
   columnLabelKey,
+  maxBarSize = 28,
   onBucketClick,
   overlay,
   id,
@@ -287,7 +290,7 @@ function BarPlot({
               name={s.label}
               stackId="1"
               fill={s.color}
-              maxBarSize={28}
+              maxBarSize={maxBarSize}
               isAnimationActive={false}
               shape={shapes[i]}
             >

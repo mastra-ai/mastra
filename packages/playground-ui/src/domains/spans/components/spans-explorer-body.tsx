@@ -5,6 +5,7 @@ import { useSpansListSource } from '../hooks/use-spans-list-source';
 import { buildSpanQueryWhere } from '../span-filters';
 import { spanToListRow } from '../span-list-row';
 import type { SpanSelection } from './span-detail-panel';
+import { SpansExplorerHistogram } from './spans-explorer-histogram';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
@@ -42,10 +43,14 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
 
-  const query = useMemo<SpanQueryArgs>(() => {
-    const where = buildSpanQueryWhere(tokens, groups, { withContextFields });
-    return { timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) };
-  }, [timeRange, sort, tokens, groups, withContextFields]);
+  const where = useMemo(
+    () => buildSpanQueryWhere(tokens, groups, { withContextFields }),
+    [tokens, groups, withContextFields],
+  );
+  const query = useMemo<SpanQueryArgs>(
+    () => ({ timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) }),
+    [timeRange, sort, where],
+  );
 
   const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
     {
@@ -77,6 +82,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         toolbar={
           <ActionRow>
             <ActionRow.Start>
+              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
               <SpansFilterBar
                 datePreset={filters.datePreset}
                 dateFrom={filters.dateFrom}
@@ -91,11 +97,9 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
                 disabled={isLoading}
               />
             </ActionRow.Start>
-            <ActionRow.End>
-              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
-            </ActionRow.End>
           </ActionRow>
         }
+        chart={<SpansExplorerHistogram timeRange={timeRange} where={where} />}
         error={
           isError ? <TracesErrorContent error={error} resource="spans" errorTitle="Failed to load spans" /> : undefined
         }

@@ -13,7 +13,6 @@ import type {
   TraceCustomColumn,
   TraceOptionalColumn,
 } from '../trace-list-columns';
-import { Button } from '@/ds/components/Button';
 import { Combobox } from '@/ds/components/Combobox';
 import {
   Dialog,
@@ -120,15 +119,10 @@ export function TraceColumnsMenu({
   return (
     <>
       <DropdownMenu>
-        <DropdownMenu.Trigger
-          disabled={disabled}
-          render={
-            <Button variant="ghost" size="md" icon={<Columns3Icon aria-hidden />}>
-              Columns
-            </Button>
-          }
-        />
-        <DropdownMenu.Content align="end" className="min-w-56">
+        <DropdownMenu.Trigger disabled={disabled} variant="ghost" size="icon-md" tooltip="Columns">
+          <Columns3Icon aria-hidden />
+        </DropdownMenu.Trigger>
+        <DropdownMenu.Content align="start" className="min-w-56">
           <DropdownMenu.Label>Standard columns</DropdownMenu.Label>
           {catalog.standardColumns.map(column => (
             <DropdownMenu.CheckboxItem
