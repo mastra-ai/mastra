@@ -791,6 +791,16 @@
         "default": "./dist/loop/server.cjs"
       }
     },
+    "./storage/dashboards": {
+      "import": {
+        "types": "./dist/storage/dashboards.d.ts",
+        "default": "./dist/storage/dashboards.js"
+      },
+      "require": {
+        "types": "./dist/storage/dashboards.d.ts",
+        "default": "./dist/storage/dashboards.cjs"
+      }
+    },
     "./storage/constants": {
       "import": {
         "types": "./dist/storage/constants.d.ts",
