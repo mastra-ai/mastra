@@ -462,6 +462,55 @@ describe('BackgroundTaskManager lifecycle', () => {
     }
   });
 
+  it('hands back the lease of a running task on graceful shutdown so a peer recovers it immediately', async () => {
+    // Waiting for runs to settle during shutdown removes them from the owned
+    // set before the lease hand-back. The hand-back must still release them,
+    // otherwise peers wait out the full lease before recovering the task.
+    const store = new InMemoryStore();
+    const workerA = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    workerA.backgroundTaskManager!.registerStaticExecutor('job', {
+      execute: (_args, { abortSignal } = {}) =>
+        new Promise((_resolve, reject) =>
+          abortSignal?.addEventListener('abort', () => reject(abortSignal.reason), { once: true }),
+        ),
+    });
+
+    const { task } = await workerA.backgroundTaskManager!.enqueue({
+      runId: 'run-1',
+      toolName: 'job',
+      toolCallId: 'call-1',
+      args: {},
+      agentId: 'agent-1',
+      maxRetries: 1,
+    });
+    const backgroundTasks = (await store.getStore('backgroundTasks'))!;
+    await vi.waitFor(async () =>
+      expect(await backgroundTasks.getTask(task.id)).toMatchObject({
+        status: 'running',
+        ownerId: expect.any(String),
+        leaseExpiresAt: expect.any(Date),
+      }),
+    );
+
+    await workerA.shutdown();
+
+    expect(await backgroundTasks.getTask(task.id)).toMatchObject({
+      status: 'running',
+      ownerId: undefined,
+      leaseExpiresAt: undefined,
+    });
+
+    const workerB = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    workerB.backgroundTaskManager!.registerStaticExecutor('job', { execute: async () => 'done' });
+    try {
+      await vi.waitFor(async () => expect((await backgroundTasks.getTask(task.id))?.status).toBe('completed'), {
+        timeout: 2_000,
+      });
+    } finally {
+      await workerB.shutdown();
+    }
+  });
+
   it('leaves retryable running tasks recoverable across shutdown', async () => {
     const pubsub = new SilentPublishPubSub();
     const mastra = new Mastra({ logger: false, storage: new MockStore(), workers: false });
