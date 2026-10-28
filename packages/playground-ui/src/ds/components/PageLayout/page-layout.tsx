@@ -72,8 +72,7 @@ export function PageLayout({
           <ScrollAreaViewport
             className={cn(variant === 'container' && 'p-4')}
             contentClassName={cn(
-              variant === 'container' && 'h-full min-h-min',
-              scrollingActionRow && 'flex flex-col',
+              variant === 'container' && 'flex h-full min-h-min flex-col',
               variant === 'narrow' && 'grid min-h-full grid-cols-1',
               // `fit` hands the remaining body height to its child (panels, graphs, tables that own their scroll).
               variant === 'fit' &&
@@ -96,10 +95,11 @@ export function PageLayout({
                 {headerSlot}
                 {children}
               </div>
-            ) : scrollingActionRow ? (
+            ) : variant === 'container' ? (
               // The body gets the height left under the row, so `h-full` children (lists that own their
               // scroll) still fit the page. Taller bodies overflow it, and scroll overflow skips the
-              // viewport's bottom padding, so a zero-height spacer puts that padding back.
+              // viewport's bottom padding, so a zero-height spacer puts that padding back. Rendered with
+              // or without a row, so the children keep their state when the row comes and goes.
               <div data-slot="page-layout-body" className="min-h-0 flex-1 after:-mb-4 after:block after:h-4">
                 {headerSlot}
                 {children}

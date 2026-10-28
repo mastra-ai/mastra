@@ -57,6 +57,23 @@ describe('PageLayout', () => {
       expect(screen.getByRole('banner').compareDocumentPosition(row) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
       expect(row.compareDocumentPosition(main) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
+
+    it('keeps the body mounted when the row appears', () => {
+      const { rerender } = render(
+        <PageLayout>
+          <input aria-label="Draft" />
+        </PageLayout>,
+      );
+      const draft = screen.getByLabelText('Draft');
+
+      rerender(
+        <PageLayout actionRow={<input aria-label="Filter" />}>
+          <input aria-label="Draft" />
+        </PageLayout>,
+      );
+
+      expect(screen.getByLabelText('Draft')).toBe(draft);
+    });
   });
 
   describe('scroll area', () => {
