@@ -431,7 +431,7 @@ Capture a screenshot of the current page as PNG (viewport by default. Set `fullP
 | Parameter | Type | Description |
 | - | - | - |
 | `fullPage` | `boolean` | Capture the full scrollable page instead of only the viewport (optional, default: false) |
-| `path` | `string` | Also save the PNG to this path in the agent's workspace. Missing folders are created. The model is told where the file went, or why it couldn't be saved (for example, when the agent has no workspace). The screenshot is returned either way (optional) |
+| `path` | `string` | Also save the PNG to this path in the agent's workspace. Missing folders are created. The model is told where the file went, or why it couldn't be saved (for example, when the agent has no workspace). Follows the workspace's write-file settings: nothing is saved when writing is turned off, needs approval, or the filesystem is read-only. The screenshot is returned either way (optional) |
 
 ### `browser_close`
 

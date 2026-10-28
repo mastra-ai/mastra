@@ -5,7 +5,7 @@ import { mkdtemp, readFile, rm } from 'node:fs/promises';
 import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 import { RequestContext } from '@mastra/core/request-context';
-import { LocalFilesystem, Workspace } from '@mastra/core/workspace';
+import { LocalFilesystem, WORKSPACE_TOOLS, Workspace } from '@mastra/core/workspace';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 const PNG = Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a, 1, 2, 3]);
@@ -134,6 +134,33 @@ describe('browser_screenshot', () => {
 
     expect(result.path).toBe('old.png');
     expect(await readFile(join(dir, 'old.png'))).toEqual(PNG);
+  });
+
+  it.each([
+    ['writing is turned off', { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: false } }, /turned off/],
+    ['writes need approval', { requireApproval: true }, /needs approval/],
+    [
+      'a dynamic setting turns writing off',
+      { [WORKSPACE_TOOLS.FILESYSTEM.WRITE_FILE]: { enabled: () => false } },
+      /turned off/,
+    ],
+  ])("doesn't save when %s, but still returns the screenshot", async (_, config, reason) => {
+    workspace.setToolsConfig(config as never);
+
+    const result = await screenshot({ path: 'blocked.png' }, { workspace });
+
+    expect(result.saveError).toMatch(reason);
+    expect(result.base64).toBe(PNG.toString('base64'));
+    await expect(readFile(join(dir, 'blocked.png'))).rejects.toThrow();
+  });
+
+  it("doesn't save into a read-only filesystem", async () => {
+    const readOnly = new Workspace({ filesystem: new LocalFilesystem({ basePath: dir, readOnly: true }) });
+
+    const result = await screenshot({ path: 'ro.png' }, { workspace: readOnly });
+
+    expect(result.saveError).toMatch(/read-only/);
+    await expect(readFile(join(dir, 'ro.png'))).rejects.toThrow();
   });
 
   it('still shows the model the screenshot when resolving the filesystem fails', async () => {

@@ -31,6 +31,8 @@ export function createScreenshotTool(browser: AgentBrowser) {
         if (!filesystem) {
           return { ...result, saveError: 'There is no workspace filesystem to save the screenshot into.' };
         }
+        const blocked = await writeBlocked(workspace!, filesystem.readOnly, input, requestContext);
+        if (blocked) return { ...result, saveError: blocked };
         await filesystem.writeFile(input.path, Buffer.from(result.base64, 'base64'), {
           recursive: true,
           mimeType: 'image/png',
@@ -73,4 +75,45 @@ export function createScreenshotTool(browser: AgentBrowser) {
       };
     },
   });
+}
+
+const WRITE_FILE_TOOL = 'mastra_workspace_write_file';
+
+type ConfigValue = boolean | ((context: Record<string, unknown>) => boolean | Promise<boolean>) | undefined;
+
+/**
+ * Saving a screenshot writes a file, so it follows the workspace's write-file settings: it's refused
+ * when writing is turned off, the filesystem is read-only, or writes need approval (a screenshot
+ * can't ask for it).
+ */
+async function writeBlocked(
+  workspace: { getToolsConfig?: () => Record<string, any> | undefined },
+  readOnly: boolean | undefined,
+  args: Record<string, unknown>,
+  requestContext: RequestContext | undefined,
+): Promise<string | undefined> {
+  if (readOnly) return 'The workspace filesystem is read-only.';
+  const config = workspace.getToolsConfig?.();
+  const perTool = config?.[WRITE_FILE_TOOL];
+  const context = {
+    args,
+    requestContext: requestContext ? Object.fromEntries(requestContext.entries()) : {},
+    workspace,
+  };
+  const resolve = async (value: ConfigValue, fallback: boolean, safeDefault: boolean) => {
+    if (value === undefined) return fallback;
+    if (typeof value === 'boolean') return value;
+    try {
+      return await value(context);
+    } catch {
+      return safeDefault;
+    }
+  };
+  if (!(await resolve(perTool?.enabled ?? config?.enabled, true, false))) {
+    return 'Writing files is turned off in this workspace.';
+  }
+  if (await resolve(perTool?.requireApproval ?? config?.requireApproval, false, true)) {
+    return 'Writing files needs approval in this workspace, so the screenshot was not saved.';
+  }
+  return undefined;
 }
