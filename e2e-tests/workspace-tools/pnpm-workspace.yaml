@@ -9,7 +9,8 @@ overrides:
   'vite@>=8.0.0 <8.3.3': 8.3.4
   proxy-addr: 2.0.8
   '@fastify/proxy-addr@<=5.1.0': 5.1.1
-  qs@>=6.7.0 <6.16.0: 6.16.0
+  # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
+  qs@>=6.7.0 <6.16.1: 6.16.1
   fast-uri@<3.1.9: 3.1.9
   fast-uri@>=4.0.0 <4.1.5: 4.2.1
   brace-expansion@>=1.0.0 <1.1.21: 1.1.21

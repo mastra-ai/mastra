@@ -10,7 +10,8 @@ overrides:
   brace-expansion@>=2.0.0 <2.1.7: 2.1.7
   js-yaml@>=3.0.0 <3.15.2: 3.15.2
   js-yaml@>=4.0.0 <4.3.2: 4.3.2
-  qs@>=6.7.0 <6.16.0: 6.16.0
+  # Vanta 2026-10-28: CVE-2026-110816 / GHSA-6pq8-jhm2-2vcw (qs <=6.16.0 stringify comma DoS) fixed in 6.16.1
+  qs@>=6.7.0 <6.16.1: 6.16.1
   uuid@<11.1.1: 11.1.1
   proxy-addr: 2.0.8
   fast-uri: 3.1.9
