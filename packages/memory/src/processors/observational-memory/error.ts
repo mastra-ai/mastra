@@ -53,15 +53,24 @@ export function isOmModelExecutionError(error: unknown): error is OmModelExecuti
 }
 
 export function getOmFailureMetadata(error: unknown, failurePolicy: OmFailurePolicy) {
+  let observerFailure: ObserverFailureMetadata['observerFailure'];
+  if (typeof coreObservability.executionFailureTermination === 'function') {
+    try {
+      const modelFailure = isOmModelExecutionError(error);
+      observerFailure = {
+        cause: coreObservability.executionFailureTermination(
+          modelFailure ? error.cause : error,
+          modelFailure ? 'model_error' : 'runtime_error',
+        ),
+      };
+    } catch {
+      // Malformed error getters must not turn tracing into a new failure.
+      observerFailure = { cause: { outcome: 'error', stopReason: 'runtime_error' } };
+    }
+  }
   return {
     failurePolicy,
-    ...(isOmModelExecutionError(error) &&
-    error.failureKind === 'observer-model' &&
-    typeof coreObservability.executionFailureTermination === 'function'
-      ? ({
-          observerFailure: { cause: coreObservability.executionFailureTermination(error.cause, 'model_error') },
-        } satisfies ObserverFailureMetadata)
-      : {}),
+    ...(observerFailure ? { observerFailure } : {}),
     ...(isOmModelExecutionError(error) ? { failureKind: error.failureKind } : {}),
   };
 }

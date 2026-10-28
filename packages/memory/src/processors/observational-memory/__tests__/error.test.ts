@@ -1,6 +1,6 @@
 import { ErrorCategory, ErrorDomain, MastraError } from '@mastra/core/error';
 import { describe, expect, it } from 'vitest';
-import { formatOmError, isOmModelExecutionFailure } from '../error';
+import { formatOmError, getOmFailureMetadata, isOmModelExecutionFailure } from '../error';
 import { createBufferingFailedMarker, createObservationFailedMarker } from '../markers';
 
 const providerError = () =>
@@ -306,3 +306,12 @@ describe.each([createBufferingFailedMarker, createObservationFailedMarker])(
     });
   },
 );
+
+it('preserves storage failure as the cause of interrupted observation', () => {
+  expect(getOmFailureMetadata(new Error('db down'), 'abort')).toMatchObject({
+    failurePolicy: 'abort',
+    observerFailure: {
+      cause: { outcome: 'error', stopReason: 'runtime_error', stopReasonContext: { message: 'db down' } },
+    },
+  });
+});
