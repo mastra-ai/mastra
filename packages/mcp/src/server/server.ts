@@ -90,6 +90,7 @@ import { resolveTasksConfig } from './tasks/config';
 import type { MCPServerTasksOptions, ResolvedTasksConfig, ResolvedToolTaskMode } from './tasks/config';
 import { emitTaskResults, taskHandleResult } from './tasks/emit';
 import { registerTaskHandlers } from './tasks/handlers';
+import { MCPTaskLimitError } from './tasks/store';
 import type { MCPTaskAttemptOutcome, MCPTaskRunOptions, MCPTaskWork } from './tasks/store';
 import type {
   AppResources,
@@ -941,7 +942,12 @@ export class MCPServer extends MCPServerBase {
           );
         }
         if (asTask && taskMode.mode === 'always') {
-          return this.startToolTask(ctx, requestContext, name, args, taskMode, { resume });
+          try {
+            return await this.startToolTask(ctx, requestContext, name, args, taskMode, { resume });
+          } catch (error) {
+            if (error instanceof MCPTaskLimitError) return errorResult(openTaskLimitMessage(error));
+            throw error;
+          }
         }
         const options = {
           requestContext,
@@ -1050,12 +1056,6 @@ export class MCPServer extends MCPServerBase {
       if ('error' in winner) throw winner.error;
       return winner;
     }
-    const first = settled.then(
-      (outcome): MCPTaskAttemptOutcome =>
-        'error' in outcome
-          ? this.toolErrorOutcome(name, outcome.error)
-          : this.toTaskOutcome(name, tool, outcome.execution),
-    );
     try {
       return {
         task: await this.startToolTask(ctx, requestContext, name, args, taskMode, {
@@ -1063,19 +1063,38 @@ export class MCPServer extends MCPServerBase {
             options.resumeData === undefined
               ? undefined
               : { resumeData: options.resumeData, suspendPayload: options.suspendPayload },
-          initialAttempt: { outcome: first, abort: reason => controller.abort(reason) },
+          initialAttempt: () => ({
+            outcome: settled.then(
+              (outcome): MCPTaskAttemptOutcome =>
+                'error' in outcome
+                  ? this.toolErrorOutcome(name, outcome.error)
+                  : this.toTaskOutcome(name, tool, outcome.execution),
+            ),
+            abort: reason => controller.abort(reason),
+          }),
         }),
       };
     } catch (error) {
-      // No task owns the execution, so nothing could ever cancel it.
-      controller.abort(error);
-      throw error;
+      if (!(error instanceof MCPTaskLimitError)) {
+        // No task owns the execution, so nothing could ever cancel it.
+        controller.abort(error);
+        throw error;
+      }
     }
+    // At the open task cap: the tool already started, so answer this call synchronously instead.
+    this.logger.debug(`Tool '${name}' outlived its sync window at the open task cap; answering synchronously.`);
+    if (requestSignal.aborted) followRequest();
+    else requestSignal.addEventListener('abort', followRequest, { once: true });
+    const outcome = await settled;
+    requestSignal.removeEventListener('abort', followRequest);
+    if ('error' in outcome) throw outcome.error;
+    return outcome;
   }
 
   /**
    * Creates the task (durably, before answering) and hands its work to the store. `initialAttempt`
-   * is an execution that already started under the request; it stays in this process.
+   * builds the run of an execution that already started under the request; it stays in this
+   * process. Rejects with {@link MCPTaskLimitError}, creating nothing, at the open task cap.
    */
   private async startToolTask(
     ctx: ServerContext,
@@ -1083,7 +1102,10 @@ export class MCPServer extends MCPServerBase {
     name: string,
     args: unknown,
     taskMode: ResolvedToolTaskMode,
-    { resume, initialAttempt }: { resume?: ToolTaskContext['resume'] } & MCPTaskRunOptions,
+    {
+      resume,
+      initialAttempt,
+    }: { resume?: ToolTaskContext['resume']; initialAttempt?: () => MCPTaskRunOptions['initialAttempt'] },
   ): Promise<CallToolResult> {
     const { persisted, dropped } = persistableRequestContext(requestContext);
     if (dropped.length > 0) {
@@ -1103,8 +1125,9 @@ export class MCPServer extends MCPServerBase {
       ttlMs: taskMode.ttlMs,
       principal: principalOf(ctx, requestContext),
       context,
+      limits: this.tasks.limits,
     });
-    this.tasks.store.run(task.taskId, this.toolTaskWork(context), { initialAttempt });
+    this.tasks.store.run(task.taskId, this.toolTaskWork(context), { initialAttempt: initialAttempt?.() });
     this.logger.debug(`Tool '${name}' continues as task.`);
     return taskHandleResult(task);
   }
@@ -1719,6 +1742,12 @@ export class MCPServer extends MCPServerBase {
 /** Tools with an intrinsic id are also registered on the Mastra instance, like `__registerMastra` does. */
 function isRegistrableTool(tool: ToolsInput[string]): tool is ToolAction<any, any, any, any> {
   return !!tool && typeof tool === 'object' && 'id' in tool && typeof tool.id === 'string';
+}
+
+function openTaskLimitMessage({ scope, limit }: MCPTaskLimitError): string {
+  return scope === 'principal'
+    ? `Too many open tasks for this client (limit ${limit}). Wait for one to finish or cancel one.`
+    : `Too many open tasks on this server (limit ${limit}). Try again later.`;
 }
 
 function errorResult(text: string): CallToolResult {

@@ -8,6 +8,7 @@ import type {
   MCPTaskInputResponses,
   MCPTaskStatus,
 } from '../../shared/tasks';
+import { MCPTaskLimitError } from './store';
 import type {
   MCPTaskAccess,
   MCPTaskAttempt,
@@ -88,6 +89,9 @@ const MAX_TIMER_DELAY_MS = 2_147_483_647;
  */
 export class InMemoryMCPTaskStore implements MCPTaskStore {
   readonly #tasks = new Map<string, TaskRecord>();
+  /** Open (non-terminal) tasks per principal, and in total. */
+  readonly #openByPrincipal = new Map<string, number>();
+  #open = 0;
   readonly #now: () => number;
   readonly #expiredRetentionMs: number;
 
@@ -100,6 +104,13 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     assertNonNegativeInteger('ttlMs', params.ttlMs);
     assertNonNegativeInteger('pollIntervalMs', params.pollIntervalMs);
     this.#sweep();
+    const openForPrincipal = this.#openByPrincipal.get(params.principal) ?? 0;
+    if (params.limits) {
+      if (openForPrincipal >= params.limits.perPrincipal) {
+        throw new MCPTaskLimitError('principal', params.limits.perPrincipal);
+      }
+      if (this.#open >= params.limits.total) throw new MCPTaskLimitError('total', params.limits.total);
+    }
     const now = this.#now();
     const record: TaskRecord = {
       taskId: createTaskId(),
@@ -115,6 +126,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     };
     if (record.ttlMs !== null) this.#armExpiry(record, now + record.ttlMs);
     this.#tasks.set(record.taskId, record);
+    this.#openByPrincipal.set(record.principal, openForPrincipal + 1);
+    this.#open++;
     return this.#snapshot(record);
   }
 
@@ -276,6 +289,8 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
       record.abort.abort();
     }
     this.#tasks.clear();
+    this.#openByPrincipal.clear();
+    this.#open = 0;
   }
 
   #lookup(taskId: string, access: MCPTaskAccess): TaskRecord | undefined {
@@ -318,7 +333,12 @@ export class InMemoryMCPTaskStore implements MCPTaskStore {
     record.lastUpdatedAt = this.#now();
   }
 
+  /** The only way a task turns terminal, so it is also where it stops counting as open. */
   #finish(record: TaskRecord, status: 'completed' | 'failed' | 'cancelled', reason?: Error): void {
+    const open = this.#openByPrincipal.get(record.principal)! - 1;
+    if (open === 0) this.#openByPrincipal.delete(record.principal);
+    else this.#openByPrincipal.set(record.principal, open);
+    this.#open--;
     this.#transition(record, status);
     const pending = record.pendingInput;
     record.pendingInput = undefined;

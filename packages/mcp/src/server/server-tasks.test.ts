@@ -33,6 +33,7 @@ interface Probe {
   aborted: string[];
   authInfos: unknown[];
   contexts: Array<{ authInfo: unknown; hasMcp: boolean }>;
+  started: string[];
 }
 
 function makeTools(probe: Probe) {
@@ -86,6 +87,7 @@ function makeTools(probe: Probe) {
       inputSchema: z.object({}),
       execute: async (_input, context) => {
         const signal = context.abortSignal!;
+        probe.started.push(id);
         await new Promise<void>(resolve => signal.addEventListener('abort', () => resolve(), { once: true }));
         probe.aborted.push(id);
         return 'stopped';
@@ -148,7 +150,7 @@ describe('MCPServer tasks', () => {
   });
 
   async function start(tasks: MCPServerConfig['tasks'], extra: Partial<MCPServerConfig> = {}) {
-    const probe: Probe = { runs: [], aborted: [], authInfos: [], contexts: [] };
+    const probe: Probe = { runs: [], aborted: [], authInfos: [], contexts: [], started: [] };
     const server = new MCPServer({ name: 'Tasks', version: '1.0.0', tools: makeTools(probe), tasks, ...extra });
     served = await serveHTTP(server, { auth: req => authFor(String(req.headers['x-test-user'] ?? 'alice')) });
     return { probe, server, url: served.url };
@@ -482,8 +484,71 @@ describe('MCPServer tasks', () => {
     expect((await call('plain')).result.resultType).toBe('task');
   });
 
+  describe('open task caps', () => {
+    const perClientError = 'Too many open tasks for this client (limit 2). Wait for one to finish or cancel one.';
+
+    it('refuses a task past the per-client cap without starting the tool, and leaves other clients alone', async () => {
+      const { probe } = await start({ tools: { hang: 'always' }, maxOpenTasksPerClient: 2 });
+      expect((await call('hang')).result).toMatchObject({ resultType: 'task' });
+      expect((await call('hang')).result).toMatchObject({ resultType: 'task' });
+      await vi.waitFor(() => expect(probe.started).toHaveLength(2));
+
+      const refused = (await call('hang')).result;
+      expect(refused).toMatchObject({ isError: true, content: [{ type: 'text', text: perClientError }] });
+      expect(refused.resultType).not.toBe('task');
+      await sleep(50);
+      expect(probe.started).toHaveLength(2);
+
+      expect((await call('hang', {}, { user: 'bob' })).result).toMatchObject({ resultType: 'task' });
+    });
+
+    it('frees a slot when a task is cancelled or completes', async () => {
+      await start({ tools: { hang: 'always', quick: 'always' }, maxOpenTasksPerClient: 1 });
+      const tasks = await requester();
+      const first = (await call('hang')).result;
+      expect((await call('hang')).result).toMatchObject({ isError: true });
+      await tasks.cancel(first.taskId);
+
+      const quick = (await call('quick')).result;
+      expect(quick).toMatchObject({ resultType: 'task' });
+      expect((await call('hang')).result).toMatchObject({ isError: true });
+      await waitFor(tasks, quick.taskId, 'completed');
+      expect((await call('hang')).result).toMatchObject({ resultType: 'task' });
+    });
+
+    it('refuses a task past the server-wide cap for every client', async () => {
+      await start({ tools: { hang: 'always' }, maxOpenTasks: 2, maxOpenTasksPerClient: 10 });
+      expect((await call('hang', {}, { user: 'alice' })).result).toMatchObject({ resultType: 'task' });
+      expect((await call('hang', {}, { user: 'bob' })).result).toMatchObject({ resultType: 'task' });
+      expect((await call('hang', {}, { user: 'carol' })).result).toMatchObject({
+        isError: true,
+        content: [{ type: 'text', text: 'Too many open tasks on this server (limit 2). Try again later.' }],
+      });
+    });
+
+    it('stops counting a task once its TTL elapses', async () => {
+      await start({ tools: { expiring: { mode: 'always', ttlMs: 200 } }, maxOpenTasksPerClient: 1 });
+      const first = (await call('expiring')).result;
+      expect((await call('expiring')).result).toMatchObject({ isError: true });
+      await waitFor(await requester(), first.taskId, 'failed');
+      expect((await call('expiring')).result).toMatchObject({ resultType: 'task' });
+    });
+
+    it("answers an 'auto' tool synchronously when it outlives its window at the cap, letting it finish", async () => {
+      await start({
+        tools: { hang: 'always', slow: { mode: 'auto', syncWindowMs: 50 } },
+        maxOpenTasksPerClient: 1,
+      });
+      expect((await call('hang')).result).toMatchObject({ resultType: 'task' });
+      const answered = (await call('slow')).result;
+      expect(answered).toMatchObject({ content: [{ type: 'text', text: 'slow done' }] });
+      expect(answered.isError).toBeFalsy();
+      expect(answered.resultType).not.toBe('task');
+    });
+  });
+
   it('rejects task configs it cannot serve at construction', () => {
-    const tools = makeTools({ runs: [], aborted: [], authInfos: [], contexts: [] });
+    const tools = makeTools({ runs: [], aborted: [], authInfos: [], contexts: [], started: [] });
     const make = (tasks: unknown) => () =>
       new MCPServer({ name: 'Bad', version: '1.0.0', tools, tasks: tasks as MCPServerConfig['tasks'] });
     expect(make({ tools: { nope: 'always' } })).toThrow(/not one of this server's tools/);
@@ -492,5 +557,9 @@ describe('MCPServer tasks', () => {
     expect(make({ tools: { echo: 'off' }, required: ['echo'] })).toThrow(/not served as a task/);
     expect(make({ tools: { echo: 'sometimes' } })).toThrow(/unknown task mode/);
     expect(make({ tools: { echo: { mode: 'auto', syncWindowMs: -1 } } })).toThrow(/non-negative integer/);
+    for (const bad of [0, -1, 1.5, Number.NaN]) {
+      expect(make({ tools: { echo: 'always' }, maxOpenTasksPerClient: bad })).toThrow(/maxOpenTasksPerClient/);
+      expect(make({ tools: { echo: 'always' }, maxOpenTasks: bad })).toThrow(/maxOpenTasks /);
+    }
   });
 });

@@ -18,6 +18,6 @@ const server = new MCPServer({
 });
 ```
 
-Tasks are bound to the caller that created them, can be cancelled (which aborts the tool's `abortSignal`), and expire after 24 hours by default. A tool that calls `suspend()` inside a task asks the client for input, and runs again with `resumeData` once the client answers. Tasks are kept in memory by default; pass `tasks.store` to keep them elsewhere.
+Tasks are bound to the caller that created them, can be cancelled (which aborts the tool's `abortSignal`), and expire after 24 hours by default. A tool that calls `suspend()` inside a task asks the client for input, and runs again with `resumeData` once the client answers. Tasks are kept in memory by default; pass `tasks.store` to keep them elsewhere. Each client can hold up to 100 open tasks and the server up to 1000 (`tasks.maxOpenTasksPerClient`, `tasks.maxOpenTasks`). Past that, an `'always'` tool answers with an error and an `'auto'` tool answers synchronously.
 
 Task runs use the request context stored when the task was created, with the bearer token removed, and get no `context.mcp`. The only exception is the first run of an `'auto'` tool, which started under the request. Read cancellation from `context.abortSignal`.

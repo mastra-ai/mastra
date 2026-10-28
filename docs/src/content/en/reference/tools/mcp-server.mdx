@@ -2033,6 +2033,21 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     description: 'Where tasks are kept. The default store keeps them in memory, in this process.',
   },
   {
+    name: 'maxOpenTasksPerClient',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '100',
+    description:
+      'Most open tasks (`working` or `input_required`) one caller can hold. See [open task caps](#open-task-caps).',
+  },
+  {
+    name: 'maxOpenTasks',
+    type: 'number',
+    isOptional: true,
+    defaultValue: '1000',
+    description: 'Most open tasks across all callers. See [open task caps](#open-task-caps).',
+  },
+  {
     name: 'authorize',
     type: '(context: { principal: string; task: MCPDetailedTask; requestContext: RequestContext }) => boolean | Promise<boolean>',
     isOptional: true,
@@ -2057,6 +2072,15 @@ The server creates the task before it answers, so a `tasks/get` sent right after
 ### Access to tasks
 
 A task id is an unguessable bearer token, and each task is bound to the caller that created it. The caller is identified the same way as for [continuation state](#continuation-state): by the OAuth subject, the mapped `user`, or a hash of the bearer token. Another caller asking for the task, and a caller `authorize` refuses, both get error `-32602`, the same answer as for an id that doesn't exist. Tasks can't be listed.
+
+### Open task caps
+
+A task counts as open while it's `working` or `input_required`. It stops counting when it completes, fails, is cancelled or expires. When a call would go over `maxOpenTasksPerClient` or `maxOpenTasks`, the server creates no task:
+
+- An `'always'` tool doesn't run. The call answers with `isError: true` and a message such as `Too many open tasks for this client (limit 100). Wait for one to finish or cancel one.`
+- An `'auto'` tool that's still running when its sync window ends keeps running under the request and answers synchronously, as if it weren't served as a task. Cancelling the request still aborts it.
+
+Both values must be positive integers. The server passes them to `store.create()` as `limits`, and the store enforces them by throwing `MCPTaskLimitError`. A custom store that ignores `limits` doesn't cap open tasks.
 
 ### Asking for input inside a task
 
