@@ -1,7 +1,7 @@
 import { describe, expect, it, vi } from 'vitest';
 import type { MCPDetailedTask, MCPTask } from '../../shared/tasks';
 import { isRecoverableTaskPollError } from '../error-utils';
-import { TaskWaitError, waitForTask } from './wait';
+import { MIN_TASK_POLL_INTERVAL_MS, TaskWaitError, waitForTask } from './wait';
 import type { TaskWaitPort } from './wait';
 
 const created: MCPTask = {
@@ -140,5 +140,34 @@ describe('waitForTask during a server outage', () => {
 
     await expect(waitForTask(port, created, { ...options, signal: controller.signal })).rejects.toThrow('user stopped');
     expect(port.cancel).toHaveBeenCalledWith('task-1');
+  });
+});
+
+describe('waitForTask with a server-chosen poll interval', () => {
+  const eager = { ...created, pollIntervalMs: 0, ttlMs: null } as MCPTask;
+  const working = { ...eager } as MCPDetailedTask;
+
+  it('waits at least the minimum between polls when the server asks for 0ms', async () => {
+    const { port, options, sleeps } = scripted([working, working, working, completed]);
+
+    await expect(waitForTask(port, eager, options)).resolves.toMatchObject({ status: 'completed' });
+    expect(sleeps).toEqual([
+      MIN_TASK_POLL_INTERVAL_MS,
+      MIN_TASK_POLL_INTERVAL_MS,
+      MIN_TASK_POLL_INTERVAL_MS,
+      MIN_TASK_POLL_INTERVAL_MS,
+    ]);
+  });
+
+  it('backs off from the minimum, not from 0, during an outage', async () => {
+    const { port, options, sleeps } = scripted([refused(), refused(), refused(), completed]);
+
+    await expect(waitForTask(port, eager, options)).resolves.toMatchObject({ status: 'completed' });
+    expect(sleeps).toEqual([
+      MIN_TASK_POLL_INTERVAL_MS,
+      MIN_TASK_POLL_INTERVAL_MS,
+      MIN_TASK_POLL_INTERVAL_MS * 2,
+      MIN_TASK_POLL_INTERVAL_MS * 4,
+    ]);
   });
 });

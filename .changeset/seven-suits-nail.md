@@ -22,6 +22,7 @@ const mcp = new MCPClient({
 - Aborting the tool call cancels the remote task. A cancelled or failed task becomes a tool error.
 - Polling rides out a server restart or deploy: the client reconnects and retries with backoff for up to 5 minutes before failing the call.
 - On an agent with background tasks enabled, these tools run as background tasks, so the agent keeps working while the remote task runs.
+- The tool call span carries `mcpTaskKey` metadata (a hash of the task id) to match it with the server's spans for that task.
 - `mcp.tasks.get`, `mcp.tasks.update` and `mcp.tasks.cancel` read, answer and cancel a task directly.
 
 Tasks are off unless `tasks` is set, so existing servers behave as before. See https://github.com/mastra-ai/mastra/issues/26000.

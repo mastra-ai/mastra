@@ -321,7 +321,7 @@ The client speaks the MCP `2026-07-28` revision. On connect it asks the server w
     type: 'boolean | MCPClientTasksOptions',
     isOptional: true,
     description:
-      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
+      'Experimental. Lets this server answer tool calls with an MCP task, which the client waits for. `pollIntervalMs` (default `5000`) is used when the server suggests no interval. The client waits at least 100 ms between polls, whatever the server suggests. `maxWaitMs` stops waiting and cancels the task after that long; by default only the server TTL applies. See the `tasks` property below.',
   },
   {
     name: 'authProvider',
@@ -1470,6 +1470,7 @@ When a tool call returns a task, the tool keeps its usual shape:
 - A task that needs input is answered through `inputRequests`, once per request key. The client sends the answers with `tasks/update` and keeps polling the same task. It never sends `tools/call` again. Without a handler the call fails with `MCP_CLIENT_TOOL_TASK_INPUT_UNHANDLED`, and the task stays open on the server until its TTL ends.
 - Aborting the tool call sends `tasks/cancel`. Reaching `maxWaitMs` sends it too, and fails the call with `MCP_CLIENT_TOOL_TASK_TIMEOUT`.
 - If the server can't be reached while the client polls, for example during a restart or deploy, the client reconnects and keeps polling with growing delays of up to 30 seconds. Refused connections and HTTP 502, 503, and 504 from a proxy count as unreachable. After 5 minutes without an answer, or when `maxWaitMs` or the task's TTL ends first, the call fails with `MCP_CLIENT_TOOL_TASK_POLL_FAILED`. The task may still finish on the server.
+- The tool call span gets `mcpTaskKey` metadata: a SHA-256 hash of the task id. A Mastra server tags its spans for the task with the same key, so you can match both sides and the task id stays out of both traces.
 - A tool error inside a finished task is handled like a direct tool error, following `onToolError`. A task the server cancelled fails with `MCP_CLIENT_TOOL_TASK_CANCELLED`, and a task the server marked `failed` fails with `MCP_CLIENT_TOOL_TASK_FAILED`.
 - A call that returned a task is never retried, because a retry would start a second task.
 - When the call continues as a task, and whenever the task's status changes, the tool writes an `MCPTaskProgress` entry (`{ type: 'mcp-task', taskId, status, createdAt, serverName }`) to its output stream. Studio's tool-call card uses it to show the task's status, elapsed time and MCP task id while it runs. Tool output isn't saved with the thread. After a reload, the card shows only the result.

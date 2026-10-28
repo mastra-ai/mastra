@@ -56,7 +56,7 @@ import type {
 import { JSON_SCHEMA_2020_12, jsonSchemaComplexity, toJsonSchema2020 } from '../shared/json-schema-dialect';
 import { getMastraToolStrictMeta } from '../shared/mastra-tool-meta';
 import { UnauthorizedError } from '../shared/oauth-types';
-import { DEFAULT_TASK_TTL_MS, tasksCapabilityEntry } from '../shared/tasks';
+import { DEFAULT_TASK_TTL_MS, taskKeyOf, tasksCapabilityEntry } from '../shared/tasks';
 import type { MCPTask } from '../shared/tasks';
 import { takeServerTraceContext, traceContextFromSpan, traceContextToMeta } from '../shared/trace-context';
 import { EventClientActions } from './actions/events';
@@ -1749,6 +1749,9 @@ export class InternalMastraMCPClient extends MastraBase {
               if (!task) return finishToolCall(res);
 
               this.log('debug', `Tool ${tool.name} continues as MCP task ${task.taskId}`);
+              // The server tags its task spans with the same key, so both sides can be matched
+              // without the task id (a bearer credential) reaching either trace.
+              toolCallSpan?.update({ metadata: { mcpTaskKey: taskKeyOf(task.taskId) } });
               // Agents with background tasks run this executor off the agent loop (see
               // `taskToolBackgroundConfig`), so waiting here doesn't block the agent.
               return finishToolCall(await this.awaitToolTask(tool.name, task, context?.abortSignal, context?.writer));
