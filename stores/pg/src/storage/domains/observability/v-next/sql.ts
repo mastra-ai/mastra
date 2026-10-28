@@ -130,9 +130,28 @@ export async function insertRows(
     if (!isMissingPartitionError(error) || (await resolveMode(client, partitioning)) !== 'native') throw error;
     const days = withinPartitionWindow(recordDays(records, SIGNAL_TIME_COLUMN[table]), partitioning);
     if (days.length === 0) throw error;
-    await ensureDayPartitions(client, schema, table, days);
+    // One day at a time, so a failure names the day that could not be
+    // created rather than every day in the batch.
+    for (const day of days) {
+      await ensureDayPartitions(client, schema, table, [day]).catch((cause: unknown) => {
+        throw new Error(partitionCreateFailure({ table, day, cause }), { cause });
+      });
+    }
     await client.query(insert.text, insert.values);
   }
+}
+
+/**
+ * The usual cause is a role that may create tables but does not own the
+ * signal tables, so it cannot attach a partition to them.
+ */
+function partitionCreateFailure({ table, day, cause }: { table: SignalTable; day: Date; cause: unknown }) {
+  const reason = cause instanceof Error ? cause.message : String(cause);
+  return (
+    `Could not create the ${table} partition for ${day.toISOString().slice(0, 10)} (UTC): ${reason}. ` +
+    'Create the partitions as the table owner, for example by calling ensurePartitions() on a schedule ' +
+    'with a role that owns the observability tables.'
+  );
 }
 
 function recordDays(records: Record<string, unknown>[], timeColumn: string): Date[] {

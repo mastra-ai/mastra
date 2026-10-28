@@ -75,11 +75,18 @@ describe('insertRows partition recovery', () => {
     const query = vi.fn().mockRejectedValueOnce(missingPartition).mockResolvedValue({ rows: [] });
     const none = vi.fn(async () => {});
     const tx = vi.fn(async (fn: (t: { none: typeof none }) => Promise<void>) => fn({ none }));
-    const manyOrNone = vi.fn(async () => []);
+    const manyOrNone = vi.fn(async (): Promise<{ relname: string }[]> => []);
     const oneOrNone = vi.fn(async (sql: string) => ({
       exists: installedExtensions.some(extension => sql.includes(`'${extension}'`)),
     }));
-    return { client: { query, tx, manyOrNone, oneOrNone } as unknown as DbClient, query, tx, oneOrNone };
+    return {
+      client: { query, tx, manyOrNone, oneOrNone } as unknown as DbClient,
+      query,
+      tx,
+      none,
+      manyOrNone,
+      oneOrNone,
+    };
   }
 
   it('creates the day and retries once in native mode', async () => {
@@ -109,6 +116,28 @@ describe('insertRows partition recovery', () => {
     const { client, tx } = clientThatLacksTodaysPartition(['pg_partman']);
     await expect(insertRows(client, 'obs', 'mastra_span_events', [row], {})).rejects.toBe(missingPartition);
     expect(tx).not.toHaveBeenCalled();
+  });
+
+  it('names the table, the day it could not create, and the fix, and keeps the database error as the cause', async () => {
+    const { client, none, manyOrNone } = clientThatLacksTodaysPartition();
+    const yesterday = new Date(row.endedAt.getTime() - 86_400_000);
+    const day = (d: Date) => d.toISOString().slice(0, 10);
+    manyOrNone.mockResolvedValue([{ relname: `mastra_span_events_p${day(yesterday).replace(/-/g, '')}` }]);
+    const notOwner = Object.assign(new Error('must be owner of table mastra_span_events'), { code: '42501' });
+    none.mockRejectedValue(notOwner);
+
+    const write = insertRows(client, 'obs', 'mastra_span_events', [{ ...row, spanId: 's0', endedAt: yesterday }, row], {
+      mode: 'native',
+    });
+
+    await expect(write).rejects.toThrow(
+      `mastra_span_events partition for ${day(row.endedAt)} (UTC): must be owner of table mastra_span_events`,
+    );
+    await expect(write).rejects.toThrow('ensurePartitions()');
+    await expect(write).rejects.toMatchObject({
+      message: expect.not.stringContaining(day(yesterday)),
+      cause: notOwner,
+    });
   });
 
   it('does not detect again when the store already resolved its mode', async () => {
