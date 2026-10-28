@@ -22,16 +22,21 @@
     "zai-org/glm-5.2"
   ],
   "reasoning": {
+    "openai/gpt-5.5": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high"]
+      }
+    ],
+    "moonshotai/kimi-k2.5": [
+      {
+        "type": "toggle"
+      }
+    ],
     "anthropic/claude-opus-4.7": [
       {
         "type": "effort",
         "values": ["low", "medium", "high"]
-      }
-    ],
-    "deepseek/deepseek-v4-flash": [
-      {
-        "type": "effort",
-        "values": ["high", "max"]
       }
     ],
     "deepseek/deepseek-v4-pro": [
@@ -40,14 +45,10 @@
         "values": ["high", "max"]
       }
     ],
-    "moonshotai/kimi-k2.5": [
+    "deepseek/deepseek-v4-flash": [
       {
-        "type": "toggle"
-      }
-    ],
-    "zai-org/glm-5.1": [
-      {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["high", "max"]
       }
     ],
     "zai-org/glm-5.2": [
@@ -56,10 +57,9 @@
         "values": ["high", "max"]
       }
     ],
-    "openai/gpt-5.5": [
+    "zai-org/glm-5.1": [
       {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high"]
+        "type": "toggle"
       }
     ]
   }

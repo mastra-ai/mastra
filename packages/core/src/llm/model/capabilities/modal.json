@@ -32,6 +32,12 @@
         "values": ["low", "high", "max"]
       }
     ],
+    "nvidia/GLM-5.3-Flash-NVFP4": [
+      {
+        "type": "effort",
+        "values": ["low", "high", "max"]
+      }
+    ],
     "meta-models/Muse-Spark-Open-816B-A42B": [
       {
         "type": "effort",
@@ -44,19 +50,13 @@
         "values": ["low", "medium", "xhigh"]
       }
     ],
-    "nvidia/GLM-5.3-Flash-NVFP4": [
+    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]
       }
     ],
     "zai-org/GLM-5.3": [
-      {
-        "type": "effort",
-        "values": ["low", "high", "max"]
-      }
-    ],
-    "zai-org/GLM-5.3-Flash": [
       {
         "type": "effort",
         "values": ["low", "high", "max"]

@@ -2,12 +2,13 @@ import { Area, CartesianGrid, ComposedChart, Line, Tooltip } from 'recharts';
 import { MetricsLineChartLegend } from './metrics-line-chart-legend';
 import { MetricsLineChartTooltip } from './metrics-line-chart-tooltip';
 import { ChartSkeleton } from '@/ds/components/ChartSkeleton';
-import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
+import { CHART_CURSOR_PROPS, CHART_GRID_PROPS, CHART_TOOLTIP_PROPS, useChartSize } from '@/ds/primitives/chart-axes';
 import type { ChartXLabels } from '@/ds/primitives/chart-axes';
 import { Y_AXIS_WIDTH, compactNumber, dataMax, isWholeData, timeXAxis, valueYAxis } from '@/ds/primitives/chart-frame';
 import type { ChartHeight } from '@/ds/primitives/chart-frame';
 import { CHART_MARGIN } from '@/ds/primitives/chart-layout';
 import { ChartPlot } from '@/ds/primitives/chart-plot';
+import { ChartTooltipPosition } from '@/ds/primitives/chart-tooltip-position';
 import { useChartDefsId } from '@/ds/primitives/use-chart-defs-id';
 import { cn } from '@/lib/utils';
 
@@ -48,20 +49,12 @@ const THIN_FILL_FADE = '[&_.recharts-area-area]:mask-x-from-[calc(100%-24px)]';
 /** A series with this few points gets a dot on each: a lone point draws no line at all. */
 const SPARSE_POINTS = 12;
 
-// Positioned via transform so the hover line glides between points instead of jumping.
-function SmoothCursor({ points }: { points?: { x: number; y: number }[] }) {
+// Jumps straight to the hovered point, with the dots and the tooltip.
+function HoverLine({ points }: { points?: { x: number; y: number }[] }) {
   const [top, bottom] = points ?? [];
   if (!top || !bottom) return null;
   return (
-    <line
-      x1={0}
-      x2={0}
-      y1={top.y}
-      y2={bottom.y}
-      {...CHART_CURSOR_PROPS}
-      className="pointer-events-none transition-transform duration-150 ease-out"
-      style={{ transform: `translateX(${top.x}px)` }}
-    />
+    <line x1={top.x} x2={top.x} y1={top.y} y2={bottom.y} {...CHART_CURSOR_PROPS} className="pointer-events-none" />
   );
 }
 
@@ -206,8 +199,13 @@ function LinePlot({
           ),
         })}
         <Tooltip
-          content={<MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />}
-          cursor={<SmoothCursor />}
+          {...CHART_TOOLTIP_PROPS}
+          content={
+            <ChartTooltipPosition>
+              <MetricsLineChartTooltip formatValue={format} labelKey={tooltipLabelKey} />
+            </ChartTooltipPosition>
+          }
+          cursor={<HoverLine />}
         />
         {series.map((s, i) => {
           const common = {
