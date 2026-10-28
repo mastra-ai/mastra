@@ -1,5 +1,5 @@
 import { z } from 'zod/v4';
-import { exprRefs, outOfRangeQueries, valueExprSchema } from '../../lib/values';
+import { exprRefs, unknownQueryIssues, valueExprSchema } from '../../lib/values';
 import type { ValueExpr, ValueRef } from '../../lib/values';
 import type { ResolvedView } from '../../widget-kind';
 
@@ -50,10 +50,10 @@ function refFigures(response: Aggregate | undefined, ref: ValueRef): KpiFigures 
  * A KPI's figures. A single aggregate keeps the API's own change; a sum adds the parts and works
  * out the change from the summed previous value, as the Tokens KPI does.
  */
-export function kpiFigures(expr: ValueExpr, responses: (Aggregate | undefined)[]): KpiFigures {
+export function kpiFigures(expr: ValueExpr, responses: ReadonlyMap<string, Aggregate | undefined>): KpiFigures {
   if (!('sum' in expr)) {
     const [ref] = exprRefs(expr);
-    return ref ? refFigures(responses[ref.query], ref) : { value: null, previous: null, change: null };
+    return ref ? refFigures(responses.get(ref.query), ref) : { value: null, previous: null, change: null };
   }
   const parts = expr.sum.map(e => kpiFigures(e, responses));
   const hasCurrent = parts.some(p => p.value != null);
@@ -70,12 +70,12 @@ export function kpiFigures(expr: ValueExpr, responses: (Aggregate | undefined)[]
 const readsAggregates = (expr: ValueExpr): boolean =>
   'query' in expr || ('sum' in expr && expr.sum.every(readsAggregates));
 
-/** What the schema can't say: query indexes in range, and only aggregates or sums. */
+/** What the schema can't say: query ids the view has, and only aggregates or sums. */
 export const kpisIssues = (view: ResolvedView<KpisOptions>) => [
-  ...outOfRangeQueries(
-    view.options.items.map(i => i.value),
-    view.queries.length,
-  ).map(r => `options reference query ${r.query}, which the view doesn't have`),
+  ...unknownQueryIssues(
+    view.options.items.flatMap(i => exprRefs(i.value).map(r => r.query)),
+    view.queries,
+  ),
   ...view.options.items
     .filter(i => !readsAggregates(i.value))
     .map(i => `KPI '${i.label}' can only read an aggregate or sum several`),

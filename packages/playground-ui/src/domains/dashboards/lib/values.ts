@@ -5,11 +5,14 @@ import { z } from 'zod/v4';
  * combine them with a few fixed operations; there are no free-form expressions.
  */
 
+/** Names one of the view's queries by its `id`, never its position, so reordering queries keeps refs. */
+export const queryRefSchema = z.string().min(1);
+
 /** A number read from one query's result. */
 export const valueRefSchema = z
   .object({
-    /** Index into the view's `queries`. */
-    query: z.number().int().min(0),
+    /** The `id` of one of the view's queries. */
+    query: queryRefSchema,
     /** Metrics and scores read `value` (or the price, `estimatedCost`); trace and span aggregates read a measure. */
     field: z.enum(['value', 'estimatedCost']).optional(),
     /** A trace or span aggregate measure, e.g. `countDistinct.threadId`. */
@@ -137,7 +140,26 @@ export function matchesGroups(ref: ValueRef, name: string) {
   return true;
 }
 
-/** Query indexes an expression reads that are out of range for a view with `count` queries. */
-export function outOfRangeQueries(exprs: ValueExpr[], count: number) {
-  return exprs.flatMap(exprRefs).filter(r => r.query >= count);
+/** Each query's answer under its id, for reading refs. Queries without an id can't be referenced. */
+export function answersById<T>(queries: readonly { id?: string }[], answers: readonly T[]): Map<string, T | undefined> {
+  const byId = new Map<string, T | undefined>();
+  queries.forEach((q, i) => {
+    if (q.id !== undefined) byId.set(q.id, answers[i]);
+  });
+  return byId;
+}
+
+/** Where a query id sits in the view's queries, or `undefined` if no query has it. */
+export const queryIndex = (queries: readonly { id?: string }[], id: string | undefined) => {
+  if (id === undefined) return undefined;
+  const index = queries.findIndex(q => q.id === id);
+  return index < 0 ? undefined : index;
+};
+
+/** An issue for each referenced query id the view doesn't have. */
+export function unknownQueryIssues(ids: readonly string[], queries: readonly { id?: string }[], where = 'options') {
+  const known = new Set(queries.flatMap(q => (q.id === undefined ? [] : [q.id])));
+  return [...new Set(ids)]
+    .filter(id => !known.has(id))
+    .map(id => `${where}: reads query '${id}', which the view doesn't have`);
 }

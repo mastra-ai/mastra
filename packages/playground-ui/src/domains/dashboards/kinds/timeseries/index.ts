@@ -6,6 +6,6 @@ import { TimeseriesWidget } from './timeseries-widget';
 export const timeseriesKind = defineWidgetKind({
   kind: 'timeseries',
   optionsSchema: timeseriesOptionsSchema,
-  issues: view => timeseriesIssues(view.options, view.queries.length),
+  issues: view => timeseriesIssues(view.options, view.queries),
   component: TimeseriesWidget,
 });

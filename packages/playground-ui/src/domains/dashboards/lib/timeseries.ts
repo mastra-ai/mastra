@@ -4,7 +4,16 @@ import { bucketGrid, bucketPlan, gridIndex, intervalHours } from '../../metrics/
 import type { ApiInterval } from '../../metrics/lib/metrics-buckets';
 import { bucketTraceAggregateRows } from '../../metrics/lib/trace-aggregate';
 import type { TraceAggregateRow } from '../../metrics/lib/trace-aggregate';
-import { colorSchema, evaluate, exprRefs, formatSchema, matchesGroups, valueExprSchema } from './values';
+import {
+  colorSchema,
+  evaluate,
+  exprRefs,
+  formatSchema,
+  matchesGroups,
+  queryRefSchema,
+  unknownQueryIssues,
+  valueExprSchema,
+} from './values';
 import type { ValueExpr, ValueRef } from './values';
 
 export const timeseriesSeriesSchema = z
@@ -34,8 +43,8 @@ export const timeseriesOptionsSchema = z
      * buckets (percentiles and averages can't merge). Trace and span aggregates always keep the API's.
      */
     buckets: z.enum(['chart', 'api']).optional(),
-    /** Queries sent over the whole range, without an interval (e.g. distinct counts, which can't be summed). */
-    totals: z.array(z.number().int().min(0)).optional(),
+    /** Ids of queries sent over the whole range, without an interval (e.g. distinct counts, which can't be summed). */
+    totals: z.array(queryRefSchema).optional(),
     /** Hides a series whose legend value (or range total) is zero. */
     hideEmpty: z.boolean().optional(),
     /** Emphasizes the first series shown. */
@@ -117,7 +126,8 @@ export function shapeTimeseries({
   hasTraceQueries,
 }: {
   options: TimeseriesOptions;
-  responses: unknown[];
+  /** Each query's answer, by query id. */
+  responses: ReadonlyMap<string, unknown>;
   window: Window;
   hasTraceQueries: boolean;
 }): ShapedTimeseries {
@@ -134,7 +144,7 @@ export function shapeTimeseries({
     const hit = cache.get(key);
     if (hit) return hit;
     const values: (number | undefined)[] = grid.map(() => (merged ? 0 : undefined));
-    const response = responses[ref.query];
+    const response = responses.get(ref.query);
     if (isTraceRows(response)) {
       bucketTraceAggregateRows(response.rows, window).forEach((b, i) => {
         values[i] = fromRows(b.rows, ref) ?? 0;
@@ -155,7 +165,7 @@ export function shapeTimeseries({
     return values;
   };
   const total = (ref: ValueRef) =>
-    rangeValue(responses[ref.query], ref, totals.has(ref.query) ? undefined : bucketed(ref)) ?? 0;
+    rangeValue(responses.get(ref.query), ref, totals.has(ref.query) ? undefined : bucketed(ref)) ?? 0;
   const overRange = (expr: ValueExpr) => evaluate(expr, total) ?? 0;
 
   const perSeries = options.series.map(s => {
@@ -200,19 +210,17 @@ export function shapeTimeseries({
   };
 }
 
-/** Query indexes the view's options read that it doesn't have. */
-export function timeseriesIssues(options: TimeseriesOptions, queryCount: number): string[] {
+/** Query ids the view's options read that it doesn't have. */
+export function timeseriesIssues(options: TimeseriesOptions, queries: readonly { id?: string }[]): string[] {
   const exprs = options.series.flatMap(s => [s.value, ...(s.legendValue ? [s.legendValue] : [])]);
   const summary = options.summary?.value;
   if (summary && summary !== 'total' && !('peak' in summary)) exprs.push(summary);
   if (options.emptyWhenZero) exprs.push(options.emptyWhenZero);
-  const refs = exprs.flatMap(exprRefs);
   return [
-    ...refs
-      .filter(r => r.query >= queryCount)
-      .map(r => `options reference query ${r.query}, which the view doesn't have`),
-    ...(options.totals ?? [])
-      .filter(q => q >= queryCount)
-      .map(q => `options.totals references query ${q}, which the view doesn't have`),
+    ...unknownQueryIssues(
+      exprs.flatMap(exprRefs).map(r => r.query),
+      queries,
+    ),
+    ...unknownQueryIssues(options.totals ?? [], queries, 'options.totals'),
   ];
 }

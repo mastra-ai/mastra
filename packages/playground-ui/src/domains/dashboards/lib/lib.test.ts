@@ -1,12 +1,12 @@
 import type { DashboardQuery, MastraClient } from '@mastra/client-js';
 import { describe, expect, it } from 'vitest';
 import { buildTableRows, listedRows, previousTableFigures, rowDrilldown, breakdownIssues } from './breakdown';
-import type { BreakdownColumn, BreakdownOptions } from './breakdown';
+import type { BreakdownColumn, BreakdownOptions, BreakdownResponse } from './breakdown';
 import { dashboardDefaults, inScope, targetScope, viewDrilldown } from './definition';
 import { intersectFilters } from './filters';
 import { buildPreviousRequest, buildRequest, sendRequest } from './requests';
 import type { DashboardPageContext } from './requests';
-import { evaluate, matchesGroups, outOfRangeQueries, valueExprSchema } from './values';
+import { answersById, evaluate, matchesGroups, unknownQueryIssues, valueExprSchema } from './values';
 import type { ValueExpr, ValueRef } from './values';
 
 const window = { start: new Date('2026-10-27T12:00:00Z'), end: new Date('2026-10-28T12:00:00Z') };
@@ -17,39 +17,41 @@ const page: DashboardPageContext = {
 };
 
 describe('value expressions', () => {
-  const values: Record<number, number | undefined> = { 0: 100, 1: 30, 2: undefined };
+  const values: Record<string, number | undefined> = { runs: 100, failed: 30, missing: undefined };
   const read = (ref: ValueRef) => values[ref.query];
 
   it('sums, subtracts and divides', () => {
-    expect(evaluate({ sum: [{ query: 0 }, { query: 1 }] }, read)).toBe(130);
-    expect(evaluate({ minus: [{ query: 1 }, { query: 0 }] }, read)).toBe(-70);
-    expect(evaluate({ ratio: { of: { query: 1 }, over: { query: 0 } } }, read)).toBe(0.3);
+    expect(evaluate({ sum: [{ query: 'runs' }, { query: 'failed' }] }, read)).toBe(130);
+    expect(evaluate({ minus: [{ query: 'failed' }, { query: 'runs' }] }, read)).toBe(-70);
+    expect(evaluate({ ratio: { of: { query: 'failed' }, over: { query: 'runs' } } }, read)).toBe(0.3);
   });
 
   it('is missing only when everything it reads is missing', () => {
-    expect(evaluate({ query: 2 }, read)).toBeUndefined();
-    expect(evaluate({ sum: [{ query: 2 }, { query: 2 }] }, read)).toBeUndefined();
-    expect(evaluate({ sum: [{ query: 2 }, { query: 1 }] }, read)).toBe(30);
-    expect(evaluate({ minus: [{ query: 2 }, { query: 2 }] }, read)).toBeUndefined();
+    expect(evaluate({ query: 'missing' }, read)).toBeUndefined();
+    expect(evaluate({ sum: [{ query: 'missing' }, { query: 'missing' }] }, read)).toBeUndefined();
+    expect(evaluate({ sum: [{ query: 'missing' }, { query: 'failed' }] }, read)).toBe(30);
+    expect(evaluate({ minus: [{ query: 'missing' }, { query: 'missing' }] }, read)).toBeUndefined();
   });
 
   it('gives a ratio no value when dividing by zero or nothing', () => {
-    expect(evaluate({ ratio: { of: { query: 1 }, over: { query: 2 } } }, read)).toBeUndefined();
-    expect(evaluate({ ratio: { of: { query: 1 }, over: { const: 0 } } }, read)).toBeUndefined();
+    expect(evaluate({ ratio: { of: { query: 'failed' }, over: { query: 'missing' } } }, read)).toBeUndefined();
+    expect(evaluate({ ratio: { of: { query: 'failed' }, over: { const: 0 } } }, read)).toBeUndefined();
   });
 
   it("states the cards' clamp and 0% rules explicitly", () => {
-    const input: ValueExpr = { max: [{ minus: [{ query: 1 }, { query: 0 }] }, { const: 0 }] };
+    const input: ValueExpr = { max: [{ minus: [{ query: 'failed' }, { query: 'runs' }] }, { const: 0 }] };
     expect(evaluate(input, read)).toBe(0);
-    const rate: ValueExpr = { coalesce: [{ ratio: { of: { query: 1 }, over: { query: 2 } } }, { const: 0 }] };
+    const rate: ValueExpr = {
+      coalesce: [{ ratio: { of: { query: 'failed' }, over: { query: 'missing' } } }, { const: 0 }],
+    };
     expect(evaluate(rate, read)).toBe(0);
-    expect(evaluate({ coalesce: [{ query: 2 }, { query: 1 }] }, read)).toBe(30);
-    expect(evaluate({ max: [{ query: 2 }] }, read)).toBeUndefined();
+    expect(evaluate({ coalesce: [{ query: 'missing' }, { query: 'failed' }] }, read)).toBe(30);
+    expect(evaluate({ max: [{ query: 'missing' }] }, read)).toBeUndefined();
   });
 
   it('matches group keys exactly', () => {
-    const failed = { query: 0, groups: ['error'] };
-    const completed = { query: 0, notGroups: ['error'] };
+    const failed = { query: 'runs', groups: ['error'] };
+    const completed = { query: 'runs', notGroups: ['error'] };
     expect(matchesGroups(failed, 'error')).toBe(true);
     expect(matchesGroups(failed, 'Error')).toBe(false);
     expect(matchesGroups(failed, 'error-handler')).toBe(false);
@@ -58,9 +60,14 @@ describe('value expressions', () => {
   });
 
   it('parses nested expressions and rejects unknown keys', () => {
-    expect(valueExprSchema.safeParse({ sum: [{ minus: [{ query: 0 }, { query: 1 }] }] }).success).toBe(true);
-    expect(valueExprSchema.safeParse({ product: [{ query: 0 }] }).success).toBe(false);
-    expect(outOfRangeQueries([{ sum: [{ query: 0 }, { query: 3 }] }], 2)).toEqual([{ query: 3 }]);
+    expect(valueExprSchema.safeParse({ sum: [{ minus: [{ query: 'runs' }, { query: 'failed' }] }] }).success).toBe(
+      true,
+    );
+    expect(valueExprSchema.safeParse({ product: [{ query: 'runs' }] }).success).toBe(false);
+    expect(valueExprSchema.safeParse({ query: 0 }).success).toBe(false);
+    expect(unknownQueryIssues(['runs', 'other'], [{ id: 'runs' }, {}])).toEqual([
+      "options: reads query 'other', which the view doesn't have",
+    ]);
   });
 });
 
@@ -222,12 +229,14 @@ describe('breakdown rows', () => {
   const options: BreakdownOptions = { groupBy: ['projectId', 'entityName'], emptyMessage: 'None.' };
   const columns: BreakdownColumn[] = [
     { id: 'project', options: {} },
-    { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
-    { id: 'p95', options: { query: 0, measure: 'duration.p95' } },
-    { id: 'tokens', options: { query: 1, field: 'value' } },
-    { id: 'cost', options: { query: 1, field: 'estimatedCost' } },
-    { id: 'count', options: { query: 0, measure: 'countDistinct.traceId' } },
+    { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
+    { id: 'p95', options: { query: 'figures', measure: 'duration.p95' } },
+    { id: 'tokens', options: { query: 'usage', field: 'value' } },
+    { id: 'cost', options: { query: 'usage', field: 'estimatedCost' } },
+    { id: 'count', options: { query: 'figures', measure: 'countDistinct.traceId' } },
   ];
+  const answers = (figures: BreakdownResponse, usage: BreakdownResponse) =>
+    answersById([{ id: 'figures' }, { id: 'usage' }], [figures, usage]);
   const aggregate = {
     rows: [
       {
@@ -244,7 +253,7 @@ describe('breakdown rows', () => {
   };
 
   it('joins every query on groupBy, keeping a group that only has usage', () => {
-    expect(buildTableRows(options, columns, [aggregate, usage])).toEqual([
+    expect(buildTableRows(options, columns, answers(aggregate, usage))).toEqual([
       {
         key: '["p1","Code Agent"]',
         projectId: 'p1',
@@ -272,12 +281,18 @@ describe('breakdown rows', () => {
     const piped = {
       rows: [{ dimensions: { projectId: 'p1', entityName: 'a|b' }, measures: { 'countDistinct.traceId': 1 } }],
     };
-    const [row] = buildTableRows(options, columns, [piped, { groups: [] }]);
+    const [row] = buildTableRows(options, columns, answers(piped, { groups: [] }));
     expect(row).toMatchObject({ projectId: 'p1', name: 'a|b' });
-    const previous = previousTableFigures(options, columns, [
-      { rows: [{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }] },
-      { groups: [] },
-    ]);
+    const previous = previousTableFigures(
+      options,
+      columns,
+      answers(
+        { rows: [{ dimensions: { projectId: 'p|2', entityName: 'x' }, measures: { 'countDistinct.traceId': 2 } }] },
+        {
+          groups: [],
+        },
+      ),
+    );
     const dropped = listedRows(options, [], previous, false, true);
     expect(dropped).toMatchObject([{ projectId: 'p|2', name: 'x', count: 0 }]);
   });
@@ -287,23 +302,29 @@ describe('breakdown rows', () => {
     const rows = buildTableRows(
       threads,
       [
-        { id: 'count', options: { query: 0, measure: 'count' } },
-        { id: 'resource', options: { query: 1, dimension: 'resourceId', joinOn: 'threadId' } },
+        { id: 'count', options: { query: 'figures', measure: 'count' } },
+        { id: 'resource', options: { query: 'usage', dimension: 'resourceId', joinOn: 'threadId' } },
       ],
-      [
+      answers(
         { rows: [{ dimensions: { threadId: 't1' }, measures: { count: 3 } }] },
         { rows: [{ dimensions: { resourceId: 'user-1', threadId: 't1' }, measures: { count: 3 } }] },
-      ],
+      ),
     );
     expect(rows[0]?.resource).toBe('user-1');
   });
 
   it('adds dropped groups unless the view turns them off or the list is cut short', () => {
-    const previous = previousTableFigures(options, columns, [
-      { rows: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 2 } }] },
-      { groups: [] },
-    ]);
-    const built = buildTableRows(options, columns, [aggregate, { groups: [] }]);
+    const previous = previousTableFigures(
+      options,
+      columns,
+      answers(
+        {
+          rows: [{ dimensions: { projectId: 'p1', entityName: 'Retired' }, measures: { 'countDistinct.traceId': 2 } }],
+        },
+        { groups: [] },
+      ),
+    );
+    const built = buildTableRows(options, columns, answers(aggregate, { groups: [] }));
     expect(listedRows(options, built, previous, false, true).map(r => r.name)).toEqual(['Code Agent', 'Retired']);
     expect(listedRows(options, built, previous, true, true)).toHaveLength(1);
     expect(listedRows({ ...options, dropped: false }, built, previous, false, true)).toHaveLength(1);
@@ -324,18 +345,18 @@ describe('breakdown rows', () => {
     expect(
       breakdownIssues(
         [
-          { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
+          { id: 'errorRate', options: { query: 'figures', measure: 'errorRate' } },
           { id: 'sparkline', options: {} },
-          { id: 'tokens', options: { query: 4, field: 'value' } },
+          { id: 'tokens', options: { query: 'missing', field: 'value' } },
         ],
-        [{ source: 'traceAggregate', measures: ['count'] }],
+        [{ id: 'figures', source: 'traceAggregate', measures: ['count'] }],
       ),
     ).toEqual([
       "columns.1: unknown column 'sparkline'",
       "columns: a breakdown needs a 'count' column",
       "columns: 'errorRate' and 'p95' come together",
       "columns: 'tokens' and 'cost' come together",
-      "columns: 'tokens' reads query 4, which the view doesn't have",
+      "columns: 'tokens' reads query 'missing', which the view doesn't have",
     ]);
   });
 });
