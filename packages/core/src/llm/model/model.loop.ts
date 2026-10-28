@@ -136,6 +136,7 @@ export class MastraLLMVNext extends MastraBase {
     toolCallConcurrency,
     eagerToolExecution,
     _internal,
+    onTracingTripwire,
     agentId,
     agentVersionId,
     resolvedScopes,
@@ -234,6 +235,15 @@ export class MastraLLMVNext extends MastraBase {
     try {
       const loopOptions: LoopOptions<Tools, OUTPUT> = {
         mastra: this.#mastra,
+        onTracingTripwire: (tripwire, usage, text) => {
+          modelSpanTracker?.endGeneration({
+            ...agentLoopTermination({ tripwire }),
+            usage,
+            output: { text },
+            attributes: {},
+          });
+          onTracingTripwire?.(tripwire, usage, text);
+        },
         resumeContext,
         runId,
         toolCallId,
@@ -354,7 +364,7 @@ export class MastraLLMVNext extends MastraBase {
                 : agentLoopTermination({
                     stopCause: context?.continuationStopCause,
                     finishReason: props.finishReason,
-                    tripwire: props.tripwire,
+                    tripwire: context?.outputResultTripwire ?? props.tripwire,
                     maxSteps,
                     suspension: {
                       approvalRequired: props.suspendReason === 'tool-call-approval',

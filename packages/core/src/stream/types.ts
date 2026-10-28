@@ -262,7 +262,6 @@ interface ToolCallInputStreamingEndPayload {
 
 interface FinishPayload<Tools extends ToolSet = ToolSet, OUTPUT extends OutputSchema = undefined> {
   stepResult: {
-    continuationStopCause?: ContinuationStopCause;
     /** Includes 'tripwire' and 'retry' for processor scenarios */
     reason: LanguageModelV2FinishReason | 'tripwire' | 'retry';
     /** Provider's own finish reason (e.g. 'MALFORMED_FUNCTION_CALL'), when the provider reports one */

@@ -350,10 +350,7 @@ export async function executeEntry(
   try {
     const result = await executeEntryBody(engine, { ...params, ...createObservabilityContext({ currentSpan: span }) });
     const settled = result.result;
-    const termination = workflowTermination(
-      { ...settled, status: settled.status === 'failed' && settled.tripwire ? 'tripwire' : settled.status },
-      params.abortController.signal,
-    );
+    const termination = workflowTermination(settled, params.abortController.signal);
     if (settled.status === 'failed')
       await engine.errorChildSpan({
         span,

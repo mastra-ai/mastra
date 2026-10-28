@@ -758,6 +758,9 @@ export interface RegistryModelListEntry {
  * Registry entry for a single run's non-serializable state
  */
 export interface RunRegistryEntry {
+  /** Transient tracing fact; not part of the iteration state or finish payload. */
+  tracingTermination?: import('../../observability').SpanTermination;
+  tracingStopCause?: import('../../loop/shared/continuation-core').ContinuationStopCause;
   /** Effective public ID of the owning agent; absent on legacy or manually seeded entries. */
   agentId?: string;
   /**

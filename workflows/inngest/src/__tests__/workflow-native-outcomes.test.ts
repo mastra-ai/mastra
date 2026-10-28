@@ -233,10 +233,7 @@ describe('native workflow outcomes across Inngest replay', () => {
     async ({ mode, workflow, attempts }) => {
       const run = await workflow.createRun();
       const result = await run.start({ inputData: {} });
-      // Known public-status race: snapshot polling can observe the intermediate
-      // failed step before tripwire finalization. Native outcome assertions below
-      // use finalized storage/export boundaries, not that early polling response.
-      if (mode !== 'tripwire') expect(result.status).toBe(mode === 'error' ? 'failed' : 'success');
+      expect(result.status).toBe(mode === 'error' || mode === 'tripwire' ? 'failed' : 'success');
       const store = await getSharedMastra().getStorage()!.getStore('workflows');
       await expect
         .poll(
@@ -248,7 +245,7 @@ describe('native workflow outcomes across Inngest replay', () => {
               })
             )?.status,
         )
-        .toBe(mode === 'error' ? 'failed' : mode === 'tripwire' ? 'tripwire' : 'success');
+        .toBe(mode === 'error' || mode === 'tripwire' ? 'failed' : 'success');
       await expect
         .poll(() =>
           exporter

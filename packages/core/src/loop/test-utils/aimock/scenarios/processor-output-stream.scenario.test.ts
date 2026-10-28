@@ -92,6 +92,9 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
     const { output, chunks } = await runLoopScenario({
       engine,
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       llm: getMock(),
       prompt: QUESTION,
       collectChunks: true,
@@ -107,7 +110,7 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
     expect(chunks!.find(c => c.type === 'tripwire')?.payload).toMatchObject({ reason: DEFAULT_REASON });
     expect(output.tripwire).toMatchObject({ reason: DEFAULT_REASON });
     for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP, SpanType.MODEL_INFERENCE]) {
-      expect(ended(type).at(-1)).toMatchObject({
+      expect(ended(type).at(-1), type).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
         stopReasonContext: { tripwire: { processorId: 'stream-breaker', reason: DEFAULT_REASON } },

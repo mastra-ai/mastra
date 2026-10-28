@@ -9,6 +9,42 @@ import { captureOutcomeEvents as capture } from '../outcome-test-utils';
 describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   const getMock = useLoopScenarioAimock();
 
+  it('records an output-result guardrail without losing usage or exporting terminal spans twice', async () => {
+    const { observability, ended } = capture();
+    const { chunks, requests } = await runLoopScenario({
+      engine,
+      llm: getMock(),
+      observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
+      collectChunks: true,
+      prompt: 'Check the final answer',
+      outputProcessors: [{ id: 'final-policy', processOutputResult: ({ abort }) => abort('Final answer rejected') }],
+      fixtures: llm =>
+        llm.on({ endpoint: 'chat' }, { content: 'Provider answer', usage: { input_tokens: 13, output_tokens: 7 } }),
+    });
+    expect(requests).toHaveLength(1);
+    await expect.poll(() => ended().length).toBe(1);
+    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION]) {
+      expect(ended(type)).toHaveLength(1);
+      expect(ended(type)[0]).toMatchObject({
+        outcome: 'blocked',
+        stopReason: 'guardrail',
+        stopReasonContext: { tripwire: { processorId: 'final-policy', reason: 'Final answer rejected' } },
+      });
+    }
+    expect(ended(SpanType.MODEL_GENERATION)[0]?.attributes?.usage).toMatchObject({ inputTokens: 13, outputTokens: 7 });
+    expect(ended(SpanType.AGENT_RUN)[0]?.output).toBeDefined();
+    const inference = ended(SpanType.MODEL_INFERENCE)[0]!;
+    expect(inference).toMatchObject({ outcome: 'success' });
+    const firstChunkTime = new Date(inference.attributes?.completionStartTime as string).getTime();
+    expect(firstChunkTime).toBeGreaterThanOrEqual(new Date(inference.startTime).getTime());
+    expect(firstChunkTime).toBeLessThanOrEqual(new Date(inference.endTime!).getTime());
+    for (const span of ended(SpanType.MODEL_CHUNK)) expect(span.parentSpanId).toBe(inference.id);
+    expect(JSON.stringify(chunks)).not.toContain('continuationStopCause');
+  });
+
   it.each([
     ['length', 'limit', 'max_tokens'],
     ['content_filter', 'blocked', 'content_filter'],
@@ -18,6 +54,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Answer',
       model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${getMock().url}/v1` }).chat('gpt-4o-mini'),
       fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'partial', finishReason }),
@@ -35,6 +74,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Slow answer',
       errorProcessors: [],
       maxRetries: 0,
@@ -59,6 +101,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'No access',
       errorProcessors: [],
       maxRetries: 0,
@@ -78,6 +123,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
         engine,
         llm: getMock(),
         observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length).toBeGreaterThan(0);
+        },
         prompt: 'Rejected input',
         errorProcessors: [],
         maxRetries: 0,
@@ -117,6 +165,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Blocked request',
       inputProcessors: [{ id: 'policy', processInput: ({ abort }) => abort('Policy rejected the request') }],
       fixtures: llm => llm.on({ endpoint: 'chat' }, { content: 'must not run' }),
@@ -131,6 +182,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Blocked step',
       inputProcessors: [
         {
@@ -163,6 +217,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Check the request and response policy',
       inputProcessors: [
         {
@@ -196,6 +253,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Write a reply',
       maxSteps: 3,
       maxProcessorRetries: 3,
@@ -231,6 +291,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Look up the order',
       abortSignal: controller.signal,
       maxSteps: 3,
@@ -268,6 +331,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Look up the order',
       decision: () => true,
       tools: {
@@ -303,6 +369,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Retry the provider',
       maxRetries: 1,
       fixtures: llm => {
@@ -325,6 +394,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Provider failure',
       maxRetries: 0,
       fixtures: llm =>
@@ -345,6 +417,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Ask for details',
       tools: {
         ask: createTool({
@@ -371,6 +446,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: 'Check stock',
       tools: {
         lookup: createTool({
@@ -409,13 +487,16 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
   it.each([false, true])(
     'distinguishes completion from a denied next step (needsAnotherStep=%s)',
     async needsAnotherStep => {
-      const { events, observability } = capture();
+      const { events, observability, ended } = capture();
       const { output, requests } = await runLoopScenario({
         engine,
         llm: getMock(),
         prompt: 'Check the order.',
         maxSteps: 1,
         observability,
+        afterStream: async () => {
+          await expect.poll(() => ended().length).toBeGreaterThan(0);
+        },
         tools: {
           lookup: createTool({
             id: 'lookup',

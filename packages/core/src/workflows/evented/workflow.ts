@@ -1994,10 +1994,10 @@ export class EventedRun<
 
   private readonly isForeignExecution?: WorkflowOptions['isForeignExecution'];
 
-  private async completeWorkflowTracing(
+  private completeWorkflowTracing(
     span: TracingContext['currentSpan'],
     completion: Parameters<typeof completeWorkflowSpan>[1],
-  ): Promise<void> {
+  ): void {
     completeWorkflowSpan(span, completion);
   }
 
@@ -2167,7 +2167,7 @@ export class EventedRun<
         outputOptions,
       });
     } catch (error) {
-      await this.completeWorkflowTracing(workflowSpan, {
+      this.completeWorkflowTracing(workflowSpan, {
         error: {
           ...executionFailureTermination(error),
           error: error instanceof Error ? error : new Error(String(error)),
@@ -2181,14 +2181,14 @@ export class EventedRun<
     this.workflowRunStatus = result.status;
     if (result.status === 'failed') {
       const err = result.error;
-      await this.completeWorkflowTracing(workflowSpan, {
+      this.completeWorkflowTracing(workflowSpan, {
         error: {
           ...workflowTermination(result),
           error: err instanceof Error ? err : new Error(String(err)),
         },
       });
     } else {
-      await this.completeWorkflowTracing(workflowSpan, {
+      this.completeWorkflowTracing(workflowSpan, {
         end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
       });
     }
@@ -2289,46 +2289,10 @@ export class EventedRun<
       mastra: this.mastra,
     });
     this.workflowRunSpan = workflowSpan;
-    const executionRequestContext = requestContext;
-    // Observe completion without waiting for it. Subscribe before publication so
-    // even a synchronous worker cannot finish before tracing is listening.
-    const finishTracing = async (event: Event, ack?: () => Promise<void>) => {
-      if (
-        event.runId !== this.runId ||
-        !['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type) ||
-        this.isForeignExecution?.(event.data?.requestContext, executionRequestContext)
-      ) {
-        await ack?.();
-        return;
-      }
-      const result = event.data?.prevResult;
-      const tripwire = Object.values(event.data?.stepResults ?? {}).find(
-        (step: any) => step?.status === 'failed' && step.tripwire,
-      ) as { tripwire?: StepTripwireInfo } | undefined;
-      const status =
-        result?.status === 'failed' && tripwire?.tripwire
-          ? 'tripwire'
-          : result?.status === 'success' && perStep
-            ? 'paused'
-            : result?.status;
-      const termination = workflowTermination({ status, error: result?.error, tripwire: tripwire?.tripwire });
-      if (status === 'failed') {
-        await this.completeWorkflowTracing(workflowSpan, { error: { ...termination, error: result.error } });
-      } else {
-        await this.completeWorkflowTracing(workflowSpan, { end: { ...termination, output: result?.output } });
-      }
-      this.workflowRunStatus = status;
-
-      this.releaseWorkflowTracing(workflowSpan);
-      await ack?.();
-      await pubsub.unsubscribe('workflows-finish', finishTracing);
-      if (status !== 'suspended') this.cleanup?.();
-    };
     if (workflowSpan) {
       this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
     try {
-      if (workflowSpan) await pubsub.subscribe('workflows-finish', finishTracing, { startFrom: 'latest' });
       // Fire-and-forget: publishing does not wait for workflow completion.
       await pubsub.publish('workflows', {
         type: 'workflow.start',
@@ -2344,7 +2308,7 @@ export class EventedRun<
         },
       });
     } catch (error) {
-      await this.completeWorkflowTracing(workflowSpan, {
+      this.completeWorkflowTracing(workflowSpan, {
         error: {
           ...executionFailureTermination(error),
           error: error instanceof Error ? error : new Error(String(error)),
@@ -2352,7 +2316,6 @@ export class EventedRun<
       });
 
       this.releaseWorkflowTracing(workflowSpan);
-      if (workflowSpan) await pubsub.unsubscribe('workflows-finish', finishTracing);
       throw error;
     }
 
@@ -2827,14 +2790,14 @@ export class EventedRun<
         this.workflowRunStatus = result.status;
         if (result.status === 'failed') {
           const error = result.error;
-          await this.completeWorkflowTracing(workflowSpan, {
+          this.completeWorkflowTracing(workflowSpan, {
             error: {
               ...workflowTermination(result),
               error: error instanceof Error ? error : new Error(String(error)),
             },
           });
         } else {
-          await this.completeWorkflowTracing(workflowSpan, {
+          this.completeWorkflowTracing(workflowSpan, {
             end: { ...workflowTermination(result), output: 'result' in result ? result.result : undefined },
           });
         }
@@ -2848,7 +2811,7 @@ export class EventedRun<
         return result;
       })
       .catch(async error => {
-        await this.completeWorkflowTracing(workflowSpan, {
+        this.completeWorkflowTracing(workflowSpan, {
           error: {
             ...executionFailureTermination(error),
             error: error instanceof Error ? error : new Error(String(error)),

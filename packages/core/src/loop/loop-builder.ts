@@ -15,6 +15,7 @@ import type { LoopRuntime, MainLoopIterationState } from './loop-runtime';
 import type { RunScopeContext } from './run-scope-access';
 import { readScoped, writeScoped } from './run-scope-access';
 import {
+  CONTINUATION_STOP_CAUSE_KEY,
   DELEGATION_BAILED_KEY,
   DRAIN_PENDING_SIGNALS_KEY,
   RESOURCE_ID_KEY,
@@ -651,7 +652,7 @@ export class AgenticLoopBuilder<Tools extends ToolSet = ToolSet, OUTPUT = undefi
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
       if (typedInputData.stepResult) {
-        typedInputData.stepResult.continuationStopCause = decision.stopCause;
+        writeScoped(scopeCtx, CONTINUATION_STOP_CAUSE_KEY, 'continuationStopCause', decision.stopCause);
         if (decision.forceContinue) {
           typedInputData.stepResult.isContinued = true;
         }

@@ -177,7 +177,7 @@ async function decideContinuationDurable(deps: ContinuationDeps): Promise<Contin
   if (deps.consumeDelegationBail()) {
     hasFinishedSteps = true;
     hardStop = true;
-    stopCause = 'delegation';
+    if (stopCause !== 'model_finished') stopCause = 'delegation';
   }
 
   let isFinal = !shouldContinue || !deps.underMaxSteps || hasFinishedSteps;
@@ -369,7 +369,7 @@ async function decideContinuationDefault(
   if (!hasFinishedSteps && deps.consumeDelegationBail()) {
     isFinal = true;
     forceContinue = false;
-    stopCause = 'delegation';
+    if (stopCause !== 'model_finished') stopCause = 'delegation';
   }
 
   return { isFinal, forceContinue, nextPendingFeedbackStop, ...(isFinal ? { stopCause } : {}) };

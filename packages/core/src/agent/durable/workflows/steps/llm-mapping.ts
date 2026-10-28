@@ -146,7 +146,7 @@ export function createDurableLLMMappingStep() {
       // Aborted calls also lack a result/error but were cancelled, not awaiting input,
       // so they must not count as a HITL suspension (mirrors the non-durable predicate's
       // `!tc.aborted`). Tripwire-blocked calls (`resultBlocked`) are resolved by policy,
-      // not awaiting a client answer; their tripwire terminates continuation below.
+      // not awaiting a client answer; keep the existing continuation decision.
       const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
         toolResult.result === undefined &&
         !toolResult.error &&
@@ -343,7 +343,7 @@ export function createDurableLLMMappingStep() {
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
       const tripwire = toolResults.find(r => r.tripwire)?.tripwire;
-      const isContinued = tripwire || hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
+      const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel
       // is the tool-call step's serializable output: the hook writes the flag
@@ -371,7 +371,6 @@ export function createDurableLLMMappingStep() {
               stepResult: {
                 ...deferredChunk.payload?.stepResult,
                 isContinued,
-                ...(tripwire ? { reason: 'tripwire' as const, tripwire } : {}),
               },
             },
           }
@@ -384,7 +383,6 @@ export function createDurableLLMMappingStep() {
         stepResult: {
           ...llmOutput.stepResult,
           isContinued,
-          ...(tripwire ? { reason: 'tripwire' as const, tripwire } : {}),
         },
         toolResults,
         output: {

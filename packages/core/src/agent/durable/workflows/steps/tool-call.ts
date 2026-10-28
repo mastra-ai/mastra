@@ -19,7 +19,7 @@ import { runBeforeApprovalChecks } from '../../../../loop/workflows/agentic-exec
 import type { Mastra } from '../../../../mastra';
 import type { MastraMemory } from '../../../../memory/memory';
 import type { MemoryConfig } from '../../../../memory/types';
-import { EntityType, SpanType, createObservabilityContext, agentLoopTermination } from '../../../../observability';
+import { EntityType, SpanType, createObservabilityContext } from '../../../../observability';
 import type { ExportedSpan, ObservabilityContext } from '../../../../observability';
 import type { ProcessorState } from '../../../../processors';
 import { BACKGROUND_WORK_CONTEXT } from '../../../../processors/background-work-signals';
@@ -2089,18 +2089,6 @@ export function createDurableToolCallStep() {
                 metadata: processorError.options?.metadata,
                 processorId: processorError.processorId,
               };
-              // The consumer can finish as soon as the tripwire is published. Close
-              // the affected execution first, preserving completed tool/provider spans.
-              const obs = (mastra as Mastra | undefined)?.observability?.getSelectedInstance({ requestContext });
-              const reg = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-              const termination = agentLoopTermination({ finishReason: 'tripwire', tripwire });
-              for (const spanData of [
-                typedInput.stepSpanData,
-                reg?.resumeModelSpanData ?? initData.modelSpanData,
-                reg?.resumeAgentSpanData ?? initData.agentSpanData,
-              ]) {
-                if (spanData) obs?.rebuildSpan(spanData as ExportedSpan<SpanType>)?.end(termination);
-              }
               if (pubsub) {
                 try {
                   await emitChunkEvent(pubsub, runId, {

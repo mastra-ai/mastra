@@ -69,6 +69,19 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
       engine,
       llm,
       observability,
+      afterStream: async () => {
+        await expect
+          .poll(
+            () =>
+              events.filter(
+                event =>
+                  event.type === TracingEventType.SPAN_ENDED &&
+                  event.exportedSpan.type === SpanType.AGENT_RUN &&
+                  event.exportedSpan.entityId !== 'observational-memory-observer',
+              ).length,
+          )
+          .toBeGreaterThan(0);
+      },
       memory,
       threadId: `observer-${engine}`,
       resourceId: 'customer',

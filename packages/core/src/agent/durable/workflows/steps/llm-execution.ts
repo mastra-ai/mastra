@@ -480,16 +480,10 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         // Clear it so it doesn't fire again on a subsequent iteration (shouldn't
         // happen since the loop will stop, but belt-and-suspenders).
         const entry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-        if (entry) entry.tripwire = undefined;
-        const agentSpan =
-          entry?.resumeAgentSpan ??
-          entry?.agentSpan ??
-          (typedInput.agentSpanData
-            ? (mastra as Mastra | undefined)?.observability
-                ?.getSelectedInstance({ requestContext })
-                ?.rebuildSpan(typedInput.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>)
-            : undefined);
-        agentSpan?.end({ ...agentLoopTermination({ tripwire: registryTripwire }), endTree: true });
+        if (entry) {
+          entry.tripwire = undefined;
+          entry.tracingTermination = agentLoopTermination({ tripwire: registryTripwire });
+        }
 
         logger?.warn?.('Input processor tripwire triggered (from preparation)', {
           agent: agentId,
@@ -845,12 +839,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             });
             endAttemptSpans = () => {
               modelSpanTracker?.interruptInference?.(interruptionOutcome);
-              const stepSpan = modelSpanTracker?.exportCurrentStep();
-              if (stepSpan)
-                observability?.rebuildSpan(stepSpan)?.end({
-                  attributes: { finishReason: 'interrupted' },
-                  ...interruptionOutcome,
-                });
+              modelSpanTracker?.endAttempt?.(interruptionOutcome);
             };
 
             // Set the step index for continuation (step: 0, 1, 2, ...)
@@ -861,7 +850,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
             // the attempt before any provider request is made.
             modelSpanTracker?.startStep();
             terminateAttemptSpans = termination => {
-              modelSpanTracker?.getTracingContext().currentSpan?.endTree(termination);
+              modelSpanTracker?.endAttempt?.(termination);
             };
             const endTripwireSpans = (
               cause: TripWire | NonNullable<Parameters<typeof agentLoopTermination>[0]['tripwire']>,
@@ -877,13 +866,9 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                       }
                     : cause,
               });
-              modelSpanTracker?.getTracingContext().currentSpan?.endTree(termination);
               const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
-              (registry?.resumeModelSpan ?? registry?.modelSpan ?? modelSpan)?.end({ ...termination, endTree: true });
-              (registry?.resumeAgentSpan ?? registry?.agentSpan ?? agentRunSpan)?.end({
-                ...termination,
-                endTree: true,
-              });
+              if (registry) registry.tracingTermination = termination;
+              modelSpanTracker?.endAttempt?.(termination);
             };
 
             // Build structured output for AI SDK if configured. Held in a `let`
@@ -1862,8 +1847,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         streamWriter: outputStreamWriter,
                         emitChunk: async chunk => {
                           if (chunk.type === 'tripwire') {
+                            const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+                            if (registry)
+                              registry.tracingTermination = agentLoopTermination({ tripwire: chunk.payload });
+                            modelSpanTracker?.endAttempt?.(agentLoopTermination({ tripwire: chunk.payload }));
                             outputStreamBlocked = true;
-                            endTripwireSpans(chunk.payload);
                           }
                           try {
                             if (chunk.type === 'step-start') {
@@ -2143,8 +2131,11 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
                         emitChunk: async chunk => {
                           // processAndEmitChunk publishes a tripwire chunk only when a processor blocks.
                           if (chunk.type === 'tripwire') {
+                            const registry = getRunRegistryEntry(runId, mastra as Mastra | undefined);
+                            if (registry)
+                              registry.tracingTermination = agentLoopTermination({ tripwire: chunk.payload });
+                            modelSpanTracker?.endAttempt?.(agentLoopTermination({ tripwire: chunk.payload }));
                             outputStreamBlocked = true;
-                            endTripwireSpans(chunk.payload);
                           }
                           trackOpenReasoning(chunk, openReasoningIds);
                           try {

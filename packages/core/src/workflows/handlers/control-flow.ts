@@ -332,7 +332,7 @@ export async function executeParallel(
       span: parallelSpan,
       operationId: `workflow.${workflowId}.run.${runId}.parallel.${executionContext.executionPath.join('-')}.span.error`,
       errorOptions: {
-        ...workflowTermination({ ...execResults, status: execResults.tripwire ? 'tripwire' : execResults.status }),
+        ...workflowTermination(execResults),
         error: execResults.error,
       },
     });
@@ -678,7 +678,7 @@ export async function executeConditional(
       span: conditionalSpan,
       operationId: `workflow.${workflowId}.run.${runId}.conditional.${executionContext.executionPath.join('-')}.span.error`,
       errorOptions: {
-        ...workflowTermination({ ...execResults, status: execResults.tripwire ? 'tripwire' : execResults.status }),
+        ...workflowTermination(execResults),
         error: execResults.error,
       },
     });
@@ -853,7 +853,7 @@ export async function executeLoop(
           ...workflowTermination(
             {
               ...result,
-              status: result.status === 'failed' && result.tripwire ? 'tripwire' : result.status,
+              status: result.status,
             },
             abortController?.signal,
           ),
@@ -1530,7 +1530,7 @@ export async function executeForeach(
       errorOptions: {
         ...workflowTermination({
           ...finalErrorResult,
-          status: finalErrorResult.tripwire ? 'tripwire' : finalErrorResult.status,
+          status: finalErrorResult.status,
         }),
         error: finalErrorResult.error,
       },

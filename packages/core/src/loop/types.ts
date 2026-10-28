@@ -106,6 +106,7 @@ export type ReasoningLevel = NonNullable<LanguageModelV4CallOptions['reasoning']
  * step code is deprecated — read via `RunScope` instead.
  */
 export type StreamInternal = {
+  continuationStopCause?: import('./shared/continuation-core').ContinuationStopCause;
   /** @deprecated Use `runScope.get(NOW_KEY)` from `loop/run-scope-keys`. */
   now?: () => number;
   /** @deprecated Use `runScope.get(GENERATE_ID_KEY)` from `loop/run-scope-keys`. */
@@ -232,6 +233,12 @@ export type AgentLoopResumeClaim = {
 };
 
 export type LoopOptions<TOOLS extends ToolSet = ToolSet, OUTPUT = undefined> = {
+  /** @internal Observes a terminal stream tripwire without invoking user lifecycle hooks. */
+  onTracingTripwire?: (
+    tripwire: import('../stream/types').StepTripwireData,
+    usage: import('../stream/types').LanguageModelUsage,
+    text: string,
+  ) => void;
   mastra?: Mastra;
   resumeContext?: {
     resumeData: any;

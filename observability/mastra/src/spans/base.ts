@@ -407,7 +407,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
   /** Preserve explicitly supplied native fields; never derive results from payloads/errors. */
   protected applyOutcome(options: SpanOutcomeFields): void {
     if (this.endTime) return;
-    if (options.outcome !== undefined) this.outcome = options.outcome;
+    if (options.outcome !== undefined) {
+      this.outcome = options.outcome;
+      this.stopReason = options.stopReason ?? null;
+      this.stopReasonContext = deepClean(options.stopReasonContext ?? null, this.deepCleanOptions);
+      return;
+    }
+    if (options.stopReason !== undefined && options.stopReason !== this.stopReason) this.stopReasonContext = null;
     if (options.stopReason !== undefined) this.stopReason = options.stopReason;
     if (options.stopReasonContext !== undefined) {
       this.stopReasonContext = deepClean(options.stopReasonContext, this.deepCleanOptions);

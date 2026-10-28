@@ -187,10 +187,10 @@ import type {
   DelegationHookError,
 } from './agent.types';
 import { createDelegationRefRegistry, resolveDelegationRefs } from './delegation-refs';
+import type { DelegationRefInput, DelegationRefRegistry } from './delegation-refs';
 // Value import of durable constants is safe: constants.ts is a leaf module
 // with no imports, so it cannot create the runtime cycle `agent →
 // agent/durable → agent`.
-import type { DelegationRefInput, DelegationRefRegistry } from './delegation-refs';
 import { DurableStepIds } from './durable/constants';
 import type {
   DurableAgentListActiveRunsOptions,

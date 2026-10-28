@@ -8,6 +8,8 @@ import { createObservabilityContext } from '../observability';
 import type { ProcessorState } from '../processors';
 import { createDestructurableOutput, MastraModelOutput } from '../stream/base/output';
 import type { LanguageModelUsage } from '../stream/types';
+import { readScoped } from './run-scope-access';
+import { CONTINUATION_STOP_CAUSE_KEY } from './run-scope-keys';
 import { findSuspendedStreamState } from './suspended-stream-state';
 import type { LoopOptions, LoopRun, StreamInternal } from './types';
 import { workflowLoopStream } from './workflows/stream';
@@ -183,6 +185,13 @@ export function loop<Tools extends ToolSet = ToolSet, OUTPUT = undefined>({
       hideSignals,
     },
     initialState: initialStreamState,
+    onTracingTripwire: rest.onTracingTripwire,
+    getContinuationStopCause: () =>
+      readScoped(
+        { mastra: rest.mastra, runId: runIdToUse, _internal: internalToUse },
+        CONTINUATION_STOP_CAUSE_KEY,
+        'continuationStopCause',
+      ),
     onFinishComplete: async () => {
       await finalizeRun?.();
     },

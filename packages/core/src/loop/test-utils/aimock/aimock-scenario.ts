@@ -586,6 +586,8 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     });
   }
 
+  if (!suspendedDuringDrain && !manualStreamConsumption) await opts.afterStream?.();
+
   // Clean up durable resources — but NOT when the stream was suspended or
   // the test wants to consume the stream manually (e.g. streamUntilIdle tests
   // that publish bg-task events after runLoopScenario returns).

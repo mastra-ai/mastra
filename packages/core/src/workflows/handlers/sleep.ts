@@ -163,7 +163,7 @@ export async function executeSleep(engine: DefaultExecutionEngine, params: Execu
         ...(abortController?.signal.aborted
           ? sleepTermination(abortController.signal)
           : workflowTermination({ status: 'failed', error: e })),
-        error: getErrorFromUnknown(e),
+        error: getErrorFromUnknown(e, { supportSerialization: false }),
       },
     });
     throw e;
@@ -319,7 +319,7 @@ export async function executeSleepUntil(
         ...(abortController?.signal.aborted
           ? sleepTermination(abortController.signal)
           : workflowTermination({ status: 'failed', error: e })),
-        error: getErrorFromUnknown(e),
+        error: getErrorFromUnknown(e, { supportSerialization: false }),
       },
     });
     throw e;

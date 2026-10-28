@@ -1,4 +1,4 @@
-import { boundedStringify } from '../utils/safe-stringify';
+import { ensureSerializable } from '../utils/safe-stringify';
 import { spanTerminationSchema } from './outcome-schema';
 import type { SpanTermination, SpanTripwireContext } from './types/outcome';
 
@@ -37,6 +37,17 @@ export function executionFailureTermination(
       current = value.error;
       continue;
     }
+    // TripWire's existing serialized error shape retains its processor and options,
+    // even on transports whose public workflow status remains `failed`.
+    if (
+      typeof value.processorId === 'string' &&
+      value.options &&
+      typeof value.options === 'object' &&
+      typeof value.message === 'string'
+    ) {
+      const options = value.options as { retry?: boolean; metadata?: unknown };
+      return tripwireTermination({ processorId: value.processorId, reason: value.message, ...options });
+    }
     failure = value;
     if (value.name === 'MastraTimeoutError' && typeof value.timeoutMs === 'number') {
       return {
@@ -65,6 +76,7 @@ export function executionFailureTermination(
         stopReasonContext: {
           message: typeof value.message === 'string' ? value.message : undefined,
           errorCode: String(value.statusCode),
+          provider: typeof value.provider === 'string' ? value.provider : undefined,
         },
       };
     }
@@ -104,14 +116,13 @@ export function executionFailureTermination(
 
 /** Preserve the mechanism while keeping an observer's failure separate from the execution it interrupts. */
 export function tripwireTermination(tripwire?: SpanTripwireContext): SpanTermination {
-  const serialized = boundedStringify(tripwire?.metadata);
+  const metadata = ensureSerializable(tripwire?.metadata);
   const detail: SpanTripwireContext | undefined = tripwire && {
     processorId: tripwire.processorId,
     reason: tripwire.reason,
     retry: tripwire.retry,
-    ...(serialized === undefined ? {} : { metadata: JSON.parse(serialized) }),
+    ...(metadata === undefined ? {} : { metadata }),
   };
-  const metadata = detail?.metadata;
   const observer =
     metadata && typeof metadata === 'object' && 'observerFailure' in metadata ? metadata.observerFailure : undefined;
   if (observer && typeof observer === 'object' && 'cause' in observer) {

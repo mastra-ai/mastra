@@ -9,6 +9,7 @@ export function workflowTermination(
   result: { status: WorkflowRunStatus; error?: unknown; tripwire?: StepTripwireInfo },
   abortSignal?: AbortSignal,
 ): SpanTermination {
+  if (result.tripwire) return tripwireTermination(result.tripwire);
   switch (result.status) {
     case 'success':
     case 'bailed': // A workflow bail returns its explicitly supplied successful result.

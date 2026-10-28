@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { signalToDataPartFormat } from '../agent/signals';
-import { spanStopReasonContextSchema, spanTerminationSchema } from './outcome-schema';
+import { spanTerminationSchema } from './outcome-schema';
 
 describe('stored stop-reason context', () => {
   it('preserves serialized files and signal metadata used to interrupt a request', () => {
@@ -23,7 +23,6 @@ describe('stored stop-reason context', () => {
       }),
     );
     expect(spanTerminationSchema.parse(stored)).toEqual(stored);
-    expect(spanStopReasonContextSchema.parse(stored.stopReasonContext)).toEqual(stored.stopReasonContext);
     expect(stored.stopReasonContext.signals[0].contents[1]).toMatchObject({ data: 'QUJD', filename: 'note.txt' });
   });
 
@@ -55,7 +54,6 @@ describe('stored stop-reason context', () => {
       },
     };
     expect(spanTerminationSchema.parse(JSON.parse(JSON.stringify(context)))).toEqual(context);
-    expect(spanStopReasonContextSchema.parse(context.stopReasonContext)).toEqual(context.stopReasonContext);
     const signalInterruption = {
       outcome: 'interrupted',
       stopReason: 'signal_received',

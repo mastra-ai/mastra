@@ -1,6 +1,6 @@
 import { APICallError } from '@internal/ai-sdk-v5';
 import { describe, expect, it } from 'vitest';
-import { executionFailureTermination } from './execution-outcome';
+import { executionFailureTermination, tripwireTermination } from './execution-outcome';
 
 function providerError(statusCode: number, code: string) {
   return new APICallError({
@@ -13,6 +13,19 @@ function providerError(statusCode: number, code: string) {
 }
 
 describe('execution failure cause precedence', () => {
+  it('classifies the existing serialized processor error without changing workflow status', () => {
+    const failure = {
+      status: 'failed',
+      error: { name: 'Error', message: 'Policy rejected', processorId: 'policy', options: {} },
+    };
+    const before = JSON.stringify(failure);
+    expect(executionFailureTermination(failure)).toMatchObject({
+      outcome: 'blocked',
+      stopReason: 'guardrail',
+      stopReasonContext: { tripwire: { reason: 'Policy rejected', processorId: 'policy' } },
+    });
+    expect(JSON.stringify(failure)).toBe(before);
+  });
   it('does not treat context-limit wording in a runtime exception as a provider limit', () => {
     expect(executionFailureTermination(new Error('context_length_exceeded'))).toMatchObject({
       outcome: 'error',
@@ -83,5 +96,23 @@ describe('execution failure cause precedence', () => {
     const error: { message: string; cause?: unknown } = { message: 'Cyclic failure' };
     error.cause = error;
     expect(executionFailureTermination(error)).toMatchObject({ outcome: 'error', stopReason: 'runtime_error' });
+  });
+});
+
+it('retains observer failure classification when metadata exceeds the serialization budget', () => {
+  let shared: unknown = { detail: 'repeated' };
+  for (let i = 0; i < 22; i++) shared = { left: shared, right: shared };
+  const cause = { outcome: 'error', stopReason: 'model_error' };
+  const result = tripwireTermination({ metadata: { observerFailure: { cause }, shared } });
+  expect(result).toMatchObject({ outcome: 'interrupted', stopReason: 'observer_failed', stopReasonContext: { cause } });
+  expect(JSON.stringify(result)).toContain('[Circular]');
+});
+
+it('retains explicit provider identity on authentication failures', () => {
+  const error = Object.assign(providerError(401, 'invalid_api_key'), { provider: 'test-provider' });
+  expect(executionFailureTermination(error)).toMatchObject({
+    outcome: 'blocked',
+    stopReason: 'authentication',
+    stopReasonContext: { provider: 'test-provider', errorCode: '401' },
   });
 });

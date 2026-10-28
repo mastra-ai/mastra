@@ -388,6 +388,7 @@ export class ModelSpanTracker {
   #currentStepSpan?: Span<SpanType.MODEL_STEP>;
   #currentInferenceSpan?: Span<SpanType.MODEL_INFERENCE>;
   #stepHasInference = false;
+  #tracksProviderStream = false;
   #currentChunkSpan?: Span<SpanType.MODEL_CHUNK>;
   #currentChunkType?: string;
   #accumulator: Record<string, any> = {};
@@ -409,6 +410,7 @@ export class ModelSpanTracker {
   #deferStepClose: boolean = false;
   /** Stored step-finish payload when defer mode is enabled */
   #pendingStepFinishPayload?: StepFinishPayload<any, any>;
+  #pendingInferenceFinish?: StepFinishPayload<any, any>;
   /** Static request-side context applied to every MODEL_INFERENCE span */
   #inferenceContext?: ModelInferenceContext;
 
@@ -617,6 +619,8 @@ export class ModelSpanTracker {
    */
   #endInferenceSpan<OUTPUT>(payload: StepFinishPayload<any, OUTPUT>): void {
     if (!this.#currentInferenceSpan) return;
+    payload = this.#pendingInferenceFinish ?? payload;
+    this.#pendingInferenceFinish = undefined;
 
     const { usage: rawUsage, ...otherOutput } = payload.output;
     const usage = extractUsageMetrics(rawUsage, payload.metadata?.providerMetadata);
@@ -642,6 +646,7 @@ export class ModelSpanTracker {
       },
     });
     this.#currentInferenceSpan = undefined;
+    this.#inferenceCompletionStartTime = undefined;
   }
 
   /**
@@ -673,8 +678,27 @@ export class ModelSpanTracker {
 
   /** Finish only the provider request; the logical step may still run processors or tools. */
   finishInference(payload: StepFinishPayload): void {
-    this.#endChunkSpan();
-    this.#endInferenceSpan(payload);
+    // The upstream provider may finish before queued chunks reach wrapStream.
+    // Retain its result, then close only after downstream chunk processing.
+    this.#pendingInferenceFinish = payload;
+  }
+
+  /** End the current attempt only; generation and agent spans belong to their owners. */
+  endAttempt(termination: SpanTermination): void {
+    const payload = this.#pendingStepFinishPayload ?? this.#pendingInferenceFinish;
+    if (payload) {
+      this.#endStepSpan(payload, termination);
+    } else {
+      this.#endChunkSpan();
+      this.#currentInferenceSpan?.end(termination);
+      this.#currentStepSpan?.end(termination);
+      this.#currentStepSpan = undefined;
+      this.#currentInferenceSpan = undefined;
+    }
+    this.#pendingStepFinishPayload = undefined;
+    this.#pendingInferenceFinish = undefined;
+    this.#inferenceCompletionStartTime = undefined;
+    this.#currentStepInputIsFinal = false;
   }
 
   #openInference(payload?: StepStartPayload): void {
@@ -686,6 +710,7 @@ export class ModelSpanTracker {
     }
 
     this.#inferenceCompletionStartTime = undefined;
+    this.#pendingInferenceFinish = undefined;
     const input = extractStepInput(payload);
     const generationAttrs = this.#modelSpan?.attributes;
     const ctx = this.#inferenceContext;
@@ -725,6 +750,8 @@ export class ModelSpanTracker {
       ...termination,
     });
     this.#currentInferenceSpan = undefined;
+    this.#inferenceCompletionStartTime = undefined;
+    this.#pendingInferenceFinish = undefined;
   }
 
   /**
@@ -1108,11 +1135,31 @@ export class ModelSpanTracker {
    * This should be added to the stream pipeline to automatically
    * create MODEL_STEP and MODEL_CHUNK spans for each semantic unit in the stream.
    */
-  wrapStream<T extends { pipeThrough: Function }>(stream: T): T {
+  /** Track physical provider chunks before processors can buffer or replace them. */
+  wrapInferenceStream<T extends { pipeThrough: Function }>(stream: T): T {
+    this.#tracksProviderStream = true;
+    return this.wrapStream(stream, true);
+  }
+
+  wrapStream<T extends { pipeThrough: Function }>(stream: T, inferenceOnly = false): T {
     return stream.pipeThrough(
       new TransformStream({
         transform: (chunk, controller) => {
-          if ((this.#inModelResponse || this.#deferStepClose) && MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)) {
+          if (
+            !inferenceOnly &&
+            this.#tracksProviderStream &&
+            (MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type) ||
+              ['text-end', 'reasoning-end', 'tool-call-input-streaming-end', 'object', 'object-result'].includes(
+                chunk.type,
+              ))
+          ) {
+            controller.enqueue(chunk);
+            return;
+          }
+          if (
+            (inferenceOnly || this.#inModelResponse || this.#deferStepClose) &&
+            MODEL_RESPONSE_CHUNK_TYPES.has(chunk.type)
+          ) {
             this.#captureCompletionStartTime();
           }
 
@@ -1124,8 +1171,6 @@ export class ModelSpanTracker {
             }
             this.#endSuspendedStep(chunk);
           }
-
-          controller.enqueue(chunk);
 
           // Handle chunk span tracking based on chunk type
           switch (chunk.type) {
@@ -1166,7 +1211,7 @@ export class ModelSpanTracker {
               // inference span here as a safety net for callers that don't
               // explicitly call startInference() before invoking the model —
               // chunks that follow will parent under MODEL_INFERENCE.
-              if (!this.#currentInferenceSpan) {
+              if (!this.#currentInferenceSpan && !this.#stepHasInference) {
                 this.#openInference(chunk.payload);
               }
               break;
@@ -1193,22 +1238,21 @@ export class ModelSpanTracker {
               const termination = coreObservability.agentLoopTermination?.({ tripwire: chunk.payload });
               // Older supported core versions do not supply native outcomes.
               if (!termination) break;
-              this.#endChunkSpan();
-              this.#currentInferenceSpan?.end(termination);
-              this.#currentInferenceSpan = undefined;
-              this.#currentStepSpan?.end(termination);
-              this.#currentStepSpan = undefined;
-              this.#currentStepInputIsFinal = false;
-              this.#modelSpan?.end({ ...termination, endTree: true });
-              this.#agentRunSpan?.end({ ...termination, endTree: true });
+              this.endAttempt(termination);
               break;
             }
+
+            case 'finish':
+              if (inferenceOnly) {
+                this.#endChunkSpan();
+                this.#endInferenceSpan(chunk.payload);
+              }
+              break;
 
             // Infrastructure chunks - skip creating spans for these
             // They are either redundant, metadata-only, or error/control flow
             case 'raw': // Redundant raw data
             case 'start': // Stream start marker
-            case 'finish': // Stream finish marker (step-finish already captures this)
             case 'response-metadata': // Response metadata (not semantic content)
             case 'source': // Source references (metadata)
             case 'file': // Binary file data (too large/not semantic)
@@ -1275,6 +1319,7 @@ export class ModelSpanTracker {
               // No span created - reduces trace noise
               break;
           }
+          controller.enqueue(chunk);
         },
       }),
     ) as T;

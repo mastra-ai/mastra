@@ -20,13 +20,9 @@ import type {
   GeneratedFile,
 } from '@internal/ai-sdk-v5';
 import { z } from 'zod/v4';
-import { CONTINUATION_STOP_CAUSES } from '../shared/continuation-core';
-import type { ContinuationStopCause } from '../shared/continuation-core';
 
 // Type definitions for the workflow data
 export interface LLMIterationStepResult {
-  /** Runtime decision retained before isContinued is cleared at the loop boundary. */
-  continuationStopCause?: ContinuationStopCause;
   /** Includes 'tripwire' and 'retry' for processor scenarios */
   reason: LanguageModelV2FinishReason | 'tripwire' | 'retry' | 'abort';
   warnings: LanguageModelV2CallWarning[];
@@ -118,7 +114,6 @@ const languageModelUsageSchema = z.object({
 
 // Zod schemas for runtime validation
 export const llmIterationStepResultSchema = z.object({
-  continuationStopCause: z.enum(CONTINUATION_STOP_CAUSES).optional(),
   reason: z.string(),
   warnings: z.array(z.any()),
   isContinued: z.boolean(),

@@ -48,7 +48,6 @@ import { getNestedWorkflow, getStepId, isExecutableStep, toStepExecutionParentWo
 
 export type ProcessorArgs = {
   eventId?: string;
-  /** Root identity of the execution that produced this terminal event. */
   activeStepsPath: Record<string, number[]>;
   workflow: Workflow;
   workflowId: string;
@@ -546,6 +545,8 @@ export class WorkflowEventProcessor extends EventProcessor {
    */
   private cleanupRun(runId: string): void {
     this.abortControllers.delete(runId);
+    this.controlFlowSpans.delete(runId);
+    this.nestedRunSpans.delete(runId);
     this.startedRuns.delete(runId);
     this.parentChildRelationships.delete(runId);
     this.runFormats.delete(runId);
@@ -647,6 +648,10 @@ export class WorkflowEventProcessor extends EventProcessor {
     if (!spans) return;
     for (const [key, { span }] of spans) {
       if (executionPath && key !== executionPath.join('.')) continue;
+      if (span.endTime) {
+        spans.delete(key);
+        continue;
+      }
       completeWorkflowSpan(span, {
         ...(termination.outcome === 'error'
           ? { error: { ...termination, error: getErrorFromUnknown(error) } }
@@ -667,7 +672,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       runId,
       workflowTermination({
         ...result,
-        status: result.status === 'failed' && result.tripwire ? 'tripwire' : result.status,
+        status: result.status,
       }),
       result.status === 'success' ? result.output : undefined,
       result.status === 'failed' ? result.error : undefined,
@@ -706,8 +711,6 @@ export class WorkflowEventProcessor extends EventProcessor {
     });
     this.nestedRunSpans.set(runId, { root, wrapper, workflowId, parentWorkflow });
     this.mastra.__registerRunTracingContext(runId, { currentSpan: root });
-
-    const owner = this.resolveRunTracingContext(parentWorkflow.runId)?.currentSpan;
   }
 
   private async endRunSpans(args: ProcessorArgs, status: WorkflowRunStatus) {
@@ -716,7 +719,7 @@ export class WorkflowEventProcessor extends EventProcessor {
       failure && args.workflow?.options?.isOwnershipLostError?.(failure.error)
         ? { outcome: 'interrupted' as const, stopReason: null, stopReasonContext: null }
         : workflowTermination({
-            status: failure?.tripwire ? 'tripwire' : status,
+            status,
             error: failure?.error,
             tripwire: failure?.tripwire,
           });
@@ -732,6 +735,22 @@ export class WorkflowEventProcessor extends EventProcessor {
       args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
       failure?.error,
     );
+    const root = this.mastra.__getRunTracingContext(args.runId)?.currentSpan;
+    if (root?.type === SpanType.WORKFLOW_RUN && root.entityId === args.workflowId) {
+      completeWorkflowSpan(
+        root,
+        termination.outcome === 'error'
+          ? { error: { ...termination, error: getErrorFromUnknown(failure?.error) } }
+          : {
+              end: {
+                ...termination,
+                output: args.prevResult?.status === 'success' ? args.prevResult.output : undefined,
+                endTree: true,
+              },
+            },
+      );
+      this.mastra.__unregisterRunTracingContext(args.runId);
+    }
   }
 
   private async finishNestedRunSpans(runId: string, termination: SpanTermination, output?: unknown, error?: unknown) {
@@ -1480,6 +1499,9 @@ export class WorkflowEventProcessor extends EventProcessor {
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
 
+    // Finish locally owned spans even when another replica handled the result.
+    await this.endRunSpans(args, perStep ? 'paused' : (args.prevResult?.status ?? 'pending'));
+
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
 
@@ -1735,6 +1757,16 @@ export class WorkflowEventProcessor extends EventProcessor {
 
     // Extract final state from stepResults or args
     const finalState = resolveCurrentState({ stepResults, state });
+
+    // Finish locally owned spans even when another replica handled the result.
+    await this.endRunSpans(
+      args,
+      args.prevResult?.status === 'failed'
+        ? 'failed'
+        : args.prevResult?.status === 'suspended'
+          ? 'suspended'
+          : 'success',
+    );
 
     // Clean up abort controller and parent-child tracking
     this.cleanupRun(runId);
@@ -2058,10 +2090,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
-          mastra: this.mastra,
           step,
           tracingContext: this.resolveRunTracingContext(runId),
-          abortController: this.getOrCreateAbortController(runId),
         },
       );
     } else if (step?.type === 'sleepUntil') {
@@ -2089,10 +2119,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           pubsub: this.mastra.pubsub,
           stepExecutor: this.stepExecutor,
           workflowsStore: await this.mastra.getStorage()?.getStore('workflows'),
-          mastra: this.mastra,
           step,
           tracingContext: this.resolveRunTracingContext(runId),
-          abortController: this.getOrCreateAbortController(runId),
         },
       );
     } else if (step?.type === 'foreach' && (executionPath.length === 1 || (restart && !restart.isForeachRestarted))) {
@@ -2171,7 +2199,6 @@ export class WorkflowEventProcessor extends EventProcessor {
             this.stepExecutor,
             result,
             this.resolveStepTracingContext(args.runId, args.executionPath),
-            this.mastra,
           ));
         stepResult = { ...result, metadata: { ...result.metadata, startedBy, loopCondition } };
         await store.updateWorkflowResults({
@@ -2201,7 +2228,6 @@ export class WorkflowEventProcessor extends EventProcessor {
         stepExecutor: this.stepExecutor,
         step,
         stepResult,
-        mastra: this.mastra,
         savedCondition: guarded ? stepResult.metadata?.loopCondition : undefined,
         tracingContext: this.resolveStepTracingContext(args.runId, args.executionPath),
       },

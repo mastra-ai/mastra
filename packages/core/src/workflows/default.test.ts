@@ -2299,6 +2299,34 @@ describe('DefaultExecutionEngine control-flow span identity', () => {
     });
   });
 
+  it.each(['sleep', 'sleepUntil'] as const)('preserves the exact error from a dynamic %s function', async kind => {
+    const error = new Error('Dynamic wait failed', { cause: new Error('Original cause') });
+    const before = Object.getOwnPropertyDescriptors(error);
+    const params = {
+      workflowId: 'dynamic-wait-error',
+      runId: 'dynamic-wait-run',
+      serializedStepGraph: [],
+      entry: {
+        type: kind,
+        id: 'dynamic',
+        fn: async () => {
+          throw error;
+        },
+      },
+      prevStep: { type: 'step', step: passthroughStep },
+      prevOutput: null,
+      stepResults: {},
+      executionContext: baseExecutionContext('dynamic-wait-error', 'dynamic-wait-run'),
+      pubsub,
+      abortController,
+      requestContext,
+      ...createObservabilityContext(),
+    };
+    const invoke = kind === 'sleep' ? engine.executeSleep.bind(engine) : engine.executeSleepUntil.bind(engine);
+    await expect(invoke(params as any)).rejects.toBe(error);
+    expect(Object.getOwnPropertyDescriptors(error)).toEqual(before);
+  });
+
   it('attaches entry identity to the sleep span while keeping the duration name', async () => {
     const workflowId = 'span-sleep';
     const runId = globalThis.crypto.randomUUID();

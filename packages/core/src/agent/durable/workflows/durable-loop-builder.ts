@@ -897,7 +897,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
       });
 
       state.pendingFeedbackStop = decision.nextPendingFeedbackStop;
-      if (state.lastStepResult) state.lastStepResult.continuationStopCause = decision.stopCause;
+      const tracingRegistry = getRunRegistryEntry(state.runId, rt.mastra);
+      if (tracingRegistry) tracingRegistry.tracingStopCause = decision.stopCause;
       const isFinal = decision.isFinal;
       await emitStepFinish(!isFinal);
 
@@ -1060,7 +1061,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               finalText = finishResult.outputText;
             }
 
-            const tripwire = finishResult.tripwire ?? state.lastStepResult?.tripwire;
+            const tripwire = finishResult.tripwire;
             if (tripwire && pubsub) {
               await emitChunkEvent(pubsub, state.runId, {
                 type: 'tripwire',
@@ -1140,7 +1141,8 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     reg?.resumeModelSpan ??
                     reg?.modelSpan ??
                     (observability.rebuildSpan(modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                      AIModelGenerationSpan | undefined);
+                      | AIModelGenerationSpan
+                      | undefined);
                   // Surface every tool call made during the run so exporters (e.g. PostHog)
                   // see the same { toolCallId, toolName, args } shape as the in-process loop.
                   const toolCalls = state.accumulatedSteps.flatMap(step =>
@@ -1152,12 +1154,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   );
                   const usageIncomplete = isUsageIncomplete(state.accumulatedUsage);
                   modelSpan?.createTracker()?.endGeneration({
-                    ...agentLoopTermination({
-                      stopCause: state.lastStepResult?.continuationStopCause,
-                      finishReason: finalOutput.stepResult?.reason,
-                      tripwire,
-                      maxSteps: initData.options?.maxSteps,
-                    }),
+                    ...(finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
+                      ? reg.tracingTermination
+                      : agentLoopTermination({
+                          stopCause: reg?.tracingStopCause,
+                          finishReason: finalOutput.stepResult?.reason,
+                          tripwire,
+                          maxSteps: initData.options?.maxSteps,
+                        })),
                     output: { text: finalText, toolCalls: toolCalls.length ? toolCalls : undefined },
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
@@ -1173,12 +1177,14 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     reg?.agentSpan ??
                     observability.rebuildSpan(agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
                   agentSpan?.end({
-                    ...agentLoopTermination({
-                      stopCause: state.lastStepResult?.continuationStopCause,
-                      finishReason: finalOutput.stepResult?.reason,
-                      tripwire,
-                      maxSteps: initData.options?.maxSteps,
-                    }),
+                    ...(finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
+                      ? reg.tracingTermination
+                      : agentLoopTermination({
+                          stopCause: reg?.tracingStopCause,
+                          finishReason: finalOutput.stepResult?.reason,
+                          tripwire,
+                          maxSteps: initData.options?.maxSteps,
+                        })),
                     output: { text: finalText },
                     ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
                   });

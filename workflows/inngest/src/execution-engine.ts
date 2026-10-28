@@ -1,5 +1,4 @@
 import { AsyncLocalStorage } from 'node:async_hooks';
-import { TripWire } from '@mastra/core/agent';
 import type { ActorSignal } from '@mastra/core/auth/ee';
 import type { RequestContext } from '@mastra/core/di';
 import { getErrorFromUnknown, MastraNonRetryableError } from '@mastra/core/error';
@@ -158,11 +157,11 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               span: params.stepSpan,
               operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
               errorOptions: {
-                ...coreWorkflows.workflowTermination?.(
-                  cause.tripwire
-                    ? { status: 'tripwire', tripwire: cause.tripwire }
-                    : { status: 'failed', error: cause.error },
-                ),
+                ...coreWorkflows.workflowTermination({
+                  status: 'failed',
+                  error: cause.error,
+                  tripwire: cause.tripwire,
+                }),
                 error: getErrorFromUnknown(e),
                 attributes: { status: 'failed' },
               },
@@ -189,7 +188,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             span: params.stepSpan,
             operationId: `workflow.${params.workflowId}.run.${params.runId}.step.${stepId}.span.error`,
             errorOptions: {
-              ...coreWorkflows.workflowTermination?.({ status: 'failed', error: errorInstance }),
+              ...coreWorkflows.workflowTermination({ status: 'failed', error: errorInstance }),
               error: errorInstance,
               attributes: { status: 'failed' },
             },
@@ -269,14 +268,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
             status: 'failed',
             error: errorInstance,
             endedAt: Date.now(),
-            ...(e instanceof TripWire && {
-              tripwire: {
-                reason: e.message,
-                processorId: e.processorId,
-                retry: e.options?.retry,
-                metadata: e.options?.metadata,
-              },
-            }),
             ...(isNonRetryable && { nonRetryable: true as const }),
           },
         });
@@ -876,8 +867,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
               endedAt: Date.now(),
             },
           };
-        } else if (result.status === 'canceled') {
-          return { executionContext, result: { status: 'canceled', endedAt: Date.now() } };
         } else if (perStep || result.status === 'paused') {
           await pubsub.publish(`workflow.events.v2.${executionContext.runId}`, {
             type: 'watch',

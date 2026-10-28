@@ -120,6 +120,8 @@ export function isDurableEngineVariant(engine: EngineVariant | undefined): boole
 }
 
 export interface RunLoopScenarioOptions {
+  /** Wait for run-side effects after the consumer stream ends, before disposing its resources. */
+  afterStream?: () => Promise<void>;
   /** Active AIMock handle for the current suite (from {@link useLoopScenarioAimock}). */
   llm: LLMock;
   /**

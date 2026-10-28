@@ -183,6 +183,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
     .map(
       async ({ inputData }) => {
         const state = inputData as IterationState;
+
         return {
           runId: state.runId,
           agentId: state.agentId,
@@ -364,6 +365,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
       .dowhile(singleIterationWorkflow, async params => {
         const { inputData, engine, mastra } = params;
         const state = inputData as IterationState;
+        const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
         const pubsub = (params as any)[PUBSUB_SYMBOL] as PubSub | undefined;
         const { step } = engine as { step: BaseContext<Inngest>['step'] };
 
@@ -392,7 +394,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         // serialized iteration state (set by the tool-call step, aggregated by
         // llm-mapping), so it survives the wire to this cross-process predicate.
         if (state.delegationBailed) {
-          if (state.lastStepResult) state.lastStepResult.continuationStopCause = 'delegation';
+          if (tracingRegistry)
+            tracingRegistry.tracingStopCause = state.lastStepResult?.isContinued ? 'delegation' : 'model_finished';
           await emitStepFinish(false);
           return false;
         }
@@ -404,8 +407,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         const underMaxSteps = state.iterationCount < effectiveMaxSteps;
 
         if (!shouldContinue || !underMaxSteps) {
-          if (state.lastStepResult) {
-            state.lastStepResult.continuationStopCause = shouldContinue ? 'max_steps' : 'model_finished';
+          if (tracingRegistry) {
+            tracingRegistry.tracingStopCause = shouldContinue ? 'max_steps' : 'model_finished';
           }
           await emitStepFinish(false);
           return false;
@@ -449,7 +452,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           return conditions.some(Boolean);
         });
 
-        if (stopped && state.lastStepResult) state.lastStepResult.continuationStopCause = 'stop_condition';
+        if (stopped && tracingRegistry) tracingRegistry.tracingStopCause = 'stop_condition';
         await emitStepFinish(!stopped);
         return !stopped;
       })
@@ -458,6 +461,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
         async params => {
           const { inputData, mastra, requestContext, tracingContext } = params;
           const state = inputData as IterationState;
+          const tracingRegistry = getRunRegistryEntry(state.runId, mastra);
           const initData = params.getInitData() as DurableAgenticWorkflowInput;
 
           // Access pubsub via symbol to emit finish event
@@ -493,7 +497,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
             finalText = finishResult.outputText;
           }
 
-          const tripwire = finishResult.tripwire ?? state.lastStepResult?.tripwire;
+          const tripwire = finishResult.tripwire;
           if (tripwire && pubsub) {
             await emitChunkEvent(pubsub, state.runId, {
               type: 'tripwire',
@@ -555,7 +559,8 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.resumeModelSpan ??
               registry?.modelSpan ??
               (observability?.rebuildSpan(state.modelSpanData as ExportedSpan<SpanType.MODEL_GENERATION>) as
-                AIModelGenerationSpan | undefined);
+                | AIModelGenerationSpan
+                | undefined);
             const toolCalls = state.accumulatedSteps.flatMap(step =>
               ((step.toolCalls ?? []) as DurableToolCallInput[]).map(tc => ({
                 toolCallId: tc.toolCallId,
@@ -564,12 +569,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               })),
             );
             modelSpan?.createTracker()?.endGeneration({
-              ...agentLoopTermination({
-                stopCause: state.lastStepResult?.continuationStopCause,
-                finishReason: finalOutput.stepResult?.reason,
-                tripwire,
-                maxSteps: state.options?.maxSteps ?? maxSteps,
-              }),
+              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
@@ -586,12 +593,14 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               registry?.agentSpan ??
               observability?.rebuildSpan(state.agentSpanData as ExportedSpan<SpanType.AGENT_RUN>);
             agentSpan?.end({
-              ...agentLoopTermination({
-                stopCause: state.lastStepResult?.continuationStopCause,
-                finishReason: finalOutput.stepResult?.reason,
-                tripwire,
-                maxSteps: state.options?.maxSteps ?? maxSteps,
-              }),
+              ...(finalOutput.stepResult?.reason === 'tripwire' && registry?.tracingTermination
+                ? registry.tracingTermination
+                : agentLoopTermination({
+                    stopCause: registry?.tracingStopCause,
+                    finishReason: finalOutput.stepResult?.reason,
+                    tripwire,
+                    maxSteps: state.options?.maxSteps ?? maxSteps,
+                  })),
               output: { text: finalText },
               ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
             });

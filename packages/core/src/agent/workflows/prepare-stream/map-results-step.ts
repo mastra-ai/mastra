@@ -11,7 +11,7 @@ import { createObservabilityContext } from '../../../observability';
 import type { Span, SpanType } from '../../../observability';
 import { StructuredOutputProcessor } from '../../../processors';
 import type { RequestContext } from '../../../request-context';
-import type { MastraOnFinishCallbackContext } from '../../../stream/types';
+import type { LanguageModelUsage, StepTripwireData, MastraOnFinishCallbackContext } from '../../../stream/types';
 import type { Step } from '../../../workflows/step';
 import type { InnerAgentExecutionOptions } from '../../agent.types';
 import type { MastraDBMessage, MessageList } from '../../message-list';
@@ -315,6 +315,9 @@ export function createMapResultsStep<OUTPUT = undefined>({
       mcp: options.mcp,
       ...createObservabilityContext({ currentSpan: agentSpan }),
       agentRunSpan: agentSpan,
+      onTracingTripwire: (tripwire: StepTripwireData, _usage: LanguageModelUsage, text: string) => {
+        agentSpan?.end({ ...agentLoopTermination({ tripwire }), output: { text }, endTree: true });
+      },
       runId,
       toolChoice: result.toolChoice,
       tools: result.tools,
@@ -442,7 +445,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
                 termination: agentLoopTermination({
                   stopCause: context?.continuationStopCause,
                   finishReason: payload.finishReason,
-                  tripwire: payload.tripwire,
+                  tripwire: context?.outputResultTripwire ?? payload.tripwire,
                   maxSteps: options.maxSteps,
                 }),
                 result: payload,

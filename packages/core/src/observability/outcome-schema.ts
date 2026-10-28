@@ -1,6 +1,6 @@
 import { z } from 'zod/v4';
 import type { AgentSignalDataPart } from '../agent/signals';
-import { SPAN_OUTCOMES } from './types/outcome';
+import { SPAN_OUTCOMES, SPAN_STOP_REASONS } from './types/outcome';
 import type { SpanStopReason, SpanStopReasonContext, SpanTermination } from './types/outcome';
 
 const failure = {
@@ -102,34 +102,14 @@ function termination<Reason extends SpanStopReason>(stopReason: Reason) {
   });
 }
 
-export const spanTerminationSchema: z.ZodType<SpanTermination> = z.lazy(() =>
-  z.union([
-    termination('max_steps'),
-    termination('max_tokens'),
-    termination('timeout'),
-    termination('runtime_error'),
-    termination('model_error'),
-    termination('caller_cancelled'),
-    termination('observer_failed'),
-    termination('context_window_exceeded'),
-    termination('guardrail'),
-    termination('content_filter'),
-    termination('approval_required'),
-    termination('signal_received'),
-    termination('stop_condition'),
-    termination('iteration_hook'),
-    termination('delegation_bail'),
-    termination('authentication'),
-    termination('authorization'),
-    z.object({
-      outcome: z.enum(SPAN_OUTCOMES),
-      stopReason: z.null().optional(),
-      stopReasonContext: z.null().optional(),
-    }),
-  ]),
-);
-
-/** Structural context schema for exporter records; terminal producers use the correlated envelope above. */
-export const spanStopReasonContextSchema: z.ZodType<SpanStopReasonContext> = z.lazy(() =>
-  z.union(Object.values(contexts)),
+export const spanTerminationSchema: z.ZodType<SpanTermination> = z.lazy(
+  () =>
+    z.union([
+      ...(Object.keys(SPAN_STOP_REASONS) as SpanStopReason[]).map(termination),
+      z.object({
+        outcome: z.enum(SPAN_OUTCOMES),
+        stopReason: z.null().optional(),
+        stopReasonContext: z.null().optional(),
+      }),
+    ]) as z.ZodType<SpanTermination>,
 );

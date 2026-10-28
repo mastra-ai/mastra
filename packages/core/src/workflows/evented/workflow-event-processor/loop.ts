@@ -28,7 +28,6 @@ export async function evaluateLoopCondition(
   stepExecutor: StepExecutor,
   stepResult: StepResult<any, any, any, any>,
   tracingContext?: TracingContext,
-  mastra?: Mastra,
 ) {
   const iterationCount = (args.stepResults[getEntryId(step.step)]?.metadata?.iterationCount ?? 0) + 1;
   const span = tracingContext?.currentSpan?.createChildSpan({
@@ -94,14 +93,12 @@ export async function processWorkflowLoop(
     stepResult,
     savedCondition,
     tracingContext,
-    mastra,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     step: Extract<StepFlowEntry, { type: 'loop' }>;
     stepResult: StepResult<any, any, any, any>;
     savedCondition?: boolean;
-    mastra?: Mastra;
     tracingContext?: TracingContext;
   },
 ) {
@@ -131,7 +128,6 @@ export async function processWorkflowLoop(
       stepExecutor,
       stepResult,
       tracingContext,
-      mastra,
     ));
 
   // When the loop body runs again, it's a fresh iteration — not a resume — so drop any

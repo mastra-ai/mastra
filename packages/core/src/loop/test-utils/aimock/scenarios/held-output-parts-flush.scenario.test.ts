@@ -91,6 +91,9 @@ describeForAllEngines('Output processors release held parts when the stream ends
       llm: getMock(),
       prompt: QUESTION,
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       collectChunks: true,
       outputProcessors: [
         new BatchPartsProcessor({ batchSize: 200, emitOnNonText: false }),

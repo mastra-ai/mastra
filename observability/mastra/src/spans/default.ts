@@ -130,6 +130,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
       this.endOpenDescendants();
     }
     if (options) this.applyOutcome(options);
+    if (this.outcome === null) this.applyOutcome({ outcome: 'unknown' });
     this.endTime = new Date();
     this.detachFromParent();
     // Metadata is always updated (read by correlation/logger/metrics contexts).
@@ -156,7 +157,7 @@ export class DefaultSpan<TType extends SpanType> extends BaseSpan<TType> {
   }
 
   error(options: ErrorSpanOptions<TType>): void {
-    if (this.isEvent) {
+    if (this.isEvent || this.endTime) {
       return;
     }
 

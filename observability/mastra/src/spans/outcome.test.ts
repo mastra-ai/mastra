@@ -34,6 +34,30 @@ describe('native execution outcomes (OBS-724)', () => {
     expect(legacy.exportSpan()).not.toHaveProperty('outcome');
   });
 
+  it('marks unfinished executions unknown when a parent cleans them up', () => {
+    const { tracing } = setup();
+    const root = tracing.startSpan({ name: 'root', type: SpanType.AGENT_RUN, outcome: null });
+    const child = root.createChildSpan({ name: 'unfinished', type: SpanType.TOOL_CALL, outcome: null });
+    root.end({ outcome: 'success', endTree: true });
+    expect(child.exportSpan()).toMatchObject({ outcome: 'unknown' });
+  });
+
+  it('replaces provisional stop details when the execution recovers', () => {
+    const { tracing } = setup();
+    const span = tracing.startSpan({ name: 'retry', type: SpanType.MODEL_GENERATION, outcome: null });
+    span.update({ outcome: 'error', stopReason: 'model_error', stopReasonContext: { message: 'retry me' } });
+    span.end({ outcome: 'success' });
+    expect(span.exportSpan()).toMatchObject({ outcome: 'success', stopReason: null, stopReasonContext: null });
+  });
+
+  it('does not attach a late error to an already successful execution', () => {
+    const { tracing } = setup();
+    const span = tracing.startSpan({ name: 'completed', type: SpanType.TOOL_CALL, outcome: null });
+    span.end({ outcome: 'success' });
+    span.error({ error: new Error('sibling failed'), outcome: 'error' });
+    expect(span.exportSpan().errorInfo).toBeUndefined();
+  });
+
   it.each(['success', 'error', 'abort', 'interrupted', 'suspend', 'limit', 'blocked', 'unknown'] as const)(
     'exports an explicitly reported %s outcome',
     outcome => {

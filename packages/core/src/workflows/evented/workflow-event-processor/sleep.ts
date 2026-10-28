@@ -2,7 +2,6 @@ import type { StepFlowEntry, WorkflowRunState } from '../..';
 import { RequestContext } from '../../../di';
 import { getErrorFromUnknown } from '../../../error';
 import type { PubSub } from '../../../events';
-import type { Mastra } from '../../../mastra';
 import { SpanType, executionFailureTermination } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows';
@@ -17,13 +16,15 @@ import type { ProcessorArgs } from '.';
 async function startWaitSpan(
   step: Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>,
   tracingContext?: TracingContext,
-  abortSignal?: AbortSignal,
 ) {
   const parent = tracingContext?.currentSpan;
   const span = parent?.createChildSpan({
     type: SpanType.WORKFLOW_SLEEP,
     outcome: null,
-    name: step.type === 'sleep' ? `sleep: ${step.duration ? `${step.duration}ms` : 'dynamic'}` : 'sleepUntil',
+    name:
+      step.type === 'sleep'
+        ? `sleep: ${step.duration ? `${step.duration}ms` : 'dynamic'}`
+        : `sleepUntil: ${step.date ? step.date.toISOString() : 'dynamic'}`,
     attributes: {
       ...getControlFlowIdentityAttributes(step),
       sleepType: step.fn ? 'dynamic' : 'fixed',
@@ -31,22 +32,12 @@ async function startWaitSpan(
     },
   });
   const finish = (completion: Parameters<typeof completeWorkflowSpan>[1]) => completeWorkflowSpan(span, completion);
-  const canceled = workflowTermination({ status: 'canceled' });
-  const onAbort = () => {
-    abortSignal?.removeEventListener('abort', onAbort);
-    finish({ end: canceled });
-    span?.endTree(canceled);
-  };
-  if (abortSignal?.aborted) onAbort();
-  else abortSignal?.addEventListener('abort', onAbort, { once: true });
   return {
     span,
     async complete() {
-      abortSignal?.removeEventListener('abort', onAbort);
       await finish({ end: workflowTermination({ status: 'success' }) });
     },
     async fail(error: unknown) {
-      abortSignal?.removeEventListener('abort', onAbort);
       await finish({ error: { ...executionFailureTermination(error), error: getErrorFromUnknown(error) } });
     },
   };
@@ -129,19 +120,15 @@ export async function processWorkflowSleep(
     workflowsStore,
     step,
     tracingContext,
-    abortController,
-    mastra,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     tracingContext?: TracingContext;
-    abortController?: AbortController;
-    mastra?: Mastra;
     workflowsStore?: WorkflowsStorage;
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
-  const tracing = await startWaitSpan(step, tracingContext, abortController?.signal);
+  const tracing = await startWaitSpan(step, tracingContext);
   try {
     // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
     // `workflows` routing publishes below are never gated — they drive execution.
@@ -203,7 +190,7 @@ export async function processWorkflowSleep(
     setTimeout(
       async () => {
         await tracing.complete();
-        if (abortController?.signal.aborted || tracing.span?.outcome === 'abort') return;
+
         if (emitStepEvents) {
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',
@@ -287,19 +274,15 @@ export async function processWorkflowSleepUntil(
     workflowsStore,
     step,
     tracingContext,
-    abortController,
-    mastra,
   }: {
     pubsub: PubSub;
     stepExecutor: StepExecutor;
     tracingContext?: TracingContext;
-    abortController?: AbortController;
-    mastra?: Mastra;
     workflowsStore?: WorkflowsStorage;
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
-  const tracing = await startWaitSpan(step, tracingContext, abortController?.signal);
+  const tracing = await startWaitSpan(step, tracingContext);
   try {
     // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
     // `workflows` routing publish below is never gated — it drives execution.
@@ -362,7 +345,7 @@ export async function processWorkflowSleepUntil(
     setTimeout(
       async () => {
         await tracing.complete();
-        if (abortController?.signal.aborted || tracing.span?.outcome === 'abort') return;
+
         if (emitStepEvents) {
           await pubsub.publish(`workflow.events.v2.${runId}`, {
             type: 'watch',

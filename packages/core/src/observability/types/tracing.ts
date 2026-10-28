@@ -1739,6 +1739,8 @@ export interface IModelSpanTracker {
    * `endGeneration`, since that step uses a fresh tracker.
    */
   getCompletionStartTime?(): Date | undefined;
+  /** Track provider chunks and completion in their original stream order. */
+  wrapInferenceStream?<T extends { pipeThrough: Function }>(stream: T): T;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
@@ -1753,6 +1755,8 @@ export interface IModelSpanTracker {
   startInference?(payload?: StepStartPayload): void;
   /** Close the provider request before post-response processors and tool execution. */
   finishInference?(payload: StepFinishPayload): void;
+  /** Close the current attempt without ending the generation or agent. */
+  endAttempt?(termination: SpanTermination): void;
 
   /**
    * End the open MODEL_INFERENCE span as interrupted, keeping the MODEL_STEP open.

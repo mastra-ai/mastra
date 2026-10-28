@@ -2,4 +2,4 @@
 '@mastra/memory': minor
 ---
 
-Preserved the observer failure cause in typed outcome context when Observational Memory interrupts a primary agent. Context-window exhaustion remains a limit on the observer and an interruption on the primary agent; the continue policy preserves successful primary completion.
+Added observer failure details to traces when Observational Memory interrupts an agent. Observer context-window exhaustion is recorded as a limit, while the affected agent records an interruption.

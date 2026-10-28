@@ -2242,22 +2242,9 @@ export function createLLMExecutionStep<TOOLS extends ToolSet = ToolSet, OUTPUT =
         // Capture the provider boundary before processors can hold its finish chunk
         // or replace the logical result with a guardrail. A rejected buffered reply
         // does not retroactively reject the completed physical request.
-        const providerStream = (modelResult as ReadableStream<ChunkType<OUTPUT>>).pipeThrough(
-          new TransformStream<ChunkType<OUTPUT>, ChunkType<OUTPUT>>({
-            transform(chunk, controller) {
-              if (chunk.type === 'finish') {
-                const reason = chunk.payload.stepResult.reason;
-                if (reason !== 'retry' && reason !== 'tripwire') {
-                  modelSpanTracker?.finishInference?.({
-                    ...chunk.payload,
-                    stepResult: { ...chunk.payload.stepResult, reason },
-                  });
-                }
-              }
-              controller.enqueue(chunk);
-            },
-          }),
-        );
+        const providerStream =
+          modelSpanTracker?.wrapInferenceStream?.(modelResult as ReadableStream<ChunkType<OUTPUT>>) ??
+          (modelResult as ReadableStream<ChunkType<OUTPUT>>);
         const outputStream = new MastraModelOutput<OUTPUT>({
           model: {
             modelId: currentStep.model.modelId,

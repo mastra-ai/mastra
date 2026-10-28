@@ -1,4 +1,3 @@
-import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 /**
  * Typed {@link RunScopeKey} registry for the agentic loop + execution workflows.
  *
@@ -15,6 +14,7 @@ import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
  * directly without going through `loop()`.
  */
 
+import type { IdGenerator, ModelMessage, ToolSet } from '@internal/ai-sdk-v5';
 import type { SaveQueueManager } from '../agent/save-queue';
 import type { PendingSignalListener, CreatedAgentSignal } from '../agent/signals';
 import type { AgentBackgroundConfig, BackgroundTaskManager, BackgroundTaskManagerConfig } from '../background-tasks';
@@ -82,3 +82,6 @@ export const INITIAL_SIGNAL_ECHOES_KEY = createRunScopeKey<CreatedAgentSignal[]>
 // --- Tool payload transform ------------------------------------------------
 
 export const TOOL_PAYLOAD_TRANSFORM_KEY = createRunScopeKey<ToolPayloadTransformPolicy>('loop:toolPayloadTransform');
+
+export const CONTINUATION_STOP_CAUSE_KEY =
+  createRunScopeKey<import('./shared/continuation-core').ContinuationStopCause>('loop:continuationStopCause');

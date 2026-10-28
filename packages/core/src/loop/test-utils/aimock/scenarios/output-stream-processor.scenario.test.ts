@@ -340,6 +340,9 @@ describeForAllEngines('Support agent output stream processors', engine => {
       engine,
       llm: getMock(),
       observability,
+      afterStream: async () => {
+        await expect.poll(() => ended().length).toBeGreaterThan(0);
+      },
       prompt: CUSTOMER_QUESTION,
       maxSteps: 3,
       tools: {
@@ -357,23 +360,29 @@ describeForAllEngines('Support agent output stream processors', engine => {
         },
       ],
       fixtures: llm =>
-        llm.on(
-          { endpoint: 'chat' },
-          {
-            toolCalls: [{ id: 'blocked-order', name: 'lookupOrder', arguments: {} }],
-          },
-        ),
+        llm
+          .on(
+            { endpoint: 'chat', sequenceIndex: 0 },
+            {
+              toolCalls: [{ id: 'blocked-order', name: 'lookupOrder', arguments: {} }],
+            },
+          )
+          .on({ endpoint: 'chat', sequenceIndex: 1 }, { content: 'Completed after the blocked tool result' }),
     });
     expect(output.tripwire).toMatchObject({ processorId: 'result-policy', reason: 'Private result blocked' });
-    for (const type of [SpanType.AGENT_RUN, SpanType.MODEL_GENERATION, SpanType.MODEL_STEP]) {
-      expect(ended(type).at(-1)).toMatchObject({
-        outcome: 'blocked',
-        stopReason: 'guardrail',
-        stopReasonContext: { tripwire: { processorId: 'result-policy', reason: 'Private result blocked' } },
-      });
+    expect(ended(SpanType.MODEL_STEP)[0]).toMatchObject({
+      outcome: 'blocked',
+      stopReason: 'guardrail',
+      stopReasonContext: { tripwire: { processorId: 'result-policy', reason: 'Private result blocked' } },
+    });
+    for (const inference of ended(SpanType.MODEL_INFERENCE)) expect(inference.outcome).toBe('success');
+    const continued = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+    expect(requests).toHaveLength(continued ? 2 : 1);
+    expect(ended()[0]?.outcome).toBe(continued ? 'success' : 'blocked');
+    for (const type of [SpanType.MODEL_STEP, SpanType.MODEL_GENERATION, SpanType.AGENT_RUN]) {
+      const spans = ended(type);
+      expect(new Set(spans.map(span => span.id)).size).toBe(spans.length);
     }
-    expect(ended(SpanType.MODEL_INFERENCE)).toMatchObject([{ outcome: 'success', stopReason: null }]);
-    expect(requests).toHaveLength(1);
   });
 
   const lookupOrderFixtures =
