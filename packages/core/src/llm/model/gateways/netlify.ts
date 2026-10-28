@@ -1,7 +1,7 @@
-import { createAnthropic } from '@ai-sdk/anthropic-v6';
-import { createGoogleGenerativeAI } from '@ai-sdk/google-v6';
-import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v6';
-import { createOpenAI } from '@ai-sdk/openai-v6';
+import { createAnthropic } from '@ai-sdk/anthropic-v7';
+import { createGoogle } from '@ai-sdk/google-v7';
+import { createOpenAICompatible } from '@ai-sdk/openai-compatible-v7';
+import { createOpenAI } from '@ai-sdk/openai-v7';
 import { InMemoryServerCache } from '../../../cache/inmemory.js';
 import { MastraError } from '../../../error/index.js';
 import { MastraModelGateway } from './base.js';
@@ -193,7 +193,7 @@ export class NetlifyGateway extends MastraModelGateway {
       case 'openai':
         return createOpenAI({ apiKey, baseURL, headers: mastraHeaders }).responses(modelId);
       case 'gemini':
-        return createGoogleGenerativeAI({
+        return createGoogle({
           baseURL: `${baseURL}/v1beta/`,
           apiKey,
           headers: {

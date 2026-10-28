@@ -50,15 +50,15 @@ function withThinkingOptions<CallOptions extends { providerOptions?: ProviderOpt
 
 type AiSdkLanguageModel = Parameters<typeof wrapLanguageModel>[0]['model'];
 
-export function withThinkingOptionsModel(
-  model: AiSdkLanguageModel,
+export function withThinkingOptionsModel<Model extends AiSdkLanguageModel>(
+  model: Model,
   thinking: ProviderThinkingOptions | undefined,
-): AiSdkLanguageModel {
+): Model | ReturnType<typeof wrapLanguageModel> {
   if (!thinking) return model;
   return wrapLanguageModel({
     model,
     middleware: {
-      specificationVersion: 'v3',
+      specificationVersion: 'v4',
       transformParams: async ({ params }) => withThinkingOptions(params, thinking),
     },
   });

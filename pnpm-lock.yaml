@@ -2639,14 +2639,14 @@ importers:
         specifier: ^5.0.124
         version: 5.0.124(zod@4.6.7)
       '@ai-sdk/anthropic':
-        specifier: ^3.0.135
-        version: 3.0.135(zod@4.6.7)
+        specifier: 4.0.82
+        version: 4.0.82(zod@4.6.7)
       '@ai-sdk/openai':
-        specifier: ^3.0.131
-        version: 3.0.131(zod@4.6.7)
+        specifier: 4.0.96
+        version: 4.0.96(zod@4.6.7)
       '@ai-sdk/openai-compatible':
-        specifier: ^2.0.87
-        version: 2.0.87(zod@4.6.7)
+        specifier: 3.0.71
+        version: 3.0.71(zod@4.6.7)
       '@ast-grep/napi':
         specifier: ^0.42.3
         version: 0.42.3
@@ -2696,8 +2696,8 @@ importers:
         specifier: workspace:*
         version: link:../../integrations/tavily
       ai:
-        specifier: ^6.0.315
-        version: 6.0.315(zod@4.6.7)
+        specifier: 7.0.153
+        version: 7.0.153(zod@4.6.7)
       execa:
         specifier: ^9.6.1
         version: 9.6.1
@@ -2772,14 +2772,14 @@ importers:
         specifier: ^5.0.124
         version: 5.0.124(zod@4.6.7)
       '@ai-sdk/anthropic':
-        specifier: ^3.0.135
-        version: 3.0.135(zod@4.6.7)
+        specifier: 4.0.82
+        version: 4.0.82(zod@4.6.7)
       '@ai-sdk/openai':
-        specifier: ^3.0.131
-        version: 3.0.131(zod@4.6.7)
+        specifier: 4.0.96
+        version: 4.0.96(zod@4.6.7)
       '@ai-sdk/openai-compatible':
-        specifier: ^2.0.87
-        version: 2.0.87(zod@4.6.7)
+        specifier: 3.0.71
+        version: 3.0.71(zod@4.6.7)
       '@ast-grep/napi':
         specifier: ^0.42.3
         version: 0.42.3
@@ -2838,8 +2838,8 @@ importers:
         specifier: workspace:*
         version: link:../../voice/openai
       ai:
-        specifier: ^6.0.315
-        version: 6.0.315(zod@4.6.7)
+        specifier: 7.0.153
+        version: 7.0.153(zod@4.6.7)
       chalk:
         specifier: ^5.6.2
         version: 5.6.2
@@ -4565,8 +4565,8 @@ importers:
         specifier: npm:@ai-sdk/provider-utils@4.0.61
         version: '@ai-sdk/provider-utils@4.0.61(zod@4.6.7)'
       '@ai-sdk/provider-utils-v7':
-        specifier: npm:@ai-sdk/provider-utils@5.0.62
-        version: '@ai-sdk/provider-utils@5.0.62(zod@4.6.7)'
+        specifier: npm:@ai-sdk/provider-utils@5.0.68
+        version: '@ai-sdk/provider-utils@5.0.68(zod@4.6.7)'
       '@ai-sdk/provider-v5':
         specifier: npm:@ai-sdk/provider@2.0.5
         version: '@ai-sdk/provider@2.0.5'
@@ -4574,8 +4574,8 @@ importers:
         specifier: npm:@ai-sdk/provider@3.0.19
         version: '@ai-sdk/provider@3.0.19'
       '@ai-sdk/provider-v7':
-        specifier: npm:@ai-sdk/provider@4.0.29
-        version: '@ai-sdk/provider@4.0.29'
+        specifier: npm:@ai-sdk/provider@4.0.34
+        version: '@ai-sdk/provider@4.0.34'
       '@isaacs/ttlcache':
         specifier: ^2.1.5
         version: 2.1.5
@@ -4694,6 +4694,9 @@ importers:
       '@ai-sdk/openai-compatible-v6':
         specifier: npm:@ai-sdk/openai-compatible@2.0.85
         version: '@ai-sdk/openai-compatible@2.0.85(zod@4.6.7)'
+      '@ai-sdk/openai-compatible-v7':
+        specifier: npm:@ai-sdk/openai-compatible@3.0.71
+        version: '@ai-sdk/openai-compatible@3.0.71(zod@4.6.7)'
       '@ai-sdk/openai-v5':
         specifier: npm:@ai-sdk/openai@2.0.135
         version: '@ai-sdk/openai@2.0.135(zod@4.6.7)'
@@ -4775,6 +4778,9 @@ importers:
       '@openrouter/ai-sdk-provider-v6':
         specifier: npm:@openrouter/ai-sdk-provider@2.10.0
         version: '@openrouter/ai-sdk-provider@2.10.0(zod@4.6.7)'
+      '@openrouter/ai-sdk-provider-v7':
+        specifier: npm:@openrouter/ai-sdk-provider@3.1.0
+        version: '@openrouter/ai-sdk-provider@3.1.0(zod@4.6.7)'
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
@@ -10520,12 +10526,6 @@ packages:
 
   '@ai-sdk/openai-compatible@2.0.85':
     resolution: {integrity: sha512-a3FXe1dTNv4XmlIehVl1cJUmOTMHFBSCIy9a6PdWzL7Tj5GgQAs+kEhjhQhEv9AxY1HFjH3EV2aK4NbWcrRJhw==}
-    engines: {node: '>=18'}
-    peerDependencies:
-      zod: 4.6.7
-
-  '@ai-sdk/openai-compatible@2.0.87':
-    resolution: {integrity: sha512-tge19iHFcU4r6QxlFmwIRU/ytd6RFjsXfMpEc9sLiS5+NnkUYLeh2mm4RzemdqrQS6uO0h0t4RD04CpbgjWXqw==}
     engines: {node: '>=18'}
     peerDependencies:
       zod: 4.6.7
@@ -16682,6 +16682,13 @@ packages:
     engines: {node: '>=18'}
     peerDependencies:
       ai: ^6.0.0
+      zod: 4.6.7
+
+  '@openrouter/ai-sdk-provider@3.1.0':
+    resolution: {integrity: sha512-BQy1TA9fKrh47s9ivsO6FY5QimN7GUF0i8Qon3pkxQclEgShso0dClpcWn8OIyPLEZZPFaFKgI8TW4S/O0p0Dw==}
+    engines: {node: '>=22'}
+    peerDependencies:
+      ai: ^7.0.0
       zod: 4.6.7
 
   '@openrouter/sdk@0.1.27':
@@ -32471,12 +32478,6 @@ snapshots:
       '@ai-sdk/provider-utils': 4.0.61(zod@4.6.7)
       zod: 4.6.7
 
-  '@ai-sdk/openai-compatible@2.0.87(zod@4.6.7)':
-    dependencies:
-      '@ai-sdk/provider': 3.0.19
-      '@ai-sdk/provider-utils': 4.0.62(zod@4.6.7)
-      zod: 4.6.7
-
   '@ai-sdk/openai-compatible@3.0.71(zod@4.6.7)':
     dependencies:
       '@ai-sdk/provider': 4.0.29
@@ -35380,7 +35381,7 @@ snapshots:
 
   '@copilotkit/aimock@1.46.0(vitest@4.1.12)':
     optionalDependencies:
-      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@couchbase/couchbase-darwin-arm64-napi@4.7.1':
     optional: true
@@ -40385,6 +40386,10 @@ snapshots:
     dependencies:
       zod: 4.6.7
 
+  '@openrouter/ai-sdk-provider@3.1.0(zod@4.6.7)':
+    dependencies:
+      zod: 4.6.7
+
   '@openrouter/sdk@0.1.27':
     dependencies:
       zod: 4.6.7
@@ -43750,7 +43755,7 @@ snapshots:
       '@stryker-mutator/util': 10.0.0
       semver: 7.8.5
       tslib: 2.8.1
-      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@supabase/auth-js@2.118.0':
     dependencies:
@@ -45460,7 +45465,7 @@ snapshots:
       obug: 2.2.1
       std-env: 4.3.0
       tinyrainbow: 3.2.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/expect@3.2.4':
     dependencies:
@@ -45550,7 +45555,7 @@ snapshots:
       sirv: 3.0.2
       tinyglobby: 0.2.17
       tinyrainbow: 3.2.0
-      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+      vitest: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@6.0.3))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
 
   '@vitest/utils@3.2.4':
     dependencies:

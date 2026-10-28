@@ -252,7 +252,7 @@ function applyGeminiSchemaCompatToTools(modelId: string, tools: unknown): unknow
 /** Middleware that prevents sending parameters Copilot's endpoint rejects. */
 function createCopilotMiddleware(modelId: string): LanguageModelMiddleware {
   return {
-    specificationVersion: 'v3',
+    specificationVersion: 'v4',
     transformParams: async ({ params }) => {
       if (params.temperature !== undefined && params.temperature !== null) {
         delete params.topP;
