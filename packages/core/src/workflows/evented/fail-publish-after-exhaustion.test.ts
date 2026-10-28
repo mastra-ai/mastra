@@ -8,7 +8,7 @@ import { EventEmitterPubSub } from '../../events/event-emitter';
 import { PublisherQueueLimitError } from '../../events/publisher-queue-limit-error';
 import type { PubSub } from '../../events/pubsub';
 import type { Event } from '../../events/types';
-import { PublisherQueueLimitError, UnixSocketPubSub } from '../../events/unix-socket-pubsub';
+import { UnixSocketPubSub } from '../../events/unix-socket-pubsub';
 import { Mastra } from '../../mastra';
 import { RequestContext } from '../../request-context';
 import { MockStore } from '../../storage/mock';
@@ -344,11 +344,15 @@ describe('workflow finish publication failure', () => {
       ]);
       expect(rejectedRunId).toBeDefined();
       expect(publishFailedEvents).toEqual([
-        {
+        expect.objectContaining({
           type: 'workflow.publish-failed',
           runId: rejectedRunId,
-          data: { message: 'UnixSocketPubSub publisher queue limit exceeded' },
-        },
+          data: expect.objectContaining({
+            message: 'UnixSocketPubSub publisher queue limit exceeded',
+            workflowId: 'child-cap',
+            runId: rejectedRunId,
+          }),
+        }),
       ]);
       expect(result).not.toBe('HANG');
       expect(result).toMatchObject({ status: 'success', result: { ok: true } });
