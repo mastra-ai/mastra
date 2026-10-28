@@ -124,6 +124,11 @@ function isFullyAnswered(row: BackgroundTask, envelope: BackgroundTaskEnvelope):
   );
 }
 
+/** Cancelled by a client, or expired (the sweep cancels the row, then records it as failed). */
+function wasCancelled(row: BackgroundTask, now: number): boolean {
+  return row.status === 'cancelled' || (row.status === 'failed' && isExpired(row, now));
+}
+
 function isExpired(row: BackgroundTask, now: number): boolean {
   return row.expiresAt !== undefined && row.expiresAt.getTime() <= now;
 }
@@ -441,6 +446,21 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
       .catch(error => this.#getLogger?.().warn('Could not stop what a cancelled MCP task stands for', { error }));
   }
 
+  /**
+   * An attempt here was aborted. The abort says why only in core's message, so read the row: if
+   * another instance cancelled or expired the task, run `onCancel` here as well, where the work may
+   * be executing (a workflow run, say). A shutdown or a lost lease leaves the row running.
+   */
+  #notifyIfCancelled(taskKey: string): void {
+    void this.#manager
+      .listTasks({ agentId: this.#owner, toolCallId: taskKey, perPage: 1 })
+      .then(({ tasks }) => {
+        const row = tasks[0];
+        if (row && wasCancelled(row, Date.now())) this.#notifyCancel(row);
+      })
+      .catch(error => this.#getLogger?.().warn('Could not check why an MCP task attempt was aborted', { error }));
+  }
+
   #abortFirstAttempt(rowId: string, reason: Error): void {
     const abort = this.#firstAttempts.get(rowId);
     if (!abort) return;
@@ -667,7 +687,10 @@ export class BackgroundTaskMCPTaskStore implements MCPTaskStore {
     }
     // An attempt that ignores its signal must still end, so the workflow can record the abort.
     const result = await new Promise<Awaited<typeof outcome>>((resolve, reject) => {
-      const onAbort = () => reject(signal.reason ?? new Error('Task cancelled'));
+      const onAbort = () => {
+        reject(signal.reason ?? new Error('Task cancelled'));
+        this.#notifyIfCancelled(args.taskKey);
+      };
       if (signal.aborted) onAbort();
       else signal.addEventListener('abort', onAbort, { once: true });
       outcome.then(resolve, reject).finally(() => signal.removeEventListener('abort', onAbort));

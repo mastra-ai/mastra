@@ -1088,10 +1088,9 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       return (await workflow.getWorkflowRunById(runs[0]!.runId))!;
     }
 
-    // Fails until core aborts a local run whose row another process cancelled (#28523), as for tools
-    // above. B leaves a running run to the attempt on A, since a `canceled` written from B would only
-    // be overwritten by A's run, and would turn A's own cancel into a no-op once core #28523 lands.
-    it.fails('stops a running run on one instance when another instance cancels its task', async () => {
+    // B leaves a running run alone, since a `canceled` written from B would only be overwritten by
+    // A's run. Core aborts A's attempt once its row reads cancelled, and A then cancels its own run.
+    it('stops a running run on one instance when another instance cancels its task', async () => {
       const a = await workflowInstance();
       const b = await workflowInstance();
       const taskId = await call(a.url, 'run_slow');
