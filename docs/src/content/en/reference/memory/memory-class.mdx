@@ -47,7 +47,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
     name: 'storage',
     type: 'MastraCompositeStore',
     description:
-      'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
+      'Storage implementation for persisting memory data. Optional: when omitted, an agent uses the storage of the Mastra instance it belongs to. If neither is configured, accessing `memory.storage` throws `Memory requires a storage provider to function`.',
     isOptional: true,
   },
   {
@@ -58,8 +58,9 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
   },
   {
     name: 'embedder',
-    type: 'EmbeddingModel<string> | EmbeddingModelV2<string>',
-    description: 'Embedder instance for vector embeddings. Required when semantic recall is enabled.',
+    type: 'string | EmbeddingModel<string> | EmbeddingModelV2<string>',
+    description:
+      'Embedder for vector embeddings, as a model-router ID string (for example `"openai/text-embedding-3-small"`), an `EmbeddingModel`, or an `EmbeddingModelV2`. Required when semantic recall is enabled and the vector store doesn\'t generate embeddings itself (`vector.isSelfEmbedding` is false).',
     isOptional: true,
   },
   {
@@ -227,8 +228,10 @@ export const agent = new Agent({
         indexConfig: {
           type: 'hnsw', // Use HNSW for better performance
           metric: 'dotproduct', // Optimal for OpenAI embeddings
-          m: 16, // Number of bi-directional links
-          efConstruction: 64, // Construction-time candidate list size
+          hnsw: {
+            m: 16, // Number of bi-directional links
+            efConstruction: 64, // Construction-time candidate list size
+          },
         },
       },
       workingMemory: {

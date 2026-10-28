@@ -9,7 +9,7 @@ packages:
 
 An agent's instructions hold its always-on system prompt: the model reads it on every turn. Use them to define the agent's identity, tone, role, and standing rules.
 
-Write them in one of two files at the agent root. Use `instructions.md` when the prompt is fixed text. Use `instructions.ts` when the prompt needs code, for example when it's built from shared constants or resolved per request.
+Write them in `instructions.md`, `instructions.ts`, or `instructions.js` at the agent root. Use `instructions.md` when the prompt is fixed text. Use `instructions.ts` (or `instructions.js`) when the prompt needs code, for example when it's built from shared constants or resolved per request.
 
 Instructions are always in context, so keep them for stable behavior that applies to every request. Move anything conditional, large, or action-oriented into [`tools/`](/reference/file-based-agents/tools) or [`skills/`](/reference/file-based-agents/skills), which the model uses only when relevant.
 
@@ -34,7 +34,7 @@ Move conditional, large, or action-oriented guidance into [`tools/`](/reference/
 
 ## Instructions in TypeScript
 
-Use `instructions.ts` when markdown can't express the prompt. The file default-exports a string, a system message, or a function returning one, and `agentInstructions()` types the export without changing it.
+Use `instructions.ts` when markdown can't express the prompt. The file default-exports a string, a system message, a non-empty array of strings or system messages, or a function returning one, and `agentInstructions()` types the export without changing it.
 
 Export a string when the prompt is assembled in code, for example from constants shared with the rest of your app:
 
