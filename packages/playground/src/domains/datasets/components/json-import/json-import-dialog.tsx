@@ -89,19 +89,16 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
     setFileError(null);
   }, []);
 
-  const resetState = useCallback(() => {
+  const handleOpenChangeComplete = (isOpen: boolean) => {
+    if (isOpen) return;
+
     readIdRef.current++;
     setTab('upload');
     setFile(null);
     setFileText('');
     setFileError(null);
     setPastedText('');
-  }, []);
-
-  const handleClose = useCallback(() => {
-    onOpenChange(false);
-    setTimeout(resetState, 150);
-  }, [onOpenChange, resetState]);
+  };
 
   const handleImport = useCallback(async () => {
     if (validation.status !== 'ready') return;
@@ -112,16 +109,20 @@ export function JSONImportDialog({ datasetId, datasetName, open, onOpenChange, o
       toast.success(`Imported ${validation.total} item${validation.total !== 1 ? 's' : ''}`);
       onSuccess?.();
       onOpenChange(false);
-      setTimeout(resetState, 150);
     } catch (err) {
       toast.error(err instanceof Error ? err.message : 'Failed to import items');
     } finally {
       setIsImporting(false);
     }
-  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange, resetState]);
+  }, [validation, batchInsertItems, datasetId, onSuccess, onOpenChange]);
 
   return (
-    <Dialog open={open} onOpenChange={handleClose} pending={isImporting}>
+    <Dialog
+      open={open}
+      onOpenChange={nextOpen => onOpenChange(nextOpen)}
+      onOpenChangeComplete={handleOpenChangeComplete}
+      pending={isImporting}
+    >
       <DialogContent size="xl">
         <DialogHeader>
           <DialogTitle>Import into dataset</DialogTitle>

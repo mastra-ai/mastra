@@ -1,14 +1,12 @@
-import type { RouteResponse } from '@mastra/client-js';
 import type { CodeEditorProps } from '@mastra/playground-ui/components/CodeEditor';
-import { fireEvent, screen, waitFor } from '@testing-library/react';
+import { act, cleanup, fireEvent, screen, waitFor } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
-import { describe, expect, it, vi } from 'vitest';
+import { afterEach, describe, expect, it, vi } from 'vitest';
 
 import { JSONImportDialog } from '../json-import-dialog';
+import { batchInsertResponse } from './fixtures/json-import';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL, waitForMutationsIdle } from '@/test/render';
-
-type BatchInsertResponse = RouteResponse<'POST /datasets/:datasetId/items/batch'>;
 
 // CodeMirror doesn't render in jsdom; stub it so we can assert on the props it receives.
 vi.mock('@mastra/playground-ui/components/CodeEditor', () => ({
@@ -33,17 +31,19 @@ const BATCH_URL = `${TEST_BASE_URL}/api/datasets/${DATASET_ID}/items/batch`;
 const renderDialog = (props: Partial<React.ComponentProps<typeof JSONImportDialog>> = {}) => {
   const onOpenChange = vi.fn();
   const onSuccess = vi.fn();
-  const result = renderWithProviders(
+  const dialog = (open: boolean) => (
     <JSONImportDialog
       datasetId={DATASET_ID}
       datasetName="faz"
-      open
       onOpenChange={onOpenChange}
       onSuccess={onSuccess}
       {...props}
-    />,
+      open={open}
+    />
   );
-  return { ...result, onOpenChange, onSuccess };
+  const result = renderWithProviders(dialog(props.open ?? true));
+  const setOpen = (open: boolean) => result.rerender(dialog(open));
+  return { ...result, onOpenChange, onSuccess, setOpen };
 };
 
 const pasteJSON = (text: string) => {
@@ -64,6 +64,61 @@ const VALID_ITEMS = JSON.stringify([
 ]);
 
 describe('JSONImportDialog', () => {
+  describe('when its parent closes the dialog', () => {
+    it('starts with an empty upload and paste form on the next open', async () => {
+      const { setOpen } = renderDialog();
+      await uploadFile('items.json', VALID_ITEMS);
+      pasteJSON(VALID_ITEMS);
+
+      setOpen(false);
+      await waitFor(() => expect(screen.queryByRole('dialog')).toBeNull());
+      setOpen(true);
+
+      expect(screen.getByRole('tab', { name: 'Upload file' }).getAttribute('aria-selected')).toBe('true');
+      expect(screen.getByTestId('json-dropzone')).not.toBeNull();
+      expect(screen.queryByTestId('json-file-card')).toBeNull();
+      expect(screen.getByRole('status').textContent).toBe('No items yet');
+      fireEvent.click(screen.getByRole('tab', { name: 'Paste JSON' }));
+      expect(screen.getByLabelText<HTMLTextAreaElement>('JSON items').value).toBe('');
+    });
+  });
+
+  describe.each(['Cancel', 'Import'] as const)('when reopened after %s', action => {
+    afterEach(() => {
+      cleanup();
+      vi.useRealTimers();
+    });
+
+    it('preserves a new draft after the previous dialog has closed', async () => {
+      let resolveImport = () => {};
+      const imported = new Promise<void>(resolve => {
+        resolveImport = resolve;
+      });
+      server.use(http.post(BATCH_URL, () => HttpResponse.json(batchInsertResponse)));
+      const { onOpenChange, setOpen } = renderDialog({ onSuccess: resolveImport });
+      pasteJSON(VALID_ITEMS);
+
+      // Advance time explicitly so the old 150 ms reset cannot race this assertion.
+      vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout', 'requestAnimationFrame', 'cancelAnimationFrame'] });
+      await act(async () => {
+        fireEvent.click(screen.getByRole('button', { name: action === 'Import' ? 'Import 3 items' : 'Cancel' }));
+        if (action === 'Import') await imported;
+      });
+      expect(onOpenChange).toHaveBeenCalledWith(false);
+      setOpen(false);
+      await act(async () => vi.advanceTimersToNextFrame());
+      expect(screen.queryByRole('dialog')).toBeNull();
+      setOpen(true);
+
+      const nextDraft = '[{"input":"next import"}]';
+      pasteJSON(nextDraft);
+      await act(async () => vi.advanceTimersByTimeAsync(1000));
+
+      expect(screen.getByLabelText<HTMLTextAreaElement>('JSON items').value).toBe(nextDraft);
+      expect(screen.getByRole('status').textContent).toBe('1 item ready · 1 without groundTruth');
+    });
+  });
+
   it('renders the header, tabs, format reference and docs link', () => {
     renderDialog();
 
@@ -188,8 +243,7 @@ describe('JSONImportDialog', () => {
     server.use(
       http.post(BATCH_URL, async ({ request }) => {
         onPost(await request.json());
-        const response: BatchInsertResponse = { items: [], count: 3 };
-        return HttpResponse.json(response);
+        return HttpResponse.json(batchInsertResponse);
       }),
     );
 
@@ -214,8 +268,7 @@ describe('JSONImportDialog', () => {
     server.use(
       http.post(BATCH_URL, async () => {
         await held;
-        const response: BatchInsertResponse = { items: [], count: 3 };
-        return HttpResponse.json(response);
+        return HttpResponse.json(batchInsertResponse);
       }),
     );
 
