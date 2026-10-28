@@ -438,6 +438,16 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
     ] as const;
   }
 
+  /**
+   * Partitioning options for the write path, with `mode` fixed to the mode
+   * this store resolved (in init(), or lazily in prune()) so the write path
+   * does not detect it again. Until then the configured mode stands in and
+   * the write path resolves it itself when a partition is missing.
+   */
+  #writePartitioning(): PartitioningOptions {
+    return { ...this.#partitioning, mode: this.#partitionMode ?? this.#partitioning.mode };
+  }
+
   async #run<T>(op: string, fn: () => Promise<T>, details?: Record<string, unknown>): Promise<T> {
     try {
       return await fn();
@@ -451,16 +461,20 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   // -------------------------------------------------------------------------
 
   override async createSpan(args: CreateSpanArgs): Promise<void> {
-    await this.#run('CREATE_SPAN', () => tracingOps.createSpan(this.#client, this.#schema, args, this.#partitioning), {
-      traceId: args.span.traceId,
-      spanId: args.span.spanId,
-    });
+    await this.#run(
+      'CREATE_SPAN',
+      () => tracingOps.createSpan(this.#client, this.#schema, args, this.#writePartitioning()),
+      {
+        traceId: args.span.traceId,
+        spanId: args.span.spanId,
+      },
+    );
   }
 
   override async batchCreateSpans(args: BatchCreateSpansArgs): Promise<void> {
     await this.#run(
       'BATCH_CREATE_SPANS',
-      () => tracingOps.batchCreateSpans(this.#client, this.#schema, args, this.#partitioning),
+      () => tracingOps.batchCreateSpans(this.#client, this.#schema, args, this.#writePartitioning()),
       {
         count: args.records.length,
       },
@@ -574,7 +588,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async batchCreateLogs(args: BatchCreateLogsArgs): Promise<void> {
     await this.#run(
       'BATCH_CREATE_LOGS',
-      () => logsOps.batchCreateLogs(this.#client, this.#schema, args, this.#partitioning),
+      () => logsOps.batchCreateLogs(this.#client, this.#schema, args, this.#writePartitioning()),
       {
         count: args.logs.length,
       },
@@ -584,7 +598,7 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   override async batchCreateMetrics(args: BatchCreateMetricsArgs): Promise<void> {
     await this.#run(
       'BATCH_CREATE_METRICS',
-      () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args, this.#partitioning),
+      () => metricsOps.batchCreateMetrics(this.#client, this.#schema, args, this.#writePartitioning()),
       {
         count: args.metrics.length,
       },
@@ -592,13 +606,15 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
   }
 
   override async createScore(args: CreateScoreArgs): Promise<void> {
-    await this.#run('CREATE_SCORE', () => scoresOps.createScore(this.#client, this.#schema, args, this.#partitioning));
+    await this.#run('CREATE_SCORE', () =>
+      scoresOps.createScore(this.#client, this.#schema, args, this.#writePartitioning()),
+    );
   }
 
   override async batchCreateScores(args: BatchCreateScoresArgs): Promise<void> {
     await this.#run(
       'BATCH_CREATE_SCORES',
-      () => scoresOps.batchCreateScores(this.#client, this.#schema, args, this.#partitioning),
+      () => scoresOps.batchCreateScores(this.#client, this.#schema, args, this.#writePartitioning()),
       {
         count: args.scores.length,
       },
@@ -607,14 +623,14 @@ export class ObservabilityStoragePostgresVNext extends ObservabilityStorage {
 
   override async createFeedback(args: CreateFeedbackArgs): Promise<void> {
     await this.#run('CREATE_FEEDBACK', () =>
-      feedbackOps.createFeedback(this.#client, this.#schema, args, this.#partitioning),
+      feedbackOps.createFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
     );
   }
 
   override async batchCreateFeedback(args: BatchCreateFeedbackArgs): Promise<void> {
     await this.#run(
       'BATCH_CREATE_FEEDBACK',
-      () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args, this.#partitioning),
+      () => feedbackOps.batchCreateFeedback(this.#client, this.#schema, args, this.#writePartitioning()),
       {
         count: args.feedbacks.length,
       },

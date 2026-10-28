@@ -22,7 +22,6 @@
 
 import type { DbClient } from '../../../client';
 import { ALL_SIGNAL_TABLES, qualifiedName, qualifiedTable, SIGNAL_TIME_COLUMN } from './ddl';
-import { isDuplicateRelationError } from './pg-errors';
 
 export type PartitionMode = 'timescale' | 'partman' | 'native';
 
@@ -150,9 +149,16 @@ export async function ensureDayPartitions(
   days: Date[],
 ): Promise<void> {
   const parent = qualifiedTable(schema, table);
+  // Days that already have an attached partition run no DDL at all. A write
+  // whose batch mixes an existing day with a missing one then only touches
+  // the missing day, and a role that may not ATTACH is never asked to for a
+  // day that needs nothing.
+  const attached = await attachedPartitionNames(client, schema, table);
   for (const d of days) {
     const { start: partStart, end: partEnd, suffix } = dayBounds(d);
-    const child = qualifiedName(schema, partitionName(table, suffix));
+    const childName = partitionName(table, suffix);
+    if (attached.has(childName)) continue;
+    const child = qualifiedName(schema, childName);
     // Two-phase partition creation. `CREATE TABLE ... PARTITION OF` takes
     // ACCESS EXCLUSIVE on the parent for the duration of the statement,
     // which blocks every concurrent read and write against every other
@@ -188,14 +194,32 @@ export async function ensureDayPartitions(
         );
       });
     } catch (error) {
-      // The child can already be attached from a previous init() or from a
-      // concurrent caller. `CREATE TABLE IF NOT EXISTS` is also not atomic
-      // under concurrency, so a parallel caller can win the race between the
-      // existence check and the create; its ATTACH then completes the day.
-      // Either way, treat the duplicate as success.
-      if (!isAlreadyAttachedError(error) && !isDuplicateRelationError(error)) throw error;
+      // A concurrent init() or write can win the race between our listing
+      // and our CREATE + ATTACH, which then fails as a duplicate relation or
+      // "already a partition" (wording depends on `lc_messages`). The catalog
+      // is the locale-proof witness: if the day is attached now, whoever
+      // attached it served this call; anything else is a real failure.
+      const attachedNow = await attachedPartitionNames(client, schema, table);
+      if (!attachedNow.has(childName)) throw error;
     }
   }
+}
+
+/** Names of the children attached to `schema.table`, read from the catalog so no search_path can shadow it. */
+async function attachedPartitionNames(client: DbClient, schema: string, table: string): Promise<Set<string>> {
+  const rows = await client.manyOrNone<{ relname: string }>(
+    `SELECT c.relname
+     FROM pg_catalog.pg_inherits i
+     JOIN pg_catalog.pg_class c ON c.oid = i.inhrelid
+     WHERE i.inhparent = (
+       SELECT p.oid
+       FROM pg_catalog.pg_class p
+       JOIN pg_catalog.pg_namespace n ON n.oid = p.relnamespace
+       WHERE n.nspname = $1 AND p.relname = $2
+     )`,
+    [schema, table],
+  );
+  return new Set(rows.map(r => r.relname));
 }
 
 /**
@@ -206,22 +230,6 @@ export async function ensureDayPartitions(
 export function isMissingPartitionError(error: unknown): boolean {
   const { code, routine, message = '' } = (error ?? {}) as { code?: string; routine?: string; message?: string };
   return code === '23514' && (routine === 'ExecFindPartition' || /no partition of relation/i.test(message));
-}
-
-/**
- * `ALTER TABLE ATTACH PARTITION` fails with `42P17 invalid_object_definition`
- * when the target table is already a partition of *any* parent (including
- * the one we want). On older PG it can also surface as 42710 or a generic
- * message. We err on the side of treating any "already a partition" wording
- * as success so concurrent inits converge cleanly.
- */
-function isAlreadyAttachedError(error: unknown): boolean {
-  const code = (error as { code?: string } | undefined)?.code;
-  const message = (error as { message?: string } | undefined)?.message ?? '';
-  if (code === '42P17' || code === '42710') {
-    return /is already a partition/i.test(message) || /already a partition/i.test(message);
-  }
-  return /is already a partition/i.test(message);
 }
 
 /**
@@ -303,11 +311,6 @@ async function partmanParentRegistered(client: DbClient, schema: string, table: 
     [schema, table],
   );
   return Boolean(row?.exists);
-}
-
-/** True when pg_partman owns `table`'s partitions, so Mastra must not create day partitions by hand. */
-export async function isPartmanManaged(client: DbClient, schema: string, table: string): Promise<boolean> {
-  return (await detectPartman(client)) && partmanParentRegistered(client, schema, table);
 }
 
 export async function ensurePartmanHypertables(client: DbClient, schema: string): Promise<void> {

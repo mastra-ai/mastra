@@ -11,7 +11,7 @@ import type { DbClient } from '../../../client';
 import { toPgJson } from '../../../db/sanitize-json';
 import { qualifiedTable, SIGNAL_TIME_COLUMN, TABLE_SPAN_EVENTS } from './ddl';
 import type { SignalTable } from './ddl';
-import { ensureDayPartitions, isMissingPartitionError, isPartmanManaged, withinPartitionWindow } from './partitioning';
+import { ensureDayPartitions, isMissingPartitionError, resolveMode, withinPartitionWindow } from './partitioning';
 import type { PartitioningOptions } from './partitioning';
 import {
   buildNamedSelectColumns,
@@ -106,7 +106,14 @@ ${onConflict}`;
   return { text, values };
 }
 
-/** Insert into a signal table. A row whose day is inside the partition window but has no partition yet gets one created, then the insert runs once more. */
+/**
+ * Insert into a signal table. In native partition mode, a row whose day is
+ * inside the partition window but has no partition yet gets one created, then
+ * the insert runs once more. TimescaleDB and pg_partman own their partitions,
+ * so in those modes the original error propagates untouched. The mode is the
+ * one the store resolved; a store that never ran init() (`disableInit`)
+ * detects it here, after the failed insert, so the hot path stays one query.
+ */
 export async function insertRows(
   client: DbClient,
   schema: string,
@@ -120,9 +127,9 @@ export async function insertRows(
   try {
     await client.query(insert.text, insert.values);
   } catch (error) {
-    if (!isMissingPartitionError(error)) throw error;
+    if (!isMissingPartitionError(error) || (await resolveMode(client, partitioning)) !== 'native') throw error;
     const days = withinPartitionWindow(recordDays(records, SIGNAL_TIME_COLUMN[table]), partitioning);
-    if (days.length === 0 || (await isPartmanManaged(client, schema, table))) throw error;
+    if (days.length === 0) throw error;
     await ensureDayPartitions(client, schema, table, days);
     await client.query(insert.text, insert.values);
   }
