@@ -2023,7 +2023,7 @@ The server creates the task before it answers, so a `tasks/get` sent right after
     isOptional: true,
     defaultValue: '86400000',
     description:
-      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes. In Mastra storage, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
+      'How long a task is kept after it is created, in milliseconds. A task still running when it expires is aborted and ends `failed`. `null` keeps tasks in memory until the server closes. With the in-memory store, finished results stay in memory until their TTL ends, so lower `ttlMs` to limit memory use and avoid `null`. In Mastra storage, `null` keeps the row until you delete it, and a task still running after about 24.8 days (the longest timer Node.js supports) ends `failed`.',
   },
   {
     name: 'recover',
