@@ -73,7 +73,6 @@ import { CachingPubSub, PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import { createTimeoutAbortSignal, isMastraTimeoutError } from '@mastra/core/loop';
 import type { Mastra } from '@mastra/core/mastra';
-import { endRunSpansWithError } from '../observability-compat';
 import { EntityType, SpanType, getOrCreateSpan } from '@mastra/core/observability';
 import { RequestContext } from '@mastra/core/request-context';
 import { ChunkFrom } from '@mastra/core/stream';
@@ -89,12 +88,13 @@ import { deepMerge, rebindProcessorTools } from '@mastra/core/utils';
 import type { ShouldPersistSnapshotFn, Workflow, WorkflowRunState } from '@mastra/core/workflows';
 import { NonRetriableError } from 'inngest';
 import type { Inngest } from 'inngest';
-
 import {
   buildDurableResumeEventData,
   buildDurableTriggerEventData,
   mergeResumeRequestContext,
 } from '../durable-event-payload';
+
+import { endRunSpansWithError } from '../observability-compat';
 import { InngestPubSub } from '../pubsub';
 import type { InngestFlowControlConfig } from '../types';
 import type { InngestWorkflow } from '../workflow';

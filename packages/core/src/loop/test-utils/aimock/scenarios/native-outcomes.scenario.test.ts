@@ -61,7 +61,9 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
         );
       },
     });
-    expect(ended().filter(span => span.entityId === 'worker')).toMatchObject([{ outcome: failed ? 'error' : 'success' }]);
+    expect(ended().filter(span => span.entityId === 'worker')).toMatchObject([
+      { outcome: failed ? 'error' : 'success' },
+    ]);
     const supervisor = ended().find(span => span.entityId !== 'worker');
     expect(supervisor).toMatchObject({ outcome: failed ? 'interrupted' : 'success', stopReason: 'delegation_bail' });
     if (failed)

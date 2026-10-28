@@ -39,6 +39,10 @@ Spans report the meaning of an individual execution through three native fields:
 
 Instrumented executions report `outcome: null` while ongoing. An absent outcome means the producer hasn't supplied one. Completing on the last allowed step is `success`. Needing another step after exhausting the allowance is `limit / max_steps`.
 
+Configured completion through `stopWhen` or an iteration hook records `success` with `stop_condition` or `iteration_hook`. A successful delegation followed by a supervisor's `bail()` records `success / delegation_bail`. If the delegated worker fails and the hook bails, the worker retains its failure and the supervisor records `interrupted / delegation_bail` with the failure in `stopReasonContext.cause`.
+
+Caller cancellation records `abort / caller_cancelled` on the targeted run. Unfinished descendants stopped by that cancellation record `interrupted / caller_cancelled`. A run deadline records `limit / timeout` on the run; work interrupted by that deadline records `interrupted / timeout`. Completed spans retain their outcomes. Generic cleanup ends otherwise unclassified spans as `unknown`.
+
 A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire reports `blocked / guardrail`. The tripwire's details describe how it happened:
 
 ```json

@@ -51,7 +51,10 @@ function interruptedByRun(termination: SpanTermination): SpanTermination;
 function interruptedByRun(termination: SpanOutcomeFields): SpanOutcomeFields;
 function interruptedByRun(termination: SpanOutcomeFields): SpanOutcomeFields {
   return termination.outcome === 'abort' ||
-    (termination.stopReason === 'timeout' && termination.stopReasonContext && 'timeoutType' in termination.stopReasonContext && termination.stopReasonContext.timeoutType === 'total')
+    (termination.stopReason === 'timeout' &&
+      termination.stopReasonContext &&
+      'timeoutType' in termination.stopReasonContext &&
+      termination.stopReasonContext.timeoutType === 'total')
     ? { ...termination, outcome: 'interrupted' }
     : termination;
 }
@@ -478,11 +481,19 @@ export class ModelSpanTracker {
         ? { outcome: options.outcome, stopReason: options.stopReason, stopReasonContext: options.stopReasonContext }
         : coreObservability.executionFailureTermination?.(options.error);
     if (this.#currentInferenceSpan) {
-      this.#currentInferenceSpan.error({ error: options.error, ...(termination ? interruptedByRun(termination) : {}), endSpan: true });
+      this.#currentInferenceSpan.error({
+        error: options.error,
+        ...(termination ? interruptedByRun(termination) : {}),
+        endSpan: true,
+      });
       this.#currentInferenceSpan = undefined;
     }
     if (this.#currentStepSpan) {
-      this.#currentStepSpan.error({ error: options.error, ...(termination ? interruptedByRun(termination) : {}), endSpan: true });
+      this.#currentStepSpan.error({
+        error: options.error,
+        ...(termination ? interruptedByRun(termination) : {}),
+        endSpan: true,
+      });
       this.#currentStepSpan = undefined;
     }
     this.#modelSpan?.error(options);
