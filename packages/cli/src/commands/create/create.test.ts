@@ -582,6 +582,21 @@ describe('managed Gateway', () => {
     expect(trackEvent).toHaveBeenCalledWith('cli_gateway_outcome', { command: 'create', outcome: 'failed' });
   });
 
+  it('says the balance is unlimited instead of warning about $0', async () => {
+    const { create } = await import('./create');
+    const prompts = await import('@clack/prompts');
+    const gatewayCredits = await import('../gateway/credits.js');
+    await mockGatewayAdapter();
+
+    vi.mocked(prompts.select).mockResolvedValueOnce('mastra').mockResolvedValueOnce('no');
+    vi.mocked(gatewayCredits.offerGatewayCredits).mockResolvedValueOnce({ remaining: 0, unlimited: true });
+
+    await create({ projectName: 'my-project', resolveVersionTag: vi.fn().mockResolvedValue('latest') });
+
+    expect(prompts.note).toHaveBeenCalledWith(expect.stringContaining('Test Org has unlimited Gateway credits.'));
+    expect(prompts.note).not.toHaveBeenCalledWith(expect.stringContaining('Model calls fail until you add credits'));
+  });
+
   it('keeps the new key when buying credits fails', async () => {
     const { create } = await import('./create');
     const prompts = await import('@clack/prompts');

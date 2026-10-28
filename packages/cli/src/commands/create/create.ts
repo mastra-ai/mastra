@@ -99,7 +99,7 @@ export interface CreateOptions {
 /** The Gateway key and credits, set up during the shared Mastra sign-in. */
 type GatewaySetupResult =
   /** `remaining` is undefined when the balance couldn't be read. */
-  | { status: 'ready'; apiKey: string; orgName: string; remaining?: number; added?: number }
+  | { status: 'ready'; apiKey: string; orgName: string; remaining?: number; added?: number; unlimited?: boolean }
   | { status: 'failed'; error: unknown };
 
 type PlatformSetupResult =
@@ -561,7 +561,7 @@ async function setUpGateway({
     const apiKey = await createGatewayApiKey(token, org.orgId, projectName);
     signal.throwIfAborted();
     // Credits are optional: a failed balance read or checkout still keeps the new key.
-    let outcome: { remaining?: number; added?: number } = {};
+    let outcome: { remaining?: number; added?: number; unlimited?: boolean } = {};
     try {
       const credits = await getGatewayCredits(token, org.orgId);
       outcome = await offerGatewayCredits({ token, orgId: org.orgId, credits, signal });
@@ -614,6 +614,9 @@ async function finishGatewaySetup({
   });
   const written = `Your Gateway key was written to ${color.cyan('.env')} as ${envName}.`;
   const creditsCommand = color.cyan('npx mastra gateway credits');
+  if (gateway.unlimited) {
+    return `${written}\n${gateway.orgName} has unlimited Gateway credits.`;
+  }
   if (gateway.remaining === undefined) {
     return `${written}\nModel calls are paid per token from Gateway credits. Check your balance with ${creditsCommand}`;
   }

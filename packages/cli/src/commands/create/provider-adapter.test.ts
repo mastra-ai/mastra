@@ -559,6 +559,27 @@ describe('writeManagedApiKey', () => {
     }
   });
 
+  it('does not replace a .env it cannot read', async () => {
+    const projectPath = await createFixture();
+    const envPath = path.join(projectPath, '.env');
+    const originalEnv = await fs.readFile(envPath, 'utf8');
+    const originalReadFile = fs.readFile.bind(fs);
+    vi.spyOn(fs, 'readFile').mockImplementation(async (...args: Parameters<typeof fs.readFile>) => {
+      if (args[0].toString() === envPath) throw Object.assign(new Error('denied'), { code: 'EACCES' });
+      return originalReadFile(...args);
+    });
+
+    const written = await writeManagedApiKey({
+      projectPath,
+      apiKeyEnv: 'MASTRA_GATEWAY_API_KEY',
+      apiKey: TEST_API_KEY,
+    });
+
+    vi.restoreAllMocks();
+    expect(written).toBe(false);
+    expect(await fs.readFile(envPath, 'utf8')).toBe(originalEnv);
+  });
+
   it('keeps other .env values and appends the key when the variable is missing', async () => {
     const projectPath = await createFixture();
     await fs.writeFile(path.join(projectPath, '.env'), 'TURSO_DATABASE_URL=file:local.db', 'utf8');

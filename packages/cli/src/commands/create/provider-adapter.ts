@@ -226,7 +226,10 @@ export async function writeManagedApiKey({
     try {
       source = await fs.readFile(candidate, 'utf8');
       break;
-    } catch {}
+    } catch (error) {
+      // Only a missing file falls through; an unreadable `.env` must not be replaced.
+      if ((error as NodeJS.ErrnoException).code !== 'ENOENT') return false;
+    }
   }
   const result = setEnvValue(source, apiKeyEnv, apiKey);
   const content = result.applied

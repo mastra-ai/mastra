@@ -16,6 +16,7 @@ export interface CreditsOutcome {
   remaining: number;
   /** Dollars added during the step, when a purchase completed. */
   added?: number;
+  unlimited?: boolean;
 }
 
 /**
@@ -36,7 +37,8 @@ export async function offerGatewayCredits({
   /** Offer even when there are credits left (`mastra gateway credits`). */
   always?: boolean;
 }): Promise<CreditsOutcome> {
-  if (credits.unlimited || (credits.remaining > 0 && !always)) return { remaining: credits.remaining };
+  if (credits.unlimited) return { remaining: credits.remaining, unlimited: true };
+  if (credits.remaining > 0 && !always) return { remaining: credits.remaining };
 
   const amount = DEFAULT_CREDITS_PURCHASE;
   const choice = await p.select({
@@ -91,9 +93,12 @@ async function waitForCredits({
       if (latest && (latest.unlimited || latest.remaining > before)) {
         const added = latest.remaining - before;
         spinner.stop(`Added ${formatCredits(added)} in credits.`);
-        return { remaining: latest.remaining, added };
+        return { remaining: latest.remaining, added, unlimited: latest.unlimited || undefined };
       }
     }
+  } catch (error) {
+    spinner.stop('Stopped waiting for checkout.');
+    throw error;
   } finally {
     stopListening();
   }
@@ -104,14 +109,14 @@ async function waitForCredits({
 
 function sleep(ms: number, signal?: AbortSignal): Promise<void> {
   return new Promise((resolve, reject) => {
-    const timer = setTimeout(resolve, ms);
-    signal?.addEventListener(
-      'abort',
-      () => {
-        clearTimeout(timer);
-        reject(signal.reason);
-      },
-      { once: true },
-    );
+    const onAbort = () => {
+      clearTimeout(timer);
+      reject(signal!.reason);
+    };
+    const timer = setTimeout(() => {
+      signal?.removeEventListener('abort', onAbort);
+      resolve();
+    }, ms);
+    signal?.addEventListener('abort', onAbort, { once: true });
   });
 }

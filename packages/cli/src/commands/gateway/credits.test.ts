@@ -2,11 +2,12 @@ import { beforeEach, describe, expect, it, vi } from 'vitest';
 
 const CANCEL = Symbol('cancel');
 
+const spinnerStop = vi.fn();
 vi.mock('@clack/prompts', () => ({
   select: vi.fn(),
   isCancel: vi.fn((value: unknown) => value === CANCEL),
   log: { info: vi.fn() },
-  spinner: vi.fn(() => ({ start: vi.fn(), stop: vi.fn() })),
+  spinner: vi.fn(() => ({ start: vi.fn(), stop: spinnerStop })),
 }));
 
 vi.mock('../auth/credentials.js', () => ({
@@ -93,6 +94,31 @@ describe('offerGatewayCredits', () => {
 
     await expect(result).resolves.toEqual({ remaining: 0 });
     expect(api.getGatewayCredits).not.toHaveBeenCalled();
+  });
+
+  it('stops the spinner and cleans up when the wait is aborted', async () => {
+    vi.useFakeTimers();
+    vi.mocked(prompts.select).mockResolvedValueOnce('buy');
+    vi.mocked(api.getGatewayCredits).mockResolvedValue(credits(0));
+    const controller = new AbortController();
+    const removeListener = vi.spyOn(controller.signal, 'removeEventListener');
+
+    const result = offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0), signal: controller.signal });
+    const settled = expect(result).rejects.toThrow('cancelled');
+    await vi.advanceTimersByTimeAsync(7_000);
+    controller.abort(new Error('cancelled'));
+    await settled;
+
+    expect(removeListener).toHaveBeenCalledTimes(2);
+    expect(spinnerStop).toHaveBeenCalledWith('Stopped waiting for checkout.');
+  });
+
+  it('keeps an unlimited balance', async () => {
+    await expect(offerGatewayCredits({ token: 't', orgId: 'o', credits: credits(0, true) })).resolves.toEqual({
+      remaining: 0,
+      unlimited: true,
+    });
+    expect(prompts.select).not.toHaveBeenCalled();
   });
 
   it('offers more credits on request even with a balance', async () => {

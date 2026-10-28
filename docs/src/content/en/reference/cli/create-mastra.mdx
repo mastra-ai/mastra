@@ -19,7 +19,7 @@ npx create-mastra@latest
 
 The default starter creates an agent harness with workspace tools, memory, task tracking, web access, recurring schedules, storage, and observability. Select the Mastra Gateway, OpenAI, Anthropic, Gemini, or xAI as your model provider.
 
-Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `mastra`, `openai`, `google`, or `xai`:
+Provide both the project name and provider to create the project without prompts. This example uses Anthropic; you can also pass `openai`, `google`, `xai`, or `mastra`. With `mastra`, also pass `--llm-api-key` to skip the browser sign-in, see [Mastra Gateway](#mastra-gateway):
 
 ```bash npm2yarn
 npx create-mastra@latest my-mastra-project --llm anthropic
