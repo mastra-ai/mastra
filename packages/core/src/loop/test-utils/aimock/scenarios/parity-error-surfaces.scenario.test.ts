@@ -294,9 +294,14 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const { messages } = await historyMemory.recall({ threadId, resourceId });
       const saved = JSON.stringify(messages);
       // Durable and evented persist the input through agent memory regardless of the configured
-      // MessageHistory or lastMessages. That predates this test and is out of scope here.
+      // MessageHistory or lastMessages. Inngest saves nothing at the deadline beyond the savePerStep
+      // flush. Both predate this test and are out of scope here.
       const durable = engine === 'durable' || engine === 'evented';
-      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      const inputSaved =
+        !readOnly &&
+        (engine === 'inngest'
+          ? savePerStep
+          : !(historyStore && durable) && !((customHistory || historyOff) && !durable));
       expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
       expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
       expect(saved.includes('Checking the courier now.')).toBe(false);
