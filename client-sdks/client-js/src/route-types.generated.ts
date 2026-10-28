@@ -242,12 +242,12 @@ type InputShared_Auxiliary_789 = {
   children?: InputShared_Auxiliary_789[] | undefined;
 };
 
-type Shared_Auxiliary_780 = {
+type Shared_Auxiliary_782 = {
   id?: string | undefined;
   name: string;
   type: 'file' | 'folder';
   content?: string | undefined;
-  children?: Shared_Auxiliary_780[] | undefined;
+  children?: Shared_Auxiliary_782[] | undefined;
 };
 
 type InputShared_Type_0 = {
@@ -4304,7 +4304,7 @@ type Shared_Type_84 = {
   /** List of asset file paths */
   assets?: string[] | undefined;
   /** Full file tree structure for the skill */
-  files?: Shared_Auxiliary_780[] | undefined;
+  files?: Shared_Auxiliary_782[] | undefined;
   /** Additional metadata for the skill */
   metadata?:
     | {
@@ -13284,6 +13284,37 @@ export interface GetKnowledgeKnowledgeKeyActivity_RouteContract {
   body: never;
   request: GetKnowledgeKnowledgeKeyActivity_Request;
   response: GetKnowledgeKnowledgeKeyActivity_Response;
+  responseType: 'json';
+}
+
+// ============================================================================
+// Route: GET /knowledge/:knowledgeKey/scopes
+// ============================================================================
+export type GetKnowledgeKnowledgeKeyScopes_PathParams = GetKnowledgeKnowledgeKeyGraph_PathParams;
+
+export type GetKnowledgeKnowledgeKeyScopes_Response = {
+  sets: {
+    scope: string[];
+    nodeCount: number;
+    recordCount: number;
+  }[];
+  truncated: boolean;
+};
+
+export type GetKnowledgeKnowledgeKeyScopes_Request = Simplify<
+  (GetKnowledgeKnowledgeKeyScopes_PathParams extends never
+    ? {}
+    : { params: GetKnowledgeKnowledgeKeyScopes_PathParams }) &
+    (never extends never ? {} : {} extends never ? { query?: never } : { query: never }) &
+    (never extends never ? {} : {} extends never ? { body?: never } : { body: never })
+>;
+
+export interface GetKnowledgeKnowledgeKeyScopes_RouteContract {
+  pathParams: GetKnowledgeKnowledgeKeyScopes_PathParams;
+  queryParams: never;
+  body: never;
+  request: GetKnowledgeKnowledgeKeyScopes_Request;
+  response: GetKnowledgeKnowledgeKeyScopes_Response;
   responseType: 'json';
 }
 
@@ -24960,6 +24991,7 @@ export interface RouteTypes {
   'GET /knowledge/:knowledgeKey/nodes/:nodeId': GetKnowledgeKnowledgeKeyNodesNodeId_RouteContract;
   'GET /knowledge/:knowledgeKey/search': GetKnowledgeKnowledgeKeySearch_RouteContract;
   'GET /knowledge/:knowledgeKey/activity': GetKnowledgeKnowledgeKeyActivity_RouteContract;
+  'GET /knowledge/:knowledgeKey/scopes': GetKnowledgeKnowledgeKeyScopes_RouteContract;
   'GET /.well-known/:agentId/agent-card.json': GetWellKnownAgentIdAgentCardJson_RouteContract;
   'POST /a2a/:agentId': PostA2aAgentId_RouteContract;
   'GET /workspaces': GetWorkspaces_RouteContract;
@@ -25693,6 +25725,9 @@ export interface Client {
   };
   '/knowledge/:knowledgeKey/nodes/:nodeId': {
     GET: GetKnowledgeKnowledgeKeyNodesNodeId_RouteContract;
+  };
+  '/knowledge/:knowledgeKey/scopes': {
+    GET: GetKnowledgeKnowledgeKeyScopes_RouteContract;
   };
   '/knowledge/:knowledgeKey/search': {
     GET: GetKnowledgeKnowledgeKeySearch_RouteContract;

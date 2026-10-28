@@ -3146,6 +3146,21 @@ export const API_ROUTE_METADATA = {
       "kind": "record"
     }
   },
+  "GET /knowledge/:knowledgeKey/scopes": {
+    "method": "GET",
+    "path": "/knowledge/:knowledgeKey/scopes",
+    "pathParams": [
+      "knowledgeKey"
+    ],
+    "queryParams": [],
+    "bodyParams": [],
+    "hasQuery": false,
+    "hasBody": false,
+    "responseShape": {
+      "kind": "object-property",
+      "listProperty": "sets"
+    }
+  },
   "GET /workspaces": {
     "method": "GET",
     "path": "/workspaces",

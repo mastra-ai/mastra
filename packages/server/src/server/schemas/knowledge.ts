@@ -39,3 +39,7 @@ export const knowledgeSearchResponseSchema = z.object({
   truncated: z.boolean(),
 });
 export const knowledgeActivityResponseSchema = payload;
+export const knowledgeScopesResponseSchema = z.object({
+  sets: z.array(z.object({ scope: z.array(z.string()), nodeCount: z.number(), recordCount: z.number() })),
+  truncated: z.boolean(),
+});

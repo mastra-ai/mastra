@@ -12,6 +12,7 @@ import {
   GET_KNOWLEDGE_GRAPH_ROUTE,
   GET_KNOWLEDGE_NODE_ROUTE,
   LIST_KNOWLEDGE_ROUTE,
+  LIST_KNOWLEDGE_SCOPES_ROUTE,
   SEARCH_KNOWLEDGE_ROUTE,
 } from './knowledge';
 
@@ -180,6 +181,45 @@ describe('Knowledge read routes', () => {
     expect(open.nodes).toHaveLength(2);
   });
 
+  it('lists scope tag sets, only inside a bound scope, and refuses unbound callers under access control', async () => {
+    const { mastra } = await setup();
+    const both = {
+      sets: [
+        { scope: org, nodeCount: 1, recordCount: 1 },
+        { scope: team, nodeCount: 1, recordCount: 1 },
+      ],
+      truncated: false,
+    };
+    expect(await call(LIST_KNOWLEDGE_SCOPES_ROUTE, { mastra, knowledgeKey: 'main' })).toEqual(both);
+    await expect(call(LIST_KNOWLEDGE_SCOPES_ROUTE, { mastra, knowledgeKey: 'nope' })).rejects.toMatchObject({
+      status: 404,
+    });
+
+    // A bound caller never learns of sets carrying a tag it does not hold.
+    const requestContext = new RequestContext();
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, org);
+    const args = { mastra, requestContext, knowledgeKey: 'main' };
+    expect(await call(LIST_KNOWLEDGE_SCOPES_ROUTE, args)).toEqual({ sets: [both.sets[0]], truncated: false });
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, team);
+    expect(await call(LIST_KNOWLEDGE_SCOPES_ROUTE, args)).toEqual(both);
+    requestContext.set(MASTRA_KNOWLEDGE_SCOPE_KEY, []);
+    expect(await call(LIST_KNOWLEDGE_SCOPES_ROUTE, args)).toEqual({ sets: [], truncated: false });
+
+    const unbound = new RequestContext();
+    unbound.set('user', { id: 'u1' });
+    (mastra as any).getServer = () => ({ rbac: { getRoles: async () => [], getPermissions: async () => [] } });
+    await expect(
+      call(LIST_KNOWLEDGE_SCOPES_ROUTE, { mastra, requestContext: unbound, knowledgeKey: 'main' }),
+    ).rejects.toMatchObject({ status: 403, message: expect.stringContaining(MASTRA_KNOWLEDGE_SCOPE_KEY) });
+
+    // An instance FGA denies is a 404, before any scope is read.
+    (mastra as any).getServer = () => ({ fga: { check: async () => false, filterAccessible: async () => [] } });
+    unbound.set(MASTRA_KNOWLEDGE_SCOPE_KEY, team);
+    await expect(
+      call(LIST_KNOWLEDGE_SCOPES_ROUTE, { mastra, requestContext: unbound, knowledgeKey: 'main' }),
+    ).rejects.toMatchObject({ status: 404 });
+  });
+
   it('parses one or many scope params and bounds them', () => {
     expect(knowledgeViewQuerySchema.parse({ scope: 'org:a' }).scope).toEqual(['org:a']);
     expect(knowledgeViewQuerySchema.parse({ scope: ['org:a', 'p:b'] }).scope).toEqual(['org:a', 'p:b']);
@@ -195,6 +235,7 @@ describe('Knowledge read routes', () => {
       GET_KNOWLEDGE_NODE_ROUTE,
       SEARCH_KNOWLEDGE_ROUTE,
       GET_KNOWLEDGE_ACTIVITY_ROUTE,
+      LIST_KNOWLEDGE_SCOPES_ROUTE,
     ]) {
       expect(route.method).toBe('GET');
       expect(route.requiresAuth).toBe(true);
