@@ -37,6 +37,8 @@ export interface SpanPayloadSectionProps {
   emphasis?: boolean;
   /** Replaces the title heading, e.g. with the sentence of the notice the section sits in. */
   heading?: ReactNode;
+  /** Clips long content behind an Expand button. Turn off for content that folds on its own, like tool call rows. */
+  clip?: boolean;
   className?: string;
 }
 
@@ -88,6 +90,7 @@ export function SpanPayloadSection({
   defaultView = 'rich',
   emphasis = false,
   heading,
+  clip = true,
   className,
 }: SpanPayloadSectionProps) {
   const [view, setView] = useState<SpanPayloadView>(defaultView);
@@ -96,7 +99,17 @@ export function SpanPayloadSection({
 
   const hasRich = hasPreview && children != null;
   const showJson = !hasRich || view === 'raw';
-  const content = showJson ? <SpanPayloadJson value={raw} bare={framed} /> : children;
+  const content = showJson ? <SpanPayloadJson value={raw} bare={framed} foldNested /> : children;
+  // JSON folds its nested values instead, so it never needs clipping.
+  const shouldClip = clip && !showJson;
+  const clipped = (body: ReactNode) =>
+    shouldClip ? (
+      <CollapsibleBox state={box} expandLabel="Expand">
+        {body}
+      </CollapsibleBox>
+    ) : (
+      body
+    );
 
   return (
     <div
@@ -126,17 +139,13 @@ export function SpanPayloadSection({
       <div className="min-w-0">
         {framed ? (
           <Card data-slot="span-payload-card" className="min-w-0 overflow-hidden">
-            <CollapsibleBox state={box} expandLabel="Expand">
-              {/* Renderers space their children with gaps; a user bubble's chat margin would double the card's Y padding. */}
-              <CardContent className="[&_[data-slot=message]]:my-0">{content}</CardContent>
-            </CollapsibleBox>
+            {/* Renderers space their children with gaps; a user bubble's chat margin would double the card's Y padding. */}
+            {clipped(<CardContent className="[&_[data-slot=message]]:my-0">{content}</CardContent>)}
           </Card>
         ) : (
-          <CollapsibleBox state={box} expandLabel="Expand">
-            {content}
-          </CollapsibleBox>
+          clipped(content)
         )}
-        {box.isExpanded && box.isClipped && (
+        {shouldClip && box.isExpanded && box.isClipped && (
           <div className="flex justify-center pt-1">
             <Button size="sm" variant="ghost" icon={<Minimize2 />} onClick={() => box.setExpanded(false)}>
               Collapse
@@ -181,7 +190,7 @@ export function SpanPayloadJsonSection({ title, icon, raw, layout = 'panel' }: S
       <CollapsibleContent>
         <Card data-slot="span-payload-card" className="min-w-0 overflow-hidden">
           <CardContent>
-            <SpanPayloadJson value={raw} bare />
+            <SpanPayloadJson value={raw} bare foldNested />
           </CardContent>
         </Card>
       </CollapsibleContent>

@@ -1,4 +1,3 @@
-import { SpanType, describeProcessorPipeline, describeSpanOutput } from '@mastra/core/observability';
 import { ArrowLeftRightIcon, BracesIcon, ExternalLinkIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import { Fragment } from 'react';
 import type { ReactNode } from 'react';
@@ -11,13 +10,13 @@ import {
   SpanInputRenderer,
   getSpanOutputPayload,
   hasSpanInputPreview,
+  hasSpanOutputPreview,
   SpanOutputRenderer,
   SpanPayloadSection,
   SpanPayloadJsonSection,
   SpanProcessorMutations,
 } from './span-payload';
-import { asCoreSpan } from './span-payload/span-payload-registry';
-import { SpanToolsSection } from './span-payload/span-tools-section';
+import { SpanToolCallsSection, SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { SpanModelSummary } from './span-token-usage';
 import { TraceIdButton } from './trace-id-button';
@@ -32,7 +31,9 @@ import { cn } from '@/lib/utils';
 const BODY_CLASS = 'min-h-0 flex-1 overflow-y-auto p-2';
 
 type SpanSection = 'error' | 'changes' | 'output' | 'input' | 'tools' | 'metadata' | 'attributes';
-const SECTION_ORDER: SpanSection[] = ['input', 'output', 'tools', 'metadata', 'attributes'];
+// Every span reads the same way: what it changed, what it received, what it returned, then the rest.
+const LEAD: SpanSection[] = ['changes', 'input', 'output'];
+const REST: SpanSection[] = ['error', 'tools', 'metadata', 'attributes'];
 
 export interface SpanDataPanelViewProps {
   traceId: string;
@@ -172,8 +173,8 @@ function SpanDataPanelContent({
   // The root span's input and output already tell its story; only a failed or stopped run needs a summary on top.
   const showOutcome = outcome != null && (!isRoot || outcome.tone === 'error' || outcome.tone === 'warning');
   const outputPayload = getSpanOutputPayload(span);
-  const pipeline = describeProcessorPipeline(asCoreSpan(span));
   const evidence = outcome?.evidence === 'output' && outputPayload == null ? undefined : outcome?.evidence;
+  const toolCallsInOutcome = showOutcome && evidence === 'toolCalls';
 
   const sections: Record<SpanSection, ReactNode> = {
     error: span.error != null && (
@@ -191,7 +192,7 @@ function SpanDataPanelContent({
         title="Output"
         icon={<FileOutputIcon />}
         raw={outputPayload}
-        hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+        hasPreview={hasSpanOutputPreview(span)}
       >
         <SpanOutputRenderer span={span} />
       </SpanPayloadSection>
@@ -206,20 +207,10 @@ function SpanDataPanelContent({
         <SpanInputRenderer span={span} />
       </SpanPayloadSection>
     ),
-    tools: <SpanToolsSection span={span} />,
+    tools: !toolCallsInOutcome && <SpanToolsSection span={span} />,
     metadata: <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} />,
     attributes: <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} />,
   };
-  // What proves the outcome leads.
-  // A root span or a processor leads with what it changed, then reads as a request and its result: input, then output.
-  const proof: SpanSection[] =
-    isRoot || span.spanType === SpanType.PROCESSOR_RUN
-      ? [...(evidence === 'changes' ? (['changes'] as const) : []), 'input', 'output']
-      : evidence
-        ? [evidence]
-        : [];
-  const lead = [...new Set<SpanSection>(['error', ...proof])];
-  const rest = SECTION_ORDER.filter(section => !lead.includes(section));
 
   const detailsBody = (
     <>
@@ -228,7 +219,7 @@ function SpanDataPanelContent({
           outcome={outcome}
           showDetail={!evidence}
           className="mb-3"
-          // The changes prove the headline, so they sit in the notice under it rather than in a section of their own.
+          // The changes or tool calls prove the headline, so they sit in the notice under it rather than in a section of their own.
           renderProof={
             evidence === 'changes'
               ? headline => (
@@ -236,7 +227,9 @@ function SpanDataPanelContent({
                     <SpanProcessorMutations span={span} />
                   </SpanPayloadSection>
                 )
-              : undefined
+              : toolCallsInOutcome
+                ? headline => <SpanToolCallsSection span={span} heading={headline} />
+                : undefined
           }
         />
       )}
@@ -252,7 +245,7 @@ function SpanDataPanelContent({
       <SpanModelSummary span={span} className="mb-4" />
 
       <div className="grid gap-4">
-        {lead.map(section => (
+        {LEAD.map(section => (
           <Fragment key={section}>{sections[section]}</Fragment>
         ))}
         {hasContext && (
@@ -323,7 +316,7 @@ function SpanDataPanelContent({
             )}
           </DataKeysAndValues>
         )}
-        {rest.map(section => (
+        {REST.map(section => (
           <Fragment key={section}>{sections[section]}</Fragment>
         ))}
       </div>

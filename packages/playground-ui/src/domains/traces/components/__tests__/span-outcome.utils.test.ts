@@ -30,6 +30,7 @@ describe('getSpanOutcome', () => {
       const span = makeSpan({
         spanType: SpanType.MEMORY_OPERATION,
         name: 'memory: recall',
+        entityName: 'Observational Memory',
         attributes: {
           operationType: 'recall',
           processorPhase: 'input',
@@ -45,7 +46,7 @@ describe('getSpanOutcome', () => {
       });
 
       expect(getSpanOutcome(span)).toEqual({
-        headline: 'Loaded 2 earlier messages from memory into the conversation',
+        headline: 'Observational Memory loaded 2 earlier messages from memory into the conversation',
         tone: 'change',
         evidence: 'changes',
       });
@@ -59,7 +60,10 @@ describe('getSpanOutcome', () => {
         output: conversation,
       });
 
-      expect(getSpanOutcome(span)).toMatchObject({ headline: 'Found no earlier messages in memory', tone: 'neutral' });
+      expect(getSpanOutcome(span)).toMatchObject({
+        headline: 'Memory loaded no earlier messages from memory into the conversation',
+        tone: 'neutral',
+      });
     });
 
     it('counts the messages a memory save persisted', () => {
@@ -69,7 +73,7 @@ describe('getSpanOutcome', () => {
         output: { messages: [{ role: 'user' }, { role: 'assistant' }] },
       });
 
-      expect(getSpanOutcome(span)).toMatchObject({ headline: 'Saved 2 messages from this turn to memory' });
+      expect(getSpanOutcome(span)).toMatchObject({ headline: 'Memory saved 2 messages from this turn to memory' });
     });
 
     it('names the workspace whose instructions were mounted', () => {
@@ -87,7 +91,7 @@ describe('getSpanOutcome', () => {
       });
 
       expect(getSpanOutcome(span)).toMatchObject({
-        headline: 'Added the chef-workspace workspace instructions to the system prompt',
+        headline: 'The workspace added the chef-workspace workspace instructions to the system prompt',
         tone: 'change',
       });
     });
@@ -105,14 +109,14 @@ describe('getSpanOutcome', () => {
       });
 
       expect(getSpanOutcome(span)).toMatchObject({
-        headline: 'Listed 3 available skills in the system prompt',
+        headline: 'The skills processor added the list of 3 available skills to the system prompt',
         tone: 'change',
       });
     });
 
     it('describes message list mutations of a generic processor', () => {
       expect(getSpanOutcome({ ...processorSystemMutationSpan, entityName: 'tone-guide' })).toMatchObject({
-        headline: 'tone-guide added 1 system message to the prompt',
+        headline: 'tone-guide added 1 message to the system prompt',
       });
       expect(getSpanOutcome({ ...processorClearedMessagesSpan, entityName: 'reset' })).toMatchObject({
         headline: 'reset removed 4 messages from the conversation',
@@ -129,11 +133,11 @@ describe('getSpanOutcome', () => {
       });
 
       expect(getSpanOutcome(span)).toMatchObject({
-        headline: 'provider-history-compat ran and left the messages unchanged',
+        headline: 'provider-history-compat left the system prompt and the conversation unchanged',
         tone: 'neutral',
       });
       expect(getSpanOutcome(processorToolResultSpan)).toMatchObject({
-        headline: 'The processor ran and left the messages unchanged',
+        headline: 'The processor left the system prompt and the conversation unchanged',
       });
     });
 
@@ -190,7 +194,7 @@ describe('getSpanOutcome', () => {
 
     it('shows the output of a processor whose output is not a message list', () => {
       expect(getSpanOutcome(processorOutputStreamSpan)).toMatchObject({
-        headline: 'The processor returned a result and left the messages unchanged',
+        headline: 'The processor returned a result and left the system prompt and the conversation unchanged',
         evidence: 'output',
       });
     });
@@ -211,8 +215,17 @@ describe('getSpanOutcome', () => {
         headline: 'gpt-4o called getWeather, then wrote the answer',
         detail: 'It is sunny in Paris.',
         tone: 'success',
-        evidence: 'output',
+        evidence: 'toolCalls',
       });
+    });
+
+    it('leads with the output of a model that called only tools the chat never draws', () => {
+      const span = makeSpan({
+        spanType: SpanType.MODEL_STEP,
+        attributes: { model: 'gpt-5-mini' },
+        output: { text: 'Done.', toolCalls: [{ toolName: 'task_write', toolCallId: 'call_1', args: { tasks: [] } }] },
+      });
+      expect(getSpanOutcome(span)?.evidence).toBe('output');
     });
 
     it('names the tools a step called when it has no reply yet', () => {

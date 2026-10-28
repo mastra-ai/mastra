@@ -213,12 +213,17 @@ describe('processor spans in the data panel', () => {
     render(<SpanDataPanelView traceId="t" spanId="s" span={processorSystemMutationSpan} />);
     const changes = slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]');
     expect(changes?.firstElementChild?.querySelector('h3')?.textContent).toMatch(
-      /^context-note added 1 system message/,
+      /added 1 message to the system prompt$/,
     );
     expect(changes?.querySelector('[data-slot="span-payload-view-toggle"]')).not.toBeNull();
     expect(changes?.textContent).toContain('Answer briefly.');
     expect(screen.queryByText('Changes')).toBeNull();
     expect(sectionTitles()[1]).toBe('Input');
+  });
+
+  it('reads as changes, then input, then output in the details layout too', () => {
+    render(<SpanDetailsView traceId="t" spanId="s" span={processorSystemMutationSpan} />);
+    expect(sectionTitles().slice(0, 2)).toEqual(['Changes', 'Input']);
   });
 
   it('reads a processor as what it changed in the system prompt, then its input, then its output', () => {

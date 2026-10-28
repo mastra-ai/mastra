@@ -127,10 +127,10 @@ describe('SpanOutputRenderer', () => {
     expect(screen.getByText('Prompt injection detected')).toBeTruthy();
   });
 
-  it('renders model generation results with tool calls and chat reasoning', () => {
+  it('renders model generation results with chat reasoning, leaving tool calls to their own section', () => {
     render(<SpanOutputRenderer span={modelGenerationSpan} />);
     expect(slot('span-model-generation-result')).not.toBeNull();
-    expect(slot('span-payload-tool-calls')).not.toBeNull();
+    expect(slot('span-payload-tool-calls')).toBeNull();
     expect(screen.getByRole('button', { name: 'Reasoning' })).toBeTruthy();
   });
 
@@ -216,10 +216,10 @@ describe.each(['panel', 'details'] as const)('Span %s view', layout => {
 });
 
 describe('SpanDataPanelView integration', () => {
-  it('sums up a tool call in one line and leads with its output', () => {
+  it('sums up a tool call in one line and reads it as its input, then its output', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={toolCallSpan.spanId} span={toolCallSpan} />);
     expect(slot('span-outcome')?.querySelector('[data-slot="span-payload-section"]')).toBeNull();
-    expect(sectionTitles()).toEqual(['Output', 'Input']);
+    expect(sectionTitles()).toEqual(['Input', 'Output']);
   });
 
   it('reads a successful root span as its input, then its output, with no summary on top', () => {
@@ -233,10 +233,12 @@ describe('SpanDataPanelView integration', () => {
     expect(slot('span-outcome')).not.toBeNull();
   });
 
-  it('leads with the error of a failed span, once', () => {
+  it('shows the error of a failed span once, after its input and output', () => {
     render(<SpanDataPanelView traceId="trace-1" spanId={errorSpan.spanId} span={errorSpan} />);
     expect(slot('span-outcome')?.textContent).toContain('getWeather failed');
-    expect(sectionTitles()[0]).toBe('Error');
+    const titles = sectionTitles();
+    expect(titles[0]).toBe('Input');
+    expect(titles.indexOf('Error')).toBeGreaterThan(titles.indexOf('Input'));
     expect(document.querySelectorAll('[data-slot="span-error"]')).toHaveLength(1);
   });
 

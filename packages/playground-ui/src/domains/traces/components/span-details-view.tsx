@@ -1,4 +1,3 @@
-import { describeSpanOutput } from '@mastra/core/observability';
 import { ArrowLeftRightIcon, BracesIcon, FileInputIcon, FileOutputIcon } from 'lucide-react';
 import type { SpanRecord } from '../types';
 import { getSpanChanges } from './span-outcome.utils';
@@ -7,12 +6,12 @@ import {
   SpanInputRenderer,
   getSpanOutputPayload,
   hasSpanInputPreview,
+  hasSpanOutputPreview,
   SpanOutputRenderer,
   SpanPayloadJsonSection,
   SpanPayloadSection,
   SpanProcessorMutations,
 } from './span-payload';
-import { asCoreSpan } from './span-payload/span-payload-registry';
 import { SpanToolsSection } from './span-payload/span-tools-section';
 import { SpanRunId, SpanSummaryDescription } from './span-summary-description';
 import { TraceIdButton } from './trace-id-button';
@@ -68,10 +67,17 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             </>
           )}
 
-          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false} className="mb-3">
-            <SpanErrorRenderer span={span} />
-          </SpanPayloadSection>
-
+          {getSpanChanges(span).length > 0 && (
+            <SpanPayloadSection
+              title="Changes"
+              icon={<ArrowLeftRightIcon />}
+              raw={getSpanChanges(span)}
+              layout="details"
+              emphasis
+            >
+              <SpanProcessorMutations span={span} />
+            </SpanPayloadSection>
+          )}
           <SpanPayloadSection
             title="Input"
             icon={<FileInputIcon />}
@@ -85,22 +91,14 @@ export function SpanDetailsView({ spanId, span, isLoading, onClose }: SpanDetail
             title="Output"
             icon={<FileOutputIcon />}
             raw={getSpanOutputPayload(span)}
-            hasPreview={describeSpanOutput(asCoreSpan(span))?.type !== 'json'}
+            hasPreview={hasSpanOutputPreview(span)}
             layout="details"
           >
             <SpanOutputRenderer span={span} />
           </SpanPayloadSection>
-          {getSpanChanges(span).length > 0 && (
-            <SpanPayloadSection
-              title="Changes"
-              icon={<ArrowLeftRightIcon />}
-              raw={getSpanChanges(span)}
-              layout="details"
-              emphasis
-            >
-              <SpanProcessorMutations span={span} />
-            </SpanPayloadSection>
-          )}
+          <SpanPayloadSection title="Error" raw={span.error} layout="details" framed={false}>
+            <SpanErrorRenderer span={span} />
+          </SpanPayloadSection>
           <SpanToolsSection span={span} layout="details" />
           <SpanPayloadJsonSection title="Metadata" icon={<BracesIcon />} raw={span.metadata} layout="details" />
           <SpanPayloadJsonSection title="Attributes" icon={<BracesIcon />} raw={span.attributes} layout="details" />

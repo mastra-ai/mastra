@@ -2,7 +2,9 @@ import { SpanType, describeProcessorPipeline, describeSpanError } from '@mastra/
 import type { ProcessorPipelineDescription } from '@mastra/core/observability';
 import type { SpanRecord } from '../types';
 import { getInputPreview } from '../utils/span-utils';
+import { getRequestedToolCalls } from './format-trace-thread-messages';
 import { asCoreSpan } from './span-payload/span-payload-registry';
+import { isHiddenTool } from '@/domains/chat/tools/tool-card-kind';
 import { pluralize } from '@/lib/string';
 
 export type SpanOutcomeTone = 'neutral' | 'success' | 'change' | 'warning' | 'error';
@@ -17,7 +19,7 @@ export interface SpanOutcome {
   evidence?: SpanOutcomeEvidence;
 }
 
-export type SpanOutcomeEvidence = 'output' | 'changes' | 'error';
+export type SpanOutcomeEvidence = 'output' | 'changes' | 'toolCalls' | 'error';
 
 const MODEL_TYPES: ReadonlySet<string> = new Set([
   SpanType.MODEL_GENERATION,
@@ -78,15 +80,18 @@ function describeOutcome(span: SpanRecord): SpanOutcome | undefined {
   const type = span.spanType ?? '';
   const pipeline = describeProcessorPipeline(asCoreSpan(span));
   if (pipeline) return describePipeline(span, pipeline);
-  const outcome = MODEL_TYPES.has(type)
-    ? describeModel(span)
-    : TOOL_TYPES.has(type)
-      ? describeTool(span)
-      : type === SpanType.AGENT_RUN
-        ? describeAgentRun(span)
-        : type === SpanType.MODEL_CHUNK
-          ? describeChunk(span)
-          : undefined;
+  if (MODEL_TYPES.has(type)) {
+    // The calls a model made are what it did; the answer it wrote after them stays in the output.
+    const calledTools = getRequestedToolCalls(span).some(call => !isHiddenTool(call.toolName));
+    return { ...describeModel(span), evidence: calledTools ? 'toolCalls' : 'output' };
+  }
+  const outcome = TOOL_TYPES.has(type)
+    ? describeTool(span)
+    : type === SpanType.AGENT_RUN
+      ? describeAgentRun(span)
+      : type === SpanType.MODEL_CHUNK
+        ? describeChunk(span)
+        : undefined;
   // What a model, tool, agent or chunk produced is the proof of its outcome.
   return outcome && { ...outcome, evidence: 'output' };
 }
@@ -110,11 +115,11 @@ function tallyMutations(mutations: ProcessorPipelineDescription['messageListMuta
   return tally;
 }
 
-/** "added 2 messages to the conversation, removed 1 message", or `undefined` when nothing changed. */
+/** "added 2 messages to the conversation, removed 1 message from the conversation", or `undefined` when nothing changed. */
 function describeTally({ added, addedSystem, removed }: MutationTally): string | undefined {
   const parts = [
     added > 0 && `added ${pluralize(added, 'message')} to the conversation`,
-    addedSystem > 0 && `added ${pluralize(addedSystem, 'system message')} to the prompt`,
+    addedSystem > 0 && `added ${pluralize(addedSystem, 'message')} to the system prompt`,
     removed > 0 && `removed ${pluralize(removed, 'message')} from the conversation`,
   ].filter((part): part is string => typeof part === 'string');
   return parts.length > 0 ? parts.join(', ') : undefined;
@@ -173,7 +178,10 @@ export function getSpanChanges(span: SpanRecord): PipelineMutation[] {
   ];
 }
 
-const CHANGED_LABELS: Record<string, string> = { messages: 'messages', systemMessages: 'system messages' };
+const CHANGED_LABELS: Record<string, string> = { systemMessages: 'the system prompt', messages: 'the conversation' };
+
+/** What every pipeline span that changed nothing says, so "no change" always reads the same. */
+const UNCHANGED = 'left the system prompt and the conversation unchanged';
 
 /** Output keys whose value differs from the same key in the input, ignoring a no-op `shortCircuited`. */
 function changedKeys(input: unknown, output: unknown): string[] {
@@ -188,13 +196,20 @@ function changedKeys(input: unknown, output: unknown): string[] {
 /** Who ran the span (an agent, tool or processor name), so a headline reads on its own. */
 const actorOf = (span: SpanRecord, fallback: string) => asText(span.entityName) ?? asText(span.entityId) ?? fallback;
 
+/** Who to name when a pipeline span records no entity, so its sentence still has a subject. */
+const PIPELINE_ACTORS: Partial<Record<SpanType, string>> = {
+  [SpanType.MEMORY_OPERATION]: 'Memory',
+  [SpanType.WORKSPACE_ACTION]: 'The workspace',
+  [SpanType.SKILL_ACTION]: 'The skills processor',
+};
+
 function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescription): SpanOutcome {
   const attributes = isRecord(span.attributes) ? span.attributes : {};
   const output = isRecord(span.output) ? span.output : {};
   const tally = tallyMutations(pipeline.messageListMutations);
   const additions = tally.added + tally.addedSystem;
   const changed = additions > 0 || tally.removed > 0;
-  const processor = actorOf(span, 'The processor');
+  const processor = actorOf(span, PIPELINE_ACTORS[span.spanType] ?? 'The processor');
 
   // Phase, step, retries and hook time already lead the Attributes section right below.
   const base = {
@@ -218,26 +233,30 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
       return saved > 0
         ? {
             ...base,
-            headline: `Saved ${pluralize(saved, 'message')} from this turn to memory`,
+            headline: `${processor} saved ${pluralize(saved, 'message')} from this turn to memory`,
             tone: 'change',
             evidence: 'output',
           }
-        : { ...base, headline: 'Nothing new to save to memory', tone: 'neutral' };
+        : { ...base, headline: `${processor} saved no new messages to memory`, tone: 'neutral' };
     }
     return additions > 0
       ? {
           ...base,
-          headline: `Loaded ${pluralize(additions, 'earlier message')} from memory into the conversation`,
+          headline: `${processor} loaded ${pluralize(additions, 'earlier message')} from memory into the conversation`,
           tone: 'change',
         }
-      : { ...base, headline: 'Found no earlier messages in memory', tone: 'neutral' };
+      : {
+          ...base,
+          headline: `${processor} loaded no earlier messages from memory into the conversation`,
+          tone: 'neutral',
+        };
   }
 
   if (span.spanType === SpanType.WORKSPACE_ACTION && changed) {
     const name = asText(attributes.workspaceName);
     return {
       ...base,
-      headline: `Added the ${name ? `${name} ` : ''}workspace instructions to the system prompt`,
+      headline: `${processor} added the ${name ? `${name} ` : ''}workspace instructions to the system prompt`,
       tone: 'change',
     };
   }
@@ -246,7 +265,7 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
     const skills = typeof attributes.skillCount === 'number' ? attributes.skillCount : undefined;
     return {
       ...base,
-      headline: `Listed ${skills === undefined ? 'the available skills' : pluralize(skills, 'available skill')} in the system prompt`,
+      headline: `${processor} added the list of ${skills === undefined ? 'available skills' : pluralize(skills, 'available skill')} to the system prompt`,
       tone: 'change',
     };
   }
@@ -272,7 +291,7 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
   if (changedMessages.length > 0) {
     return {
       ...base,
-      headline: `${processor} rewrote the ${changedMessages.map(key => CHANGED_LABELS[key]).join(' and ')}`,
+      headline: `${processor} rewrote ${changedMessages.map(key => CHANGED_LABELS[key]).join(' and ')}`,
       tone: 'change',
       evidence: 'output',
     };
@@ -280,13 +299,13 @@ function describePipeline(span: SpanRecord, pipeline: ProcessorPipelineDescripti
   if (changedFields.length > 0) {
     return {
       ...base,
-      headline: `${processor} returned a result and left the messages unchanged`,
+      headline: `${processor} returned a result and ${UNCHANGED}`,
       tone: 'neutral',
       evidence: 'output',
     };
   }
 
-  return { ...base, headline: `${processor} ran and left the messages unchanged`, tone: 'neutral' };
+  return { ...base, headline: `${processor} ${UNCHANGED}`, tone: 'neutral' };
 }
 
 // --- Model, tool, agent and chunk spans -------------------------------------------------------

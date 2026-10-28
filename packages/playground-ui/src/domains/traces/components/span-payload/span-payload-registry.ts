@@ -1,4 +1,4 @@
-import { SpanType, describeProcessorPipeline, describeSpanInput } from '@mastra/core/observability';
+import { SpanType, describeProcessorPipeline, describeSpanInput, describeSpanOutput } from '@mastra/core/observability';
 import type { ProcessorRunInputByPhase, ProcessorSpanPayload } from '@mastra/core/observability';
 import type { ComponentType } from 'react';
 import type { SpanRecord } from '../../types';
@@ -41,6 +41,38 @@ export const hasItems = (value: unknown): value is unknown[] => Array.isArray(va
 /** Whether a span's input has a rendered preview, rather than only its raw JSON. */
 export function hasSpanInputPreview(span: SpanRecord): boolean {
   return getSpanSignal(span) !== undefined || describeSpanInput(asCoreSpan(span))?.type !== 'json';
+}
+
+const hasText = (value: unknown) => typeof value === 'string' && value.length > 0;
+
+/**
+ * Whether a span's output has a rendered preview, rather than only its raw JSON.
+ * A model result that only asked for tools has nothing to preview: its calls are listed under Tool calls.
+ */
+export function hasSpanOutputPreview(span: SpanRecord): boolean {
+  const description = describeSpanOutput(asCoreSpan(span));
+  switch (description?.type) {
+    case 'json':
+      return false;
+    case 'model-step-result': {
+      const { text, object, steps } = description.value;
+      return hasText(text) || object !== undefined || hasItems(steps);
+    }
+    case 'model-generation-result': {
+      const { text, reasoningText, reasoning, object, sources, files, warnings } = description.value;
+      return (
+        hasText(text) ||
+        typeof reasoningText === 'string' ||
+        reasoning !== undefined ||
+        object !== undefined ||
+        hasItems(sources) ||
+        hasItems(files) ||
+        hasItems(warnings)
+      );
+    }
+    default:
+      return true;
+  }
 }
 
 const isEmptyObject = (value: unknown) =>
