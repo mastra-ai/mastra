@@ -29,8 +29,16 @@ function recoveryLinks(requestContext: RequestContext, recoveries: RunErrorRecov
   const settingsUrl = factoryProjectId && modelSettingsLink(factoryProjectId);
   const sessionUrl = sessionLinkFromRequest(requestContext);
   const links = recoveries.flatMap(recovery => {
-    if (recovery === 'credentials') return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
-    return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+    switch (recovery) {
+      case 'credentials':
+        return settingsUrl ? [{ url: settingsUrl, label: 'Review credentials' }] : [];
+      case 'model':
+        return sessionUrl ? [{ url: sessionUrl, label: 'Change model' }] : [];
+      // A reply in the thread continues the run; a mention in a new thread starts a new session.
+      case 'continue':
+      case 'new_session':
+        return [];
+    }
   });
   if (links.length || !sessionUrl) return links;
   return [{ url: sessionUrl, label: 'Open session' }];

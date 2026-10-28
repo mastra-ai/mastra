@@ -187,11 +187,12 @@ export function transcriptReducer(state: TranscriptState, action: Action): Trans
     case 'failLocalUser':
       return {
         ...state,
-        entries: state.entries.map(entry =>
-          entry.kind === 'message' && entry.id === action.id && entry.deliveryStatus === 'pending'
-            ? { ...entry, deliveryStatus: 'failed' }
-            : entry,
-        ),
+        entries: state.entries.flatMap(entry => {
+          if (entry.kind !== 'message' || entry.id !== action.id) return [entry];
+          if (entry.deliveryStatus === 'pending') return [{ ...entry, deliveryStatus: 'failed' as const }];
+          const echoed = entry.message.id !== entry.id;
+          return entry.deliveryStatus === undefined && !echoed ? [] : [entry];
+        }),
       };
     case 'localNotice':
       return pushNotice(state, action.level, action.text);
