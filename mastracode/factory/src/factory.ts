@@ -168,6 +168,11 @@ type BuildApiRoutesDeps = Pick<FactoryApiRoutesDeps, 'controller' | 'authStorage
 /** Constructor args for the `new Mastra(...)` literal in the deploy entry. */
 export type MastraArgs = NonNullable<ConstructorParameters<typeof Mastra>[0]>;
 
+/** Tools for every Factory session, or a resolver called per run. */
+export type FactoryTools =
+  | IntegrationTools
+  | ((args: { requestContext: RequestContext }) => IntegrationTools | Promise<IntegrationTools>);
+
 export interface MastraFactoryConfig {
   /**
    * Auth provider instance — `MastraAuthStudio` (`@mastra/auth-studio`),
@@ -258,6 +263,15 @@ export interface MastraFactoryConfig {
    * approval cannot bypass that gate.
    */
   disableBuiltinTools?: BuiltinToolId[];
+  /**
+   * Tools offered to every Factory session, such as the tools of MCP servers
+   * connected before the factory is created (`await mcpClient.listTools()`).
+   * Credentials built into these tools are shared by every user of the
+   * instance. Pass a function to resolve tools per run instead, for example to
+   * use the run's org credentials. A name that clashes with a Factory tool
+   * fails the run.
+   */
+  tools?: FactoryTools;
   /** Background Factory dispatcher configuration. */
   dispatcher?: MastraFactoryDispatcherConfig;
   /**
@@ -1301,6 +1315,10 @@ export class MastraFactory {
           workspaceRegistry,
         }),
         disableGithubSignals: true,
+        // MCP servers come in through `tools`. The SDK's own discovery reads
+        // the host process's mcp.json files, which never belong to a hosted
+        // session, and its tools would shadow same-named Factory tools.
+        disableMcp: true,
         // A wake (notification or peer signal) has no signed-in request, so
         // tenant credential resolution would fail closed. Run it as the Factory
         // session's owner in its org.
@@ -1630,6 +1648,13 @@ export class MastraFactory {
             if (integration.sessionTools) {
               mergeTools(integration.id, integration.sessionTools({ requestContext }));
             }
+          }
+          const configuredTools = this.#config.tools;
+          if (configuredTools) {
+            mergeTools(
+              'tools',
+              typeof configuredTools === 'function' ? await configuredTools({ requestContext }) : configuredTools,
+            );
           }
           return tools;
         },
