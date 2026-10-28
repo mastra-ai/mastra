@@ -8,16 +8,19 @@ import type { ResolvedView } from '../widget-kind';
 import { MetricsCard } from '@/ds/components/MetricsCard';
 
 /** The open view of a widget with tabs, and the tab list for its toolbar. */
-export function useViewTabs<Options>(views: [ResolvedView<Options>, ...ResolvedView<Options>[]]) {
-  const [index, setIndex] = useState(0);
+export function useViewTabs<Options>(
+  views: [ResolvedView<Options>, ...ResolvedView<Options>[]],
+  /** The tab open until one is chosen. */
+  defaultIndex = 0,
+) {
+  const [chosen, setIndex] = useState<number>();
+  const wanted = chosen ?? defaultIndex;
+  const index = views[wanted] ? wanted : 0;
   const view = views[index] ?? views[0];
   const values = views.map((v, i) => tabValue(v.label, i));
   const tabs =
     views.length > 1 ? (
-      <MetricsCard.Tabs<string>
-        value={tabValue(view.label, views.indexOf(view))}
-        onValueChange={v => setIndex(values.indexOf(v))}
-      >
+      <MetricsCard.Tabs<string> value={tabValue(view.label, index)} onValueChange={v => setIndex(values.indexOf(v))}>
         {views.map((v, i) => {
           const value = tabValue(v.label, i);
           return (

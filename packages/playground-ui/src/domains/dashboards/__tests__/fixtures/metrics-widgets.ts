@@ -316,3 +316,240 @@ export const scoresWidget: DashboardWidget = {
     },
   ],
 };
+
+const USAGE = [INPUT, OUTPUT];
+const TRACE_LIMIT = 1000;
+const SPAN_LIMIT = 500;
+const ERRORS = ['count', 'errorRate', 'duration.p95'] as const;
+const hasThread = { op: 'exists', path: 'threadId' } as const;
+
+const usageTotals = (groupBy: string[], filters?: Record<string, string>): DashboardQuery => ({
+  source: 'metrics',
+  request: 'breakdown',
+  name: USAGE,
+  groupBy,
+  aggregation: 'sum',
+  orderDirection: 'DESC',
+  limit: 1000,
+  ...(filters ? { filters } : {}),
+  compare: 'previousWindow',
+});
+
+/** Count, errors and P95 from query 0; tokens and cost from query 1. */
+const figureColumns = (count: { label: string; measure: string; unit: 'traces' | 'spans' }, usage: boolean) => [
+  { id: 'errorRate', options: { query: 0, measure: 'errorRate' } },
+  { id: 'p95', options: { query: 0, measure: 'duration.p95' } },
+  ...(usage
+    ? [
+        { id: 'tokens', options: { query: 1, field: 'value' } },
+        { id: 'cost', options: { query: 1, field: 'estimatedCost' } },
+      ]
+    : []),
+  { id: 'count', label: count.label, options: { query: 0, measure: count.measure, unit: count.unit } },
+];
+
+const project = { id: 'project', scope: 'org' } as const;
+const scoped = (scope: 'org' | 'project', dimension: string) =>
+  scope === 'org' ? ['projectId', dimension] : [dimension];
+
+const entityView = (
+  scope: 'org' | 'project',
+  label: string,
+  spanTypes: string[],
+  description: string,
+  emptyMessage: string,
+) => {
+  const groupBy = scoped(scope, 'entityName');
+  const agents = label === 'Agents';
+  const usage = agents;
+  const traces = agents || label === 'Workflows';
+  return {
+    label,
+    scope,
+    description,
+    queries: [
+      {
+        source: 'spanAggregate',
+        where:
+          spanTypes.length === 1
+            ? { op: 'eq', left: { path: 'spanType' }, right: { literal: spanTypes[0] } }
+            : { op: 'in', value: { path: 'spanType' }, set: spanTypes },
+        groupBy,
+        measures: ['count', ...(traces ? ['countDistinct.traceId'] : []), 'errorCount', 'errorRate', 'duration.p95'],
+        limit: SPAN_LIMIT,
+        compare: 'previousWindow',
+      },
+      ...(usage ? [usageTotals(groupBy, { entityType: 'agent' })] : []),
+    ],
+    columns: [
+      ...(scope === 'org' ? [project] : []),
+      ...figureColumns(
+        traces
+          ? { label: 'Traces', measure: 'countDistinct.traceId', unit: 'traces' }
+          : { label: 'Spans', measure: 'count', unit: 'spans' },
+        usage,
+      ),
+    ],
+    options: { groupBy, rowScope: { spanTypes }, emptyMessage },
+  };
+};
+
+const traceColumns = (scope: 'org' | 'project') => [
+  ...(scope === 'org' ? [project] : []),
+  ...figureColumns({ label: 'Traces', measure: 'count', unit: 'traces' }, true),
+];
+
+const environmentsView = (scope: 'org' | 'project') => {
+  const groupBy = scoped(scope, 'environment');
+  return {
+    label: 'Environments',
+    scope,
+    description: 'Traces, errors, latency and spend per environment.',
+    queries: [
+      { source: 'traceAggregate', groupBy, measures: ERRORS, limit: TRACE_LIMIT, compare: 'previousWindow' },
+      usageTotals(groupBy),
+    ],
+    columns: traceColumns(scope),
+    options: {
+      groupBy,
+      unnamed: 'No environment',
+      rowScope: { field: 'environment' },
+      emptyMessage: 'No traces in this range.',
+    },
+  };
+};
+
+const threadsView = (scope: 'org' | 'project') => {
+  const groupBy = scoped(scope, 'threadId');
+  const threads = {
+    source: 'traceAggregate',
+    where: hasThread,
+    groupBy: scope === 'org' ? ['projectId', 'threadId'] : ['resourceId', 'threadId'],
+    measures: ERRORS,
+    limit: TRACE_LIMIT,
+    compare: 'previousWindow',
+  };
+  // Org-wide the second dimension is the project, so a third request names each thread's resource.
+  const resources = {
+    source: 'traceAggregate',
+    where: hasThread,
+    groupBy: ['resourceId', 'threadId'],
+    measures: ['count'],
+    limit: TRACE_LIMIT,
+  };
+  return {
+    label: 'Threads',
+    scope,
+    description: 'Traces, errors, latency and spend per thread.',
+    queries: [threads, usageTotals(groupBy), ...(scope === 'org' ? [resources] : [])],
+    columns: [
+      ...traceColumns(scope),
+      {
+        id: 'resource',
+        options: { query: scope === 'org' ? 2 : 0, dimension: 'resourceId', joinOn: 'threadId' },
+      },
+    ],
+    options: {
+      groupBy,
+      hideUnnamed: true,
+      dropped: false,
+      rowScope: { field: 'threadId', keepEmpty: true },
+      emptyMessage: 'No traces with a thread in this range.',
+    },
+  };
+};
+
+const modelsView = (scope: 'org' | 'project') => {
+  const groupBy = scoped(scope, 'model');
+  return {
+    label: 'Models',
+    scope,
+    description: 'Model calls, tokens and spend per model.',
+    queries: [
+      usageTotals(groupBy),
+      {
+        source: 'metrics',
+        request: 'breakdown',
+        name: [INPUT],
+        groupBy,
+        aggregation: 'count',
+        orderDirection: 'DESC',
+        limit: 1000,
+        compare: 'previousWindow',
+      },
+    ],
+    columns: [
+      ...(scope === 'org' ? [project] : []),
+      { id: 'tokens', options: { query: 0, field: 'value' } },
+      { id: 'cost', options: { query: 0, field: 'estimatedCost' } },
+      { id: 'count', label: 'Spans', options: { query: 1, field: 'value', unit: 'spans' } },
+    ],
+    options: {
+      groupBy,
+      unnamed: 'Unknown model',
+      rowScope: { field: 'model' },
+      emptyMessage: 'No model usage in this range.',
+    },
+  };
+};
+
+const scopedViews = (scope: 'org' | 'project') => [
+  entityView(
+    scope,
+    'Agents',
+    ['agent_run'],
+    'Traces each agent ran in, nested runs included, with errors, latency and spend.',
+    'No agent runs in this range.',
+  ),
+  entityView(
+    scope,
+    'Workflows',
+    ['workflow_run'],
+    'Traces each workflow ran in, nested runs included, with errors and latency.',
+    'No workflow runs in this range.',
+  ),
+  entityView(
+    scope,
+    'Tools',
+    ['tool_call', 'mcp_tool_call'],
+    'Every tool call, MCP tools included, with errors and latency.',
+    'No tool calls in this range.',
+  ),
+  modelsView(scope),
+  threadsView(scope),
+  environmentsView(scope),
+];
+
+export const breakdownWidget = {
+  id: 'breakdown',
+  span: 12,
+  kind: 'table',
+  title: 'Breakdown',
+  drilldown: { click: { page: 'traces' } },
+  views: [
+    {
+      label: 'Projects',
+      scope: 'org',
+      description: 'Traces, errors, latency and spend per project.',
+      queries: [
+        {
+          source: 'traceAggregate',
+          groupBy: ['projectId'],
+          measures: [...ERRORS, 'countDistinct.resourceId', 'countDistinct.threadId'],
+          limit: TRACE_LIMIT,
+          compare: 'previousWindow',
+        },
+        usageTotals(['projectId']),
+      ],
+      columns: figureColumns({ label: 'Traces', measure: 'count', unit: 'traces' }, true),
+      options: {
+        groupBy: ['projectId'],
+        rowLabel: 'project',
+        emptyMessage: 'No traces in this range.',
+        openWhen: 'twoOrMoreRows',
+      },
+    },
+    ...scopedViews('org'),
+    ...scopedViews('project'),
+  ],
+} as DashboardWidget;

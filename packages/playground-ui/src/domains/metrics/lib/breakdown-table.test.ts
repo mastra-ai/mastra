@@ -3,7 +3,6 @@ import type { BreakdownRow } from './breakdown';
 import { previousFigures } from './breakdown';
 import {
   changeDescription,
-  comparedLabel,
   drilldownFor,
   formatChange,
   formatCost,
@@ -22,7 +21,7 @@ const row = (figures: Partial<BreakdownRow>): BreakdownRow => ({
   ...figures,
 });
 
-describe('volumeLabel and comparedLabel', () => {
+describe('volumeLabel', () => {
   describe('when Change follows the count column', () => {
     it('counts traces, or spans where one trace makes many', () => {
       expect(volumeLabel('agents')).toBe('Traces');
@@ -32,15 +31,6 @@ describe('volumeLabel and comparedLabel', () => {
       expect(countDescription('agents')).toMatch(/^A trace is/);
       expect(countDescription('models')).toMatch(/^A span is/);
       expect(volumeLabel('models')).toBe('Spans');
-      expect(comparedLabel('tools', 'count')).toBe('Spans');
-    });
-  });
-
-  describe('when they follow another column', () => {
-    it('names that column', () => {
-      expect(comparedLabel('agents', 'cost')).toBe('Cost');
-      expect(comparedLabel('agents', 'errorRate')).toBe('Errors');
-      expect(comparedLabel('agents', 'p95')).toBe('P95 latency');
     });
   });
 });
