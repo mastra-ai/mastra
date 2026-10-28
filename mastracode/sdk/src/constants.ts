@@ -52,3 +52,6 @@ export const OBSERVATION_ACTIVATION_TOKENS = 2000;
  * floor rather than trusting the stored one.
  */
 export const MIN_OBSERVATION_THRESHOLD = OBSERVATION_ACTIVATION_TOKENS + 1;
+
+/** Id of the coding agent Mastra Code registers; Factory board phases run it. */
+export const CODE_AGENT_ID = 'code-agent';

@@ -30,6 +30,7 @@ describe('shipped provider registry', () => {
       'notion',
       'one-drive',
       'openai',
+      'outlook',
       'posthog',
       'resend',
       'slack',
