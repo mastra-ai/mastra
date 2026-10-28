@@ -12,12 +12,7 @@ import { Observability } from './default';
 import { TestExporter } from './exporters';
 import {
   createControlFlowOutcomeTests,
-  createEventedCancelCompletionRaceTests,
-  createEventedRemoteTracingTests,
-  createEventedNestedDispatchCancellationTests,
-  createEventedStaleTerminationTests,
   createConcurrentBranchOutcomeTests,
-  createNestedForeachResumeOutcomeTests,
 } from './test-utils/workflow-control-flow-suite';
 
 import {
@@ -198,10 +193,6 @@ describe('workflow run cancellation tracing', () => {
   });
 
   createControlFlowOutcomeTests({ createStorage: () => new MockStore() });
-  createEventedRemoteTracingTests(() => new MockStore());
-  createEventedNestedDispatchCancellationTests(() => new MockStore());
-  createEventedStaleTerminationTests(() => new MockStore());
-  createEventedCancelCompletionRaceTests(() => new MockStore());
   createConcurrentBranchOutcomeTests({ createStorage: () => new MockStore() });
 
   it.each([
@@ -355,13 +346,15 @@ describe('workflow run cancellation tracing', () => {
 
   it.each(
     (['default', 'evented', 'evented-async'] as const).flatMap(engine =>
-      (['until', 'while', 'foreach', 'parallel', 'conditional'] as const).flatMap(kind =>
-        (kind === 'foreach' ? (['explicit', 'auto'] as const) : (['explicit'] as const)).map(resumeMode => ({
-          engine,
-          kind,
-          resumeMode,
-        })),
-      ),
+      (['until', 'while', 'foreach', 'parallel', 'conditional'] as const)
+        .filter(kind => engine === 'default' || kind !== 'foreach')
+        .flatMap(kind =>
+          (kind === 'foreach' ? (['explicit', 'auto'] as const) : (['explicit'] as const)).map(resumeMode => ({
+            engine,
+            kind,
+            resumeMode,
+          })),
+        ),
     ),
   )(
     '$engine resumes a nested workflow inside $kind ($resumeMode) with separate loop outcomes',
@@ -608,8 +601,6 @@ describe('workflow run cancellation tracing', () => {
       await host.shutdown({ drainTimeout: 0 });
     }
   });
-
-  createNestedForeachResumeOutcomeTests({ createStorage: () => new MockStore() });
 
   it.each(['default', 'evented', 'evented-async'] as const)(
     '%s cancels an active nested execution once',

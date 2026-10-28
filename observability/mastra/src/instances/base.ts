@@ -15,7 +15,6 @@ import type {
   TracingEvent,
   AnySpan,
   EndSpanOptions,
-  ErrorSpanOptions,
   UpdateSpanOptions,
   StartSpanOptions,
   CreateSpanOptions,
@@ -346,29 +345,6 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
    * @returns A span that can have lifecycle methods called on it
    */
   rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
-    const span = this.restoreSpan(cached);
-    this.wireSpanLifecycle(span);
-    return span;
-  }
-
-  prepareSpanCompletion<TType extends SpanType>(
-    cached: SpanSnapshot<TType>,
-    completion: { end?: EndSpanOptions<TType>; error?: ErrorSpanOptions<TType> },
-  ): SpanSnapshot<TType> | undefined {
-    const span = this.restoreSpan(cached);
-    if (!cached.endTime) {
-      if (completion.error) span.error(completion.error);
-      else span.end(completion.end);
-    }
-    return span.snapshot();
-  }
-
-  emitSpanCompletion<TType extends SpanType>(cached: SpanSnapshot<TType>): void {
-    if (!cached.endTime) throw new Error('Cannot export an unfinished span as a durable completion');
-    this.emitSpanEnded(this.restoreSpan(cached));
-  }
-
-  private restoreSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType> {
     // Create span with existing IDs from cached data
     const span = this.createSpan<TType>({
       name: cached.name,
@@ -398,13 +374,15 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
       span.restoreEntityLineage(cached);
     }
 
-    // A snapshot of a completed execution must not become an ongoing execution
-    // again on replay. Resumption creates a separate span.
+    // Rebuilding an existing completed segment must not reopen its outcome.
     if (cached.endTime) {
       span.endTime = cached.endTime instanceof Date ? cached.endTime : new Date(cached.endTime);
       span.output = cached.output;
       span.errorInfo = cached.errorInfo;
     }
+
+    // Wire up lifecycle events (but skip SPAN_STARTED since it was already emitted)
+    this.wireSpanLifecycle(span);
 
     return span;
   }
@@ -986,7 +964,8 @@ export abstract class BaseObservabilityInstance extends MastraBase implements Ob
     span: Span<TType>,
     endOptions: EndSpanOptions<TType> | undefined,
   ):
-    { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean } | undefined {
+    | { ancestor: AnySpan; usage: UsageStats; provider?: string; model?: string; usageIncomplete?: boolean }
+    | undefined {
     if (span.type !== SpanType.MODEL_GENERATION) return undefined;
     // If the span itself will be exported, the existing auto-extract pipeline
     // emits its metrics; nothing to roll up.

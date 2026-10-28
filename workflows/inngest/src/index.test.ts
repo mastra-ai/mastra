@@ -2181,7 +2181,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'step1: test' },
-        payload: { value: 'test' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });
@@ -2284,7 +2283,6 @@ describe('MastraInngestWorkflow', () => {
       expect(result.steps['step1']).toEqual({
         status: 'success',
         output: { result: 'step1: test' },
-        payload: { value: 'test' },
         startedAt: expect.any(Number),
         endedAt: expect.any(Number),
       });

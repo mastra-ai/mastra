@@ -1,3 +1,4 @@
+import type { AnySpan, EndSpanOptions, ErrorSpanOptions, SpanType } from '../observability';
 import { executionFailureTermination } from '../observability/execution-outcome';
 import type { SpanTermination } from '../observability/types';
 import { WORKFLOW_CANCELLED_SYMBOL } from './constants';
@@ -39,4 +40,13 @@ export function workflowTermination(
       // Pending/running/skipped is not evidence of a completed execution.
       return { outcome: 'unknown', stopReason: null, stopReasonContext: null };
   }
+}
+
+/** Complete a live workflow span at its execution boundary. */
+export function completeWorkflowSpan(
+  span: AnySpan | undefined,
+  completion: { end?: EndSpanOptions<SpanType>; error?: ErrorSpanOptions<SpanType> },
+): void {
+  if (completion.error) span?.error(completion.error);
+  else span?.end(completion.end);
 }

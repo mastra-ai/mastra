@@ -76,7 +76,6 @@
  */
 
 import { expect, vi } from 'vitest';
-import type { ObservabilityEntrypoint } from '../../../observability';
 import type { WorkflowRunState } from '../../../workflows/types';
 import type { Agent } from '../../agent';
 import { AGENT_STREAM_TOPIC, AgentStreamEventTypes, DurableStepIds } from '../constants';
@@ -215,8 +214,6 @@ export type ScenarioOptions<K extends RestartKind> = {
   /** Park graph 1 inside the write that leaves the snapshot this picks out. */
   hold?: HoldWrite;
   timeoutMs?: number;
-  /** Build observability inside each fresh module graph, when a scenario checks persisted traces. */
-  observability?: () => Promise<ObservabilityEntrypoint>;
 };
 
 export type Graph = {
@@ -238,11 +235,10 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       ? (await import('../../../storage/domains/workflows/serializing-store.test-utils')).createSerializingStore().store
       : new core.InMemoryStore();
   const built = options.build({ core, generation } as BuildContext);
-  const observability = await options.observability?.();
   let mastra: any;
   try {
     if (options.kind === 'workflow') {
-      mastra = new core.Mastra({ logger: false, storage, observability, workflows: { [built.id]: built } });
+      mastra = new core.Mastra({ logger: false, storage, workflows: { [built.id]: built } });
       if (built.engineType === 'evented') await mastra.startWorkers();
       const workflows = await mastra.getStorage()!.getStore('workflows');
       return { core, mastra, storage, workflows, generation, workflow: mastra.getWorkflowById(built.id) };
@@ -260,7 +256,6 @@ async function buildGraph<K extends RestartKind>(options: ScenarioOptions<K>, ge
       logger: false,
       storage,
       agents: { [built.id]: agent as any },
-      observability,
       recovery: { durableAgents: 'auto' },
     });
     const expectedEngine = options.kind === 'evented' ? 'evented' : 'default';
@@ -525,10 +520,7 @@ export function createRestartScenario<K extends RestartKind>(options: ScenarioOp
       // Release holds first: a parked write blocks the execution `stopWorkers()`
       // awaits, so stopping before releasing would deadlock.
       for (const hold of holds.splice(0)) hold.release();
-      for (const graph of graphs) {
-        await graph.mastra?.stopWorkers?.();
-        if (options.observability) await graph.mastra?.observability?.shutdown();
-      }
+      for (const graph of graphs) await graph.mastra?.stopWorkers?.();
     },
   };
 }

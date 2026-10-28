@@ -248,8 +248,6 @@ export class InngestRun<
   }
 
   async cancel() {
-    // A delayed cancel cannot rewrite a completed execution or its persisted status.
-    if (await this.hasReachedTerminalStatus?.()) return;
     const storage = this.#mastra?.getStorage();
 
     await this.inngest.send({
@@ -260,16 +258,22 @@ export class InngestRun<
     });
 
     const workflowsStore = await storage?.getStore('workflows');
-    // The run can finish while the cancellation request is in flight. Update only
-    // a still-cancellable state, without replacing newer step results or trace data.
-    await workflowsStore?.updateWorkflowState({
+    const snapshot = await workflowsStore?.loadWorkflowSnapshot({
       workflowName: this.workflowId,
       runId: this.runId,
-      opts: {
-        status: 'canceled',
-        expectedStatus: ['pending', 'running', 'suspended', 'waiting', 'paused', 'skipped'],
-      },
     });
+    if (snapshot) {
+      await workflowsStore?.persistWorkflowSnapshot({
+        workflowName: this.workflowId,
+        runId: this.runId,
+        resourceId: this.resourceId,
+        snapshot: {
+          ...snapshot,
+          status: 'canceled' as any,
+          value: snapshot.value,
+        },
+      });
+    }
   }
 
   async start(

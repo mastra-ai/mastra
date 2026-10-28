@@ -21,13 +21,7 @@ import type { Inngest, BaseContext } from 'inngest';
 import { NonRetriableError } from 'inngest';
 import type { NestedWorkflowResult } from './nested-workflow-output';
 import { NESTED_WORKFLOW_OUTPUT_MODE } from './nested-workflow-output';
-import {
-  checkpointNestedWorkflow,
-  checkpointObservability,
-  checkpointStartedSpan,
-  completeCheckpointedSpan,
-} from './span-checkpoints';
-import type { SpanCheckpointScope } from './span-checkpoints';
+
 import { InngestWorkflow } from './workflow';
 
 function isNonRetryableStepFailure(error: unknown): boolean {
@@ -77,7 +71,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     inngestAttempts: number = 0,
     options: ExecutionEngineOptions,
     private parentStream?: { workflowId: string; runId: string },
-    private checkpointScope?: SpanCheckpointScope,
   ) {
     super({ mastra, options });
     this.inngestStep = inngestStep;
@@ -365,7 +358,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     parentSpan: any;
     stepId: string;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -383,14 +376,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
 
     // Without observability there is no span to memoize; skip the durable operation.
-    if (!checkpointObservability(this.mastra, this.checkpointScope)) return undefined;
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
-      const observability = checkpointObservability(this.mastra, this.checkpointScope);
+      const observability = this.mastra?.observability?.getSelectedInstance({});
       if (!observability) return undefined;
 
-      // A resumed nested entry can omit tracingIds; its live parent still owns the trace.
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
       const span = observability.startSpan({
         ...options,
         entityType: options.entityType as EntityType | undefined,
@@ -399,19 +392,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Return serializable form
-      return span
-        ? await checkpointStartedSpan(
-            this.mastra,
-            { workflowId: executionContext.workflowId, runId: executionContext.runId },
-            observability,
-            span,
-          )
-        : undefined;
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
     if (exportedSpan) {
-      const observability = checkpointObservability(this.mastra, this.checkpointScope);
+      const observability = this.mastra?.observability?.getSelectedInstance({});
       return observability?.rebuildSpan(exportedSpan);
     }
 
@@ -433,14 +419,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
-      await completeCheckpointedSpan(
-        this.mastra,
-        this.checkpointScope,
-        checkpointObservability(this.mastra, this.checkpointScope),
-        span,
-        operationId,
-        { end: endOptions },
-      );
+      span.end(endOptions);
     });
   }
 
@@ -459,14 +438,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
-      await completeCheckpointedSpan(
-        this.mastra,
-        this.checkpointScope,
-        checkpointObservability(this.mastra, this.checkpointScope),
-        span,
-        operationId,
-        { error: errorOptions },
-      );
+      span.error(errorOptions);
     });
   }
 
@@ -477,7 +449,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async createChildSpan(params: {
     parentSpan: any;
     operationId: string;
-    options: {
+    options: SpanOutcomeFields & {
       name: string;
       type: any;
       input?: unknown;
@@ -491,14 +463,14 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     const parentSpanId = parentSpan?.id ?? executionContext.tracingIds?.workflowSpanId;
 
     // Without observability there is no span to memoize; skip the durable operation.
-    if (!checkpointObservability(this.mastra, this.checkpointScope)) return undefined;
+    if (!this.mastra?.observability?.getSelectedInstance({})) return undefined;
 
     // Use wrapDurableOperation to memoize span creation
     const exportedSpan = await this.wrapDurableOperation(operationId, async () => {
-      const observability = checkpointObservability(this.mastra, this.checkpointScope);
+      const observability = this.mastra?.observability?.getSelectedInstance({});
       if (!observability) return undefined;
 
-      // A resumed nested entry can omit tracingIds; its live parent still owns the trace.
+      // Create span using tracingIds for traceId, and actual parent span for parentSpanId
       const span = observability.startSpan({
         ...options,
         traceId: parentSpan?.traceId ?? executionContext.tracingIds?.traceId,
@@ -507,19 +479,12 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       });
 
       // Return serializable form
-      return span
-        ? await checkpointStartedSpan(
-            this.mastra,
-            { workflowId: executionContext.workflowId, runId: executionContext.runId },
-            observability,
-            span,
-          )
-        : undefined;
+      return span?.snapshot?.() ?? span?.exportSpan();
     });
 
     // Return a rebuilt span that can have .end()/.error() called later
     if (exportedSpan) {
-      const observability = checkpointObservability(this.mastra, this.checkpointScope);
+      const observability = this.mastra?.observability?.getSelectedInstance({});
       return observability?.rebuildSpan(exportedSpan);
     }
 
@@ -532,7 +497,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
   async endChildSpan(params: {
     span: any;
     operationId: string;
-    endOptions?: SpanOutcomeFields & {
+    endOptions?: {
       output?: unknown;
       attributes?: Record<string, unknown>;
     };
@@ -541,14 +506,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
-      await completeCheckpointedSpan(
-        this.mastra,
-        this.checkpointScope,
-        checkpointObservability(this.mastra, this.checkpointScope),
-        span,
-        operationId,
-        { end: endOptions },
-      );
+      span.end(endOptions);
     });
   }
 
@@ -567,14 +525,7 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
     if (!span) return;
 
     await this.wrapDurableOperation(operationId, async () => {
-      await completeCheckpointedSpan(
-        this.mastra,
-        this.checkpointScope,
-        checkpointObservability(this.mastra, this.checkpointScope),
-        span,
-        operationId,
-        { error: errorOptions },
-      );
+      span.error(errorOptions);
     });
   }
 
@@ -660,23 +611,6 @@ export class InngestExecutionEngine extends DefaultExecutionEngine {
       executionContext.foreachIndex !== undefined
         ? `${executionContext.runId}-foreach-${executionContext.foreachIndex}`
         : executionContext.runId;
-
-    const childRunId = isTimeTravel
-      ? executionContext.runId
-      : isResume
-        ? (stepResults[resume?.steps?.[0] ?? '']?.suspendPayload?.__workflow_meta?.runId ?? derivedNestedRunId)
-        : derivedNestedRunId;
-    const mayInvoke =
-      !step.options.shouldPersistSnapshot({ workflowStatus: 'pending', stepResults: {} }) ||
-      (await this.inngestStep.run(`workflow.${executionContext.workflowId}.step.${step.id}.register-child`, () =>
-        checkpointNestedWorkflow(
-          this.mastra,
-          { workflowId: executionContext.workflowId, runId: executionContext.runId },
-          stepSpan,
-          { workflowId: step.id, runId: childRunId },
-        ),
-      ));
-    if (!mayInvoke) return { status: 'canceled', startedAt, endedAt: Date.now() };
 
     try {
       if (isResume) {

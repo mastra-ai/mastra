@@ -95,7 +95,7 @@ import type {
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { resolveLegacyAgent, resolveRegisteredAgent } from '../entry-executors';
 import type { ClassifierStepOutput } from '../entry-executors';
-import { workflowTermination } from '../execution-outcome';
+import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { createStepFromClassifier } from '../step-factories';
 import type { ClassifierStepOptions } from '../step-factories';
 import { forwardAgentStreamChunk } from '../stream-utils';
@@ -106,7 +106,7 @@ import type { AgentStepOptions } from '../workflow';
 import { EventedExecutionEngine } from './execution-engine';
 import { isTripwireChunk, createTripWireFromChunk, getTextDeltaFromChunk, withoutAuthToken } from './helpers';
 import type { TripwireChunk } from './helpers';
-import { checkpointEventedSpan, completeEventedSpan, completeCheckpointedEventedChildren } from './span-checkpoints';
+
 import { WorkflowEventProcessor } from './workflow-event-processor';
 
 export type EventedEngineType = {};
@@ -1996,14 +1996,12 @@ export class EventedRun<
 
   private async completeWorkflowTracing(
     span: TracingContext['currentSpan'],
-    completion: Parameters<typeof completeEventedSpan>[5],
+    completion: Parameters<typeof completeWorkflowSpan>[1],
   ): Promise<void> {
-    await completeEventedSpan(this.mastra, this.workflowId, this.runId, span, `caller:${span?.id}`, completion);
+    completeWorkflowSpan(span, completion);
   }
 
   private releaseWorkflowTracing(span: TracingContext['currentSpan']): void {
-    // Checkpoint persistence yields: a resume may have installed its new root
-    // before the prior segment finishes releasing its context.
     if (span && this.mastra?.__getRunTracingContext(this.runId)?.currentSpan === span)
       this.mastra.__unregisterRunTracingContext(this.runId);
   }
@@ -2152,7 +2150,6 @@ export class EventedRun<
 
     let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
     try {
-      await checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true);
       result = await this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
         workflowId: this.workflowId,
         runId: this.runId,
@@ -2299,10 +2296,6 @@ export class EventedRun<
       if (
         event.runId !== this.runId ||
         !['workflow.end', 'workflow.fail', 'workflow.suspend'].includes(event.type) ||
-        (workflowSpan &&
-          event.data?.executionSpan &&
-          (event.data.executionSpan.traceId !== workflowSpan.traceId ||
-            event.data.executionSpan.spanId !== workflowSpan.id)) ||
         this.isForeignExecution?.(event.data?.requestContext, executionRequestContext)
       ) {
         await ack?.();
@@ -2335,7 +2328,6 @@ export class EventedRun<
       this.mastra.__registerRunTracingContext(this.runId, { currentSpan: workflowSpan });
     }
     try {
-      await checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true);
       if (workflowSpan) await pubsub.subscribe('workflows-finish', finishTracing, { startFrom: 'latest' });
       // Fire-and-forget: publishing does not wait for workflow completion.
       await pubsub.publish('workflows', {
@@ -2809,30 +2801,28 @@ export class EventedRun<
     const resumeState = (snapshot?.context as any)?.__state ?? snapshot?.value ?? {};
 
     const resumePubsub = this.mastra.pubsub;
-    const executionResultPromise = checkpointEventedSpan(this.mastra, this.workflowId, this.runId, workflowSpan, true)
-      .then(() =>
-        this.executionEngine.execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
-          workflowId: this.workflowId,
-          runId: this.runId,
-          graph: this.executionGraph,
-          serializedStepGraph: this.serializedStepGraph,
-          input: snapshot?.context?.input as TInput,
-          initialState: resumeState as TState,
-          resume: {
-            steps,
-            stepResults: snapshot?.context as any,
-            resumePayload: resumeDataToUse,
-            resumePath,
-            forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
-          },
-          pubsub: resumePubsub,
-          requestContext,
-          actor: params.actor,
-          abortController: this.abortController,
-          perStep: params.perStep,
-          outputOptions: params.outputOptions,
-        }),
-      )
+    const executionResultPromise = this.executionEngine
+      .execute<TState, TInput, WorkflowResult<TState, TInput, TOutput, TSteps>>({
+        workflowId: this.workflowId,
+        runId: this.runId,
+        graph: this.executionGraph,
+        serializedStepGraph: this.serializedStepGraph,
+        input: snapshot?.context?.input as TInput,
+        initialState: resumeState as TState,
+        resume: {
+          steps,
+          stepResults: snapshot?.context as any,
+          resumePayload: resumeDataToUse,
+          resumePath,
+          forEachIndex: params.forEachIndex ?? snapshotResumeLabel?.foreachIndex,
+        },
+        pubsub: resumePubsub,
+        requestContext,
+        actor: params.actor,
+        abortController: this.abortController,
+        perStep: params.perStep,
+        outputOptions: params.outputOptions,
+      })
       .then(async result => {
         this.workflowRunStatus = result.status;
         if (result.status === 'failed') {
@@ -2923,33 +2913,16 @@ export class EventedRun<
 
     // Update storage directly for immediate status update (same pattern as Inngest)
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
-    const canceled = await workflowsStore?.updateWorkflowState({
+    await workflowsStore?.updateWorkflowState({
       workflowName: this.workflowId,
       runId: this.runId,
       opts: {
         status: 'canceled',
-        expectedStatus: ['pending', 'running', 'suspended', 'waiting', 'paused', 'skipped', 'canceled'],
       },
-    });
-
-    if (workflowsStore && !canceled) return;
-
-    await completeCheckpointedEventedChildren(this.mastra, this.workflowId, this.runId, 'caller-cancel', {
-      outcome: 'abort',
-      stopReason: 'caller_cancelled',
-      stopReasonContext: null,
     });
 
     // End the whole span tree now: a step that ignores abortSignal keeps running, so the
     // execution engine may never unwind and no span in the tree would otherwise be ended.
-    await this.completeWorkflowTracing(this.workflowRunSpan, {
-      end: {
-        outcome: 'abort',
-        stopReason: 'caller_cancelled',
-        stopReasonContext: null,
-        attributes: { status: 'canceled' },
-      },
-    });
     this.workflowRunSpan?.endTree({
       outcome: 'abort',
       stopReason: 'caller_cancelled',

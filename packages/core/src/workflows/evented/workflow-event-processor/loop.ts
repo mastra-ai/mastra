@@ -6,12 +6,12 @@ import type { Mastra } from '../../../mastra';
 import { SpanType } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import { selectFields } from '../../../utils';
-import { workflowTermination } from '../../execution-outcome';
+import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
 import { getControlFlowIdentityAttributes } from '../../handlers/control-flow';
 import { getEntryId, getEntryWorkflow } from '../../step-entry';
 import { resolveForeachConcurrency } from '../../utils';
 import { resolveCurrentState, withoutAuthToken } from '../helpers';
-import { checkpointEventedChildSpan, completeEventedSpan } from '../span-checkpoints';
+
 import type { StepExecutor } from '../step-executor';
 import { createPendingMarker } from '../types';
 import type { ProcessorArgs } from '.';
@@ -42,12 +42,6 @@ export async function evaluateLoopCondition(
     attributes: { conditionIndex: iterationCount - 1, ...getControlFlowIdentityAttributes(step) },
   });
   try {
-    const root = mastra?.__getRunTracingContext(args.runId)?.currentSpan;
-    if (root)
-      await checkpointEventedChildSpan(mastra, args.workflowId, args.runId, span, {
-        traceId: root.traceId,
-        spanId: root.id,
-      });
     const result = await stepExecutor.evaluateCondition({
       workflowId: args.workflowId,
       condition: step.condition,
@@ -63,12 +57,12 @@ export async function evaluateLoopCondition(
       iterationCount,
       tracingContext: { currentSpan: span },
     });
-    await completeEventedSpan(mastra, args.workflowId, args.runId, span, `predicate:${span?.id}`, {
+    completeWorkflowSpan(span, {
       end: { ...workflowTermination({ status: 'success' }), output: result },
     });
     return result;
   } catch (error) {
-    await completeEventedSpan(mastra, args.workflowId, args.runId, span, `predicate:${span?.id}`, {
+    completeWorkflowSpan(span, {
       error: { ...workflowTermination({ status: 'failed', error }), error: getErrorFromUnknown(error) },
     });
     throw error;

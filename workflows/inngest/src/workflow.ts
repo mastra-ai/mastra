@@ -5,10 +5,8 @@ import { PubSub } from '@mastra/core/events';
 import type { Event, EventCallback, SubscribeOptions } from '@mastra/core/events';
 import type { Mastra } from '@mastra/core/mastra';
 import { SpanType, EntityType } from '@mastra/core/observability';
-import { createEmptyWorkflowSnapshot } from '@mastra/core/storage';
 import type { WorkflowRuns } from '@mastra/core/storage';
-import { Workflow, getEntryWorkflow, isSingleStepEntry } from '@mastra/core/workflows';
-import * as coreWorkflows from '@mastra/core/workflows';
+import { Workflow, getEntryWorkflow, isSingleStepEntry, workflowTermination } from '@mastra/core/workflows';
 import type {
   Step,
   StepResult,
@@ -16,7 +14,6 @@ import type {
   StepFlowEntry,
   WorkflowResult,
   WorkflowRunState,
-  WorkflowSpanSnapshot,
   WorkflowStreamEvent,
   Run,
 } from '@mastra/core/workflows';
@@ -30,7 +27,6 @@ import {
 } from './nested-workflow-output';
 import { InngestPubSub } from './pubsub';
 import { InngestRun } from './run';
-import { checkpointObservability, checkpointStartedSpan, completeCheckpointedSpan } from './span-checkpoints';
 import type {
   InngestEngineType,
   InngestFlowControlConfig,
@@ -171,7 +167,6 @@ export class InngestWorkflow<
   public inngest: Inngest;
 
   private function: ReturnType<Inngest['createFunction']> | undefined;
-  private cancellationFunction: ReturnType<Inngest['createFunction']> | undefined;
   private cronFunction: ReturnType<Inngest['createFunction']> | undefined;
   private readonly flowControlConfig?: InngestFlowControlConfig;
   private readonly functionRetries: NonNullable<InngestFlowControlConfig['retries']>;
@@ -544,21 +539,6 @@ export class InngestWorkflow<
           const observability = mastra?.observability?.getSelectedInstance({ requestContext });
           if (!observability) return undefined;
 
-          const workflowsStore = await mastra.getStorage()?.getStore('workflows');
-          if (
-            workflowsStore?.supportsWorkflowSpanSnapshots?.() &&
-            workflowsStore.supportsGuardedSnapshotWrites?.() &&
-            this.options.shouldPersistSnapshot({ workflowStatus: 'pending', stepResults: {} })
-          ) {
-            await workflowsStore.persistWorkflowSnapshot({
-              workflowName: this.id,
-              runId,
-              resourceId,
-              snapshot: { ...createEmptyWorkflowSnapshot(runId), serializedStepGraph: this.serializedStepGraph },
-              expectedStatus: [],
-            });
-          }
-
           const span = observability.startSpan({
             type: SpanType.WORKFLOW_RUN,
             outcome: null,
@@ -576,29 +556,10 @@ export class InngestWorkflow<
             requestContext,
           });
 
-          return checkpointStartedSpan(mastra, { workflowId: this.id, runId }, observability, span);
+          return span?.snapshot?.() ?? span?.exportSpan();
         });
 
-        // A parent's cancellation can arrive after child registration but before
-        // invocation. Honor the persisted cancellation before executing any steps.
-        const cancellationStore = await mastra?.getStorage()?.getStore('workflows');
-        if ((await cancellationStore?.loadWorkflowRunStatus({ workflowName: this.id, runId })) === 'canceled') {
-          return { result: { status: 'canceled', input: inputData, steps: {}, state: initialState ?? {} }, runId };
-        }
-
-        const checkpointScope = {
-          workflowId: this.id,
-          runId,
-          observabilityInstanceName: workflowSpanData?.observabilityInstanceName,
-        };
-        const engine = new InngestExecutionEngine(
-          this.#mastra,
-          step,
-          attempt,
-          this.options,
-          parentStream,
-          checkpointScope,
-        );
+        const engine = new InngestExecutionEngine(this.#mastra, step, attempt, this.options, parentStream);
 
         let result: WorkflowResult<TState, TInput, TOutput, TSteps>;
         try {
@@ -710,31 +671,24 @@ export class InngestWorkflow<
             // End the workflow span with appropriate status
             // The workflow span was already created and SPAN_STARTED was exported in the span.start step
             if (workflowSpanData) {
-              const observability = checkpointObservability(mastra, checkpointScope);
+              const observability = mastra?.observability?.getSelectedInstance({ requestContext });
               if (observability) {
+                // Rebuild the span from cached data to call end/error
                 const workflowSpan = observability.rebuildSpan(workflowSpanData);
-                await completeCheckpointedSpan(
-                  mastra,
-                  checkpointScope,
-                  observability,
-                  workflowSpan,
-                  `finalize:${workflowSpanData.id}`,
-                  result.status === 'failed'
-                    ? {
-                        error: {
-                          ...coreWorkflows.workflowTermination?.(result),
-                          error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
-                          attributes: { status: 'failed' },
-                        },
-                      }
-                    : {
-                        end: {
-                          ...coreWorkflows.workflowTermination?.(result),
-                          output: result.status === 'success' ? result.result : undefined,
-                          attributes: { status: result.status },
-                        },
-                      },
-                );
+
+                if (result.status === 'failed') {
+                  workflowSpan.error({
+                    ...workflowTermination(result),
+                    error: getErrorFromUnknown(result.error, { fallbackMessage: 'Workflow execution failed' }),
+                    attributes: { status: 'failed' },
+                  });
+                } else {
+                  workflowSpan.end({
+                    ...workflowTermination(result),
+                    output: result.status === 'success' ? result.result : undefined,
+                    attributes: { status: result.status },
+                  });
+                }
               }
             }
 
@@ -750,7 +704,8 @@ export class InngestWorkflow<
                 // For suspended workflows, read existing snapshot to preserve suspendedPaths and resumeLabels
                 // which were set correctly by the handlers during execution
                 let existingSnapshot:
-                  { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> } | undefined;
+                  | { suspendedPaths?: Record<string, number[]>; resumeLabels?: Record<string, any> }
+                  | undefined;
                 if (result.status === 'suspended') {
                   existingSnapshot =
                     (await workflowsStore.loadWorkflowSnapshot({
@@ -782,38 +737,14 @@ export class InngestWorkflow<
                   timestamp: Date.now(),
                 };
 
-                const canceledResult = {
-                  status: 'canceled' as const,
-                  input: inputData,
-                  steps: result.steps,
-                  state: result.state,
-                };
-                // onFinish can await while an external cancellation commits. Do not
-                // replace it with the earlier executor result when the callback returns.
-                if ((await workflowsStore.loadWorkflowRunStatus({ workflowName: this.id, runId })) === 'canceled') {
-                  return canceledResult;
-                }
-                const written = await workflowsStore.persistWorkflowSnapshot({
+                await workflowsStore.persistWorkflowSnapshot({
                   workflowName: this.id,
                   runId,
                   resourceId,
-                  expectedStatus: [
-                    'pending',
-                    'running',
-                    'waiting',
-                    'suspended',
-                    'paused',
-                    'skipped',
-                    'success',
-                    'failed',
-                    'tripwire',
-                    'bailed',
-                  ],
                   snapshot: this.options.pruneSnapshot
                     ? this.options.pruneSnapshot({ snapshot: finalSnapshot, workflowStatus: result.status })
                     : finalSnapshot,
                 });
-                if (written === false) return canceledResult;
               }
             }
 
@@ -844,8 +775,7 @@ export class InngestWorkflow<
 
             return shouldCompactNestedWorkflowOutput ? { status: result.status } : result;
           };
-          const finalized = await step.run(`workflow.${this.id}.finalize`, finalizeWorkflow);
-          if (finalized.status === 'canceled') return { result: finalized, runId };
+          await step.run(`workflow.${this.id}.finalize`, finalizeWorkflow);
         } catch (error) {
           finalizeErrored = true;
           finalizeError = error;
@@ -871,94 +801,11 @@ export class InngestWorkflow<
     return this.function;
   }
 
-  private getCancellationFunction(): ReturnType<Inngest['createFunction']> {
-    if (this.cancellationFunction) return this.cancellationFunction;
-    this.cancellationFunction = this.inngest.createFunction(
-      {
-        id: `workflow.${this.id}.cancel-spans`,
-        retries: this.functionRetries,
-        concurrency: { limit: 1, key: 'event.data.runId' },
-        triggers: { event: `cancel.workflow.${this.id}` },
-      },
-      async ({ event, step }) => {
-        const runId = event.data.runId;
-        if (typeof runId !== 'string') return;
-        const scope = { workflowId: this.id, runId };
-        const spans: WorkflowSpanSnapshot[] = await step.run('load-canceled-spans', async () => {
-          const store = await this.#mastra?.getStorage()?.getStore('workflows');
-          if (!store?.supportsWorkflowSpanSnapshots?.()) return [];
-          await store.updateWorkflowState({
-            workflowName: this.id,
-            runId,
-            opts: {
-              status: 'canceled',
-              expectedStatus: ['pending', 'running', 'suspended', 'waiting', 'paused', 'skipped'],
-            },
-          });
-          const snapshot = await store.loadWorkflowSnapshot({ workflowName: this.id, runId });
-          if (snapshot?.status !== 'canceled') return [];
-          return Object.values(snapshot.tracingSpans ?? {});
-        });
-        const children = new Map(
-          spans
-            .filter(span => span.nestedWorkflow)
-            .map(span => {
-              const child = span.nestedWorkflow!;
-              return [JSON.stringify([child.workflowId, child.runId]), child] as const;
-            }),
-        );
-        for (const [key, child] of children) {
-          const shouldCancel = await step.run(`cancel-child-state:${key}`, async () => {
-            const store = await this.#mastra?.getStorage()?.getStore('workflows');
-            const childKey = { workflowName: child.workflowId, runId: child.runId };
-            await store?.updateWorkflowState({
-              ...childKey,
-              opts: {
-                status: 'canceled',
-                expectedStatus: ['pending', 'running', 'suspended', 'waiting', 'paused', 'skipped'],
-              },
-            });
-            return (await store?.loadWorkflowRunStatus(childKey)) === 'canceled';
-          });
-          if (!shouldCancel) continue;
-          await step.sendEvent(`cancel-child:${key}`, {
-            name: `cancel.workflow.${child.workflowId}`,
-            data: { runId: child.runId },
-          });
-        }
-        for (const saved of spans) {
-          if (saved.endTime) continue;
-          const operationId = `cancel:${event.id}:${saved.traceId}:${saved.id}`;
-          await step.run(operationId, async () => {
-            const observability = checkpointObservability(this.#mastra, {
-              ...scope,
-              observabilityInstanceName: saved.observabilityInstanceName,
-            });
-            if (!observability?.prepareSpanCompletion || !observability.emitSpanCompletion) return;
-            await completeCheckpointedSpan(
-              this.#mastra,
-              scope,
-              observability,
-              observability.rebuildSpan(saved),
-              operationId,
-              { end: { outcome: 'abort', stopReason: 'caller_cancelled', stopReasonContext: null } },
-            );
-          });
-        }
-      },
-    );
-    return this.cancellationFunction;
-  }
-
   getNestedFunctions(steps: StepFlowEntry[]): ReturnType<Inngest['createFunction']>[] {
     return steps.flatMap(step => {
       const nested = getNestedInngestWorkflow(step);
       if (nested) {
-        return [
-          nested.getFunction(),
-          nested.getCancellationFunction(),
-          ...nested.getNestedFunctions(nested.executionGraph.steps),
-        ];
+        return [nested.getFunction(), ...nested.getNestedFunctions(nested.executionGraph.steps)];
       }
       if (step.type === 'parallel' || step.type === 'conditional') {
         return this.getNestedFunctions(step.steps);
@@ -971,7 +818,6 @@ export class InngestWorkflow<
   getFunctions(): ReturnType<Inngest['createFunction']>[] {
     return [
       this.getFunction(),
-      this.getCancellationFunction(),
       ...(this.cronConfig?.cron ? [this.createCronFunction()] : []),
       ...this.getNestedFunctions(this.executionGraph.steps),
     ];

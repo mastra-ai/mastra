@@ -2323,13 +2323,6 @@ export type StorageMemoryRef =
 // ============================================
 
 export interface UpdateWorkflowStateOptions {
-  /** Active execution root, atomically written alongside its checkpoint by checkpoint-capable stores. */
-  executionSpan?: WorkflowRunState['executionSpan'];
-  /**
-   * Per-span patches keyed by `${traceId}:${spanId}` for durable handoff. Only use when supportsWorkflowSpanSnapshots() is true.
-   * Checkpoint-capable stores merge these atomically and retain the first completed snapshot.
-   */
-  tracingSpans?: WorkflowRunState['tracingSpans'];
   status: WorkflowRunStatus;
   result?: StepResult<any, any, any, any>;
   error?: SerializedError;
@@ -3429,20 +3422,3 @@ export type StorageDeleteToolProviderConnectionInput = {
   providerId: string;
   connectionId: string;
 };
-
-/** Merge durable span checkpoints inside the workflow storage transaction. */
-export function mergeWorkflowSpanSnapshots(
-  existing: WorkflowRunState['tracingSpans'],
-  incoming: WorkflowRunState['tracingSpans'],
-): WorkflowRunState['tracingSpans'] {
-  if (!incoming) return existing;
-  const merged = { ...existing };
-  for (const [key, span] of Object.entries(incoming)) {
-    if (key !== `${span.traceId}:${span.id}`)
-      throw new Error('Workflow span checkpoint key must match its trace and span IDs');
-    const previous = Object.hasOwn(merged, key) ? merged[key] : undefined;
-    if (!previous?.endTime)
-      Object.defineProperty(merged, key, { value: span, enumerable: true, configurable: true, writable: true });
-  }
-  return merged;
-}

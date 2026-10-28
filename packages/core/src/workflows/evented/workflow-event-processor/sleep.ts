@@ -6,22 +6,20 @@ import type { Mastra } from '../../../mastra';
 import { SpanType, executionFailureTermination } from '../../../observability';
 import type { TracingContext } from '../../../observability';
 import type { WorkflowsStorage } from '../../../storage/domains/workflows';
-import { workflowTermination } from '../../execution-outcome';
+import { workflowTermination, completeWorkflowSpan } from '../../execution-outcome';
 import { getControlFlowIdentityAttributes } from '../../handlers/control-flow';
 import { withoutAuthToken } from '../helpers';
-import { checkpointEventedChildSpan, checkpointEventedSpan, completeEventedSpan } from '../span-checkpoints';
+
 import type { StepExecutor } from '../step-executor';
 import { getStepId } from './utils';
 import type { ProcessorArgs } from '.';
 
 async function startWaitSpan(
   step: Extract<StepFlowEntry, { type: 'sleep' | 'sleepUntil' }>,
-  scope: { mastra?: Mastra; workflowId: string; runId: string },
   tracingContext?: TracingContext,
   abortSignal?: AbortSignal,
 ) {
   const parent = tracingContext?.currentSpan;
-  const executionSpan = parent ? { traceId: parent.traceId, spanId: parent.id } : undefined;
   const span = parent?.createChildSpan({
     type: SpanType.WORKFLOW_SLEEP,
     outcome: null,
@@ -32,42 +30,17 @@ async function startWaitSpan(
       ...(step.type === 'sleep' ? { durationMs: step.duration } : { untilDate: step.date }),
     },
   });
-  try {
-    if (executionSpan)
-      await checkpointEventedChildSpan(scope.mastra, scope.workflowId, scope.runId, span, executionSpan);
-  } catch (error) {
-    span?.error({ ...executionFailureTermination(error), error: getErrorFromUnknown(error) });
-    throw error;
-  }
-  const finish = (completion: Parameters<typeof completeEventedSpan>[5]) =>
-    completeEventedSpan(
-      scope.mastra,
-      scope.workflowId,
-      scope.runId,
-      span,
-      `wait:${span?.id}:${completion.end?.outcome ?? completion.error?.outcome}`,
-      completion,
-    );
+  const finish = (completion: Parameters<typeof completeWorkflowSpan>[1]) => completeWorkflowSpan(span, completion);
   const canceled = workflowTermination({ status: 'canceled' });
   const onAbort = () => {
     abortSignal?.removeEventListener('abort', onAbort);
-    void finish({ end: canceled })
-      .then(() => span?.endTree(canceled))
-      .catch(error => {
-        scope.mastra?.getLogger()?.error('Failed to checkpoint canceled workflow wait', {
-          workflowId: scope.workflowId,
-          runId: scope.runId,
-          error,
-        });
-      });
+    finish({ end: canceled });
+    span?.endTree(canceled);
   };
   if (abortSignal?.aborted) onAbort();
   else abortSignal?.addEventListener('abort', onAbort, { once: true });
   return {
     span,
-    checkpoint() {
-      return checkpointEventedSpan(scope.mastra, scope.workflowId, scope.runId, span, false, executionSpan);
-    },
     async complete() {
       abortSignal?.removeEventListener('abort', onAbort);
       await finish({ end: workflowTermination({ status: 'success' }) });
@@ -168,7 +141,7 @@ export async function processWorkflowSleep(
     step: Extract<StepFlowEntry, { type: 'sleep' }>;
   },
 ) {
-  const tracing = await startWaitSpan(step, { mastra, workflowId, runId }, tracingContext, abortController?.signal);
+  const tracing = await startWaitSpan(step, tracingContext, abortController?.signal);
   try {
     // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
     // `workflows` routing publishes below are never gated — they drive execution.
@@ -201,19 +174,15 @@ export async function processWorkflowSleep(
       },
       requestContext: withoutAuthToken(requestContext ?? {}),
     });
-    const updated = await workflowsStore?.updateWorkflowState({
+    await workflowsStore?.updateWorkflowState({
       workflowName: workflowId,
       runId,
       opts: {
         status: 'running',
-        expectedStatus: 'running',
         activePaths: executionPath,
         activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
       },
     });
-
-    if (workflowsStore && !updated && (await workflowsStore.loadWorkflowRunStatus({ workflowName: workflowId, runId })))
-      return;
 
     // Create a proper RequestContext from the plain object passed in ProcessorArgs
     const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -231,7 +200,6 @@ export async function processWorkflowSleep(
     });
 
     tracing.span?.update({ attributes: { durationMs: Math.max(0, duration) } });
-    await tracing.checkpoint();
     setTimeout(
       async () => {
         await tracing.complete();
@@ -331,7 +299,7 @@ export async function processWorkflowSleepUntil(
     step: Extract<StepFlowEntry, { type: 'sleepUntil' }>;
   },
 ) {
-  const tracing = await startWaitSpan(step, { mastra, workflowId, runId }, tracingContext, abortController?.signal);
+  const tracing = await startWaitSpan(step, tracingContext, abortController?.signal);
   try {
     // Step-lifecycle watch events honor `emitStepEvents: false` (#21529); the
     // `workflows` routing publish below is never gated — it drives execution.
@@ -349,19 +317,15 @@ export async function processWorkflowSleepUntil(
       },
       requestContext: withoutAuthToken(requestContext ?? {}),
     });
-    const updated = await workflowsStore?.updateWorkflowState({
+    await workflowsStore?.updateWorkflowState({
       workflowName: workflowId,
       runId,
       opts: {
         status: 'running',
-        expectedStatus: 'running',
         activePaths: executionPath,
         activeStepsPath: { ...activeStepsPath, [step.id]: executionPath },
       },
     });
-
-    if (workflowsStore && !updated && (await workflowsStore.loadWorkflowRunStatus({ workflowName: workflowId, runId })))
-      return;
 
     // Create a proper RequestContext from the plain object passed in ProcessorArgs
     const reqContext = new RequestContext(Object.entries(requestContext ?? {}) as any);
@@ -395,7 +359,6 @@ export async function processWorkflowSleepUntil(
     }
 
     tracing.span?.update({ attributes: { durationMs: Math.max(0, duration) } });
-    await tracing.checkpoint();
     setTimeout(
       async () => {
         await tracing.complete();

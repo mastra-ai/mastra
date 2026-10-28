@@ -116,18 +116,10 @@ export class EventedExecutionEngine extends ExecutionEngine {
       isForeignExecution = undefined;
     }
 
-    const executionSpan = this.mastra?.__getRunTracingContext(params.runId)?.currentSpan;
     const finishCb = async (event: Event, ack?: () => Promise<void>) => {
       // Another execution of this run (one that lost it to recover(), say) still
       // publishes its finish under the same runId; it isn't this caller's result.
-      if (
-        event.runId !== params.runId ||
-        isForeignExecution?.(event.data?.requestContext, params.requestContext) ||
-        (executionSpan &&
-          event.data?.executionSpan &&
-          (event.data.executionSpan.traceId !== executionSpan.traceId ||
-            event.data.executionSpan.spanId !== executionSpan.id))
-      ) {
+      if (event.runId !== params.runId || isForeignExecution?.(event.data?.requestContext, params.requestContext)) {
         await ack?.();
         return;
       }

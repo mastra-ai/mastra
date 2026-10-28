@@ -9,7 +9,6 @@ import {
   TABLE_SCHEMAS,
   RUN_FENCING_TABLE_SCHEMAS,
   matchesExpectedWorkflowStatus,
-  mergeWorkflowSpanSnapshots,
   WorkflowsStorage,
   createStorageErrorId,
   isRunFenceConflictError,
@@ -182,10 +181,6 @@ export class WorkflowsPG extends WorkflowsStorage {
     this.#indexes = indexes?.filter(idx => (WorkflowsPG.MANAGED_TABLES as readonly string[]).includes(idx.table));
   }
 
-  supportsWorkflowSpanSnapshots(): boolean {
-    return true;
-  }
-
   supportsConcurrentUpdates(): boolean {
     return true;
   }
@@ -194,16 +189,12 @@ export class WorkflowsPG extends WorkflowsStorage {
     return true;
   }
 
-  /** SQL for a snapshot as JSON. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
-  async #snapshotExpression(column: string): Promise<string> {
+  /** SQL for a snapshot's status. Legacy json/text columns can hold escapes that fail a jsonb cast (#11563). */
+  async #statusExpression(column: string): Promise<string> {
     const snapshotType = await this.#db.getColumnType(TABLE_WORKFLOW_SNAPSHOT, 'snapshot');
     return snapshotType === 'jsonb'
-      ? column
-      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb`;
-  }
-
-  async #statusExpression(column: string): Promise<string> {
-    return `${await this.#snapshotExpression(column)} ->> 'status'`;
+      ? `${column} ->> 'status'`
+      : `regexp_replace(${column}::text, '\\\\u(0000|[Dd][89A-Fa-f][0-9A-Fa-f]{2})', '', 'g')::jsonb ->> 'status'`;
   }
 
   private parseWorkflowRun(row: Record<string, any>): WorkflowRun {
@@ -656,17 +647,13 @@ export class WorkflowsPG extends WorkflowsStorage {
 
         // `expectedStatus` is a compare-and-set guard, not state. It is checked here, inside the
         // row lock, and stripped so it can never be merged into the persisted snapshot.
-        const { expectedStatus, tracingSpans, ...state } = opts;
+        const { expectedStatus, ...state } = opts;
         if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
           return undefined;
         }
 
         // Merge the new options with the existing snapshot
-        const updatedSnapshot = {
-          ...snapshot,
-          ...state,
-          ...(tracingSpans ? { tracingSpans: mergeWorkflowSpanSnapshots(snapshot.tracingSpans, tracingSpans) } : {}),
-        };
+        const updatedSnapshot = { ...snapshot, ...state };
 
         // Update the snapshot within the same transaction
         const sanitizedSnapshot = toPgJson(updatedSnapshot);
@@ -726,12 +713,6 @@ export class WorkflowsPG extends WorkflowsStorage {
       // between the check and the write. An empty list matches no status.
       const guard =
         expectedStatus === undefined ? '' : ` WHERE ${await this.#statusExpression('t.snapshot')} = ANY($9::text[])`;
-      const existingJson = await this.#snapshotExpression('t.snapshot');
-      const preservedSnapshot = ['tracingSpans', 'executionSpan'].reduce(
-        (value, field) =>
-          `${value} || CASE WHEN (${existingJson}) ? '${field}' THEN jsonb_build_object('${field}', (${existingJson}) -> '${field}') ELSE '{}'::jsonb END`,
-        '$4::jsonb',
-      );
       const written = await withRunFence(
         this.#db.client,
         this.#runOwnersTable(),
@@ -743,7 +724,7 @@ export class WorkflowsPG extends WorkflowsStorage {
                  (workflow_name, run_id, "resourceId", snapshot, "createdAt", "updatedAt", "createdAtZ", "updatedAtZ")
                  VALUES ($1, $2, $3, $4, $5, $6, $7, $8)
                  ON CONFLICT (workflow_name, run_id) DO UPDATE
-                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = ${preservedSnapshot}, "updatedAt" = $6, "updatedAtZ" = $8${guard}
+                 SET "resourceId" = COALESCE($3, t."resourceId"), snapshot = $4, "updatedAt" = $6, "updatedAtZ" = $8${guard}
                  RETURNING 1 AS written`,
             [
               workflowName,

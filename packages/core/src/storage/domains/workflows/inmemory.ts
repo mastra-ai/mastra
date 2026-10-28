@@ -16,7 +16,7 @@ import type {
   StorageListWorkflowRunsInput,
   UpdateWorkflowStateOptions,
 } from '../../types';
-import { matchesExpectedWorkflowStatus, mergeWorkflowSpanSnapshots } from '../../types';
+import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
@@ -184,10 +184,6 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   constructor({ db }: { db: InMemoryDB }) {
     super();
     this.db = db;
-  }
-
-  supportsWorkflowSpanSnapshots(): boolean {
-    return true;
   }
 
   supportsConcurrentUpdates(): boolean {
@@ -361,18 +357,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       throw new Error(`Snapshot not found for runId ${runId}`);
     }
 
-    const { expectedStatus, tracingSpans, ...state } = opts;
+    const { expectedStatus, ...state } = opts;
     if (!matchesExpectedWorkflowStatus(snapshot.status, expectedStatus)) {
       return;
     }
 
-    snapshot = {
-      ...snapshot,
-      ...state,
-      ...(tracingSpans
-        ? { tracingSpans: mergeWorkflowSpanSnapshots(snapshot.tracingSpans, cloneRunData(tracingSpans)) }
-        : {}),
-    };
+    snapshot = { ...snapshot, ...state };
     this.db.workflows.set(key, {
       ...run,
       snapshot: snapshot,
@@ -407,22 +397,13 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     if (existing?.snapshot && !matchesExpectedWorkflowStatus(this.snapshotStatus(existing), expectedStatus)) {
       return false;
     }
-    const previousSnapshot = existing?.snapshot
-      ? typeof existing.snapshot === 'string'
-        ? JSON.parse(existing.snapshot)
-        : existing.snapshot
-      : undefined;
     const data: StorageWorkflowRun = {
       workflow_name: workflowName,
       run_id: runId,
       // A re-persist without a resourceId (e.g. resume) must not erase a
       // previously-set value. Matches the persistent stores' COALESCE upserts.
       resourceId: resourceId ?? existing?.resourceId,
-      snapshot: {
-        ...snapshot,
-        ...(previousSnapshot?.tracingSpans ? { tracingSpans: previousSnapshot.tracingSpans } : {}),
-        ...(previousSnapshot?.executionSpan ? { executionSpan: previousSnapshot.executionSpan } : {}),
-      },
+      snapshot,
       // Preserve the original creation time when re-persisting an existing run; only set it
       // on first insert. Otherwise listWorkflowRuns ordering and date filters drift to the
       // last activity time. Matches the persistent stores (pg/mysql/mongodb/libsql).

@@ -17,7 +17,7 @@ import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import { PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL } from '../constants';
 import { runAgentEntry, runClassifierEntry, runMappingEntry, runToolEntry } from '../entry-executors';
-import { workflowTermination } from '../execution-outcome';
+import { workflowTermination, completeWorkflowSpan } from '../execution-outcome';
 import { getControlFlowIdentityAttributes } from '../handlers/control-flow';
 import { getStepResult } from '../step';
 import type { InnerOutput, LoopConditionFunction, SuspendOptions } from '../step';
@@ -30,8 +30,6 @@ import {
   runCountDeprecationMessage,
   validateStepSuspendData,
 } from '../utils';
-
-import { checkpointEventedChildSpan, completeEventedSpan } from './span-checkpoints';
 
 export class StepExecutor extends MastraBase {
   protected mastra?: Mastra;
@@ -225,12 +223,6 @@ export class StepExecutor extends MastraBase {
       : (params.tracingContext ?? {});
 
     try {
-      const root = this.mastra?.__getRunTracingContext(runId)?.currentSpan ?? params.tracingContext?.currentSpan;
-      if (root)
-        await checkpointEventedChildSpan(this.mastra, params.workflowId, runId, workflowStepSpan, {
-          traceId: root.traceId,
-          spanId: root.id,
-        });
       if (validationError) {
         throw validationError;
       }
@@ -393,20 +385,13 @@ export class StepExecutor extends MastraBase {
         finalResult.__stateDelta = stateDelta;
       }
 
-      await completeEventedSpan(
-        this.mastra,
-        params.workflowId,
-        runId,
-        workflowStepSpan,
-        `step:${workflowStepSpan?.id}`,
-        {
-          end: {
-            ...workflowTermination(finalResult),
-            ...(finalResult.status === 'success' ? { output: stepOutput } : {}),
-            attributes: { status: finalResult.status },
-          },
+      completeWorkflowSpan(workflowStepSpan, {
+        end: {
+          ...workflowTermination(finalResult),
+          ...(finalResult.status === 'success' ? { output: stepOutput } : {}),
+          attributes: { status: finalResult.status },
         },
-      );
+      });
 
       return finalResult;
     } catch (error: any) {
@@ -417,23 +402,16 @@ export class StepExecutor extends MastraBase {
         fallbackMessage: 'Unknown step execution error',
       });
 
-      await completeEventedSpan(
-        this.mastra,
-        params.workflowId,
-        runId,
-        workflowStepSpan,
-        `step:${workflowStepSpan?.id}`,
-        {
-          error: {
-            ...workflowTermination(
-              error instanceof TripWire
-                ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
-                : { status: 'failed', error: errorInstance },
-            ),
-            error: errorInstance,
-          },
+      completeWorkflowSpan(workflowStepSpan, {
+        error: {
+          ...workflowTermination(
+            error instanceof TripWire
+              ? { status: 'tripwire', tripwire: { reason: error.message, processorId: error.processorId } }
+              : { status: 'failed', error: errorInstance },
+          ),
+          error: errorInstance,
         },
-      );
+      });
 
       // Log the error for observability (matching default engine behavior)
       const mastraError = new MastraError(
@@ -498,12 +476,6 @@ export class StepExecutor extends MastraBase {
           attributes: { conditionIndex, ...getControlFlowIdentityAttributes(step) },
         });
         try {
-          const root = this.mastra?.__getRunTracingContext(runId)?.currentSpan;
-          if (root)
-            await checkpointEventedChildSpan(this.mastra, params.workflowId, runId, span, {
-              traceId: root.traceId,
-              spanId: root.id,
-            });
           const result = await this.evaluateCondition({
             workflowId: params.workflowId,
             condition,
@@ -519,13 +491,13 @@ export class StepExecutor extends MastraBase {
             iterationCount: 0,
             tracingContext: { currentSpan: span },
           });
-          await completeEventedSpan(this.mastra, params.workflowId, runId, span, `predicate:${span?.id}`, {
+          completeWorkflowSpan(span, {
             end: { ...workflowTermination({ status: 'success' }), output: result },
           });
           return result;
         } catch (e) {
           const errorInstance = getErrorFromUnknown(e, { serializeStack: false });
-          await completeEventedSpan(this.mastra, params.workflowId, runId, span, `predicate:${span?.id}`, {
+          completeWorkflowSpan(span, {
             error: { ...workflowTermination({ status: 'failed', error: errorInstance }), error: errorInstance },
           });
           const mastraError = new MastraError(

@@ -24,8 +24,6 @@ import type {
   Span,
   SpanIds,
   SpanSnapshot,
-  EndSpanOptions,
-  ErrorSpanOptions,
   SpanOutputProcessor,
   SpanType,
   StartSpanOptions,
@@ -244,15 +242,6 @@ export interface ObservabilityInstance {
    * @returns A span that can have end()/update()/error() called on it
    */
   rebuildSpan<TType extends SpanType>(cached: SpanSnapshot<TType>): Span<TType>;
-
-  /** Prepare a durable completion without exporting it. Pair with emitSpanCompletion after persistence. */
-  prepareSpanCompletion?<TType extends SpanType>(
-    cached: SpanSnapshot<TType>,
-    completion: { end?: EndSpanOptions<TType>; error?: ErrorSpanOptions<TType> },
-  ): SpanSnapshot<TType> | undefined;
-
-  /** Export a persisted completion through ordinary filtering/processors, retaining its recorded end time. */
-  emitSpanCompletion?<TType extends SpanType>(cached: SpanSnapshot<TType>): void;
 
   /**
    * Force flush any buffered/queued spans from all exporters and the bridge

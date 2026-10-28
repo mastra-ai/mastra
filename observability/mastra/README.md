@@ -112,19 +112,11 @@ Signal context preserves serialized identity, timestamps, text/file contents, at
 
 True and false predicate results are successful evaluations. Conditional predicate failure retains its runtime error even when the existing false-branch fallback lets the workflow succeed. Thrown loop conditions retain their failure while completed bodies stay successful. Evented dynamic wait calculation errors retain their cause while its existing zero-duration fallback can recover. Unselected branches emit no execution. Public workflow statuses and existing fallback behavior remain unchanged.
 
-### Persisted workflow handoff
+### Workflow scope
 
-In-memory, LibSQL, and PostgreSQL workflow stores opt into `supportsWorkflowSpanSnapshots()`. They atomically merge checkpoints by trace/span identity, preserve the first completed snapshot, reject mismatched identities, and retain checkpoints across full snapshot writes. The active `executionSpan` pointer is separate from resume lineage in `tracingContext`.
+This change instruments live workflow spans and preserves outcome fields through the engines' existing span snapshot/rebuild paths. It does not add workflow-storage checkpoints, worker-replacement tracing recovery, cancellation handlers for abandoned spans, or terminal-event reconciliation. Those changes and their dedicated tests have been removed from this PR; the earlier implementation remains available in Git history.
 
-Evented callers checkpoint roots before dispatch. Workers restore them through the saved observability registration key, including aliases, and can complete them after caller loss. Steps, waits, control-flow containers, predicate evaluations, and nested invocation wrappers/roots also checkpoint their identity and completion. A replacement worker can cancel these unfinished executions using their original identities and exporter, even when the fresh caller has no observability configured. Completed peers and their timestamps remain unchanged. Child roots and wrappers are saved before nested dispatch; cancellation follows child references, and a delayed child start cannot reopen a canceled child.
-
-Inngest checkpoints roots, steps, and control-flow spans. A separate worker cancellation function closes unfinished checkpoints when `cancelOn` stops the execution function. Nested parent checkpoints retain child workflow/run identity before dispatch, allowing recursive cancellation and prevention of delayed canceled child execution. Explicit suspended continuations can resume on replacement workers with distinct execution identities.
-
-Completion is prepared without export, persisted, then emitted through the normal filters and processors. The winning durable operation can replay its stored completion. This is not an exactly-once export/metrics guarantee or a transactional outbox: a crash between persistence and export requires replay of the winning operation to deliver that completion. Worker disappearance or drain timeout alone does not establish interruption, because already dispatched handlers may still run.
-
-Evented guarded status writes prevent delayed cancellation from rewriting completed runs. Terminal notifications carry execution identity; workers and caller listeners reject notifications for another active root. Legacy events without identity retain existing behavior. This is not a general ownership-generation protocol, and broader conflicting terminal writes remain outside the verified guarantees.
-
-Handoff requires persisted parent/child workflow snapshots, a checkpoint-capable store, and observability completion support. Snapshot opt-outs, unsupported stores, and spans created outside these lifecycle hooks do not gain the same guarantees.
+Suspended and resumed executions retain separate outcomes where the existing engine supplies their span lifecycle boundaries. Worker disappearance alone does not establish an outcome. Cross-worker completion after caller loss and cancellation of orphaned spans remain outside this tracing/export change.
 
 ### Export boundary
 
@@ -134,27 +126,11 @@ The storage exporter passes these records to the configured storage domain. The 
 
 ### Validation and remaining work
 
-Runtime scenarios use real agents, processors, storage, and HTTP mock LLMs. Inngest cases use its real dev server. Workflow recovery tests use separate processes, file-backed LibSQL, and explicit worker termination; shared guarded-runtime tests also run against isolated PostgreSQL. Tests assert exported/persisted outcomes, original identities, context, timestamps, and preservation of completed peers.
+Shared agent scenarios cover normal, durable, evented, filesystem-routed, and real Inngest execution. Local workflow tests cover ordinary outcomes, guardrails, cancellation, and suspension/resume. The Inngest workflow suite uses the real dev server and its existing durable operations. Exporter tests use real in-memory storage and a local HTTP server, asserting the three native fields, nested observer causes, and serialized signals.
 
-Relevant suites:
+Relevant suites include [agent outcomes](../../packages/core/src/loop/test-utils/aimock/scenarios/native-outcomes.scenario.test.ts), [observer causes](../../packages/core/src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts), [signal context](../../packages/core/src/loop/test-utils/aimock/scenarios/signal-outcomes.scenario.test.ts), [workflow tracing](src/workflow-cancel-tracing.test.ts), [Inngest workflow outcomes](../../workflows/inngest/src/__tests__/workflow-native-outcomes.test.ts), and [exporter payload agreement](src/exporters/span-previews.test.ts).
 
-- [Agent outcomes](../../packages/core/src/loop/test-utils/aimock/scenarios/native-outcomes.scenario.test.ts), [observer causes](../../packages/core/src/loop/test-utils/aimock/scenarios/observer-outcomes.scenario.test.ts), and [signal context](../../packages/core/src/loop/test-utils/aimock/scenarios/signal-outcomes.scenario.test.ts), shared across five engines.
-- [Workflow control-flow scenarios](src/test-utils/workflow-control-flow-suite.ts) and [evented process handoff](src/workflow-remote-tracing.test.ts).
-- [Inngest native workflows](../../workflows/inngest/src/__tests__/workflow-native-outcomes.test.ts) and [cross-process continuation/cancellation](../../workflows/inngest/src/__tests__/workflow-cross-process-outcomes.test.ts).
-- [Workflow checkpoint storage contract](../../stores/_test-utils/src/domains/workflows/span-checkpoints.ts), including concurrent full-snapshot writes.
-
-The HTTP exporter agreement suite checks the three termination fields, nested observer context, and signals under all three storage export strategies. Removing context from the Platform payload makes all three cases fail at the received-payload assertion. Backend storage/query validation belongs to the separate storage work.
-
-The final agent audit passes 115 core scenario/classification checks and 27 Inngest scenarios after correcting an observer capture exporter's missing `flush()` method. The latest nested-workflow validation passes 351 local/process workflow cases and 103 PostgreSQL cases. Three replacement-worker nested scenarios plus delayed-dispatch cancellation passed 20 repetitions each locally; PostgreSQL delayed-dispatch cancellation passed 20 repetitions. These results establish the covered boundaries, not arbitrary cross-worker reconciliation.
-
-Remaining work before claiming full OBS-724 completion:
-
-- Update the authoritative Linear proposal with final reason codes and design decisions after review; no Linear changes have been made by this implementation.
-- Integrate the separate OSS/Platform native-column work and query work. Validate third-party exporter mappings separately where their backends support these fields.
-- Complete active ownership-transfer and concurrent mixed-cause reconciliation coverage. Restoring unfinished timers is not implemented; replacement-worker cancellation is covered. External-placeholder creation and trace/thread representative selection remain coordinated with OBS-607/608 rather than inferred here.
-- Extend signal attribution and provider/observer cases beyond the tested boundaries, and audit spans created outside instrumented lifecycle hooks.
-- The separate memory integration harness remains unavailable because its lockfile/configuration and unpublished internal dependency prevent installation; the observer scenarios use real in-memory storage.
-- Resolve the existing public Inngest polling race that can expose an intermediate failed step before final tripwire status. Native tests await finalized storage/exports; they do not claim that public-status race is fixed.
+Backend native columns, migrations, queries, and Platform ingestion/storage deployment are separate work. Third-party exporter mappings, external-placeholder creation, and trace/thread representative selection also remain outside this change. Additional reason codes need review against the Linear proposal. This PR does not claim full OBS-724 completion or repair public workflow status/recovery behavior.
 
 ## Changelog
 
