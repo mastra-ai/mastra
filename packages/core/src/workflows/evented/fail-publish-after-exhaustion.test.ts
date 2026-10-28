@@ -285,8 +285,17 @@ describe('workflow finish publication failure', () => {
     const pubsub = new EventEmitterPubSub();
     const publish = pubsub.publish.bind(pubsub);
     let rejected = 0;
+    let finishAttempts = 0;
     let parentHandoffs = 0;
     let parentAdvances = 0;
+    let releaseCapacity = () => {};
+    const capacity = new Promise<void>(resolve => {
+      releaseCapacity = resolve;
+    });
+    let firstRejection = () => {};
+    const rejectedOnce = new Promise<void>(resolve => {
+      firstRejection = resolve;
+    });
     pubsub.publish = async (topic, event, options) => {
       if (
         topic === 'workflows' &&
@@ -299,11 +308,14 @@ describe('workflow finish publication failure', () => {
       if (
         topic === 'workflows-finish' &&
         event.type === 'workflow.end' &&
-        event.data.workflowId === 'child-saturation' &&
-        rejected < 4
+        event.data.workflowId === 'child-saturation'
       ) {
-        rejected++;
-        throw new PublisherQueueLimitError(undefined, async () => {});
+        finishAttempts++;
+        if (rejected < 1) {
+          rejected++;
+          firstRejection();
+          throw new PublisherQueueLimitError(undefined, () => capacity);
+        }
       }
       return publish(topic, event, options);
     };
@@ -348,15 +360,27 @@ describe('workflow finish publication failure', () => {
     await mastra.startWorkers();
     try {
       const run = await parent.createRun();
+      const resultPromise = run.start({ inputData: {} });
+      await Promise.race([
+        rejectedOnce,
+        new Promise<never>((_, reject) => setTimeout(() => reject(new Error('finish was not attempted')), 5000)),
+      ]);
+      await new Promise(resolve => setTimeout(resolve, 20));
+      expect(rejected).toBe(1);
+      expect(finishAttempts).toBe(1);
+      expect(parentHandoffs).toBe(1);
+      releaseCapacity();
       const result = await Promise.race([
-        run.start({ inputData: {} }),
+        resultPromise,
         new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
       ]);
-      expect(rejected).toBe(4);
+      expect(rejected).toBe(1);
+      expect(finishAttempts).toBe(2);
       expect(result).toMatchObject({ status: 'success', result: { ok: true } });
       expect(parentHandoffs).toBe(1);
       expect(parentAdvances).toBe(1);
     } finally {
+      releaseCapacity();
       await mastra.stopWorkers();
     }
   });
