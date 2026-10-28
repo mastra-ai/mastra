@@ -1,8 +1,9 @@
-import { startTransition, useEffect, useEffectEvent, useLayoutEffect, useRef, useState } from 'react';
+import { startTransition, useEffect, useEffectEvent, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
 import { ResponsiveContainer } from 'recharts';
 import type { ChartHeight } from './chart-frame';
 import { cn } from '@/lib/utils';
+import './chart-plot.css';
 
 /** How long the box has to hold still before the chart redraws at its new size. */
 const SETTLE_MS = 150;
@@ -54,8 +55,9 @@ export function ChartPlot({
 
 /**
  * Draws the chart at the box's size, and again only once the box has stopped resizing: a page of
- * charts can't redraw on every frame of a resize. Meanwhile the drawn chart is scaled to the box in
- * the same frame, so it moves with its card, and its text is scaled back so labels keep their shape.
+ * charts can't redraw on every frame of a resize. React only sets the drawn size; `chart-plot.css`
+ * scales the drawn chart to the box's live size meanwhile, so it moves with its card and its labels
+ * keep their shape. JS writes nothing during a resize.
  */
 function StretchedPlot({
   onResize,
@@ -78,14 +80,9 @@ function StretchedPlot({
     let timer: ReturnType<typeof setTimeout> | undefined;
     const observer = new ResizeObserver(([entry]) => {
       if (!entry) return;
-      const width = Math.round(entry.contentRect.width);
-      const height = Math.round(entry.contentRect.height);
+      const { width, height } = entry.contentRect;
       clearTimeout(timer);
-      // Back at the drawn size before the redraw: drop the stretch, the drawn chart already fits.
-      if (width === drawn?.width && height === drawn?.height) {
-        el.removeAttribute('style');
-        return;
-      }
+      if (width === drawn?.width && height === drawn?.height) return;
       const commit = () => {
         drawn = { width, height };
         draw(width, height);
@@ -95,11 +92,6 @@ function StretchedPlot({
         commit();
         return;
       }
-      const x = width / drawn.width;
-      const y = height / drawn.height;
-      el.style.transform = `scale(${x}, ${y})`;
-      el.style.setProperty('--chart-unscale-x', String(1 / x));
-      el.style.setProperty('--chart-unscale-y', String(1 / y));
       // Redraw once the resize stops, in a transition so React draws the charts in slices between
       // frames instead of in one long task.
       timer = setTimeout(() => startTransition(commit), SETTLE_MS);
@@ -111,28 +103,22 @@ function StretchedPlot({
     };
   }, []);
 
-  // Drop the stretch in the same commit that draws the chart at its new size.
-  useLayoutEffect(() => {
-    ref.current?.removeAttribute('style');
-  }, [size]);
-
   return (
-    <div
-      ref={ref}
-      className={cn(
-        'size-full origin-top-left',
-        // Only while stretched (the inline style is set), so labels keep their own transforms otherwise.
-        '[&[style]_text]:[transform:scale(var(--chart-unscale-x),var(--chart-unscale-y))]',
-        '[&[style]_text]:origin-center [&[style]_text]:[transform-box:fill-box]',
-      )}
-    >
+    <div ref={ref} className="chart-plot-box size-full">
       {size && isDrawable(size) && (
-        <ResponsiveContainer width={size.width} height={size.height}>
-          {children}
-        </ResponsiveContainer>
+        <div className="chart-plot-stretch" style={drawnSizeVars(size)}>
+          <ResponsiveContainer width={size.width} height={size.height}>
+            {children}
+          </ResponsiveContainer>
+        </div>
       )}
     </div>
   );
+}
+
+/** The drawn size as the CSS variables `chart-plot.css` scales from. */
+function drawnSizeVars({ width, height }: { width: number; height: number }): Record<string, string> {
+  return { '--chart-drawn-w': `${width}px`, '--chart-drawn-h': `${height}px` };
 }
 
 function isDrawable({ width, height }: { width: number; height: number }) {
