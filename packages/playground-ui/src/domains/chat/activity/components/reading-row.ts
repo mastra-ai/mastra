@@ -40,3 +40,8 @@ export function keepReadingRow(rows: ReadonlyMap<string, HTMLElement>, store: Ac
     return () => viewport.removeEventListener('scroll', remember);
   };
 }
+
+/** Remembers whether a live list follows its latest call, so it resumes that way when it mounts again. */
+export function keepFollowing(rows: ReadonlyMap<string, HTMLElement>, store: ActivityDisclosureStore) {
+  return (following: boolean) => store.keepFollowing(rows.keys(), following);
+}

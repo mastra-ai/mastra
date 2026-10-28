@@ -26,28 +26,45 @@ function rect(top: number, height: number): DOMRect {
 /** Lays panel rows out in a column, one row height each, moved up by how far their panel is scrolled. */
 function layOutPanels(): () => void {
   const scrolled = new WeakMap<Element, number>();
+  const rowsIn = (element: Element) =>
+    Array.from(element.querySelectorAll('[aria-label^="Tool: "]'), tool => tool.parentElement);
+  const isViewport = (element: Element) => element.matches('[data-id$="-viewport"]');
   Object.defineProperty(HTMLElement.prototype, 'scrollTop', {
     configurable: true,
     get(this: HTMLElement) {
       return scrolled.get(this) ?? 0;
     },
     set(this: HTMLElement, value: number) {
-      scrolled.set(this, value);
+      const end = Math.max(0, this.scrollHeight - this.clientHeight);
+      scrolled.set(this, Math.min(Math.max(0, value), end));
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'scrollHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isViewport(this) ? rowsIn(this).length * ROW_HEIGHT : 0;
+    },
+  });
+  Object.defineProperty(HTMLElement.prototype, 'clientHeight', {
+    configurable: true,
+    get(this: HTMLElement) {
+      return isViewport(this) ? 2 * ROW_HEIGHT : 0;
     },
   });
   const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
     this: HTMLElement,
   ) {
-    if (this.matches('[data-id$="-viewport"]')) return rect(0, 2 * ROW_HEIGHT);
+    if (isViewport(this)) return rect(0, 2 * ROW_HEIGHT);
     const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
-    const rows = Array.from(viewport?.querySelectorAll('[aria-label^="Tool: "]') ?? [], tool => tool.parentElement);
-    const index = rows.indexOf(this);
+    const index = viewport ? rowsIn(viewport).indexOf(this) : -1;
     if (!viewport || index < 0) return rect(0, 0);
     return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
   });
   return () => {
     measure.mockRestore();
-    Reflect.deleteProperty(HTMLElement.prototype, 'scrollTop');
+    for (const property of ['scrollTop', 'scrollHeight', 'clientHeight']) {
+      Reflect.deleteProperty(HTMLElement.prototype, property);
+    }
   };
 }
 
@@ -284,6 +301,34 @@ describe('TranscriptEntries tool rows', () => {
       expect(within(line).getByText('All agree.')).toBeInTheDocument();
       const group = within(line).getByRole('group', { name: 'Read files' });
       expect(panelOf(within(group).getByText('b.ts')).scrollTop).toBe(ROW_HEIGHT);
+    } finally {
+      restoreLayout();
+    }
+  });
+
+  it('keeps a live list the reader scrolled up on their row when older history moves it and more calls land', async () => {
+    const restoreLayout = layOutPanels();
+    const nextFrame = () => new Promise(resolve => requestAnimationFrame(resolve));
+    const view = (id: string, path: string) => assistantMessage(id, [doneTool(`call-${id}`, 'view', { path })]);
+    const command = (id: string, cmd: string) =>
+      assistantMessage(id, [runningTool(`call-${id}`, 'execute_command', { command: cmd })]);
+    try {
+      const steps = [view('b', 'b.ts'), view('c', 'c.ts'), view('d', 'd.ts'), command('e', 'pnpm test')];
+      const { rerender } = renderEntries(steps, true);
+      await expand(screen.getByRole('group', { name: 'Running pnpm test' }));
+      const panel = panelOf(screen.getByText('b.ts'));
+      await nextFrame();
+      fireEvent.wheel(panel, { deltaY: -ROW_HEIGHT });
+      panel.scrollTop = ROW_HEIGHT;
+      fireEvent.scroll(panel);
+
+      rerender(entriesView([view('a', 'a.ts'), ...steps], true));
+      await nextFrame();
+      rerender(entriesView([view('a', 'a.ts'), ...steps, command('f', 'pnpm lint')], true));
+      await nextFrame();
+
+      const rowC = screen.getByText('c.ts');
+      expect(panelOf(rowC).scrollTop).toBe(2 * ROW_HEIGHT);
     } finally {
       restoreLayout();
     }

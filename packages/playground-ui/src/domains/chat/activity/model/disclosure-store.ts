@@ -14,6 +14,7 @@ export interface RowAnchor {
 export class ActivityDisclosureStore {
   readonly #open: Record<DisclosureScope, Set<string>> = { line: new Set(), group: new Set(), row: new Set() };
   readonly #anchors = new Map<string, RowAnchor>();
+  readonly #leftEnd = new Set<string>();
   readonly #listeners = new Set<() => void>();
 
   subscribe = (listener: () => void) => {
@@ -48,6 +49,21 @@ export class ActivityDisclosureStore {
     for (const key of keys) {
       if (anchor) this.#anchors.set(key, anchor);
       else this.#anchors.delete(key);
+    }
+  }
+
+  /** Whether a live list still follows its latest call, rather than staying where the reader scrolled it. */
+  isFollowing(keys: Iterable<string>): boolean {
+    for (const key of keys) {
+      if (this.#leftEnd.has(key)) return false;
+    }
+    return true;
+  }
+
+  keepFollowing(keys: Iterable<string>, following: boolean): void {
+    for (const key of keys) {
+      if (following) this.#leftEnd.delete(key);
+      else this.#leftEnd.add(key);
     }
   }
 }
