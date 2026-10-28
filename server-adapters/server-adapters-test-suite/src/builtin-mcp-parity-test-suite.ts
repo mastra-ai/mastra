@@ -6,7 +6,7 @@ import { MockMemory } from '@mastra/core/memory';
 import { SimpleAuth } from '@mastra/core/server';
 import type { ServerMCPConfig } from '@mastra/core/server';
 import { InMemoryStore } from '@mastra/core/storage';
-import { createMockModel } from '@mastra/core/test-utils/llm-mock';
+import { createMockModel, MastraLanguageModelV2Mock } from '@mastra/core/test-utils/llm-mock';
 import { createTool } from '@mastra/core/tools';
 import { createStep, createWorkflow } from '@mastra/core/workflows';
 import { MCPClient } from '@mastra/mcp';
@@ -598,6 +598,50 @@ export function createBuiltinMCPParityTestSuite(config: BuiltinMCPParityTestSuit
       )) as ToolResult;
       expect(status(ok)).toBe('ok');
     });
+  });
+
+  describe(`${suiteName} — abort`, () => {
+    it("aborts the agent's model call when the client aborts call_agent", async () => {
+      let modelSignal: AbortSignal | undefined;
+      let modelStarted!: () => void;
+      const started = new Promise<void>(resolve => (modelStarted = resolve));
+      // Never answers on its own; only an abort ends the call.
+      const hang = async ({ abortSignal }: { abortSignal?: AbortSignal }): Promise<never> => {
+        modelSignal = abortSignal;
+        modelStarted();
+        return new Promise((_, reject) => abortSignal?.addEventListener('abort', () => reject(abortSignal.reason)));
+      };
+      const model = new MastraLanguageModelV2Mock({ doGenerate: hang, doStream: hang });
+      const { mastra, memory } = createParityMastra();
+      mastra.addAgent(new Agent({ id: 'slow-agent', name: 'slow-agent', instructions: 'x', model, memory }));
+      const running = await startServer(mastra);
+      const client = new MCPClient({
+        id: 'mcp-abort',
+        servers: {
+          mastra: {
+            url: new URL(`${running.url}/api/mcp`),
+            requestInit: { headers: { authorization: 'Bearer owner-token' } },
+            onToolError: 'return',
+          },
+        },
+      });
+      try {
+        const tools = await client.listTools();
+        const controller = new AbortController();
+        const call = tools['mastra_call_agent']!.execute!({ agentId: 'slow-agent', message: 'hi' }, {
+          abortSignal: controller.signal,
+        } as any).catch(error => error);
+        await Promise.race([started, call]);
+        expect(modelSignal?.aborted).toBe(false);
+        controller.abort();
+        await call;
+        // The client closes the HTTP request; the adapter propagates the disconnect to the agent run.
+        await expect.poll(() => modelSignal?.aborted, { timeout: 5000 }).toBe(true);
+      } finally {
+        await client.disconnect();
+        await running.close();
+      }
+    }, 15_000);
   });
 
   describe(`${suiteName} — gating`, () => {
