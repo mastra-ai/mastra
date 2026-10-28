@@ -51,15 +51,15 @@ function layOutPanels(): () => void {
       return isViewport(this) ? 2 * ROW_HEIGHT : 0;
     },
   });
-  const measure = vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockImplementation(function (
-    this: HTMLElement,
-  ) {
-    if (isViewport(this)) return rect(0, 2 * ROW_HEIGHT);
-    const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
-    const index = viewport ? rowsIn(viewport).indexOf(this) : -1;
-    if (!viewport || index < 0) return rect(0, 0);
-    return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
-  });
+  const measure = vi
+    .spyOn(HTMLElement.prototype, 'getBoundingClientRect')
+    .mockImplementation(function (this: HTMLElement) {
+      if (isViewport(this)) return rect(0, 2 * ROW_HEIGHT);
+      const viewport = this.closest<HTMLElement>('[data-id$="-viewport"]');
+      const index = viewport ? rowsIn(viewport).indexOf(this) : -1;
+      if (!viewport || index < 0) return rect(0, 0);
+      return rect(index * ROW_HEIGHT - viewport.scrollTop, ROW_HEIGHT);
+    });
   return () => {
     measure.mockRestore();
     for (const property of ['scrollTop', 'scrollHeight', 'clientHeight']) {
