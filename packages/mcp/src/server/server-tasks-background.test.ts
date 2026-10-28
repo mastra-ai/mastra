@@ -192,28 +192,11 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
         if (closed) return;
         closed = true;
         await served.close();
-        await drain(mastra);
         await mastra.shutdown();
       },
     };
     instances.push(created);
     return created;
-  }
-
-  /**
-   * Cancels the runs this instance still owns and waits for each to delete its workflow run.
-   * Core deletes it unawaited once the run settles; if that happens during `shutdown()`, after
-   * storage closed, it is an unhandled rejection. Remove once core awaits it on shutdown.
-   */
-  async function drain(mastra: Mastra) {
-    const manager = mastra.backgroundTaskManager!;
-    const workflow = mastra.__getInternalWorkflow('__background-task');
-    const { tasks: owned } = await manager.listTasks({ status: ['pending', 'running'] });
-    const mine = owned.filter(task => !task.ownerId || task.ownerId === manager.ownerId);
-    await Promise.all(mine.map(task => manager.cancel(task.id).catch(() => undefined)));
-    for (const task of mine) {
-      for (let i = 0; i < 100 && (await workflow.getWorkflowRunById(task.id)); i++) await sleep(20);
-    }
   }
 
   async function call(
@@ -340,7 +323,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const released = new Promise<void>(resolve => (release = resolve));
     vi.spyOn(storageB, 'updateTask').mockImplementation(async (...args) => {
       const responses = (args[1].metadata as { inputResponses?: Record<string, unknown> } | undefined)?.inputResponses;
-      if (responses && k1! in responses) {
+      if (responses && (k1 as string) in responses) {
         reachedWrite();
         await released;
       }
@@ -378,10 +361,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     });
   });
 
-  // Fails until core aborts a local run whose row another process cancelled
-  // (daniel/fix-bg-task-cross-process-cancel): B's cancel marks the row cancelled, but the cancel
-  // event never reaches A, and A's lease renewal ignores a cancelled row, so the run goes on.
-  it.fails('stops a run on one instance when another instance cancels its task', async () => {
+  it('stops a run on one instance when another instance cancels its task', async () => {
     const a = await instance({ tools: { hang: 'always' } });
     const b = await instance({ tools: { hang: 'always' } });
     const taskId = await call(a.url, 'hang');
@@ -444,14 +424,57 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const taskId = await call(a.url, 'crashy');
     await until(() => runsIn(counterFile) === 1);
 
-    // A graceful stop hands the lease back but leaves the row running, with no owner and no lease.
     await a.mastra.backgroundTaskManager!.shutdown();
-    const [row] = await rows(b.mastra);
-    expect(row).toMatchObject({ status: 'running', ownerId: undefined, leaseExpiresAt: undefined });
+    expect((await rows(b.mastra))[0]).toMatchObject({ status: 'running' });
 
     const done = await waitFor(await requester(b.url), taskId, 'completed');
     expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
     expect(runsIn(counterFile)).toBe(2);
+  });
+
+  it('runs a task again on a peer when its row is running with no owner and no lease (recover: true)', async () => {
+    const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
+    const b = await instance(tasks);
+    const a = await instance(tasks);
+    const taskId = await call(a.url, 'crashy');
+    await until(() => runsIn(counterFile) === 1);
+
+    // What a graceful stop hands back: the row stays running, without an owner or a lease.
+    // Written here because core currently keeps the lease of a run it waited on (see below).
+    const manager = a.mastra.backgroundTaskManager!;
+    const owner = manager.ownerId;
+    await manager.shutdown();
+    const [row] = await rows(b.mastra);
+    const storage = await b.mastra.backgroundTaskManager!.getStorage();
+    expect(
+      await storage.updateTask(row!.id, { ownerId: undefined, leaseExpiresAt: undefined }, { expectedOwnerId: owner }),
+    ).toBe(true);
+    expect((await rows(b.mastra))[0]).toMatchObject({
+      status: 'running',
+      ownerId: undefined,
+      leaseExpiresAt: undefined,
+    });
+
+    const done = await waitFor(await requester(b.url), taskId, 'completed');
+    expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
+    expect(runsIn(counterFile)).toBe(2);
+  });
+
+  // Fails since core #28509: shutdown now waits for aborted runs to settle before it releases
+  // leases, and a settled run drops out of `ownedLeases`, so its lease is never handed back.
+  // A peer still reruns the task, one lease later, as after a crash.
+  it.fails('hands the lease of a running task back when its instance shuts down gracefully', async () => {
+    const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
+    const a = await instance(tasks);
+    await call(a.url, 'crashy');
+    await until(() => runsIn(counterFile) === 1);
+
+    await a.mastra.backgroundTaskManager!.shutdown();
+    expect((await rows(a.mastra))[0]).toMatchObject({
+      status: 'running',
+      ownerId: undefined,
+      leaseExpiresAt: undefined,
+    });
   });
 
   describe('tracing', () => {
@@ -769,9 +792,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     await expect(onA.get(echoed)).rejects.toMatchObject({ code: -32602 });
   });
 
-  // Fails until core exempts its internal background-task workflow from the workflow FGA check
-  // (daniel/fix-bg-task-fga-internal): every background task fails "authenticated user is required" under FGA.
-  it.fails('checks FGA on an attempt resumed on another instance against the caller read back from storage', async () => {
+  it('checks FGA on an attempt resumed on another instance against the caller read back from storage', async () => {
     const checked: unknown[] = [];
     const fga = {
       check: vi.fn(),
@@ -942,7 +963,7 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
       url: served.url,
       server,
       mastra,
-      close: async () => (await served.close(), await drain(mastra), await mastra.shutdown()),
+      close: async () => (await served.close(), await mastra.shutdown()),
     });
     const warn = vi.spyOn((server as unknown as { logger: { warn: (...args: unknown[]) => void } }).logger, 'warn');
 
