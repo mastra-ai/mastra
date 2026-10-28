@@ -592,6 +592,35 @@ describe('Span', () => {
 
       expect(instance.rebuildSpan(span.exportSpan()).exportSpan().links).toEqual([callerSpan]);
     });
+
+    it('exports native span fields only when set and keeps them when a span is rebuilt', () => {
+      const instance = tracing();
+      const fields = {
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+      };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'resumed-run', ...fields });
+      const bare = instance.startSpan({ type: SpanType.GENERIC, name: 'bare' });
+
+      expect(span.exportSpan()).toMatchObject(fields);
+      expect(instance.rebuildSpan(span.snapshot()).exportSpan()).toMatchObject(fields);
+      for (const key of Object.keys(fields)) {
+        expect(bare.exportSpan()).not.toHaveProperty(key);
+      }
+    });
+
+    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+      const instance = tracing();
+      const context = { error: new Error('limit hit'), steps: 10n };
+      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
+      const exported = span.exportSpan();
+
+      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
+      expect(exported.stopReasonContext).toMatchObject({ error: { name: 'Error', message: 'limit hit' } });
+      expect(exported.stopReasonContext).toMatchObject({ steps: '10n' });
+    });
   });
 
   describe('getExternalParentId', () => {
