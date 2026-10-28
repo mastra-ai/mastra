@@ -79,13 +79,13 @@ export function SettingsPageLayout({
   return (
     <PageLayout
       variant="narrow"
+      header={header}
       breadcrumbs={
         breadcrumbs ??
         (isMobile ? <SettingsHeader autoFocus /> : sidebarCollapsed ? <ChatHeaderSidebarTrigger /> : undefined)
       }
       headerActions={sidebarCollapsed ? <GlobalSearchButton id="global-search-collapsed-trigger" /> : undefined}
     >
-      {header}
       {children}
     </PageLayout>
   );

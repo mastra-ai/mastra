@@ -93,7 +93,7 @@ export function CreateFactoryWizard() {
   const value = typedOnThisStep ?? (step === 'name' ? (draft.name ?? '') : '');
 
   return (
-    <div className="flex min-h-0 flex-col gap-2 pt-2">
+    <div className="flex min-h-0 flex-col gap-2 pt-6">
       <CreateFactoryPalette
         {...STEP_CHROME[step]}
         step={step}

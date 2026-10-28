@@ -7,10 +7,15 @@ import { CreateFactoryWizard } from '../domains/workspaces/components/create-fac
 export function CreateFactoryPage() {
   const slots = useSidebarHeaderSlots();
   return (
-    <PageLayout {...slots} variant="narrow">
-      <PageHeader>
-        <PageHeader.Title>New Factory</PageHeader.Title>
-      </PageHeader>
+    <PageLayout
+      {...slots}
+      variant="narrow"
+      header={
+        <PageHeader>
+          <PageHeader.Title>New Factory</PageHeader.Title>
+        </PageHeader>
+      }
+    >
       <CreateFactoryWizard />
     </PageLayout>
   );

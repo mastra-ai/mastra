@@ -112,7 +112,7 @@ export function SlackConnectionSettings() {
   };
 
   return (
-    <div className="mt-2 flex flex-col gap-8 pb-5">
+    <div className="mt-6 flex flex-col gap-8 pb-5">
       {accountsQuery.isPending ? (
         <SettingsSubsection scope="personal" title="Connection">
           <SettingsContainer>

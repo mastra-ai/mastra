@@ -43,6 +43,17 @@ describe('PageLayout', () => {
       expect(filter.compareDocumentPosition(screen.getByText('Body')) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
 
+    it('stacks them 16px apart', () => {
+      render(
+        <PageLayout>
+          <input aria-label="Filter" />
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      expect(screen.getByText('Body').parentElement?.className).toContain('gap-4');
+    });
+
     it('gives the list the height left under the toolbar', () => {
       render(
         <PageLayout>
@@ -118,33 +129,37 @@ describe('PageLayout', () => {
       expect(viewportOf('Body')?.className).not.toContain('p-4');
     });
 
-    it('constrains the "fit" column to the page width', () => {
+    it.each([undefined, <h1 key="title">Title</h1>])('constrains the "fit" column to the page width', header => {
       render(
-        <PageLayout variant="fit">
+        <PageLayout variant="fit" header={header}>
           <p>Body</p>
         </PageLayout>,
       );
       expect(contentOf('Body')?.className).toContain('grid-cols-1');
     });
+  });
 
-    it.each(['container', 'narrow'] as const)('stacks the "%s" body with a gap', variant => {
+  describe('when a header is provided', () => {
+    it.each(['container', 'narrow', 'fit'] as const)('renders it inside main before the body (%s)', variant => {
       render(
-        <PageLayout variant={variant}>
-          <h1>Title</h1>
+        <PageLayout variant={variant} header={<h1>Title</h1>}>
           <p>Body</p>
         </PageLayout>,
       );
-      const stack = screen.getByText('Body').parentElement?.className ?? '';
-      expect(stack).toContain('flex-col');
-      expect(stack).toContain('gap-4');
+
+      const main = screen.getByRole('main');
+      const heading = screen.getByRole('heading', { name: 'Title' });
+      const body = screen.getByText('Body');
+      expect(main.contains(heading)).toBe(true);
+      expect(main.contains(body)).toBe(true);
+      expect(heading.compareDocumentPosition(body) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
     });
   });
 
   describe('narrow variant', () => {
-    it('centers the body in a max-width padded container', () => {
+    it('centers the header and body in a max-width padded container', () => {
       render(
-        <PageLayout variant="narrow">
-          <h1>Title</h1>
+        <PageLayout variant="narrow" header={<h1>Title</h1>}>
           <p>Body</p>
         </PageLayout>,
       );
@@ -156,6 +171,18 @@ describe('PageLayout', () => {
       expect(container.className).toContain('max-w-5xl');
       expect(container.className).toContain('p-4');
       expect(container.contains(screen.getByRole('heading', { name: 'Title' }))).toBe(true);
+      expect(contentOf('Body')?.className).not.toContain('p-4');
+    });
+
+    it('leaves spacing between header and body to the call site', () => {
+      render(
+        <PageLayout variant="narrow" header={<h1>Title</h1>}>
+          <p>Body</p>
+        </PageLayout>,
+      );
+
+      const container = screen.getByText('Body').closest('[data-slot="page-layout-container"]');
+      expect(container?.className).not.toMatch(/\b(flex|gap-6)\b/);
     });
   });
 

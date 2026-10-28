@@ -72,9 +72,8 @@ const resourceList = (
 export const Container: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} headerActions={headerActions}>
-        {pageHeader}
-        <div className="mt-2">{resourceList}</div>
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
       </PageLayout>
     </StoryFrame>
   ),
@@ -85,9 +84,8 @@ const longResources = Array.from({ length: 24 }, (_, index) => `Resource ${index
 export const EdgeFade: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} mask={{ y: true }}>
-        {pageHeader}
-        <ul className="mt-2 grid gap-2">
+      <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader} mask={{ y: true }}>
+        <ul className="mt-6 grid gap-2">
           {longResources.map(resource => (
             <li key={resource} className="rounded border border-border px-3 py-2">
               {resource}
@@ -151,9 +149,8 @@ export const TopBarSpacingComparison: Story = {
           With top bar (default)
         </Txt>
         <StoryFrame>
-          <PageLayout breadcrumbs={crumbs} headerActions={headerActions}>
-            <ComparisonHeader />
-            <div className="mt-2">{resourceList}</div>
+          <PageLayout breadcrumbs={crumbs} headerActions={headerActions} header={<ComparisonHeader />}>
+            <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
@@ -162,9 +159,8 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing
         </Txt>
         <StoryFrame>
-          <PageLayout>
-            <ComparisonHeader spacing="breathing" />
-            <div className="mt-2">{resourceList}</div>
+          <PageLayout header={<ComparisonHeader spacing="breathing" />}>
+            <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
@@ -173,9 +169,8 @@ export const TopBarSpacingComparison: Story = {
           No bar + breathing spacing + Back link
         </Txt>
         <StoryFrame>
-          <PageLayout>
-            <ComparisonHeader spacing="breathing" eyebrow={backLink} />
-            <div className="mt-2">{resourceList}</div>
+          <PageLayout header={<ComparisonHeader spacing="breathing" eyebrow={backLink} />}>
+            <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
@@ -184,9 +179,8 @@ export const TopBarSpacingComparison: Story = {
           No bar (default unchanged)
         </Txt>
         <StoryFrame>
-          <PageLayout>
-            <ComparisonHeader />
-            <div className="mt-2">{resourceList}</div>
+          <PageLayout header={<ComparisonHeader />}>
+            <div className="mt-6">{resourceList}</div>
           </PageLayout>
         </StoryFrame>
       </div>
@@ -213,9 +207,8 @@ export const TopBarSpacingComparison: Story = {
 export const Narrow: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout variant="narrow" breadcrumbs={crumbs} headerActions={headerActions}>
-        {pageHeader}
-        <div className="mt-2">{resourceList}</div>
+      <PageLayout variant="narrow" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
       </PageLayout>
     </StoryFrame>
   ),
@@ -224,8 +217,8 @@ export const Narrow: Story = {
 export const Fit: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout variant="fit" breadcrumbs={crumbs} headerActions={headerActions}>
-        <div className="flex items-center justify-center border border-border text-placeholder">
+      <PageLayout variant="fit" breadcrumbs={crumbs} headerActions={headerActions} header={pageHeader}>
+        <div className="mt-6 flex items-center justify-center border border-border text-placeholder">
           Full-height panel (graph, table…)
         </div>
       </PageLayout>
@@ -262,9 +255,8 @@ export const FullPage: Story = {
 export const WithoutBreadcrumbsAndHeaderActions: Story = {
   render: () => (
     <StoryFrame>
-      <PageLayout variant="narrow">
-        {pageHeader}
-        <div className="mt-2">{resourceList}</div>
+      <PageLayout variant="narrow" header={pageHeader}>
+        <div className="mt-6">{resourceList}</div>
       </PageLayout>
     </StoryFrame>
   ),
