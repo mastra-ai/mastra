@@ -176,7 +176,7 @@ describe('built-in board and integration handlers', () => {
     expect(workBoard.rules.done?.issue?.onEnter).toBeTypeOf('function');
     expect(reviewBoard.rules.intake?.pullRequest?.onEnter).toBeUndefined();
     expect(reviewBoard.rules.review?.pullRequest?.onEnter).toBeTypeOf('function');
-    expect(workBoard.tools.submit_plan).toBeUndefined();
+    expect(workBoard.tools.submit_plan?.onResult).toBeTypeOf('function');
     expect(defaultGithubRules.issueOpened).toBeTypeOf('function');
     expect(defaultGithubRules.issueEdited).toBeTypeOf('function');
     expect(defaultGithubRules.issueCommentCreated).toBeTypeOf('function');
@@ -848,6 +848,28 @@ describe('built-in board and integration handlers', () => {
     expect(await rule?.({ ...context, ingress: { type: 'human' as const, id: 'delivery-2' } })).toMatchObject({
       idempotencyKey: 'delivery-2:factory-plan',
     });
+  });
+
+  it('advances only an approved plan from a bound planning role', async () => {
+    const rule = workBoard.tools.submit_plan?.onResult;
+    expect(await rule?.(toolContext({ content: 'Plan approved. Proceed with implementation.' }))).toMatchObject({
+      type: 'transition',
+      board: 'work',
+      stage: 'execute',
+    });
+    for (const context of [
+      toolContext({ content: 'Plan submitted for review.' }),
+      toolContext({ content: 'Plan was not approved. Revise it.' }),
+      toolContext({ status: 'approved' }),
+      toolContext(
+        { content: 'Plan approved. Proceed.' },
+        { actor: { type: 'agent', bindingId: 'binding-1', role: 'chat' } },
+      ),
+      toolContext({ content: 'Plan approved. Proceed.' }, { item: { ...item, stages: ['intake'] } }),
+      toolContext({ content: 'Plan approved. Proceed.' }, { result: { status: 'error', value: 'failed' } }),
+    ]) {
+      expect(await rule?.(context)).toBeUndefined();
+    }
   });
 
   describe('pullRequestReviewSubmitted', () => {

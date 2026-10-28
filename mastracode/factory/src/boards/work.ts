@@ -3,6 +3,7 @@ import { needsApproval } from '../rules/types.js';
 import { workItemNumber } from '../work-item-branch.js';
 import { defineBoard } from './define-board.js';
 import type { BoardPhaseDefinition } from './define-board.js';
+import { advanceApprovedPlan } from './work-tool-rules.js';
 import { workTransitionPolicy } from './work-transition-policy.js';
 
 function sourceIdentifier(item: FactoryRuleItemContext): string | undefined {
@@ -268,6 +269,7 @@ export const workBoard = defineBoard<'work', Record<WorkBoardPhase, BoardPhaseDe
   transitionPolicy: workTransitionPolicy,
   sourceClosed: { completed: 'done', canceled: 'canceled' },
   tools: {
+    submit_plan: { onResult: advanceApprovedPlan },
     factory_record_review_verdict: { onResult: openApprovedChangeRequest },
   },
   phases: {

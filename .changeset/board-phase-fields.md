@@ -18,6 +18,6 @@ planning: {
 
 Existing board declarations keep working: `defineBoard()` maps the deprecated `title`, `role` and `next` to `name`, `runner.context` and `nextPhases` and logs a warning listing them. The board it returns has only the new fields, so code reading `board.title`, `phase.title` or `phase.role` must read `name` and `runner.context` instead. The board catalog keeps sending `title` and `role` for older clients. It also sends each working phase's `autoStartWhen` and `exitTool.autoApproveWhen`, so a client can tell which cards a phase starts or approves on its own.
 
-The built-in Work and Review boards now use the new fields, with `nextPhases` instead of `outcomes`. Work no longer moves a card to Building when `submit_plan` is approved in an interactive session; the agent moves the card itself with `factory_transition_work_item`. Automatic planning runs already worked this way.
+The built-in Work and Review boards now use the new fields, with `nextPhases` instead of `outcomes`.
 
 Integration rule contexts describe the card's phase with `nextPhases` and `context` beside `outcomes`; `role` stays as a deprecated alias of `context`. Built-in phases declare no outcome names, so rules that tested `context.phase?.outcomes` should test `context.phase?.nextPhases`.

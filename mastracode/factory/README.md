@@ -166,7 +166,7 @@ const releaseBoard = defineBoard({
 
 The handler receives the bound item, actor, board, tool name, normalized result, and `configVersion`, and returns one decision or `undefined`. Tool names follow the identifier rules for decision roles; `onResult` must be a function and the leaf may contain nothing else. Violations are `BoardDefinitionError`s at definition time.
 
-The default Work board declares one rule: `factory_record_review_verdict`, which tells the builder to open the change request once self-review approves. Review declares none. An approved `submit_plan` does not move a card: in an interactive session, the agent moves the card from Planning itself with `factory_transition_work_item`. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
+The default Work board declares two rules. `submit_plan`: in an interactive session, a successful result whose content starts with `Plan approved.` transitions a Planning card to Execute when the actor is an agent in the `plan` role. `factory_record_review_verdict` tells the builder to open the change request once self-review approves. Review declares none. Rules resolve from the installed board, so a replacement `work` board can declare its own `tools.submit_plan.onResult`. Resolution is fail-closed: a tool result on a card whose board is not installed, or whose board does not declare that tool, fires no rule. Other boards inherit nothing from Work even if they reuse its phase names.
 
 ### Board event rules
 

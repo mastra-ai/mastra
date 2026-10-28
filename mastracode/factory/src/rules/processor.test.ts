@@ -494,23 +494,36 @@ describe('FactoryPhaseStateProcessor', () => {
     const stageOf = async (storage: WorkItemsStorage, id: string) =>
       (await storage.get({ orgId: 'org-1', id }))?.stages;
 
-    it('leaves an approved plan on Planning: the agent moves the card itself', async () => {
-      const storage = (await createFactoryStorageForTests()).workItems;
-      const prepared = await prepare(storage, 'plan');
-      const boards = createBoardRegistry();
-      const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
-      const processor = new FactoryPhaseStateProcessor({
-        configVersion: 'rules-v1',
-        boards,
-        storage,
-        transitionService,
-      });
-      await processor.processInputStep(inputArgs(requestContext(), [approved()]));
-      expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
-      expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
+    it('fires Work’s submit_plan rule only for a plan-seated planning card', async () => {
+      const cases = [
+        { role: 'plan', message: approved(), stages: ['execute'] },
+        { role: 'work', message: approved(), stages: ['planning'] },
+        { role: 'plan', message: toolMessage({ result: { content: 'Plan rejected.' } }), stages: ['planning'] },
+        { role: 'plan', message: toolMessage({ state: 'error', result: 'boom' }), stages: ['planning'] },
+        { role: 'plan', message: approved(), stages: ['triage'], from: 'triage' },
+      ] as const;
+      for (const c of cases) {
+        const storage = (await createFactoryStorageForTests()).workItems;
+        const prepared = await prepare(
+          storage,
+          c.role,
+          'issue',
+          'from' in c ? { id: 'work', stage: c.from } : undefined,
+        );
+        const boards = createBoardRegistry();
+        const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+        const processor = new FactoryPhaseStateProcessor({
+          configVersion: 'rules-v1',
+          boards,
+          storage,
+          transitionService,
+        });
+        await processor.processInputStep(inputArgs(requestContext(), [c.message]));
+        expect(await stageOf(storage, prepared.item.id)).toEqual(c.stages);
+      }
     });
 
-    it('gives Review and custom boards no submit_plan behaviour', async () => {
+    it('gives Review and custom boards none of Work’s submit_plan behaviour', async () => {
       const release = defineBoard({
         id: 'release',
         title: 'Release',
@@ -580,6 +593,31 @@ describe('FactoryPhaseStateProcessor', () => {
       expect(await stageOf(storage, prepared.item.id)).toEqual(['planning']);
       expect(await storage.listDeferredDecisions('org-1', PROJECT_ID)).toEqual([]);
     });
+  });
+
+  it('moves an approved plan to Building before emitting the next phase signal', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const prepared = await prepare(storage, 'plan');
+    const boards = createBoardRegistry();
+    const transitionService = new FactoryTransitionService({ configVersion: 'rules-v1', boards, storage });
+    const processor = new FactoryPhaseStateProcessor({ configVersion: 'rules-v1', boards, storage, transitionService });
+
+    await processor.processInputStep(
+      inputArgs(requestContext(), [
+        toolMessage({ result: { content: 'Plan approved. Proceed with implementation.' } }),
+      ]),
+    );
+
+    await expect(storage.get({ orgId: 'org-1', id: prepared.item.id })).resolves.toMatchObject({
+      revision: 2,
+      stages: ['execute'],
+    });
+    const signal = await processor.computeStateSignal(stateArgs(requestContext()));
+    expect(signal).toMatchObject({
+      attributes: { board: 'work', stage: 'execute', role: 'plan', revision: 2 },
+    });
+    expect(signal?.contents).toContain('Factory work phase: Building (execute)');
+    expect(signal?.contents).toContain('Config: rules-v1');
   });
 
   it('emits the persisted custom board and phase in the state signal', async () => {
