@@ -6,6 +6,6 @@ Fixed `PostgresStoreVNext` observability dropping every span, metric, log, score
 
 A write that lands on a day with no partition now creates that partition and retries. Traces keep flowing without a redeploy or a scheduled `init()`.
 
-Roles that cannot create tables still need to re-run `init()` at least every `futureDays` days. The PostgreSQL integration docs now explain this.
+Roles that cannot create tables, or do not own the observability tables, still need to re-run `init()` at least every `futureDays` days. The PostgreSQL integration docs now explain this.
 
 Fixes https://github.com/mastra-ai/mastra/issues/28644

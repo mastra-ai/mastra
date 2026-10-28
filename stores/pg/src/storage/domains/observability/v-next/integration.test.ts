@@ -2037,7 +2037,10 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
 
   describe('native partition maintenance', () => {
     it('keeps storing signals after the pre-created day partitions run out', async () => {
-      const harness = await createHarness({ schemaPrefix: 'obs_vnext_partition_runout' });
+      const harness = await createHarness({
+        schemaPrefix: 'obs_vnext_partition_runout',
+        partitioning: { mode: 'native' },
+      });
 
       try {
         const parent = qualifiedTable(harness.schema, TABLE_SPAN_EVENTS);
@@ -2114,12 +2117,20 @@ describe('ObservabilityStoragePostgresVNext — integration', () => {
         new ObservabilityStoragePostgresVNext({
           client: new PoolAdapter(ownerPool),
           schemaName: schema,
-          partitioning: { futureDays: 25 },
+          partitioning: { mode: 'native', futureDays: 25 },
         });
-      const appDomain = new ObservabilityStoragePostgresVNext({ client: new PoolAdapter(appPool), schemaName: schema });
+      const appDomain = new ObservabilityStoragePostgresVNext({
+        client: new PoolAdapter(appPool),
+        schemaName: schema,
+        partitioning: { mode: 'native' },
+      });
 
       try {
-        await new ObservabilityStoragePostgresVNext({ client: new PoolAdapter(ownerPool), schemaName: schema }).init();
+        await new ObservabilityStoragePostgresVNext({
+          client: new PoolAdapter(ownerPool),
+          schemaName: schema,
+          partitioning: { mode: 'native' },
+        }).init();
         await admin.none(
           `GRANT SELECT, INSERT, UPDATE ON ALL TABLES IN SCHEMA ${quotedIdentifier(schema)} TO ${quotedIdentifier(appRole)}`,
         );
