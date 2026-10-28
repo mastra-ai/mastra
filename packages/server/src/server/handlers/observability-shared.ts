@@ -311,6 +311,19 @@ export function assertObservabilityTraceQueryTimingFieldsSupported(
   }
 }
 
+/** @deprecated Use `supportsObservabilityTraceQueryTimingField(observabilityStore, 'timeToFirstChunkMs')`. */
+export function supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore: ObservabilityStorage) {
+  return supportsObservabilityTraceQueryTimingField(observabilityStore, 'timeToFirstChunkMs');
+}
+
+/** @deprecated Use `assertObservabilityTraceQueryTimingFieldsSupported`. */
+export function assertObservabilityTraceQueryTimeToFirstChunkSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  assertObservabilityTraceQueryTimingFieldsSupported(observabilityStore, predicate, ['timeToFirstChunkMs']);
+}
+
 function rootSpanFieldIssues(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
@@ -380,17 +393,35 @@ export function assertObservabilityTraceQueryRootSpanValuesSupported(
   throw new coreStorage.TraceQueryValidationError([rootSpanFieldIssue(['path'], plan.path)]);
 }
 
+/** Whether the store can sort by `field`; true for any field that is not a timing field. */
+export function supportsObservabilityTraceQueryTimingSort(observabilityStore: ObservabilityStorage, field: string) {
+  const timing = timingField(field);
+  return !timing || getFeatures(observabilityStore)?.includes(timing.sortFeature) === true;
+}
+
 /** Covers the sort of trace and span queries. */
 export function assertObservabilityTraceQueryTimingSortSupported(
   observabilityStore: ObservabilityStorage,
   orderBy: { field: string },
 ) {
-  const timing = timingField(orderBy.field);
-  if (!timing || getFeatures(observabilityStore)?.includes(timing.sortFeature)) return;
+  if (supportsObservabilityTraceQueryTimingSort(observabilityStore, orderBy.field)) return;
 
   throw new HTTPException(501, {
-    message: `Sorting by ${timing.label.toLowerCase()} is not supported by the configured observability store`,
+    message: `Sorting by ${timingField(orderBy.field).label.toLowerCase()} is not supported by the configured observability store`,
   });
+}
+
+/** @deprecated Use `supportsObservabilityTraceQueryTimingSort(observabilityStore, 'timeToFirstChunkMs')`. */
+export function supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore: ObservabilityStorage) {
+  return supportsObservabilityTraceQueryTimingSort(observabilityStore, 'timeToFirstChunkMs');
+}
+
+/** @deprecated Use `assertObservabilityTraceQueryTimingSortSupported`. */
+export function assertObservabilityTraceQueryTimeToFirstChunkSortSupported(
+  observabilityStore: ObservabilityStorage,
+  orderBy: { field: string },
+) {
+  assertObservabilityTraceQueryTimingSortSupported(observabilityStore, orderBy);
 }
 
 export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
