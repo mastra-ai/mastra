@@ -683,6 +683,42 @@ describe('InMemoryKnowledgeStorage', () => {
     expect((await store.search({ query: 'release', scope: thread })).map(result => result.type)).toEqual(['node']);
   });
 
+  it('lists distinct live scope tag sets with node and record counts', async () => {
+    const store = createStore();
+    const lee = [...resource, 'team:LEE'];
+    const mob = [...resource, 'team:MOB'];
+    // Structural scope nodes are not tag sets and stay out of the listing.
+    await store.reconcileStructure({ scopes: [{ address: 'org:acme', name: 'Acme' }] });
+    const hub = await store.createNode({ name: 'hub', kind: 'team', scope: resource });
+    const leeDoc = await store.createNode({ name: 'lee doc', kind: 'doc', scope: lee });
+    const merged = await store.createNode({ name: 'lee dup', kind: 'doc', scope: lee });
+    await store.mergeNodes({ sourceId: merged.id, targetId: leeDoc.id, sourceVersion: merged.version });
+    await store.createNode({ name: 'mob doc', kind: 'doc', scope: mob });
+    const append = (node: string, text: string, scope: string[]) =>
+      store.appendKnowledge({ node, text, scope, sourceThreadId: 't1', resolutionScope: scope, defaultScope: scope });
+    await append(hub.id, 'hub fact', resource);
+    await append(leeDoc.id, 'lee fact 1', lee);
+    await append(leeDoc.id, 'lee fact 2', lee);
+    const removed = await append(leeDoc.id, 'lee fact removed', lee);
+    await store.removeKnowledge({ id: removed.id, deletedBy: 'test' });
+
+    const all = await store.listScopeSets();
+    expect(all).toEqual({
+      truncated: false,
+      sets: [
+        { scope: ['org:acme', 'resource:mastra'], nodeCount: 1, recordCount: 1 },
+        { scope: ['org:acme', 'resource:mastra', 'team:LEE'], nodeCount: 1, recordCount: 2 },
+        { scope: ['org:acme', 'resource:mastra', 'team:MOB'], nodeCount: 1, recordCount: 0 },
+      ],
+    });
+    expect(await store.listScopeSets({ limit: 2 })).toEqual({ truncated: true, sets: all.sets.slice(0, 2) });
+    expect((await store.listScopeSets({ within: mob })).sets.map(set => set.scope)).toEqual([
+      ['org:acme', 'resource:mastra'],
+      ['org:acme', 'resource:mastra', 'team:MOB'],
+    ]);
+    expect(await store.listScopeSets({ within: ['team:LEE'] })).toEqual({ sets: [], truncated: false });
+  });
+
   describe('node descriptions', () => {
     it('creates nodes with and without a description', async () => {
       const store = createStore();

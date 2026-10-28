@@ -121,6 +121,36 @@ export interface ListKnowledgeScopeMembersOutput {
 
 export const MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT = 500;
 
+/** Hard cap on scope sets returned by one `listScopeSets` read. */
+export const MAX_KNOWLEDGE_SCOPE_SETS = 200;
+
+export interface ListKnowledgeScopeSetsInput {
+  /** Only the sets visible from this scope: every tag of a returned set is in it. Omit for every set. */
+  within?: string[];
+  /** Sets to return, from 1 to `MAX_KNOWLEDGE_SCOPE_SETS` (the default). */
+  limit?: number;
+}
+
+/** One distinct scope tag set carried by stored nodes or records, with how many of each carry exactly it. */
+export interface KnowledgeScopeSet {
+  scope: string[];
+  nodeCount: number;
+  recordCount: number;
+}
+
+export interface ListKnowledgeScopeSetsOutput {
+  /** Fewest tags first, then by scope key. */
+  sets: KnowledgeScopeSet[];
+  /** True when more sets matched than `limit`. */
+  truncated: boolean;
+}
+
+/** Clamps a requested scope set limit to 1–{@link MAX_KNOWLEDGE_SCOPE_SETS}. */
+export function knowledgeScopeSetsLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_SETS;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_SETS);
+}
+
 /** Clamps a requested member limit to 1–{@link MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT}. */
 export function knowledgeScopeMembersLimit(limit: number | undefined): number {
   if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_MEMBERS_LIMIT;

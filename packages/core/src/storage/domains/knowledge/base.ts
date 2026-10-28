@@ -370,6 +370,47 @@ export interface ListKnowledgeScopeNodesOutput {
   nextCursor: string | null;
 }
 
+/** Hard cap on scope sets returned by one `listScopeSets` read. */
+export const MAX_KNOWLEDGE_SCOPE_SETS = 200;
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeSetsInput {
+  /** Only the sets visible from this scope: every tag of a returned set is in it. Omit for every set. */
+  within?: KnowledgeScope;
+  /** Sets to return, from 1 to `MAX_KNOWLEDGE_SCOPE_SETS` (the default). */
+  limit?: number;
+}
+
+/**
+ * One distinct scope tag set carried by stored nodes or records, with how many of each carry exactly it.
+ * @experimental Knowledge APIs are experimental and may change without notice.
+ */
+export interface KnowledgeScopeSet {
+  scope: KnowledgeScope;
+  nodeCount: number;
+  recordCount: number;
+}
+
+/** @experimental Knowledge APIs are experimental and may change without notice. */
+export interface ListKnowledgeScopeSetsOutput {
+  /** Fewest tags first, then by scope key. */
+  sets: KnowledgeScopeSet[];
+  /** True when more sets matched than `limit`. */
+  truncated: boolean;
+}
+
+/** Clamps a requested scope set limit to 1–{@link MAX_KNOWLEDGE_SCOPE_SETS}. */
+export function knowledgeScopeSetsLimit(limit: number | undefined): number {
+  if (limit === undefined || !Number.isFinite(limit)) return MAX_KNOWLEDGE_SCOPE_SETS;
+  return Math.min(Math.max(Math.trunc(limit), 1), MAX_KNOWLEDGE_SCOPE_SETS);
+}
+
+/** Orders scope sets fewest tags first, then by scope key. */
+export function compareKnowledgeScopeSets(a: KnowledgeScopeSet, b: KnowledgeScopeSet): number {
+  if (a.scope.length !== b.scope.length) return a.scope.length - b.scope.length;
+  return compareCodeUnits(a.scope.join('\u001f'), b.scope.join('\u001f'));
+}
+
 function knowledgeScopeNodeFilterKey(input: ListKnowledgeScopeNodesInput): string {
   return JSON.stringify([
     input.withinAddress ?? null,
@@ -956,6 +997,14 @@ export abstract class KnowledgeStorage extends StorageDomain {
   /** Lists the nodes placed inside one structural scope, newest-first (bounded). */
   async listScopeMembers(_input: ListKnowledgeScopeMembersInput): Promise<ListKnowledgeScopeMembersOutput> {
     throw new KnowledgeUnsupportedCapabilityError('structural scope nodes');
+  }
+
+  /**
+   * Lists the distinct scope tag sets carried by live nodes and records, with counts, so a reader can offer
+   * the views that hold data. Scope nodes from `reconcileStructure` are not included.
+   */
+  async listScopeSets(_input?: ListKnowledgeScopeSetsInput): Promise<ListKnowledgeScopeSetsOutput> {
+    throw new KnowledgeUnsupportedCapabilityError('scope set listing');
   }
 
   abstract createNode(input: CreateKnowledgeNodeInput): Promise<KnowledgeNode>;

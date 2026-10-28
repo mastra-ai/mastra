@@ -3,9 +3,11 @@ import {
   assertKnowledgeDescriptionWithinBound,
   assertKnowledgeRecordTextWithinBound,
   canonicalizeKnowledgeScope,
+  compareKnowledgeScopeSets,
   createKnowledgeUlid,
   isKnowledgeScopeVisible,
   knowledgeScopeKey,
+  knowledgeScopeSetsLimit,
   pageKnowledgeScopeMembers,
   parseListKnowledgeScopeMembersInput,
   knowledgeSemanticDocumentId,
@@ -31,8 +33,11 @@ import type {
   KnowledgeMention,
   KnowledgeScope,
   KnowledgeScopeNodeSummary,
+  KnowledgeScopeSet,
   KnowledgeSemanticDocumentType,
   ListKnowledgeScopeNodesInput,
+  ListKnowledgeScopeSetsInput,
+  ListKnowledgeScopeSetsOutput,
   ListKnowledgeScopeMembersInput,
   ListKnowledgeScopeMembersOutput,
   ListKnowledgeScopeNodesOutput,
@@ -227,6 +232,23 @@ export class InMemoryKnowledgeStorage extends KnowledgeStorage {
       changed,
       accessEpoch: this.#accessEpoch,
     };
+  }
+
+  override async listScopeSets(input: ListKnowledgeScopeSetsInput = {}): Promise<ListKnowledgeScopeSetsOutput> {
+    const limit = knowledgeScopeSetsLimit(input.limit);
+    const within = input.within ? canonicalizeKnowledgeScope(input.within) : undefined;
+    const sets = new Map<string, KnowledgeScopeSet>();
+    const count = (scope: KnowledgeScope, field: 'nodeCount' | 'recordCount') => {
+      if (within && !isKnowledgeScopeVisible(scope, within)) return;
+      const key = knowledgeScopeKey(scope);
+      const set = sets.get(key) ?? { scope: canonicalizeKnowledgeScope(scope), nodeCount: 0, recordCount: 0 };
+      set[field]++;
+      sets.set(key, set);
+    };
+    for (const node of this.#db.knowledgeNodes.values()) if (!node.mergedInto) count(node.scope, 'nodeCount');
+    for (const record of this.#db.knowledgeRecords.values()) if (!record.deletedAt) count(record.scope, 'recordCount');
+    const sorted = [...sets.values()].sort(compareKnowledgeScopeSets);
+    return { sets: sorted.slice(0, limit), truncated: sorted.length > limit };
   }
 
   override async listScopeNodes(input: ListKnowledgeScopeNodesInput = {}): Promise<ListKnowledgeScopeNodesOutput> {
