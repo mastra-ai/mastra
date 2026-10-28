@@ -46,7 +46,6 @@ function useScorers(view: ResolvedView<ScoresOptions>, page: DashboardPageContex
     queryKey: ['dashboards', 'listScores', args],
     queryFn: () => client.listScores(args),
     placeholderData: keepPreviousData,
-    staleTime: Infinity,
     enabled: discover,
   });
   if (!discover) {

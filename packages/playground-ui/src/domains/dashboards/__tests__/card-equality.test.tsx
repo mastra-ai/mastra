@@ -21,7 +21,7 @@ import {
   usageByModel,
   usageByThread,
 } from '../../metrics/components/__tests__/fixtures/breakdown';
-import { emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtures/metrics';
+import { agentLatencyFixture, emptyBreakdownFixture } from '../../metrics/components/__tests__/fixtures/metrics';
 import {
   aggregateCapabilities,
   distinctIdsSeriesFixture,
@@ -55,6 +55,7 @@ import {
   scoresWidget,
   tokenUsageWidget,
 } from './fixtures/metrics-widgets';
+import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { TEST_BASE_URL } from '@/test/render';
 
@@ -113,8 +114,8 @@ function recordRequests() {
   };
 }
 
-/** React's `useId` values differ between two trees; they say nothing about the markup. */
-const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:/g, 'ID');
+/** React's `useId` values and Recharts' chart ids differ between two trees; they say nothing about the markup. */
+const normalise = (html: string) => html.replace(/_r_[0-9a-z]+_|:r[0-9a-z]+:|recharts\d+-clip/g, 'ID');
 
 /** Waits until nothing is in flight and the request count has stopped growing. */
 async function settle(recorder: ReturnType<typeof recordRequests>) {
@@ -384,5 +385,60 @@ describe.each(Object.entries(SCOPES))('cards and their widgets at %s scope', (_n
     const widget = await renderWidget(scoresWidget, scope);
     expect(within(card.root).getByText('Answer relevancy')).toBeDefined();
     expectSame(card, widget);
+  });
+});
+
+/** A tab's requests held until released, to compare what each shows while the tab loads. */
+function holdPercentiles(metric: string) {
+  let release = () => {};
+  const held = new Promise<void>(resolve => (release = resolve));
+  server.use(
+    http.post(`${API}/metrics/percentiles`, async ({ request }) => {
+      const body = record(await request.clone().json());
+      if (body.name !== metric) return undefined;
+      await held;
+      return HttpResponse.json(agentLatencyFixture());
+    }),
+  );
+  return release;
+}
+
+/** Clicks a tab in both and returns their markup once each has sent its requests, before answers. */
+async function switchWhileLoading(card: Rendered, widget: Rendered, tab: string) {
+  for (const side of [card, widget]) {
+    const recorder = recordRequests();
+    fireEvent.click(within(side.root).getByRole('tab', { name: tab }));
+    await waitFor(() => expect(recorder.sent.length).toBeGreaterThan(0));
+    recorder.stop();
+    side.sent = recorder.sent;
+  }
+}
+
+describe('Latency drawn at real size', () => {
+  useFixedChartSize(800, 300);
+
+  beforeEach(() => {
+    seedMetrics();
+  });
+
+  it('keeps the last tab dimmed while the next loads, and refetches a tab opened again', async () => {
+    const release = holdPercentiles('mastra_workflow_duration_ms');
+    const card = await renderCard(<LatencyCard onViewTraces={noop} onTimeRangeClick={noop} />, undefined);
+    const widget = await renderWidget(latencyWidget, undefined);
+    expect(card.root.querySelector('.recharts-area-curve')).not.toBeNull();
+    expectSame(card, widget);
+
+    await switchWhileLoading(card, widget, 'Workflows');
+    // The card keeps the agents' chart, dimmed, rather than a skeleton.
+    expect(card.root.querySelector('.recharts-area-curve')).not.toBeNull();
+    expectSame(card, widget);
+
+    release();
+    await act(() => new Promise(resolve => setTimeout(resolve, 50)));
+    expectSame(card, widget);
+
+    // Going back to Agents, the card refetches; so must the widget.
+    await expectSameTab(card, widget, 'Agents');
+    expect(card.sent).toHaveLength(1);
   });
 });
