@@ -88,9 +88,15 @@ export function rulePhaseContext(
   const board = boards.get(boardForWorkItem(item));
   const kind = board?.phaseKind(stage);
   if (!board || !kind) return undefined;
-  const role = board.roleForPhase(stage);
-  const outcomes = Object.freeze(Object.keys(board.phases[stage]?.outcomes ?? {}));
-  return Object.freeze({ id: stage, kind, ...(role === undefined ? {} : { role }), outcomes });
+  const context = board.roleForPhase(stage);
+  const phase = board.phases[stage];
+  return Object.freeze({
+    id: stage,
+    kind,
+    ...(context === undefined ? {} : { context, role: context }),
+    nextPhases: Object.freeze([...(phase?.nextPhases ?? [])]),
+    outcomes: Object.freeze(Object.keys(phase?.outcomes ?? {})),
+  });
 }
 
 /**

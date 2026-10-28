@@ -1,3 +1,4 @@
+import { CODE_AGENT_ID } from '@mastra/code-sdk/constants';
 import { cardRuleGroupSchema, evaluateRuleGroup } from '../rules/rule-group.js';
 import type { RuleFacts, RuleGroup } from '../rules/rule-group.js';
 import {
@@ -99,7 +100,7 @@ type ReadonlyFactoryBoardRules = Readonly<
 export type BoardPhaseKind = 'resting' | 'working' | 'terminal';
 
 /** The agent Factory runs every phase with. */
-export const FACTORY_AGENT_ID = 'code-agent';
+export const FACTORY_AGENT_ID = CODE_AGENT_ID;
 
 /** The session context a working phase runs in when it names none. */
 export const DEFAULT_PHASE_CONTEXT = 'work';

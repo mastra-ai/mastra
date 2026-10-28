@@ -66,12 +66,12 @@ import { defineBoard } from '@mastra/factory/boards';
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'queued',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
     shipped: {
-      title: 'Shipped',
+      name: 'Shipped',
       kind: 'terminal',
       onEnter: {
         manual: () => ({ type: 'reject', code: 'release_held', reason: 'Release is held.' }),
@@ -126,13 +126,13 @@ When a tracked GitHub, GitLab, Linear, or Jira issue or incident.io follow-up is
 ```typescript
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'queued',
   sourceClosed: { completed: 'shipped', canceled: 'dropped' },
   phases: {
-    queued: { title: 'Queued', kind: 'resting', outcomes: { ship: 'shipped', drop: 'dropped' } },
-    shipped: { title: 'Shipped', kind: 'terminal' },
-    dropped: { title: 'Dropped', kind: 'terminal' },
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped', 'dropped'] },
+    shipped: { name: 'Shipped', kind: 'terminal' },
+    dropped: { name: 'Dropped', kind: 'terminal' },
   },
 });
 ```
@@ -154,11 +154,11 @@ const shipIt: BoardToolResultRuleHandler = context => {
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'queued',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+    shipped: { name: 'Shipped', kind: 'terminal' },
   },
   tools: { ship_it: { onResult: shipIt } },
 });
@@ -177,7 +177,7 @@ import { defineBoard } from '@mastra/factory';
 
 const deliveryBoard = defineBoard({
   id: 'delivery',
-  title: 'Delivery',
+  name: 'Delivery',
   initialPhase: 'triage',
   phases: {/* ... */},
   events: {
@@ -192,7 +192,7 @@ const deliveryBoard = defineBoard({
     },
     linear: {
       issueClosed: context =>
-        context.issue.stateType === 'canceled' && context.phase?.outcomes.includes('canceled')
+        context.issue.stateType === 'canceled' && context.phase?.nextPhases.includes('canceled')
           ? {
               type: 'transition',
               idempotencyKey: `${context.ingress.id}:canceled`,
@@ -215,7 +215,7 @@ For each event, Factory picks the handler in this order:
 
 A board handler that returns a decision replaces the default for that card. One that returns nothing lets the default run, so card-independent defaults such as dismissing stale Factory reviews still apply. The stock Work and Review behavior stays in the integration defaults and never acts on cards on other boards, so a custom board needs no board guards and no delegation to stock handlers.
 
-Every integration rule context bound to a card carries `phase`: `{ id, kind, role?, outcomes }`, describing what the card's current phase means on its board. `outcomes` lists the outcome names the phase declares. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
+Every integration rule context bound to a card carries `phase`: `{ id, kind, context?, nextPhases, outcomes }`, describing what the card's current phase means on its board. `context` is the session context of a working phase (`role` carries the same value and is deprecated), `nextPhases` lists the phases the card may move to, and `outcomes` lists the outcome names the phase declares, if any. `phase` is absent when the card sits in more than one stage or its board does not declare the phase.
 
 Unknown integrations, unknown event names, and handler values other than a function or `null` are rejected by `defineBoard` with a `BoardDefinitionError`.
 
@@ -236,7 +236,7 @@ new MastraFactory({ storage, rules: defaultFactoryRules({ version: 'v2', overrid
 new MastraFactory({ storage, configVersion: 'v2', boards: [defineBoard({ ..., tools: { my_tool: { onResult } } })] });
 ```
 
-Contexts that carried `ruleSetVersion` now carry `configVersion`. To customize Work's `submit_plan` rule, declare `tools.submit_plan.onResult` on the installed replacement `work` board.
+Contexts that carried `ruleSetVersion` now carry `configVersion`. To add a tool-result rule to Work, declare it under `tools` on the installed replacement `work` board.
 
 ### Board transition policy
 
@@ -256,12 +256,12 @@ const releasePolicy: BoardTransitionPolicy = context => {
 
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'approval',
   transitionPolicy: releasePolicy,
   phases: {
-    approval: { title: 'Approval', kind: 'resting', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'working', role: 'release' },
+    approval: { name: 'Approval', kind: 'resting', nextPhases: ['shipped'] },
+    shipped: { name: 'Shipped', kind: 'working', runner: { context: 'release' } },
   },
 });
 // Install through new MastraFactory({ storage, boards: [releaseBoard] }).
@@ -280,37 +280,37 @@ A policy cannot bypass topology, ingress authorization, board ownership, externa
 Every phase declares what it _is_ with a required `kind`; `defineBoard()` rejects a phase without one.
 
 - `resting` — the card is parked. A human move out of a resting phase arms autonomy; a move back into one disarms it. `initialPhase` must be resting: a card cannot arrive already seated or already finished.
-- `working` — an agent seat carries the card. `role` is required (same identifier rules as decision roles) and names the seat a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a role; `phaseForRole` returns the first in declaration order.
-- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `role` is not allowed.
+- `working` — an agent carries the card. `runner.context` (same identifier rules as decision roles, default `work`) names the session context a human kickoff opens and the lane a rule-started run leaves rest for. Two working phases may share a context, and then a session; `phaseForRole` returns the first in declaration order.
+- `terminal` — the card is finished. Entering it releases the sandbox and lets sweeps supersede stale decisions and revoke run bindings. `runner` is not allowed.
 
 ```typescript
 const releaseBoard = defineBoard({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'queued',
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'shipping' },
-    shipping: { title: 'Shipping', kind: 'working', role: 'release', next: 'shipped' },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipping'] },
+    shipping: { name: 'Shipping', kind: 'working', runner: { context: 'release' }, nextPhases: ['shipped'] },
+    shipped: { name: 'Shipped', kind: 'terminal' },
   },
 });
 ```
 
-Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with roles `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with role `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
+Work declares `intake` resting; `triage`, `planning`, `execute`, and `review` working with contexts `triage`, `plan`, `work`, and `work`; `done` and `canceled` terminal. Review declares `intake` resting, `review` working with context `review`, and `done`/`canceled` terminal. The definition exposes the derived helpers `phaseKind`, `isWorking`, `isTerminal`, `roleForPhase`, and `phaseForRole`.
 
 Consent, the external-author guard, kickoff seating, run-start lanes, terminal cleanup, and the closed-PR and issue sweeps all read the installed board's declarations; nothing name-matches phases. A board that reuses Work's phase names gets exactly what it declared. Persisted `board` is authoritative; rows without one are read as Review for pull requests and Work otherwise.
 
 Unknown semantics fail closed. When the board is not installed or the phase is not declared: external-event transitions ask for consent, no sweep or cleanup treats the card as finished, and a rule-started run from rest with no lane for its role is rejected.
 
-**Migration:** Existing `defineBoard()` calls must add `kind` to every phase and `role` to working phases.
+**Migration:** Existing `defineBoard()` calls must add `kind` to every phase. Working phases name their session context with `runner.context`.
 
 ```typescript
 // before
 phases: { queued: { title: 'Queued', next: 'shipped' }, shipped: { title: 'Shipped' } }
 // after
 phases: {
-  queued: { title: 'Queued', kind: 'resting', next: 'shipped' },
-  shipped: { title: 'Shipped', kind: 'terminal' },
+  queued: { name: 'Queued', kind: 'resting', nextPhases: ['shipped'] },
+  shipped: { name: 'Shipped', kind: 'terminal' },
 }
 ```
 
@@ -372,7 +372,7 @@ type ReleasePhase = 'queued' | 'preparing' | 'shipping' | 'shipped';
 
 const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefinition<ReleasePhase>>>({
   id: 'release',
-  title: 'Release',
+  name: 'Release',
   initialPhase: 'queued',
   transitionPolicy: context => {
     if (context.fromStage === 'queued' && context.toStage === 'preparing' && !context.isHumanTransition) {
@@ -384,12 +384,12 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
     }
   },
   phases: {
-    queued: { title: 'Queued', kind: 'resting', next: 'preparing' },
+    queued: { name: 'Queued', kind: 'resting', nextPhases: ['preparing'] },
     preparing: {
-      title: 'Preparing',
+      name: 'Preparing',
       kind: 'working',
-      role: 'release-preparer',
-      next: 'shipping',
+      runner: { context: 'release-preparer' },
+      nextPhases: ['shipping'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
@@ -401,10 +401,10 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
       },
     },
     shipping: {
-      title: 'Shipping',
+      name: 'Shipping',
       kind: 'working',
-      role: 'release-publisher',
-      next: 'shipped',
+      runner: { context: 'release-publisher' },
+      nextPhases: ['shipped'],
       onEnter: {
         issue: context => ({
           type: 'invokeSkill',
@@ -415,7 +415,7 @@ const releaseBoard = defineBoard<'release', Record<ReleasePhase, BoardPhaseDefin
         }),
       },
     },
-    shipped: { title: 'Shipped', kind: 'terminal' },
+    shipped: { name: 'Shipped', kind: 'terminal' },
   },
   tools: {
     execute_command: {
