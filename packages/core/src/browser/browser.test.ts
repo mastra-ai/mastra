@@ -175,6 +175,28 @@ describe('MastraBrowser.setCookies', () => {
     }
   }
 
+  it('adds cookies still waiting before newer ones, so the newer value wins', async () => {
+    const browser = new QueueingBrowser({ headless: true, scope: 'shared' });
+    await browser.setCookies([{ name: 'v1', value: 'v', url: 'https://example.com' }]);
+    browser.open = true;
+
+    await browser.setCookies([{ name: 'v2', value: 'v', url: 'https://example.com' }]);
+    await browser.openThread('thread-1');
+
+    expect(browser.added).toEqual(['v1', 'v2']);
+  });
+
+  it('rejects a cookie with neither a url nor a domain and path', async () => {
+    const browser = new QueueingBrowser({ headless: true });
+
+    await expect(browser.setCookies([{ name: 'bad', value: 'v', domain: 'example.com' }])).rejects.toThrow(
+      'Cookie "bad" needs a url, or a domain and a path',
+    );
+    browser.open = true;
+    await browser.openThread('thread-1');
+    expect(browser.added).toEqual([]);
+  });
+
   it('drops cookies queued for a thread that closes before its browser opens', async () => {
     const browser = new QueueingBrowser({ headless: true, scope: 'thread' });
     await browser.setCookies([{ name: 'kept', value: 'v', url: 'https://example.com' }], 'thread-1');

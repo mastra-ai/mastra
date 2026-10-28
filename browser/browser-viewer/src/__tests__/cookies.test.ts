@@ -5,6 +5,7 @@
 import { once } from 'node:events';
 import { createServer } from 'node:http';
 import type { AddressInfo } from 'node:net';
+import { chromium } from 'playwright-core';
 import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest';
 
 import { BrowserViewer } from '../browser-viewer';
@@ -74,5 +75,20 @@ describe.skipIf(!canLaunchBrowser)('BrowserViewer.setCookies', () => {
 
     expect(await titleAt('thread-1')).toBe('preview=late');
     expect(await titleAt('thread-2')).toBe('no cookie');
+  }, 30_000);
+
+  it('sends cookies set before connecting to an external browser', async () => {
+    const port = 9300 + Math.floor(Math.random() * 500);
+    const external = await chromium.launch({ headless: true, args: [`--remote-debugging-port=${port}`] });
+    try {
+      viewer = new BrowserViewer({ cli: 'agent-browser', headless: true, scope: 'thread' });
+
+      await viewer.setCookies([cookie('external')], 'thread-1');
+      await viewer.connectToExternalCdp(`http://127.0.0.1:${port}`, 'thread-1');
+
+      expect(await titleAt('thread-1')).toBe('preview=external');
+    } finally {
+      await external.close();
+    }
   }, 30_000);
 });

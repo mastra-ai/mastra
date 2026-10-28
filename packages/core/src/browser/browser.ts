@@ -1565,10 +1565,20 @@ export abstract class MastraBrowser extends MastraBase {
    * @throws If this provider can't set cookies
    */
   async setCookies(cookies: BrowserCookie[], threadId?: string): Promise<void> {
+    for (const cookie of cookies) {
+      if (!cookie.url && !(cookie.domain && cookie.path)) {
+        throw new Error(`Cookie "${cookie.name}" needs a url, or a domain and a path`);
+      }
+    }
     const effectiveThreadId = threadId ?? this.getCurrentThread();
-    if (await this.addCookiesToOpenBrowser(cookies, effectiveThreadId)) return;
     const key = this.cookieQueueKey(effectiveThreadId);
-    this.pendingCookies.set(key, [...(this.pendingCookies.get(key) ?? []), ...cookies]);
+    // Cookies still waiting go first, so an older value never overwrites a newer one.
+    const all = [...(this.pendingCookies.get(key) ?? []), ...cookies];
+    if (await this.addCookiesToOpenBrowser(all, effectiveThreadId)) {
+      this.pendingCookies.delete(key);
+      return;
+    }
+    this.pendingCookies.set(key, all);
   }
 
   /**

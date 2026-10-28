@@ -229,6 +229,7 @@ export class BrowserViewer extends MastraBrowser {
   override async connectToExternalCdp(cdpUrl: string, threadId?: string): Promise<void> {
     const effectiveThreadId = threadId ?? this.getCurrentThread();
     await this.threadManager.connectToExternalCdp(cdpUrl, effectiveThreadId);
+    await this.addPendingCookies(effectiveThreadId);
     // Mark as ready
     this.status = 'ready';
   }

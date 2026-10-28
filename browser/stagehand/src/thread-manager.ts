@@ -96,7 +96,15 @@ export class StagehandThreadManager extends ThreadManager<V3> {
       const stagehand = await this.createStagehand();
       session.stagehand = stagehand;
       this.threadManagers.set(threadId, stagehand);
-      await this.onBrowserOpened?.(threadId);
+      try {
+        await this.onBrowserOpened?.(threadId);
+      } catch (error) {
+        // Don't leave a half-opened browser registered for the thread.
+        this.threadManagers.delete(threadId);
+        session.stagehand = undefined;
+        await stagehand.close().catch(() => {});
+        throw error;
+      }
 
       // Restore browser state if available (before notifying parent to avoid screencast race)
       if (savedState && savedState.tabs.length > 0) {

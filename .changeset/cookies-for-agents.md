@@ -11,4 +11,4 @@ Added `setCookies()` to browsers, so your app can sign a thread's browser in to 
 await browser.setCookies([{ name: 'my_app_session', value: token, domain: 'app.example.com', path: '/' }], threadId);
 ```
 
-`AgentBrowser`, `BrowserViewer`, `FirecrawlBrowser` and `StagehandBrowser` support it. Custom providers can add support by overriding `addCookiesToOpenBrowser()`.
+`AgentBrowser`, `BrowserViewer` and `StagehandBrowser` support it. Custom providers can add support by overriding `addCookiesToOpenBrowser()` and calling `addPendingCookies(threadId)` once a thread's browser opens, before it loads a page.

@@ -741,6 +741,20 @@ describe('StagehandBrowser', () => {
       await threaded.close();
     });
 
+    it("closes the thread's browser when adding its cookies fails", async () => {
+      const threaded = new StagehandBrowser({ scope: 'thread' });
+      await threaded.launch();
+      await threaded.setCookies([cookie], 'thread-1');
+      mockStagehand.close.mockClear();
+      mockContext.addCookies.mockRejectedValueOnce(new Error('bad cookie'));
+
+      await expect(threaded.getManagerForThread('thread-1')).rejects.toThrow('bad cookie');
+
+      expect(mockStagehand.close).toHaveBeenCalled();
+      expect(threaded['threadManager'].getExistingManagerForThread('thread-1')).toBeNull();
+      await threaded.close();
+    });
+
     it('adds cookies before restoring saved tabs', async () => {
       const threaded = new StagehandBrowser({ scope: 'thread' });
       await threaded.launch();
