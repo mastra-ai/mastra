@@ -18,6 +18,14 @@ describe('InMemoryMCPTaskStore', () => {
     vi.useRealTimers();
   });
 
+  it('keeps a task whose TTL is longer than the longest timer delay', async () => {
+    store = new InMemoryMCPTaskStore();
+    // 30 days: past setTimeout's 2^31-1 ms limit, where Node fires after 1 ms instead.
+    const { taskId } = await store.create({ ttlMs: 30 * 86_400_000, principal: 'alice' });
+    await new Promise(resolve => setTimeout(resolve, 50));
+    expect(await store.get(taskId, alice)).toMatchObject({ status: 'working' });
+  });
+
   it('is readable as soon as create resolves, with an unguessable id', async () => {
     store = new InMemoryMCPTaskStore();
     const created = await store.create({ ttlMs: 60_000, principal: 'alice' });
