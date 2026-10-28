@@ -60,6 +60,31 @@ const dropBareBuiltinImports = {
   },
 };
 
+/**
+ * Entries that browser apps import directly. Everything they load statically must not touch
+ * `process` (it is undefined in the browser) or pull in agent/provider-registry chunks, which do.
+ */
+const browserSafeEntries = ['storage/dashboards.js', 'storage/dashboards.cjs'];
+
+function findBrowserUnsafeImports(distDir: string, entry: string): string[] {
+  const problems: string[] = [];
+  const seen = new Set<string>();
+  const visit = (file: string, from: string) => {
+    if (seen.has(file)) return;
+    seen.add(file);
+    const name = path.relative(distDir, file);
+    if (/(^|\/)(agent|provider-registry)[-./]/.test(name)) problems.push(`${from} imports ${name}`);
+    const code = fs.readFileSync(file, 'utf-8');
+    if (/\bprocess\b/.test(code)) problems.push(`${name} (reached from ${entry}) references process`);
+    const specifiers = [...code.matchAll(/(?:\bfrom\s*|\bimport\s*|\brequire\()["']([^"']+)["']/g)].map(m => m[1]!);
+    for (const specifier of specifiers) {
+      if (specifier.startsWith('.')) visit(path.resolve(path.dirname(file), specifier), name);
+    }
+  };
+  visit(path.join(distDir, entry), entry);
+  return problems;
+}
+
 export default defineConfig({
   entry: [
     'src/index.ts',
@@ -71,6 +96,7 @@ export default defineConfig({
     'src/tools/is-vercel-tool.ts',
     'src/workflows/constants.ts',
     'src/storage/constants.ts',
+    'src/storage/dashboards.ts',
     'src/workflows/builder/index.ts',
     'src/workflows/evented/index.ts',
     'src/network/index.ts',
@@ -190,5 +216,12 @@ export default defineConfig({
       fs.copyFileSync(srcDts, distDts);
       console.info('✓ Copied provider-types.generated.d.ts to dist/llm/model/');
     }
+
+    const distDir = path.join(process.cwd(), 'dist');
+    const unsafe = browserSafeEntries.flatMap(entry => findBrowserUnsafeImports(distDir, entry));
+    if (unsafe.length > 0) {
+      throw new Error(`Browser-safe entries load Node-only code:\n${unsafe.join('\n')}`);
+    }
+    console.info(`✓ Checked browser-safe entries: ${browserSafeEntries.join(', ')}`);
   },
 });
