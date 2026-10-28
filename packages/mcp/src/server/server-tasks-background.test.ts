@@ -513,23 +513,15 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     expect(runsIn(counterFile)).toBe(2);
   });
 
-  it('runs a task again on a peer when its row is running with no owner and no lease (recover: true)', async () => {
+  it('hands the lease back on a graceful shutdown, so a peer runs the task again (recover: true)', async () => {
     const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
     const b = await instance(tasks);
     const a = await instance(tasks);
     const taskId = await call(a.url, 'crashy');
     await until(() => runsIn(counterFile) === 1);
 
-    // What a graceful stop hands back: the row stays running, without an owner or a lease.
-    // Written here because core currently keeps the lease of a run it waited on (see below).
-    const manager = a.mastra.backgroundTaskManager!;
-    const owner = manager.ownerId;
-    await manager.shutdown();
-    const [row] = await rows(b.mastra);
-    const storage = await b.mastra.backgroundTaskManager!.getStorage();
-    expect(
-      await storage.updateTask(row!.id, { ownerId: undefined, leaseExpiresAt: undefined }, { expectedOwnerId: owner }),
-    ).toBe(true);
+    // A graceful stop hands the lease back: the row stays running, without an owner or a lease.
+    await a.mastra.backgroundTaskManager!.shutdown();
     expect((await rows(b.mastra))[0]).toMatchObject({
       status: 'running',
       ownerId: undefined,
@@ -539,23 +531,6 @@ describe('MCPServer tasks on Mastra background tasks (libsql)', () => {
     const done = await waitFor(await requester(b.url), taskId, 'completed');
     expect(done).toMatchObject({ result: { content: [{ type: 'text', text: 'recovered' }] } });
     expect(runsIn(counterFile)).toBe(2);
-  });
-
-  // Fails since core #28509: shutdown now waits for aborted runs to settle before it releases
-  // leases, and a settled run drops out of `ownedLeases`, so its lease is never handed back.
-  // A peer still reruns the task, one lease later, as after a crash.
-  it.fails('hands the lease of a running task back when its instance shuts down gracefully', async () => {
-    const tasks = { tools: { crashy: { mode: 'always' as const, recover: true } } };
-    const a = await instance(tasks);
-    await call(a.url, 'crashy');
-    await until(() => runsIn(counterFile) === 1);
-
-    await a.mastra.backgroundTaskManager!.shutdown();
-    expect((await rows(a.mastra))[0]).toMatchObject({
-      status: 'running',
-      ownerId: undefined,
-      leaseExpiresAt: undefined,
-    });
   });
 
   /** Spans go to the shared storage, as Studio reads them. */

@@ -1092,6 +1092,9 @@ export class BackgroundTaskManager {
     // Retryable running tasks intentionally remain `running` in storage so
     // the next process can recover them through recoverStaleTasks(). Tasks
     // without retries retain the existing terminal cancellation behavior.
+    // Snapshot the held leases now: waiting for runs to settle below removes
+    // them from `ownedLeases`, but their leases still need handing back.
+    const leasesToRelease = new Set(this.ownedLeases);
     const activeTaskIds = [...this.activeAbortControllers.keys()];
     this.#abortActiveControllers();
     const cancellationResults = await this.#waitForShutdownStep(
@@ -1167,9 +1170,10 @@ export class BackgroundTaskManager {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
     }
-    if (this.ownedLeases.size > 0) {
-      const ownedTaskIds = [...this.ownedLeases];
-      this.ownedLeases.clear();
+    for (const taskId of this.ownedLeases) leasesToRelease.add(taskId);
+    this.ownedLeases.clear();
+    if (leasesToRelease.size > 0) {
+      const ownedTaskIds = [...leasesToRelease];
       try {
         const storage = await this.getStorage();
         // Fenced on `ownerId` so a task already reclaimed or finished elsewhere
