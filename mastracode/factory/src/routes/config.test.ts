@@ -1908,6 +1908,25 @@ describe('custom provider routes', () => {
     expect(providers).toEqual([]);
   });
 
+  it('includes only the caller org custom providers in the provider catalog without exposing keys', async () => {
+    await postProvider(buildApp(userA), providerBody);
+    await postProvider(buildApp(userOtherOrg), {
+      name: 'Other LLM',
+      url: 'https://other.example.com/v1',
+      apiKey: 'sk-other',
+      models: ['other-model'],
+    });
+
+    const response = await buildApp(userA).request('/web/config/providers');
+    expect(response.status).toBe(200);
+    const body = await response.json();
+
+    expect(body.providers).toContainEqual({ provider: 'my-llm', source: 'stored-org', custom: true });
+    expect(body.providers).not.toContainEqual(expect.objectContaining({ provider: 'other-llm' }));
+    expect(JSON.stringify(body)).not.toContain('sk-x');
+    expect(JSON.stringify(body)).not.toContain('sk-other');
+  });
+
   it('deletes within the caller org only', async () => {
     const created = await postProvider(buildApp(userA), providerBody);
     const { provider } = await created.json();

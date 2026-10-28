@@ -47,6 +47,7 @@ export interface ProviderConnection {
   clear: () => void;
   chooseSignInProvider: (provider: ProviderInfo) => void;
   chooseKeyProvider: (provider: ProviderInfo) => void;
+  chooseCustomProvider: (providerId: string) => void;
   closeKeyDialog: () => void;
   closeOAuth: () => void;
   completeOAuth: () => void;
@@ -56,6 +57,7 @@ export function providerCredentialMethod(
   provider: ProviderInfo,
   scope?: ProviderCredentialScope,
 ): ProviderConnectionMethod | undefined {
+  if (provider.custom) return 'api_key';
   if (scope === 'user') return credentialAt(provider, 'user');
   if (provider.source === 'deployment') return 'api_key';
   if (scope === 'org') return credentialAt(provider, 'org');
@@ -188,6 +190,7 @@ export function useProviderConnection({
       select({ providerId: chosen.provider, method: 'api_key' });
       if (!isConfigured(chosen, 'api_key')) setKeyDialogProvider(chosen);
     },
+    chooseCustomProvider: providerId => select({ providerId, method: 'api_key' }),
     closeKeyDialog: () => setKeyDialogProvider(undefined),
     closeOAuth: () => {
       const flow = activeOAuth;
