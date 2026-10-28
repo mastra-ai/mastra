@@ -221,4 +221,19 @@ describe('DashboardRenderer', () => {
     for (const body of metrics) expect(body).toMatchObject({ filters: { environment: 'production' } });
     for (const request of traces) expect(JSON.stringify(request.where)).toContain('production');
   });
+
+  it("sends nothing and shows no data when a widget's filters contradict the page's", async () => {
+    const sent: string[] = [];
+    server.events.on('request:start', ({ request }) => sent.push(new URL(request.url).pathname));
+    const [view] = agentRunsWidget.views;
+    const [runs] = view.queries;
+    const staging: DashboardWidget = {
+      ...agentRunsWidget,
+      views: [{ ...view, queries: [{ ...runs, filters: { environment: 'staging' } } as DashboardQuery] }],
+    };
+    const { container } = renderDashboard(definition(staging), { environment: 'production' });
+    expect(await within(cell(container, 'agent-runs')).findByText('No agent runs in this range.')).toBeDefined();
+    server.events.removeAllListeners();
+    expect(sent.filter(path => path.includes('/metrics/'))).toEqual([]);
+  });
 });

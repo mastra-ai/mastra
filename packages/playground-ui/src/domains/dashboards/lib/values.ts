@@ -1,7 +1,7 @@
 import { z } from 'zod/v4';
 
 /**
- * The options vocabulary widget kinds share. Values reference a view's query results by index and
+ * The options vocabulary widget kinds share. Values reference a view's query results and
  * combine them with a few fixed operations; there are no free-form expressions.
  */
 
@@ -16,10 +16,10 @@ export const valueRefSchema = z
     measure: z.string().min(1).optional(),
     /** A percentile of a percentiles request, e.g. `0.95`. */
     percentile: z.number().min(0).max(1).optional(),
-    /** Only the series whose group name contains one of these (case-insensitive)... */
-    groupsIncluding: z.array(z.string().min(1)).min(1).optional(),
-    /** ...or none of these. */
-    groupsExcluding: z.array(z.string().min(1)).min(1).optional(),
+    /** Only the series whose group key is exactly one of these... */
+    groups: z.array(z.string()).min(1).optional(),
+    /** ...or is none of these. */
+    notGroups: z.array(z.string()).min(1).optional(),
   })
   .strict();
 
@@ -27,13 +27,19 @@ export type ValueRef = z.infer<typeof valueRefSchema>;
 
 export type ValueExpr =
   | ValueRef
+  | { const: number }
   | { sum: ValueExpr[] }
-  /** The first minus the second, never below zero. */
+  /** The first minus the second. */
   | { minus: [ValueExpr, ValueExpr] }
-  /** `of / over`, 0 when `over` is 0. */
-  | { ratio: { of: ValueExpr; over: ValueExpr } };
+  /** `of / over`; no value when `over` is 0 or has none. */
+  | { ratio: { of: ValueExpr; over: ValueExpr } }
+  /** The largest part that has a value. */
+  | { max: ValueExpr[] }
+  /** The first part that has a value. */
+  | { coalesce: ValueExpr[] };
 
 // Recursive through getters, as zod 4 recommends; `z.lazy` around a union recurses forever.
+const constSchema = z.strictObject({ const: z.number() });
 const sumSchema = z.strictObject({
   get sum() {
     return z.array(valueExprSchema).min(1);
@@ -49,8 +55,26 @@ const ratioSchema = z.strictObject({
     return z.strictObject({ of: valueExprSchema, over: valueExprSchema });
   },
 });
+const maxSchema = z.strictObject({
+  get max() {
+    return z.array(valueExprSchema).min(1);
+  },
+});
+const coalesceSchema = z.strictObject({
+  get coalesce() {
+    return z.array(valueExprSchema).min(1);
+  },
+});
 
-export const valueExprSchema: z.ZodType<ValueExpr> = z.union([valueRefSchema, sumSchema, minusSchema, ratioSchema]);
+export const valueExprSchema: z.ZodType<ValueExpr> = z.union([
+  valueRefSchema,
+  constSchema,
+  sumSchema,
+  minusSchema,
+  ratioSchema,
+  maxSchema,
+  coalesceSchema,
+]);
 
 export const VALUE_FORMATS = ['count', 'usd', 'duration', 'percent', 'score'] as const;
 export const formatSchema = z.enum(VALUE_FORMATS);
@@ -61,38 +85,55 @@ export const colorSchema = z.enum(CHART_COLOR_NAMES);
 
 /** Every ref an expression reads, in order. */
 export function exprRefs(expr: ValueExpr): ValueRef[] {
+  if ('const' in expr) return [];
   if ('sum' in expr) return expr.sum.flatMap(exprRefs);
   if ('minus' in expr) return expr.minus.flatMap(exprRefs);
   if ('ratio' in expr) return [...exprRefs(expr.ratio.of), ...exprRefs(expr.ratio.over)];
+  if ('max' in expr) return expr.max.flatMap(exprRefs);
+  if ('coalesce' in expr) return expr.coalesce.flatMap(exprRefs);
   return [expr];
 }
 
-/** Evaluates an expression, reading each ref through `read`; `undefined` when every ref is. */
+const defined = (values: (number | undefined)[]) => values.filter((v): v is number => v !== undefined);
+
+/**
+ * Evaluates an expression, reading each ref through `read`. A missing operand counts as 0 in `sum` and
+ * `minus` while another has a value; the result is missing when every operand is.
+ */
 export function evaluate(expr: ValueExpr, read: (ref: ValueRef) => number | undefined): number | undefined {
+  const run = (e: ValueExpr) => evaluate(e, read);
+  if ('const' in expr) return expr.const;
   if ('sum' in expr) {
-    const parts = expr.sum.map(e => evaluate(e, read));
-    return parts.every(p => p === undefined) ? undefined : parts.reduce<number>((total, p) => total + (p ?? 0), 0);
+    const parts = expr.sum.map(run);
+    return defined(parts).length ? parts.reduce<number>((total, p) => total + (p ?? 0), 0) : undefined;
   }
   if ('minus' in expr) {
-    const [a, b] = expr.minus.map(e => evaluate(e, read));
-    if (a === undefined && b === undefined) return undefined;
-    return Math.max((a ?? 0) - (b ?? 0), 0);
+    const [a, b] = expr.minus.map(run);
+    return a === undefined && b === undefined ? undefined : (a ?? 0) - (b ?? 0);
   }
   if ('ratio' in expr) {
-    const of = evaluate(expr.ratio.of, read);
-    const over = evaluate(expr.ratio.over, read);
-    if (of === undefined && over === undefined) return undefined;
-    return over ? (of ?? 0) / over : 0;
+    const over = run(expr.ratio.over);
+    if (!over) return undefined;
+    return (run(expr.ratio.of) ?? 0) / over;
+  }
+  if ('max' in expr) {
+    const parts = defined(expr.max.map(run));
+    return parts.length ? Math.max(...parts) : undefined;
+  }
+  if ('coalesce' in expr) {
+    for (const e of expr.coalesce) {
+      const v = run(e);
+      if (v !== undefined) return v;
+    }
+    return undefined;
   }
   return read(expr);
 }
 
-/** Whether a series named `name` is one a ref reads. */
+/** Whether the series with group key `name` is one a ref reads. */
 export function matchesGroups(ref: ValueRef, name: string) {
-  const lower = name.toLowerCase();
-  const has = (parts: string[]) => parts.some(p => lower.includes(p.toLowerCase()));
-  if (ref.groupsIncluding && !has(ref.groupsIncluding)) return false;
-  if (ref.groupsExcluding && has(ref.groupsExcluding)) return false;
+  if (ref.groups && !ref.groups.includes(name)) return false;
+  if (ref.notGroups?.includes(name)) return false;
   return true;
 }
 

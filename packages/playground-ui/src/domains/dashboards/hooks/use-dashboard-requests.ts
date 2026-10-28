@@ -21,17 +21,18 @@ function queryOptions(
   return {
     queryKey,
     // Grouped aggregates wait for a slot in the page's three-request cap, as the cards' do.
-    queryFn: isAggregate
-      ? () =>
-          limiter.run(() => sendRequest(client, request), {
-            priority: request.priority,
-            isWanted: () => isObserved(queryKey),
-          })
-      : () => sendRequest(client, request),
+    queryFn:
+      isAggregate && !request.unsatisfiable
+        ? () =>
+            limiter.run(() => sendRequest(client, request), {
+              priority: request.priority,
+              isWanted: () => isObserved(queryKey),
+            })
+        : () => sendRequest(client, request),
     placeholderData: keepPreviousData,
     // Grouped aggregates and usage breakdowns keep an answer for the frozen window, as the cards' do; the
     // other cards refetch a tab opened again, so these do too.
-    ...(isAggregate || request.method === 'getMetricBreakdown' ? { staleTime: Infinity } : {}),
+    ...(isAggregate || request.method === 'getMetricBreakdown' || request.unsatisfiable ? { staleTime: Infinity } : {}),
     // Aggregates retry in the client only, as `useTraceAggregate` does.
     ...(isAggregate ? { retry: false, refetchOnWindowFocus: false } : {}),
   };

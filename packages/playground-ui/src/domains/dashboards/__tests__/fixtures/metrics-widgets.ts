@@ -25,9 +25,10 @@ const agentRunsByStatus: DashboardQuery = {
   groupBy: ['status'],
 };
 
-const FAILED = ['error', 'fail'];
-const completedRuns = { query: 0, groupsExcluding: FAILED };
-const failedRuns = { query: 0, groupsIncluding: FAILED };
+// Runs report status `ok` or `error` (observability/mastra auto-extract); the card also counts `failed`.
+const FAILED = ['error', 'failed'];
+const completedRuns = { query: 0, notGroups: FAILED };
+const failedRuns = { query: 0, groups: FAILED };
 const agentRunsTraces = { page: 'traces', filters: [{ fieldId: 'rootEntityType', value: 'agent' }] } as const;
 
 export const kpisWidget: DashboardWidget = {
@@ -102,7 +103,12 @@ export const tokenUsageWidget: DashboardWidget = {
         chart: 'stackedBar',
         format: 'count',
         series: [
-          { dataKey: 'input', label: 'Input', color: 'green', value: { minus: [{ query: 0 }, { query: 2 }] } },
+          {
+            dataKey: 'input',
+            label: 'Input',
+            color: 'green',
+            value: { max: [{ minus: [{ query: 0 }, { query: 2 }] }, { const: 0 }] },
+          },
           { dataKey: 'cacheRead', label: 'Cache read', color: 'violet', value: { query: 2 } },
           { dataKey: 'output', label: 'Output', color: 'sky', value: { query: 1 } },
         ],
@@ -198,12 +204,16 @@ export const failureRateWidget: DashboardWidget = {
             dataKey: 'failureRate',
             label: 'Failed runs',
             color: 'error',
-            value: { ratio: { of: failedRuns, over: { sum: [completedRuns, failedRuns] } } },
+            value: {
+              coalesce: [{ ratio: { of: failedRuns, over: { sum: [completedRuns, failedRuns] } } }, { const: 0 }],
+            },
           },
         ],
         summary: {
           label: 'failed',
-          value: { ratio: { of: failedRuns, over: { sum: [completedRuns, failedRuns] } } },
+          value: {
+            coalesce: [{ ratio: { of: failedRuns, over: { sum: [completedRuns, failedRuns] } } }, { const: 0 }],
+          },
         },
         emptyWhenZero: { sum: [completedRuns, failedRuns] },
         emptyMessage: 'No agent runs in this range.',
@@ -523,7 +533,7 @@ const scopedViews = (scope: 'org' | 'project') => [
 export const breakdownWidget = {
   id: 'breakdown',
   span: 12,
-  kind: 'table',
+  kind: 'breakdown',
   title: 'Breakdown',
   drilldown: { click: { page: 'traces' } },
   views: [
