@@ -381,14 +381,36 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       expect(pttl).toBeLessThanOrEqual(60_000);
     }, 15_000);
 
-    it('leaves streams persistent by default', async () => {
+    it('expires idle streams by default (7 days) on both publish- and subscribe-created keys', async () => {
+      // A deployment constructed with defaults must not accumulate immortal
+      // streams: under a volatile-* policy they can't be evicted, and under
+      // noeviction they grow until Redis rejects writes.
+      const sevenDays = 7 * 24 * 60 * 60 * 1000;
       const ps = createPubSub();
-      const topic = `nottl-${randomUUID()}`;
-      await ps.publish(topic, makeEvent());
+      const publishTopic = `default-ttl-pub-${randomUUID()}`;
+      const subscribeTopic = `default-ttl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
+
+      const inspector = await createInspector();
+      for (const topic of [publishTopic, subscribeTopic]) {
+        const pttl = await inspector.pTTL(`mastra:topic:${topic}`);
+        expect(pttl).toBeGreaterThan(0);
+        expect(pttl).toBeLessThanOrEqual(sevenDays);
+      }
+    }, 15_000);
+
+    it('keeps streams persistent with streamIdleTtlMs: 0', async () => {
+      const ps = createPubSub({ streamIdleTtlMs: 0 });
+      const publishTopic = `nottl-pub-${randomUUID()}`;
+      const subscribeTopic = `nottl-sub-${randomUUID()}`;
+      await ps.publish(publishTopic, makeEvent());
+      await ps.subscribe(subscribeTopic, (_event, ack) => void ack?.());
 
       const inspector = await createInspector();
       // -1 = key exists with no TTL.
-      expect(await inspector.pTTL(`mastra:topic:${topic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${publishTopic}`)).toBe(-1);
+      expect(await inspector.pTTL(`mastra:topic:${subscribeTopic}`)).toBe(-1);
     }, 15_000);
 
     it('rejects an invalid streamIdleTtlMs (negative, NaN, Infinity, or non-integer)', () => {

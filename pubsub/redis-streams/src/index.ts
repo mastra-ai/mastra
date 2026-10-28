@@ -5,6 +5,7 @@ import type { RedisClientOptions, RedisClientType, RedisClusterOptions, RedisClu
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 const TRIM_PAGE_SIZE = 500;
 
 /**
@@ -143,9 +144,9 @@ export interface RedisStreamsPubSubConfig {
    * the full duration is deleted by Redis automatically — entries, consumer
    * groups and their pending lists included.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior: streams live
-   * until an explicit `clearTopic`, and a stream that never reaches one stays
-   * in Redis forever. **Production deployments should set this** — see below.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry: streams
+   * then live until an explicit `clearTopic`, and a stream that never reaches
+   * one stays in Redis forever.
    *
    * Why a TTL matters: topics fall into two classes.
    * - *Lifecycle-owned* topics (workflow/agent run streams, request/reply
@@ -274,7 +275,7 @@ export class RedisStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Redis rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison

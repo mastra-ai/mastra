@@ -5,6 +5,7 @@ import type { ValkeyClientOptions, ValkeyClientType } from './client.js';
 
 /** Page size for the reclaim loop's XPENDING scan and the max entries claimed per tick. */
 const RECLAIM_PAGE_SIZE = 100;
+const DEFAULT_STREAM_IDLE_TTL_MS = 7 * 24 * 60 * 60 * 1000;
 /** Page size for replaying existing entries to a fan-out subscriber joining a shared reader. */
 const REPLAY_PAGE_SIZE = 500;
 
@@ -112,7 +113,7 @@ export interface ValkeyStreamsPubSubConfig {
    * option only bounds memory for streams that never reach a `clearTopic` call
    * — e.g. a run that crashed before cleanup — so they don't linger forever.
    *
-   * Defaults to 0 (disabled) to preserve existing behavior.
+   * Defaults to 7 days (604_800_000). Set to 0 to disable expiry.
    */
   streamIdleTtlMs?: number;
   /**
@@ -216,7 +217,7 @@ export class ValkeyStreamsPubSub extends PubSub implements LeaseProvider {
     this.#keyPrefix = options.keyPrefix ?? 'mastra:topic';
     this.#blockMs = options.blockMs ?? 1000;
     this.#maxStreamLength = options.maxStreamLength ?? 10_000;
-    const ttl = options.streamIdleTtlMs ?? 0;
+    const ttl = options.streamIdleTtlMs ?? DEFAULT_STREAM_IDLE_TTL_MS;
     // Must be a non-negative integer: node-redis serializes the PEXPIRE arg with
     // toString(), and Valkey rejects a non-integer/Infinity ('value is not an
     // integer or out of range'). Without this guard a bad value would poison
