@@ -1,4 +1,6 @@
 export * from './base';
+export * from './dashboard';
+export * from './dashboard-filters';
 export * from './discovery';
 export * from './feedback';
 export * from './inmemory';
