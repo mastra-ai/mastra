@@ -18,7 +18,6 @@ vi.mock('../logger', async importOriginal => {
 });
 
 import { loop } from './loop';
-import { optionsTests } from './test-utils/options';
 import { createMessageListWithUserMessage, createTestMastra, createTestModels, mockDate } from './test-utils/utils';
 
 // The agentic loop now runs on the evented engine, which requires a Mastra
@@ -63,13 +62,5 @@ describe('Loop Tests', () => {
 
       expect(consoleLoggerConstructor).toHaveBeenCalledWith({ level: 'error' });
     });
-
-    optionsTests({ loopFn, runId: 'test-run-id' });
   });
-
-  // optionsTestsV5({ executeFn: execute, runId });
-
-  // textStreamTestsV5({ executeFn: execute, runId });
-
-  // toUIMessageStreamTests({ executeFn: execute, runId });
 });
