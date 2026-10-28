@@ -34,6 +34,19 @@ function SidebarShortcuts() {
   return null;
 }
 
+function AppFrame() {
+  const { state, collapsedWidth } = useSidebar();
+  const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
+
+  return (
+    <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
+      <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
+        <Outlet />
+      </MainCard>
+    </AppShell>
+  );
+}
+
 /**
  * Application frame rendered once at the router level: sidebar + page card
  * around the routed page. Pages render only their body (see `PageLayout`).
@@ -46,11 +59,7 @@ export function AppLayout() {
         <SidebarShortcuts />
         <OverlaysProvider>
           <ChatSessionRouteProvider>
-            <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />}>
-              <MainCard className="flex flex-col">
-                <Outlet />
-              </MainCard>
-            </AppShell>
+            <AppFrame />
             <ChatOverlays />
           </ChatSessionRouteProvider>
         </OverlaysProvider>

@@ -9,7 +9,7 @@ type CardActionButtonProps = {
  *  to whatever dimensions the card knows about. */
 export function OpenInTracesButton({ onClick }: CardActionButtonProps) {
   return (
-    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in Traces" aria-label="View in Traces">
+    <Button onClick={onClick} variant="ghost" size="icon-md" tooltip="View in traces" aria-label="View in traces">
       <EyeIcon />
     </Button>
   );
@@ -23,8 +23,8 @@ export function OpenErrorsInLogsButton({ onClick }: CardActionButtonProps) {
       onClick={onClick}
       variant="ghost"
       size="icon-md"
-      tooltip="View errors in Logs"
-      aria-label="View errors in Logs"
+      tooltip="View errors in logs"
+      aria-label="View errors in logs"
     >
       <LogsIcon />
     </Button>

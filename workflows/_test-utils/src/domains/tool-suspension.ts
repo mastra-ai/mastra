@@ -29,7 +29,7 @@ export function createToolSuspensionTests({ createAgent }: DurableAgentTestConte
             response: z.string(),
             confirmed: z.boolean().optional(),
           }),
-          execute: async (input, context) => {
+          execute: async (_input, context) => {
             const suspend = context?.agent?.suspend;
             if (suspend && !context?.agent?.resumeData) {
               await suspend({ message: 'Please confirm', promptType: 'confirm' });
@@ -168,7 +168,7 @@ export function createToolSuspensionTests({ createAgent }: DurableAgentTestConte
           inputSchema: z.object({ data: z.string() }),
           suspendSchema: z.object({ reason: z.string() }),
           resumeSchema: z.object({ approved: z.boolean() }),
-          execute: async (input, context) => {
+          execute: async (_input, context) => {
             if (!context?.agent?.resumeData) {
               return context?.agent?.suspend?.({ reason: 'Manual approval required' });
             }

@@ -9,7 +9,7 @@ import { ProviderLogo } from '@site/src/components/connect/provider-logo';
 
 # Provider toolsets
 
-This page documents generated toolsets for 23 providers (928 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
+This page documents generated toolsets for 26 providers (996 tools in this version of `@mastra/connect`). It isn't an exhaustive list of providers registered in the SDK or available in the platform catalog. [`tools()`](/reference/connect/tools) exposes a provider's toolset when the project has an active connection for its provider ID.
 
 Tool keys are stable identifiers of the form `<provider>_<action>` and are the values accepted by `allowTools` and `disallowTools`. Toolsets are versioned with the package: the exact list depends on the installed `@mastra/connect` version, and this page reflects the version it was generated from.
 
@@ -30,10 +30,13 @@ MCP providers (Attio, Canva, Clay, Neon, Render, Robinhood, and Sanity) serve th
 | <ProviderLogo src="https://app.nango.dev/images/template-logos/incident-io.svg" /> [incident.io](#incidentio) | `incident-io` | 66 |
 | <ProviderLogo slug="jira" /> [Jira](#jira) | `jira` | 38 |
 | <ProviderLogo slug="linear" /> [Linear](#linear) | `linear` | 46 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-powerpoint.svg" /> [Microsoft PowerPoint](#microsoft-powerpoint) | `microsoft-powerpoint` | 18 |
 | <ProviderLogo slug="microsoftteams" /> [Microsoft Teams](#microsoft-teams) | `microsoft-teams` | 25 |
-| [microsoft-word](#microsoft-word) | `microsoft-word` | 18 |
+| <ProviderLogo src="https://app.nango.dev/images/template-logos/microsoft-word.svg" /> [Microsoft Word](#microsoft-word) | `microsoft-word` | 18 |
 | <ProviderLogo slug="notion" mono /> [Notion](#notion) | `notion` | 44 |
+| [OneDrive](#onedrive) | `one-drive` | 20 |
 | <ProviderLogo src="https://svgl.app/library/openai.svg" mono /> [OpenAI](#openai) | `openai` | 26 |
+| <ProviderLogo slug="microsoftoutlook" /> [Microsoft Outlook](#microsoft-outlook) | `outlook` | 30 |
 | <ProviderLogo slug="posthog" /> [PostHog](#posthog) | `posthog` | 67 |
 | <ProviderLogo slug="resend" mono /> [Resend](#resend) | `resend` | 80 |
 | <ProviderLogo src="https://svgl.app/library/slack.svg" /> [Slack](#slack) | `slack` | 52 |
@@ -531,34 +534,34 @@ Provider ID: `incident-io` · 66 tools
 | `incident_io_get_team` | Get team in incident.io. |
 | `incident_io_get_user` | Get user in incident.io. |
 | `incident_io_get_user_paging_provider` | Get a user paging provider in incident.io. |
-| `incident_io_list_actions` | List actions in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_alert_tags` | List alert tags in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_alerts` | List alerts in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_catalog_entries` | List catalog entries in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_actions` | List actions in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_alert_tags` | List alert tags in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_alerts` | List alerts in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_catalog_entries` | List catalog entries in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_catalog_resources` | List catalog resources in incident.io. |
 | `incident_io_list_catalog_types` | List catalog types in incident.io. |
-| `incident_io_list_follow_ups` | List follow ups in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_incident_alerts` | List incident alerts in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_follow_ups` | List follow ups in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_incident_alerts` | List incident alerts in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_incident_participant_workloads` | List incident participant workloads in incident.io. |
 | `incident_io_list_incident_participants` | List incident participants in incident.io. |
 | `incident_io_list_incident_roles` | List incident roles in incident.io. |
 | `incident_io_list_incident_statuses` | List incident statuses in incident.io. |
-| `incident_io_list_incident_timeline_items` | List incident timeline items in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incident_timeline_items` | List incident timeline items in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_incident_timestamps` | List incident timestamps in incident.io. |
 | `incident_io_list_incident_types` | List incident types in incident.io. |
-| `incident_io_list_incident_updates` | List incident updates in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_incidents` | List incidents in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_postmortem_documents` | List postmortem documents in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_schedule_entries` | List schedule entries in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_schedule_overrides` | List schedule overrides in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_incident_updates` | List incident updates in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_incidents` | List incidents in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_postmortem_documents` | List postmortem documents in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_schedule_entries` | List schedule entries in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_schedule_overrides` | List schedule overrides in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_schedule_replicas` | List schedule replicas in incident.io. |
-| `incident_io_list_schedule_sync_rules` | List schedule sync rules in incident.io. Returns one page; pass next\_cursor as after to continue. |
-| `incident_io_list_schedules` | List schedules in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_schedule_sync_rules` | List schedule sync rules in incident.io. Returns one page; pass next_cursor as after to continue. |
+| `incident_io_list_schedules` | List schedules in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_severities` | List severities in incident.io. |
-| `incident_io_list_teams` | List teams in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_teams` | List teams in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_list_user_notification_methods` | List user notification methods in incident.io. |
 | `incident_io_list_user_notification_rules` | List user notification rules in incident.io. |
-| `incident_io_list_users` | List users in incident.io. Returns one page; pass next\_cursor as after to continue. |
+| `incident_io_list_users` | List users in incident.io. Returns one page; pass next_cursor as after to continue. |
 | `incident_io_remove_alert_tags` | Remove alert tags in incident.io. |
 | `incident_io_resolve_alert` | Resolve alert in incident.io. |
 | `incident_io_set_alert_tags` | Set alert tags in incident.io. |
@@ -666,6 +669,31 @@ Provider ID: `linear` · 46 tools
 | `linear_update_issue_relation` | Update fields on an existing Linear issue relation. |
 | `linear_update_project` | Update an existing Linear project. |
 
+## Microsoft PowerPoint
+
+Provider ID: `microsoft-powerpoint` · 18 tools
+
+| Tool | Description |
+| - | - |
+| `microsoft_powerpoint_copy_presentation` | Copy a presentation to a (possibly different) folder, optionally renaming it. |
+| `microsoft_powerpoint_create_presentation` | Upload a new .pptx presentation to a drive folder. |
+| `microsoft_powerpoint_create_sharing_link` | Create a sharing link for a presentation. |
+| `microsoft_powerpoint_delete_presentation` | Delete a presentation. |
+| `microsoft_powerpoint_get_presentation` | Retrieve driveItem metadata for a presentation |
+| `microsoft_powerpoint_get_presentation_as_pdf` | Download a presentation converted to PDF |
+| `microsoft_powerpoint_get_presentation_content` | Download the raw .pptx content of a presentation. |
+| `microsoft_powerpoint_get_site_drive` | Get the default document library (drive) for a SharePoint site. |
+| `microsoft_powerpoint_get_user_drive` | Get the connected user's OneDrive, or another user's drive when userId is provided. |
+| `microsoft_powerpoint_list_presentation_permissions` | List sharing permissions on a presentation. |
+| `microsoft_powerpoint_list_presentation_thumbnails` | Get thumbnail image URLs for a presentation. |
+| `microsoft_powerpoint_list_presentation_versions` | List the version history of a presentation. |
+| `microsoft_powerpoint_list_presentations` | List/search .pptx files within a drive |
+| `microsoft_powerpoint_list_sites` | Search/list SharePoint sites accessible to the app. |
+| `microsoft_powerpoint_list_users` | List/search tenant users, to resolve a user id for personal OneDrive access. |
+| `microsoft_powerpoint_move_presentation` | Move a presentation to a different folder. |
+| `microsoft_powerpoint_update_presentation_content` | Replace the content of an existing presentation. |
+| `microsoft_powerpoint_update_presentation_metadata` | Rename a presentation or update its description, without touching content |
+
 ## Microsoft Teams
 
 Provider ID: `microsoft-teams` · 25 tools
@@ -698,7 +726,7 @@ Provider ID: `microsoft-teams` · 25 tools
 | `microsoft_teams_reply_to_channel_message` | Reply to a channel message thread. |
 | `microsoft_teams_update_channel` | Update mutable channel properties. |
 
-## microsoft-word
+## Microsoft Word
 
 Provider ID: `microsoft-word` · 18 tools
 
@@ -774,6 +802,33 @@ Provider ID: `notion` · 44 tools
 | `notion_update_page` | Update page properties and other mutable page fields. |
 | `notion_update_page_markdown` | Update page content using markdown commands. Supports targeted edits, full replacement, insertion, and range replacement. |
 
+## OneDrive
+
+Provider ID: `one-drive` · 20 tools
+
+| Tool | Description |
+| - | - |
+| `one_drive_copy_item` | Copy a file or folder to another location |
+| `one_drive_create_folder` | Create a folder in OneDrive. |
+| `one_drive_create_sharing_link` | Create a share link for a file or folder. |
+| `one_drive_create_upload_session` | Start a resumable upload for a large file. |
+| `one_drive_delete_item` | Delete a file or folder. |
+| `one_drive_delete_permission` | Remove a sharing permission from an item |
+| `one_drive_get_drive` | Retrieve the user drive metadata. |
+| `one_drive_get_item` | Retrieve a file or folder by ID or path |
+| `one_drive_get_permission` | Retrieve a sharing permission on an item |
+| `one_drive_invite_recipients` | Grant item access to recipients and optionally send invitations. |
+| `one_drive_list_children` | List items under a folder |
+| `one_drive_list_drives` | List drives available to the authenticated user. |
+| `one_drive_list_permissions` | List sharing permissions on an item |
+| `one_drive_list_recent_items` | List recently used items from the user drive. |
+| `one_drive_list_shared_items` | List items shared with the user. |
+| `one_drive_list_versions` | List versions for a file. |
+| `one_drive_move_item` | Move or rename a file or folder |
+| `one_drive_search_items` | Search drive items by keyword |
+| `one_drive_update_item` | Update mutable file or folder metadata. |
+| `one_drive_upload_small_file` | Upload a small file in a single request. |
+
 ## OpenAI
 
 Provider ID: `openai` · 26 tools
@@ -806,6 +861,43 @@ Provider ID: `openai` · 26 tools
 | `openai_list_vector_stores` | List vector stores from OpenAI. |
 | `openai_search_vector_store` | Search a vector store for semantically matching content chunks |
 | `openai_update_vector_store` | Update a vector store in OpenAI |
+
+## Microsoft Outlook
+
+Provider ID: `outlook` · 30 tools
+
+| Tool | Description |
+| - | - |
+| `outlook_add_event_attachment` | Attach a small file (under 3 MB) to an Outlook event. |
+| `outlook_add_message_attachment` | Attach a file to a draft message. Note: 3 MB simple upload limit applies. |
+| `outlook_cancel_event` | Cancel a meeting and send the cancellation notice to attendees |
+| `outlook_copy_message` | Copy a message to another mail folder. |
+| `outlook_create_calendar` | Create a secondary calendar in the mailbox. |
+| `outlook_create_draft_message` | Create a draft email message |
+| `outlook_create_event` | Create an event on a calendar. |
+| `outlook_create_mail_folder` | Create a child mail folder in Outlook. |
+| `outlook_delete_calendar` | Delete a secondary calendar. |
+| `outlook_delete_event` | Delete an event from a calendar. |
+| `outlook_delete_message` | Delete a message from the mailbox |
+| `outlook_download_message_attachment` | Download the content of a file attachment on a message. |
+| `outlook_get_calendar` | Retrieve a calendar by ID. |
+| `outlook_get_event` | Retrieve an event by ID from the user's calendar |
+| `outlook_get_message` | Retrieve a message by ID. |
+| `outlook_list_calendar_events` | List events from a calendar or date window. |
+| `outlook_list_calendars` | List calendars in the mailbox. |
+| `outlook_list_event_attachments` | List attachments on an event. |
+| `outlook_list_mail_folder_children` | List child folders under a mail folder |
+| `outlook_list_mail_folders` | List top-level mail folders from the mailbox |
+| `outlook_list_message_attachments` | List attachments on a message. |
+| `outlook_list_messages` | List messages from a mail folder. |
+| `outlook_move_message` | Move a message to another mail folder. |
+| `outlook_reply_all_to_message` | Reply to all recipients on a message |
+| `outlook_reply_to_message` | Reply to a message sender. |
+| `outlook_send_draft_message` | Send an existing draft message. |
+| `outlook_send_mail` | Send a new email message immediately |
+| `outlook_update_calendar` | Update calendar properties. |
+| `outlook_update_event` | Update event details in Outlook calendar. |
+| `outlook_update_message` | Update a draft or mutable message fields. |
 
 ## PostHog
 
@@ -929,25 +1021,25 @@ Provider ID: `resend` · 80 tools
 | `resend_get_webhook` | Retrieve a single webhook in Resend. |
 | `resend_get_webhook_event` | Retrieve a single webhook event in Resend. |
 | `resend_list_audiences` | Retrieve a list of audiences in Resend. Deprecated by the provider in favour of Segments: prefer list-segments. The endpoint still works but will be removed in the future. |
-| `resend_list_broadcast_clicked_links` | Retrieve a broadcast's clicked links in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_broadcast_recipients` | Retrieve broadcast recipients in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_broadcasts` | Retrieve a list of broadcasts in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_contact_imports` | Retrieve a list of contact imports in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_contact_properties` | Retrieve a list of contact properties in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_contact_segments` | Retrieve a list of segments for a contact in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_contact_topics` | Retrieve topics for a contact in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_contacts` | Retrieve a list of contacts in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_domains` | List domains in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_email_attachments` | Retrieve a list of attachments for a sent email in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_emails` | List emails in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_received_email_attachments` | Retrieve a list of attachments for a received email in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_received_emails` | Retrieve a list of received emails in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_segments` | Retrieve a list of segments in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_templates` | Retrieve a list of templates in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_topics` | Retrieve a list of topics in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
-| `resend_list_webhook_event_attempts` | Retrieve a list of webhook event attempts in Resend. Returns one page; pass next\_cursor as after to continue. |
-| `resend_list_webhook_events` | Retrieve a list of webhook events in Resend. Returns one page; pass next\_cursor as after to continue. |
-| `resend_list_webhooks` | Retrieve a list of webhooks in Resend. Returns one page; pass next\_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_broadcast_clicked_links` | Retrieve a broadcast's clicked links in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_broadcast_recipients` | Retrieve broadcast recipients in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_broadcasts` | Retrieve a list of broadcasts in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_imports` | Retrieve a list of contact imports in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_properties` | Retrieve a list of contact properties in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_segments` | Retrieve a list of segments for a contact in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contact_topics` | Retrieve topics for a contact in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_contacts` | Retrieve a list of contacts in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_domains` | List domains in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_email_attachments` | Retrieve a list of attachments for a sent email in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_emails` | List emails in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_received_email_attachments` | Retrieve a list of attachments for a received email in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_received_emails` | Retrieve a list of received emails in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_segments` | Retrieve a list of segments in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_templates` | Retrieve a list of templates in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_topics` | Retrieve a list of topics in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
+| `resend_list_webhook_event_attempts` | Retrieve a list of webhook event attempts in Resend. Returns one page; pass next_cursor as after to continue. |
+| `resend_list_webhook_events` | Retrieve a list of webhook events in Resend. Returns one page; pass next_cursor as after to continue. |
+| `resend_list_webhooks` | Retrieve a list of webhooks in Resend. Returns one page; pass next_cursor back as after, or as before when paginating backwards, to continue. |
 | `resend_publish_template` | Publish a template in Resend. |
 | `resend_remove_contact_from_segment` | Remove a contact from a segment in Resend. |
 | `resend_replay_webhook_event` | Replay a webhook event in Resend. |

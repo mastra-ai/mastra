@@ -35,12 +35,12 @@ const ProviderVersionSchema = z.object({
     .optional(),
   lastModifiedDateTime: z.string().nullable().optional(),
   size: z.number().nullable().optional(),
-  ['@microsoft.graph.downloadUrl']: z.string().nullable().optional(),
+  '@microsoft.graph.downloadUrl': z.string().nullable().optional(),
 });
 
 const ProviderResponseSchema = z.object({
   value: z.array(z.unknown()),
-  ['@odata.nextLink']: z.string().nullable().optional(),
+  '@odata.nextLink': z.string().nullable().optional(),
 });
 
 const VersionSchema = z.object({

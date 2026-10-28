@@ -160,7 +160,8 @@ function traceQueryFixtureForWriteModel(
         : rootVersions === 'current-first'
           ? [...current, ...superseded]
           : current,
-    relatedSpans: [...spans.values()],
+    // Completion-only writers never see a span before it ends.
+    relatedSpans: [...spans.values()].filter(span => !span.isPending),
     scores: data.scores,
     feedback: data.feedback,
   };
@@ -195,7 +196,8 @@ export async function writeTraceQueryFixture(
       environment: span.environment,
       organizationId: span.organizationId,
       serviceName: span.serviceName ?? null,
-      executionSource: span.executionSource ?? null,
+      // Spans carry execution provenance as `source`; stores expose it as `executionSource`.
+      source: span.executionSource ?? null,
       runId: span.runId ?? null,
       userId: span.userId ?? null,
       sessionId: span.sessionId ?? null,
@@ -2518,6 +2520,86 @@ export function createObservabilityVNextTests(options: CreateObservabilityVNextT
         });
       });
     }
+
+    describe('native span fields', () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'initial-run',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      const unset = Object.fromEntries(Object.keys(fields).map(key => [key, null]));
+      // Read through getTrace: it collapses a span's start and end rows the same
+      // way on every store, where getSpan may return either row before they merge.
+      const readSpan = async (spanId: string) => {
+        const trace = await storage.getTrace({ traceId: 'native-fields' });
+        const span = trace?.spans.find(candidate => candidate.spanId === spanId);
+        if (!span) throw new Error(`span ${spanId} was not stored`);
+        return span;
+      };
+
+      it('round-trips supplied values and reads unset ones as null', async () => {
+        await storage.batchCreateSpans({
+          records: [
+            makeSpan({ traceId: 'native-fields', spanId: 'set', ...fields }),
+            makeSpan({ traceId: 'native-fields', spanId: 'unset', ...unset }),
+            // Records built by a core version that predates the fields leave them out.
+            makeSpan({ traceId: 'native-fields', spanId: 'missing' }),
+          ],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        expect(await readSpan('set')).toMatchObject(fields);
+        expect(await readSpan('unset')).toMatchObject(unset);
+        const missing = await readSpan('missing');
+        for (const key of Object.keys(fields) as (keyof typeof fields)[]) {
+          expect(missing[key] ?? null).toBeNull();
+        }
+      });
+
+      it('adds the outcome on the ended write, which re-sends the fields written at start', async () => {
+        const started = { model: 'gpt-6.1-sol', provider: 'openai' };
+        await storage.createSpan({
+          span: makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', endedAt: null, ...started }),
+        });
+        await storage.batchCreateSpans({
+          records: [makeSpan({ traceId: 'native-fields', spanId: 'lifecycle', ...started, outcome: 'success' })],
+        });
+        if (flushPendingMerges) await flushPendingMerges(storage);
+
+        const span = await readSpan('lifecycle');
+        expect(span).toMatchObject({ ...started, outcome: 'success' });
+        expect(span.stopReason ?? null).toBeNull();
+      });
+
+      if (capabilities.traceQuery) {
+        it('reads model and provider from attributes when the columns are empty', async () => {
+          // Rows written before the columns existed are never backfilled, so a
+          // span read must agree with the trace and span queries, which read
+          // the model-call attributes.
+          await storage.batchCreateSpans({
+            records: [
+              makeSpan({
+                traceId: 'native-fields',
+                spanId: 'legacy',
+                spanType: SpanType.MODEL_GENERATION,
+                attributes: { model: 'gpt-6.1-sol', provider: 'openai', outcome: 'ignored' },
+              }),
+            ],
+          });
+          if (flushPendingMerges) await flushPendingMerges(storage);
+
+          const span = await readSpan('legacy');
+          expect(span).toMatchObject({ model: 'gpt-6.1-sol', provider: 'openai' });
+          expect(span.outcome ?? null).toBeNull();
+        });
+      }
+    });
 
     describe('getStructure / getTraceLight', () => {
       beforeEach(async () => {

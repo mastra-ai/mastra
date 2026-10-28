@@ -7,8 +7,6 @@ import type { SkillActivation } from '@mastra/playground-ui/domains/chat/message
 import type { MessageEntry, TimelineEntry } from '../services/transcript';
 import { isRecord } from './transcript-shared';
 
-export { SignalActivity as SignalRow } from '@mastra/playground-ui/components/ai/activity';
-
 function timeGapDivider(text: string): SignalRowView {
   const [label = '', title] = text.split(' — ');
   return { kind: 'divider', label, title };
@@ -36,7 +34,7 @@ export function skillSignalActivation(entry: MessageEntry): SkillActivation | un
 export const HIDDEN_REACTIVE_SIGNAL_TAGS = new Set(['github-subscribe-pr', 'github-unsubscribe-pr']);
 export const SUPPRESSED_STATE_SIGNAL_IDS = new Set(['tasks', 'goal']);
 
-type SignalRowView =
+export type SignalRowView =
   | { kind: 'state'; stateId: string; mode: 'snapshot' | 'delta'; text: string }
   | { kind: 'divider'; label: string; title?: string }
   | { kind: 'reminder'; text: string }

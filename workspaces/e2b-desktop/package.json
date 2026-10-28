@@ -1,6 +1,6 @@
 {
   "name": "@mastra/e2b-desktop",
-  "version": "0.1.9",
+  "version": "0.1.10",
   "description": "E2B Desktop (computer-use) sandbox provider for Mastra workspaces",
   "type": "module",
   "main": "dist/index.js",
@@ -31,25 +31,25 @@
   },
   "license": "Apache-2.0",
   "dependencies": {
-    "@e2b/desktop": "^2.3.1",
+    "@e2b/desktop": "^2.5.0",
     "@mastra/e2b": "workspace:^",
-    "e2b": "^2.36.0"
+    "e2b": "^2.59.0"
   },
   "devDependencies": {
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@internal/workspace-test-utils": "workspace:*",
     "@mastra/core": "workspace:*",
-    "@types/node": "22.20.1",
+    "@types/node": "22.19.15",
     "@vitest/coverage-v8": "catalog:",
     "@vitest/ui": "catalog:",
     "dotenv": "^17.4.2",
-    "tsdown": "0.22.9",
+    "tsdown": "0.23.1",
     "typescript": "catalog:",
     "vitest": "catalog:"
   },
   "peerDependencies": {
-    "@mastra/core": ">=1.67.0-0 <2.0.0-0"
+    "@mastra/core": ">=1.80.0-0 <2.0.0-0"
   },
   "files": [
     "dist"

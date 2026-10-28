@@ -3,6 +3,15 @@
   "temperature": ["GLM-5.1", "GLM-5.2", "MiniMax-M3", "glm5.2-fast"],
   "structuredOutput": ["GLM-5.1", "GLM-5.2", "Kimi-K2.6", "MiniMax-M3", "glm5.2-fast"],
   "reasoning": {
+    "GLM-5.2": [
+      {
+        "type": "toggle"
+      },
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
     "GLM-5.1": [
       {
         "type": "toggle"
@@ -20,15 +29,6 @@
     "Kimi-K2.6": [
       {
         "type": "toggle"
-      }
-    ],
-    "GLM-5.2": [
-      {
-        "type": "toggle"
-      },
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "xhigh", "max"]
       }
     ],
     "glm5.2-fast": [

@@ -30,6 +30,39 @@ describe('MetricsShareList', () => {
     expect(items[1]).toContain('25%');
   });
 
+  it('puts left-aligned text columns right after the label, before the number columns, in rows and headers', () => {
+    render(
+      <MetricsShareList
+        rows={[row('agent', 10, { cells: ['5%', 'my-project'] })]}
+        columns={[{ label: 'Errors' }, { label: 'Project', align: 'left' }]}
+        valueLabel="Runs"
+        showShare={false}
+        onSortChange={() => {}}
+      />,
+    );
+    expect(labels()[0]).toBe('agentmy-project5%10');
+    expect(screen.getAllByRole('columnheader').map(h => h.textContent)).toEqual(['Project', 'Errors', 'Runs']);
+  });
+
+  it('drops the strip and the row swatches when showStrip is off', () => {
+    render(<MetricsShareList rows={[row('a', 10), row('b', 5)]} valueLabel="Runs" showStrip={false} />);
+    expect(screen.queryAllByTestId('metrics-share-segment')).toHaveLength(0);
+    expect(screen.getAllByRole('listitem')[0]?.querySelector('.size-2')).toBeNull();
+  });
+
+  it('shows an emphasis column in the main value’s colour, and the others muted', () => {
+    render(
+      <MetricsShareList
+        rows={[row('agent', 10, { cells: ['5%', '42'] })]}
+        columns={[{ label: 'Errors' }, { label: 'Traces', emphasis: true }]}
+        valueLabel="% Change"
+        showShare={false}
+      />,
+    );
+    expect(screen.getByText('42').className).toContain('text-foreground');
+    expect(screen.getByText('5%').className).toContain('text-muted-foreground');
+  });
+
   it('folds rows past the limit into one Other row with the caller’s totals', () => {
     const rows = ['a', 'b', 'c', 'd', 'e', 'f', 'g'].map((k, i) => row(k, 70 - i * 10));
     render(
@@ -163,5 +196,26 @@ describe('MetricsShareList', () => {
       'var(--chart-share-5)',
       'var(--chart-share-1)',
     ]);
+  });
+
+  it('puts the column headers between the strip and the rows with headerPlacement="below-strip"', () => {
+    const { container } = render(
+      <MetricsShareList rows={[row('a', 3), row('b', 1)]} valueLabel="Spend" headerPlacement="below-strip" />,
+    );
+    const order = [...(container.firstElementChild?.children ?? [])].map(el =>
+      el.querySelector('[data-testid="metrics-share-segment"]')
+        ? 'strip'
+        : el.tagName === 'UL'
+          ? 'rows'
+          : el.textContent?.includes('Spend')
+            ? 'header'
+            : 'other',
+    );
+    expect(order).toEqual(['strip', 'header', 'rows']);
+  });
+
+  it('keeps the column headers above the strip by default', () => {
+    const { container } = render(<MetricsShareList rows={[row('a', 3)]} valueLabel="Spend" />);
+    expect(container.firstElementChild?.firstElementChild?.textContent).toContain('Spend');
   });
 });

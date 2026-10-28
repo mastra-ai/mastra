@@ -485,7 +485,7 @@ export function DatasetReview({
               <Icon size="xs">
                 <GaugeIcon />
               </Icon>
-              Create Scorer
+              Create scorer
             </Button>
           )}
           {hasSelection && (
@@ -503,7 +503,7 @@ export function DatasetReview({
               </Button>
               <DropdownMenu>
                 <DropdownMenu.Trigger asChild>
-                  <Button disabled={isAnalyzing} aria-label="More actions">
+                  <Button size="icon-md" disabled={isAnalyzing} aria-label="More actions">
                     {isAnalyzing ? <Spinner className="h-4 w-4" /> : <EllipsisIcon />}
                   </Button>
                 </DropdownMenu.Trigger>

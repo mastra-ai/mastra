@@ -1,9 +1,11 @@
 import { createSignal } from '@mastra/core/signals';
 import { describe, expect, it, vi } from 'vitest';
 
-import { createBoardRegistry, defineBoard } from '../boards/index.js';
+import { createBoardRegistry, defineBoard, reviewBoard, workBoard } from '../boards/index.js';
+import type { BoardPhaseDefinition, BoardRegistry } from '../boards/index.js';
 import { createLifecycleTestRegistry, createTestBoard } from '../boards/test-utils.js';
 import { DecisionAttentionProvider, failedDecisionAttentionSpec } from '../routes/attention-providers.js';
+import { resolveFactoryCredentialTenant } from '../session/credential-policy.js';
 import { FACTORY_OPEN_RUNS_SETTING, observeSessionRunEnd, waitForSessionRunAudit } from '../session/run-audit.js';
 import { FactoryFeedReader } from '../storage/domains/comments/feed-context.js';
 import { FACTORY_RULE_MATERIALIZATION_KEY, WorkItemUpdateConflictError } from '../storage/domains/work-items/base.js';
@@ -1347,10 +1349,27 @@ describe('FactoryDecisionDispatcher', () => {
     const requestContext = session.sendSignal.mock.calls[0]?.[1]?.requestContext;
     expect(requestContext?.get('user')).toEqual({ workosId: 'user-1', organizationId: 'org-1' });
     expect(requestContext?.get('controller')).toMatchObject({
+      sessionId: 'session-1',
       resourceId: PROJECT_ID,
       threadId: 'thread-1',
       session: { modelId: 'openai/gpt-5.6-sol' },
     });
+    expect(
+      await resolveFactoryCredentialTenant(requestContext!, {
+        projects: {
+          getById: vi.fn(async () => ({ id: PROJECT_ID, orgId: 'org-1', modelScope: 'factory' })) as never,
+        },
+        sourceControl: {
+          getBySessionId: vi.fn(async () => ({
+            sessionId: 'session-1',
+            orgId: 'org-1',
+            userId: 'user-1',
+            factoryProjectId: PROJECT_ID,
+          })) as never,
+        },
+        workItems: storage,
+      }),
+    ).toEqual({ orgId: 'org-1', userId: 'user-1', credentialScope: 'factory' });
     expect(session.subscribe).toHaveBeenCalledTimes(2);
     expect(getAgentEndListenerCount()).toBe(0);
   });
@@ -6753,6 +6772,7 @@ describe('a skill run that ends in error (#27740)', () => {
     ['a tool quoting an API key hint', 'Tool failed: README says "set your API key in .env" (user quote)'],
     ['model output naming a 401 handler', 'Model output parse error near "HTTP 401 handler" in user code'],
     ['a repository credential failure', 'Invalid credentials for repository clone'],
+    ['a local file permission failure', 'EACCES: permission denied, open /x'],
   ])('does not blame model credentials for %s', async (_case, runError) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -6782,6 +6802,13 @@ describe('a skill run that ends in error (#27740)', () => {
   it.each([
     ['a 401 status', Object.assign(new Error('Request failed'), { statusCode: 401 })],
     ['a wrapped 403 status', Object.assign(new Error('Stream failed'), { cause: { statusCode: 403 } })],
+    [
+      'an authentication failure named only in the body',
+      Object.assign(new Error('Request failed'), {
+        statusCode: 400,
+        responseBody: '{"error":{"code":"invalid_api_key","message":"Incorrect API key provided."}}',
+      }),
+    ],
     [
       'a resolver error with no policy for the user',
       'Tenant model credential policy could not be resolved: no credential policy applies to this request.',
@@ -6903,5 +6930,123 @@ describe('a skill run that ends in error (#27740)', () => {
     await dispatcher.runOnce(new Date('2030-01-01T00:00:00Z'));
 
     expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.lastError).toContain(runError);
+  });
+});
+
+describe('board phase automation', () => {
+  const LOW_EFFORT = {
+    operator: 'AND' as const,
+    conditions: [{ field: 'item.labels', operator: 'contains' as const, value: 'effort:low' }],
+  };
+
+  /** Work with the Building phase replaced, as a board author would declare it. */
+  function boardsWithBuilding(
+    fields: Partial<Extract<BoardPhaseDefinition<string>, { kind: 'working' }>>,
+  ): BoardRegistry {
+    const board = defineBoard({
+      id: 'work',
+      name: 'Work',
+      initialPhase: 'intake',
+      sourceClosed: workBoard.sourceClosed,
+      transitionPolicy: workBoard.transitionPolicy,
+      phases: { ...workBoard.phases, execute: { ...workBoard.phases.execute, ...fields } },
+    });
+    return new Map([
+      [board.id, board],
+      [reviewBoard.id, reviewBoard],
+    ]);
+  }
+
+  async function queueBuild(storage: WorkItemsStorage, labels: string[], key: string) {
+    const queued = await queueDecision(storage, {
+      type: 'invokeSkill',
+      role: 'work',
+      skillName: 'understand-issue',
+      idempotencyKey: key,
+    });
+    await storage.update({
+      orgId: 'org-1',
+      id: queued.item.id,
+      userId: 'user-1',
+      patch: { metadata: { authorTrusted: true, labels } },
+    });
+    await bindWorkRun(storage, queued.item.id);
+    return queued;
+  }
+
+  it('starts the run of a phase that starts on its own, only for the cards its rule matches', async () => {
+    const boards = boardsWithBuilding({ autoStart: true, autoStartWhen: LOW_EFFORT });
+    for (const [labels, expected] of [
+      [['effort:low'], 'succeeded'],
+      [['effort:high'], 'proposed'],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { transitionService } = await queueBuild(storage, [...labels], `auto-start-${labels[0]}`);
+      const { controller } = createSession();
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe(expected);
+    }
+  });
+
+  it('never auto-starts a phase for a card from outside the write-access circle', async () => {
+    const storage = (await createFactoryStorageForTests()).workItems;
+    const { item, transitionService } = await queueBuild(storage, ['effort:low'], 'auto-start-outsider');
+    await storage.update({
+      orgId: 'org-1',
+      id: item.id,
+      userId: 'user-1',
+      patch: { metadata: { authorTrusted: false, labels: ['effort:low'] } },
+    });
+    const { controller } = createSession();
+    await new FactoryDecisionDispatcher({
+      controller: controller as never,
+      transitionService,
+      storage,
+      boards: boardsWithBuilding({ autoStart: true }),
+      ownerId: 'worker-1',
+      isAutoRunEnabled: async () => true,
+    }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+    expect((await storage.listDeferredDecisions('org-1', PROJECT_ID))[0]?.status).toBe('proposed');
+  });
+
+  it("approves a phase's submit_plan only for the cards its rule matches", async () => {
+    const boards = boardsWithBuilding({
+      exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
+    });
+    for (const [labels, approved] of [
+      [['effort:low'], true],
+      [['effort:high'], false],
+    ] as const) {
+      const storage = (await createFactoryStorageForTests()).workItems;
+      const { transitionService } = await queueBuild(storage, [...labels], `plan-${labels[0]}`);
+      const { controller, session } = createSession(undefined, { suspendsOnPlan: true });
+      await new FactoryDecisionDispatcher({
+        controller: controller as never,
+        transitionService,
+        storage,
+        boards,
+        ownerId: 'worker-1',
+        isAutoRunEnabled: async () => true,
+        autoApprovePlans: async () => false,
+      }).runOnce(new Date('2030-01-01T00:00:00Z'));
+
+      if (approved) {
+        expect(session.respondToToolSuspension).toHaveBeenCalledWith({
+          resumeData: { action: 'approved' },
+          toolCallId: 'call-plan',
+        });
+      } else {
+        expect(session.respondToToolSuspension).not.toHaveBeenCalled();
+      }
+    }
   });
 });

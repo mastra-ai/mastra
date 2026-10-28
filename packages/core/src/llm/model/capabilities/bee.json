@@ -9,7 +9,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-brood": [
+    "bee-swarm": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]
@@ -21,7 +21,7 @@
         "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "bee-swarm": [
+    "bee-brood": [
       {
         "type": "effort",
         "values": ["low", "medium", "high", "xhigh", "max"]

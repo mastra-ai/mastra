@@ -81,6 +81,32 @@ export function buildStepRecord(executionOutput: DurableAgenticExecutionOutput):
 }
 
 /**
+ * An output processor can hold a tool result past its tool-call step and emit
+ * it when a later stream ends. The tool-call step recorded it as hidden; now
+ * that it was emitted, callbacks report it again.
+ */
+function withReleasedToolResults<T extends StepRecord>(steps: T[], released?: string[]): T[] {
+  if (!released?.length) return steps;
+  const ids = new Set(released);
+  return steps.map(step => {
+    if (!step.toolResults?.some(result => isHeldResult(result, ids))) return step;
+    return {
+      ...step,
+      toolResults: step.toolResults.map(result => {
+        if (!isHeldResult(result, ids)) return result;
+        const { resultHidden: _resultHidden, ...rest } = result as { resultHidden?: boolean };
+        return rest;
+      }),
+    };
+  });
+}
+
+function isHeldResult(result: unknown, ids: Set<string>): boolean {
+  const record = result as { toolCallId?: string; resultHidden?: boolean } | undefined;
+  return !!record?.resultHidden && !!record.toolCallId && ids.has(record.toolCallId);
+}
+
+/**
  * Create the base iteration state update.
  *
  * This returns the common fields for iteration state updates.
@@ -145,7 +171,10 @@ export function createBaseIterationStateUpdate(input: IterationStateUpdateInput)
     iterationCount: currentState.iterationCount + (signalPreempted ? 0 : 1),
     accumulatedSteps: signalPreempted
       ? currentState.accumulatedSteps
-      : [...currentState.accumulatedSteps, buildStepRecord(executionOutput)],
+      : [
+          ...withReleasedToolResults(currentState.accumulatedSteps, executionOutput.releasedToolResultIds),
+          buildStepRecord(executionOutput),
+        ],
     accumulatedUsage: newUsage,
     usageAggregationVersion: signalPreempted ? currentState.usageAggregationVersion : 1,
     lastStepResult,

@@ -14,7 +14,8 @@ export type LinearStatusReason =
   | 'auth_required'
   | 'organization_required'
   | 'not_connected'
-  | 'ready';
+  | 'ready'
+  | 'unavailable';
 
 export interface LinearStatus {
   enabled: boolean;
@@ -89,10 +90,11 @@ export async function fetchLinearStatus(baseUrl: string): Promise<LinearStatus> 
     if (res.status === 401) {
       return { enabled: false, connected: false, workspace: null, reason: 'auth_required' };
     }
-    if (!res.ok) return { enabled: false, connected: false, workspace: null };
+    if (res.status === 404) return { enabled: false, connected: false, workspace: null };
+    if (!res.ok) return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
     return (await res.json()) as LinearStatus;
   } catch {
-    return { enabled: false, connected: false, workspace: null };
+    return { enabled: false, connected: false, workspace: null, reason: 'unavailable' };
   }
 }
 

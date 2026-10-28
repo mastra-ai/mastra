@@ -347,6 +347,24 @@ beforeEach(() => {
 });
 
 describe('factory_switch_session_model', () => {
+  it('lets an agent inspect the available models before choosing an exact ID from the user’s intent', async () => {
+    const env = await setup();
+    const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
+
+    await expect(env.switchModel({ sessionId: started.sessionId })).resolves.toEqual({
+      sessionId: started.sessionId,
+      models: ['openai/gpt-5.6', 'openai/gpt-6.1-sol'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
+
+    await expect(
+      env.switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-6.1-sol' }),
+    ).resolves.toMatchObject({
+      modelId: 'openai/gpt-6.1-sol',
+      live: true,
+    });
+  });
+
   it('switches a running session immediately, a stopped one for its next run, and rejects unavailable models or other users', async () => {
     const env = await setup();
     const started = (await env.start({ prompt: 'Investigate the build.' })) as { sessionId: string };
@@ -392,10 +410,11 @@ describe('factory_switch_session_model', () => {
       baseBranch: 'main',
       visibility: 'org',
     });
-    await expect(env.switchModel({ sessionId: 'other-user-session', modelId: 'openai/gpt-5.6' })).rejects.toThrow(
-      'not owned by you',
-    );
-    await expect(env.switchModel({ sessionId: 'missing', modelId: 'openai/gpt-5.6' })).rejects.toThrow('not found');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.switchModel({ sessionId: 'other-user-session' })).rejects.toThrow('not owned by you');
+    await expect(env.switchModel({ sessionId: 'missing' })).rejects.toThrow('not found');
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
+    expect(env.controller.setThreadModel).toHaveBeenCalledTimes(2);
   });
 });
 
@@ -423,6 +442,12 @@ describe('factory_switch_session_model with stored credentials', () => {
 
   it('lets a user-scoped session switch to a model its owner holds a credential for, and nothing else', async () => {
     const env = await tenantSetup('user');
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['anthropic/claude-opus-5-5'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(env.switchModel({ sessionId: env.sessionId, modelId: 'anthropic/claude-opus-5-5' })).resolves.toEqual({
       sessionId: env.sessionId,
@@ -454,6 +479,12 @@ describe('factory_switch_session_model with stored credentials', () => {
       input: { providerId: 'acme', name: 'Acme', url: 'https://llm.acme.test/v1', apiKey: 'acme', models: ['acme-1'] },
     });
     env.controller.getSession.mockResolvedValue(null);
+
+    await expect(env.switchModel({ sessionId: env.sessionId })).resolves.toEqual({
+      sessionId: env.sessionId,
+      models: ['acme/acme-1', 'deepseek/deepseek-flash'],
+    });
+    expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(
       env.switchModel({ sessionId: env.sessionId, modelId: 'deepseek/deepseek-flash' }),
@@ -696,10 +727,15 @@ describe('the side session run-end backstop', () => {
       attributes: { backstop: 'true', 'from-session': result.sessionId, 'from-user': 'user-1' },
     });
 
-    // A later run nobody started from here (a typed message, a wake) reports too.
+    // A later run (a typed message, a wake) that ends with nothing new doesn't say "finished" again.
     session.emit({ type: 'agent_end', reason: 'complete' } as AgentControllerEvent);
+    await new Promise(resolve => setTimeout(resolve, 10));
+    expect(reports).toHaveLength(1);
+
+    // But a failure after it still goes out.
+    session.emit({ type: 'agent_end', reason: 'error' } as AgentControllerEvent);
     await vi.waitFor(() => expect(reports).toHaveLength(2));
-    expect(reports[1]!.target).toEqual({ resourceId: scope.sessionId, threadId: scope.threadId });
+    expect(reports[1]!.input).toMatchObject({ kind: 'failed' });
   });
 
   it('stays quiet when the agent already sent its own final report', async () => {
@@ -1322,9 +1358,11 @@ describe('session tools on a turn nobody signed in started', () => {
     });
     const other = { ...env.scope, sessionId: 'other-session', resourceId: 'other-session', threadId: 'other-thread' };
 
-    await expect(
-      env.toolsFor(other).switchModel({ sessionId: started.sessionId, modelId: 'openai/gpt-5.6' }),
-    ).rejects.toThrow('only this session and the side sessions it started can switch models');
+    env.controller.listAvailableModels.mockClear();
+    await expect(env.toolsFor(other).switchModel({ sessionId: started.sessionId })).rejects.toThrow(
+      'only this session and the side sessions it started can switch models',
+    );
+    expect(env.controller.listAvailableModels).not.toHaveBeenCalled();
     expect(env.controller.setThreadModel).not.toHaveBeenCalled();
 
     await expect(

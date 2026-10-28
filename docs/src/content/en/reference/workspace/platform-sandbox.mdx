@@ -156,9 +156,11 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`Template()` supports `cpuCount`, `memoryMB`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
+`Template()` supports `cpuCount`, `memoryMB`, `docker`, `runCmd`, `setWorkdir`, `setEnvs`, `aptInstall`, `pipInstall`, and `npmInstall`. Platform serializes the builder internally and computes the content hash. Call `await template.build(options)` to start or reuse that provider build without provisioning a sandbox. It returns `ready`, `pending`, or `failed`, with the template ID and an optional retry hint or error.
 
 For E2B, `cpuCount()` and `memoryMB()` set the template build resources inherited by sandboxes created from the exact template or a resource-matched stale template. Both methods accept a positive safe integer. They default to 2 CPUs and 1,024 MB. Resource setters use last-value-wins semantics, and their effective values are part of the content identity. Omitting both setters is equivalent to explicitly selecting the defaults. If a pending build falls back to the provider base, that sandbox may use the provider's default resources. Check `templatePending` to detect this case.
+
+`docker()` installs Docker Engine and Compose in the E2B template. The daemon starts the first time something uses Docker, so sandboxes that never use it don't pay for it. Docker is part of the content identity only when it's on, so templates without it keep their IDs. Use at least 2,048 MB of memory with Docker.
 
 Railway converts the command, working directory, environment, and package operations to Railway template instructions. Railway currently ignores `cpuCount()` and `memoryMB()` because its sandbox template API doesn't expose matching resource settings.
 
@@ -178,7 +180,7 @@ const sandbox = new PlatformSandbox({
 await sandbox.start()
 ```
 
-`createRepoTemplate()` accepts the same `cpuCount` and `memoryMB` sizing as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
+`createRepoTemplate()` accepts the same `cpuCount`, `memoryMB`, and `docker` settings as the `Template()` builder methods, as plain options. They carry the identity and stale-fallback semantics described above. Omit them for the provider defaults.
 
 `setupCommand` also accepts an array. Each entry runs as its own cached build step. `workingDirectory` sets the cwd for the build and the sandbox, and the repository is cloned to `<workingDirectory>/<repo>`. `buildEnv` passes environment variables to the build steps only. They never enter the serialized definition.
 
@@ -313,6 +315,25 @@ console.log(result.exitCode)
 The `command` argument is a shell string and is concatenated verbatim into the remote shell. This lets you use pipes, redirects, and chaining (`ls -la | grep foo`) but means untrusted input must be passed through `args` (safely quoted) or shell-quoted by the caller. Untrusted `command` values allow arbitrary shell execution on the sandbox.
 
 :::
+
+### Background processes
+
+`sandbox.processes` runs commands in the background. Output streams while they run, and you can list, attach to and stop them:
+
+```typescript
+const handle = await sandbox.processes.spawn('pnpm dev', {
+  onStdout: data => console.log(data),
+})
+
+// Everything running in the sandbox, plus exited processes not read yet
+const running = await sandbox.processes.list()
+
+await handle.kill()
+```
+
+A process has no time limit unless you pass `timeout` to `spawn()` or the constructor. Call `get(pid)` to attach to a process this manager didn't start, for example after your app restarts. Output written before attaching isn't available.
+
+A long-running process's output stream reconnects periodically, and the process keeps running through it. Output written during a reconnect is lost, and a process that exits while its stream reconnects reports exit code `1` from `wait()` instead of its real exit code.
 
 ## Constructor parameters
 
@@ -457,9 +478,9 @@ The `command` argument is a shell string and is concatenated verbatim into the r
   },
   {
     name: 'processes',
-    type: 'PlatformProcessManager',
+    type: 'SandboxProcessManager',
     description:
-      'Background process manager. See [SandboxProcessManager reference](/reference/workspace/process-manager).',
+      "Background process manager. `spawn()` streams output while the process runs, `kill()` stops it, `list()` shows what is running in the sandbox, and `get(pid)` attaches to a process this manager didn't start. See [Background processes](#background-processes) and the [SandboxProcessManager reference](/reference/workspace/process-manager).",
   },
   {
     name: 'filesystem',

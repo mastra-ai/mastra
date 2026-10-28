@@ -44,6 +44,9 @@ beforeAll(() => {
   }
   globalThis.ResizeObserver = ResizeObserverStub;
   vi.spyOn(HTMLElement.prototype, 'getBoundingClientRect').mockReturnValue(new DOMRect(0, 0, 800, 600));
+  // The virtualizer sizes its scroll container from clientWidth/clientHeight.
+  vi.spyOn(HTMLElement.prototype, 'clientWidth', 'get').mockReturnValue(800);
+  vi.spyOn(HTMLElement.prototype, 'clientHeight', 'get').mockReturnValue(600);
   // Base UI waits for the menu's exit animations; jsdom has no Web Animations API.
   Element.prototype.getAnimations ??= () => [];
 });
@@ -159,6 +162,39 @@ describe('TracesListView — status column', () => {
 
     const statuses = screen.getAllByRole('button').map(row => row.lastElementChild?.textContent);
     expect(statuses).toEqual(['-']);
+  });
+});
+
+describe('TracesListView — time to first chunk column', () => {
+  const ttfcOnly = { visibleColumns: ['timeToFirstChunk'], customColumns: [], metadataKeys: [] } as const;
+
+  it('labels the column TTFC right after Status', () => {
+    const { container } = render(<TracesListView traces={[]} columnPreferences={ttfcOnly} onTraceClick={vi.fn()} />);
+
+    expect(headerTexts(container)).toEqual(['Start', 'Primitive name', 'Status', 'TTFC']);
+  });
+
+  it('shows how long each root took to stream its first chunk, leaving rows that never streamed empty', () => {
+    const { container } = render(
+      <TracesListView
+        columnPreferences={ttfcOnly}
+        traces={[
+          makeTrace({ traceId: 'trace-streamed', timeToFirstChunkMs: 412 }),
+          makeTrace({ traceId: 'trace-slow', timeToFirstChunkMs: 1830 }),
+          makeTrace({ traceId: 'trace-never-streamed', timeToFirstChunkMs: null }),
+          makeTrace({ traceId: 'trace-unreported' }),
+        ]}
+        onTraceClick={vi.fn()}
+      />,
+    );
+
+    const top = container.querySelector('.data-list-top');
+    assert(top);
+    const ttfc = screen
+      .getAllByRole('button')
+      .filter(row => !top.contains(row))
+      .map(row => row.lastElementChild?.textContent);
+    expect(ttfc).toEqual(['412ms', '1.83s', '', '']);
   });
 });
 
@@ -414,6 +450,26 @@ describe('TracesListView — empty and loading', () => {
 
     render(<TracesListView traces={[]} filtersApplied onTraceClick={vi.fn()} />);
     expect(screen.getByText('No traces found for applied filters')).toBeTruthy();
+  });
+
+  it('names spans in the empty messages of a span list', () => {
+    render(<TracesListView traces={[]} resource="spans" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="spans" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No spans found for applied filters')).toBeTruthy();
+  });
+
+  it('names threads in the empty messages of a thread list', () => {
+    render(<TracesListView traces={[]} resource="threads" onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found yet')).toBeTruthy();
+
+    cleanup();
+
+    render(<TracesListView traces={[]} resource="threads" filtersApplied onTraceClick={vi.fn()} />);
+    expect(screen.getByText('No threads found for applied filters')).toBeTruthy();
   });
 });
 

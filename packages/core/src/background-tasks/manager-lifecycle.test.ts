@@ -3,9 +3,11 @@ import { afterEach, describe, expect, it, vi } from 'vitest';
 import { EventEmitterPubSub } from '../events/event-emitter';
 import type { Event, EventCallback, SubscribeOptions } from '../events/types';
 import { Mastra } from '../mastra';
-import { MockStore } from '../storage';
+import { InMemoryStore, MockStore } from '../storage';
+import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
+import { InMemoryDB } from '../storage/domains/inmemory-db';
 import { BackgroundTaskManager } from './manager';
-import type { BackgroundTask } from './types';
+import type { BackgroundTask, UpdateBackgroundTask, UpdateBackgroundTaskOptions } from './types';
 import { BACKGROUND_TASK_WORKFLOW_ID } from './workflow-id';
 
 function deferred<T = void>() {
@@ -66,6 +68,62 @@ class CapturingPubSub extends EventEmitterPubSub {
 
 class SilentPublishPubSub extends EventEmitterPubSub {
   override async publish(): Promise<void> {}
+}
+
+/**
+ * In-memory store whose workflows and background-task domains reject every
+ * call once `close()` has run, like LibSQL's client does with CLIENT_CLOSED.
+ * `failDeletes` makes run deletes reject regardless; `holdTaskDeletesUntilClose`
+ * parks `deleteTasks` calls until the store closes, so they land on it closed.
+ */
+class ClosableStore extends InMemoryStore {
+  closed = false;
+  failDeletes = false;
+  holdTaskDeletesUntilClose = false;
+  readonly taskDeleteStarted = deferred();
+  readonly #closedSignal = deferred();
+
+  constructor() {
+    super();
+    this.stores.workflows = this.#rejectWhenClosed(this.stores.workflows!);
+    this.stores.backgroundTasks = this.#rejectWhenClosed(this.stores.backgroundTasks!);
+  }
+
+  #rejectWhenClosed<T extends object>(domain: T): T {
+    return new Proxy(domain, {
+      get: (target, prop, receiver) => {
+        const value = Reflect.get(target, prop, receiver);
+        if (typeof value !== 'function') return value;
+        return (...args: unknown[]) => {
+          if (this.holdTaskDeletesUntilClose && prop === 'deleteTasks') {
+            this.taskDeleteStarted.resolve();
+            return this.#closedSignal.promise.then(() =>
+              Promise.reject(new Error('CLIENT_CLOSED: The client is closed')),
+            );
+          }
+          if (this.closed) return Promise.reject(new Error('CLIENT_CLOSED: The client is closed'));
+          if (this.failDeletes && prop === 'deleteWorkflowRunById') return Promise.reject(new Error('delete failed'));
+          return value.apply(target, args);
+        };
+      },
+    });
+  }
+
+  override async close(): Promise<void> {
+    this.closed = true;
+    this.#closedSignal.resolve();
+  }
+}
+
+function recordUnhandledRejections() {
+  const rejections: unknown[] = [];
+  const onRejection = (reason: unknown) => rejections.push(reason);
+  process.on('unhandledRejection', onRejection);
+  return { rejections, stop: () => process.off('unhandledRejection', onRejection) };
+}
+
+function waitUntilAborted(_args: unknown, { abortSignal }: { abortSignal?: AbortSignal } = {}) {
+  return new Promise(resolve => abortSignal?.addEventListener('abort', () => resolve('stopped'), { once: true }));
 }
 
 function makeRunningTask(overrides: Partial<BackgroundTask> = {}): BackgroundTask {
@@ -247,6 +305,160 @@ describe('BackgroundTaskManager lifecycle', () => {
       expect(warn).toHaveBeenCalledWith('Failed to cancel background task task-1 during shutdown:', error);
     } finally {
       mastra.__unregisterHooks();
+    }
+  });
+
+  it('finishes deleting a running task workflow run before Mastra closes storage on shutdown', async () => {
+    // A task aborted by shutdown settles after manager.shutdown() used to return,
+    // so its fire-and-forget run delete hit the already-closed store and became
+    // an unhandled rejection, which crashes Node mid-shutdown.
+    const store = new ClosableStore();
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    manager.registerStaticExecutor('wait', { execute: waitUntilAborted });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'wait',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('running'));
+      const workflowsStore = await store.getStore('workflows');
+      const backgroundTaskRun = () =>
+        workflowsStore!.getWorkflowRunById({ runId: task.id, workflowName: BACKGROUND_TASK_WORKFLOW_ID });
+      await vi.waitFor(async () => expect(await backgroundTaskRun()).not.toBeNull());
+
+      await mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 200));
+
+      expect(unhandled.rejections).toEqual([]);
+      store.closed = false;
+      expect(await backgroundTaskRun()).toBeNull();
+    } finally {
+      unhandled.stop();
+    }
+  });
+
+  it('logs a failed workflow run delete instead of rejecting unhandled', async () => {
+    const store = new ClosableStore();
+    store.failDeletes = true;
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const manager = mastra.backgroundTaskManager!;
+    manager.registerStaticExecutor('quick', { execute: async () => 'done' });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'quick',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+      await vi.waitFor(() =>
+        expect(warn).toHaveBeenCalledWith(
+          `Failed to delete workflow run for background task ${task.id}:`,
+          expect.objectContaining({ message: 'delete failed' }),
+        ),
+      );
+      await new Promise(resolve => setTimeout(resolve, 50));
+      expect(unhandled.rejections).toEqual([]);
+    } finally {
+      unhandled.stop();
+      await mastra.shutdown();
+    }
+  });
+
+  it('logs a cleanup tick that lands on storage closed by shutdown instead of rejecting unhandled', async () => {
+    // Shutdown clears the cleanup interval, but a tick already deleting task
+    // records keeps going and finishes after Mastra has closed storage.
+    const store = new ClosableStore();
+    store.holdTaskDeletesUntilClose = true;
+    const mastra = new Mastra({
+      logger: false,
+      storage: store,
+      backgroundTasks: { enabled: true, cleanup: { cleanupIntervalMs: 20 } },
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      await store.taskDeleteStarted.promise;
+      await mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(unhandled.rejections).toEqual([]);
+      expect(warn).toHaveBeenCalledWith(
+        'Background task cleanup failed:',
+        expect.objectContaining({ message: 'CLIENT_CLOSED: The client is closed' }),
+      );
+    } finally {
+      unhandled.stop();
+    }
+  });
+
+  it('declines a resume caught mid-preparation by shutdown and keeps the task suspended', async () => {
+    // The resume event flips the task to `running` and then awaits the run.
+    // If shutdown starts in that gap, it must not start the run against a
+    // store that is about to close, and the task must stay resumable.
+    const store = new ClosableStore();
+    const mastra = new Mastra({ logger: false, storage: store, backgroundTasks: { enabled: true } });
+    const manager = mastra.backgroundTaskManager!;
+    const execute = vi.fn(async (_args: unknown, opts: any) => {
+      if (!opts.resumeData) return opts.suspend({ waiting: true });
+      return opts.resumeData;
+    });
+    manager.registerStaticExecutor('approval', { execute });
+    const unhandled = recordUnhandledRejections();
+
+    try {
+      const { task } = await manager.enqueue({
+        runId: 'run-1',
+        toolName: 'approval',
+        toolCallId: 'call-1',
+        args: {},
+        agentId: 'agent-1',
+      });
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('suspended'));
+
+      const workflow = mastra.__getInternalWorkflow(BACKGROUND_TASK_WORKFLOW_ID);
+      const createRun = workflow.createRun.bind(workflow);
+      const createRunStarted = deferred();
+      const createRunGate = deferred();
+      vi.spyOn(workflow, 'createRun').mockImplementation(async (...args) => {
+        createRunStarted.resolve();
+        await createRunGate.promise;
+        return createRun(...args);
+      });
+
+      await manager.resume(task.id, { ok: true });
+      await createRunStarted.promise;
+      expect((await manager.getTask(task.id))?.status).toBe('running');
+
+      const shutdown = mastra.shutdown();
+      await new Promise(resolve => setTimeout(resolve, 20));
+      createRunGate.resolve();
+      await shutdown;
+      await new Promise(resolve => setTimeout(resolve, 50));
+
+      expect(unhandled.rejections).toEqual([]);
+      expect(execute).toHaveBeenCalledTimes(1);
+      store.closed = false;
+      const backgroundTasks = await store.getStore('backgroundTasks');
+      expect(await backgroundTasks!.getTask(task.id)).toMatchObject({
+        status: 'suspended',
+        suspendPayload: { waiting: true },
+        ownerId: undefined,
+        leaseExpiresAt: undefined,
+      });
+    } finally {
+      unhandled.stop();
     }
   });
 
@@ -1011,5 +1223,195 @@ describe('BackgroundTaskManager lifecycle', () => {
     expect(controller.signal.aborted).toBe(true);
     expect(manager.activeAbortControllers.has('task-1')).toBe(false);
     await shutdownPromise;
+  });
+});
+
+class FailOnceOnCompleteBackgroundTasks extends BackgroundTasksInMemory {
+  completedWriteFailures = 0;
+
+  override async updateTask(
+    taskId: string,
+    update: UpdateBackgroundTask,
+    options?: UpdateBackgroundTaskOptions,
+  ): Promise<boolean> {
+    if (update.status === 'completed' && this.completedWriteFailures === 0) {
+      this.completedWriteFailures++;
+      throw new Error('storage unavailable while completing task');
+    }
+    return super.updateTask(taskId, update, options);
+  }
+}
+
+class FailOnceOnCompleteStore extends InMemoryStore {
+  readonly backgroundTasks = new FailOnceOnCompleteBackgroundTasks({ db: new InMemoryDB() });
+
+  constructor() {
+    super();
+    this.stores.backgroundTasks = this.backgroundTasks;
+  }
+}
+
+describe('BackgroundTaskManager workflow run settlement', () => {
+  async function setup(storage: InMemoryStore) {
+    const mastra = new Mastra({ logger: false, storage });
+    await mastra.startWorkers();
+    const pubsub = new EventEmitterPubSub();
+    const onTaskFailed = vi.fn();
+    const onTaskComplete = vi.fn();
+    const manager = new BackgroundTaskManager({ enabled: true, onTaskFailed, onTaskComplete });
+    manager.__registerMastra(mastra);
+    await manager.init(pubsub);
+    const publish = vi.spyOn(pubsub, 'publish');
+    return {
+      manager,
+      onTaskFailed,
+      onTaskComplete,
+      completedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.completed'),
+      failedEvents: () => publish.mock.calls.filter(([, event]) => event.type === 'task.failed'),
+      cleanup: async () => {
+        await manager.shutdown();
+        await pubsub.close();
+        await mastra.stopWorkers();
+      },
+    };
+  }
+
+  it('marks the task failed when the workflow run fails before a terminal status is persisted', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(storage.backgroundTasks.completedWriteFailures).toBe(1);
+      const failed = await manager.getTask(task.id);
+      expect(failed?.error?.message).toBe('storage unavailable while completing task');
+      expect(failed?.completedAt).toBeInstanceOf(Date);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.failed when a per-task failure hook throws during settlement', async () => {
+    const storage = new FailOnceOnCompleteStore();
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(storage);
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onFailed },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('fires failure hooks and events once when the task itself fails', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn();
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+  it('still publishes task.failed when onFailed throws after an ordinary step failure', async () => {
+    const { manager, onTaskFailed, failedEvents, cleanup } = await setup(new InMemoryStore());
+    const onFailed = vi.fn(async () => {
+      throw new Error('onFailed hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1', maxRetries: 0 },
+        {
+          executor: {
+            execute: async () => {
+              throw new Error('tool exploded');
+            },
+          },
+          onFailed,
+        },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('failed'));
+      await vi.waitFor(() => expect(onTaskFailed).toHaveBeenCalledTimes(1));
+      // Let the workflow run settle so a duplicate settle-path publish would land.
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.error?.message).toBe('tool exploded');
+      expect(onFailed).toHaveBeenCalledTimes(1);
+      expect(onTaskFailed).toHaveBeenCalledTimes(1);
+      expect(failedEvents()).toHaveLength(1);
+    } finally {
+      await cleanup();
+    }
+  });
+
+  it('still publishes task.completed when onComplete throws after a successful run', async () => {
+    const { manager, onTaskComplete, onTaskFailed, completedEvents, failedEvents, cleanup } = await setup(
+      new InMemoryStore(),
+    );
+    const onComplete = vi.fn(async () => {
+      throw new Error('onComplete hook exploded');
+    });
+
+    try {
+      const { task } = await manager.enqueue(
+        { toolName: 'my-tool', toolCallId: 'call-1', args: {}, agentId: 'agent-1', runId: 'run-1' },
+        { executor: { execute: async () => 'done' }, onComplete },
+      );
+
+      await vi.waitFor(async () => expect((await manager.getTask(task.id))?.status).toBe('completed'));
+      await vi.waitFor(() => expect(onTaskComplete).toHaveBeenCalledTimes(1));
+      await new Promise(resolve => setTimeout(resolve, 100));
+
+      expect((await manager.getTask(task.id))?.status).toBe('completed');
+      expect(onComplete).toHaveBeenCalledTimes(1);
+      expect(completedEvents()).toHaveLength(1);
+      expect(onTaskFailed).not.toHaveBeenCalled();
+      expect(failedEvents()).toHaveLength(0);
+    } finally {
+      await cleanup();
+    }
   });
 });

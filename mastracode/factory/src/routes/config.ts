@@ -1,11 +1,14 @@
+import type { CredentialTenant } from '@mastra/code-sdk/agents/credential-resolver';
 import { MastraCodeGateway } from '@mastra/code-sdk/agents/mastracode-gateway';
 import type { AuthStorage } from '@mastra/code-sdk/auth/storage';
+import { MIN_OBSERVATION_THRESHOLD } from '@mastra/code-sdk/constants';
 import { resolveAutoOMModelId } from '@mastra/code-sdk/onboarding/packs';
 import type { ProviderAccess, ProviderAccessLevel } from '@mastra/code-sdk/onboarding/packs';
 import { getCustomProviderId, MASTRA_GATEWAY_PROVIDER } from '@mastra/code-sdk/onboarding/settings';
 import type { CustomProviderSetting } from '@mastra/code-sdk/onboarding/settings';
 import { AMAZON_BEDROCK_GATEWAY_ID } from '@mastra/code-sdk/providers/amazon-bedrock-gateway';
 import { MASTRA_GATEWAY_PREFIX } from '@mastra/code-sdk/providers/model-ids';
+import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
 import { getModelReasoningOptions } from '@mastra/core/llm';
 import type { ModelReasoningOption } from '@mastra/core/llm';
 import { RequestContext } from '@mastra/core/request-context';
@@ -14,7 +17,7 @@ import { registerApiRoute } from '@mastra/core/server';
 
 import type { Context } from 'hono';
 import { z } from 'zod';
-import { resolveFactoryModelPolicy } from '../session/credential-policy.js';
+import { resolveFactoryModelPolicy, routedPersonalDefaults } from '../session/credential-policy.js';
 import { DEFAULT_OBSERVATION_THRESHOLD, DEFAULT_REFLECTION_THRESHOLD } from '../session/memory-settings-hydration.js';
 import type {
   CredentialRecord,
@@ -33,6 +36,7 @@ import { effectiveModelScope } from '../storage/domains/projects/base.js';
 import type { FactoryProjectsStorage } from '../storage/domains/projects/base.js';
 import type { SourceControlStorageHandle } from '../storage/domains/source-control/base.js';
 import type { WorkItemsStorage } from '../storage/domains/work-items/base.js';
+import { THINKING_LEVELS } from './contracts.js';
 import {
   credentialLabel,
   getAuthProviderId,
@@ -43,6 +47,7 @@ import {
 } from './provider-credentials.js';
 import { Route } from './route.js';
 import type { RouteAuth, RouteDependencies } from './route.js';
+import { resolveTenantProviderDefaultModel } from './tenant-credentials.js';
 
 /** Widen a route-local Hono context to the plain `Context` the auth helpers take. */
 function loose(c: unknown): Context {
@@ -97,10 +102,16 @@ export interface ProviderInfo {
    * when one shadows the other.
    */
   userCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the caller's personal sign-in could not be renewed and must be redone. */
+  userCredentialExpired?: true;
   /** Tenant mode: the shared org credential for this provider, if any. */
   orgCredential?: 'oauth' | 'api_key';
+  /** Tenant mode: the shared org sign-in could not be renewed and must be redone. */
+  orgCredentialExpired?: true;
   /** Web OAuth sign-in capability, when the provider supports it. */
   oauth?: { supported: true; modes: LoginSessionKind[] };
+  /** The provider is a stored custom OpenAI-compatible endpoint. */
+  custom?: true;
 }
 
 /** Minimal session surface the config routes touch. */
@@ -113,9 +124,17 @@ export interface OMSession {
 /** Minimal controller surface this module needs (model catalog + modes + sessions). */
 export interface ModelCatalog {
   listAvailableModels: () => Promise<
-    Array<{ id?: string; modelName: string; provider: string; hasApiKey: boolean; apiKeyEnvVar?: string }>
+    Array<{
+      id?: string;
+      modelName: string;
+      provider: string;
+      hasApiKey: boolean;
+      apiKeyEnvVar?: string;
+      releaseDate?: string;
+    }>
   >;
   listModes?: () => Array<{ id: string; defaultModelId?: string }>;
+  getDefaultMode?: () => { defaultModelId?: string };
   getSession?: (sessionId: string) => Promise<OMSession | undefined>;
 }
 
@@ -133,11 +152,13 @@ export async function listProviders({
   authStorage,
   tenantCredentials,
   deploymentProviders,
+  listCustomProviders,
 }: {
   controller: ModelCatalog;
   authStorage?: AuthStorage;
   tenantCredentials?: CredentialRecord[];
   deploymentProviders?: ReadonlySet<string>;
+  listCustomProviders?: () => Promise<CustomProviderRecord[]>;
 }): Promise<ProviderInfo[]> {
   const models = await controller.listAvailableModels();
   const seen = new Map<string, ProviderInfo>();
@@ -159,14 +180,18 @@ export async function listProviders({
     let source: ProviderInfo['source'] = 'none';
     let orgKey: boolean | undefined;
     let userCredential: ProviderInfo['userCredential'];
+    let userCredentialExpired = false;
     let orgCredential: ProviderInfo['orgCredential'];
+    let orgCredentialExpired = false;
     if (tenantCredentials) {
       const userRec = tenantCredentials.find(r => r.scope === 'user' && r.provider === authProviderId);
       const orgRec = tenantCredentials.find(r => r.scope === 'org' && r.provider === authProviderId);
       // Any shared org credential (API key or org-wide OAuth) counts.
       orgKey = orgRec !== undefined;
       userCredential = userRec?.credential.type;
+      userCredentialExpired = userRec?.refreshFailedAt !== undefined;
       orgCredential = orgRec?.credential.type;
+      orgCredentialExpired = orgRec?.refreshFailedAt !== undefined;
       if (userRec?.credential.type === 'oauth') {
         source = 'oauth-user';
       } else if (userRec?.credential.type === 'api_key') {
@@ -193,9 +218,26 @@ export async function listProviders({
       source,
       ...(orgKey !== undefined ? { orgKey } : {}),
       ...(userCredential ? { userCredential } : {}),
+      ...(userCredentialExpired ? { userCredentialExpired: true as const } : {}),
       ...(orgCredential ? { orgCredential } : {}),
+      ...(orgCredentialExpired ? { orgCredentialExpired: true as const } : {}),
       ...(flowKind ? { oauth: { supported: true as const, modes: [flowKind] } } : {}),
     });
+  }
+
+  if (listCustomProviders) {
+    try {
+      for (const record of await listCustomProviders()) {
+        if (seen.has(record.providerId)) continue;
+        seen.set(record.providerId, {
+          provider: record.providerId,
+          source: tenantCredentials ? 'stored-org' : 'stored',
+          custom: true,
+        });
+      }
+    } catch {
+      // Keep the built-in provider catalog available if custom-provider storage is unavailable.
+    }
   }
 
   return Array.from(seen.values()).sort((a, b) => a.provider.localeCompare(b.provider));
@@ -410,6 +452,7 @@ export interface ModelCatalogEntry {
   id: string;
   provider: string;
   modelName: string;
+  releaseDate?: string;
   hasApiKey: true;
   reasoningOptions?: ModelReasoningOption[];
   credentialLabel?: string;
@@ -444,13 +487,14 @@ export async function buildModelCatalog({
       deploymentProviders,
     }),
   ]);
-  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName }) =>
+  const catalog: ModelCatalogEntry[] = models.flatMap(({ id, provider, modelName, releaseDate }) =>
     typeof id === 'string' && canUseModelProvider(access, provider)
       ? [
           {
             id,
             provider,
             modelName,
+            releaseDate,
             hasApiKey: true as const,
             reasoningOptions: getModelReasoningOptions(id),
             ...tenantModelCredential(tenantCredentials, provider),
@@ -617,7 +661,10 @@ function readStoredOMConfig(
     reflector: roleConfig(record?.reflectorModelId ?? 'auto', reflectorModelId, autoModelSource, availableProviders),
     observerModelId,
     reflectorModelId,
-    observationThreshold: record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+    observationThreshold: Math.max(
+      record?.observationThreshold ?? DEFAULT_OBSERVATION_THRESHOLD,
+      MIN_OBSERVATION_THRESHOLD,
+    ),
     reflectionThreshold: record?.reflectionThreshold ?? DEFAULT_REFLECTION_THRESHOLD,
     observeAttachments: record?.observeAttachments ?? 'auto',
   };
@@ -639,8 +686,8 @@ interface MemorySettingsContext {
  * Resolve the memory-settings context for a request, or a ready-to-return
  * error response. When `factoryProjectId` is provided the row addressed is the
  * factory project's shared settings (a sentinel user id in the caller's org)
- * instead of the caller's personal row — this is what factory board runs and
- * channel sessions hydrate from.
+ * instead of the caller's personal row — the row requests paid with the
+ * Factory's credentials read.
  */
 async function resolveMemorySettingsContext({
   c,
@@ -700,7 +747,8 @@ async function persistMemorySettings(context: MemorySettingsContext, patch: Memo
 /** Dependencies injected into {@link ConfigRoutes}. */
 export interface ConfigRoutesDeps extends RouteDependencies {
   controller: ModelCatalog;
-  features?: { knowledge: boolean };
+  /** `mcp`: the Factory MCP endpoint is mounted (auth plus an MCP authorization server). */
+  features?: { knowledge: boolean; mcp?: boolean };
   authStorage?: AuthStorage;
   /** Tenant credential domain handle; absent in local (no-DB) mode. */
   modelCredentials?: ModelCredentialsStorage;
@@ -750,12 +798,103 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
     const onCredentialsChanged = options.onCredentialsChanged ?? (() => {});
     const onCustomProvidersChanged = options.onCustomProvidersChanged ?? (() => {});
 
-    const resolveOMResponseContext = async (c: Context) => {
-      const tenantCredentials = await listTenantCredentialsForRequest({
+    const resolveSessionModelContext = async (
+      c: Context,
+      address: { resourceId: string; threadId: string; sessionId: string },
+      includeDefaultModel = true,
+    ) => {
+      const tenant = auth.tenant(c);
+      if (!tenant && auth.enabled()) return { response: c.json({ error: 'unauthorized' }, 401) };
+      if (!tenant) return undefined;
+      if (
+        !options.factoryProjects ||
+        !options.sourceControlSessions ||
+        !options.workItems ||
+        !options.modelCredentials
+      ) {
+        return { response: c.json({ error: 'session_model_policy_unavailable' }, 503) };
+      }
+
+      const requestContext = new RequestContext();
+      requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
+      requestContext.set('controller', address);
+      let policy;
+      try {
+        policy = await resolveFactoryModelPolicy(requestContext, {
+          projects: options.factoryProjects,
+          sourceControl: options.sourceControlSessions,
+          workItems: options.workItems,
+        });
+      } catch {
+        return { response: c.json({ error: 'session_model_policy_unavailable' }, 403) };
+      }
+      if (!policy) return { response: c.json({ error: 'unauthorized' }, 401) };
+
+      const orgId = policy.tenant.orgId ?? tenantOrgId(tenant);
+      const modelScope = policy.tenant.credentialScope ?? 'user';
+      const tenantCredentials = await listSessionScopedCredentials({
+        credentials: options.modelCredentials,
+        orgId,
+        userId: policy.tenant.userId,
+        modelScope,
+      });
+      let defaultModelId = policy.factoryDefaultModelId ?? null;
+      let personalThinkingLevel: ThinkingLevelSetting | null = null;
+      if (modelScope === 'user' && includeDefaultModel) {
+        if (!options.modelDefaults) return { response: c.json({ error: 'model_defaults_unavailable' }, 503) };
+        const ownerDefaults = await routedPersonalDefaults(policy.tenant, options.modelDefaults);
+        defaultModelId = ownerDefaults?.modelId ?? null;
+        personalThinkingLevel = ownerDefaults?.thinkingLevel ?? null;
+      }
+      return { tenantCredentials, modelScope, defaultModelId, personalThinkingLevel };
+    };
+
+    const resolveOMResponseContext = async (
+      c: Context,
+      {
+        sessionId,
+        threadId,
+        resourceId,
+        factoryProjectId,
+      }: {
+        sessionId?: string;
+        threadId?: string;
+        resourceId?: string;
+        factoryProjectId?: string;
+      },
+    ) => {
+      let tenantCredentials = await listTenantCredentialsForRequest({
         c: loose(c),
         auth,
         credentials: options.modelCredentials,
       });
+      const tenant = auth.tenant(c);
+      if (sessionId !== undefined && threadId !== undefined) {
+        const address = z
+          .object({
+            sessionId: z.string().trim().min(1),
+            threadId: z.string().trim().min(1),
+            resourceId: z.string().trim().min(1).optional(),
+          })
+          .transform(data => ({ ...data, resourceId: data.resourceId ?? data.sessionId }))
+          .safeParse({ sessionId, threadId, resourceId });
+        if (!address.success) return { response: c.json({ error: 'invalid_session_context' }, 400) };
+        const sessionContext = await resolveSessionModelContext(c, address.data, false);
+        if (sessionContext && 'response' in sessionContext) return { response: sessionContext.response };
+        tenantCredentials = sessionContext?.tenantCredentials;
+      } else if (threadId !== undefined) {
+        return { response: c.json({ error: 'invalid_session_context' }, 400) };
+      } else if (tenantCredentials && factoryProjectId && tenant) {
+        if (!options.factoryProjects) return { response: c.json({ error: 'factory_unavailable' }, 503) };
+        await options.factoryProjects.ensureReady();
+        const project = await options.factoryProjects.get({ orgId: tenantOrgId(tenant), id: factoryProjectId });
+        if (!project) return { response: c.json({ error: 'factory_project_not_found' }, 404) };
+        const scope = effectiveModelScope(project.modelScope, 'run') === 'factory' ? 'org' : 'user';
+        tenantCredentials = tenantCredentials.filter(record => record.scope === scope);
+      } else if (tenantCredentials) {
+        tenantCredentials = tenantCredentials.filter(record => record.scope === 'user');
+      }
+
       const access = await buildProviderAccess({
         controller,
         authStorage: tenantCredentials ? undefined : authStorage,
@@ -779,7 +918,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           }
         }
       }
-      return availableProviders;
+      return { availableProviders };
     };
 
     // Without a live session, Auto previews against the factory default model
@@ -801,7 +940,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
       registerApiRoute('/web/config/features', {
         method: 'GET',
         requiresAuth: false,
-        handler: async c => c.json({ knowledge: options.features?.knowledge ?? false }),
+        handler: async c =>
+          c.json({ knowledge: options.features?.knowledge ?? false, mcp: options.features?.mcp ?? false }),
       }),
 
       registerApiRoute('/web/config/providers', {
@@ -820,12 +960,20 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             // keys, so the settings UI can gate the "Everyone in org" option.
             const tenant = auth.tenant(loose(c));
             const orgKeyAdmin = tenant ? await auth.isOrganizationAdmin(loose(c), tenantOrgId(tenant)) : undefined;
+            const customProviders = options.customProviders;
+            const listCustomProviders = customProviders
+              ? async () => {
+                  const ctx = await resolveCustomProvidersContext({ c: loose(c), auth, customProviders });
+                  return 'response' in ctx ? [] : ctx.storage.list({ orgId: ctx.orgId });
+                }
+              : undefined;
             return c.json({
               providers: await listProviders({
                 controller,
                 authStorage: tenantCredentials ? undefined : authStorage,
                 tenantCredentials,
                 deploymentProviders,
+                listCustomProviders,
               }),
               ...(orgKeyAdmin !== undefined ? { orgKeyAdmin } : {}),
             });
@@ -1025,7 +1173,14 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             const factoryProjectId = c.req.query('factoryId') || undefined;
             const tenant = auth.tenant(c);
             let tenantCredentials = allTenantCredentials;
-            let sessionPolicy: { modelScope: 'factory' | 'user'; defaultModelId: string | null } | undefined;
+            let sessionPolicy:
+              | {
+                  modelScope: 'factory' | 'user';
+                  defaultModelId: string | null;
+                  personalThinkingLevel: ThinkingLevelSetting | null;
+                }
+              | undefined;
+            let credentialTenant: CredentialTenant | undefined;
             const resourceId = c.req.query('resourceId');
             const threadId = c.req.query('threadId');
             const sessionId = c.req.query('sessionId');
@@ -1041,51 +1196,28 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 .transform(data => ({ ...data, sessionId: data.sessionId ?? data.resourceId }))
                 .safeParse({ resourceId, threadId, sessionId });
               if (!address.success) return c.json({ error: 'invalid_session_context' }, 400);
-              if (!tenant && auth.enabled()) return c.json({ error: 'unauthorized' }, 401);
-              if (tenant) {
-                if (
-                  !options.factoryProjects ||
-                  !options.sourceControlSessions ||
-                  !options.workItems ||
-                  !options.modelCredentials
-                )
-                  return c.json({ error: 'session_model_policy_unavailable' }, 503);
-                const requestContext = new RequestContext();
-                requestContext.set('user', { id: tenant.userId, organizationId: tenantOrgId(tenant) });
-                requestContext.set('controller', address.data);
-                let policy;
-                try {
-                  policy = await resolveFactoryModelPolicy(requestContext, {
-                    projects: options.factoryProjects,
-                    sourceControl: options.sourceControlSessions,
-                    workItems: options.workItems,
-                  });
-                } catch {
-                  return c.json({ error: 'session_model_policy_unavailable' }, 403);
-                }
-                if (!policy) return c.json({ error: 'unauthorized' }, 401);
-                const orgId = policy.tenant.orgId ?? tenantOrgId(tenant);
-                const modelScope = policy.tenant.credentialScope ?? 'user';
-                tenantCredentials = await listSessionScopedCredentials({
-                  credentials: options.modelCredentials,
-                  orgId,
-                  userId: policy.tenant.userId,
-                  modelScope,
-                });
-                let defaultModelId = policy.factoryDefaultModelId ?? null;
-                if (modelScope === 'user') {
-                  if (!options.modelDefaults) return c.json({ error: 'model_defaults_unavailable' }, 503);
-                  await options.modelDefaults.ensureReady();
-                  defaultModelId =
-                    (await options.modelDefaults.get({ orgId, userId: policy.tenant.userId }))?.modelId ?? null;
-                }
-                sessionPolicy = { modelScope, defaultModelId };
+              const context = await resolveSessionModelContext(c, address.data);
+              if (context && 'response' in context) return context.response;
+              if (context) {
+                tenantCredentials = context.tenantCredentials;
+                sessionPolicy = {
+                  modelScope: context.modelScope,
+                  defaultModelId: context.defaultModelId,
+                  personalThinkingLevel: context.personalThinkingLevel,
+                };
               }
             } else if (c.req.query('scope') !== undefined) {
               // Explicit settings scopes never override a live thread's owner and policy above.
               const scope = z.enum(['org', 'user']).safeParse(c.req.query('scope'));
               if (!scope.success) return c.json({ error: 'invalid_model_scope' }, 400);
               tenantCredentials = allTenantCredentials?.filter(record => record.scope === scope.data);
+              if (tenant) {
+                credentialTenant = {
+                  orgId: tenantOrgId(tenant),
+                  userId: tenant.userId,
+                  credentialScope: scope.data === 'user' ? 'user' : 'factory',
+                };
+              }
             } else if (allTenantCredentials && factoryProjectId && tenant) {
               if (!options.factoryProjects) return c.json({ error: 'factory_unavailable' }, 503);
               await options.factoryProjects.ensureReady();
@@ -1093,6 +1225,11 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               if (!project) return c.json({ error: 'factory_project_not_found' }, 404);
               const credentialScope = project.modelScope === 'user' ? 'user' : 'org';
               tenantCredentials = allTenantCredentials.filter(record => record.scope === credentialScope);
+              credentialTenant = {
+                orgId: tenantOrgId(tenant),
+                userId: tenant.userId,
+                credentialScope: credentialScope === 'user' ? 'user' : 'factory',
+              };
             }
             const customProviders = options.customProviders;
             const listCustomProviders = customProviders
@@ -1108,7 +1245,17 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               deploymentProviders,
               listCustomProviders,
             });
-            return c.json({ ...sessionPolicy, models });
+            if (!credentialTenant) return c.json({ ...sessionPolicy, models });
+            const modeModelId = controller.getDefaultMode?.().defaultModelId;
+            const candidate =
+              (await resolveTenantProviderDefaultModel(credentialTenant, modeModelId).catch(error => {
+                console.warn('[Factory Config] Failed to resolve a provider default model', {
+                  error: error instanceof Error ? error.message : String(error),
+                });
+                return undefined;
+              })) ?? modeModelId;
+            const fallbackModelId = models.find(model => model.id === candidate)?.id ?? null;
+            return c.json({ fallbackModelId, models });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1127,7 +1274,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
-            return c.json({ modelId: record?.modelId ?? null });
+            return c.json({ modelId: record?.modelId ?? null, thinkingLevel: record?.thinkingLevel ?? null });
           } catch (error) {
             return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
           }
@@ -1243,6 +1390,39 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         },
       }),
 
+      registerApiRoute('/web/config/default-model/thinking', {
+        method: 'PUT',
+        requiresAuth: false,
+        handler: async c => {
+          const context = await resolveModelDefaultsContext({
+            c: loose(c),
+            auth,
+            modelDefaults: options.modelDefaults,
+          });
+          if ('response' in context) return context.response;
+          let body: unknown;
+          try {
+            body = await c.req.json();
+          } catch {
+            return c.json({ error: 'Invalid JSON body' }, 400);
+          }
+          const parsed = z.object({ thinkingLevel: z.enum(THINKING_LEVELS).nullable() }).safeParse(body);
+          if (!parsed.success) return c.json({ error: 'Invalid thinkingLevel' }, 400);
+          const { thinkingLevel } = parsed.data;
+          try {
+            const record = await context.storage.setThinkingLevel({
+              orgId: context.orgId,
+              userId: context.userId,
+              thinkingLevel,
+            });
+            if (!record) return c.json({ error: 'default_model_not_set' }, 400);
+            return c.json({ ok: true, thinkingLevel });
+          } catch (error) {
+            return c.json({ error: error instanceof Error ? error.message : String(error) }, 500);
+          }
+        },
+      }),
+
       registerApiRoute('/web/config/default-model', {
         method: 'DELETE',
         requiresAuth: false,
@@ -1271,6 +1451,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         requiresAuth: false,
         handler: async c => {
           const sessionId = c.req.query('sessionId');
+          const threadId = c.req.query('threadId');
+          const resourceId = c.req.query('resourceId');
           const factoryProjectId = c.req.query('factoryId') || undefined;
           const context = await resolveMemorySettingsContext({
             c: loose(c),
@@ -1283,7 +1465,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           try {
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
             const fallback = await factoryOmFallback(factoryProjectId);
-            const availableProviders = await resolveOMResponseContext(loose(c));
+            const responseContext = await resolveOMResponseContext(loose(c), {
+              sessionId,
+              threadId,
+              resourceId,
+              factoryProjectId,
+            });
+            if ('response' in responseContext) return responseContext.response;
             const session = sessionId ? await controller.getSession?.(sessionId) : undefined;
             const sessionModelId = session?.model.get();
             return c.json({
@@ -1291,7 +1479,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
                 record,
                 sessionModelId || fallback,
                 sessionModelId ? 'live-session' : 'configured-default',
-                availableProviders,
+                responseContext.availableProviders,
               ),
             });
           } catch (error) {
@@ -1308,13 +1496,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (role !== 'observer' && role !== 'reflector') {
             return c.json({ error: `Unknown OM role "${role}"` }, 400);
           }
-          let body: { sessionId?: unknown; modelId?: unknown; factoryId?: unknown };
+          let body: {
+            sessionId?: unknown;
+            threadId?: unknown;
+            resourceId?: unknown;
+            modelId?: unknown;
+            factoryId?: unknown;
+          };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
+          const threadId = typeof body.threadId === 'string' ? body.threadId : undefined;
+          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const model = typeof body.modelId === 'string' ? body.modelId.trim() : '';
           if (!model) {
@@ -1333,7 +1529,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if ('response' in context) return context.response;
           // Resolve the response context before persisting: a provider-enumeration
           // failure must not report 500 for a write that already succeeded.
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const responseContext = await resolveOMResponseContext(loose(c), {
+            sessionId,
+            threadId,
+            resourceId,
+            factoryProjectId,
+          });
+          if ('response' in responseContext) return responseContext.response;
           try {
             await persistMemorySettings(context, {
               [role === 'observer' ? 'observerModelId' : 'reflectorModelId']: wantsAuto ? null : model,
@@ -1345,7 +1547,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               record,
               sessionModelId || (await factoryOmFallback(factoryProjectId)),
               sessionModelId ? 'live-session' : 'configured-default',
-              availableProviders,
+              responseContext.availableProviders,
             );
             return c.json({ ok: true, config });
           } catch (error) {
@@ -1360,6 +1562,8 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         handler: async c => {
           let body: {
             sessionId?: unknown;
+            threadId?: unknown;
+            resourceId?: unknown;
             observationThreshold?: unknown;
             reflectionThreshold?: unknown;
             factoryId?: unknown;
@@ -1369,7 +1573,9 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
+          const threadId = typeof body.threadId === 'string' ? body.threadId : undefined;
+          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const observation =
             typeof body.observationThreshold === 'number' && body.observationThreshold > 0
@@ -1382,6 +1588,12 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
           if (observation === undefined && reflection === undefined) {
             return c.json({ error: 'Provide observationThreshold and/or reflectionThreshold (positive numbers)' }, 400);
           }
+          if (observation !== undefined && observation < MIN_OBSERVATION_THRESHOLD) {
+            return c.json(
+              { error: `observationThreshold must be greater than ${MIN_OBSERVATION_THRESHOLD - 1} tokens` },
+              400,
+            );
+          }
           const context = await resolveMemorySettingsContext({
             c: loose(c),
             auth,
@@ -1390,7 +1602,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const responseContext = await resolveOMResponseContext(loose(c), {
+            sessionId,
+            threadId,
+            resourceId,
+            factoryProjectId,
+          });
+          if ('response' in responseContext) return responseContext.response;
           try {
             await persistMemorySettings(context, {
               ...(observation !== undefined ? { observationThreshold: observation } : {}),
@@ -1403,7 +1621,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               record,
               sessionModelId || (await factoryOmFallback(factoryProjectId)),
               sessionModelId ? 'live-session' : 'configured-default',
-              availableProviders,
+              responseContext.availableProviders,
             );
             return c.json({ ok: true, config });
           } catch (error) {
@@ -1416,13 +1634,21 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
         method: 'PUT',
         requiresAuth: false,
         handler: async c => {
-          let body: { sessionId?: unknown; value?: unknown; factoryId?: unknown };
+          let body: {
+            sessionId?: unknown;
+            threadId?: unknown;
+            resourceId?: unknown;
+            value?: unknown;
+            factoryId?: unknown;
+          };
           try {
             body = await c.req.json();
           } catch {
             return c.json({ error: 'Invalid JSON body' }, 400);
           }
-          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : '';
+          const sessionId = typeof body.sessionId === 'string' ? body.sessionId : undefined;
+          const threadId = typeof body.threadId === 'string' ? body.threadId : undefined;
+          const resourceId = typeof body.resourceId === 'string' ? body.resourceId : undefined;
           const factoryProjectId = typeof body.factoryId === 'string' && body.factoryId ? body.factoryId : undefined;
           const raw = body.value;
           const value: 'auto' | boolean = raw === 'auto' || raw === true || raw === false ? raw : 'auto';
@@ -1437,7 +1663,13 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
             factoryProjects: options.factoryProjects,
           });
           if ('response' in context) return context.response;
-          const availableProviders = await resolveOMResponseContext(loose(c));
+          const responseContext = await resolveOMResponseContext(loose(c), {
+            sessionId,
+            threadId,
+            resourceId,
+            factoryProjectId,
+          });
+          if ('response' in responseContext) return responseContext.response;
           try {
             await persistMemorySettings(context, { observeAttachments: value });
             const record = await context.storage.get({ orgId: context.orgId, userId: context.userId });
@@ -1447,7 +1679,7 @@ export class ConfigRoutes extends Route<ConfigRoutesDeps> {
               record,
               sessionModelId || (await factoryOmFallback(factoryProjectId)),
               sessionModelId ? 'live-session' : 'configured-default',
-              availableProviders,
+              responseContext.availableProviders,
             );
             return c.json({ ok: true, config });
           } catch (error) {

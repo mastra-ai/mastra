@@ -78,13 +78,12 @@ const createNumericOperator = (symbol: string) => {
         sql: `(CASE WHEN jsonb_typeof(${jsonExtract}) = 'number' THEN (${textExtract})::numeric ${symbol} $${paramIndex}::numeric ELSE NULL END)`,
         needsValue: true,
       };
-    } else {
-      // Use text comparison for strings (including ISO 8601 dates which sort correctly)
-      return {
-        sql: `${textExtract} ${symbol} $${paramIndex}::text`,
-        needsValue: true,
-      };
     }
+    // Use text comparison for strings (including ISO 8601 dates which sort correctly)
+    return {
+      sql: `${textExtract} ${symbol} $${paramIndex}::text`,
+      needsValue: true,
+    };
   };
 };
 

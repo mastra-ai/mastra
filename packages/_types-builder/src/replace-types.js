@@ -56,7 +56,7 @@ async function getPackageRootPath(packageName, parentPath) {
 
     const pkg = await getPackageInfo(packageName, options);
     rootPath = pkg?.rootPath ?? null;
-  } catch (e) {
+  } catch {
     rootPath = null;
   }
 

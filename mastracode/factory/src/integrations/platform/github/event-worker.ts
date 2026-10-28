@@ -600,6 +600,13 @@ function isFactoryIngestedEvent(event: ParsedGithubWebhook): boolean {
   if (event.event === 'issues' && ISSUE_INGESTED_ACTIONS.has(String(event.payload.action))) return true;
   if (event.event === 'pull_request_review' && event.payload.action === 'submitted') return true;
   if (event.event === 'issue_comment' && event.payload.action === 'created') return true;
+  // `factory-review` edits its earlier verdict in place on a re-review. The rules
+  // engine only acts on edits that leave a request-changes verdict behind.
+  if (event.event === 'pull_request_review' && event.payload.action === 'edited') return true;
+  if (event.event === 'issue_comment' && event.payload.action === 'edited') {
+    const issue = event.payload.issue;
+    if (issue && typeof issue === 'object' && 'pull_request' in issue && issue.pull_request) return true;
+  }
   // Default-branch pushes drive base-checkpoint rebuilds
   // (`withBaseCheckpointWebhookTrigger` wraps the ingest callback).
   if (event.event === 'push') return true;

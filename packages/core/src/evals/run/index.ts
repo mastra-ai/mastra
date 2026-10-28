@@ -988,9 +988,8 @@ async function executeTarget(
       return await executeAgentTurns(target, item, targetOptions as RunEvalsAgentOptions);
     } else if (item.inputs && Array.isArray(item.inputs) && item.inputs.length > 0) {
       return await executeAgentMultiTurn(target, item, targetOptions as RunEvalsAgentOptions);
-    } else {
-      return await executeAgent(target, item, targetOptions as RunEvalsAgentOptions);
     }
+    return await executeAgent(target, item, targetOptions as RunEvalsAgentOptions);
   } catch (error) {
     throw new MastraError(
       {
@@ -1055,18 +1054,17 @@ async function executeAgent(agent: Agent, item: RunEvalsDataItem<any>, targetOpt
       ...result,
       entityType: EntityType.AGENT,
     };
-  } else {
-    const result = await agent.generateLegacy(item.input, {
-      scorers: {},
-      returnScorerData: true,
-      requestContext: item.requestContext,
-      ...observabilityContext,
-    });
-    return {
-      ...result,
-      entityType: EntityType.AGENT,
-    };
   }
+  const result = await agent.generateLegacy(item.input, {
+    scorers: {},
+    returnScorerData: true,
+    requestContext: item.requestContext,
+    ...observabilityContext,
+  });
+  return {
+    ...result,
+    entityType: EntityType.AGENT,
+  };
 }
 
 /** Per-turn execution record: the turn's input, its own output, and trace metadata. */
@@ -1635,8 +1633,10 @@ async function saveSingleScore({
   turn?: { index: number; traceId?: string; spanId?: string; threadId?: string };
 }): Promise<void> {
   try {
-    // Get scorer information
-    let scorer = mastra?.getScorerById?.(scorerId);
+    // A runEvals scorer may not be registered on the Mastra instance.
+    let scorer: RunEvalsScorer | undefined = (Object.values(mastra?.listScorers?.() ?? {}) as RunEvalsScorer[]).find(
+      entry => entry.id === scorerId,
+    );
 
     if (!scorer) {
       // Try to get from target's scorers

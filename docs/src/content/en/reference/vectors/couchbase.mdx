@@ -7,7 +7,7 @@ packages:
 
 # Couchbase vector store
 
-The `CouchbaseVector` class provides vector search using [Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html). It enables efficient similarity search and metadata filtering within your Couchbase collections.
+The `CouchbaseVector` class provides vector search using [Couchbase Vector Search](https://docs.couchbase.com/server/current/vector-search/vector-search.html). It enables efficient similarity search within your Couchbase collections.
 
 ## Requirements
 
@@ -234,7 +234,7 @@ Deletes the Search index. Documents stored in the collection aren't deleted.
 
 ### `listIndexes()`
 
-Lists all vector indexes in the Couchbase bucket.
+Lists the names of all Search indexes in the configured scope.
 
 Returns: `Promise<string[]>`
 
@@ -283,7 +283,11 @@ Deletes a single vector by its ID from the index.
 
 ### `deleteVectors()`
 
-Deletes multiple vectors by their IDs. Filter-based deletion isn't yet implemented for Couchbase.
+Deletes vectors by ID from the configured Couchbase collection. Pass a non-empty `ids` array to remove multiple documents. Missing IDs are ignored. Filter-based deletion isn't supported and throws a `MastraError`. Providing an empty `ids` array, both `ids` and `filter`, or neither, also throws.
+
+```typescript
+await store.deleteVectors({ indexName: 'my_index', ids: ['vec_1', 'vec_2'] })
+```
 
 <PropertiesTable
   content={[
@@ -295,7 +299,13 @@ Deletes multiple vectors by their IDs. Filter-based deletion isn't yet implement
   {
     name: 'ids',
     type: 'string[]',
-    description: 'Array of vector IDs to delete',
+    description: 'IDs of the vectors to delete (required for Couchbase)',
+  },
+  {
+    name: 'filter',
+    type: 'VectorFilter',
+    isOptional: true,
+    description: 'Not supported for Couchbase. Passing a filter throws an error',
   },
 ]}
 />
@@ -350,7 +360,8 @@ try {
 ## Limitations
 
 - Index creation delays may impact immediate querying after creation.
-- No hard enforcement of vector dimension at ingest time (dimension mismatches will error at query time).
+- Vector dimension is enforced at ingest only after `createIndex()` creates a new index on the same `CouchbaseVector` instance. Calling `createIndex()` for an index that already exists doesn't turn on the ingest check. When the check is on, `upsert()` and `updateVector()` throw on a dimension mismatch. `query()` always checks the query vector against the index dimension.
+- `deleteVectors()` supports deletion by ID only. Metadata-filter deletion isn't supported.
 - Vector insertion and index updates are eventually consistent. Strong consistency isn't guaranteed immediately after writes.
 
 ## Related

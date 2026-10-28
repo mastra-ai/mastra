@@ -31,17 +31,45 @@ export const traceQueryCapabilities: GetObservabilityCapabilitiesResponse = {
     deltaPolling: true,
     traceQuery: true,
     traceQueryRootDuration: true,
+    traceQueryTimeToFirstChunk: true,
+    traceQueryTimeToFirstChunkSort: true,
     traceQueryDiscovery: true,
     traceQueryTenantScope: true,
     threadQuery: true,
+    threadQueryRows: true,
     spanQuery: true,
     feedback: true,
   },
 };
 
+export const noThreadRowsCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, threadQueryRows: false },
+};
+
 export const noRootDurationCapabilities: GetObservabilityCapabilitiesResponse = {
   ...traceQueryCapabilities,
   capabilities: { ...traceQueryCapabilities.capabilities, traceQueryRootDuration: false },
+};
+
+export const noTimeToFirstChunkCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: {
+    ...traceQueryCapabilities.capabilities,
+    traceQueryTimeToFirstChunk: false,
+    traceQueryTimeToFirstChunkSort: false,
+  },
+};
+
+/** A store that records when each root streamed its first chunk but can't order trace queries by it. */
+export const noTimeToFirstChunkSortCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, traceQueryTimeToFirstChunkSort: false },
+};
+
+export const noSpanQueryCapabilities: GetObservabilityCapabilitiesResponse = {
+  ...traceQueryCapabilities,
+  capabilities: { ...traceQueryCapabilities.capabilities, spanQuery: false },
 };
 
 export const noDeltaPollingCapabilities: GetObservabilityCapabilitiesResponse = {
@@ -89,7 +117,21 @@ export const twoTracesPage: TraceQueryKeysetTraceResponse = {
   page: { next: null },
 };
 
+/** One root that streamed its first chunk after 412ms, one that never streamed. */
+export const streamedTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [
+    { ...weatherTrace, timeToFirstChunkMs: 412 },
+    { ...twoTracesPage.traces[1], timeToFirstChunkMs: null },
+  ],
+  page: { next: null },
+};
+
 export const emptyTracesPage: TraceQueryKeysetTraceResponse = { traces: [], page: { next: null } };
+
+export const workflowTracesPage: TraceQueryKeysetTraceResponse = {
+  traces: [{ ...weatherTrace, name: 'weather-workflow', entityId: 'weather-workflow', entityType: 'workflow_run' }],
+  page: { next: null },
+};
 
 /** A delta poll with nothing new since the cursor. */
 export const idleDeltaBatch: Extract<TraceQueryResponse, { delta: unknown }> = {

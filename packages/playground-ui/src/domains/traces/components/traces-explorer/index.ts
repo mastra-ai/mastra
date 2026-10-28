@@ -1,4 +1,4 @@
-import { TracesExplorerAutoRefresh } from './traces-explorer-auto-refresh';
+import { TracesExplorerBody } from './traces-explorer-body';
 import { TracesExplorerColumnsMenu } from './traces-explorer-columns-menu';
 import {
   TracesExplorerFilterBar,
@@ -12,29 +12,37 @@ import { TracesExplorerRoot } from './traces-explorer-root';
 
 export const TracesExplorer = Object.assign(TracesExplorerRoot, {
   Layout: TracesExplorerLayout,
+  Body: TracesExplorerBody,
   FilterBar: TracesExplorerFilterBar,
   FilterChips: TracesExplorerFilterChips,
   TimeRangeChip: TracesExplorerTimeRangeChip,
   ColumnsMenu: TracesExplorerColumnsMenu,
-  AutoRefresh: TracesExplorerAutoRefresh,
   List: TracesExplorerList,
   Panel: TracesExplorerPanel,
 });
 
 export type { TracesExplorerRootProps } from './traces-explorer-root';
 export type { TracesExplorerErrorRenderArgs, TracesExplorerLayoutProps } from './traces-explorer-layout';
+export type { TracesExplorerBodyProps } from './traces-explorer-body';
 export type {
   TracesExplorerFilterBarProps,
   TracesExplorerFilterChipsProps,
   TracesExplorerTimeRangeChipProps,
 } from './traces-explorer-filter-bar';
 export type { TracesExplorerPanelProps } from './traces-explorer-panel';
-export { DEFAULT_TRACES_FILTERS, EMPTY_TRACES_SELECTION, resolveTracesDateWindow } from './traces-explorer-actions';
+export {
+  DEFAULT_TRACES_FILTERS,
+  DEFAULT_TRACES_SORT,
+  EMPTY_TRACES_SELECTION,
+  resolveTracesDateWindow,
+} from './traces-explorer-actions';
 export type {
   TracesExplorerState,
   TracesFilters,
   TracesSelection,
+  TracesSort,
   TracesSortDirection,
+  TracesSortField,
 } from './traces-explorer-actions';
 export {
   useTraceUsageColumns,
