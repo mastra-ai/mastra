@@ -19,7 +19,7 @@ function providerFailureCode(value: Record<string | symbol, unknown>): string | 
   return typeof error.code === 'string' ? error.code : undefined;
 }
 
-/** Classify explicit failure facts, including wrapped/serialized causes. Never match error-message text. */
+/** @internal Classify explicit failure facts, including wrapped/serialized causes. Never match error-message text. */
 export function executionFailureTermination(
   error: unknown,
   layer: 'runtime_error' | 'model_error' = 'runtime_error',
