@@ -573,8 +573,7 @@ export function defineBoard<
       Object.entries(config.phases).map(([phaseId, phase]) => {
         const label = `Phase "${phaseId}"`;
         const nextPhases = Object.freeze([
-          ...(phase.nextPhases ?? []).filter((to, index, all) => all.indexOf(to) === index),
-          ...transitions[phaseId as PhaseId]!.map(({ to }) => to).filter(to => !phase.nextPhases?.includes(to)),
+          ...new Set([...(phase.nextPhases ?? []), ...transitions[phaseId as PhaseId]!.map(({ to }) => to)]),
         ]);
         const runner = phase.kind === 'working' ? resolveRunner(phaseId, phase) : undefined;
         const working = phase.kind === 'working' ? phase : undefined;

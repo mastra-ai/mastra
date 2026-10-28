@@ -76,7 +76,21 @@ describe('defineBoard phase fields', () => {
   it('accepts a defined board phase back as a declaration, as fixtures that extend a board do', () => {
     const copy = defineBoard({ id: 'copy', name: 'Copy', initialPhase: 'intake', phases: workBoard.phases });
     expect(copy.transitions).toEqual(workBoard.transitions);
-    expect(copy.phases.review.role).toBe(workBoard.phases.review.role);
+    expect(copy.phases.review).toMatchObject({ kind: 'working', runner: { context: 'work' } });
+    expect(copy.phases.review).not.toHaveProperty('role');
+  });
+
+  it('lists each next phase once when several outcomes lead to it', () => {
+    const board = defineBoard({
+      id: 'twice',
+      name: 'Twice',
+      initialPhase: 'backlog',
+      phases: {
+        backlog: { name: 'Backlog', kind: 'resting', outcomes: { ship: 'done', finish: 'done' } },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    expect(board.phases.backlog.nextPhases).toEqual(['done']);
   });
 
   it('runs a working phase in the work context unless it names one, and rejects conflicting names', () => {
