@@ -7,7 +7,7 @@ description: "Browse Perplexity Agent model IDs, capabilities, context windows, 
 
 # <img src="https://models.dev/logos/perplexity-agent.svg" alt="Perplexity Agent logo" className="inline w-8 h-8 mr-2 align-middle dark:invert dark:brightness-0 dark:contrast-200" />Perplexity Agent
 
-Access 45 Perplexity Agent models through Mastra's model router. Authentication is handled automatically using the `PERPLEXITY_API_KEY` environment variable.
+Access 50 Perplexity Agent models through Mastra's model router. Authentication is handled automatically using the `PERPLEXITY_API_KEY` environment variable.
 
 Learn more in the [Perplexity Agent documentation](https://docs.perplexity.ai/docs/agent-api/models).
 
@@ -22,7 +22,7 @@ const agent = new Agent({
   id: "my-agent",
   name: "My Agent",
   instructions: "You are a helpful assistant",
-  model: "perplexity-agent/anthropic/claude-fable-5"
+  model: "perplexity-agent/low"
 });
 
 // Generate a response
@@ -30,14 +30,16 @@ const response = await agent.generate("Hello!");
 
 // Stream a response
 const stream = await agent.stream("Tell me a story");
-for await (const chunk of stream) {
+for await (const chunk of stream.textStream) {
   console.log(chunk);
 }
 ```
 
 :::note
 
-Mastra uses the OpenAI-compatible `/chat/completions` endpoint. Some provider-specific features may not be available. Check the [Perplexity Agent documentation](https://docs.perplexity.ai/docs/agent-api/models) for details.
+Mastra uses Perplexity's native Agent API at `/v1/agent`. Choose a preset (`fast`, `low`, `medium`, `high`, or `xhigh`) or a direct model ID from the table below. Presets select provider-managed models and tools; the table describes direct models only. Both `perplexity/` and `perplexity-agent/` use `PERPLEXITY_API_KEY`.
+
+Retired bare Sonar IDs require an explicit replacement. See [Perplexity Agent API migration](/reference/agents/agent#perplexity-agent-api) for model selection, option changes, and unsupported inputs and results.
 
 :::
 
@@ -493,8 +495,8 @@ const agent = new Agent({
   id: "custom-agent",
   name: "custom-agent",
   model: {
-    url: "https://api.perplexity.ai/v1",
-    id: "perplexity-agent/anthropic/claude-fable-5",
+    url: "https://api.perplexity.ai",
+    id: "perplexity-agent/low",
     apiKey: process.env.PERPLEXITY_API_KEY,
     headers: {
       "X-Custom-Header": "value"
@@ -512,10 +514,10 @@ const agent = new Agent({
   id: "dynamic-agent",
   name: "Dynamic Agent",
   model: ({ requestContext }) => {
-    const useAdvanced = requestContext.task === "complex";
+    const useAdvanced = requestContext.get("task") === "complex";
     return useAdvanced
-      ? "perplexity-agent/xai/grok-4.7"
-      : "perplexity-agent/anthropic/claude-fable-5";
+      ? "perplexity-agent/high"
+      : "perplexity-agent/low";
   }
 });
 ```

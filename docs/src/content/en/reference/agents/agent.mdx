@@ -120,6 +120,39 @@ Popular provider strings and credentials:
 
 See [models](/models) for supported model IDs and [environment variables](/models/environment-variables) for the complete provider list.
 
+### Perplexity Agent API
+
+Set `PERPLEXITY_API_KEY` and choose `perplexity/fast`, `perplexity/low`, `perplexity/medium`, `perplexity/high`, or `perplexity/xhigh`. These presets select Perplexity-managed models and tools. For a direct model, include its full ID after the provider prefix, for example `perplexity/perplexity/sonar`. The `perplexity-agent/` prefix remains supported.
+
+The bare Sonar IDs `sonar`, `sonar-pro`, `sonar-reasoning`, `sonar-reasoning-pro`, and `sonar-deep-research` are retired. Mastra raises a migration error instead of mapping them automatically. For example, replace `perplexity/sonar-pro` with `perplexity/low` only after reviewing the different model, tools, pricing, and latency.
+
+```typescript title="src/mastra/agents/research-agent.ts"
+import { Agent } from '@mastra/core/agent'
+
+export const agent = new Agent({
+  id: 'research-agent',
+  name: 'Research Agent',
+  instructions: 'Answer research questions with sources.',
+  model: 'perplexity/low',
+})
+
+const response = await agent.generate('What changed in battery recycling this year?')
+```
+
+Inside `providerOptions.perplexity`, Mastra translates these legacy options to the [Agent API options](https://docs.perplexity.ai/docs/agent-api/quickstart). Explicit Agent API values take precedence:
+
+| Legacy option | Agent API location |
+| - | - |
+| `reasoning_effort` | `reasoning.effort` |
+| `search_domain_filter`, `search_recency_filter`, `search_after_date_filter`, `search_before_date_filter`, `last_updated_after_filter`, `last_updated_before_filter` | `tools[].filters` on a `web_search` tool |
+| `num_search_results` | `tools[].max_results` on a `web_search` tool |
+| `web_search_options.search_context_size` | `tools[].search_context_size` on a `web_search` tool |
+| `web_search_options.user_location` | `tools[].user_location` on a `web_search` tool |
+
+To replace `disable_search: true`, use a direct model without a `web_search` tool. Presets cannot disable search individually; `max_tool_calls: 0` disables all their native tools. Conflicting search settings raise a migration error.
+
+The Agent API accepts `reasoning.effort` values `minimal`, `low`, `medium`, `high`, and `xhigh`, subject to the selected model's capabilities. `max` is unsupported. PDF, video, and other non-image file inputs raise actionable errors; send extracted text or choose a provider that supports the file type. Enabled Sonar options `return_images`, `return_videos`, `return_related_questions`, `search_language_filter`, `stream_mode`, and `search_mode` also raise migration errors. Remove them and use a separate service for media results, or request related questions through prompting or structured output.
+
 ## Thread signals
 
 Use Agent signals to send real-time input and context into a memory thread. Message APIs are for user-authored input. `sendSignal()` is the lower-level API for system-generated context.
