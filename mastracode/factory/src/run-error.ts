@@ -6,7 +6,7 @@ import {
   providerModelId,
 } from '@mastra/core/error';
 
-export type RunErrorRecovery = 'credentials' | 'model';
+export type RunErrorRecovery = 'continue' | 'credentials' | 'model' | 'new_session';
 
 export interface RunErrorDescription {
   title: string;
@@ -52,7 +52,7 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
       return {
         title: 'Conversation exceeds the model’s limit',
         message: 'Choose a model with a larger context window or start a new session with a shorter prompt.',
-        recoveries: ['model'],
+        recoveries: ['model', 'new_session'],
       };
     case 'model_rejected':
       return {
@@ -68,32 +68,33 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
       return {
         title: 'Conversation history rejected',
         message:
-          'The provider could not match a tool call with its result. Copy the error details so this session can be investigated.',
-        recoveries: [],
+          'The provider could not match a tool call with its result. Start a new session to keep working, and copy the error details so this session can be investigated.',
+        recoveries: ['new_session'],
       };
     case 'invalid_request':
       return {
         title: 'Model request rejected',
         message: providerErrorReason(error) ?? NO_REASON_AVAILABLE,
-        recoveries: [],
+        recoveries: ['model'],
       };
     case 'timeout':
       return {
         title: 'Request timed out',
         message: 'The request took too long to complete. Send a message to continue the run.',
-        recoveries: [],
+        recoveries: ['continue'],
       };
     case 'rate_limited':
       return {
         title: 'Provider rate limit reached',
-        message: 'Wait a moment, then send a message to continue the run.',
-        recoveries: [],
+        message: 'Wait a moment, then send a message to continue the run, or use another credential or model.',
+        recoveries: ['continue', 'credentials', 'model'],
       };
     case 'unavailable':
       return {
         title: 'Model provider temporarily unavailable',
-        message: 'The provider could not complete the request. Send a message to continue the run.',
-        recoveries: [],
+        message:
+          'The provider could not complete the request. Send a message to continue the run, or choose another model.',
+        recoveries: ['continue', 'model'],
       };
     case 'unknown':
       return describeUnclassifiedError(error);
@@ -107,9 +108,10 @@ function afterProviderReason(error: RunErrorIdentity, next: string, fallback?: s
 
 function describeUnclassifiedError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {
   const message = providerErrorReason(error) ?? (error.message || UNEXPECTED_ERROR);
+  const providerCall = PROVIDER_CALL_ERROR_NAME.test(error.name);
   return {
-    title: PROVIDER_CALL_ERROR_NAME.test(error.name) ? 'Model request failed' : 'Run stopped',
+    title: providerCall ? 'Model request failed' : 'Run stopped',
     message,
-    recoveries: [],
+    recoveries: providerCall ? ['model'] : [],
   };
 }

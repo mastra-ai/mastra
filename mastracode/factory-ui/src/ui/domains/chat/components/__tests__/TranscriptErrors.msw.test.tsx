@@ -2,7 +2,7 @@ import type { MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
-import { MemoryRouter } from 'react-router';
+import { MemoryRouter, Route, Routes } from 'react-router';
 import { beforeEach, describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
@@ -10,6 +10,7 @@ import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/ren
 import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
+import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../../services/transcript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { TranscriptEntries } from '../Transcript';
@@ -31,44 +32,86 @@ function failedReply(
   };
 }
 
-function ErrorSession({ messages, liveEvent }: { messages: MastraDBMessage[]; liveEvent?: LiveEvent }) {
-  const entries = liveEvent
-    ? transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }).entries
-    : createInitialTranscript({ messages, threadId: 'thread-1' }).entries;
-  return (
-    <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
-      <ChatSessionContext.Provider
+function userMessage(text: string): MastraDBMessage {
+  return {
+    id: 'later-user-message',
+    role: 'user',
+    createdAt: new Date('2026-10-19T10:01:00Z'),
+    content: { format: 2, parts: [{ type: 'text', text }] },
+  };
+}
+
+function ErrorSession({
+  messages,
+  liveEvent,
+  boundThreadId = 'thread-1',
+}: {
+  messages: MastraDBMessage[];
+  liveEvent?: LiveEvent;
+  boundThreadId?: string;
+}) {
+  const transcript = liveEvent
+    ? { ...transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }), threadId: 'thread-1' }
+    : createInitialTranscript({ messages, threadId: 'thread-1' });
+  const session = (
+    <ChatSessionContext.Provider
+      value={{
+        sessionId: 'session-1',
+        resourceId: 'resource-1',
+        sessionThreadId: 'thread-1',
+        sessionEnabled: true,
+        resourceReady: true,
+        sandboxReady: true,
+        sandboxPreparing: false,
+        resourceEnabled: true,
+        baseUrl: TEST_BASE_URL,
+        kind: 'user',
+        factorySessionState: { factoryProjectId: 'factory-1' },
+      }}
+    >
+      <ChatConnectionContext.Provider
         value={{
-          sessionId: 'session-1',
-          resourceId: 'resource-1',
-          sessionThreadId: 'thread-1',
-          sessionEnabled: true,
-          resourceReady: true,
-          sandboxReady: true,
-          sandboxPreparing: false,
-          resourceEnabled: true,
-          baseUrl: TEST_BASE_URL,
-          kind: 'user',
-          factorySessionState: { factoryProjectId: 'factory-1' },
+          status: 'ready',
+          threadId: boundThreadId,
+          state: {
+            controllerId: 'code',
+            sessionId: 'session-1',
+            resourceId: 'resource-1',
+            modeId: 'build',
+            modelId: 'openai/gpt-5.5',
+          },
         }}
       >
-        <ChatConnectionContext.Provider
+        <ChatTranscriptContext.Provider
           value={{
-            status: 'ready',
-            state: {
-              controllerId: 'code',
-              sessionId: 'session-1',
-              resourceId: 'resource-1',
-              modeId: 'build',
-              modelId: 'openai/gpt-5.5',
-            },
+            transcript,
+            busy: false,
+            phase: 'awaiting',
+            initializing: false,
+            historyInitializing: false,
+            initialHistoryReady: true,
+            localUser: () => 'local-continue',
+            failLocalUser: () => {},
+            reset: () => {},
+            resolvePrompt: () => {},
+            clearPending: () => {},
+            pushNotice: () => {},
+            loadMore: { hasMore: false, isLoading: false },
           }}
         >
           <ChatModelsProvider>
-            <TranscriptEntries entries={entries} onApprove={() => {}} onRespond={() => {}} />
+            <TranscriptEntries entries={transcript.entries} onApprove={() => {}} onRespond={() => {}} />
           </ChatModelsProvider>
-        </ChatConnectionContext.Provider>
-      </ChatSessionContext.Provider>
+        </ChatTranscriptContext.Provider>
+      </ChatConnectionContext.Provider>
+    </ChatSessionContext.Provider>
+  );
+  return (
+    <MemoryRouter initialEntries={['/factories/factory-1/sessions/session-1']}>
+      <Routes>
+        <Route path="/factories/:factoryId/user/new/:draftSessionId" element={<p>New session draft</p>} />
+        <Route path="*" element={session} />
+      </Routes>
     </MemoryRouter>
   );
 }
@@ -175,43 +218,65 @@ describe('chat run errors', () => {
     await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.4' }]));
   });
 
-  it('names the model a rejected key was tried with and offers another model next to the credentials', async () => {
-    const modelSwitches: unknown[] = [];
-    server.use(
-      http.post(
-        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
-        async ({ request }) => {
-          modelSwitches.push(await request.json());
-          return HttpResponse.json({ ok: true });
+  it.each([
+    {
+      title: 'Provider access failed',
+      model: 'GPT-5.5',
+      reply: failedReply('Incorrect API key provided.', 'AI_APICallError', { statusCode: 401, modelId: 'gpt-5.5' }),
+    },
+    {
+      title: 'Provider rate limit reached',
+      model: 'Claude Opus 5.5',
+      reply: failedReply(
+        "This request would exceed your account's rate limit. Please try again later.",
+        'AI_APICallError',
+        {
+          statusCode: 429,
+          modelId: 'claude-opus-5-5',
+          responseBody: JSON.stringify({
+            type: 'error',
+            error: {
+              type: 'rate_limit_error',
+              message: "This request would exceed your account's rate limit. Please try again later.",
+            },
+          }),
         },
       ),
-      http.get(`${TEST_BASE_URL}/web/config/models`, () =>
-        HttpResponse.json({
-          models: [
-            { id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true },
-            { id: 'anthropic/claude-opus-4-5', provider: 'anthropic', modelName: 'claude-opus-4-5', hasApiKey: true },
-          ],
-        }),
-      ),
-    );
-    const user = userEvent.setup();
-    renderWithProviders(
-      <ErrorSession
-        messages={[
-          failedReply('Incorrect API key provided.', 'AI_APICallError', { statusCode: 401, modelId: 'gpt-5.5' }),
-        ]}
-      />,
-    );
+    },
+  ])(
+    'names the model behind $title and offers another model next to the credentials',
+    async ({ title, model, reply }) => {
+      const modelSwitches: unknown[] = [];
+      server.use(
+        http.post(
+          `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+          async ({ request }) => {
+            modelSwitches.push(await request.json());
+            return HttpResponse.json({ ok: true });
+          },
+        ),
+        http.get(`${TEST_BASE_URL}/web/config/models`, () =>
+          HttpResponse.json({
+            models: [
+              { id: 'openai/gpt-5.5', provider: 'openai', modelName: 'gpt-5.5', hasApiKey: true },
+              { id: 'anthropic/claude-opus-4-5', provider: 'anthropic', modelName: 'claude-opus-4-5', hasApiKey: true },
+            ],
+          }),
+        ),
+      );
+      const user = userEvent.setup();
+      renderWithProviders(<ErrorSession messages={[reply]} />);
 
-    expect(screen.getByText('Provider access failed')).toBeVisible();
-    expect(screen.getByText('Model: GPT-5.5')).toBeVisible();
-    expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+      expect(screen.getByText(title)).toBeVisible();
+      expect(screen.getByText(`Model: ${model}`)).toBeVisible();
+      expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
 
-    await user.click(await screen.findByRole('button', { name: 'Change model' }));
-    await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
+      await user.click(await screen.findByRole('button', { name: 'Change model' }));
+      await user.click(await screen.findByRole('option', { name: /claude-opus-4-5/ }));
 
-    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
-  });
+      await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'anthropic/claude-opus-4-5' }]));
+    },
+  );
 
   it('classifies a live error by the status the server kept, not by its message alone', () => {
     renderWithProviders(
@@ -222,5 +287,55 @@ describe('chat run errors', () => {
     );
 
     expect(screen.getByText('Provider access failed')).toBeVisible();
+  });
+
+  it('continues a timed-out run from the card', async () => {
+    const sentMessages: unknown[] = [];
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/messages`,
+        async ({ request }) => {
+          sentMessages.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ErrorSession messages={[failedReply('Request timed out.')]} />);
+
+    expect(screen.getByText('Request timed out')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    await waitFor(() => expect(sentMessages).toMatchObject([{ message: 'Continue from where you stopped.' }]));
+  });
+
+  it.each([
+    {
+      when: 'a later message follows the failure',
+      messages: [failedReply('Request timed out.'), userMessage('Try a smaller change instead.')],
+      boundThreadId: 'thread-1',
+    },
+    {
+      when: 'the session is still bound to the thread it is switching away from',
+      messages: [failedReply('Request timed out.')],
+      boundThreadId: 'thread-0',
+    },
+  ])('withholds Continue when $when', ({ messages, boundThreadId }) => {
+    renderWithProviders(<ErrorSession messages={messages} boundThreadId={boundThreadId} />);
+
+    expect(screen.getByText('Request timed out')).toBeVisible();
+    expect(screen.queryByRole('button', { name: 'Continue' })).not.toBeInTheDocument();
+  });
+
+  it('opens a new session when the provider rejects the conversation history', async () => {
+    const user = userEvent.setup();
+    renderWithProviders(
+      <ErrorSession messages={[failedReply('No tool output found for function call call_abc123.')]} />,
+    );
+
+    expect(screen.getByText('Conversation history rejected')).toBeVisible();
+    await user.click(screen.getByRole('button', { name: 'New session' }));
+
+    expect(await screen.findByText('New session draft')).toBeVisible();
   });
 });
