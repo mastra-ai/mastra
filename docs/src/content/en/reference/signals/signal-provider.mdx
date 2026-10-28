@@ -355,7 +355,15 @@ Returns: `Promise<{ status?: number; body?: unknown }>`
 
 #### `getRoutes()`
 
-Return API routes this provider needs on the Mastra server, such as webhook receivers or OAuth callbacks. Optional. When the provider's agent is registered, Mastra adds these routes to `server.apiRoutes`, so you don't add them by hand. Routes with a method and path that are already registered are skipped, so a provider shared by several agents mounts its routes once.
+Return API routes this provider needs on the Mastra server, such as webhook receivers or OAuth callbacks. Optional. When the provider's agent is registered, Mastra adds these routes to `server.apiRoutes`, so you don't add them by hand.
+
+Routes are collected when the agent is registered. If you add an agent with `addAgent()` after the server has started, its provider routes aren't served until the server restarts.
+
+If a route with the same method and path is already registered, the existing route wins:
+
+- A provider shared by several agents mounts its routes once.
+- A route in `server.apiRoutes` or a file-system route replaces the provider route, and Mastra logs a warning.
+- If two different providers declare the same route, the first one registered is mounted and Mastra logs a warning.
 
 ```typescript oxfmt:false
 getRoutes() {
@@ -364,6 +372,7 @@ getRoutes() {
       method: 'POST',
       requiresAuth: false,
       handler: async c => {
+        // Public route: handleWebhook() must verify the sender's signature
         const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() })
         return c.json(result.body ?? {}, result.status ?? 200)
       },
@@ -373,6 +382,13 @@ getRoutes() {
 ```
 
 Returns: `ApiRoute[]`
+
+Provider routes follow the same rules as other [custom API routes](/docs/server/custom-api-routes#authentication). Adding a provider to an agent mounts its routes with no extra step from the user, so set access on each route deliberately:
+
+- Routes require authentication by default when the server has auth configured.
+- A route with `requiresAuth: false` is public. Verify the sender, for example with a webhook signature, before calling `handleWebhook()`.
+- An authenticated route should set `requiresPermission` or `fga`. When an FGA provider audits protected routes, routes with neither are reported at startup.
+- Paths can't start with the server's `apiPrefix` (`/api` by default). The server throws at startup. Use a provider-specific prefix such as `/acme/...`.
 
 ### Lifecycle
 

@@ -68,6 +68,7 @@ import { Schedules } from '../schedules/schedules';
 import type { SchedulesConfig, ScheduleHooks } from '../schedules/types';
 import type { MastraServerBase } from '../server/base';
 import type { ApiRoute, Middleware, ServerConfig, StudioConfig } from '../server/types';
+import type { SignalProvider } from '../signals/signal-provider';
 import type { MastraCompositeStore, WorkflowRuns } from '../storage';
 import { InMemoryStore } from '../storage';
 import { BackgroundTasksInMemory } from '../storage/domains/background-tasks/inmemory';
@@ -891,6 +892,7 @@ export class Mastra<
   #workspaces: Record<string, RegisteredWorkspace> = {};
   #server?: ServerConfig;
   #serverExplicit = false;
+  #signalProviderRouteOwners = new WeakMap<ApiRoute, SignalProvider>();
   #studio?: StudioConfig;
   #studioExplicit = false;
   #serverAdapter?: MastraServerBase;
@@ -3118,7 +3120,9 @@ export class Mastra<
   /**
    * Merge routes from the agent's signal providers into `server.apiRoutes`.
    * Skips routes whose method and path are already registered, so a provider
-   * shared by several agents only mounts its routes once.
+   * shared by several agents only mounts its routes once and existing routes
+   * win. Logs a warning when a route is skipped because something other than
+   * the same provider already holds that method and path.
    */
   #registerSignalProviderRoutes(agent: Agent<any, any, any>): void {
     const existingRoutes = this.#server?.apiRoutes ?? [];
@@ -3126,10 +3130,19 @@ export class Mastra<
 
     for (const provider of agent.listSignalProviders?.() ?? []) {
       for (const route of provider.getRoutes?.() ?? []) {
-        const isRegistered = [...existingRoutes, ...newRoutes].some(
+        const registered = [...existingRoutes, ...newRoutes].find(
           existing => existing.path === route.path && existing.method === route.method,
         );
-        if (!isRegistered) newRoutes.push(route);
+        if (!registered) {
+          newRoutes.push(route);
+          this.#signalProviderRouteOwners.set(route, provider);
+          continue;
+        }
+        if (this.#signalProviderRouteOwners.get(registered) !== provider) {
+          this.getLogger().warn(
+            `Signal provider "${provider.id}" on agent "${agent.id}" declares ${route.method} ${route.path}, but that route is already registered. Skipping the provider route.`,
+          );
+        }
       }
     }
 
@@ -3378,8 +3391,19 @@ export class Mastra<
     // Preserve apiRoutes accumulated during construction (e.g. channel
     // webhook routes) — they live on #server even when the user never
     // passed a server config explicitly.
-    const existingRoutes = this.#server?.apiRoutes ?? [];
+    // File-system routes win over signal provider routes on the same method and path.
     const fsRoutes = fsServer.apiRoutes ?? [];
+    const existingRoutes = (this.#server?.apiRoutes ?? []).filter(route => {
+      const provider = this.#signalProviderRouteOwners.get(route);
+      if (!provider) return true;
+      const overridden = fsRoutes.some(fsRoute => fsRoute.path === route.path && fsRoute.method === route.method);
+      if (overridden) {
+        this.getLogger().warn(
+          `Signal provider "${provider.id}" route ${route.method} ${route.path} is overridden by a file-system route.`,
+        );
+      }
+      return !overridden;
+    });
     const mergedRoutes = [...existingRoutes, ...fsRoutes];
     this.setServer({
       ...fsServer,

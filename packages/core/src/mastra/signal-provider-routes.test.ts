@@ -1,4 +1,4 @@
-import { describe, expect, it } from 'vitest';
+import { describe, expect, it, vi } from 'vitest';
 import { Agent } from '../agent';
 import { registerApiRoute } from '../server';
 import type { ApiRoute } from '../server/types';
@@ -65,6 +65,54 @@ describe('signal provider routes', () => {
     mastra.__registerFsServer({ port: 4111, apiRoutes: [fsRoute] });
 
     expect(mastra.getServer()?.apiRoutes).toEqual([webhookRoute, fsRoute]);
+  });
+
+  it('keeps a user-defined route that collides with a provider route', () => {
+    const userWebhookRoute = registerApiRoute('/routed/webhook', { method: 'POST', handler: c => c.text('user') });
+    const mastra = new Mastra({ logger: false, server: { apiRoutes: [userWebhookRoute] } });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+
+    mastra.addAgent(createAgent('agent', [new RoutedSignalProvider([webhookRoute])]));
+
+    expect(mastra.getServer()?.apiRoutes).toEqual([userWebhookRoute]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('POST /routed/webhook'));
+  });
+
+  it('warns when two providers declare the same route', () => {
+    const mastra = new Mastra({ logger: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+
+    mastra.addAgent(createAgent('first', [new RoutedSignalProvider([webhookRoute])]));
+    mastra.addAgent(createAgent('second', [new RoutedSignalProvider([{ ...webhookRoute }])]));
+
+    expect(mastra.getServer()?.apiRoutes).toEqual([webhookRoute]);
+    expect(warn).toHaveBeenCalledTimes(1);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('agent "second"'));
+  });
+
+  it('does not warn when a shared provider is registered on several agents', () => {
+    const provider = new RoutedSignalProvider([webhookRoute]);
+    const mastra = new Mastra({ logger: false });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+
+    mastra.addAgent(createAgent('first', [provider]));
+    mastra.addAgent(createAgent('second', [provider]));
+
+    expect(warn).not.toHaveBeenCalled();
+  });
+
+  it('lets a file-system route override a provider route on the same method and path', () => {
+    const fsWebhookRoute = registerApiRoute('/routed/webhook', { method: 'POST', handler: c => c.text('fs') });
+    const mastra = new Mastra({
+      logger: false,
+      agents: { agent: createAgent('agent', [new RoutedSignalProvider([webhookRoute])]) },
+    });
+    const warn = vi.spyOn(mastra.getLogger(), 'warn');
+
+    mastra.__registerFsServer({ port: 4111, apiRoutes: [fsWebhookRoute] });
+
+    expect(mastra.getServer()?.apiRoutes).toEqual([fsWebhookRoute]);
+    expect(warn).toHaveBeenCalledWith(expect.stringContaining('overridden by a file-system route'));
   });
 
   it('leaves server config untouched when providers have no routes', () => {

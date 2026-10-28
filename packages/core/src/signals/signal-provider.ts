@@ -421,7 +421,12 @@ export abstract class SignalProvider<TId extends string = string> {
    * Return API routes this provider needs on the Mastra server, such as
    * webhook receivers or OAuth callbacks. Mastra merges them into
    * `server.apiRoutes` when the provider's agent is registered, so users
-   * don't have to add them by hand.
+   * don't have to add them by hand. Routes already registered with the same
+   * method and path win, and Mastra logs a warning when it skips one.
+   *
+   * Routes require auth by default. A route with `requiresAuth: false` must
+   * verify the sender (for example a webhook signature) before handling the
+   * request. Paths must not start with the server `apiPrefix` (`/api`).
    *
    * @example
    * ```ts
@@ -431,6 +436,7 @@ export abstract class SignalProvider<TId extends string = string> {
    *       method: 'POST',
    *       requiresAuth: false,
    *       handler: async c => {
+   *         // Public route: handleWebhook() must verify the sender's signature
    *         const result = await this.handleWebhook({ body: await c.req.text(), headers: c.req.header() });
    *         return c.json(result.body ?? {}, result.status ?? 200);
    *       },
