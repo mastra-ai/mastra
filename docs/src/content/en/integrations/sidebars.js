@@ -67,7 +67,10 @@ const sidebars = {
           type: 'doc',
           id: 'frameworks/angular',
           label: 'Angular',
-          customProps: { icon: 'https://cdn.simpleicons.org/angular?viewbox=auto&size=28' },
+          customProps: {
+            icon: 'https://cdn.simpleicons.org/angular/black?viewbox=auto&size=28',
+            iconDark: 'https://cdn.simpleicons.org/angular/white?viewbox=auto&size=28',
+          },
         },
         {
           type: 'doc',
