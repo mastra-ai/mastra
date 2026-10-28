@@ -32,28 +32,14 @@ import {
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
 import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
-import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
-import {
-  collectToolGroups,
-  draws,
-  hasVisibleText,
-  messageText,
-  renderableParts,
-  toolFromInvocationPart,
-} from './transcript-parts';
-import {
-  isSkillNotificationSignal,
-  notificationMetadata,
-  NotificationCard,
-  NotificationSummaryCard,
-} from './TranscriptNotifications';
-import {
-  HIDDEN_REACTIVE_SIGNAL_TAGS,
-  signalRowView,
-  skillSignalActivation,
-  SUPPRESSED_STATE_SIGNAL_IDS,
-} from './TranscriptSignals';
+import { draws, hasVisibleText, messageText, renderableParts, toolFromInvocationPart } from './transcript-parts';
+import { ActivityStretchLine } from './activity/ActivityStretchLine';
+import { activityPartKey, reasoningWithState } from './activity/activity-plan';
+import type { EntryActivity } from './activity/activity-plan';
+import { NotificationCard, NotificationSummaryCard } from './TranscriptNotifications';
+import { messageEntryView } from './message-entry-view';
+import type { StatusMetadata } from './message-entry-view';
 import type { MastraErrorPart } from '@mastra/core/agent/message-list';
 import { Txt } from '@mastra/playground-ui/components/Txt';
 
@@ -78,6 +64,7 @@ export function MessageBubble({
   onRespond,
   viewerId,
   owner,
+  activity,
 }: {
   entry: MessageEntry;
   suspensions: ReadonlyMap<string, SuspensionPrompt>;
@@ -86,6 +73,8 @@ export function MessageBubble({
   onRespond: (toolCallId: string, resumeData: string | string[] | PlanResume, promptId: string) => void;
   viewerId?: string;
   owner?: ThreadOwner;
+  /** The stretches of tool work this entry hosts, and the parts an earlier entry's stretch draws instead. */
+  activity?: EntryActivity;
 }) {
   const written = renderableParts(entry);
   const parts = useRevealedParts(written, Boolean(entry.streaming));
@@ -93,8 +82,23 @@ export function MessageBubble({
     entry.message.role === 'user' ? splitMessageAttachments(parts) : { attachments: [], content: parts };
   const message = { ...entry.message, content: { ...entry.message.content, parts: content } };
   const hasRenderablePart = written.some(part => draws(part, suspensions, entry.runtimeTools));
+  const drawsOwnPart = written.some(
+    (part, index) =>
+      draws(part, suspensions, entry.runtimeTools) && !activity?.hidden.has(activityPartKey(entry.id, part, index)),
+  );
+  const revealed = new Map(parts.map((part, index) => [activityPartKey(entry.id, part, index), part] as const));
+  const keyOfPart = new Map<object, string>(parts.map((part, index) => [part, activityPartKey(entry.id, part, index)]));
+  const stretchLine = (key: string | undefined) => {
+    const stretch = key === undefined ? undefined : activity?.hosts.get(key);
+    return (
+      stretch && (
+        <Arriving>
+          <ActivityStretchLine stretch={stretch} hostEntryId={entry.id} revealed={revealed} />
+        </Arriving>
+      )
+    );
+  };
 
-  const toolGroups = collectToolGroups(parts, suspensions);
   const origin = channelOrigin(entry.message);
   const author = messageAuthor(entry.message);
   const sender = author && author.id !== viewerId ? author : undefined;
@@ -196,30 +200,18 @@ export function MessageBubble({
         </MarkdownRenderer>
       );
     },
-    Reasoning: (part: ReasoningPart) => (
-      <ReasoningPartRenderer
-        part={{ ...part, state: part.state ?? (entry.streaming ? 'streaming' : 'done') }}
-        defaultOpen={false}
-      />
-    ),
+    Reasoning: (part: ReasoningPart) => {
+      const key = keyOfPart.get(part);
+      const line = stretchLine(key);
+      if (line) return line;
+      if (key !== undefined && activity?.hidden.has(key)) return null;
+      return <ReasoningPartRenderer part={reasoningWithState(part, Boolean(entry.streaming))} defaultOpen={false} />;
+    },
     ToolInvocation: (part: ToolInvocationPart) => {
       const toolCallId = part.toolInvocation.toolCallId;
-      const group = toolGroups.byFirstKey.get(toolCallId);
-      if (group) {
-        const tools = group.map(member =>
-          toolFromInvocationPart(
-            member,
-            entry.runtimeTools?.[member.toolInvocation.toolCallId],
-            entry.message.createdAt,
-          ),
-        );
-        return (
-          <Arriving>
-            <ToolGroup tools={tools} />
-          </Arriving>
-        );
-      }
-      if (toolGroups.memberKeys.has(toolCallId)) return null;
+      const line = stretchLine(toolCallId);
+      if (line) return line;
+      if (activity?.hidden.has(toolCallId)) return null;
 
       const runtime = entry.runtimeTools?.[toolCallId];
       const tool = toolFromInvocationPart(part, runtime, entry.message.createdAt);
@@ -244,83 +236,45 @@ export function MessageBubble({
     File: (part: FilePart) => <UserFilePartRenderer part={part} />,
   };
 
-  const skillActivation =
-    entry.message.role === 'user' && parts.length === 1 && parts[0].type === 'text'
-      ? parseSkillActivation(parts[0].text)
-      : skillSignalActivation(entry);
-  if (skillActivation) return <SkillMessage activation={skillActivation} />;
-  if (isSkillNotificationSignal(entry)) return null;
-
-  const notifications = notificationMetadata(entry);
-  if (notifications.length > 0) {
-    return (
-      <div className="flex flex-col">
-        {notifications.map(notification =>
-          notification.kind === 'notification' ? (
-            <NotificationCard key={notification.id} entry={notification} />
-          ) : (
-            <NotificationSummaryCard key={notification.id} entry={notification} />
-          ),
-        )}
-        {hasRenderablePart && entry.message.role !== 'signal' && (
-          <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
-        )}
-      </div>
-    );
-  }
-
-  const signalRow = signalRowView(entry);
-  if (signalRow) {
-    if (signalRow.kind === 'state') {
-      if (SUPPRESSED_STATE_SIGNAL_IDS.has(signalRow.stateId)) return null;
-      return <SignalActivity kind="state" label={signalRow.stateId} mode={signalRow.mode} message={signalRow.text} />;
+  const view = messageEntryView(entry, parts);
+  switch (view.kind) {
+    case 'skill':
+      return <SkillMessage activation={view.activation} />;
+    case 'hidden':
+      return null;
+    case 'notifications':
+      return (
+        <div className="flex flex-col">
+          {view.notifications.map(notification =>
+            notification.kind === 'notification' ? (
+              <NotificationCard key={notification.id} entry={notification} />
+            ) : (
+              <NotificationSummaryCard key={notification.id} entry={notification} />
+            ),
+          )}
+          {hasRenderablePart && entry.message.role !== 'signal' && (
+            <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />
+          )}
+        </div>
+      );
+    case 'signal': {
+      const { row } = view;
+      if (row.kind === 'state') {
+        return <SignalActivity kind="state" label={row.stateId} mode={row.mode} message={row.text} />;
+      }
+      if (row.kind === 'divider') return <TranscriptDivider label={row.label} title={row.title} />;
+      if (row.kind === 'reminder') return <SignalActivity kind="reminder" label="System reminder" message={row.text} />;
+      return <SignalActivity kind="reactive" label={row.tagName} message={row.text} />;
     }
-    if (signalRow.kind === 'divider') return <TranscriptDivider label={signalRow.label} title={signalRow.title} />;
-    if (signalRow.kind === 'reminder') {
-      return <SignalActivity kind="reminder" label="System reminder" message={signalRow.text} />;
-    }
-    if (!signalRow.tagName || HIDDEN_REACTIVE_SIGNAL_TAGS.has(signalRow.tagName)) return null;
-    return <SignalActivity kind="reactive" label={signalRow.tagName} message={signalRow.text} />;
+    case 'status':
+      return <StatusMetadataCard status={view.status} />;
+    case 'parts':
+      break;
   }
-
-  const status = statusMetadata(entry);
-  if (status?.text.trim()) return <StatusMetadataCard status={status} />;
-  if (!hasRenderablePart) return null;
+  // A step whose parts all draw inside an earlier step's stretch still carries the reply's footer when it ends the turn.
+  if (!hasRenderablePart || (!drawsOwnPart && !meta)) return null;
 
   return <MessageFactory message={message} roles={roles} {...renderers} fallback={() => null} />;
-}
-
-interface StatusMetadata {
-  id: string;
-  text: string;
-  level: 'info' | 'error';
-}
-
-function statusMetadata(entry: MessageEntry): StatusMetadata | undefined {
-  const harnessContent = entry.message.content.metadata?.harnessContent;
-  if (!Array.isArray(harnessContent)) return undefined;
-
-  const statusPart = harnessContent.find(
-    part =>
-      typeof part === 'object' &&
-      part !== null &&
-      'type' in part &&
-      typeof part.type === 'string' &&
-      (part.type === 'notification_summary' || part.type.startsWith('om_') || part.type === 'harness-error'),
-  );
-  if (!statusPart || typeof statusPart !== 'object' || !('type' in statusPart)) return undefined;
-
-  const text =
-    'text' in statusPart && typeof statusPart.text === 'string'
-      ? statusPart.text
-      : 'message' in statusPart && typeof statusPart.message === 'string'
-        ? statusPart.message
-        : '';
-  return {
-    id: `${entry.id}-${String(statusPart.type)}`,
-    text,
-    level: statusPart.type === 'harness-error' ? 'error' : 'info',
-  };
 }
 
 function StatusMetadataCard({ status }: { status: StatusMetadata }) {

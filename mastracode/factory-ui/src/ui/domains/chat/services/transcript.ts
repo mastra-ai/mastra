@@ -1011,7 +1011,17 @@ function toolAnchorIndex(entries: TimelineEntry[], toolCallId: string): number {
     if (entry.runtimeTools?.[toolCallId]) return i;
     if (entry.message.content.parts.some(part => toolCallIdForPart(part) === toolCallId)) return i;
   }
-  return latestAssistantIndex(entries);
+  return currentTurnAssistantIndex(entries);
+}
+
+function currentTurnAssistantIndex(entries: TimelineEntry[]): number {
+  for (let i = entries.length - 1; i >= 0; i--) {
+    const entry = entries[i];
+    if (entry.kind !== 'message') continue;
+    if (entry.message.role === 'assistant') return i;
+    if (entry.message.role === 'user' && !entry.steer) return -1;
+  }
+  return -1;
 }
 
 function latestAssistantIndex(entries: TimelineEntry[]): number {

@@ -63,6 +63,10 @@ export type ScrollAreaScrollButtons =
 export type ScrollAreaProps = React.ComponentProps<typeof ScrollAreaPrimitive.Root> & {
   maxHeight?: string;
   autoScroll?: boolean;
+  /** With `autoScroll`, start pinned to the end. `false` keeps the reader's position until they scroll back to the end. Defaults to `true`. */
+  autoScrollStartFollowing?: boolean;
+  /** With `autoScroll`, called whenever following turns on or off. */
+  onAutoScrollFollowingChange?: (following: boolean) => void;
   orientation?: Orientation;
   /** Show left/right controls for horizontal overflow. Only applies to `horizontal` and `both` orientations. */
   scrollButtons?: ScrollAreaScrollButtons;
@@ -262,6 +266,7 @@ export type ScrollAreaViewportProps = {
   children?: React.ReactNode;
   /** The scrolling element, e.g. a virtualizer's `getScrollElement`. */
   ref?: React.Ref<HTMLDivElement>;
+  onScroll?: React.UIEventHandler<HTMLDivElement>;
   /**
    * Renders the scrolling element as another component, for a library that has to own it
    * (e.g. Base UI's `Select.List`, which Select scrolls to line the selected item up with the trigger).
@@ -275,7 +280,7 @@ function useScrollAreaViewportContext() {
   return viewport;
 }
 
-function ScrollAreaViewport({ className, contentClassName, children, ref, render }: ScrollAreaViewportProps) {
+function ScrollAreaViewport({ className, contentClassName, children, ref, render, onScroll }: ScrollAreaViewportProps) {
   const viewport = useScrollAreaViewportContext();
   const { areaRef } = viewport;
   const viewportRef = React.useMemo(() => mergeRefs(areaRef, ref), [areaRef, ref]);
@@ -286,6 +291,7 @@ function ScrollAreaViewport({ className, contentClassName, children, ref, render
       className={cn(viewport.className, className)}
       style={viewport.style}
       render={render}
+      onScroll={onScroll}
     >
       <ScrollAreaPrimitive.Content className={contentClassName} style={viewport.contentStyle}>
         <ScrollAreaViewportContext value={null}>{children}</ScrollAreaViewportContext>
@@ -299,6 +305,8 @@ function ScrollArea({
   children,
   maxHeight,
   autoScroll = false,
+  autoScrollStartFollowing,
+  onAutoScrollFollowingChange,
   orientation = 'vertical',
   scrollButtons,
   mask,
@@ -306,7 +314,11 @@ function ScrollArea({
   ...props
 }: ScrollAreaProps) {
   const areaRef = React.useRef<HTMLDivElement>(null);
-  useAutoscroll(areaRef, { enabled: autoScroll });
+  useAutoscroll(areaRef, {
+    enabled: autoScroll,
+    startFollowing: autoScrollStartFollowing,
+    onFollowingChange: onAutoScrollFollowingChange,
+  });
 
   const sides = resolveMask(mask, orientation);
   const fadesAnySide = Object.values(sides).some(Boolean);

@@ -1,8 +1,11 @@
 import {
   Activity,
   ActivityContent,
-  ActivityHeadline,
-  ActivityTrigger,
+  ActivityDetail,
+  ActivityDisclosure,
+  ActivityHeader,
+  ActivityIcon,
+  ActivityLabel,
 } from '@mastra/playground-ui/components/ai/activity';
 import {
   ToolCallArguments,
@@ -14,22 +17,25 @@ import {
   stripSerializedAnsi,
   toolEdit,
 } from '@mastra/playground-ui/components/ai/tool-call';
+import { cn } from '@mastra/playground-ui/utils/cn';
+import { X } from 'lucide-react';
 
 import { toolCallStatus } from '../../services/transcript';
 import type { ToolCall } from '../../services/transcript';
-import { ToolTime } from '../ToolTime';
+import { TimedTrigger } from '../activity/TimedTrigger';
+import { rowStyle } from '../activity/row-style';
 
 function toolResultText(tool: ToolCall): string | undefined {
   if (tool.status === 'running' || tool.result === undefined || tool.result === null) return undefined;
   return stripSerializedAnsi(stringifyToolValue(tool.result)) || undefined;
 }
 
-function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
+export function toolHasBody(tool: ToolCall, command: string | undefined): boolean {
   if (command !== undefined || tool.output) return true;
   return hasToolArguments(tool) || toolResultText(tool) !== undefined;
 }
 
-function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
+export function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   const edit = toolEdit(tool.toolName, tool.args);
   const resultText = toolResultText(tool);
 
@@ -66,8 +72,14 @@ function ToolBody({ tool, command }: { tool: ToolCall; command?: string }) {
   );
 }
 
-export function ToolCard({ tool }: { tool: ToolCall }) {
+export interface RowOpenState {
+  defaultOpen?: boolean;
+  onOpenChange?: (open: boolean) => void;
+}
+
+export function ToolCard({ tool, ...open }: { tool: ToolCall } & RowOpenState) {
   const { icon: ToolIcon, label, detail, description, command } = presentTool(tool.toolName, tool.args);
+  const failed = tool.status === 'error';
 
   return (
     <Activity
@@ -75,17 +87,22 @@ export function ToolCard({ tool }: { tool: ToolCall }) {
       status={toolCallStatus(tool.status)}
       aria-label={`Tool: ${tool.toolName}`}
       aria-busy={tool.status === 'running'}
+      {...open}
     >
-      <ActivityTrigger>
-        <ActivityHeadline
-          leading={<ToolTime at={tool.createdAt} />}
-          icon={<ToolIcon aria-hidden />}
-          label={label}
-          detail={detail}
-          description={description}
-        />
-      </ActivityTrigger>
-      <ActivityContent>
+      <TimedTrigger at={tool.createdAt}>
+        <ActivityHeader className={rowStyle.header}>
+          <ActivityIcon className={cn(!failed && rowStyle.icon)}>
+            <ToolIcon aria-hidden />
+          </ActivityIcon>
+          <ActivityLabel className={cn(rowStyle.text, 'max-w-none', (description || !detail) && 'min-w-0 shrink')}>
+            {description || label}
+          </ActivityLabel>
+          {!description && detail && <ActivityDetail className={rowStyle.text}>{detail}</ActivityDetail>}
+          {failed && <X size={13} role="img" aria-label="Failed" className="shrink-0 text-destructive-foreground" />}
+          <ActivityDisclosure />
+        </ActivityHeader>
+      </TimedTrigger>
+      <ActivityContent className={rowStyle.content}>
         <ToolBody tool={tool} command={command} />
       </ActivityContent>
     </Activity>

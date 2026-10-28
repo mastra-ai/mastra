@@ -8,6 +8,9 @@ import {
   useRequiredMessageScrollerScrollableContext,
   useRequiredMessageScrollerVisibilityContext,
 } from './message-scroller-context';
+import { createVisibilityStore } from './message-scroller-visibility-store';
+
+const DETACHED_VISIBILITY = createVisibilityStore();
 
 export const useMessageScroller = () => {
   const { scrollToEnd, scrollToMessage, scrollToStart } =
@@ -41,21 +44,13 @@ export const useOptionalMessageScrollerScrollable = () => {
 };
 
 export const useMessageScrollerVisibility = () => {
-  const { currentAnchorId, visibleMessageIds } =
-    useRequiredMessageScrollerVisibilityContext('useMessageScrollerVisibility');
-  return React.useMemo(() => ({ currentAnchorId, visibleMessageIds }), [currentAnchorId, visibleMessageIds]);
+  const store = useRequiredMessageScrollerVisibilityContext('useMessageScrollerVisibility');
+  return React.useSyncExternalStore(store.subscribe, store.getSnapshot, store.getSnapshot);
 };
 
 export const useOptionalMessageScrollerVisibility = () => {
-  const context = React.useContext(MessageScrollerVisibilityContext);
-  return React.useMemo(
-    () =>
-      context
-        ? {
-            currentAnchorId: context.currentAnchorId,
-            visibleMessageIds: context.visibleMessageIds,
-          }
-        : undefined,
-    [context],
-  );
+  const store = React.useContext(MessageScrollerVisibilityContext);
+  const { subscribe, getSnapshot } = store ?? DETACHED_VISIBILITY;
+  const visibility = React.useSyncExternalStore(subscribe, getSnapshot, getSnapshot);
+  return store ? visibility : undefined;
 };
