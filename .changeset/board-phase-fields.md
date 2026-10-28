@@ -8,7 +8,7 @@ Board phases can now say who runs them and when they start. `defineBoard()` acce
 planning: {
   name: 'Planning',
   kind: 'working',
-  runner: { context: 'build', skill: 'factory-plan' },
+  runner: { context: 'build', skill: 'plan' }, // a skill that ends by calling submit_plan
   autoStart: true,
   autoStartWhen: LOW_EFFORT,
   exitTool: { id: 'submit_plan', autoApprove: true, autoApproveWhen: LOW_EFFORT },
