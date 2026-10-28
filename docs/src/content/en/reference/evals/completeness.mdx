@@ -95,6 +95,8 @@ The scorer evaluates completeness through linguistic element coverage analysis.
    - Exact matches for short terms (≤3 chars)
    - Substantial overlap (>60%) for longer terms
 
+When the input yields no elements, the scorer returns `1` if the output also has no elements and `0` otherwise.
+
 Final score: `covered_elements / total_input_elements`
 
 The completeness scorer has no `scale` option. The score is always between 0 and 1.
