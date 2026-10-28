@@ -291,22 +291,79 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       const errors = result.chunks!.filter(chunk => chunk.type === 'error');
       expect(errors).toHaveLength(1);
       expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
-      const { messages } = await historyMemory.recall({ threadId, resourceId });
-      const saved = JSON.stringify(messages);
-      // Durable and evented persist the input through agent memory regardless of the configured
-      // MessageHistory or lastMessages. Inngest saves nothing at the deadline beyond the savePerStep
-      // flush. Both predate this test and are out of scope here.
-      const durable = engine === 'durable' || engine === 'evented';
-      const inputSaved =
-        !readOnly &&
-        (engine === 'inngest'
-          ? savePerStep
-          : !(historyStore && durable) && !((customHistory || historyOff) && !durable));
-      expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
-      expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
-      expect(saved.includes('Checking the courier now.')).toBe(false);
+      // The durable engines persist the input through agent memory regardless of the configured
+      // MessageHistory or lastMessages; durable and evented up front, Inngest at the deadline. This
+      // predates this test and is out of scope here.
+      const durable = engine === 'durable' || engine === 'evented' || engine === 'inngest';
+      const inputSaved = !readOnly && !(historyStore && durable) && !((customHistory || historyOff) && !durable);
+      // Recall at the deadline and again once a late write from the settling run would have landed.
+      for (const delayMs of [0, engine === 'inngest' ? 3_000 : 500]) {
+        await new Promise(resolve => setTimeout(resolve, delayMs));
+        const { messages } = await historyMemory.recall({ threadId, resourceId });
+        const saved = JSON.stringify(messages);
+        expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
+        expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
+        expect(saved.includes('Checking the courier now.')).toBe(false);
+      }
     },
-    TEST_TIMEOUT_MS,
+    TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // The tool ignores cancellation and finishes after the deadline. Its result belongs to a step the
+  // deadline cut off, so it must not reach memory even once the tool settles.
+  it.each([false, true])(
+    'a tool that finishes after the deadline does not reach memory (savePerStep: %s)',
+    async savePerStep => {
+      const memory = new MockMemory();
+      const threadId = `late-tool-${engine}-${savePerStep}`;
+      const toolFinished = Promise.withResolvers<void>();
+      const result = await runLoopScenario({
+        engine,
+        llm: getMock(),
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'Check the slow courier.',
+        maxSteps: 3,
+        savePerStep,
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        collectChunks: true,
+        tools: {
+          slow: createTool({
+            id: 'slow',
+            description: 'Check the slow courier.',
+            inputSchema: z.object({}),
+            execute: async () => {
+              await new Promise(resolve => setTimeout(resolve, DEADLINE_MS + 1_000));
+              toolFinished.resolve();
+              return { status: 'late courier result' };
+            },
+          }),
+        },
+        fixtures: llm => {
+          llm.on(
+            { endpoint: 'chat', hasToolResult: false },
+            { toolCalls: [{ id: 'call_slow', name: 'slow', arguments: {} }] },
+          );
+          llm.on({ endpoint: 'chat', hasToolResult: true }, { content: 'Must not reach the model again.' });
+        },
+      });
+
+      const errors = result.chunks!.filter(chunk => chunk.type === 'error');
+      expect(errors).toHaveLength(1);
+      expect(errors[0]!.payload.error).toMatchObject({ name: 'MastraTimeoutError' });
+      await toolFinished.promise;
+      // Give any late write from the settled tool time to land before recalling.
+      await new Promise(resolve => setTimeout(resolve, engine === 'inngest' ? 3_000 : 500));
+
+      expect(result.requests).toHaveLength(1);
+      const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
+      expect(messages.map(message => message.role)).toEqual(['user']);
+      const saved = JSON.stringify(messages);
+      expect(saved.includes('Check the slow courier.')).toBe(true);
+      expect(saved.includes('late courier result')).toBe(false);
+    },
+    TEST_TIMEOUT_MS + 5_000,
   );
 
   it.each(['generate', 'resumeStream', 'resumeGenerate'] as const)(
