@@ -50,6 +50,23 @@ This creates a `src/mastra` folder with an example weather agent and the followi
 
 You'll call `weather-agent.ts` from your chat UI in the next steps.
 
+## Exclude Mastra from the Angular build
+
+Angular's default `tsconfig.app.json` compiles every file under `src/`, including the `src/mastra` server code. Its default `tsconfig.json` also enables `noPropertyAccessFromIndexSignature`, which makes the generated `process.env` access in `src/mastra/index.ts` fail the build.
+
+Keep the server code out of the browser build by adding `src/mastra/**` to the `exclude` list in `tsconfig.app.json`:
+
+```json title="tsconfig.app.json"
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "types": []
+  },
+  "include": ["src/**/*.ts"],
+  "exclude": ["src/**/*.spec.ts", "src/mastra/**"]
+}
+```
+
 ## Install AI SDK UI
 
 Install AI SDK UI along with the Mastra adapter and the Angular bindings:
