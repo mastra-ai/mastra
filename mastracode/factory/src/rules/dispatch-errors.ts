@@ -5,6 +5,7 @@ import type {
 
 interface FactoryDispatchFailureMetadata {
   canRetry: boolean;
+  manualRetryOnly?: true;
   label: string;
 }
 
@@ -30,6 +31,8 @@ const FAILURE_METADATA = {
   run_credentials_unavailable: { canRetry: true, label: 'Model credentials unavailable for the run' },
   // The run's request carries no user, so every retry fails the same way; a person has to start it.
   run_user_unauthenticated: { canRetry: false, label: 'Run started without an authenticated user' },
+  // A rerun on its own lands on the same account and its limit; a person picks the remedy, then retries.
+  run_provider_limited: { canRetry: true, manualRetryOnly: true, label: 'Provider rate limit or quota reached' },
   run_failed: { canRetry: true, label: 'Agent run ended in error' },
   unknown: { canRetry: true, label: 'Factory automation failed' },
   // Retired: no path writes these any more, stored rows still read through here.
