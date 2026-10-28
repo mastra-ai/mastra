@@ -102,10 +102,11 @@ describe('describeRunError', () => {
     });
   });
 
-  it('tells the user to wait out a rate limit or move to another credential or model', () => {
-    expect(describeRunError({ name: 'AI_APICallError', message: 'ThrottlingException' }).message).toBe(
-      'Wait a moment, then send a message to continue the run, or use another credential or model.',
-    );
+  it('offers to continue, switch credential, or switch model when the provider throttles the run', () => {
+    expect(describeRunError({ name: 'AI_APICallError', message: 'ThrottlingException' })).toMatchObject({
+      title: 'Provider rate limit reached',
+      recoveries: ['continue', 'credentials', 'model'],
+    });
   });
 
   it('keeps a rejected parameter terminal even when its name mentions a timeout', () => {

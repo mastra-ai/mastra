@@ -22,6 +22,7 @@ import { ChatThreadMessagesContext } from '../context/ChatThreadMessagesContext'
 import { ContinueRunAction } from './ContinueRunAction';
 import { NewSessionAction } from './NewSessionAction';
 import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { RunErrorCredential } from './RunErrorCredential';
 import { ChangeModelAction } from './StatusLine/ModelPicker';
 
 const RECOVERY_ACTIONS: Record<RunErrorRecovery, ComponentType<{ entryId: string }>> = {
@@ -83,6 +84,7 @@ export function RunErrorNotice({ error, entryId }: { error: MastraErrorPart['err
           Model: {formatModelName(model)}
         </Txt>
       )}
+      {model && recoveries.includes('credentials') && <RunErrorCredential entryId={entryId} modelId={model} />}
     </Notice>
   );
 }
