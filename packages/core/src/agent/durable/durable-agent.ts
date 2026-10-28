@@ -2120,7 +2120,7 @@ export class DurableAgent<
    * version 2 where the engine and store support it (see the workflow's
    * `autoStorageVersion` option). A resumed run stays in its stored version.
    * Off until version 2 prunes what version 1 prunes: a paused v2 run's
-   * largest write is over twice v1's (see snapshot-write-amplification.test.ts).
+   * largest write is 1.5 times v1's (see snapshot-write-amplification.test.ts).
    * EventedAgent overrides this to `false`.
    * @internal
    */

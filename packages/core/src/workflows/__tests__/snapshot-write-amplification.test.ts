@@ -394,11 +394,10 @@ describe('durable snapshot write amplification (issue #20747)', () => {
 
   // Durable agents keep new runs on storage v1 (`DurableAgent.storesRunsInJournal`)
   // because of what this measures. At 16 steps, v2 writes 10.2 MB against v1's
-  // 25.3 MB with recovery `auto`, and 2.7 MB against 3.6 MB with suspend-only,
-  // but its largest single write with suspend-only is 236 kB against v1's
+  // 25.3 MB with recovery `auto`, and 2.0 MB against 3.6 MB with suspend-only,
+  // but its largest single write with suspend-only is 155 kB against v1's
   // 103 kB. That write is the agent's nested run pausing: its step entries
-  // keep the provider request echo that v1 prunes, and it stores the whole
-  // state because the loop run hasn't stored the state it started from.
+  // keep four copies of the provider request body, 35 kB each, which v1 prunes.
   it.each<Recovery>(['auto', 'suspend-only'])(
     'compares storage v1 and v2 writes with recovery %s',
     async recovery => {
@@ -419,12 +418,9 @@ describe('durable snapshot write amplification (issue #20747)', () => {
       // v2 writes less in total than v1 for every run length.
       v2.forEach((stats, i) => expect(stats.totalBytes).toBeLessThan(v1[i]!.totalBytes));
 
-      // While the run is written at every step, a v2 write sends the step
-      // records it adds, not all of them so far.
-      if (recovery === 'auto') {
-        expect(v2[2]!.maxStepRecordsPerWrite).toBeLessThanOrEqual(v2[0]!.maxStepRecordsPerWrite);
-        expect(v1[2]!.maxStepRecordsPerWrite).toBeGreaterThan(v1[0]!.maxStepRecordsPerWrite);
-      }
+      // A v2 write sends the step records it adds, not all of them so far.
+      expect(v2[2]!.maxStepRecordsPerWrite).toBeLessThanOrEqual(v2[0]!.maxStepRecordsPerWrite);
+      expect(v1[2]!.maxStepRecordsPerWrite).toBeGreaterThan(v1[0]!.maxStepRecordsPerWrite);
     },
     240000,
   );
