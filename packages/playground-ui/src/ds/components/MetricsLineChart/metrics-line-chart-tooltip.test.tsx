@@ -37,6 +37,23 @@ describe('MetricsLineChartTooltip', () => {
     expect(html).toContain('10ms');
   });
 
+  it('shows a dash for the total of a bucket with no readings', () => {
+    const html = renderToStaticMarkup(
+      <MetricsLineChartTooltip
+        active
+        label="3 AM"
+        payload={[
+          { name: 'Input', value: Number.NaN, color: 'green' },
+          { name: 'Output', value: Number.NaN, color: 'blue' },
+        ]}
+        showTotal
+      />,
+    );
+    expect(html).toContain('Total');
+    expect(html).not.toContain('>0<');
+    expect(html.match(/—/g)).toHaveLength(3);
+  });
+
   it('formats each series with its own formatter and reads the heading from the row', () => {
     const html = renderToStaticMarkup(
       <MetricsLineChartTooltip

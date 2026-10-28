@@ -33,6 +33,8 @@ export function MetricsLineChartTooltip({
   // A missing reading (NaN, Infinity) shows as a dash and stays out of the total.
   const finite = (value: unknown): value is number => typeof value === 'number' && Number.isFinite(value);
   const total = payload.reduce((sum, entry) => sum + (finite(entry.value) ? entry.value : 0), 0);
+  // A bucket with no readings at all totals to a dash, not 0.
+  const hasReading = payload.some(entry => finite(entry.value));
   const heading = labelKey ? String(payload[0]?.payload?.[labelKey] ?? label ?? '') : label;
   const format = (entry: { dataKey?: string | number }) => formatByKey?.[String(entry.dataKey)] ?? formatValue;
   // A number through its formatter; a missing or non-finite one as a dash; text as it is.
@@ -65,8 +67,8 @@ export function MetricsLineChartTooltip({
               Total
             </Txt>
             <span className="text-right font-mono text-foreground tabular-nums">
-              {formatValue(total)}
-              {suffix}
+              {hasReading ? formatValue(total) : '—'}
+              {hasReading && suffix}
             </span>
           </div>
         )}
