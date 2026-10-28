@@ -192,7 +192,7 @@ describe('breakdownGroupBy', () => {
     it('groups every tab but Projects by project too', () => {
       expect(breakdownGroupBy('projects', true)).toEqual(['projectId']);
       expect(breakdownGroupBy('threads', true)).toEqual(['projectId', 'threadId']);
-      expect(breakdownGroupBy('models', true)).toEqual(['projectId', 'model']);
+      expect(breakdownGroupBy('models', true)).toEqual(['projectId', 'provider', 'model']);
       expect(breakdownGroupBy('environments', true)).toEqual(['projectId', 'environment']);
     });
   });

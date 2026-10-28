@@ -5,6 +5,7 @@ import type { UISpan, UISpanStyle } from '../types';
 import { SPAN_TREE_INDENT, SPAN_TREE_LINE, SPAN_TREE_META_GAP, SPAN_TREE_PAD_Y, SpanTreeRail } from './span-tree-rail';
 import { SpanTypeBadge } from './span-type-badge';
 import { Badge } from '@/ds/components/Badge';
+import { SegmentedName } from '@/ds/components/SegmentedName';
 import { Txt } from '@/ds/components/Txt';
 import { focusRing, focusRingInset } from '@/ds/primitives/transitions';
 import { cn } from '@/lib/utils';
@@ -111,17 +112,7 @@ export function TimelineNameCol({
                 title={span.matchedInPayloadOnly ? 'Matches your search in this span’s details' : undefined}
                 className="min-w-0 truncate font-[450]"
               >
-                {kind ? (
-                  <>
-                    {kind}
-                    <span aria-hidden className="px-1 text-foreground/70">
-                      ›
-                    </span>
-                    {value}
-                  </>
-                ) : (
-                  span.name
-                )}
+                {kind ? <SegmentedName parts={[kind, value]} /> : span.name}
               </Txt>
             </button>
             {span.signalLabel && (

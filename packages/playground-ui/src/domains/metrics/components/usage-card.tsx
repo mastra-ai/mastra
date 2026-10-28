@@ -11,8 +11,8 @@ import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
-import { MetricsShareList } from '@/ds/components/MetricsShareList';
+import { ShareBar } from '@/ds/components/ShareBar';
+import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type View = 'agents' | 'models' | 'threads';
 type UsageRow = { key: string; cost: number; tokens: number; onClick?: () => void };
@@ -112,7 +112,7 @@ function UsageFrame({
   isError,
 }: ViewProps & { view: View; rows: UsageRow[]; isLoading: boolean; isUpdating: boolean; isError: boolean }) {
   const tokensOf = new Map(rows.map(r => [r.key, r.tokens]));
-  const shareRows: MetricsShareListRow[] = rows.map(r => ({
+  const shareRows: ShareBarRow[] = rows.map(r => ({
     key: r.key,
     label: r.key,
     share: r.cost,
@@ -132,7 +132,6 @@ function UsageFrame({
           <MetricsCard.Tab value="models">Models</MetricsCard.Tab>
           <MetricsCard.Tab value="threads">Threads</MetricsCard.Tab>
         </MetricsCard.Tabs>
-        <MetricsShareList.Header columns={COLUMNS} valueLabel="Cost" />
       </MetricsCard.Toolbar>
     ),
   };
@@ -158,11 +157,10 @@ function UsageFrame({
       isUpdating={isUpdating}
     >
       <ChartArea>
-        <MetricsShareList
+        <ShareBar
           rows={shareRows}
           columns={COLUMNS}
           valueLabel="Cost"
-          showHeader={false}
           color={CHART_COLORS.green}
           other={rest => ({
             value: formatUsd(rest.reduce((sum, r) => sum + r.share, 0)),

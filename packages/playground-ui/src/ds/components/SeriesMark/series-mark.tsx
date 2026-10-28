@@ -2,11 +2,15 @@ import type { CSSProperties, ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 export type SeriesMarkProps = {
-  /** The series color, as drawn on its chart line or strip segment. */
-  color: string;
   /**
-   * A logo or icon (e.g. a provider logo, about 14px) drawn in `color` on a square tinted with it.
-   * Without one, the mark is a small square of `color`.
+   * The series color, as drawn on its chart line or bar segment. Without one (a table with no
+   * chart), the mark is neutral.
+   */
+  color?: string;
+  /**
+   * An icon or logo drawn in `color` on an 18px square tinted with it: a provider logo at 13px
+   * (`ProviderMark`), or an entity glyph (agent, workflow, tool) at 12px. Without one, the mark is
+   * a small square of `color`.
    */
   icon?: ReactNode;
   className?: string;
@@ -14,9 +18,10 @@ export type SeriesMarkProps = {
 };
 
 /**
- * Ties a row to its series on a chart: a small color square, or an icon in the series color on a
- * square tinted with it. For chart tables and legends, so a row reads as the line or segment it
- * stands for.
+ * What a table row stands for, before its name: a small color square, or an icon on a tinted
+ * square. With `color`, it ties the row to its series on a chart (a chart's table or legend);
+ * without, it marks the kind of thing the row is. 18px, inside a table row's text line, so it
+ * doesn't make rows taller.
  */
 export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
   if (icon === undefined || icon === null) {
@@ -24,7 +29,7 @@ export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
       <span
         aria-hidden
         data-slot="series-mark"
-        className={cn('inline-block size-2 shrink-0 rounded-[2px]', className)}
+        className={cn('inline-block size-2 shrink-0 rounded-[2px]', !color && 'bg-fill-subtle', className)}
         style={{ background: color, ...style }}
       />
     );
@@ -33,12 +38,13 @@ export function SeriesMark({ color, icon, className, style }: SeriesMarkProps) {
     <span
       aria-hidden
       data-slot="series-mark"
-      // Logos ship their own fills; the mark paints every path in the series color instead.
+      // Logos ship their own fills; the mark paints every path in the series color (or muted) instead.
       className={cn(
-        'grid size-5 shrink-0 place-items-center rounded-[5px] [&_svg_*]:fill-current [&_svg_*]:stroke-none',
+        'grid size-4.5 shrink-0 place-items-center rounded-[4px] [&_svg_*]:fill-current [&_svg_*]:stroke-none',
+        !color && 'bg-fill-subtle text-muted-foreground',
         className,
       )}
-      style={{ background: `color-mix(in oklab, ${color} 18%, transparent)`, color, ...style }}
+      style={color ? { background: `color-mix(in oklab, ${color} 18%, transparent)`, color, ...style } : style}
     >
       {icon}
     </span>

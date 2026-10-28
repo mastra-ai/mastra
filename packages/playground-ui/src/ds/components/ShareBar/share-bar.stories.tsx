@@ -1,11 +1,10 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
-import { useState } from 'react';
-import { MetricsShareList } from './metrics-share-list';
-import type { MetricsShareListRow, MetricsShareListSort } from './metrics-share-list-types';
+import { ShareBar } from './share-bar';
+import type { ShareBarRow } from './share-bar-types';
 
 const n = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
-const agents: MetricsShareListRow[] = [
+const agents: ShareBarRow[] = [
   ['Code Agent', 102, 6],
   ['Observer', 22, 1],
   ['Research Supervisor', 14, 2],
@@ -19,11 +18,10 @@ const agents: MetricsShareListRow[] = [
   share: Number(runs),
   value: n.format(Number(runs)),
   cells: [`${((Number(errors) / Number(runs)) * 100).toFixed(1)}%`],
-  sortValues: { runs: Number(runs), errorRate: Number(errors) / Number(runs) },
 }));
 
 /** A long tail of routes on a power law, the way production traffic looks. */
-const routes: MetricsShareListRow[] = Array.from({ length: 1000 }, (_, i) => {
+const routes: ShareBarRow[] = Array.from({ length: 1000 }, (_, i) => {
   const requests = Math.max(1, Math.round(12_000 / Math.pow(i + 1, 1.1)));
   return {
     key: `GET /api/route-${i}`,
@@ -34,20 +32,20 @@ const routes: MetricsShareListRow[] = Array.from({ length: 1000 }, (_, i) => {
   };
 });
 
-const meta: Meta<typeof MetricsShareList> = {
-  title: 'Metrics/MetricsShareList',
-  component: MetricsShareList,
+const meta: Meta<typeof ShareBar> = {
+  title: 'Metrics/ShareBar',
+  component: ShareBar,
   parameters: { layout: 'centered' },
   args: { rows: agents, columns: [{ label: 'Error rate' }], valueLabel: 'Runs' },
   render: args => (
     <div className="w-[min(36rem,calc(100vw-3rem))]">
-      <MetricsShareList {...args} />
+      <ShareBar {...args} />
     </div>
   ),
 };
 
 export default meta;
-type Story = StoryObj<typeof MetricsShareList>;
+type Story = StoryObj<typeof ShareBar>;
 
 /** A summary card: the top five, the rest folded into "Other". */
 export const Summary: Story = {
@@ -57,24 +55,17 @@ export const Summary: Story = {
 };
 
 /**
- * A list to scan: the top 15 in five cool hues, then "Show 50 more" pages the rest in. Past 50
- * rows, segments would go sub-pixel, so the tail shares the gray one. Click a row to make it
- * active: it stays listed even when it ranks far down.
+ * A long list: the top 15 in five cool hues, then "Show 50 more" pages the rest in. Past 50
+ * rows, segments would go sub-pixel, so the tail shares the gray one.
  */
 export const LongList: Story = {
-  render: args => {
-    const [active, setActive] = useState<string>();
-    return (
-      <div className="w-[min(48rem,calc(100vw-3rem))]">
-        <MetricsShareList
-          {...args}
-          rows={routes.map(r => ({ ...r, onClick: () => setActive(a => (a === r.key ? undefined : r.key)) }))}
-          activeKey={active}
-        />
-      </div>
-    );
-  },
+  render: args => (
+    <div className="w-[min(48rem,calc(100vw-3rem))]">
+      <ShareBar {...args} />
+    </div>
+  ),
   args: {
+    rows: routes,
     columns: [{ label: 'P50', width: 'w-14' }],
     valueLabel: 'Requests',
     valueWidth: 'w-16',
@@ -103,28 +94,7 @@ export const Empty: Story = { args: { rows: [], emptyState: 'No runs in this ran
 /** Skeleton rows in the list's own markup, so the card keeps its height when data lands. */
 export const Loading: Story = { args: { isLoading: true } };
 
-/**
- * `headerPlacement="below-strip"`: the column headers sit right above the values they label, and
- * the rows pack under the strip. For compact summary cards.
- */
-export const HeaderBelowStrip: Story = {
-  args: { headerPlacement: 'below-strip', overflow: 'more', pageSize: 5 },
-};
-
-/**
- * Click a header to sort by it; again to flip the direction. The strip, the Share column and the
- * colours keep following runs, so sorting by error rate reorders rows without changing their meaning.
- */
-export const Sortable: Story = {
-  render: args => {
-    const [sort, setSort] = useState<MetricsShareListSort>({ key: 'runs', direction: 'descending' });
-    return <MetricsShareList {...args} sort={sort} onSortChange={setSort} />;
-  },
-  args: {
-    columns: [{ label: 'Error rate', width: 'w-20', sortKey: 'errorRate' }],
-    valueSortKey: 'runs',
-    palette: 'hues',
-    limit: 10,
-    overflow: 'more',
-  },
+/** A compact card's list: five rows, then "Show 5 more". */
+export const ShowMore: Story = {
+  args: { overflow: 'more', pageSize: 5, palette: 'hues' },
 };

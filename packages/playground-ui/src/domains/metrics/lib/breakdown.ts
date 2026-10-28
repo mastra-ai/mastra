@@ -48,10 +48,11 @@ export const countsSpans = (tab: BreakdownTab) => tab === 'tools' || tab === 'mo
  */
 export function breakdownGroupBy(tab: BreakdownTab, byProject: boolean): string[] {
   if (tab === 'projects') return ['projectId'];
-  const by = (dimension: string) => (byProject ? ['projectId', dimension] : [dimension]);
+  const by = (...dimensions: string[]) => (byProject ? ['projectId', ...dimensions] : dimensions);
   if (tab === 'environments') return by('environment');
   if (tab === 'threads') return by('threadId');
-  if (tab === 'models') return by('model');
+  // Provider first, so a row's name (its last dimension) is still the model, with its provider known.
+  if (tab === 'models') return by('provider', 'model');
   return by('entityName');
 }
 
@@ -165,6 +166,8 @@ export type BreakdownRow = {
   key: string;
   /** Set when the rows group by project (org scope). */
   projectId?: string;
+  /** The model's provider (Models tab); `''` when the usage has none. */
+  provider?: string;
   /** The entity, environment, model, thread or project id; `''` when the group has no value. */
   name: string;
   /** Traces or spans, by tab ({@link countsSpans}). */
@@ -223,6 +226,7 @@ export function buildBreakdownRows({
 }: BreakdownSources): BreakdownRow[] {
   const rows = new Map<string, BreakdownRow>();
   const projectAt = groupBy.indexOf('projectId');
+  const providerAt = groupBy.indexOf('provider');
   const rowFor = (key: string) => {
     let row = rows.get(key);
     if (!row) {
@@ -230,6 +234,7 @@ export function buildBreakdownRows({
       row = {
         key,
         ...(projectAt >= 0 ? { projectId: values[projectAt] ?? '' } : {}),
+        ...(providerAt >= 0 ? { provider: values[providerAt] ?? '' } : {}),
         name: values[values.length - 1] ?? '',
         count: 0,
         ...(usageGroups ? { tokens: 0 } : {}),
@@ -319,6 +324,7 @@ export function withDropped(
 ): BreakdownRow[] {
   const listed = new Set(rows.map(r => r.key));
   const projectAt = groupBy.indexOf('projectId');
+  const providerAt = groupBy.indexOf('provider');
   const dropped: BreakdownRow[] = [];
   for (const [key, before] of previous) {
     if (listed.has(key) || !((before.count ?? 0) > 0 || (before.tokens ?? 0) > 0)) continue;

@@ -10,8 +10,8 @@ import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
 import { ChartCardError } from './chart-card-error';
 import { MetricsCard } from '@/ds/components/MetricsCard';
-import type { MetricsShareListRow } from '@/ds/components/MetricsShareList';
-import { MetricsShareList } from '@/ds/components/MetricsShareList';
+import { ShareBar } from '@/ds/components/ShareBar';
+import type { ShareBarRow } from '@/ds/components/ShareBar';
 
 type Entity = 'agents' | 'workflows' | 'tools';
 
@@ -47,7 +47,7 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
     tools: volume.data?.toolData ?? [],
   };
   const source = byEntity[entity];
-  const rows: MetricsShareListRow[] = source.map(r => ({
+  const rows: ShareBarRow[] = source.map(r => ({
     key: r.name,
     label: r.name,
     share: r.completed + r.errors,
@@ -77,7 +77,6 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
           <MetricsCard.Tab value="workflows">Workflows</MetricsCard.Tab>
           <MetricsCard.Tab value="tools">Tools</MetricsCard.Tab>
         </MetricsCard.Tabs>
-        <MetricsShareList.Header columns={COLUMNS} valueLabel="Runs" />
       </MetricsCard.Toolbar>
     ),
   };
@@ -97,12 +96,11 @@ export function TraceVolumeCard({ onViewTraces, onViewErrors, onEntityClick }: T
       isUpdating={volume.isPlaceholderData}
     >
       <ChartArea>
-        <MetricsShareList
+        <ShareBar
           key={entity}
           rows={rows}
           columns={COLUMNS}
           valueLabel="Runs"
-          showHeader={false}
           color={CHART_COLORS.sky}
           other={rest => {
             const errors = rest.reduce((sum, r) => sum + (errorsOf.get(r.key) ?? 0), 0);

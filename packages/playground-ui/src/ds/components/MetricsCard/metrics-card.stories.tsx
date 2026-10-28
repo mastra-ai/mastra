@@ -3,9 +3,9 @@ import { EyeIcon, LogsIcon } from 'lucide-react';
 import { useState } from 'react';
 import { Button } from '../Button/Button';
 import { MetricsLineChart } from '../MetricsLineChart';
-import { MetricsShareList } from '../MetricsShareList';
-import type { MetricsShareListColumn, MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
+import { ShareBar } from '../ShareBar';
+import type { ShareBarColumn, ShareBarRow } from '../ShareBar';
 import { Txt } from '../Txt';
 import { MetricsCard } from './metrics-card';
 import { count, ms, percent, percentileSeries, requestsByHour, routeStats, statusSeries } from './metrics-story-data';
@@ -156,7 +156,7 @@ const LENSES: Record<
     share: (r: RouteStat) => number;
     value: (r: RouteStat) => string;
     cell: (r: RouteStat) => string;
-    column: MetricsShareListColumn;
+    column: ShareBarColumn;
   }
 > = {
   busiest: {
@@ -179,7 +179,7 @@ function RoutesToolbarCard() {
   const [lens, setLens] = useState<Lens>('busiest');
   const spec = LENSES[lens];
   const columns = [spec.column];
-  const rows: MetricsShareListRow[] = routeStats
+  const rows: ShareBarRow[] = routeStats
     .filter(r => spec.share(r) > 0)
     .map(r => ({
       key: `${r.method} ${r.path}`,
@@ -210,15 +210,13 @@ function RoutesToolbarCard() {
             <MetricsCard.Tab value="busiest">Busiest</MetricsCard.Tab>
             <MetricsCard.Tab value="failing">Failing</MetricsCard.Tab>
           </MetricsCard.Tabs>
-          <MetricsShareList.Header columns={columns} valueLabel={spec.valueLabel} valueWidth="w-16" />
         </MetricsCard.Toolbar>
-        <MetricsShareList
+        <ShareBar
           key={lens}
           rows={rows}
           columns={columns}
           valueLabel={spec.valueLabel}
           valueWidth="w-16"
-          showHeader={false}
           palette="hues"
           limit={6}
           overflow="more"
@@ -230,9 +228,7 @@ function RoutesToolbarCard() {
 
 /**
  * `MetricsCard.Toolbar`: one row under the top bar, first child left, last child right. Here
- * compact tabs (`MetricsCard.Tabs`) pick the question, and the list's
- * column headers (`MetricsShareList.Header`) sit beside them, so the list drops its own header
- * (`showHeader={false}`).
+ * compact tabs (`MetricsCard.Tabs`) pick the question for the `ShareBar` under them.
  */
 export const Toolbar: Story = {
   render: () => (

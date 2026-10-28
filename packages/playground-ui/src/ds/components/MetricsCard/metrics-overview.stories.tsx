@@ -6,9 +6,9 @@ import { MetricsCardGroup } from '../MetricsCardGroup';
 import { MetricsKpiCard } from '../MetricsKpiCard';
 import { MetricsLineChart, MetricsLineChartLegend } from '../MetricsLineChart';
 import type { MetricsLineChartSeries } from '../MetricsLineChart';
-import { MetricsShareList } from '../MetricsShareList';
-import type { MetricsShareListRow } from '../MetricsShareList';
 import { MetricsStackedBarChart } from '../MetricsStackedBarChart';
+import { ShareBar } from '../ShareBar';
+import type { ShareBarRow } from '../ShareBar';
 import { MetricsCard } from './metrics-card';
 import { agentActivityByHour, count, ms, percent, traceVolume, usageBy, usd } from './metrics-story-data';
 import type { AgentActivityBucket } from './metrics-story-data';
@@ -245,7 +245,7 @@ type VolumeTab = keyof typeof traceVolume;
 function TraceVolumeCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<VolumeTab>('agents');
   const rate = (errors: number, runs: number) => (errors > 0 ? percent(errors / runs) : '0%');
-  const rows: MetricsShareListRow[] = traceVolume[tab].map(r => ({
+  const rows: ShareBarRow[] = traceVolume[tab].map(r => ({
     key: r.label,
     label: r.label,
     share: r.runs,
@@ -272,14 +272,12 @@ function TraceVolumeCard({ isLoading }: Loadable) {
             ['tools', 'Tools'],
           ]}
         />
-        <MetricsShareList.Header columns={columns} valueLabel="Runs" />
       </MetricsCard.Toolbar>
-      <MetricsShareList
+      <ShareBar
         key={tab}
         rows={rows}
         columns={columns}
         valueLabel="Runs"
-        showHeader={false}
         color="var(--chart-blue)"
         other={rest => {
           const errors = rest.reduce((sum, r) => sum + (errorsOf.get(r.key) ?? 0), 0);
@@ -299,7 +297,7 @@ function UsageCard({ isLoading }: Loadable) {
   const [tab, setTab] = useState<UsageTab>('agents');
   const source = usageBy[tab];
   const tokensOf = new Map(source.map(r => [r.label, r.tokens]));
-  const rows: MetricsShareListRow[] = source.map(r => ({
+  const rows: ShareBarRow[] = source.map(r => ({
     key: r.label,
     label: r.label,
     share: r.cost,
@@ -324,14 +322,12 @@ function UsageCard({ isLoading }: Loadable) {
             ['threads', 'Threads'],
           ]}
         />
-        <MetricsShareList.Header columns={columns} valueLabel="Cost" />
       </MetricsCard.Toolbar>
-      <MetricsShareList
+      <ShareBar
         key={tab}
         rows={rows}
         columns={columns}
         valueLabel="Cost"
-        showHeader={false}
         color="var(--chart-purple)"
         other={rest => ({
           value: usd(rest.reduce((sum, r) => sum + r.share, 0)),
