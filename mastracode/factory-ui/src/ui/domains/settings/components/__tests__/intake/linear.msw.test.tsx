@@ -73,13 +73,53 @@ describe('IntakeSection linear', () => {
       );
 
       renderIntakeSection();
+      await openSourcePicker('Linear repository mappings');
 
-      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      const drawer = await screen.findByRole('dialog', { name: 'Add repository mapping' });
+      expect(within(drawer).queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+      await userEvent.click(await within(drawer).findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
       expect(screen.queryByRole('option', { name: 'unrelated/repo' })).not.toBeInTheDocument();
       await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
 
       await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
-      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+      await waitFor(() =>
+        expect(within(drawer).queryByRole('combobox', { name: 'Repository for Q3 Roadmap' })).not.toBeInTheDocument(),
+      );
+      await closeSourcePicker();
+      const mappings = screen.getByRole('group', { name: 'Linear repository mappings' });
+      expect(within(mappings).getByRole('combobox', { name: 'Repository for Q3 Roadmap' })).toHaveTextContent('mastra');
+    });
+
+    it('lists only mapped projects on the page and clears a mapping on remove', async () => {
+      seedGithubProject();
+      const saved = useIntakeHandlers({
+        config: {
+          ...baseConfig(),
+          linear: { enabled: true, sourceIds: [engTeam.sourceId], repositoryByLinearProject: { 'lproj-1': 'mastra' } },
+        },
+      });
+      server.use(
+        http.get(BINDINGS_URL, () =>
+          HttpResponse.json({
+            bindings: [
+              { integrationId: 'linear', sourceId: engTeam.sourceId, factoryProjectId: 'fp-1', board: 'work' },
+            ],
+          }),
+        ),
+      );
+
+      renderIntakeSection();
+
+      const mappings = await screen.findByRole('group', { name: 'Linear repository mappings' });
+      expect(await within(mappings).findByRole('combobox', { name: 'Repository for Q3 Roadmap' })).toHaveTextContent(
+        'mastra',
+      );
+      expect(
+        within(mappings).queryByRole('combobox', { name: 'Repository for Shared initiative' }),
+      ).not.toBeInTheDocument();
+
+      await userEvent.click(within(mappings).getByRole('button', { name: 'Remove Q3 Roadmap' }));
+      await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({}));
     });
 
     it('keeps repository mapping available while Linear sync is off', async () => {
@@ -100,7 +140,9 @@ describe('IntakeSection linear', () => {
 
       renderIntakeSection();
 
-      expect(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' })).toBeInTheDocument();
+      expect(
+        await screen.findByRole('button', { name: 'Add repository mapping to Linear repository mappings' }),
+      ).toBeInTheDocument();
     });
 
     it('maps projects included through a team source to that team’s routed Factory', async () => {
@@ -119,12 +161,14 @@ describe('IntakeSection linear', () => {
       );
 
       renderIntakeSection();
+      await openSourcePicker('Linear repository mappings');
 
-      await userEvent.click(await screen.findByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
+      const drawer = await screen.findByRole('dialog', { name: 'Add repository mapping' });
+      expect(within(drawer).getByRole('combobox', { name: 'Repository for Shared initiative' })).toBeInTheDocument();
+      expect(within(drawer).queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
+      await userEvent.click(within(drawer).getByRole('combobox', { name: 'Repository for Q3 Roadmap' }));
       await userEvent.click(await screen.findByRole('option', { name: 'mastra' }));
       await waitFor(() => expect(saved.at(-1)?.linear.repositoryByLinearProject).toEqual({ 'lproj-1': 'mastra' }));
-      expect(screen.getByRole('combobox', { name: 'Repository for Shared initiative' })).toBeInTheDocument();
-      expect(screen.queryByRole('combobox', { name: 'Repository for Design refresh' })).not.toBeInTheDocument();
     });
 
     it('filters every team from one search bar', async () => {

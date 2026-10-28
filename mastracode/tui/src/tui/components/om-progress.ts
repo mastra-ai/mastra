@@ -114,9 +114,8 @@ export class OMProgressComponent extends Container {
       return chalk.hex(mastra.red)(bar); // Mastra red
     } else if (percent >= 70) {
       return chalk.hex(mastra.orange)(bar); // Mastra orange
-    } else {
-      return chalk.hex(mastra.darkGray)(bar); // Mastra dark gray
     }
+    return chalk.hex(mastra.darkGray)(bar); // Mastra dark gray
   }
   private spinnerFrame = 0;
   private getSpinner(): string {

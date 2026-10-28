@@ -2892,40 +2892,39 @@ export class WorkflowEventProcessor extends EventProcessor {
           },
         });
         return;
-      } else {
-        if (guardStart && !completedResult) {
-          await workflowsStore!.updateWorkflowResults({
-            workflowName: workflowId,
-            runId,
-            stepId: leafId,
-            result: stepResult,
-            requestContext: withoutAuthToken(requestContext),
-            completionGuard: { eventId: args.eventId! },
-          });
-        }
-        if (guardStart) stepResults[leafId] = stepResult;
-        return this.mastra.pubsub.publish('workflows', {
-          type: 'workflow.step.run',
+      }
+      if (guardStart && !completedResult) {
+        await workflowsStore!.updateWorkflowResults({
+          workflowName: workflowId,
           runId,
-          data: {
-            parentWorkflow,
-            workflowId,
-            runId,
-            executionPath,
-            resumeSteps,
-            stepResults,
-            timeTravel,
-            restart,
-            prevResult,
-            activeStepsPath,
-            requestContext,
-            actor,
-            retryCount: retryCount + 1,
-            state: currentState,
-            outputOptions,
-          },
+          stepId: leafId,
+          result: stepResult,
+          requestContext: withoutAuthToken(requestContext),
+          completionGuard: { eventId: args.eventId! },
         });
       }
+      if (guardStart) stepResults[leafId] = stepResult;
+      return this.mastra.pubsub.publish('workflows', {
+        type: 'workflow.step.run',
+        runId,
+        data: {
+          parentWorkflow,
+          workflowId,
+          runId,
+          executionPath,
+          resumeSteps,
+          stepResults,
+          timeTravel,
+          restart,
+          prevResult,
+          activeStepsPath,
+          requestContext,
+          actor,
+          retryCount: retryCount + 1,
+          state: currentState,
+          outputOptions,
+        },
+      });
     }
 
     if (step.type === 'loop' && stepResult.status === 'suspended') {

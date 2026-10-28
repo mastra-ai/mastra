@@ -9,8 +9,7 @@ import type { IncidentioStatus } from '../../factory/services/incidentio';
 import type { PlatformProviderConnection } from '../../factory/services/platformConnect';
 import { IntakeProviderCard, toggleSourceId } from './IntakeProviderCard';
 import type { IntakeSectionProps } from './IntakeProviderCard';
-import { SourcePicker } from './IntakeSourcePicker';
-import { IntakeSourceRouting } from './LinearRouting';
+import { RoutedSourcePicker } from './IntakeSourceRouting';
 import { SettingsIntegrationIcon } from './brand-icons/SettingsIntegrationIcon';
 import { IntakeSyncControl } from './common/IntakeSyncControl';
 
@@ -84,48 +83,46 @@ export function IncidentioIntakeSection({
       }
     >
       {(directConfigured || connections.length > 0) && (
-        <>
-          <SettingsRow
-            label="Incident board configuration"
-            description="Configure a dedicated board for incident response."
-          >
-            <Badge size="sm" variant="neutral">
-              Coming soon
-            </Badge>
-          </SettingsRow>
-          {credentialActive && config.incidentio.enabled && (
-            <SourcePicker
-              label="Follow-up sources"
-              addLabel="Add follow-up source"
-              itemIcon={<SettingsIntegrationIcon provider="incidentio" />}
-              groups={[
-                {
-                  id: 'incidentio-follow-ups',
-                  items: sources.map(source => ({ id: source.id, label: source.name })),
-                },
-              ]}
-              selectedIds={config.incidentio.sourceIds}
-              pending={busy}
-              loading={sourcesQuery.isPending}
-              error={sourcesQuery.isError ? "Couldn't load follow-up sources." : undefined}
-              onRetry={() => void sourcesQuery.refetch()}
-              onToggleItem={id =>
-                update({
-                  ...config,
-                  incidentio: { ...config.incidentio, sourceIds: toggleSourceId(config.incidentio.sourceIds, id) },
-                })
-              }
-            />
-          )}
-        </>
+        <SettingsRow
+          label="Incident board configuration"
+          description="Configure a dedicated board for incident response."
+        >
+          <Badge size="sm" variant="neutral">
+            Coming soon
+          </Badge>
+        </SettingsRow>
       )}
-      {config.incidentio.enabled && (
-        <IntakeSourceRouting
+      {config.incidentio.enabled && (credentialActive || Boolean(config.incidentio.sourceIds?.length)) && (
+        <RoutedSourcePicker
           integrationId="incidentio"
-          label="incident.io"
-          sourceIds={config.incidentio.sourceIds ?? []}
-          sources={sources}
+          routingLabel="incident.io"
           factories={factories}
+          label="Follow-up sources"
+          addLabel="Add follow-up source"
+          itemIcon={<SettingsIntegrationIcon provider="incidentio" />}
+          groups={[
+            {
+              id: 'incidentio-follow-ups',
+              items: sources.map(source => ({ id: source.id, label: source.name })),
+            },
+          ]}
+          selectedIds={config.incidentio.sourceIds}
+          pending={busy}
+          loading={credentialActive && sourcesQuery.isPending}
+          error={
+            !credentialActive
+              ? 'Reconnect incident.io to add follow-up sources.'
+              : sourcesQuery.isError
+                ? "Couldn't load follow-up sources."
+                : undefined
+          }
+          onRetry={credentialActive ? () => void sourcesQuery.refetch() : undefined}
+          onToggleItem={id =>
+            update({
+              ...config,
+              incidentio: { ...config.incidentio, sourceIds: toggleSourceId(config.incidentio.sourceIds, id) },
+            })
+          }
         />
       )}
     </IntakeProviderCard>

@@ -7,11 +7,8 @@ import { builtinBoardCatalog, releaseBoard } from '../../../../../../e2e/ui/boar
 import { server } from '../../../../../../e2e/ui/msw-server';
 import { TEST_BASE_URL, renderWithProviders } from '../../../../../../e2e/ui/render';
 import type { IntakeSourceBinding } from '../../../factory/services/intake';
-import type { LinearProject, LinearTeam } from '../../../factory/services/linear';
-import { LinearRouting } from '../LinearRouting';
+import { RoutedSourcePicker } from '../IntakeSourceRouting';
 
-const projects: LinearProject[] = [{ id: 'proj-1', name: 'Releases', state: 'started', teams: [] }];
-const teams: LinearTeam[] = [{ id: 'team-1', key: 'ENG', name: 'Engineering', sourceId: 'linear-team:opaque-team-1' }];
 const factories = [
   { id: 'fp-1', name: 'Acme' },
   { id: 'fp-2', name: 'Globex' },
@@ -39,9 +36,30 @@ function stub(initial: IntakeSourceBinding[]) {
 }
 
 const renderRouting = () =>
-  renderWithProviders(<LinearRouting sourceIds={['proj-1']} projects={projects} teams={teams} factories={factories} />);
+  renderWithProviders(
+    <RoutedSourcePicker
+      integrationId="linear"
+      routingLabel="Linear"
+      factories={factories}
+      label="Linear projects and teams"
+      addLabel="Add project or team"
+      groups={[{ id: 'linear', items: [{ id: 'proj-1', label: 'Releases' }] }]}
+      selectedIds={['proj-1']}
+      pending={false}
+      onToggleItem={async () => {}}
+    />,
+  );
 
-describe('LinearRouting board target', () => {
+describe('RoutedSourcePicker', () => {
+  it('routes a selected source from its own row', async () => {
+    stub([]);
+    renderRouting();
+    const row = await screen.findByRole('listitem');
+    await waitFor(() => expect(within(row).getByRole('combobox', { name: 'Factory for Releases' })).toBeEnabled());
+    expect(within(row).getByText("Not routed — this source's issues won't be picked up.")).toBeInTheDocument();
+    expect(within(row).getByRole('button', { name: 'Remove Releases' })).toBeInTheDocument();
+  });
+
   it('hides the board picker until the project is routed to a Factory', async () => {
     stub([]);
     renderRouting();
@@ -102,22 +120,6 @@ describe('LinearRouting board target', () => {
     expect(saved[0]).toMatchObject({ factoryProjectId: 'fp-2', board: null });
   });
 
-  it('renders a team source with its friendly team label', async () => {
-    stub([]);
-    renderWithProviders(
-      <LinearRouting
-        sourceIds={['linear-team:opaque-team-1']}
-        projects={projects}
-        teams={teams}
-        factories={factories}
-      />,
-    );
-    await waitFor(() =>
-      expect(screen.getByRole('combobox', { name: 'Factory for All issues in Engineering' })).toBeInTheDocument(),
-    );
-    expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
-  });
-
   it('offers a retry instead of editable routes when the routes fail to load', async () => {
     const binding = { integrationId: 'linear', sourceId: 'proj-1', factoryProjectId: 'fp-1', board: 'release' };
     stub([binding]);
@@ -149,86 +151,5 @@ describe('LinearRouting board target', () => {
     const picker = await screen.findByRole('combobox', { name: 'Board for Releases' });
     await waitFor(() => expect(picker).toHaveTextContent('Boards unavailable'));
     expect(picker).toBeDisabled();
-  });
-
-  describe('with many sources', () => {
-    const manyProjects: LinearProject[] = Array.from({ length: 12 }, (_, index) => ({
-      id: `proj-${index + 1}`,
-      name: index === 7 ? 'Release Tools' : `Project ${index + 1}`,
-      state: 'started',
-      teams: [],
-    }));
-
-    const renderMany = () =>
-      renderWithProviders(
-        <LinearRouting
-          sourceIds={manyProjects.map(project => project.id)}
-          projects={manyProjects}
-          teams={[]}
-          factories={factories}
-        />,
-      );
-
-    it('filters routing rows and shows an empty result when no project matches', async () => {
-      stub([]);
-      const user = userEvent.setup();
-      renderMany();
-
-      const group = await screen.findByRole('group', { name: 'Linear routing' });
-      const search = screen.getByRole('searchbox', { name: 'Search Linear routing' });
-      expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(12);
-
-      await user.type(search, 'release');
-      await waitFor(() => {
-        expect(within(group).getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument();
-        expect(within(group).queryByRole('combobox', { name: 'Factory for Project 1' })).not.toBeInTheDocument();
-      });
-
-      await user.clear(search);
-      await user.type(search, 'no such project');
-      expect(await within(group).findByText('No matches')).toBeInTheDocument();
-    });
-
-    it('shows every remaining source when the search field is hidden', async () => {
-      stub([]);
-      const user = userEvent.setup();
-      const { rerender } = renderMany();
-
-      await user.type(await screen.findByRole('searchbox', { name: 'Search Linear routing' }), 'release');
-      await waitFor(() =>
-        expect(screen.getByRole('combobox', { name: 'Factory for Release Tools' })).toBeInTheDocument(),
-      );
-
-      const remainingProjects = manyProjects.slice(0, 5);
-      rerender(
-        <LinearRouting
-          sourceIds={remainingProjects.map(project => project.id)}
-          projects={manyProjects}
-          teams={[]}
-          factories={factories}
-        />,
-      );
-
-      expect(screen.queryByRole('searchbox', { name: 'Search Linear routing' })).not.toBeInTheDocument();
-      const group = screen.getByRole('group', { name: 'Linear routing' });
-      expect(within(group).getAllByRole('combobox', { name: /^Factory for/ })).toHaveLength(5);
-      expect(within(group).getByRole('combobox', { name: 'Factory for Project 1' })).toBeInTheDocument();
-    });
-
-    it('saves the binding for a filtered project', async () => {
-      const saved = stub([]);
-      const user = userEvent.setup();
-      renderMany();
-
-      const search = await screen.findByRole('searchbox', { name: 'Search Linear routing' });
-      await user.type(search, 'release');
-      const factory = await screen.findByRole('combobox', { name: 'Factory for Release Tools' });
-      await user.click(factory);
-      await user.click(await screen.findByRole('option', { name: 'Acme' }));
-
-      await waitFor(() =>
-        expect(saved).toEqual([{ integrationId: 'linear', sourceId: 'proj-8', factoryProjectId: 'fp-1', board: null }]),
-      );
-    });
   });
 });
