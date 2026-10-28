@@ -21,7 +21,8 @@ export interface JiraProjectScope {
  * Factory happened to be on screen. Routing is explicit: a project feeds this
  * Factory only when its binding names both the Factory project and a board.
  * Several Factories may share a project; their slices are disjoint, so each
- * issue feeds exactly one of them.
+ * issue feeds exactly one of them. A sibling binding without a board does not
+ * poll, so it takes nothing from the others' slices until its board is set.
  */
 export async function scopeJiraSourcesToProject({
   intake,
@@ -45,9 +46,10 @@ export async function scopeJiraSourcesToProject({
   for (const [sourceId, siblings] of bySource) {
     const binding = siblings.find(candidate => candidate.factoryProjectId === factoryProjectId);
     if (!binding?.board || !selected.has(sourceId)) continue;
+    const active = siblings.filter(sibling => sibling.board);
     intakeBoards[sourceId] = binding.board;
-    scopes.push({ projectId: sourceId, ...bindingLabelSlice(binding, siblings) });
-    owned.set(sourceId, { binding, siblings });
+    scopes.push({ projectId: sourceId, ...bindingLabelSlice(binding, active) });
+    owned.set(sourceId, { binding, siblings: active });
   }
   return {
     intakeBoards,

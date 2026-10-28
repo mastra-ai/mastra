@@ -211,6 +211,32 @@ describe.each(paths)('Jira project shared by label — $name', path => {
     }
   });
 
+  it('leaves labels with the all-issues factory until the label factory has a board', async () => {
+    const triage = (await seed.projects.create({ orgId: 'org1', userId: 'u1', input: { name: 'triage' } })).id;
+    const bindTriage = (board: string | null) =>
+      seed.intake.setSharedBinding({
+        orgId: 'org1',
+        integrationId: 'jira',
+        sourceId: path.sourceId,
+        factoryProjectId: triage,
+        board,
+        labels: ['bug'],
+      });
+    const open = (factoryProjectId: string, key: string) =>
+      app.request(
+        `/web/jira/issues/${key}?factoryProjectId=${factoryProjectId}&issueRef=${encodeURIComponent(path.issueRef(key))}`,
+      );
+
+    await bindTriage(null);
+    expect(await poll(factories.platform)).toContain('OPS-2');
+    expect((await open(factories.platform, 'OPS-2')).status).toBe(200);
+
+    await bindTriage('work');
+    expect(await poll(factories.platform)).not.toContain('OPS-2');
+    expect((await open(factories.platform, 'OPS-2')).status).toBe(404);
+    expect(await poll(triage)).toEqual(['OPS-2']);
+  });
+
   it("does not open an issue from another factory's slice by its identifier", async () => {
     const open = (factory: 'platform' | 'payments' | 'mobile', key: string) =>
       app.request(
