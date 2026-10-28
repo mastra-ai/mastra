@@ -45,10 +45,12 @@ function ErrorSession({
   messages,
   liveEvent,
   boundThreadId = 'thread-1',
+  modelId = 'openai/gpt-5.5',
 }: {
   messages: MastraDBMessage[];
   liveEvent?: AgentControllerEvent;
   boundThreadId?: string;
+  modelId?: string;
 }) {
   const { transcript, onEvent, localUser, failLocalUser, clearPending, pushNotice } = useAgentControllerTranscript({
     initialThreadId: 'thread-1',
@@ -82,7 +84,7 @@ function ErrorSession({
             sessionId: 'session-1',
             resourceId: 'resource-1',
             modeId: 'build',
-            modelId: 'openai/gpt-5.5',
+            modelId,
           },
         }}
       >
@@ -435,6 +437,14 @@ describe('chat run errors on an account limit', () => {
               credentialLabel: 'Claude Pro/Max',
               credentialHolder,
             },
+            {
+              id: 'openai/gpt-5.5',
+              provider: 'openai',
+              modelName: 'gpt-5.5',
+              hasApiKey: true,
+              credentialLabel: 'ChatGPT Plus/Pro',
+              credentialHolder,
+            },
           ],
           modelScope: credentialHolder === 'organization' ? 'factory' : 'user',
           defaultModelId: null,
@@ -445,23 +455,52 @@ describe('chat run errors on an account limit', () => {
 
   it('tells a work-item reviewer the limit belongs to the organization’s subscription, not theirs', async () => {
     stubCredential('organization');
-    renderWithProviders(<ErrorSession messages={[rateLimited]} />);
+    renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
     expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
   });
 
   it('tells the chat owner the limit belongs to their own subscription', async () => {
     stubCredential('personal');
-    renderWithProviders(<ErrorSession messages={[rateLimited]} />);
+    renderWithProviders(<ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />);
 
     expect(await screen.findByText('Runs on Claude Pro/Max · Damien Schneider (you)')).toBeVisible();
   });
 
   it('does not name a credential on an older failure, which may predate a credential change', async () => {
     stubCredential('organization');
-    renderWithProviders(<ErrorSession messages={[rateLimited, userMessage('Try again.')]} />);
+    renderWithProviders(
+      <ErrorSession messages={[rateLimited, userMessage('Try again.')]} modelId="anthropic/claude-opus-5-5" />,
+    );
 
     expect(await screen.findByRole('link', { name: 'Review credentials' })).toBeVisible();
+    expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
+  });
+
+  it('stops naming the failed model’s credential once the session switches to another provider', async () => {
+    const modelSwitches: unknown[] = [];
+    stubCredential('organization');
+    server.use(
+      http.post(
+        `${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/model`,
+        async ({ request }) => {
+          modelSwitches.push(await request.json());
+          return HttpResponse.json({ ok: true });
+        },
+      ),
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderWithProviders(
+      <ErrorSession messages={[rateLimited]} modelId="anthropic/claude-opus-5-5" />,
+    );
+    expect(await screen.findByText('Runs on Claude Pro/Max · Shared by the organization')).toBeVisible();
+
+    await user.click(await screen.findByRole('button', { name: 'Change model' }));
+    await user.click(await screen.findByRole('option', { name: /gpt-5\.5/i }));
+    await waitFor(() => expect(modelSwitches).toEqual([{ modelId: 'openai/gpt-5.5' }]));
+    rerender(<ErrorSession messages={[rateLimited]} modelId="openai/gpt-5.5" />);
+
+    expect(screen.getByText('Provider rate limit reached')).toBeVisible();
     expect(screen.queryByText(/^Runs on/)).not.toBeInTheDocument();
   });
 });

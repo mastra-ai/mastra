@@ -2,7 +2,6 @@ import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { ModelCredentialHolder } from '@mastra/factory/routes/config';
 
 import { useAvailableModelsQuery } from '../../../../hooks/useAvailableModels';
-import type { AvailableModelOption } from '../../../../hooks/useAvailableModels';
 import { useFactoryAuth } from '../../../../hooks/useFactoryAuth';
 import type { FactoryAuthState } from '../../auth/services/auth';
 import { useChatModelScope } from '../context/useChatModelScope';
@@ -66,21 +65,13 @@ function teammateWarning(holder: CredentialHolder, credential: string): string |
   return `Your messages use ${holder.name ? `${holder.name}’s` : 'the session owner’s'} ${credential}`;
 }
 
-/** A provider failure names the bare model (`claude-opus-5-5`); only an unambiguous catalog match is trusted. */
-function findCatalogModel(models: AvailableModelOption[], modelId: string): AvailableModelOption | undefined {
-  const exact = models.find(model => model.id === modelId);
-  if (exact) return exact;
-  const sameName = models.filter(model => model.id.slice(model.id.indexOf('/') + 1) === modelId);
-  return sameName.length === 1 ? sameName[0] : undefined;
-}
-
 /** The credential this session's requests to `modelId` run on right now, and who holds it. */
 export function useModelCredential(modelId: string | undefined): ModelCredential | undefined {
   const authQuery = useFactoryAuth();
   const { owner, draftSessionId } = useChatSessionContext();
   const { catalogTarget } = useChatModelScope();
   const modelsQuery = useAvailableModelsQuery(catalogTarget);
-  const model = modelId && modelsQuery.data ? findCatalogModel(modelsQuery.data, modelId) : undefined;
+  const model = modelId ? modelsQuery.data?.find(entry => entry.id === modelId) : undefined;
 
   if (!authQuery.data?.authEnabled || !model?.credentialHolder) return undefined;
 
