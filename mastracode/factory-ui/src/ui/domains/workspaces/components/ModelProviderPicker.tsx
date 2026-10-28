@@ -4,7 +4,7 @@ import { Tab, TabContent, TabList, Tabs } from '@mastra/playground-ui/components
 import { Txt } from '@mastra/playground-ui/components/Txt';
 import { Check, KeyRound, LogIn } from 'lucide-react';
 import { useId, useState } from 'react';
-import { SkeletonRows } from '../../../ui/SkeletonRows';
+import { Skeleton } from '@mastra/playground-ui/components/Skeleton';
 import { providerDisplayName } from '@mastra/factory/provider-display-name';
 import type { PreviewProvider, ProviderConnection, ProviderConnectionMethod } from '../hooks/useProviderConnection';
 import { CONNECTION_METHOD_LABEL, matchesProviderQuery } from '../hooks/useProviderConnection';
@@ -20,7 +20,22 @@ export function ModelProviderPicker({
   const [search, setSearch] = useState('');
   const [method, setMethod] = useState<ProviderConnectionMethod>(connection.method ?? 'api_key');
   const connectedDescriptionId = useId();
-  if (connection.isPending) return <SkeletonRows label="Loading model providers" rows={3} rowClassName="h-9 w-full" />;
+  if (connection.isPending)
+    return (
+      <div role="status" aria-label="Loading model providers">
+        <div aria-hidden>
+          <Skeleton className="h-control-sm w-56 max-w-full rounded-full motion-reduce:before:animate-none" />
+          <div className="flex h-36 flex-col gap-3 pt-2">
+            <Skeleton className="h-control-md w-full rounded-full motion-reduce:before:animate-none" />
+            <div className="flex flex-wrap gap-2">
+              <Skeleton className="h-control-md w-28 rounded-full motion-reduce:before:animate-none" />
+              <Skeleton className="h-control-md w-32 rounded-full motion-reduce:before:animate-none" />
+              <Skeleton className="h-control-md w-24 rounded-full motion-reduce:before:animate-none" />
+            </div>
+          </div>
+        </div>
+      </div>
+    );
   if (connection.catalogError)
     return (
       <div className="flex flex-col items-start gap-3">

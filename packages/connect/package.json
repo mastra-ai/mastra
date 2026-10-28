@@ -1,6 +1,6 @@
 {
   "name": "@mastra/connect",
-  "version": "1.2.0-alpha.0",
+  "version": "1.2.0-alpha.2",
   "description": "Use Mastra platform integration connections as agent toolsets",
   "type": "module",
   "main": "./dist/index.js",
@@ -67,7 +67,7 @@
     "@internal/lint": "workspace:*",
     "@internal/types-builder": "workspace:*",
     "@mastra/core": "workspace:*",
-    "hono": "^4.13.7",
+    "hono": "^4.13.13",
     "prettier": "3.9.5",
     "ts-morph": "^27.0.2",
     "tsdown": "0.23.1",

@@ -407,6 +407,26 @@ describe('MastraPlatformExporter', () => {
       expect(spanRecord.createdAt).toBeInstanceOf(Date);
     });
 
+    it('keeps native span fields on the buffered span record', async () => {
+      const fields = {
+        externalParentSpanId: 'b7ad6b7169203331',
+        resumedFromSpanId: 'a1b2c3d4e5f60718',
+        model: 'gpt-6.1-sol',
+        provider: 'openai',
+        outcome: 'success',
+        stopReason: 'max_steps',
+        stopReasonContext: { maxSteps: 10 },
+        timeToFirstTokenMs: 321.5,
+        errorCount: 2,
+      };
+      await exporter.exportTracingEvent({
+        type: TracingEventType.SPAN_ENDED,
+        exportedSpan: { ...mockSpan, ...fields },
+      });
+
+      expect((exporter as any).buffer.spans[0]).toMatchObject(fields);
+    });
+
     it('should reset buffer correctly', () => {
       const buffer = (exporter as any).buffer;
       const resetBuffer = (exporter as any).resetBuffer.bind(exporter);

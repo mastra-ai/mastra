@@ -27,6 +27,8 @@ export class EventBuffer {
   #creates: BufferedEvent[] = [];
   #updates: BufferedEvent[] = [];
   #allCreatedSpans: Set<string> = new Set();
+  /** Spans whose SPAN_STARTED this buffer has seen but whose create isn't confirmed yet */
+  #pendingCreateSpans: Set<string> = new Set();
   #firstEventTime?: Date;
   #storageStrategy?: ObservabilityStorageStrategy;
   #maxRetries: number;
@@ -81,8 +83,13 @@ export class EventBuffer {
         // Strategy 'insert-only' ignores SPAN_STARTED events
         switch (this.#storageStrategy) {
           case 'realtime':
-          case 'event-sourced':
           case 'batch-with-updates':
+            if (!event.exportedSpan.isEvent) {
+              this.#pendingCreateSpans.add(this.exportedSpanKey(event.exportedSpan));
+            }
+            this.pushCreate(event);
+            break;
+          case 'event-sourced':
             this.pushCreate(event);
             break;
         }
@@ -193,6 +200,10 @@ export class EventBuffer {
     return `${span.traceId}:${span.spanId}`;
   }
 
+  private exportedSpanKey(span: AnyExportedSpan): string {
+    return this.buildSpanKey({ traceId: span.traceId, spanId: span.id });
+  }
+
   /** Track successfully created spans so updates can verify span existence before flushing. */
   addCreatedSpans(args: { records: CreateSpanRecord[] }): void {
     if (this.#storageStrategy === 'event-sourced' || this.#storageStrategy === 'insert-only') {
@@ -203,14 +214,30 @@ export class EventBuffer {
     for (const createRecord of args.records) {
       // no need to track event spans
       if (!createRecord.isEvent) {
-        this.#allCreatedSpans.add(this.buildSpanKey(createRecord));
+        const key = this.buildSpanKey(createRecord);
+        this.#pendingCreateSpans.delete(key);
+        this.#allCreatedSpans.add(key);
+      }
+    }
+  }
+
+  /** Stop waiting on creates that were dropped, so their updates aren't held back for them. */
+  forgetDroppedCreates(events: BufferedEvent[]): void {
+    for (const event of events) {
+      if (event.type === TracingEventType.SPAN_STARTED) {
+        this.#pendingCreateSpans.delete(this.exportedSpanKey(event.exportedSpan));
       }
     }
   }
 
   /** Check whether a span's create record has already been flushed to storage. */
   spanExists(span: AnyExportedSpan): boolean {
-    return this.#allCreatedSpans?.has(this.buildSpanKey({ traceId: span.traceId, spanId: span.id }));
+    return this.#allCreatedSpans.has(this.exportedSpanKey(span));
+  }
+
+  /** Check whether this buffer saw the span's SPAN_STARTED but its create hasn't been confirmed yet. */
+  isAwaitingCreate(span: AnyExportedSpan): boolean {
+    return this.#pendingCreateSpans.has(this.exportedSpanKey(span));
   }
 
   /** Remove completed spans from tracking after their SPAN_ENDED updates are flushed. */
@@ -220,7 +247,9 @@ export class EventBuffer {
       return;
     }
     args.records.forEach(r => {
-      this.#allCreatedSpans.delete(this.buildSpanKey(r));
+      const key = this.buildSpanKey(r);
+      this.#allCreatedSpans.delete(key);
+      this.#pendingCreateSpans.delete(key);
     });
   }
 }

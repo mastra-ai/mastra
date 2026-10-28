@@ -83,7 +83,11 @@ DropdownMenuSubTrigger.displayName = 'DropdownMenuSubTrigger';
 
 type DropdownMenuContentPositionerProps = Omit<MenuPositionerProps, keyof MenuPopupProps>;
 
-type DropdownMenuSubContentProps = MenuPopupProps & DropdownMenuContentPositionerProps;
+type DropdownMenuSubContentProps = MenuPopupProps &
+  DropdownMenuContentPositionerProps & {
+    /** Fixed content above the scrolling options, such as a search field. */
+    header?: React.ReactNode;
+  };
 
 const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubContentProps>(
   (
@@ -101,6 +105,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
       arrowPadding,
       disableAnchorTracking,
       collisionAvoidance,
+      header,
       children,
       ...props
     },
@@ -134,6 +139,7 @@ const DropdownMenuSubContent = React.forwardRef<HTMLDivElement, DropdownMenuSubC
             className={cn(menuPopupClass, menuScrollPopupClass, className)}
             {...props}
           >
+            {header && <div className="shrink-0">{header}</div>}
             <MenuScrollArea menu={menu}>{children}</MenuScrollArea>
           </MenuPrimitive.Popup>
         </MenuPrimitive.Positioner>
@@ -304,12 +310,15 @@ type DropdownMenuRadioOptionsProps<V extends string> = {
   options: readonly DropdownMenuRadioOption<V>[];
   value: V;
   onValueChange: (value: V) => void;
+  /** Closes the menu once an option is picked, for a menu that holds only this choice. Default `false`. */
+  closeOnSelect?: boolean;
 };
 
 function DropdownMenuRadioOptions<V extends string>({
   options,
   value,
   onValueChange,
+  closeOnSelect = false,
 }: DropdownMenuRadioOptionsProps<V>) {
   return (
     <DropdownMenuRadioGroup
@@ -320,7 +329,7 @@ function DropdownMenuRadioOptions<V extends string>({
       }}
     >
       {options.map(option => (
-        <DropdownMenuRadioItem key={option.value} value={option.value}>
+        <DropdownMenuRadioItem key={option.value} value={option.value} closeOnClick={closeOnSelect}>
           {option.icon}
           <span>{option.label}</span>
         </DropdownMenuRadioItem>
@@ -340,6 +349,7 @@ function DropdownMenuRadioSub<V extends string>({
   options,
   value,
   onValueChange,
+  closeOnSelect,
 }: DropdownMenuRadioSubProps<V>) {
   const selected = options.find(option => option.value === value);
   return (
@@ -349,7 +359,12 @@ function DropdownMenuRadioSub<V extends string>({
         <span>{label}</span>
       </DropdownMenuSubTrigger>
       <DropdownMenuSubContent>
-        <DropdownMenuRadioOptions options={options} value={value} onValueChange={onValueChange} />
+        <DropdownMenuRadioOptions
+          options={options}
+          value={value}
+          onValueChange={onValueChange}
+          closeOnSelect={closeOnSelect}
+        />
       </DropdownMenuSubContent>
     </DropdownMenuSub>
   );

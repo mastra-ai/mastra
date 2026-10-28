@@ -1,7 +1,7 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
 import { useState } from 'react';
 import { MetricsShareList } from './metrics-share-list';
-import type { MetricsShareListRow } from './metrics-share-list-types';
+import type { MetricsShareListRow, MetricsShareListSort } from './metrics-share-list-types';
 
 const n = new Intl.NumberFormat('en', { notation: 'compact', maximumFractionDigits: 1 });
 
@@ -19,6 +19,7 @@ const agents: MetricsShareListRow[] = [
   share: Number(runs),
   value: n.format(Number(runs)),
   cells: [`${((Number(errors) / Number(runs)) * 100).toFixed(1)}%`],
+  sortValues: { runs: Number(runs), errorRate: Number(errors) / Number(runs) },
 }));
 
 /** A long tail of routes on a power law, the way production traffic looks. */
@@ -108,4 +109,22 @@ export const Loading: Story = { args: { isLoading: true } };
  */
 export const HeaderBelowStrip: Story = {
   args: { headerPlacement: 'below-strip', overflow: 'more', pageSize: 5 },
+};
+
+/**
+ * Click a header to sort by it; again to flip the direction. The strip, the Share column and the
+ * colours keep following runs, so sorting by error rate reorders rows without changing their meaning.
+ */
+export const Sortable: Story = {
+  render: args => {
+    const [sort, setSort] = useState<MetricsShareListSort>({ key: 'runs', direction: 'descending' });
+    return <MetricsShareList {...args} sort={sort} onSortChange={setSort} />;
+  },
+  args: {
+    columns: [{ label: 'Error rate', width: 'w-20', sortKey: 'errorRate' }],
+    valueSortKey: 'runs',
+    palette: 'hues',
+    limit: 10,
+    overflow: 'more',
+  },
 };

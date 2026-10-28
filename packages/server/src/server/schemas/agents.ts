@@ -317,6 +317,7 @@ export const providerSchema = z.object({
   connected: z.boolean(),
   docUrl: z.string().optional(),
   models: z.array(z.string()),
+  modelReleaseDates: z.record(z.string(), z.string()).optional(),
 });
 
 /**
@@ -793,6 +794,7 @@ const agentThreadBodySchema = z.object({
 });
 
 export const subscribeAgentThreadBodySchema = agentThreadBodySchema.extend({
+  withRunStatus: z.boolean().optional().describe('Emit thread-run-status chunks, including retained outcomes'),
   withInitialHistory: z
     .union([z.boolean(), z.object({ perPage: z.number().int().positive().optional() })])
     .optional()

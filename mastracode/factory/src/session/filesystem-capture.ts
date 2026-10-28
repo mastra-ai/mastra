@@ -278,7 +278,7 @@ export function observeSessionFilesystem(
         suspended.delete(event.toolCallId);
         if (event.isError || event.denied) return;
         if (isMeaningfulToolName(toolName)) workspaceTouched = true;
-        return;
+        break;
       }
     }
   });

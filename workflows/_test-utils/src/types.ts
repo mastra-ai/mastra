@@ -5,11 +5,22 @@
 import type { Workflow } from '@mastra/core/workflows';
 import type { MastraStorage } from '@mastra/core/storage';
 import type { PubSub } from '@mastra/core/events';
-import type { ToolsInput } from '@mastra/core/agent';
+import type { AgentConfig, PublicStructuredOutputOptions, ToolsInput } from '@mastra/core/agent';
+import type { RequestContext } from '@mastra/core/di';
+import type { DurableAgentStreamOptions } from '@mastra/core/agent/durable';
+import type { MessageListInput } from '@mastra/core/agent/message-list';
 
 // ============================================================================
 // Durable Agent Test Types
 // ============================================================================
+
+/**
+ * Stream options accepted by every DurableAgent-like implementation. Structured
+ * output is per call here, so any object schema is accepted.
+ */
+export type DurableAgentLikeStreamOptions = Omit<DurableAgentStreamOptions, 'structuredOutput'> & {
+  structuredOutput?: PublicStructuredOutputOptions<{}>;
+};
 
 /**
  * Common interface for DurableAgent-like classes.
@@ -17,12 +28,12 @@ import type { ToolsInput } from '@mastra/core/agent';
  *
  * This interface focuses on observable behavior, not implementation details.
  */
-export interface DurableAgentLike<TOutput = undefined> {
+export interface DurableAgentLike {
   id: string;
   name: string;
   stream(
-    messages: any,
-    options?: any,
+    messages: MessageListInput,
+    options?: DurableAgentLikeStreamOptions,
   ): Promise<{
     output: any;
     runId: string;
@@ -87,10 +98,10 @@ export interface DurableAgentLike<TOutput = undefined> {
  * Configuration passed to createAgent factory.
  * Extends AgentConfig but makes pubsub optional (provided by context) and name optional.
  */
-export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput, TOutput = undefined> {
+export interface CreateAgentConfig<TTools extends ToolsInput = ToolsInput> {
   id: string;
   name?: string;
-  instructions: string;
+  instructions: AgentConfig['instructions'];
   model: any;
   tools?: TTools;
   /**
@@ -816,7 +827,7 @@ export interface WorkflowTestConfig {
 export interface ExecuteWorkflowOptions {
   runId?: string;
   resourceId?: string;
-  requestContext?: Record<string, unknown>;
+  requestContext?: RequestContext;
   initialState?: Record<string, unknown>;
   perStep?: boolean;
   /** Close stream when workflow suspends (for streaming tests) */

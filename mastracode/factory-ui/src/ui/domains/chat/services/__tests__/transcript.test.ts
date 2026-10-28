@@ -2,6 +2,7 @@ import type { MastraDBMessage, MastraMessagePart } from '@mastra/core/agent-cont
 import { describe, expect, it, vi } from 'vitest';
 
 import { createInitialTranscript, initialTranscript, transcriptReducer } from '../transcript';
+import type { TranscriptState } from '../transcript';
 
 type MessageEntryFixture = {
   kind: 'message';
@@ -886,6 +887,62 @@ describe('transcript reducer mergeWindow', () => {
     expect(ids).toEqual(['history-1', 'history-2', 'live-1']);
   });
 
+  it('clears pending when the refetched window brings in the reply the stream missed', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    expect(sent.pending).toBe(true);
+
+    const next = transcriptReducer(sent, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+        dbMessage('reply-1', 'assistant', [{ type: 'text', text: 'answer' }]),
+      ],
+    });
+
+    expect(next.entries.map(e => (e.kind === 'message' ? e.id : e.kind))).toEqual(['user-1', 'reply-1']);
+    expect(next.pending).toBe(false);
+  });
+
+  it('keeps pending when the refetched window has no reply to the latest prompt yet', () => {
+    let state = createInitialTranscript({
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+      ],
+    });
+    state = transcriptReducer(state, { type: 'localUser', id: 'user-1', text: 'question' });
+
+    const next = transcriptReducer(state, {
+      type: 'mergeWindow',
+      messages: [
+        dbMessage('user-0', 'user', [{ type: 'text', text: 'earlier' }]),
+        dbMessage('reply-0', 'assistant', [{ type: 'text', text: 'earlier answer' }]),
+        dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }]),
+      ],
+    });
+
+    expect(next.pending).toBe(true);
+  });
+
+  it('keeps pending when only the live, still-empty reply follows the prompt', () => {
+    const sent = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'question' });
+    const started = transcriptReducer(sent, {
+      type: 'event',
+      event: {
+        type: 'message_start',
+        message: dbMessage('assistant-1', 'assistant', [{ type: 'text', text: '' }]),
+      },
+    });
+    expect(started.pending).toBe(true);
+
+    const next = transcriptReducer(started, {
+      type: 'mergeWindow',
+      messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'question' }])],
+    });
+
+    expect(next.pending).toBe(true);
+  });
+
   it('is a no-op for an empty older window', () => {
     const onScreen = createInitialTranscript({
       messages: [dbMessage('msg-1', 'user', [{ type: 'text', text: 'only' }])],
@@ -1429,32 +1486,37 @@ describe('transcript reducer mergeWindow', () => {
 });
 
 describe('transcript reducer error notices', () => {
-  function errorNoticeText(event: Record<string, unknown>): string {
+  function errorNotice(event: Record<string, unknown>) {
     const state = transcriptReducer(initialTranscript, { type: 'event', event: { type: 'error', ...event } });
     const notice = state.entries.find(entry => entry.kind === 'notice');
     if (!notice || notice.kind !== 'notice') throw new Error('expected a notice entry');
-    return notice.text;
+    return notice;
   }
+  const errorNoticeText = (event: Record<string, unknown>) => errorNotice(event).text;
 
-  it('offers a provider login on a missing-credential error', () => {
-    const state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } },
-    });
-    expect(state.entries.at(-1)).toMatchObject({
-      kind: 'notice',
+  it('keeps the wire error name so the notice can match a missing credential on it', () => {
+    expect(
+      errorNotice({ error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' } }),
+    ).toMatchObject({
       level: 'error',
       text: 'Not logged in to Anthropic.',
-      action: 'provider-login',
+      error: { name: 'ProviderAuthRequiredError', message: 'Not logged in to Anthropic.' },
     });
   });
 
-  it('offers no action on other errors', () => {
-    const state = transcriptReducer(initialTranscript, {
-      type: 'event',
-      event: { type: 'error', error: { name: 'Error', message: 'boom' } },
-    });
-    expect(state.entries.at(-1)).not.toHaveProperty('action');
+  it('keeps the provider details a wire error carries so the notice classifies like a reload', () => {
+    const error = {
+      name: 'AI_APICallError',
+      message: 'Bad Request',
+      statusCode: 403,
+      responseBody: '{"error":{"type":"permission_error"}}',
+      requestId: 'req_123',
+    };
+    expect(errorNotice({ error }).error).toEqual(error);
+  });
+
+  it('names a bare error payload Error', () => {
+    expect(errorNotice({ error: 'boom' }).error).toEqual({ name: 'Error', message: 'boom' });
   });
 
   it('renders a string error payload verbatim', () => {
@@ -1473,6 +1535,99 @@ describe('transcript reducer error notices', () => {
 
   it('falls back to a generic hint when the payload is empty', () => {
     expect(errorNoticeText({ error: {} })).toBe('Run failed with an unknown error. Check the server logs for details.');
+  });
+
+  describe('once the saved reply loads in', () => {
+    const rejectedKey = {
+      name: 'AI_APICallError',
+      message: 'invalid x-api-key',
+      statusCode: 401,
+      requestId: 'req_011CgRohdkzzzGj2p18ZeJVu',
+    };
+    const savedFailure = (id: string) => dbMessage(id, 'assistant', [{ type: 'error', error: rejectedKey }]);
+    const shownFailures = (state: TranscriptState) =>
+      state.entries.flatMap(entry => {
+        if (entry.kind === 'notice') return entry.error ? [entry.id] : [];
+        if (entry.kind !== 'message') return [];
+        return entry.message.content.parts.some(part => part.type === 'error') ? [entry.id] : [];
+      });
+
+    it('shows a failed run once, not as a live card plus its saved copy', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'say hi' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'agent_end', reason: 'error' } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-1')],
+      });
+
+      expect(shownFailures(next)).toEqual(['reply-1']);
+    });
+
+    it('keeps the next run’s live failure when a stale window brings only the previous run’s saved error', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'say hi' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'localUser', text: 'try again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const nextRunNotice = shownFailures(state).at(-1);
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-1', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-1')],
+      });
+
+      expect(shownFailures(next)).toEqual([nextRunNotice, 'reply-1']);
+    });
+
+    it('replaces the right live failure when the same prompt was sent twice', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', id: 'user-1', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const firstRunNotice = shownFailures(state).at(-1);
+      state = transcriptReducer(state, { type: 'localUser', id: 'user-2', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-2', 'user', [{ type: 'text', text: 'again' }]), savedFailure('reply-2')],
+      });
+
+      expect(shownFailures(next)).toEqual([firstRunNotice, 'reply-2']);
+    });
+
+    it('keeps both live failures when it cannot tell which unconfirmed repeat the saved copy answers', () => {
+      let state = transcriptReducer(initialTranscript, { type: 'localUser', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      state = transcriptReducer(state, { type: 'localUser', text: 'again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+      const liveFailures = shownFailures(state);
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [dbMessage('user-2', 'user', [{ type: 'text', text: 'again' }]), savedFailure('reply-2')],
+      });
+
+      expect(shownFailures(next)).toEqual([...liveFailures, 'reply-2']);
+    });
+
+    it('keeps a new live failure when only an earlier turn saved the same error', () => {
+      let state = createInitialTranscript({
+        messages: [dbMessage('user-0', 'user', [{ type: 'text', text: 'say hi' }]), savedFailure('reply-0')],
+      });
+      state = transcriptReducer(state, { type: 'localUser', id: 'user-1', text: 'try again' });
+      state = transcriptReducer(state, { type: 'event', event: { type: 'error', error: rejectedKey } });
+
+      const next = transcriptReducer(state, {
+        type: 'mergeWindow',
+        messages: [
+          dbMessage('user-0', 'user', [{ type: 'text', text: 'say hi' }]),
+          savedFailure('reply-0'),
+          dbMessage('user-1', 'user', [{ type: 'text', text: 'try again' }]),
+        ],
+      });
+
+      expect(shownFailures(next)).toEqual(['reply-0', expect.stringMatching(/^notice-/)]);
+    });
   });
 });
 

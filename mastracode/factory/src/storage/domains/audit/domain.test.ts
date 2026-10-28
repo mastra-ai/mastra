@@ -387,4 +387,35 @@ describe('AuditDomain', () => {
     await app.request(`/web/factory/projects/${project.id}/audit?limit=lots`);
     expect(list.mock.calls[1]?.[0].limit).toBeUndefined();
   });
+
+  it('narrows to the requested registry actions and never falls back to an unfiltered page', async () => {
+    const seed = await createFactoryStorageForTests();
+    const project = await seed.projects.create({
+      orgId: 'org-1',
+      userId: 'user-1',
+      input: { name: 'Acme project' },
+    });
+    const domain = auditDomain(seed);
+    const list = vi.spyOn(domain, 'list').mockResolvedValue({ events: [], nextCursor: undefined });
+    const app = new Hono();
+    app.use('*', async (c, next) => {
+      c.set('factoryAuthUser' as never, { workosId: 'user-1', organizationId: 'org-1' } as never);
+      await next();
+    });
+    mountApiRoutes(app as never, domain.routes());
+    const audit = (query: Record<string, string>) =>
+      app.request(`/web/factory/projects/${project.id}/audit?${new URLSearchParams(query)}`);
+
+    expect((await audit({ actions: 'factory.run.started, factory.run.bogus' })).status).toBe(200);
+    expect(list.mock.calls[0]?.[0].actions).toEqual(['factory.run.started']);
+
+    expect((await audit({ actions: 'factory.run.started,factory.git.push', namespaces: 'run' })).status).toBe(200);
+    expect(list.mock.calls[1]?.[0].actions).toEqual(['factory.run.started']);
+
+    const unknown = await audit({ actions: 'factory.run.bogus' });
+    expect(unknown.status).toBe(400);
+    expect(await unknown.json()).toEqual({ error: 'unknown_actions' });
+    expect((await audit({ actions: 'factory.git.push', namespaces: 'run' })).status).toBe(400);
+    expect(list).toHaveBeenCalledTimes(2);
+  });
 });

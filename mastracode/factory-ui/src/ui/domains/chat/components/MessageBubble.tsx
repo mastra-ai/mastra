@@ -19,7 +19,6 @@ import { channelOrigin, messageAuthor } from '../services/message-author';
 import { replyCredentialLabel } from '../services/reply-credential';
 import type { ThreadOwner } from '../services/reply-credential';
 import type { MessageEntry, SuspensionPrompt } from '../services/transcript';
-import { PROVIDER_AUTH_REQUIRED_ERROR } from '../services/transcript';
 import { Arriving } from '@mastra/playground-ui/components/Arrival';
 import { SignalActivity } from '@mastra/playground-ui/components/ai/activity';
 import { TranscriptDivider } from '@mastra/playground-ui/components/ai/transcript-divider';
@@ -31,7 +30,7 @@ import {
   MessageTimestamp,
 } from '@mastra/playground-ui/components/Message';
 import { ChannelOriginBadge, SenderAvatar } from './MessageSender';
-import { ProviderReconnectAction } from './ProviderReconnectAction';
+import { RunErrorNotice } from './RunErrorNotice';
 import { ToolCard } from './tool/ToolCard';
 import { ToolGroup } from './tool/ToolGroup';
 import { ToolFactory } from './ToolFactory';
@@ -183,15 +182,7 @@ export function MessageBubble({
   };
 
   const renderers = {
-    Error: (part: MastraErrorPart) => (
-      <Notice
-        variant="destructive"
-        title={part.error.name ?? 'Error'}
-        action={part.error.name === PROVIDER_AUTH_REQUIRED_ERROR ? <ProviderReconnectAction /> : undefined}
-      >
-        <Notice.Message>{part.error.message}</Notice.Message>
-      </Notice>
-    ),
+    Error: (part: MastraErrorPart) => <RunErrorNotice error={part.error} entryId={entry.id} />,
     Text: (part: TextPart) => {
       if (!hasVisibleText(part.text)) return null;
       if (entry.message.role === 'user') {

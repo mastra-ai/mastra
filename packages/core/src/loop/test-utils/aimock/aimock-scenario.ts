@@ -1,5 +1,6 @@
 import { createOpenAI } from '@ai-sdk/openai-v5';
 import { LLMock } from '@copilotkit/aimock';
+import type { ChatCompletionRequest } from '@copilotkit/aimock';
 import { afterAll, afterEach, beforeAll, describe } from 'vitest';
 import { Agent } from '../../../agent';
 import { createDurableAgent, createEventedAgent } from '../../../agent/durable';
@@ -20,6 +21,16 @@ import type {
 import { ALL_ENGINE_VARIANTS, isDurableEngineVariant, SCENARIO_MODEL_ID } from './types';
 
 export { isDurableEngineVariant } from './types';
+
+/**
+ * Whether a tool result appears anywhere in the request. AIMock's `hasToolResult`
+ * only looks at messages after the last `user` message, so scenarios that add a
+ * user-role message after a tool round (signals, queued messages, request
+ * processors) must match on the whole conversation instead.
+ */
+export function anyToolResult(req: ChatCompletionRequest): boolean {
+  return req.messages.some(message => message.role === 'tool');
+}
 
 /**
  * Start a shared AIMock server for the lifetime of a test suite and wire its
@@ -318,6 +329,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     outputProcessors,
     maxProcessorRetries,
     requireToolApproval,
+    closeOnSuspend,
     inputProcessors,
     prepareStep,
     transform,
@@ -357,6 +369,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     savePerStep,
     actor,
     defaultOptions,
+    hooks,
     sharedAgent,
     pubsub,
     cache,
@@ -457,6 +470,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(outputProcessors ? { outputProcessors } : {}),
     ...(maxProcessorRetries !== undefined ? { maxProcessorRetries } : {}),
     ...(requireToolApproval !== undefined ? { requireToolApproval } : {}),
+    ...(closeOnSuspend !== undefined && isDurable ? { closeOnSuspend } : {}),
     ...(inputProcessors && !isDurable ? { inputProcessors } : {}),
     // Pass the scenario's error processors at call time so they form the complete list. Without
     // this, the agent's constructor list is the base and the shared stability defaults are added
@@ -466,6 +480,7 @@ export async function runLoopScenario(opts: RunLoopScenarioOptions): Promise<Loo
     ...(transform ? { transform } : {}),
     ...(requestContext ? { requestContext } : {}),
     ...(delegation ? { delegation } : {}),
+    ...(hooks ? { hooks } : {}),
     ...(onIterationComplete ? { onIterationComplete } : {}),
     ...(onStepFinish ? { onStepFinish } : {}),
     ...(onFinish ? { onFinish } : {}),
