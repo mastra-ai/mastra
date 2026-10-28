@@ -2256,13 +2256,13 @@ importers:
         version: link:../../packages/_types-builder
       '@livekit/agents':
         specifier: ^1.9.4
-        version: 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
+        version: 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       '@livekit/agents-plugin-livekit':
         specifier: ^1.9.4
-        version: 1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@types/node@22.19.15)
+        version: 1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@types/node@22.19.15)
       '@livekit/agents-plugin-silero':
         specifier: ^1.9.4
-        version: 1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@livekit/rtc-node@1.2.1)(bufferutil@4.1.0)
+        version: 1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@livekit/rtc-node@1.2.1)(bufferutil@4.1.0)
       '@mastra/client-js':
         specifier: workspace:*
         version: link:../../client-sdks/client-js
@@ -4764,8 +4764,8 @@ importers:
         specifier: workspace:*
         version: link:../_internals/voice
       '@modelcontextprotocol/server':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.4.0
+        version: 2.4.0
       '@openrouter/ai-sdk-provider':
         specifier: ^0.7.5
         version: 0.7.5(zod@4.6.7)
@@ -5252,20 +5252,20 @@ importers:
   packages/mcp:
     dependencies:
       '@modelcontextprotocol/client':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.4.0
+        version: 2.4.0
       '@modelcontextprotocol/core':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.4.0
+        version: 2.4.0
       '@modelcontextprotocol/ext-apps':
         specifier: ^2.0.3
-        version: 2.0.3(@modelcontextprotocol/client@2.3.1)(@modelcontextprotocol/core@2.3.1)(@modelcontextprotocol/server@2.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
+        version: 2.0.3(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/core@2.4.0)(@modelcontextprotocol/server@2.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)
       '@modelcontextprotocol/node':
-        specifier: 2.0.0
-        version: 2.0.0(@modelcontextprotocol/server@2.3.1)(hono@4.13.13)
+        specifier: 2.1.2
+        version: 2.1.2(@modelcontextprotocol/server@2.4.0)
       '@modelcontextprotocol/server':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.4.0
+        version: 2.4.0
       exit-hook:
         specifier: ^5.1.0
         version: 5.1.0
@@ -5313,8 +5313,8 @@ importers:
         specifier: ^1.29.3
         version: 1.29.3(debug@4.4.3(supports-color@10.2.2))(supports-color@10.2.2)
       '@modelcontextprotocol/conformance':
-        specifier: 0.2.0-alpha.11
-        version: 0.2.0-alpha.11(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)
+        specifier: 0.2.0-alpha.12
+        version: 0.2.0-alpha.12(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -5374,8 +5374,8 @@ importers:
         specifier: workspace:*
         version: link:../_types-builder
       '@modelcontextprotocol/client':
-        specifier: 2.3.1
-        version: 2.3.1
+        specifier: 2.4.0
+        version: 2.4.0
       '@types/node':
         specifier: 22.19.15
         version: 22.19.15
@@ -9566,7 +9566,7 @@ importers:
     dependencies:
       '@azure/identity':
         specifier: ^4.0.0
-        version: 4.13.1(supports-color@10.2.2)
+        version: 4.14.0(supports-color@10.2.2)
       '@azure/storage-blob':
         specifier: ^12.34.0
         version: 12.34.0(supports-color@10.2.2)
@@ -10139,7 +10139,7 @@ importers:
         version: 3.1156.0
       '@aws-sdk/types':
         specifier: ^3.0.0
-        version: 3.974.2
+        version: 3.975.0
     devDependencies:
       '@internal/lint':
         specifier: workspace:*
@@ -10287,9 +10287,6 @@ packages:
         optional: true
       express:
         optional: true
-
-  '@adobe/css-tools@4.4.4':
-    resolution: {integrity: sha512-Elp+iwUx5rN5+Y8xLt5/GRoG20WGoDCQ/1Fb+1LiGtvwbDavuSk0jhD/eZdckHAuzcDzccnkv+rEjyWfRx18gg==}
 
   '@adobe/css-tools@4.5.0':
     resolution: {integrity: sha512-6OzddxPio9UiWTCemp4N8cYLV2ZN1ncRnV1cVGtve7dhPOtRkleRyx32GQCYSwDYgaHU3USMm84tNsvKzRCa1Q==}
@@ -11284,10 +11281,6 @@ packages:
     resolution: {integrity: sha512-/dS+LLiTM+63ZE1gEOmlXwQ0yrkyT+Bk1xUalfCXPo8w5RUvJXFhXUTAoe7vI83h1YjhFQz1CQtB6ZP6rn8g6g==}
     engines: {node: '>=20.0.0'}
 
-  '@aws-sdk/types@3.974.2':
-    resolution: {integrity: sha512-3W6IUtSxFbH6X7Wb7DzGCV5QiFQsd0g8bOfntpmDxQlzBoKWUMBu/JPQR0DwkE+Hpnxd6db1tXbOwdeHddG6cA==}
-    engines: {node: '>=20.0.0'}
-
   '@aws-sdk/types@3.975.0':
     resolution: {integrity: sha512-WQlhs6juByzWOzj5fwxOx0mPJaEqMcG/sDpl3Id61B3XhKE63xY+0QWcnG+sWR/sCfprmreyUo1lM7IKZmHMzw==}
     engines: {node: '>=20.0.0'}
@@ -11316,10 +11309,6 @@ packages:
     resolution: {integrity: sha512-6933vNLqh06RR7rumnrq3UZIeBtRLeBHDPMrieDPIljiCaMMwt0nRw++nd3TOxiohtasNtm29rC+b/9ZVKCOqg==}
     engines: {node: '>=22.0.0'}
 
-  '@azure/abort-controller@2.1.2':
-    resolution: {integrity: sha512-nBrLsEWm4J2u5LpAPjxADTlq3trDgVZZXHNKabeXZtpq3d3AbN/KGO82R87rdDz5/lYB024rtEf10/q0urNgsA==}
-    engines: {node: '>=18.0.0'}
-
   '@azure/abort-controller@2.2.0':
     resolution: {integrity: sha512-fNAjWnA/nZ2jz31kxR/AqRaUT8ewHBw/WuBIosK0moMy1C9e5ValbDfFdIxJzVOOYaYkV/b2F1S4H/aHiqfVQg==}
     engines: {node: '>=22.0.0'}
@@ -11327,10 +11316,6 @@ packages:
   '@azure/core-auth@1.11.0':
     resolution: {integrity: sha512-IUZydyTUkDnYdstOW9pFOOUQlBjAepK5teihDE3x6yxsPJs/hsAaaYpeGxdxrgtOiJbBKSjKW7MDk7AEhb4LRg==}
     engines: {node: '>=22.0.0'}
-
-  '@azure/core-client@1.10.1':
-    resolution: {integrity: sha512-Nh5PhEOeY6PrnxNPsEHRr9eimxLwgLlpmguQaHKBinFYA/RU9+kOYVOQqOrTsCL+KSxrLLl1gD8Dk5BFW/7l/w==}
-    engines: {node: '>=20.0.0'}
 
   '@azure/core-client@1.11.1':
     resolution: {integrity: sha512-2QygG2F76ZpMP2eMztiJvAiFMu71M9rDeU7vO/QKg5Css7MgM4frUOslFjhVjRhbGaCNPtz/S8M6y46/fFKVuQ==}
@@ -11359,17 +11344,9 @@ packages:
     resolution: {integrity: sha512-bMs8ekJLjX8wPV+9IPBges1SLPyuDtE9g5gLDWOpxzKcoOFQnpLGkbcT1tdw3FaAmDS1gnPmMmJ6y/T5B96kIA==}
     engines: {node: '>=22.0.0'}
 
-  '@azure/core-tracing@1.3.1':
-    resolution: {integrity: sha512-9MWKevR7Hz8kNzzPLfX4EAtGM2b8mr50HPDBvio96bURP/9C+HjdH3sBlLSNNrvRAr5/k/svoH457gB5IKpmwQ==}
-    engines: {node: '>=20.0.0'}
-
   '@azure/core-tracing@1.4.0':
     resolution: {integrity: sha512-eGwxD0AtncrxeBM4tG8R55Pc3rdX1hNW2WibJAgYpCVA6E93mvvVH+LcssoVjOBrSKWS55yEIHsk0X8ctHmfOQ==}
     engines: {node: '>=22.0.0'}
-
-  '@azure/core-util@1.13.1':
-    resolution: {integrity: sha512-XPArKLzsvl0Hf0CaGyKHUyVgF7oDnhKoP85Xv6M4StF/1AhfORhZudHtOyf2s+FcbuQ9dPRAjB8J2KvRRMUK2A==}
-    engines: {node: '>=20.0.0'}
 
   '@azure/core-util@1.14.0':
     resolution: {integrity: sha512-9n2pWK61veAuN0V20t9lOuoV4CFMdyAZ1ygZzvBGk/pBBJRib/PjL9PLXa/aI2CcPpyHfqVsxxqLCYl6uZlfDw==}
@@ -11378,10 +11355,6 @@ packages:
   '@azure/core-xml@1.6.0':
     resolution: {integrity: sha512-e7lX/dk//F6Qf7BB6PTY4+p2yuOQtyOeHGyapYHNwqSp2OnYpwQt49A/Nin2XmKBQ69pwagR4k/lQBq8lbHQkA==}
     engines: {node: '>=22.0.0'}
-
-  '@azure/identity@4.13.1':
-    resolution: {integrity: sha512-5C/2WD5Vb1lHnZS16dNQRPMjN6oV/Upba+C9nBIs15PmOi6A3ZGs4Lr2u60zw4S04gi+u3cEXiqTVP7M4Pz3kw==}
-    engines: {node: '>=20.0.0'}
 
   '@azure/identity@4.14.0':
     resolution: {integrity: sha512-8utCLdTZn14CiAe0HW4JbtzUMsc0mdDwnjUvStFMrR4IxQP8S2eL9zVAdplpfORVJGYmidZElpeXRYjJQ4UyUw==}
@@ -11393,10 +11366,6 @@ packages:
 
   '@azure/keyvault-keys@4.10.2':
     resolution: {integrity: sha512-VmUSLbXRAbSzDD8grXHGPaknYs0SKr3yuf6U+d4XMpX4XuVYskNqbTTwXce0zR1LyxfTZm9rWEBcvs3vdYwCmQ==}
-    engines: {node: '>=20.0.0'}
-
-  '@azure/logger@1.3.0':
-    resolution: {integrity: sha512-fCqPIfOcLE+CGqGPd66c8bZpwAji98tZ4JI9i/mlTNTlsIWslCfpg48s/ypyLxZTump5sypjrKn2/kY7q8oAbA==}
     engines: {node: '>=20.0.0'}
 
   '@azure/logger@1.4.0':
@@ -16056,12 +16025,20 @@ packages:
     resolution: {integrity: sha512-mIGZXpHsjnZ6lD+gD/WCMpR5k8yVQQ8nNFH1N0Srf7AvnwTUMYD6pvTY8ng2+He5FfV7YMZLmrjL7cLa/cc3dQ==}
     engines: {node: '>=20'}
 
-  '@modelcontextprotocol/conformance@0.2.0-alpha.11':
-    resolution: {integrity: sha512-imPK9tx5gQsL6ZKQq4MrsyDYfSaIwpRmX6+ogjbeAXs9LGvxkBxWcY7KcS7TvwaBk/ZiVWl6b/naF4q83UwDRA==}
+  '@modelcontextprotocol/client@2.4.0':
+    resolution: {integrity: sha512-LgrD2OphHuG12vfKFKz6SOnq7bKHQmhGJIAYdD+MZBn2npHEyry6uD8zvktodtl5CQM85MO0anUyD9JwmUmxww==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/conformance@0.2.0-alpha.12':
+    resolution: {integrity: sha512-eXtZFgmtZiU5SsvXty+RGXGnyIqEVm3GLU/HZmg1wMjtKOocPZZgD9HQKd30oJhio5UB0wFJmsc6r8u48Q+EYA==}
     hasBin: true
 
   '@modelcontextprotocol/core@2.3.1':
     resolution: {integrity: sha512-laVmIhPGpWi7rG9q+0UigblRN0Hws/Yjlb6qLFtVqryXVLkc4h+yN8z731POD2LnAGQlFe7/tXhUm7Bi0YB91g==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/core@2.4.0':
+    resolution: {integrity: sha512-z8QBKqdfXLPzkLQuG4xp8hrVEMm1PZ1IgxMN2sMbJiFiAKOWXnAzogXn2W4aqIBlP1ea6U5yiqVquvUNM1Cj6Q==}
     engines: {node: '>=20'}
 
   '@modelcontextprotocol/ext-apps@1.7.5':
@@ -16106,6 +16083,12 @@ packages:
       hono:
         optional: true
 
+  '@modelcontextprotocol/node@2.1.2':
+    resolution: {integrity: sha512-IIcIqBpr6NCQQs5DgJTgvbSOAw+3iaR/uquqg+e0nXCdudfjPg/80x0TseUnQx14AUAtE4fsJCEpJKPyb6WPVA==}
+    engines: {node: '>=20'}
+    peerDependencies:
+      '@modelcontextprotocol/server': ^2.4.0
+
   '@modelcontextprotocol/sdk@1.32.1':
     resolution: {integrity: sha512-2DdE+SJDtzLEEWzY1ZjY7Q+VcPhcV1KisD3zI4u0XZyktsjHum1mwbMI+JaulUBi2OZk+KJAi2uPXzxichPkdw==}
     engines: {node: '>=18'}
@@ -16138,6 +16121,10 @@ packages:
 
   '@modelcontextprotocol/server@2.3.1':
     resolution: {integrity: sha512-e59MfWuSssj6DoQ96JCTqdW1AXT5/XtnTl0WWd6MU1Ka434fFUGGosCLJbGNySDhHGvxQWoRWK137FXYFkYNWw==}
+    engines: {node: '>=20'}
+
+  '@modelcontextprotocol/server@2.4.0':
+    resolution: {integrity: sha512-rgR9yxSaAJ+bcsi/XroT/S2AfPiIWloXAnrdfYSCms9ivVju0ishu/wW0J21Ho6+ZOR1r7RyeRbjiRuF87ix5Q==}
     engines: {node: '>=20'}
 
   '@module-federation/error-codes@0.22.0':
@@ -19206,15 +19193,6 @@ packages:
       rollup:
         optional: true
 
-  '@rollup/pluginutils@5.3.0':
-    resolution: {integrity: sha512-5EdhGZtnu3V88ces7s53hhfK5KSASnJZv8Lulpc04cWO3REESroJXg73DFsOmgbU2BhwV0E20bu2IDZb3VKW4Q==}
-    engines: {node: '>=14.0.0'}
-    peerDependencies:
-      rollup: ^1.20.0||^2.0.0||^3.0.0||^4.0.0
-    peerDependenciesMeta:
-      rollup:
-        optional: true
-
   '@rollup/pluginutils@5.4.0':
     resolution: {integrity: sha512-MfPp06CjRLfXQ3wY0R8vJDYBy/MvVcc9OulEfR0B8Iv9ko+GCNaRZ+EpJYFl27LhKsZK0o420sYCRHCjfCgeUg==}
     engines: {node: '>=14.0.0'}
@@ -19692,10 +19670,6 @@ packages:
 
   '@smithy/signature-v4@5.7.4':
     resolution: {integrity: sha512-tHy0K0VtqNd5Y7Y41h0a0Lhh0L1GzC08dTWg0F7vRJWFtTENg7IZikf3wQkanYIRdb7ngoIPMTmqgUi401fEeQ==}
-    engines: {node: '>=18.0.0'}
-
-  '@smithy/types@4.16.1':
-    resolution: {integrity: sha512-0JFs3V2y2M9tKW5na/qxe69Zv+uxLMO7QBbhxF/FHu/Gp2NFZAAL9tWl9PU02xxo07pb3G9FTyjNc6D5uZrJIg==}
     engines: {node: '>=18.0.0'}
 
   '@smithy/types@4.19.0':
@@ -24373,9 +24347,6 @@ packages:
   es-module-lexer@1.7.0:
     resolution: {integrity: sha512-jEQoCwk8hyb2AZziIOLhDqpm5+2ww5uIE6lkO/6jcOCusfk6LhMHpXXfBLXTZ7Ydyt0j4VoUQv6uGNYbdW+kBA==}
 
-  es-module-lexer@2.3.0:
-    resolution: {integrity: sha512-KLdwQm2NvGLDkQDCGvmiQrhkd0JbMzXthwQAUgWjQuQdBLFa3eiBP5arXZyA+f8x+x7OXgud6bq2rxjGtHV2tw==}
-
   es-module-lexer@2.3.2:
     resolution: {integrity: sha512-poHGpORABojJJucnV9KbOavETW8lBVnphkW77ER5/BQ5Fz7oXSoCNek7IH3vR5nRjdsEz926ibFYX8KtLQmdyw==}
 
@@ -25743,10 +25714,6 @@ packages:
 
   import-in-the-middle@1.15.0:
     resolution: {integrity: sha512-bpQy+CrsRmYmoPMAE/0G33iwRqwW4ouqdRg8jgbH3aKuCtOc8lxgmYXg2dMM92CRiGP660EtBcymH/eVUpCSaA==}
-
-  import-in-the-middle@3.3.3:
-    resolution: {integrity: sha512-AiohS3H80sXO6owEltjGX+glb7qXaDhBoJb9XcQVH4UI207xu/bDLUcadVKp7Qe576reg9yr/PXZjV5qx8gfbA==}
-    engines: {node: '>=18'}
 
   import-in-the-middle@3.5.1:
     resolution: {integrity: sha512-mPKuL8bPQzecui2KK6Gb+M8JvJoHnhS1FeYGa22QopBmlevF5F0FE6ued/B5EgHDeIoMTONIpDWWFKUPOG0DBQ==}
@@ -29795,11 +29762,6 @@ packages:
     resolution: {integrity: sha512-zepuGL0ulf+nt+XaFrlKeaiTJeyPFPLLY62+ncq1/VTHBdt3HsfXOH60priZ6tnXQozdGcDeIF5JVTanvIcYWQ==}
     engines: {node: '>=10'}
 
-  resolve@1.22.12:
-    resolution: {integrity: sha512-TyeJ1zif53BPfHootBGwPRYT1RUt6oGWsaQr8UyZW/eAm9bKoijtvruSDEmZHm92CwS9nj7/fWttqPCgzep8CA==}
-    engines: {node: '>= 0.4'}
-    hasBin: true
-
   resolve@1.22.13:
     resolution: {integrity: sha512-Dj/cW9zBV2aRj6XzCxuGIs3ESZKv02jixne3q6jFZYZ3/Tg09gHHviSMDL4kObh9pqSahdRHEnDoaP2gn8YLhA==}
     engines: {node: '>= 0.4'}
@@ -31000,10 +30962,6 @@ packages:
     resolution: {integrity: sha512-hZjcHdHrveEKI67v8OzI90a1bizgoDkY7ekE4fH89qJhZgxvmjfBOv98aibCU7OpKbvV3R9p/qd3DrzZqT1cFQ==}
     engines: {node: '>=18.0.0'}
 
-  ts-dedent@2.2.0:
-    resolution: {integrity: sha512-q5W7tVM71e2xjHZTlgfTDoPF/SmqKG5hddq9SzR49CH2hayqRKJtQ4mtRlSxKaJlR/+9rEM+mnBHf7I2/BQcpQ==}
-    engines: {node: '>=6.10'}
-
   ts-dedent@2.3.0:
     resolution: {integrity: sha512-JfJeIHke7y2egdGGgRAvpCwYFUsHlM2gPcrVOxFkznt/4uzQ7HFmvE63iFHVLBJNDuyDOQgijDK/tXH/f6Msjg==}
     engines: {node: '>=6.10'}
@@ -32173,9 +32131,6 @@ packages:
   zod-from-json-schema@0.5.2:
     resolution: {integrity: sha512-/dNaicfdhJTOuUd4RImbLUE2g5yrSzzDjI/S6C2vO2ecAGZzn9UcRVgtyLSnENSmAOBRiSpUdzDS6fDWX3Z35g==}
 
-  zod-from-json-schema@0.5.6:
-    resolution: {integrity: sha512-U33AJ7ZWS6y9XNSzMWcdy8hRAvZmWhTtpYJu0SXPT5AArbc9nq2ur7Magzmn5RF9KBV4b3FP0nCpmqqlfXlR9w==}
-
   zod-to-json-schema@3.25.2:
     resolution: {integrity: sha512-O/PgfnpT1xKSDeQYSCfRI5Gy3hPf91mKVDuYLUHZJMiDFptvP41MSnWofm8dnCm0256ZNfZIM7DSzuSMAFnjHA==}
     peerDependencies:
@@ -32236,8 +32191,6 @@ snapshots:
       '@bufbuild/protobuf': 2.13.0
       '@grpc/grpc-js': 1.14.5
       express: 5.3.0(supports-color@10.2.2)
-
-  '@adobe/css-tools@4.4.4': {}
 
   '@adobe/css-tools@4.5.0': {}
 
@@ -33473,11 +33426,6 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
-  '@aws-sdk/types@3.974.2':
-    dependencies:
-      '@smithy/types': 4.16.1
-      tslib: 2.8.1
-
   '@aws-sdk/types@3.975.0':
     dependencies:
       '@smithy/types': 4.19.0
@@ -33514,10 +33462,6 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/abort-controller@2.1.2':
-    dependencies:
-      tslib: 2.8.1
-
   '@azure/abort-controller@2.2.0':
     dependencies:
       tslib: 2.8.1
@@ -33526,18 +33470,6 @@ snapshots:
     dependencies:
       '@azure/abort-controller': 2.2.0
       '@azure/core-util': 1.14.0(supports-color@10.2.2)
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@azure/core-client@1.10.1(supports-color@10.2.2)':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
-      '@azure/core-tracing': 1.3.1
-      '@azure/core-util': 1.13.1(supports-color@10.2.2)
-      '@azure/logger': 1.3.0(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -33587,21 +33519,9 @@ snapshots:
     transitivePeerDependencies:
       - supports-color
 
-  '@azure/core-tracing@1.3.1':
-    dependencies:
-      tslib: 2.8.1
-
   '@azure/core-tracing@1.4.0':
     dependencies:
       tslib: 2.8.1
-
-  '@azure/core-util@1.13.1(supports-color@10.2.2)':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
 
   '@azure/core-util@1.14.0(supports-color@10.2.2)':
     dependencies:
@@ -33615,22 +33535,6 @@ snapshots:
     dependencies:
       fast-xml-parser: 5.11.2
       tslib: 2.8.1
-
-  '@azure/identity@4.13.1(supports-color@10.2.2)':
-    dependencies:
-      '@azure/abort-controller': 2.1.2
-      '@azure/core-auth': 1.11.0(supports-color@10.2.2)
-      '@azure/core-client': 1.10.1(supports-color@10.2.2)
-      '@azure/core-rest-pipeline': 1.25.0(supports-color@10.2.2)
-      '@azure/core-tracing': 1.3.1
-      '@azure/core-util': 1.13.1(supports-color@10.2.2)
-      '@azure/logger': 1.3.0(supports-color@10.2.2)
-      '@azure/msal-browser': 5.17.1
-      '@azure/msal-node': 5.6.0
-      open: 10.2.0
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
 
   '@azure/identity@4.14.0(supports-color@10.2.2)':
     dependencies:
@@ -33674,13 +33578,6 @@ snapshots:
       '@azure/core-util': 1.14.0(supports-color@10.2.2)
       '@azure/keyvault-common': 2.1.0(supports-color@10.2.2)
       '@azure/logger': 1.4.0(supports-color@10.2.2)
-      tslib: 2.8.1
-    transitivePeerDependencies:
-      - supports-color
-
-  '@azure/logger@1.3.0(supports-color@10.2.2)':
-    dependencies:
-      '@typespec/ts-http-runtime': 0.3.9(supports-color@10.2.2)
       tslib: 2.8.1
     transitivePeerDependencies:
       - supports-color
@@ -39152,18 +39049,18 @@ snapshots:
   '@libsql/win32-x64-msvc@0.5.29':
     optional: true
 
-  '@livekit/agents-plugin-livekit@1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@types/node@22.19.15)':
+  '@livekit/agents-plugin-livekit@1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@types/node@22.19.15)':
     dependencies:
       '@huggingface/hub': 2.4.1
       '@huggingface/transformers': 4.2.0(@types/node@22.19.15)
-      '@livekit/agents': 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
+      '@livekit/agents': 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       onnxruntime-node: 1.24.3
     transitivePeerDependencies:
       - '@types/node'
 
-  '@livekit/agents-plugin-silero@1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@livekit/rtc-node@1.2.1)(bufferutil@4.1.0)':
+  '@livekit/agents-plugin-silero@1.9.4(@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7))(@livekit/rtc-node@1.2.1)(bufferutil@4.1.0)':
     dependencies:
-      '@livekit/agents': 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
+      '@livekit/agents': 1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)
       '@livekit/rtc-node': 1.2.1
       onnxruntime-node: 1.24.3
       ws: 8.22.0(bufferutil@4.1.0)
@@ -39171,7 +39068,7 @@ snapshots:
       - bufferutil
       - utf-8-validate
 
-  '@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.3.1)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)':
+  '@livekit/agents@1.9.4(@aws-sdk/credential-provider-node@3.972.88)(@livekit/rtc-node@1.2.1)(@modelcontextprotocol/client@2.4.0)(@smithy/hash-node@4.4.6)(@smithy/signature-v4@5.7.4)(@types/node@22.19.15)(bufferutil@4.1.0)(supports-color@10.2.2)(typescript@7.0.2)(zod@4.6.7)':
     dependencies:
       '@bufbuild/protobuf': 1.10.1
       '@livekit/av': 10.1.0
@@ -39214,7 +39111,7 @@ snapshots:
       zod: 4.6.7
       zod-to-json-schema: 3.25.2(zod@4.6.7)
     optionalDependencies:
-      '@modelcontextprotocol/client': 2.3.1
+      '@modelcontextprotocol/client': 2.4.0
     transitivePeerDependencies:
       - '@aws-sdk/credential-provider-node'
       - '@smithy/hash-node'
@@ -39480,7 +39377,7 @@ snapshots:
     dependencies:
       json-schema-to-zod: 2.8.1
       zod: 3.25.76
-      zod-from-json-schema: 0.5.6
+      zod-from-json-schema: 0.5.2
 
   '@mcp-ui/client@7.1.1(@cfworker/json-schema@4.1.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(supports-color@10.2.2)':
     dependencies:
@@ -39692,7 +39589,17 @@ snapshots:
       pkce-challenge: 5.0.1
       zod: 4.6.7
 
-  '@modelcontextprotocol/conformance@0.2.0-alpha.11(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
+  '@modelcontextprotocol/client@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
+      cross-spawn: 7.0.6
+      eventsource: 3.0.7
+      eventsource-parser: 3.1.1
+      jose: 6.2.12
+      pkce-challenge: 5.0.1
+      zod: 4.6.7
+
+  '@modelcontextprotocol/conformance@0.2.0-alpha.12(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)':
     dependencies:
       '@modelcontextprotocol/sdk': 1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@4.6.7)
       '@octokit/rest': 22.0.1
@@ -39710,6 +39617,10 @@ snapshots:
       - supports-color
 
   '@modelcontextprotocol/core@2.3.1':
+    dependencies:
+      zod: 4.6.7
+
+  '@modelcontextprotocol/core@2.4.0':
     dependencies:
       zod: 4.6.7
 
@@ -39731,14 +39642,14 @@ snapshots:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
-  '@modelcontextprotocol/ext-apps@2.0.3(@modelcontextprotocol/client@2.3.1)(@modelcontextprotocol/core@2.3.1)(@modelcontextprotocol/server@2.3.1)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)':
+  '@modelcontextprotocol/ext-apps@2.0.3(@modelcontextprotocol/client@2.4.0)(@modelcontextprotocol/core@2.4.0)(@modelcontextprotocol/server@2.4.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(zod@4.6.7)':
     dependencies:
-      '@modelcontextprotocol/client': 2.3.1
-      '@modelcontextprotocol/core': 2.3.1
+      '@modelcontextprotocol/client': 2.4.0
+      '@modelcontextprotocol/core': 2.4.0
       '@standard-schema/spec': 1.1.0
       zod: 4.6.7
     optionalDependencies:
-      '@modelcontextprotocol/server': 2.3.1
+      '@modelcontextprotocol/server': 2.4.0
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
 
@@ -39747,6 +39658,12 @@ snapshots:
       '@hono/node-server': 1.19.15(hono@4.13.13)
       '@modelcontextprotocol/server': 2.3.1
     optionalDependencies:
+      hono: 4.13.13
+
+  '@modelcontextprotocol/node@2.1.2(@modelcontextprotocol/server@2.4.0)':
+    dependencies:
+      '@hono/node-server': 1.19.15(hono@4.13.13)
+      '@modelcontextprotocol/server': 2.4.0
       hono: 4.13.13
 
   '@modelcontextprotocol/sdk@1.32.1(@cfworker/json-schema@4.1.1)(supports-color@10.2.2)(zod@3.25.76)':
@@ -39862,6 +39779,11 @@ snapshots:
   '@modelcontextprotocol/server@2.3.1':
     dependencies:
       '@modelcontextprotocol/core': 2.3.1
+      zod: 4.6.7
+
+  '@modelcontextprotocol/server@2.4.0':
+    dependencies:
+      '@modelcontextprotocol/core': 2.4.0
       zod: 4.6.7
 
   '@module-federation/error-codes@0.22.0': {}
@@ -41311,7 +41233,7 @@ snapshots:
     dependencies:
       '@opentelemetry/api': 1.9.1
       '@opentelemetry/api-logs': 0.221.0
-      import-in-the-middle: 3.3.3
+      import-in-the-middle: 3.5.2
       require-in-the-middle: 8.0.1(supports-color@10.2.2)
     transitivePeerDependencies:
       - supports-color
@@ -42988,14 +42910,6 @@ snapshots:
     optionalDependencies:
       rollup: 4.65.0
 
-  '@rollup/pluginutils@5.3.0(rollup@4.65.0)':
-    dependencies:
-      '@types/estree': 1.0.9
-      estree-walker: 2.0.2
-      picomatch: 4.0.7
-    optionalDependencies:
-      rollup: 4.65.0
-
   '@rollup/pluginutils@5.4.0(rollup@4.65.0)':
     dependencies:
       '@types/estree': 1.0.9
@@ -43468,10 +43382,6 @@ snapshots:
       '@smithy/types': 4.19.0
       tslib: 2.8.1
 
-  '@smithy/types@4.16.1':
-    dependencies:
-      tslib: 2.8.1
-
   '@smithy/types@4.19.0':
     dependencies:
       tslib: 2.8.1
@@ -43644,7 +43554,7 @@ snapshots:
       react: 19.3.1
       react-dom: 19.3.1(react@19.3.1)
       storybook: 10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1)
-      ts-dedent: 2.2.0
+      ts-dedent: 2.3.0
       unplugin: 2.3.11
     optionalDependencies:
       '@types/react': 19.3.0
@@ -43665,7 +43575,7 @@ snapshots:
   '@storybook/builder-vite@10.6.3(storybook@10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       storybook: 10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1)
-      ts-dedent: 2.2.0
+      ts-dedent: 2.3.0
       vite: 8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
 
   '@storybook/builder-vite@9.1.21(storybook@9.1.21(@testing-library/dom@10.4.2)(bufferutil@4.1.0)(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(prettier@3.9.5)(supports-color@10.2.2)(vite@8.3.5(@types/node@22.19.15)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.25.12)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
@@ -43704,7 +43614,7 @@ snapshots:
   '@storybook/react-vite@10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(rollup@4.65.0)(storybook@10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))':
     dependencies:
       '@joshwooding/vite-plugin-react-docgen-typescript': 0.7.0(patch_hash=b12da0e1afbb3227d182cd3f3a5812bae17b2b04fc5c8e4f4fd4c530a76ad4c4)(typescript@6.0.3)(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
-      '@rollup/pluginutils': 5.3.0(rollup@4.65.0)
+      '@rollup/pluginutils': 5.4.0(rollup@4.65.0)
       '@storybook/builder-vite': 10.6.3(storybook@10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
       '@storybook/react': 10.6.3(@types/react-dom@19.3.0(@types/react@19.3.0))(@types/react@19.3.0)(react-dom@19.3.1(react@19.3.1))(react@19.3.1)(storybook@10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1))(supports-color@10.2.2)(typescript@7.0.2)
       empathic: 2.1.0
@@ -43712,7 +43622,7 @@ snapshots:
       react: 19.3.1
       react-docgen: 8.0.2(supports-color@10.2.2)
       react-dom: 19.3.1(react@19.3.1)
-      resolve: 1.22.12
+      resolve: 1.22.13
       storybook: 10.6.2(@types/react@19.3.0)(bufferutil@4.1.0)(prettier@3.9.5)(react@19.3.1)
       tsconfig-paths: 4.2.0
       vite: 8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1)
@@ -44335,7 +44245,7 @@ snapshots:
 
   '@testing-library/jest-dom@6.9.1':
     dependencies:
-      '@adobe/css-tools': 4.4.4
+      '@adobe/css-tools': 4.5.0
       aria-query: 5.3.2
       css.escape: 1.5.1
       dom-accessibility-api: 0.6.3
@@ -48590,8 +48500,6 @@ snapshots:
 
   es-module-lexer@1.7.0: {}
 
-  es-module-lexer@2.3.0: {}
-
   es-module-lexer@2.3.2: {}
 
   es-module-lexer@3.0.4: {}
@@ -50510,12 +50418,6 @@ snapshots:
       acorn: 8.19.0
       acorn-import-attributes: 1.9.5(acorn@8.19.0)
       cjs-module-lexer: 2.2.1
-      module-details-from-path: 1.0.4
-
-  import-in-the-middle@3.3.3:
-    dependencies:
-      cjs-module-lexer: 2.2.1
-      es-module-lexer: 2.3.0
       module-details-from-path: 1.0.4
 
   import-in-the-middle@3.5.1:
@@ -55701,13 +55603,6 @@ snapshots:
 
   resolve.exports@2.0.4: {}
 
-  resolve@1.22.12:
-    dependencies:
-      es-errors: 1.3.0
-      is-core-module: '@socketregistry/is-core-module@1.0.11'
-      path-parse: '@socketregistry/path-parse@1.0.8'
-      supports-preserve-symlinks-flag: 1.0.0
-
   resolve@1.22.13:
     dependencies:
       es-errors: 1.3.0
@@ -57159,8 +57054,6 @@ snapshots:
   ts-blank-space@0.6.2:
     dependencies:
       typescript: 5.9.3
-
-  ts-dedent@2.2.0: {}
 
   ts-dedent@2.3.0: {}
 
@@ -58700,10 +58593,6 @@ snapshots:
       zod: 3.25.76
 
   zod-from-json-schema@0.5.2:
-    dependencies:
-      zod: 4.6.7
-
-  zod-from-json-schema@0.5.6:
     dependencies:
       zod: 4.6.7
 

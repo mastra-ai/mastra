@@ -60,6 +60,7 @@ describe('platform entry (src/mastra/index.ts)', () => {
       'MASTRA_GITLAB_CONNECTION_ID',
       'LINEAR_CLIENT_ID',
       'LINEAR_CLIENT_SECRET',
+      'JIRA_API_BASE_URL',
       'INCIDENT_IO_API_KEY',
       'SLACK_APP_SIGNING_SECRET',
       'MASTRACODE_DISPATCH_MAX_IN_FLIGHT',
@@ -357,6 +358,21 @@ describe('platform entry (src/mastra/index.ts)', () => {
       expect(factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira')?.constructor.name).toBe(
         'JiraIntegration',
       );
+    });
+
+    it('forwards the optional Jira API base URL to the direct integration', { timeout: 60_000 }, async () => {
+      vi.resetModules();
+      vi.stubEnv('MASTRA_PLATFORM_SECRET_KEY', '');
+      vi.stubEnv('JIRA_BASE_URL', 'https://acme.atlassian.net');
+      vi.stubEnv('JIRA_API_BASE_URL', 'https://api.atlassian.com/ex/jira/cloud-123');
+      vi.stubEnv('JIRA_EMAIL', 'ops@acme.test');
+      vi.stubEnv('JIRA_API_TOKEN', 'jira-token');
+      await import('./index.js');
+
+      const jira = factoryConfigs[0]?.integrations?.find(integration => integration.id === 'jira') as
+        | { api: { baseUrl: string } }
+        | undefined;
+      expect(jira?.api.baseUrl).toBe('https://api.atlassian.com/ex/jira/cloud-123');
     });
 
     it('does not register Platform Jira without Platform credentials', { timeout: 60_000 }, async () => {

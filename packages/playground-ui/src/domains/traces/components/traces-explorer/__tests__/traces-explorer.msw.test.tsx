@@ -295,6 +295,17 @@ describe('TracesExplorer', () => {
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
       expect(screen.getByText('Book a table for two')).toBeTruthy();
     });
+
+    it('has no thread message-count column', async () => {
+      localStorage.clear();
+      setExplorerHandlers();
+
+      renderExplorer();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      expect(screen.getByText('Status')).toBeTruthy();
+      expect(screen.queryByText('Messages')).toBeNull();
+    });
   });
 
   describe('when the list request fails', () => {

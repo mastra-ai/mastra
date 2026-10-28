@@ -84,6 +84,7 @@ import type {
   BatchCreateSpansArgs,
   BatchDeleteTracesArgs,
   BatchUpdateSpansArgs,
+  BatchUpdateUnendedSpansResponse,
   CreateSpanArgs,
   GetBranchArgs,
   GetBranchResponse,
@@ -538,6 +539,18 @@ export class ObservabilityStorage extends StorageDomain {
       text: 'This storage provider does not support batch updating spans',
     });
   }
+
+  /**
+   * Optional. Updates multiple spans, but only rows that already exist and haven't
+   * ended (`endedAt` is null). Never inserts. Returns the spans whose rows changed,
+   * so callers can tell which updates didn't apply.
+   *
+   * Lets an exporter end a span that a different process started (for example, a
+   * durable agent recovering after a crash) without reading the row first, while
+   * keeping ended spans immutable. Stores that don't implement it leave it
+   * undefined, so callers must check that it exists before calling it.
+   */
+  batchUpdateUnendedSpans?(args: BatchUpdateSpansArgs): Promise<BatchUpdateUnendedSpansResponse>;
 
   /**
    * Deletes multiple traces, all their associated spans, and any trace-linked signal

@@ -76,8 +76,6 @@ function makeThread(
     outputPreview: null,
     errorPreview: null,
     traceCount: 2,
-    model: null,
-    provider: null,
     ...overrides,
   };
 }
@@ -92,6 +90,7 @@ export const threadRowsPage: QueryTraceThreadsResult = {
       lastTraceId: 'trace-2b',
       entityId: 'support-agent',
       entityName: 'Support Agent',
+      traceCount: 7,
     }),
   ],
   page: { next: null },

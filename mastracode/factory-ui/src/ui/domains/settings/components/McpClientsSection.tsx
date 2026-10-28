@@ -8,7 +8,7 @@ import { useServerFeatures } from '../../../../hooks/useServerFeatures';
 
 import { SettingsSubsection } from './SettingsSubsection';
 
-/** The Factory's MCP endpoint. The web app calls the API same-origin (`baseUrl` is `''`). */
+// Same-origin API: baseUrl is ''.
 export function factoryMcpUrl(baseUrl: string, factoryId: string): string {
   return `${baseUrl || window.location.origin}/web/factory/projects/${encodeURIComponent(factoryId)}/mcp`;
 }
@@ -21,7 +21,6 @@ function ConnectStep({ children }: { children: string }) {
   );
 }
 
-/** Shown only when the server mounts the MCP endpoint (auth plus an OAuth server for MCP clients). */
 export function McpClientsSection() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const { baseUrl } = useApiConfig();
@@ -37,12 +36,18 @@ export function McpClientsSection() {
       description="Use this Factory from Claude, ChatGPT and other MCP clients. They sign in as you."
     >
       <SettingsContainer>
-        <SettingsRow label="MCP URL">
-          <div className="flex min-w-0 items-center gap-1">
-            <Txt tone="muted" as="span" variant="caption" font="mono" className="truncate">
+        <SettingsRow label="MCP URL" className="group/mcp-url">
+          <div className="relative min-w-0">
+            <Txt tone="muted" as="span" variant="caption" font="mono" className="block truncate">
               {url}
             </Txt>
-            <CopyButton content={url} size="icon-sm" variant="ghost" tooltip="Copy MCP URL" />
+            <CopyButton
+              content={url}
+              size="icon-sm"
+              variant="default"
+              tooltip="Copy MCP URL"
+              className="absolute top-1/2 right-0 -translate-y-1/2 opacity-0 group-focus-within/mcp-url:opacity-100 group-hover/mcp-url:opacity-100 [@media(hover:none)]:opacity-100"
+            />
           </div>
         </SettingsRow>
         <SettingsRow label="Claude">

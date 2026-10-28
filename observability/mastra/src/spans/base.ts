@@ -169,6 +169,20 @@ export function getExternalParentId(options: CreateSpanOptions<any>): string | u
   return parent.id;
 }
 
+/**
+ * Vercel AI Gateway reports which provider served a step, and any provider
+ * attempts that failed first, only in `providerMetadata.gateway.routing`.
+ * Read it defensively so a throwing getter never skips the strip below.
+ */
+function readGatewayRouting(providerMetadata: unknown): unknown {
+  try {
+    const gateway = isPlainRecord(providerMetadata) ? providerMetadata.gateway : undefined;
+    return isPlainRecord(gateway) ? gateway.routing : undefined;
+  } catch {
+    return undefined;
+  }
+}
+
 export abstract class BaseSpan<TType extends SpanType = any> implements Span<TType> {
   public abstract id: string;
   public abstract traceId: string;
@@ -368,9 +382,13 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     }
 
     try {
-      const prepared = { ...value };
+      const prepared: Record<string, unknown> = { ...value };
+      const gatewayRouting = readGatewayRouting(prepared.providerMetadata);
       delete prepared.providerMetadata;
       delete prepared.experimental_providerMetadata;
+      if (gatewayRouting !== undefined) {
+        prepared.providerMetadata = { gateway: { routing: gatewayRouting } };
+      }
       return prepared as T;
     } catch {
       return value;

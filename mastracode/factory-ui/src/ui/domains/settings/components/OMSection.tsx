@@ -102,17 +102,21 @@ function TokenThresholdInput({ value, onCommit }: { value: number; onCommit: (va
 export function OMSection({
   sessionId,
   factoryId,
+  threadId,
+  resourceId,
   models,
 }: {
   sessionId?: string;
   factoryId?: string;
+  threadId?: string;
+  resourceId?: string;
   models: AvailableModelOption[];
 }) {
-  const omQuery = useOMQuery(sessionId, factoryId);
-  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId);
-  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId);
-  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId);
-  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId);
+  const omQuery = useOMQuery(sessionId, factoryId, threadId, resourceId);
+  const observerMutation = useUpdateOMModel(sessionId, 'observer', factoryId, threadId, resourceId);
+  const reflectorMutation = useUpdateOMModel(sessionId, 'reflector', factoryId, threadId, resourceId);
+  const thresholdsMutation = useUpdateOMThresholds(sessionId, factoryId, threadId, resourceId);
+  const attachmentsMutation = useUpdateOMObserveAttachments(sessionId, factoryId, threadId, resourceId);
 
   const busy =
     observerMutation.isPending ||
