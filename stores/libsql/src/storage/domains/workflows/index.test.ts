@@ -1,10 +1,8 @@
 import { createSampleSuspendedSnapshotWithThread } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
-import { TABLE_WORKFLOW_SNAPSHOT, TABLE_SCHEMAS } from '@mastra/core/storage';
 import type { WorkflowRunState } from '@mastra/core/workflows';
 import { beforeEach, describe, expect, it } from 'vitest';
 
-import { LibSQLDB } from '../../db';
 import { WorkflowsLibSQL } from './index';
 
 describe('WorkflowsLibSQL — snapshot serialization', () => {
@@ -12,12 +10,8 @@ describe('WorkflowsLibSQL — snapshot serialization', () => {
 
   beforeEach(async () => {
     const client = createClient({ url: ':memory:' });
-    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await db.createTable({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-    });
     workflows = new WorkflowsLibSQL({ client });
+    await workflows.init();
   });
 
   // Regression test: the default workflow executor builds the success snapshot
@@ -89,12 +83,8 @@ describe('WorkflowsLibSQL — threadId filter pushdown', () => {
 
   beforeEach(async () => {
     const client = createClient({ url: ':memory:' });
-    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await db.createTable({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-    });
     workflows = new WorkflowsLibSQL({ client });
+    await workflows.init();
 
     const agenticA = createSampleSuspendedSnapshotWithThread({ threadId: 'thread-a', layout: 'agentic-loop' });
     agenticRunIdA = agenticA.runId;
@@ -154,12 +144,8 @@ describe('WorkflowsLibSQL — updateWorkflowState', () => {
 
   beforeEach(async () => {
     const client = createClient({ url: ':memory:' });
-    const db = new LibSQLDB({ client, maxRetries: 1, initialBackoffMs: 10 });
-    await db.createTable({
-      tableName: TABLE_WORKFLOW_SNAPSHOT,
-      schema: TABLE_SCHEMAS[TABLE_WORKFLOW_SNAPSHOT],
-    });
     workflows = new WorkflowsLibSQL({ client });
+    await workflows.init();
   });
 
   it('advances updatedAt when the snapshot state changes', async () => {

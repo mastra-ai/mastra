@@ -173,12 +173,16 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * state over: from `state`, or from `stateBase` with `statePatch` applied, or from `{}`. Earlier
    * state entries are kept, so a nested run built on an earlier version of this run's state still
    * reads it. Writes the header, creating the run if it isn't stored. Returns the run's `lastSeq`.
+   *
+   * `threadId` is the whole run's thread (`getSnapshotMemoryInfo`), passed on every write.
+   * Stores that keep it next to the header filter `listWorkflowRuns` by it without reading entries.
    * @experimental
    */
   async writeWorkflowRunCheckpoint(_args: {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
@@ -194,12 +198,15 @@ export abstract class WorkflowsStorage extends StorageDomain {
    * when given (at most one of them). Writes the header, creating the run if it isn't stored.
    * With `startStateSeq` (a resumed run's first append), records it as the run's `startStateSeq`.
    * Returns the run's `lastSeq`.
+   *
+   * `threadId` is the whole run's thread, as for `writeWorkflowRunCheckpoint`, not only the given steps'.
    * @experimental
    */
   async appendWorkflowRunEntries(_args: {
     workflowName: string;
     runId: string;
     resourceId?: string;
+    threadId?: string;
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;

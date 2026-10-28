@@ -78,7 +78,19 @@ export type StoredWorkflowRun = StoredWorkflowRunHeader & {
   summarizedStepIds: string[];
 };
 
-const SUMMARY_FIELDS = ['status', 'startedAt', 'endedAt', 'suspendedAt', 'resumedAt', 'metadata'] as const;
+/**
+ * The fields of a successful step result that its summary keeps. Exported for adapters that
+ * summarize in their query rather than with `summarizeStepResult`.
+ * @experimental
+ */
+export const STEP_RESULT_SUMMARY_FIELDS = [
+  'status',
+  'startedAt',
+  'endedAt',
+  'suspendedAt',
+  'resumedAt',
+  'metadata',
+] as const satisfies readonly (keyof StepResultSummary)[];
 
 /**
  * The summary of a successful step result. Shared so every adapter summarizes the same way.
@@ -86,7 +98,7 @@ const SUMMARY_FIELDS = ['status', 'startedAt', 'endedAt', 'suspendedAt', 'resume
  */
 export function summarizeStepResult(result: StepResultSummary): StepResultSummary {
   const summary: Record<string, unknown> = {};
-  for (const field of SUMMARY_FIELDS) {
+  for (const field of STEP_RESULT_SUMMARY_FIELDS) {
     if (result[field] !== undefined) summary[field] = result[field];
   }
   return summary as StepResultSummary;
