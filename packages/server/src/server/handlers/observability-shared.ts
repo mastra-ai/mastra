@@ -49,22 +49,10 @@ const SPAN_QUERY_CONTEXT_FIELDS = new Set([
 const OBSERVABILITY_TRACE_QUERY_ROOT_DURATION_STORAGE_FEATURE = 'trace-query-root-duration';
 const OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE = 'trace-query-context-ids';
 const TRACE_QUERY_CONTEXT_ID_FIELDS = new Set(['runId', 'sessionId', 'userId', 'organizationId']);
-// Timing fields, keyed to the storage features that add their predicates and their sort.
-const TRACE_QUERY_TIMING_FIELDS = {
-  timeToFirstChunkMs: {
-    label: 'Time to first chunk',
-    feature: 'trace-query-time-to-first-chunk',
-    sortFeature: 'trace-query-time-to-first-chunk-sort',
-  },
-  timeToFirstTokenMs: {
-    label: 'Time to first token',
-    feature: 'trace-query-time-to-first-token',
-    sortFeature: 'trace-query-time-to-first-token-sort',
-  },
-} as const;
-type TraceQueryTimingField = keyof typeof TRACE_QUERY_TIMING_FIELDS;
-const TRACE_QUERY_TIMING_FIELD_NAMES = Object.keys(TRACE_QUERY_TIMING_FIELDS) as TraceQueryTimingField[];
-const timingField = (field: string) => TRACE_QUERY_TIMING_FIELDS[field as TraceQueryTimingField];
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE = 'trace-query-time-to-first-chunk';
+const TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS = new Set(['timeToFirstChunkMs']);
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_STORAGE_FEATURE = 'trace-query-time-to-first-token';
+const TRACE_QUERY_TIME_TO_FIRST_TOKEN_FIELDS = new Set(['timeToFirstTokenMs']);
 const OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE = 'trace-query-root-span-fields';
 const OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE = 'trace-query-root-entity-id';
 // Trace-scope fields read from the root span, keyed by the storage feature that added their SQL.
@@ -73,6 +61,8 @@ const TRACE_QUERY_ROOT_SPAN_FIELD_FEATURES = new Map([
   ['spanType', OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE],
   ['entityId', OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE],
 ]);
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE = 'trace-query-time-to-first-chunk-sort';
+const OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_SORT_STORAGE_FEATURE = 'trace-query-time-to-first-token-sort';
 const OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE = 'trace-query-discovery';
 const OBSERVABILITY_THREAD_QUERY_STORAGE_FEATURE = 'thread-query';
 const OBSERVABILITY_TRACE_QUERY_TENANT_SCOPE_STORAGE_FEATURE = 'trace-query-tenant-scope';
@@ -287,41 +277,50 @@ export function assertObservabilityTraceQueryContextIdsSupported(
   });
 }
 
-/** Whether the store can filter on `field`; true for any field that is not a timing field. */
-export function supportsObservabilityTraceQueryTimingField(observabilityStore: ObservabilityStorage, field: string) {
-  const timing = timingField(field);
-  return !timing || getFeatures(observabilityStore)?.includes(timing.feature) === true;
+export function supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE) === true
+  );
 }
 
 /** Covers trace, thread and span query predicates, including `spans` and `traces` relations. */
-export function assertObservabilityTraceQueryTimingFieldsSupported(
-  observabilityStore: ObservabilityStorage,
-  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
-  fields: readonly TraceQueryTimingField[] = TRACE_QUERY_TIMING_FIELD_NAMES,
-) {
-  for (const field of fields) {
-    if (
-      !usesField(predicate, new Set([field])) ||
-      supportsObservabilityTraceQueryTimingField(observabilityStore, field)
-    )
-      continue;
-    throw new HTTPException(501, {
-      message: `${TRACE_QUERY_TIMING_FIELDS[field].label} predicates are not supported by the configured observability store`,
-    });
-  }
-}
-
-/** @deprecated Use `supportsObservabilityTraceQueryTimingField(observabilityStore, 'timeToFirstChunkMs')`. */
-export function supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore: ObservabilityStorage) {
-  return supportsObservabilityTraceQueryTimingField(observabilityStore, 'timeToFirstChunkMs');
-}
-
-/** @deprecated Use `assertObservabilityTraceQueryTimingFieldsSupported`. */
 export function assertObservabilityTraceQueryTimeToFirstChunkSupported(
   observabilityStore: ObservabilityStorage,
   predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
 ) {
-  assertObservabilityTraceQueryTimingFieldsSupported(observabilityStore, predicate, ['timeToFirstChunkMs']);
+  if (
+    !usesField(predicate, TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS) ||
+    supportsObservabilityTraceQueryTimeToFirstChunk(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Time to first chunk predicates are not supported by the configured observability store',
+  });
+}
+
+export function supportsObservabilityTraceQueryTimeToFirstToken(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_STORAGE_FEATURE) === true
+  );
+}
+
+/** Covers trace, thread and span query predicates, including `spans` and `traces` relations. */
+export function assertObservabilityTraceQueryTimeToFirstTokenSupported(
+  observabilityStore: ObservabilityStorage,
+  predicate: TrustedTraceQueryPredicate | TrustedThreadPredicate | undefined,
+) {
+  if (
+    !usesField(predicate, TRACE_QUERY_TIME_TO_FIRST_TOKEN_FIELDS) ||
+    supportsObservabilityTraceQueryTimeToFirstToken(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Time to first token predicates are not supported by the configured observability store',
+  });
 }
 
 function rootSpanFieldIssues(
@@ -393,35 +392,52 @@ export function assertObservabilityTraceQueryRootSpanValuesSupported(
   throw new coreStorage.TraceQueryValidationError([rootSpanFieldIssue(['path'], plan.path)]);
 }
 
-/** Whether the store can sort by `field`; true for any field that is not a timing field. */
-export function supportsObservabilityTraceQueryTimingSort(observabilityStore: ObservabilityStorage, field: string) {
-  const timing = timingField(field);
-  return !timing || getFeatures(observabilityStore)?.includes(timing.sortFeature) === true;
+export function supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE) ===
+    true
+  );
 }
 
 /** Covers the sort of trace and span queries. */
-export function assertObservabilityTraceQueryTimingSortSupported(
-  observabilityStore: ObservabilityStorage,
-  orderBy: { field: string },
-) {
-  if (supportsObservabilityTraceQueryTimingSort(observabilityStore, orderBy.field)) return;
-
-  throw new HTTPException(501, {
-    message: `Sorting by ${timingField(orderBy.field).label.toLowerCase()} is not supported by the configured observability store`,
-  });
-}
-
-/** @deprecated Use `supportsObservabilityTraceQueryTimingSort(observabilityStore, 'timeToFirstChunkMs')`. */
-export function supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore: ObservabilityStorage) {
-  return supportsObservabilityTraceQueryTimingSort(observabilityStore, 'timeToFirstChunkMs');
-}
-
-/** @deprecated Use `assertObservabilityTraceQueryTimingSortSupported`. */
 export function assertObservabilityTraceQueryTimeToFirstChunkSortSupported(
   observabilityStore: ObservabilityStorage,
   orderBy: { field: string },
 ) {
-  assertObservabilityTraceQueryTimingSortSupported(observabilityStore, orderBy);
+  if (
+    !TRACE_QUERY_TIME_TO_FIRST_CHUNK_FIELDS.has(orderBy.field) ||
+    supportsObservabilityTraceQueryTimeToFirstChunkSort(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Sorting by time to first chunk is not supported by the configured observability store',
+  });
+}
+
+export function supportsObservabilityTraceQueryTimeToFirstTokenSort(observabilityStore: ObservabilityStorage) {
+  return (
+    getFeatures(observabilityStore)?.includes(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_SORT_STORAGE_FEATURE) ===
+    true
+  );
+}
+
+/** Covers the sort of trace and span queries. */
+export function assertObservabilityTraceQueryTimeToFirstTokenSortSupported(
+  observabilityStore: ObservabilityStorage,
+  orderBy: { field: string },
+) {
+  if (
+    !TRACE_QUERY_TIME_TO_FIRST_TOKEN_FIELDS.has(orderBy.field) ||
+    supportsObservabilityTraceQueryTimeToFirstTokenSort(observabilityStore)
+  ) {
+    return;
+  }
+
+  throw new HTTPException(501, {
+    message: 'Sorting by time to first token is not supported by the configured observability store',
+  });
 }
 
 export function assertObservabilityTraceQueryDiscoverySupported(observabilityStore: ObservabilityStorage) {
@@ -619,17 +635,19 @@ export function getObservabilityStorageCapabilities(
     traceQueryContextIds:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_CONTEXT_IDS_STORAGE_FEATURE),
     traceQueryTimeToFirstChunk:
-      (traceQuery || threadQuery || spanQuery) && declares(TRACE_QUERY_TIMING_FIELDS.timeToFirstChunkMs.feature),
+      (traceQuery || threadQuery || spanQuery) &&
+      declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_STORAGE_FEATURE),
     traceQueryRootSpanFields:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_SPAN_FIELDS_STORAGE_FEATURE),
     traceQueryRootEntityId:
       (traceQuery || threadQuery) && declares(OBSERVABILITY_TRACE_QUERY_ROOT_ENTITY_ID_STORAGE_FEATURE),
     traceQueryTimeToFirstChunkSort:
-      (traceQuery || spanQuery) && declares(TRACE_QUERY_TIMING_FIELDS.timeToFirstChunkMs.sortFeature),
+      (traceQuery || spanQuery) && declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_CHUNK_SORT_STORAGE_FEATURE),
     traceQueryTimeToFirstToken:
-      (traceQuery || threadQuery || spanQuery) && declares(TRACE_QUERY_TIMING_FIELDS.timeToFirstTokenMs.feature),
+      (traceQuery || threadQuery || spanQuery) &&
+      declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_STORAGE_FEATURE),
     traceQueryTimeToFirstTokenSort:
-      (traceQuery || spanQuery) && declares(TRACE_QUERY_TIMING_FIELDS.timeToFirstTokenMs.sortFeature),
+      (traceQuery || spanQuery) && declares(OBSERVABILITY_TRACE_QUERY_TIME_TO_FIRST_TOKEN_SORT_STORAGE_FEATURE),
     traceQueryDiscovery:
       newApiCore && supportsTraceQueryDiscoveryCore() && declares(OBSERVABILITY_TRACE_QUERY_DISCOVERY_STORAGE_FEATURE),
     traceQueryTenantScope:

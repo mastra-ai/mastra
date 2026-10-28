@@ -1,15 +1,8 @@
 import type { Mastra } from '@mastra/core/mastra';
-import type { MastraCompositeStore, ObservabilityStorage, TrustedTraceQueryPredicate } from '@mastra/core/storage';
+import type { MastraCompositeStore } from '@mastra/core/storage';
 import { describe, it, expect, vi } from 'vitest';
 import { HTTPException } from '../http-exception';
-import {
-  assertObservabilityTraceQueryTimeToFirstChunkSortSupported,
-  assertObservabilityTraceQueryTimeToFirstChunkSupported,
-  getObservabilityStore,
-  getScoresStore,
-  supportsObservabilityTraceQueryTimeToFirstChunk,
-  supportsObservabilityTraceQueryTimeToFirstChunkSort,
-} from './observability-shared';
+import { getObservabilityStore, getScoresStore } from './observability-shared';
 
 const createMockMastra = (storage?: Partial<MastraCompositeStore>): Mastra =>
   ({
@@ -73,38 +66,5 @@ describe('getScoresStore', () => {
     const error = await getScoresStore(mastra).catch(e => e);
     expect(error).toBeInstanceOf(HTTPException);
     expect(error.status).toBe(500);
-  });
-});
-
-describe('deprecated time to first chunk helpers', () => {
-  const store = (...features: string[]) => ({ getFeatures: () => features }) as unknown as ObservabilityStorage;
-  const where = (field: string) =>
-    ({ type: 'comparison', field, operator: 'gt', value: 100 }) as unknown as TrustedTraceQueryPredicate;
-
-  it('still gate time to first chunk predicates and sort on the store features', () => {
-    expect(supportsObservabilityTraceQueryTimeToFirstChunk(store('trace-query-time-to-first-chunk'))).toBe(true);
-    expect(supportsObservabilityTraceQueryTimeToFirstChunk(store())).toBe(false);
-    expect(supportsObservabilityTraceQueryTimeToFirstChunkSort(store('trace-query-time-to-first-chunk-sort'))).toBe(
-      true,
-    );
-    expect(supportsObservabilityTraceQueryTimeToFirstChunkSort(store())).toBe(false);
-
-    expect(() => assertObservabilityTraceQueryTimeToFirstChunkSupported(store(), where('timeToFirstChunkMs'))).toThrow(
-      HTTPException,
-    );
-    expect(() =>
-      assertObservabilityTraceQueryTimeToFirstChunkSupported(
-        store('trace-query-time-to-first-chunk'),
-        where('timeToFirstChunkMs'),
-      ),
-    ).not.toThrow();
-    expect(() =>
-      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(store(), { field: 'timeToFirstChunkMs' }),
-    ).toThrow(HTTPException);
-    expect(() =>
-      assertObservabilityTraceQueryTimeToFirstChunkSortSupported(store('trace-query-time-to-first-chunk-sort'), {
-        field: 'timeToFirstChunkMs',
-      }),
-    ).not.toThrow();
   });
 });
