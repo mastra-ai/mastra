@@ -1,4 +1,4 @@
-import type { MastraDBMessage } from '@mastra/client-js';
+import type { AgentControllerEvent, MastraDBMessage } from '@mastra/client-js';
 import { screen, waitFor, within } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
@@ -13,11 +13,9 @@ import { ChatSessionContext } from '../../context/ChatSessionContext';
 import { ChatConnectionContext } from '../../context/ChatConnectionContext';
 import { ChatModelsProvider } from '../../context/ChatModelsProvider';
 import { ChatTranscriptContext } from '../../context/ChatTranscriptContext';
-import { createInitialTranscript, initialTranscript, transcriptReducer } from '../../services/transcript';
+import { useAgentControllerTranscript } from '../../hooks/useAgentControllerTranscript';
 import { AGENT_CONTROLLER_ID } from '../../services/constants';
 import { TranscriptEntries } from '../Transcript';
-
-type LiveEvent = Extract<Parameters<typeof transcriptReducer>[1], { type: 'event' }>['event'];
 
 const SIGN_IN_REJECTED = 'Anthropic rejected the stored sign-in.';
 
@@ -49,12 +47,16 @@ function ErrorSession({
   boundThreadId = 'thread-1',
 }: {
   messages: MastraDBMessage[];
-  liveEvent?: LiveEvent;
+  liveEvent?: AgentControllerEvent;
   boundThreadId?: string;
 }) {
-  const transcript = liveEvent
-    ? { ...transcriptReducer(initialTranscript, { type: 'event', event: liveEvent }), threadId: 'thread-1' }
-    : createInitialTranscript({ messages, threadId: 'thread-1' });
+  const { transcript, onEvent, localUser, failLocalUser, clearPending, pushNotice } = useAgentControllerTranscript({
+    initialThreadId: 'thread-1',
+    initialMessages: messages,
+  });
+  useEffect(() => {
+    if (liveEvent) onEvent(liveEvent);
+  }, [liveEvent, onEvent]);
   const session = (
     <ChatSessionContext.Provider
       value={{
@@ -92,12 +94,12 @@ function ErrorSession({
             initializing: false,
             historyInitializing: false,
             initialHistoryReady: true,
-            localUser: () => 'local-continue',
-            failLocalUser: () => {},
+            localUser,
+            failLocalUser,
             reset: () => {},
             resolvePrompt: () => {},
-            clearPending: () => {},
-            pushNotice: () => {},
+            clearPending,
+            pushNotice,
             loadMore: { hasMore: false, isLoading: false },
           }}
         >
@@ -309,6 +311,29 @@ describe('chat run errors', () => {
     await user.click(screen.getByRole('button', { name: 'Continue' }));
 
     await waitFor(() => expect(sentMessages).toMatchObject([{ message: 'Continue from where you stopped.' }]));
+  });
+
+  it.each([
+    { source: 'saved reply', messages: [failedReply('Request timed out.')] },
+    {
+      source: 'live error event',
+      messages: [],
+      liveEvent: { type: 'error', error: { name: 'AI_APICallError', message: 'Request timed out.' } } as const,
+    },
+  ])('offers Continue again on a $source when sending it fails', async ({ messages, liveEvent }) => {
+    server.use(
+      http.post(`${TEST_BASE_URL}/api/agent-controller/${AGENT_CONTROLLER_ID}/sessions/:sessionId/messages`, () =>
+        HttpResponse.json({ error: 'Session is busy' }, { status: 409 }),
+      ),
+    );
+    const user = userEvent.setup();
+    renderWithProviders(<ErrorSession messages={messages} liveEvent={liveEvent} />);
+
+    await user.click(screen.getByRole('button', { name: 'Continue' }));
+
+    expect(await screen.findByText(/Session is busy/)).toBeVisible();
+    expect(screen.queryByText('Continue from where you stopped.')).not.toBeInTheDocument();
+    await waitFor(() => expect(screen.getByRole('button', { name: 'Continue' })).toBeEnabled());
   });
 
   it.each([

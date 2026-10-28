@@ -22,7 +22,9 @@ export function ContinueRunAction({ entryId }: { entryId: string }) {
   });
   // The server can rebind before a switch's response lands, so the acknowledged binding is unknown until then.
   const switchingThread = useIsMutating({ mutationKey: switchThreadMutationKey(AGENT_CONTROLLER_ID, sessionId) }) > 0;
-  const latestFailure = transcript.transcript.entries.at(-1)?.id === entryId;
+  const latestFailure =
+    transcript.transcript.entries.findLast(entry => entry.kind !== 'notice' || entry.error !== undefined)?.id ===
+    entryId;
   // A message goes to the bound thread, which lags the displayed one while a thread switch is in flight.
   const displayedThreadIsBound = boundThreadId !== undefined && transcript.transcript.threadId === boundThreadId;
   if (!sessionEnabled || !latestFailure || !displayedThreadIsBound) return null;
