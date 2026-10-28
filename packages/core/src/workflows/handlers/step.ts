@@ -15,10 +15,16 @@ import type { ObservabilityContext, Span } from '../../observability';
 import { executeWithContext } from '../../observability/utils';
 import { ToolStream } from '../../tools/stream';
 import type { DynamicArgument } from '../../types';
-import { PARENT_STATE_SYMBOL, PUBSUB_SYMBOL, STREAM_FORMAT_SYMBOL, WORKFLOW_CANCELLED_SYMBOL } from '../constants';
+import {
+  HAND_BACK_STATE_SYMBOL,
+  PARENT_STATE_SYMBOL,
+  PUBSUB_SYMBOL,
+  STREAM_FORMAT_SYMBOL,
+  WORKFLOW_CANCELLED_SYMBOL,
+} from '../constants';
 import type { DefaultExecutionEngine } from '../default';
 import { buildStepResultAccessors } from '../run-journal';
-import type { ParentStateLink, RunJournal } from '../run-journal';
+import type { ParentStateLink } from '../run-journal';
 import type { Step, SuspendOptions } from '../step';
 import type {
   ExecutionContext,
@@ -71,20 +77,6 @@ export interface ExecuteStepParams extends ObservabilityContext {
   entryDescription?: string;
   /** Authored graph entry metadata to attach to the step span (e.g. mapping steps) */
   entryMetadata?: Record<string, any>;
-}
-
-/**
- * Inside a parallel, branch or foreach block, a sibling can change the parent's stored state while
- * the nested run is paused, so the nested run copies its state when it pauses. In exchange it can
- * start from a stored state its siblings have already changed: nothing is stored over it while the
- * block runs.
- */
-function parentStateLink(journal: RunJournal, executionContext: ExecutionContext): ParentStateLink {
-  const inBlock = executionContext.executionPath.length > 1 || executionContext.foreachIndex !== undefined;
-  return {
-    inheritableState: state => journal.inheritableState(state, { exact: !inBlock }),
-    copyStateOnPause: inBlock,
-  };
 }
 
 export async function executeStep(
@@ -375,6 +367,7 @@ export async function executeStep(
         suspendedPaths: Record<string, number[]>;
         resumeLabels: Record<string, { stepId: string; foreachIndex?: number }>;
         stateUpdate: any;
+        stateBase?: Record<string, unknown>;
         requestContextUpdate: Record<string, any> | null;
       } = {
         suspendedPaths: {},
@@ -398,17 +391,11 @@ export async function executeStep(
         const workflowsStore = await engine.mastra.getStorage()?.getStore('workflows');
         // The nested run has this run's version, which is 2 when this run has a journal.
         if (journal) {
-          const stored = await workflowsStore?.loadWorkflowRunHeader({
-            workflowName: step.id,
-            runId: persistedNestedRunId,
-          });
+          const nestedRun = { workflowName: step.id, runId: persistedNestedRunId };
+          const stored = await workflowsStore?.loadWorkflowRunHeader(nestedRun);
           if (stored?.header.status === 'success') {
             // The header alone has no state; read it only once the run is known to be finished.
-            const run = await workflowsStore?.loadWorkflowRun({
-              workflowName: step.id,
-              runId: persistedNestedRunId,
-              successfulSteps: 'summary',
-            });
+            const run = await workflowsStore?.loadWorkflowRun({ ...nestedRun, successfulSteps: 'summary' });
             completedNestedOutput = { found: true, value: stored.header.result, state: run?.state };
           }
         } else {
@@ -446,6 +433,19 @@ export async function executeStep(
         };
       }
 
+      const setState = async (state: any, base?: Record<string, unknown>) => {
+        const { stateData, validationError: stateValidationError } = await validateStepStateData({
+          stateData: state,
+          step,
+          validateInputs: engine.options?.validateInputs ?? true,
+        });
+        if (stateValidationError) {
+          throw stateValidationError;
+        }
+        contextMutations.stateUpdate = stateData;
+        contextMutations.stateBase = base;
+      };
+
       const stepParams = {
         runId: nestedRunId ?? runId,
         resourceId,
@@ -458,18 +458,7 @@ export async function executeStep(
         actor,
         inputData,
         state: executionContext.state,
-        setState: async (state: any) => {
-          const { stateData, validationError: stateValidationError } = await validateStepStateData({
-            stateData: state,
-            step,
-            validateInputs: engine.options?.validateInputs ?? true,
-          });
-          if (stateValidationError) {
-            throw stateValidationError;
-          }
-          // executionContext.state = stateData;
-          contextMutations.stateUpdate = stateData;
-        },
+        setState: (state: any) => setState(state),
         retryCount,
         resumeData: resumeDataToUse,
         suspendData: suspendDataToUse,
@@ -542,7 +531,11 @@ export async function executeStep(
             : undefined,
         [PUBSUB_SYMBOL]: pubsub,
         [STREAM_FORMAT_SYMBOL]: executionContext.format,
-        [PARENT_STATE_SYMBOL]: isNestedWorkflow && journal ? parentStateLink(journal, executionContext) : undefined,
+        [PARENT_STATE_SYMBOL]:
+          isNestedWorkflow && journal
+            ? (((state: unknown) => journal.baseFor(state)) satisfies ParentStateLink)
+            : undefined,
+        [HAND_BACK_STATE_SYMBOL]: isNestedWorkflow ? setState : undefined,
         engine: engine.getEngineContext(),
         abortSignal: abortController?.signal,
         outputWriter,
@@ -674,12 +667,15 @@ export async function executeStep(
   return {
     result: stepResult,
     stepResults: { [step.id]: stepResult },
-    mutableContext: engine.buildMutableContext({
-      ...executionContext,
-      state: stepRetryResult.ok
-        ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
-        : executionContext.state,
-    }),
+    mutableContext: {
+      ...engine.buildMutableContext({
+        ...executionContext,
+        state: stepRetryResult.ok
+          ? (stepRetryResult.result.contextMutations.stateUpdate ?? executionContext.state)
+          : executionContext.state,
+      }),
+      stateBase: stepRetryResult.ok ? stepRetryResult.result.contextMutations.stateBase : undefined,
+    },
     // Serialize requestContext only for engines that restore it from
     // serialized results (Inngest memoization); the default engine keeps
     // the original reference and never reads this field, so serializing

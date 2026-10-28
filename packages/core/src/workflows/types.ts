@@ -1421,6 +1421,11 @@ export type ExecutionContext = {
  */
 export type MutableContext = {
   state: Record<string, any>;
+  /**
+   * @internal Set when `state` is a nested run's state: the JSON state its changes are relative
+   * to. Applying it applies those changes to the state then, not `state` itself.
+   */
+  stateBase?: Record<string, unknown>;
   suspendedPaths: Record<string, number[]>;
   resumeLabels: Record<
     string,

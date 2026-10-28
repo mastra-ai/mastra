@@ -20,8 +20,15 @@ import { matchesExpectedWorkflowStatus } from '../../types';
 import { createEmptyWorkflowSnapshot, mergeWorkflowStepResult } from '../../workflow-snapshot';
 import type { InMemoryDB } from '../inmemory-db';
 import { WorkflowsStorage } from './base';
-import { inheritsState, materializeState, materializeWorkflowRun, summarizeStepResult } from './journal';
-import type { StoredWorkflowRun, StoredWorkflowRunHeader, WorkflowRunEntry, WorkflowRunHeader } from './journal';
+import { materializeState, materializeWorkflowRun, stateBaseOf, summarizeStepResult } from './journal';
+import type {
+  StateRef,
+  StateVersion,
+  StoredWorkflowRun,
+  StoredWorkflowRunHeader,
+  WorkflowRunEntry,
+  WorkflowRunHeader,
+} from './journal';
 import { getSnapshotMemoryInfo } from './snapshot-memory-info';
 import type { StatePatchOp } from './state-patch';
 
@@ -209,21 +216,35 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }
 
   /**
-   * The parent state a storage v2 run's state starts from: the state of the run in
-   * `header.parentWorkflow` when the run inherits it, else undefined. `{}` when the parent isn't
-   * stored. Not cloned.
+   * A storage v2 run's state, latest or as of `at`, with its `state-base` resolved recursively.
+   * `{}` when the run isn't stored. Not cloned.
    */
-  private parentStateOf(
-    header: WorkflowRunHeader,
-    entries: readonly WorkflowRunEntry[],
-  ): Record<string, any> | undefined {
-    const parent = header.parentWorkflow;
-    if (!parent || !inheritsState(entries)) return undefined;
-    const key = this.getWorkflowKey(parent.workflowId, parent.runId);
-    const record = this.db.workflowRunHeaders.get(key);
-    if (!record) return {};
-    const parentEntries = this.db.workflowRunEntries.get(key) ?? [];
-    return materializeState(parentEntries, this.parentStateOf(record.header, parentEntries)).state;
+  private stateOf(
+    workflowName: string,
+    runId: string,
+    at?: StateVersion,
+  ): { state: Record<string, any>; statePatchBytes: number } {
+    const key = this.getWorkflowKey(workflowName, runId);
+    if (!this.db.workflowRunHeaders.has(key)) return { state: {}, statePatchBytes: 0 };
+    const entries = this.db.workflowRunEntries.get(key) ?? [];
+    const ref = stateBaseOf(entries, at);
+    const base = ref ? this.stateOf(ref.workflowName, ref.runId, ref).state : undefined;
+    return materializeState(entries, { at, base });
+  }
+
+  /**
+   * Before a run is deleted, store the full state in place of every `state-base` entry built on it,
+   * so the runs built on it keep reading the same state.
+   */
+  private detachStateChildren(workflowName: string, runId: string): void {
+    for (const entries of this.db.workflowRunEntries.values()) {
+      entries.forEach((entry, i) => {
+        if (entry.kind !== 'state-base') return;
+        if (entry.base.workflowName !== workflowName || entry.base.runId !== runId) return;
+        const state = cloneRunData(this.stateOf(workflowName, runId, entry.base).state);
+        entries[i] = { seq: entry.seq, kind: 'state', state };
+      });
+    }
   }
 
   /** A storage v2 run as a v1 row, with its state rebuilt from the entries. Not cloned. */
@@ -237,7 +258,10 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       workflow_name: record.workflow_name,
       run_id: record.run_id,
       resourceId: record.resourceId,
-      snapshot: materializeWorkflowRun(record.header, entries, this.parentStateOf(record.header, entries)),
+      snapshot: {
+        ...materializeWorkflowRun(record.header, entries),
+        value: this.stateOf(record.workflow_name, record.run_id).state,
+      },
       createdAt: record.createdAt,
       updatedAt: record.updatedAt,
       storageVersion: 2,
@@ -452,7 +476,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     runId: string;
   }): Promise<StoredWorkflowRunHeader | null> {
     const record = this.db.workflowRunHeaders.get(this.getWorkflowKey(workflowName, runId));
-    return record ? { header: cloneRunData(record.header), lastSeq: record.lastSeq } : null;
+    return record
+      ? { header: cloneRunData(record.header), lastSeq: record.lastSeq, startStateSeq: record.startStateSeq }
+      : null;
   }
 
   async loadWorkflowRun({
@@ -474,7 +500,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     for (const entry of entries) {
       if (entry.kind === 'step') latest.set(entry.stepId, entry.result);
     }
-    const { state, statePatchBytes } = materializeState(entries, this.parentStateOf(record.header, entries));
+    const { state, statePatchBytes } = this.stateOf(workflowName, runId);
 
     const steps: StoredWorkflowRun['steps'] = {};
     const summarizedStepIds: string[] = [];
@@ -491,6 +517,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     return {
       header: cloneRunData(record.header),
       lastSeq: record.lastSeq,
+      startStateSeq: record.startStateSeq,
       state: cloneRunData(state),
       statePatchBytes,
       steps,
@@ -534,7 +561,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     const { expectedStatus, ...patch } = opts;
     if (!matchesExpectedWorkflowStatus(record.header.status, expectedStatus)) return;
     record.header = { ...record.header, ...cloneRunData(patch) };
-    return { header: cloneRunData(record.header), lastSeq: record.lastSeq };
+    return { header: cloneRunData(record.header), lastSeq: record.lastSeq, startStateSeq: record.startStateSeq };
   }
 
   async writeWorkflowRunCheckpoint(args: {
@@ -544,11 +571,12 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
+    stateBase?: StateRef;
     statePatch?: StatePatchOp[];
     fence?: RunFence;
-  }): Promise<void> {
+  }): Promise<{ lastSeq: number }> {
     this.assertFence(args.fence, args.runId, 'writeWorkflowRunCheckpoint');
-    this.writeRunEntries({ ...args, append: false });
+    return this.writeRunEntries({ ...args, append: false });
   }
 
   async appendWorkflowRunEntries(args: {
@@ -559,13 +587,53 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
     statePatch?: StatePatchOp[];
+    startStateSeq?: number;
     fence?: RunFence;
-  }): Promise<void> {
+  }): Promise<{ lastSeq: number }> {
     this.assertFence(args.fence, args.runId, 'appendWorkflowRunEntries');
-    this.writeRunEntries({ ...args, append: true });
+    return this.writeRunEntries({ ...args, append: true });
   }
 
-  /** Writes the header and one entry per step, then the state or state patch. A checkpoint first drops the old entries. */
+  async loadWorkflowRunState({
+    workflowName,
+    runId,
+    seq,
+  }: {
+    workflowName: string;
+    runId: string;
+    seq: number;
+  }): Promise<Record<string, any> | null> {
+    if (!this.db.workflowRunHeaders.has(this.getWorkflowKey(workflowName, runId))) return null;
+    return cloneRunData(this.stateOf(workflowName, runId, { seq }).state);
+  }
+
+  async appendWorkflowRunStateDraft(
+    args: { workflowName: string; runId: string } & (
+      | { on: StateVersion; ops: StatePatchOp[] }
+      | { state: Record<string, any> }
+    ),
+  ): Promise<{ seq: number }> {
+    const key = this.getWorkflowKey(args.workflowName, args.runId);
+    const record = this.db.workflowRunHeaders.get(key);
+    if (!record) throw new Error(`Storage v2 run ${args.workflowName}/${args.runId} is not stored`);
+    const seq = ++record.lastSeq;
+    record.stateShared = true;
+    const entries = this.db.workflowRunEntries.get(key) ?? [];
+    entries.push(
+      'state' in args
+        ? { seq, kind: 'state-draft', state: cloneRunData(args.state) }
+        : { seq, kind: 'state-draft', on: { ...args.on }, ops: cloneRunData(args.ops) },
+    );
+    this.db.workflowRunEntries.set(key, entries);
+    return { seq };
+  }
+
+  /**
+   * Writes the header and one entry per step, then the state, state base or state patch. A
+   * checkpoint first drops the old step entries and starts the state over (`{}` when it carries
+   * none). It drops the old state entries too, unless another run's state builds on this run's
+   * (`stateShared`), which can name an earlier version.
+   */
   private writeRunEntries({
     workflowName,
     runId,
@@ -573,7 +641,9 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     header,
     steps,
     state,
+    stateBase,
     statePatch,
+    startStateSeq,
     append,
   }: {
     workflowName: string;
@@ -582,20 +652,34 @@ export class WorkflowsInMemory extends WorkflowsStorage {
     header: WorkflowRunHeader;
     steps: Record<string, StepResult<any, any, any, any>>;
     state?: Record<string, any>;
+    stateBase?: StateRef;
     statePatch?: StatePatchOp[];
+    startStateSeq?: number;
     append: boolean;
-  }): void {
+  }): { lastSeq: number } {
     const key = this.getWorkflowKey(workflowName, runId);
     const existing = this.db.workflowRunHeaders.get(key);
     const now = new Date();
     let seq = existing?.lastSeq ?? 0;
-    const entries: WorkflowRunEntry[] = append ? (this.db.workflowRunEntries.get(key) ?? []) : [];
+    const previous = this.db.workflowRunEntries.get(key) ?? [];
+    const entries: WorkflowRunEntry[] = append
+      ? previous
+      : existing?.stateShared
+        ? previous.filter(entry => entry.kind !== 'step')
+        : [];
     for (const [stepId, result] of Object.entries(steps)) {
       entries.push({ seq: ++seq, kind: 'step', stepId, result: cloneRunData(result) });
     }
     if (state !== undefined) {
       entries.push({ seq: ++seq, kind: 'state', state: cloneRunData(state) });
-    } else if (statePatch !== undefined) {
+    } else if (stateBase !== undefined) {
+      entries.push({ seq: ++seq, kind: 'state-base', base: { ...stateBase } });
+      const base = this.db.workflowRunHeaders.get(this.getWorkflowKey(stateBase.workflowName, stateBase.runId));
+      if (base) base.stateShared = true;
+    } else if (!append) {
+      entries.push({ seq: ++seq, kind: 'state', state: {} });
+    }
+    if (state === undefined && statePatch !== undefined) {
       entries.push({ seq: ++seq, kind: 'state-patch', ops: cloneRunData(statePatch) });
     }
     this.db.workflowRunHeaders.set(key, {
@@ -604,10 +688,14 @@ export class WorkflowsInMemory extends WorkflowsStorage {
       resourceId: resourceId ?? existing?.resourceId,
       header: cloneRunData(header),
       lastSeq: seq,
+      // A checkpoint's state entries come last, so its start state is the state as of its last entry.
+      startStateSeq: append ? (startStateSeq ?? existing?.startStateSeq ?? 0) : seq,
+      stateShared: existing?.stateShared,
       createdAt: existing?.createdAt ?? now,
       updatedAt: now,
     });
     this.db.workflowRunEntries.set(key, entries);
+    return { lastSeq: seq };
   }
 
   async persistWorkflowSnapshot({
@@ -815,6 +903,7 @@ export class WorkflowsInMemory extends WorkflowsStorage {
   }): Promise<void> {
     this.assertFence(fence, runId, 'deleteWorkflowRunById');
     const key = this.getWorkflowKey(workflowName, runId);
+    this.detachStateChildren(workflowName, runId);
     this.db.workflows.delete(key);
     this.db.workflowRunHeaders.delete(key);
     this.db.workflowRunEntries.delete(key);

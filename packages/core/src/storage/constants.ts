@@ -1147,7 +1147,10 @@ export const TABLE_WORKFLOW_RUN_ENTRIES = 'mastra_workflow_run_entries';
  * Storage v2 run headers: the run's `WorkflowRunHeader` (its `WorkflowRunState` without
  * `context` and `value`). `status` and `threadId` are copied out of the snapshot so they
  * can be filtered and indexed. `lastSeq` is the highest `seq` the run's entries have used;
- * it only increases, across checkpoints too.
+ * it only increases, across checkpoints too. `startStateSeq` is the state version the run's
+ * current drive started from (see `StoredWorkflowRunHeader`). `stateShared` is set once another
+ * run's state builds on this run's state, so a checkpoint keeps the earlier state entries and a
+ * delete knows to detach the runs built on it.
  * @experimental
  */
 export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
@@ -1158,13 +1161,16 @@ export const WORKFLOW_RUNS_SCHEMA: Record<string, StorageColumn> = {
   status: { type: 'text', nullable: false },
   header: { type: 'jsonb', nullable: false },
   lastSeq: { type: 'integer', nullable: false },
+  startStateSeq: { type: 'integer', nullable: false },
+  stateShared: { type: 'boolean', nullable: false },
   createdAt: { type: 'timestamp', nullable: false },
   updatedAt: { type: 'timestamp', nullable: false },
 };
 
 /**
- * Storage v2 run entries: one step result (`kind: 'step'`) or the run's state
- * (`kind: 'state'`, `step_id` null) per row, ordered by `seq` within a run.
+ * Storage v2 run entries: one step result (`kind: 'step'`) or one state entry (`kind` `state`,
+ * `state-patch`, `state-base` or `state-draft`, `step_id` null; see `WorkflowRunEntry`) per row,
+ * ordered by `seq` within a run.
  * @experimental
  */
 export const WORKFLOW_RUN_ENTRIES_SCHEMA: Record<string, StorageColumn> = {
