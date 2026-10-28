@@ -1,15 +1,16 @@
 import { Toaster } from '@mastra/playground-ui/components/Toaster';
-import { screen, waitFor } from '@testing-library/react';
+import { fireEvent, screen, waitFor } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { http, HttpResponse } from 'msw';
 import { MemoryRouter, Route, Routes, useNavigate } from 'react-router';
 import { describe, expect, it } from 'vitest';
 
 import { server } from '../../../../../../e2e/ui/msw-server';
+import { queryKeys } from '../../../../../api/keys';
 import { renderWithProviders, TEST_BASE_URL } from '../../../../../../e2e/ui/render';
 import type { FactoryEnvironmentPatch, FactoryEnvironmentPayload } from '../../../workspaces/services/environment';
-import { EnvironmentSection } from '../EnvironmentSection';
-import { customEnvironment, environmentPayload, environmentRepository, FACTORY_ID } from './fixtures/environment';
+import { FactoryManagementSection } from '../FactoryManagementSection';
+import { customEnvironment, environmentPayload, FACTORY_ID } from './fixtures/environment';
 
 const ENVIRONMENT_URL = `${TEST_BASE_URL}/web/factory/projects/${FACTORY_ID}/environment`;
 
@@ -25,12 +26,11 @@ function useEnvironment(environment: FactoryEnvironmentPayload) {
   server.use(http.get(ENVIRONMENT_URL, () => HttpResponse.json({ environment })));
 }
 
-/** Records every PATCH body and answers with the given environment. */
 function recordPatches(environment: FactoryEnvironmentPayload) {
   const patches: FactoryEnvironmentPatch[] = [];
   server.use(
-    http.patch(ENVIRONMENT_URL, async ({ request }) => {
-      patches.push((await request.json()) as FactoryEnvironmentPatch);
+    http.patch<never, FactoryEnvironmentPatch>(ENVIRONMENT_URL, async ({ request }) => {
+      patches.push(await request.json());
       return HttpResponse.json({ environment });
     }),
   );
@@ -38,10 +38,10 @@ function recordPatches(environment: FactoryEnvironmentPayload) {
 }
 
 function renderEnvironmentSettings() {
-  renderWithProviders(
-    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/environment`]}>
+  return renderWithProviders(
+    <MemoryRouter initialEntries={[`/factories/${FACTORY_ID}/settings/factory`]}>
       <Routes>
-        <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+        <Route path="/factories/:factoryId/settings/factory" element={<FactoryManagementSection />} />
       </Routes>
       <Toaster position="bottom-right" />
     </MemoryRouter>,
@@ -49,32 +49,39 @@ function renderEnvironmentSettings() {
 }
 
 describe('Environment settings', () => {
-  it('renders Repositories, then Configuration with the working directory, the setup command and the provider settings', async () => {
+  it('renders Environment with the working directory, the setup command and the provider settings, then Builds', async () => {
     useFactory();
     useEnvironment(environmentPayload());
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByRole('heading', { name: 'Configuration' })).toBeInTheDocument();
+    expect(await screen.findByRole('heading', { name: 'Environment' })).toBeInTheDocument();
     const headings = screen.getAllByRole('heading').map(heading => heading.textContent);
-    expect(headings).toEqual(['Repositories', 'Configuration', 'Builds']);
+    expect(headings).toEqual(['Environment', 'Builds', 'Danger zone']);
     const workdir = screen.getByRole('textbox', { name: 'Working directory' });
     const command = screen.getByRole('textbox', { name: 'Setup command' });
     expect(workdir.closest('section')).toBe(command.closest('section'));
-    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Configuration' }).closest('section'));
+    expect(workdir.closest('section')).toBe(screen.getByRole('heading', { name: 'Environment' }).closest('section'));
   });
 
-  it('points to Repositories when nothing is linked yet', async () => {
+  it('saves global settings before any repository is linked', async () => {
     useFactory();
-    useEnvironment(environmentPayload({ repositories: [] }));
+    const environment = environmentPayload({ repositories: [], workspaceSetupCommand: 'pnpm install' });
+    useEnvironment(environment);
+    const patches = recordPatches(environment);
+    const user = userEvent.setup();
 
     renderEnvironmentSettings();
 
-    expect(await screen.findByText(/Link a repository first/)).toBeInTheDocument();
-    expect(screen.getByRole('link', { name: 'Go to repositories' })).toHaveAttribute(
-      'href',
-      `/factories/${FACTORY_ID}/settings/repositories`,
-    );
+    const workdir = await screen.findByRole('textbox', { name: 'Working directory' });
+    expect(workdir).toHaveValue('/workspace');
+    await user.clear(workdir);
+    await user.type(workdir, '/workspace/new{Enter}');
+    await waitFor(() => expect(patches).toHaveLength(1));
+    expect(patches[0]).toEqual({ sandboxWorkingDirectory: '/workspace/new' });
+    expect(screen.getByRole('textbox', { name: 'Setup command' })).toHaveValue('pnpm install');
+    expect(screen.getByRole('spinbutton', { name: 'CPU' })).toHaveValue(2);
+    expect(screen.getByRole('heading', { name: 'Builds' })).toBeInTheDocument();
   });
 
   it('shows the load failure instead of an empty page', async () => {
@@ -86,123 +93,26 @@ describe('Environment settings', () => {
     expect(await screen.findByText('Failed to load environment (500)')).toBeInTheDocument();
   });
 
-  it('shows every stored value: working directory, ordered repositories with status, workspace setup', async () => {
-    useFactory();
-    useEnvironment(
-      environmentPayload({
-        workspaceSetupCommand: 'pnpm install',
-        repositories: [
-          environmentRepository({
-            projectRepositoryId: 'link-api',
-            position: 2,
-            lastBuildStatus: 'failed',
-            lastBuildError: 'pnpm build exited with 1',
-            setupCommand: 'pnpm build',
-          }),
-          environmentRepository({ projectRepositoryId: 'link-web', position: 1, lastBuildStatus: 'configured' }),
-          environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3, inEnvironment: false }),
-        ],
+  it('keeps the settings on screen when refreshing the Factory list fails in the background', async () => {
+    let factoryRequests = 0;
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects`, () => {
+        factoryRequests++;
+        return factoryRequests === 1
+          ? HttpResponse.json({ projects: [{ id: FACTORY_ID, name: 'Acme' }] })
+          : HttpResponse.json({ error: 'Factories unavailable' }, { status: 503 });
       }),
     );
+    useEnvironment(environmentPayload());
 
-    renderEnvironmentSettings();
+    const { client } = renderEnvironmentSettings();
 
-    expect(await screen.findByRole('textbox', { name: 'Working directory' })).toHaveValue('/workspace');
-    expect(screen.getByRole('textbox', { name: 'Setup command' })).toHaveValue('pnpm install');
-
-    // Rows follow `position`; a link whose repository is gone is not shown at all.
-    const names = screen.getAllByText(/^acme\//).map(node => node.textContent);
-    expect(names).toEqual(['acme/link-web', 'acme/link-api']);
-    expect(screen.queryByText(/unavailable/i)).not.toBeInTheDocument();
-    expect(screen.getAllByRole('switch', { name: /Clone .* into every session/ })).toHaveLength(2);
-    expect(screen.queryByText('Configured')).not.toBeInTheDocument();
-    expect(screen.getByText('Last build failed')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Clone acme/link-web into every session' })).toBeChecked();
-    expect(screen.getAllByText('Included')).toHaveLength(2);
-
-    // The card header opens its commands and the last failure; the switch inside it does not.
-    const user = userEvent.setup();
-    expect(screen.queryByText('pnpm build exited with 1')).not.toBeInTheDocument();
-    await user.click(screen.getByText('acme/link-api'));
-    expect(screen.getByText('pnpm build exited with 1')).toBeInTheDocument();
-    expect(screen.getByRole('textbox', { name: 'Setup command for acme/link-api' })).toHaveValue('pnpm build');
-    await user.click(screen.getByRole('switch', { name: 'Clone acme/link-api into every session' }));
-    expect(screen.getByRole('button', { name: 'Hide commands for acme/link-api' })).toHaveAttribute(
-      'aria-expanded',
-      'true',
-    );
-  });
-
-  it('offers a drag handle per live repository and none for a dead link', async () => {
-    useFactory();
-    useEnvironment(
-      environmentPayload({
-        repositories: [
-          environmentRepository({ projectRepositoryId: 'link-web', position: 1 }),
-          environmentRepository({ projectRepositoryId: 'link-api', position: 2 }),
-          environmentRepository({ projectRepositoryId: 'link-gone', slug: null, position: 3 }),
-        ],
-      }),
-    );
-
-    renderEnvironmentSettings();
-
-    // Drag and drop itself needs layout jsdom does not provide; the PATCH a drop
-    // produces is covered by `reorderPatch`'s unit test.
-    expect(await screen.findByLabelText('Drag acme/link-web')).toBeInTheDocument();
-    expect(screen.getByLabelText('Drag acme/link-api')).toBeInTheDocument();
-    expect(screen.getAllByLabelText(/^Drag /)).toHaveLength(2);
-  });
-
-  it('toggles a repository out of the environment', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-
-    renderEnvironmentSettings();
-
-    await userEvent.setup().click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    // Only the toggled repository and field: a stale page never resends another repository's values.
-    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-api', inEnvironment: false }] });
-  });
-
-  it('saves a setup command inside the repositories array', async () => {
-    useFactory();
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
-    const input = screen.getByRole('textbox', { name: 'Setup command for acme/web' });
-    await user.type(input, 'pnpm i{Enter}');
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    expect(patches[0]).toEqual({ repositories: [{ projectRepositoryId: 'link-web', setupCommand: 'pnpm i' }] });
-  });
-
-  it('never overwrites a command another editor saved after this page loaded', async () => {
-    useFactory();
-    // This page loaded before someone else saved `make api` on acme/api.
-    const environment = environmentPayload();
-    useEnvironment(environment);
-    const patches = recordPatches(environment);
-    const user = userEvent.setup();
-
-    renderEnvironmentSettings();
-
-    await user.click(await screen.findByRole('button', { name: 'Show commands for acme/web' }));
-    await user.type(screen.getByRole('textbox', { name: 'Setup command for acme/web' }), 'pnpm i{Enter}');
-
-    await waitFor(() => expect(patches).toHaveLength(1));
-    const sent = patches[0]?.repositories ?? [];
-    expect(sent.map(repository => repository.projectRepositoryId)).toEqual(['link-web']);
-    expect(sent[0]).not.toHaveProperty('teardownCommand');
+    expect(await screen.findByRole('heading', { name: 'Danger zone' })).toBeInTheDocument();
+    fireEvent(window, new Event('visibilitychange'));
+    await waitFor(() => expect(client.getQueryState(queryKeys.factories())?.status).toBe('error'));
+    expect(factoryRequests).toBe(2);
+    expect(screen.queryByText(/Failed to list Factories/)).not.toBeInTheDocument();
+    expect(screen.getByRole('button', { name: 'Delete Acme' })).toBeInTheDocument();
   });
 
   it('surfaces a failed save as a toast and shows the stored value again', async () => {
@@ -214,14 +124,10 @@ describe('Environment settings', () => {
 
     renderEnvironmentSettings();
 
-    await user.click(await screen.findByRole('switch', { name: 'Clone acme/api into every session' }));
-    expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
-    expect(screen.getByRole('switch', { name: 'Clone acme/api into every session' })).toBeChecked();
-
-    const workdir = screen.getByRole('textbox', { name: 'Working directory' });
+    const workdir = await screen.findByRole('textbox', { name: 'Working directory' });
     await user.clear(workdir);
     await user.type(workdir, '/home/user{Enter}');
-    await waitFor(() => expect(screen.getAllByText('Failed to save environment (500)').length).toBeGreaterThan(1));
+    expect(await screen.findByText('Failed to save environment (500)')).toBeInTheDocument();
     await waitFor(() => expect(workdir).toHaveValue('/workspace'));
   });
 
@@ -327,18 +233,17 @@ describe('Environment settings', () => {
       const navigate = useNavigate();
       return (
         <>
-          <button onClick={() => navigate(`/factories/${FACTORY_ID}/settings/environment`)}>Switch to Acme</button>
-          <button onClick={() => navigate('/factories/factory-b/settings/environment')}>Switch to Beta</button>
+          <button onClick={() => navigate(`/factories/${FACTORY_ID}/settings/factory`)}>Switch to Acme</button>
+          <button onClick={() => navigate('/factories/factory-b/settings/factory')}>Switch to Beta</button>
         </>
       );
     }
 
-    // Beta is visited first, so its environment is cached and switching back renders it without a loading state.
     renderWithProviders(
-      <MemoryRouter initialEntries={['/factories/factory-b/settings/environment']}>
+      <MemoryRouter initialEntries={['/factories/factory-b/settings/factory']}>
         <SwitchFactory />
         <Routes>
-          <Route path="/factories/:factoryId/settings/environment" element={<EnvironmentSection />} />
+          <Route path="/factories/:factoryId/settings/factory" element={<FactoryManagementSection />} />
         </Routes>
       </MemoryRouter>,
     );
@@ -349,7 +254,6 @@ describe('Environment settings', () => {
     const cpu = await screen.findByRole('spinbutton', { name: 'CPU' });
     await user.clear(cpu);
     await user.type(cpu, '0{Enter}');
-    // The rejected draft stays in Acme's field so the user can correct it.
     await waitFor(() => expect(cpu).toHaveValue(0));
     await user.click(screen.getByRole('button', { name: 'Switch to Beta' }));
 
@@ -398,6 +302,38 @@ describe('Environment settings', () => {
     await userEvent.setup().click(privileged);
     await waitFor(() => expect(patches).toHaveLength(1));
     expect(patches[0]).toEqual({ settings: { privileged: true } });
+  });
+
+  it('suggests more memory only while Docker is on with less than 2 GB', async () => {
+    const withSettings = (settings: Record<string, unknown>) => {
+      const base = environmentPayload();
+      return environmentPayload({
+        sandbox: {
+          ...base.sandbox,
+          settingsSchema: {
+            type: 'object',
+            properties: {
+              memoryMb: { type: 'integer', title: 'Memory', default: 1024 },
+              docker: { type: 'boolean', title: 'Docker', default: false },
+            },
+          },
+        },
+        settings,
+      });
+    };
+    const tip = /We recommend at least 2 GB for Docker/;
+    useFactory();
+    useEnvironment(withSettings({ docker: true }));
+    const first = renderEnvironmentSettings();
+    expect(await screen.findByText(tip)).toHaveTextContent('1024 MB');
+    first.unmount();
+    for (const settings of [{ docker: true, memoryMb: 2048 }, {}]) {
+      useEnvironment(withSettings(settings));
+      const view = renderEnvironmentSettings();
+      expect(await screen.findByRole('switch', { name: 'Docker' })).toBeInTheDocument();
+      expect(screen.queryByText(tip)).not.toBeInTheDocument();
+      view.unmount();
+    }
   });
 
   it('renders a oneOf of consts as a select labelled by title and saves the numeric value', async () => {

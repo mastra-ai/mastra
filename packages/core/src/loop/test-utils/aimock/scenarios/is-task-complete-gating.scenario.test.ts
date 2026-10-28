@@ -17,11 +17,9 @@ import { runLoopScenario, useLoopScenarioAimock, describeForAllEngines } from '.
  *  - a passing score halts the loop.
  */
 describeForAllEngines('AIMock loop scenario: isTaskComplete gating', engine => {
-  const itFailsOnInngest = engine === 'inngest' ? it.fails : it;
   const getMock = useLoopScenarioAimock();
 
-  // Inngest's agentic loop has no isTaskComplete, goal, or onIterationComplete steps yet.
-  itFailsOnInngest('re-invokes the model on a failing score, then stops on a passing score', async () => {
+  it('re-invokes the model on a failing score, then stops on a passing score', async () => {
     let scorerCalls = 0;
     // Fails the first evaluation, passes the second — mirrors the supervisor
     // adaptive-scorer integration test, but driven over the real OpenAI wire.

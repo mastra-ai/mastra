@@ -1,5 +1,76 @@
 # @mastra/memory
 
+## 1.39.1-alpha.3
+
+### Patch Changes
+
+- Observational memory now detects context-overflow errors with the shared provider error reader from @mastra/core, so it recovers from the same overflow shapes the rest of Mastra recognizes, including overflow named only in a provider's response body or stream error frame. These packages now require @mastra/core 1.80.0 or newer. ([#28496](https://github.com/mastra-ai/mastra/pull/28496))
+
+  If your package manager reports a peer conflict after this release, upgrade @mastra/core first, then the package:
+
+  ```bash
+  pnpm add @mastra/core@^1.80.0
+  pnpm add @mastra/memory@latest
+  ```
+
+  Before, a project could pair @mastra/memory with @mastra/core 1.78 and install cleanly; after, that pairing is refused at install time instead of failing at runtime.
+
+- Fixed observational memory dropping messages when the Observer model replies with text but no observations, such as a refusal ("I can't help with that"). These replies are now retried the same way as an empty reply, with the same `observation.maxRetries` budget, and `failurePolicy` decides the turn once retries run out. A reply that carries only other Observer sections, such as `<current-task>`, is still accepted. ([#28456](https://github.com/mastra-ai/mastra/pull/28456))
+
+  In resource scope, a thread the Observer leaves out of its reply no longer has its cursor advanced. Its messages are observed in a later cycle. A reply whose `<thread>` blocks name none of the requested threads is retried.
+
+  Observer sections written on one line, such as `<observations>- note</observations>`, are now parsed instead of being ignored.
+
+- Updated dependencies [[`24a821b`](https://github.com/mastra-ai/mastra/commit/24a821b0ff29f527787c0645a7bf7bbe50d27f57), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`1fc075a`](https://github.com/mastra-ai/mastra/commit/1fc075ab7f7eddca854512d21149db8212f422eb), [`38ff787`](https://github.com/mastra-ai/mastra/commit/38ff787998d56210cfd938439af0fea68703a196), [`9ffb79b`](https://github.com/mastra-ai/mastra/commit/9ffb79b17e6ed0f0ec6bd1640218ef2a5fb7c058), [`155e3ac`](https://github.com/mastra-ai/mastra/commit/155e3aca3e57114ce3393bd88f6848c29f37c82b), [`7c20f00`](https://github.com/mastra-ai/mastra/commit/7c20f008c84db8f4f49e6e95d6dc965482bb2039), [`4ad204d`](https://github.com/mastra-ai/mastra/commit/4ad204dc5bdde76dca26cb7d87c48dd11f97316d), [`e56f88e`](https://github.com/mastra-ai/mastra/commit/e56f88e18d906635b033173abcae637cf361ce8a), [`cd4722a`](https://github.com/mastra-ai/mastra/commit/cd4722a583a0eb75022b1da6a6f8210f8126e486), [`2499c00`](https://github.com/mastra-ai/mastra/commit/2499c00181520cf7cda756729dc0e0085b85454f), [`d580530`](https://github.com/mastra-ai/mastra/commit/d580530ff36d43e752b1f838b3f8e16017e8f92b), [`682ebf6`](https://github.com/mastra-ai/mastra/commit/682ebf6b6f867224acbcb021fc142b902738ad07), [`dd6205e`](https://github.com/mastra-ai/mastra/commit/dd6205e985e5fd76b59d000076ab199143c989eb), [`97ade4e`](https://github.com/mastra-ai/mastra/commit/97ade4e8621a9afd01a1f38b921519ddc3086568), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`9a9085e`](https://github.com/mastra-ai/mastra/commit/9a9085ef3481c31093152ea9976759c72dc3fd89), [`9a83d42`](https://github.com/mastra-ai/mastra/commit/9a83d42b2461dd1629021d05704939b641330d5b), [`2447071`](https://github.com/mastra-ai/mastra/commit/2447071b11d7a5f159e6dc726eb5df0aa0db69da), [`ab1727d`](https://github.com/mastra-ai/mastra/commit/ab1727d5cafb64e36b04fad9f8871dc6640d2420), [`4fc17c6`](https://github.com/mastra-ai/mastra/commit/4fc17c65e85628a71201bf7490fca1db8376cf71), [`ddb7721`](https://github.com/mastra-ai/mastra/commit/ddb77211bc797c45fe434baac5c44c4193c1381e), [`d1aee64`](https://github.com/mastra-ai/mastra/commit/d1aee64e65968744c118440d2d01eb4fba3616d6), [`5e88354`](https://github.com/mastra-ai/mastra/commit/5e883545edd6082e741cdce1d192e0e83fa5dc2e), [`5bb592a`](https://github.com/mastra-ai/mastra/commit/5bb592a862869d529d8d6ca48772cd0e1863f224), [`4278b9d`](https://github.com/mastra-ai/mastra/commit/4278b9dfb8aef7f274e4dfb102597cc0400475ee), [`45c1d16`](https://github.com/mastra-ai/mastra/commit/45c1d16c4f0cd3e5b18d2a788fb998c70b45b7c0), [`a9f392e`](https://github.com/mastra-ai/mastra/commit/a9f392e60e5bc1fab66280314bab5f697e8d7c09), [`0811cda`](https://github.com/mastra-ai/mastra/commit/0811cda8d22476cf1393b429a63aaefa5292048c), [`3cdaaa8`](https://github.com/mastra-ai/mastra/commit/3cdaaa86f48812bdae1077e55be1d58dd5e85fc5), [`852110d`](https://github.com/mastra-ai/mastra/commit/852110d4eeaf5ab74ea94747343501700033a1e8), [`b63456b`](https://github.com/mastra-ai/mastra/commit/b63456befb5f51d1a2b1288225f02c30738b6099), [`580452a`](https://github.com/mastra-ai/mastra/commit/580452acbbb9812eae1b31d4f3ded716c348a78b)]:
+  - @mastra/core@1.80.0-alpha.5
+
+## 1.39.1-alpha.2
+
+### Patch Changes
+
+- dependencies updates: ([#28417](https://github.com/mastra-ai/mastra/pull/28417))
+  - Updated dependency [`diff@^8.0.4` ↗︎](https://www.npmjs.com/package/diff/v/8.0.4) (from `^8.0.3`, in `dependencies`)
+  - Updated dependency [`lru-cache@^11.5.3` ↗︎](https://www.npmjs.com/package/lru-cache/v/11.5.3) (from `^11.2.7`, in `dependencies`)
+  - Updated dependency [`@copilotkit/aimock@^1.46.0` ↗︎](https://www.npmjs.com/package/@copilotkit/aimock/v/1.46.0) (from `^1.29.0`, in `devDependencies`)
+  - Updated dependency [`@types/node@22.19.15` ↗︎](https://www.npmjs.com/package/@types/node/v/22.19.15) (from `22.20.5`, in `devDependencies`)
+  - Removed dependency [`@types/lru-cache@^7.10.10` ↗︎](https://www.npmjs.com/package/@types/lru-cache/v/7.10.10) (from `devDependencies`)
+
+- Fixed Observational Memory injecting the continuation hint on threads that have no observations yet when retrieval is enabled. The hint (a synthetic user message telling the model earlier context was summarized) now only appears once observations have actually replaced messages. Fixes #26562 ([#26826](https://github.com/mastra-ai/mastra/pull/26826))
+
+- Fixed observational memory dropping messages when the Observer model returns an empty response. An empty or whitespace-only Observer reply is now retried like a model error, with backoff, up to `observation.maxRetries`. If every attempt comes back empty, `lastObservedAt` stays where it was, so those messages remain pending, and `failurePolicy` decides how the turn proceeds. A provider that always returns empty output therefore uses the full retry budget before `failurePolicy` applies. ([#27294](https://github.com/mastra-ai/mastra/pull/27294))
+
+  `summarizeConversation()` and `memory.summarizeThread()` now throw once retries are exhausted on empty Observer output, instead of returning `summary: ''`.
+
+- Fixed Observational Memory calls continuing after an agent run is cancelled. Synchronous observation and reflection now stop with their run and leave the run's messages unobserved for a later cycle. Async buffering and background reflection keep running after the run is cancelled, and `settled()` still waits for them; only the run's own waits on that work stop. Fixes #27792. ([#28158](https://github.com/mastra-ai/mastra/pull/28158))
+
+- Fixed Observational Memory crashing when stored conversation history contains a failed tool call with a structured error instead of a text message. Both token counting and the observer now handle these errors, so Observational Memory keeps working on later turns instead of stopping. Fixes #28407. ([#28440](https://github.com/mastra-ai/mastra/pull/28440))
+
+- Fixed agents saying they can't save information when working memory uses `agentManaged: false`. The instructions now say that memory updates automatically after each response. Agents acknowledge new information instead of claiming they can't save it. Only `readOnly: true` tells agents they cannot update working memory. ([#28441](https://github.com/mastra-ai/mastra/pull/28441))
+
+- Updated dependencies [[`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`ce5d473`](https://github.com/mastra-ai/mastra/commit/ce5d4731eeeb44779748852618b95c5cb6485bed), [`0a913e0`](https://github.com/mastra-ai/mastra/commit/0a913e096cb569aea396fa3d9f286cc874179ce8), [`3dfe2eb`](https://github.com/mastra-ai/mastra/commit/3dfe2eb8c3ef3b18d2395a3618b6214488963d05), [`152e380`](https://github.com/mastra-ai/mastra/commit/152e380aca6fcf74f598a158c710c0e755ceb325), [`99e4867`](https://github.com/mastra-ai/mastra/commit/99e486723d3f0063ae70a39c9840daf92a98fa23), [`929a728`](https://github.com/mastra-ai/mastra/commit/929a7281d411ac515e0befb53a5383741b06d484), [`52db47c`](https://github.com/mastra-ai/mastra/commit/52db47cd0d66f891d41a2dbfa36e55b640a30a37), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`f51a29e`](https://github.com/mastra-ai/mastra/commit/f51a29e82b6e2371b5c6aed46141ce20f099c9a9), [`5c0a994`](https://github.com/mastra-ai/mastra/commit/5c0a99438ef82cf5584218f250a023371bab3373), [`7adffbb`](https://github.com/mastra-ai/mastra/commit/7adffbb3df2f734b59648dcf8d461e7af8d1f914), [`823a389`](https://github.com/mastra-ai/mastra/commit/823a3890deb5cf14484fd655c8360df4c41c4aed), [`ff35b8c`](https://github.com/mastra-ai/mastra/commit/ff35b8c3d86136509d31b87fed7f789a572dc1af), [`501b207`](https://github.com/mastra-ai/mastra/commit/501b207b1b6300af44b5b8f40ff33adfe7a9d195), [`d9245dd`](https://github.com/mastra-ai/mastra/commit/d9245dd486349163bfc6468ab45e5600abc6a59e), [`358c711`](https://github.com/mastra-ai/mastra/commit/358c71145d677394ce03a019156bc464afe6cc76), [`dbdfaee`](https://github.com/mastra-ai/mastra/commit/dbdfaee279dab2a5dca31134ca1967eb582e639c), [`fdd2201`](https://github.com/mastra-ai/mastra/commit/fdd22014f6fbfa115eba53cff42063544af2ff41), [`4303017`](https://github.com/mastra-ai/mastra/commit/4303017f393b9c09f692837d8e9e7a19f6539cf4)]:
+  - @mastra/core@1.80.0-alpha.4
+  - @mastra/schema-compat@1.3.17-alpha.0
+
+## 1.39.1-alpha.1
+
+### Patch Changes
+
+- Fixed Observational Memory keeping a run's original user message in the prompt after it had been observed. Once memory has observed the request and the model has answered it, the request leaves the prompt and the observations stand in for it for the rest of the run, as they already did on later turns. ([#28364](https://github.com/mastra-ai/mastra/pull/28364))
+
+  Keeping it had two costs:
+
+  - **A stale instruction.** Many steps later the old request still appeared next to observations that already recorded it and what was done about it, and could read as a new instruction.
+  - **A lost prompt cache on the next turn.** The request sat ahead of every tool call the run made after it, and the next turn dropped it. So the next turn's prompt matched the cached one only up to that point, and every one of those tool calls had to be written to the cache again. In a run with about 40k tokens of tool results after the request, the next turn now reuses nearly all of its prompt from cache instead of almost none.
+
+  Tool results and messages the model has not read yet still stay in the prompt until it reads them. The request message stays stored; only details the observer did not copy into its observations, such as a pasted link, are no longer sent once it has been observed.
+
+- Fixed a long agent run ending with a context-window error after observational memory had already recovered from one. Recovery now moves the rest of the run's response to a new message, so a later overflow in the same run can be observed and retried too. ([#28358](https://github.com/mastra-ai/mastra/pull/28358))
+
+- Fixed working-memory data leaking into recalled history after raw message writes and partial message edits. Preserved observation markers and omitted content fields. Message edits now index the visible text the message keeps after the edit, so semantic recall no longer drops a message whose edit only touches working memory or metadata. Fixes [#27946](https://github.com/mastra-ai/mastra/issues/27946). ([#28149](https://github.com/mastra-ai/mastra/pull/28149))
+
+- Updated dependencies [[`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`ca04e2c`](https://github.com/mastra-ai/mastra/commit/ca04e2cbb6f5ae13edf006905d9810434b4163fe), [`decd0a0`](https://github.com/mastra-ai/mastra/commit/decd0a0066286996a4558f63e91a8edfa1143feb), [`5bd713b`](https://github.com/mastra-ai/mastra/commit/5bd713b4f2ca7769675d949f8052943807c11598), [`2ca9e35`](https://github.com/mastra-ai/mastra/commit/2ca9e3522f117cc12fee7a9dad2f5961cd41164e), [`2ded35c`](https://github.com/mastra-ai/mastra/commit/2ded35cb0c97b26f641a9eb9a5747d32164d45c9), [`2b9f9a5`](https://github.com/mastra-ai/mastra/commit/2b9f9a55799ee7a6020a063d2419096429254481), [`34ee1d1`](https://github.com/mastra-ai/mastra/commit/34ee1d16226852f57d1f8bb34ee7a88397e5cce2), [`b7ff751`](https://github.com/mastra-ai/mastra/commit/b7ff751ed0fd87a3f93ce438c355c2dcc16e79d5), [`1e31034`](https://github.com/mastra-ai/mastra/commit/1e31034b30cb9661e38af548dfda646aee74f08f)]:
+  - @mastra/core@1.80.0-alpha.3
+
 ## 1.39.1-alpha.0
 
 ### Patch Changes

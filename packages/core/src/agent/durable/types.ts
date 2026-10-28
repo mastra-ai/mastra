@@ -39,6 +39,7 @@ import type {
   ToolPayloadTransformTarget,
 } from '../../tools/types';
 import type { Workspace } from '../../workspace';
+import type { Agent } from '../agent';
 import type { AgentExecutionOptions } from '../agent.types';
 import type { AIV5ResponseMessage, MessageList } from '../message-list';
 import type { SerializedMessageListState } from '../message-list/state';
@@ -409,6 +410,8 @@ export interface DurableLLMStepOutput {
   processorRetryCount?: number;
   /** Processor retry feedback message */
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps that an output processor held until this step's stream ended */
+  releasedToolResultIds?: string[];
   /** Updated serializable state */
   state: SerializableDurableState;
   /** Exported model_generation span data (only set when there are tool calls) */
@@ -431,8 +434,8 @@ export interface DurableToolCallInput {
   toolCallId: string;
   /** Name of the tool to execute */
   toolName: string;
-  /** Arguments for the tool */
-  args: Record<string, unknown>;
+  /** Arguments for the tool; absent when the model's JSON could not be parsed. */
+  args?: Record<string, unknown>;
   /** Provider-specific metadata */
   providerMetadata?: SharedV2ProviderMetadata;
   /** Whether the tool was already executed by the provider */
@@ -484,6 +487,12 @@ export interface DurableToolCallOutput extends DurableToolCallInput {
    * loop's tripwire handling, where commit and emission are both skipped).
    */
   resultBlocked?: boolean;
+  /**
+   * Set when an output processor dropped the tool-result chunk without a
+   * tripwire. The model still gets the result, but callbacks leave it out of
+   * `toolResults`, as the stream never emitted it.
+   */
+  resultHidden?: boolean;
   /**
    * Non-transient data-* chunks emitted by output processors via
    * writer.custom() during this tool call. The tool-call step's messageList
@@ -564,6 +573,8 @@ export interface DurableAgenticExecutionOutput {
   /** Processor retry tracking */
   processorRetryCount?: number;
   processorRetryFeedback?: string;
+  /** Tool results of earlier steps emitted at the end of this iteration's stream */
+  releasedToolResultIds?: string[];
   /** Whether background tasks are still running after this iteration */
   backgroundTaskPending?: boolean;
   /** Whether a delegation hook called ctx.bail() during this iteration */
@@ -629,7 +640,7 @@ export interface AgentStreamEvent<T = unknown> {
    */
   index?: number;
   /**
-   * The `chunk` event's chunk already ran through the run's output processors
+   * The `chunk` or `step-start` event's chunk already ran through the run's output processors
    * before it was published, so the stream consumer must not run them again.
    */
   outputProcessed?: boolean;
@@ -819,6 +830,8 @@ export interface RunRegistryEntry {
   errorProcessors?: ErrorProcessorOrWorkflow[];
   /** Processor state map (carried across steps) */
   processorStates?: Map<string, ProcessorState>;
+  /** The agent running this run, passed to every processor hook as `agent`. */
+  agent?: Agent<any, any, any, any>;
   /** Background task manager instance (non-serializable) */
   backgroundTaskManager?: BackgroundTaskManager;
   /** Agent background tasks configuration */
@@ -899,6 +912,12 @@ export interface RunRegistryEntry {
    * allowing them.
    */
   requireToolApproval?: RequireToolApproval;
+  /**
+   * Per-call delegation config (`onDelegationStart`, `onDelegationComplete`,
+   * `messageFilter`, ...). Closures, so in-process only. A warm resume that
+   * rebuilds tools reuses it when the resume call supplies no `delegation`.
+   */
+  delegation?: AgentExecutionOptions['delegation'];
   /**
    * Signal drain closure. When the durable agent inherits `sendSignal()` from
    * its wrapped `Agent`, signals are queued in `AgentThreadStreamRuntime`. This

@@ -165,6 +165,5 @@ export async function recordFactoryPullRequestProvenance(
       });
     }
   } catch {
-    return;
   }
 }

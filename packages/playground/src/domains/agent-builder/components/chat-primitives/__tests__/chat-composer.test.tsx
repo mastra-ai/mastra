@@ -30,7 +30,7 @@ const renderComposer = (props: Partial<React.ComponentProps<typeof ChatComposer>
           onSubmit={e => e.preventDefault()}
           onKeyDown={noop}
           disabled={false}
-          canSubmit={true}
+          canSubmit
           inputTestId="composer-input"
           submitTestId="composer-submit"
           containerTestId="composer-container"

@@ -10,7 +10,7 @@ packages:
 
 # Memory class
 
-The `Memory` class provides a reliable system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and embedder.
+The `Memory` class provides a reliable system for managing conversation history and thread-based message storage in Mastra. It enables persistent storage of conversations, semantic search capabilities, and efficient message retrieval. You must configure a storage provider for conversation history, and if you enable semantic recall you will also need to provide a vector store and, unless that vector store embeds text itself, an embedder.
 
 ## Usage example
 
@@ -47,7 +47,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
     name: 'storage',
     type: 'MastraCompositeStore',
     description:
-      'Storage implementation for persisting memory data. Defaults to `new DefaultStorage({ config: { url: "file:memory.db" } })` if not provided.',
+      'Storage implementation for persisting memory data. Optional: when omitted, an agent uses the storage of the Mastra instance it belongs to. If neither is configured, accessing `memory.storage` throws `Memory requires a storage provider to function`.',
     isOptional: true,
   },
   {
@@ -58,8 +58,9 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
   },
   {
     name: 'embedder',
-    type: 'EmbeddingModel<string> | EmbeddingModelV2<string>',
-    description: 'Embedder instance for vector embeddings. Required when semantic recall is enabled.',
+    type: 'string | EmbeddingModel<string> | EmbeddingModelV2<string>',
+    description:
+      'Embedder for vector embeddings, as a model-router ID string (for example `"openai/text-embedding-3-small"`), an `EmbeddingModel`, or an `EmbeddingModelV2`. Required when semantic recall is enabled and the vector store doesn\'t generate embeddings itself (`vector.isSelfEmbedding` is false).',
     isOptional: true,
   },
   {
@@ -112,7 +113,7 @@ To enable `workingMemory` on an agent, you’ll need a storage provider configur
             name: 'semanticRecall',
             type: "boolean | { topK: number; messageRange: number | { before: number; after: number }; scope?: 'thread' | 'resource' }",
             description:
-              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires both vector store and embedder to be configured. Default topK is 4, default messageRange is {before: 1, after: 1}.',
+              'Enable semantic search in message history. Can be a boolean or an object with configuration options. When enabled, requires a vector store, and an embedder unless the vector store embeds text itself (`isSelfEmbedding`). Default topK is 4, default messageRange is {before: 1, after: 1}.',
             isOptional: true,
             defaultValue: 'false',
           },
@@ -227,8 +228,10 @@ export const agent = new Agent({
         indexConfig: {
           type: 'hnsw', // Use HNSW for better performance
           metric: 'dotproduct', // Optimal for OpenAI embeddings
-          m: 16, // Number of bi-directional links
-          efConstruction: 64, // Construction-time candidate list size
+          hnsw: {
+            m: 16, // Number of bi-directional links
+            efConstruction: 64, // Construction-time candidate list size
+          },
         },
       },
       workingMemory: {

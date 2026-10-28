@@ -145,7 +145,7 @@ export function DynamicForm({
         defaultValues={normalizedDefaultValues}
         formProps={{ className, noValidate: true }}
         uiComponents={uiComponents}
-        withSubmit={true}
+        withSubmit
         readOnly={readOnly}
       >
         {children}

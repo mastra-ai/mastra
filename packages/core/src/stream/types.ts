@@ -14,6 +14,7 @@ import type {
   LogProbs as LanguageModelV1LogProbs,
 } from '@internal/ai-sdk-v4';
 import type { CallSettings, ModelMessage, StepResult, ToolSet, TypedToolCall, UIMessage } from '@internal/ai-sdk-v5';
+import type { Agent } from '../agent';
 import type { AIV5ResponseMessage } from '../agent/message-list';
 import type { StoredMessageLoader } from '../agent/message-list/memory-message-refs';
 import type { AIV5Type, MastraDBMessage } from '../agent/message-list/types';
@@ -302,6 +303,8 @@ export interface ThreadHistoryPayload {
   messages: MastraDBMessage[];
   /** Whether older messages exist beyond this page. */
   hasMore: boolean;
+  /** Run holding the thread lease at hydration, or null when idle. */
+  activeRunId: string | null;
 }
 
 interface StartPayload {
@@ -919,6 +922,12 @@ export type NetworkChunkType<OUTPUT = undefined> =
 /** Emitted only by `subscribeToThread({ withInitialHistory })`, before any other chunk. */
 export type ThreadHistoryChunk = BaseChunkType & { type: 'thread-history'; payload: ThreadHistoryPayload };
 
+/** A thread run's outcome, independent of stored-message replay. Suspension is resumable. */
+export type ThreadRunStatusChunk = BaseChunkType & {
+  type: 'thread-run-status';
+  payload: { status: 'success' | 'failed' | 'aborted' | 'suspended' };
+};
+
 export type AgentChunkType<OUTPUT = undefined> =
   | (BaseChunkType & { type: 'response-metadata'; payload: ResponseMetadataPayload })
   | (BaseChunkType & { type: 'text-start'; payload: TextStartPayload })
@@ -1284,6 +1293,8 @@ export type MastraModelOutputOptions<OUTPUT = undefined> = {
   /** Loads response messages the run pruned from its message list (kept there by id only) for scorer data. */
   loadStoredMessages?: StoredMessageLoader;
   processorStates?: Map<string, any>;
+  /** The agent producing this output, passed to output processors as `agent`. */
+  agent?: Agent<any, any, any, any>;
   requestContext?: RequestContext;
   /** The run's abort signal, forwarded to output processors. */
   abortSignal?: AbortSignal;

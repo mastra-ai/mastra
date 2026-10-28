@@ -63,48 +63,16 @@
     "openai-gpt-5.6-terra"
   ],
   "reasoning": {
-    "openai-gpt-5.6-sol": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
     "openai-gpt-5.2": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "openai-gpt-5-nano": [
+    "openai-gpt-5.6-luna": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-sonnet-4-6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "openai-gpt-5.6-terra": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high"]
-      }
-    ],
-    "claude-opus-4-6": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "claude-opus-4-5": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "claude-haiku-4-5": [
-      {
-        "type": "budget_tokens"
       }
     ],
     "openai-gpt-5.5": [
@@ -125,15 +93,15 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "claude-sonnet-4-5": [
-      {
-        "type": "budget_tokens"
-      }
-    ],
-    "openai-gpt-5.6-luna": [
+    "openai-gpt-5": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-sonnet-4-5": [
+      {
+        "type": "budget_tokens"
       }
     ],
     "openai-gpt-5.1": [
@@ -142,7 +110,39 @@
         "values": ["none", "minimal", "low", "medium", "high"]
       }
     ],
-    "openai-gpt-5": [
+    "openai-gpt-5.6-sol": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-haiku-4-5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "claude-sonnet-4-6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "openai-gpt-5-nano": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high"]
+      }
+    ],
+    "claude-opus-4-5": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "claude-opus-4-6": [
+      {
+        "type": "budget_tokens"
+      }
+    ],
+    "openai-gpt-5.6-terra": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high"]

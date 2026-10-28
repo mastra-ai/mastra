@@ -264,28 +264,33 @@ Configuration options specific to Turbopuffer vector store.
     ### Multi-Database Configuration
 
     ```typescript
+    import { RequestContext } from '@mastra/core/request-context'
+
     const vectorTool = createVectorQueryTool({
-      vectorStoreName: 'dynamic', // Will be determined at runtime
+      vectorStoreName: 'pinecone',
       indexName: 'documents',
       model: embedModel,
-      databaseConfig: {
-        pinecone: {
-          namespace: 'default',
-        },
-        pgvector: {
-          minScore: 0.8,
-          ef: 150,
-        },
-        chroma: {
-          where: { type: 'documentation' },
-        },
-      },
     })
+
+    // Select the store per request and pass only its matching config block
+    const pineconeContext = new RequestContext()
+    pineconeContext.set('vectorStoreName', 'pinecone')
+    pineconeContext.set('databaseConfig', {
+      pinecone: { namespace: 'default' },
+    })
+
+    const pgVectorContext = new RequestContext()
+    pgVectorContext.set('vectorStoreName', 'pgVector')
+    pgVectorContext.set('databaseConfig', {
+      pgvector: { minScore: 0.8, ef: 150 },
+    })
+
+    await vectorTool.execute({ queryText: 'search query' }, { mastra, requestContext: pgVectorContext })
     ```
 
     :::note
 
-    **Multi-Database Support**: When you configure multiple databases, only the configuration matching the actual vector store being used will be applied.
+    **Multi-Database Support**: Settings from every database block you configure are merged into the query parameters, regardless of which vector store is queried. Shared keys apply to whichever store runs the query. For example, `pgvector.minScore` is passed as `minScore`, which other stores such as LibSQL also read to filter results. Pass only the block for the vector store you query.
 
     :::
   </TabItem>

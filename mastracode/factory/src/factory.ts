@@ -64,13 +64,9 @@ import {
 import type { FactoryPullRequestProvenanceData } from './integrations/github/provenance.js';
 import { isFactoryGithubLogin, trustedCollaborator } from './integrations/github/rules.js';
 import { dismissStaleFactoryReviews } from './integrations/github/stale-reviews.js';
+import type { GitLabIntegrationBase } from './integrations/gitlab/integration.js';
 import { PlatformApiClient, platformApiClientConfigFromEnv } from './integrations/platform/api-client.js';
 import { buildPlatformConnectRoutes } from './integrations/platform/connect/routes.js';
-import { PlatformGithubIntegration } from './integrations/platform/github/integration.js';
-import { PlatformGitLabIntegration } from './integrations/platform/gitlab/integration.js';
-import { PlatformIncidentioIntegration } from './integrations/platform/incidentio/integration.js';
-import { PlatformJiraIntegration } from './integrations/platform/jira/integration.js';
-import { PlatformLinearIntegration } from './integrations/platform/linear/integration.js';
 import { createSessionAsRowOwner, prepareSessionRunContext } from './integrations/subscription-session.js';
 import { buildFactoryMcpRoutes, resolveMcpAuthorizationServers } from './mcp/routes.js';
 import type { FactoryMcpConfig } from './mcp/routes.js';
@@ -103,6 +99,7 @@ import { FactoryTransitionService } from './rules/transition-service.js';
 import { assertFactoryConfigVersion, DEFAULT_FACTORY_CONFIG_VERSION } from './rules/validation.js';
 import { CallbackFactorySandbox } from './sandbox/callback-factory-sandbox.js';
 import { isValidGitRef } from './sandbox/git-ref.js';
+import { LocalFactorySandbox } from './sandbox/local-factory-sandbox.js';
 import { SessionRetirementCoordinator } from './sandbox/session-retirement.js';
 import type { MastraFactorySandboxOption } from './sandbox/session-sandbox.js';
 import { createPlaintextFactorySecretEncryption } from './secret-encryption.js';
@@ -240,8 +237,10 @@ export interface MastraFactoryConfig {
    * `new PlatformFactorySandbox({ ... })`, which owns the session sandbox
    * constructor, the repo template and the schema of environment settings.
    * A bare callback is also accepted and wrapped as a `provider: 'custom'`
-   * sandbox with no settings. Omitted → repository sandboxes are
-   * disabled.
+   * sandbox with no settings. Omitted with Platform credentials → the factory
+   * installs a `LocalFactorySandbox` under `mastra dev` and a
+   * `PlatformFactorySandbox` in built deployments. Omitted without Platform
+   * credentials → repository sandboxes are disabled.
    */
   sandbox?: MastraFactorySandboxOption;
   /** Browser automation provider for Factory agent sessions. */
@@ -369,6 +368,29 @@ function hasPlatformCredentials(): boolean {
 }
 
 /**
+ * The sandbox the factory installs when the host passes none and Platform
+ * credentials are present: a local sandbox under `mastra dev` (or
+ * NODE_ENV=development), so development never boots remote machines, and
+ * a Platform sandbox in built deployments. Without credentials, sandboxes
+ * stay disabled.
+ */
+async function platformDefaultSandbox(): Promise<FactorySandbox | undefined> {
+  if (!hasPlatformCredentials()) return undefined;
+  if (process.env.MASTRA_DEV === 'true' || process.env.NODE_ENV === 'development') {
+    return new LocalFactorySandbox();
+  }
+  const missing = ['MASTRA_PROJECT_ID', 'MASTRA_ENVIRONMENT_ID'].filter(key => !process.env[key]?.trim());
+  if (missing.length > 0) {
+    console.warn(
+      `MastraFactory: Platform credentials are set but ${missing.join(' and ')} ${missing.length > 1 ? 'are' : 'is'} missing, so no Platform sandbox was installed and repository sandboxes are disabled.`,
+    );
+    return undefined;
+  }
+  const { PlatformFactorySandbox } = await import('@mastra/platform-workspace');
+  return new PlatformFactorySandbox();
+}
+
+/**
  * Default auth provider — `MastraAuthStudio`, which proxies identity to the
  * shared Mastra platform API and resolves its own env (`MASTRA_SHARED_API_URL`,
  * `MASTRA_ORGANIZATION_ID`, ...).
@@ -434,6 +456,8 @@ export class MastraFactory {
   #dispatcher: FactoryDecisionDispatcher | undefined;
   #startCoordinator: FactoryStartCoordinator | undefined;
   #factoryProcessor: FactoryPhaseStateProcessor | undefined;
+  #channelShutdowns: Array<() => Promise<void>> = [];
+  #shutdownPromise: Promise<void> | undefined;
   /** Environment builds through the sandbox's `builds`; undefined when the sandbox has none. */
   #environmentBuilds: EnvironmentBuildRunner | undefined;
   /** The background session resource migration; resolves `true` when it moved run bindings. */
@@ -533,6 +557,7 @@ export class MastraFactory {
         // itself. `slug` falls back to the sibling `githubAppSlug` so existing
         // deploys keep working; the constructor validates and freezes `rules`,
         // so invalid ones fail boot.
+        const { PlatformGithubIntegration } = await import('./integrations/platform/github/integration.js');
         integrations.push(
           new PlatformGithubIntegration({
             rules: this.#config.platform?.github?.rules,
@@ -542,15 +567,19 @@ export class MastraFactory {
         installedPlatformGithub = true;
       }
       if (!integrations.some(integration => integration.id === 'incidentio')) {
+        const { PlatformIncidentioIntegration } = await import('./integrations/platform/incidentio/integration.js');
         integrations.push(new PlatformIncidentioIntegration());
       }
       if (!integrations.some(integration => integration.id === 'jira')) {
+        const { PlatformJiraIntegration } = await import('./integrations/platform/jira/integration.js');
         integrations.push(new PlatformJiraIntegration());
       }
       if (!integrations.some(integration => integration.id === 'gitlab')) {
+        const { PlatformGitLabIntegration } = await import('./integrations/platform/gitlab/integration.js');
         integrations.push(new PlatformGitLabIntegration());
       }
       if (!integrations.some(integration => integration.id === 'linear')) {
+        const { PlatformLinearIntegration } = await import('./integrations/platform/linear/integration.js');
         integrations.push(new PlatformLinearIntegration());
       }
     }
@@ -640,7 +669,9 @@ export class MastraFactory {
 
     const sandboxOption = this.#config.sandbox;
     let sandboxConfig: FactorySandbox | undefined;
-    if (sandboxOption === undefined || isFactorySandbox(sandboxOption)) {
+    if (sandboxOption === undefined) {
+      sandboxConfig = await platformDefaultSandbox();
+    } else if (isFactorySandbox(sandboxOption)) {
       sandboxConfig = sandboxOption;
     } else if (typeof sandboxOption === 'function') {
       sandboxConfig = new CallbackFactorySandbox(sandboxOption);
@@ -781,7 +812,7 @@ export class MastraFactory {
       | undefined;
     const gitlabIntegration = integrations.find(
       integration => integration.id === 'gitlab' && integration.intake && integration.versionControl,
-    );
+    ) as GitLabIntegrationBase | undefined;
     const workItemsReady = storage.isDomainReady('work-items');
     const sessionRetirement =
       sandboxConfig && storage.isDomainReady('source-control')
@@ -1082,14 +1113,36 @@ export class MastraFactory {
             },
           }
         : {}),
-      ...(typeof githubIntegration?.ingestLinkedRepositoryBacklog === 'function'
+      ...(githubIntegration || gitlabIntegration
         ? {
             onProjectRepositoryLinked: ({ orgId, projectRepository }) => {
-              void githubIntegration
-                .ingestLinkedRepositoryBacklog({ orgId, projectRepositoryId: projectRepository.id })
-                .catch(error => {
-                  console.warn('[factory] Failed to import a linked repository backlog:', error);
-                });
+              void (async () => {
+                const linkedInGithub =
+                  githubIntegration &&
+                  (await sourceControlStorage.forIntegration('github').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  }));
+                if (linkedInGithub) {
+                  await githubIntegration.ingestLinkedRepositoryBacklog({
+                    orgId,
+                    projectRepositoryId: projectRepository.id,
+                  });
+                } else if (gitlabIntegration) {
+                  const linkedInGitlab = await sourceControlStorage.forIntegration('gitlab').projectRepositories.get({
+                    orgId,
+                    id: projectRepository.id,
+                  });
+                  if (linkedInGitlab) {
+                    await gitlabIntegration.ingestLinkedRepositoryBacklog({
+                      orgId,
+                      projectRepositoryId: projectRepository.id,
+                    });
+                  }
+                }
+              })().catch(error => {
+                console.warn('[factory] Failed to import a linked repository backlog:', error);
+              });
             },
           }
         : {}),
@@ -1911,6 +1964,7 @@ export class MastraFactory {
           .join(', ')}] all provide channels, but only one may. Remove all but one.`,
       );
     }
+    this.#channelShutdowns = [];
     for (const { integration } of channelRegistrations) {
       const context = buildIntegrationContext(
         {
@@ -1932,8 +1986,13 @@ export class MastraFactory {
         },
         integration.id,
       );
-      // Integrations return a channels CONFIG; the factory owns construction.
-      prepared.base.controller.setChannels(new AgentControllerChannels(integration.channels!(context)));
+      // Integrations return a channels CONFIG; the factory owns construction and teardown.
+      const channels = new AgentControllerChannels(integration.channels!(context));
+      prepared.base.controller.setChannels(channels);
+      for (const adapter of Object.values(channels.adapters)) {
+        const disconnect = (adapter as unknown as { disconnect?: () => Promise<void> }).disconnect;
+        if (disconnect) this.#channelShutdowns.push(() => disconnect.call(adapter));
+      }
     }
 
     // Feed publishers mirror web-feed comments outward (a chat bridge, a
@@ -2039,8 +2098,28 @@ export class MastraFactory {
     this.#dispatcher?.start();
   }
 
-  /** Stop Factory-owned background dispatch before the host process shuts down. */
+  /** Stop Factory-owned background work and channel transports before the host process shuts down. */
   async shutdown(): Promise<void> {
-    await this.#dispatcher?.stop();
+    if (this.#shutdownPromise) return this.#shutdownPromise;
+
+    const channelShutdowns = this.#channelShutdowns;
+    this.#channelShutdowns = [];
+    const shutdownPromise = (async () => {
+      const results = await Promise.allSettled([
+        this.#dispatcher?.stop() ?? Promise.resolve(),
+        ...channelShutdowns.map(async shutdown => shutdown()),
+      ]);
+      results.slice(1).forEach((result, index) => {
+        if (result.status === 'rejected') this.#channelShutdowns.push(channelShutdowns[index]!);
+      });
+      const failure = results.find(result => result.status === 'rejected');
+      if (failure) throw failure.reason;
+    })();
+    this.#shutdownPromise = shutdownPromise;
+    try {
+      await shutdownPromise;
+    } finally {
+      if (this.#shutdownPromise === shutdownPromise) this.#shutdownPromise = undefined;
+    }
   }
 }

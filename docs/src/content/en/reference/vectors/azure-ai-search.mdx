@@ -37,7 +37,7 @@ The `AzureAISearchVector` class provides vector search using [Azure AI Search](h
   },
   {
     name: 'clientOptions',
-    type: 'SearchClientOptions',
+    type: "Omit<SearchClientOptions, 'apiVersion'>",
     isOptional: true,
     description:
       'Additional options passed to the underlying SearchClient/SearchIndexClient, such as additionalPolicies for proxies, custom headers, or retry behavior.',

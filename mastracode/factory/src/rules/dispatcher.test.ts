@@ -6771,6 +6771,7 @@ describe('a skill run that ends in error (#27740)', () => {
     ['a tool quoting an API key hint', 'Tool failed: README says "set your API key in .env" (user quote)'],
     ['model output naming a 401 handler', 'Model output parse error near "HTTP 401 handler" in user code'],
     ['a repository credential failure', 'Invalid credentials for repository clone'],
+    ['a local file permission failure', 'EACCES: permission denied, open /x'],
   ])('does not blame model credentials for %s', async (_case, runError) => {
     const storage = (await createFactoryStorageForTests()).workItems;
     const { item, transitionService } = await queueDecision(storage, {
@@ -6800,6 +6801,13 @@ describe('a skill run that ends in error (#27740)', () => {
   it.each([
     ['a 401 status', Object.assign(new Error('Request failed'), { statusCode: 401 })],
     ['a wrapped 403 status', Object.assign(new Error('Stream failed'), { cause: { statusCode: 403 } })],
+    [
+      'an authentication failure named only in the body',
+      Object.assign(new Error('Request failed'), {
+        statusCode: 400,
+        responseBody: '{"error":{"code":"invalid_api_key","message":"Incorrect API key provided."}}',
+      }),
+    ],
     [
       'a resolver error with no policy for the user',
       'Tenant model credential policy could not be resolved: no credential policy applies to this request.',

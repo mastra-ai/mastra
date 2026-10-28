@@ -10,6 +10,7 @@ import { existsSync } from 'node:fs';
 import type { Writable } from 'node:stream';
 import { parseArgs } from 'node:util';
 
+import { resolveSubagentsSetting } from '../agents/subagents/index.js';
 import { createMastraCode } from '../index.js';
 import { activateModePackInSettings, resolveModePackArg, resolvePackSelection } from '../onboarding/pack-activation.js';
 import { listBuiltinModePacks } from '../onboarding/packs.js';
@@ -243,7 +244,11 @@ export async function runMCCli(
   // still surfaces as a failure to the caller / CI.
   let exitCode = 1;
   try {
-    boot = await createMastraCode({ settingsPath: args.settings, coAuthor: options?.coAuthor });
+    boot = await createMastraCode({
+      settingsPath: args.settings,
+      coAuthor: options?.coAuthor,
+      subagents: resolveSubagentsSetting(settings.preferences.subagentsEnabled),
+    });
     const { controller, session, mcpManager } = boot;
 
     const effectiveDefaults = resolveModelDefaults(settings, listBuiltinModePacks());

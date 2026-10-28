@@ -1,21 +1,20 @@
-import { useQuerySpans } from '@mastra/react/hooks/traces';
 import type { SpanQueryArgs } from '@mastra/react/hooks/traces';
 import { useMemo } from 'react';
 import type { ReactNode } from 'react';
+import { useSpansListSource } from '../hooks/use-spans-list-source';
 import { buildSpanQueryWhere } from '../span-filters';
 import { spanToListRow } from '../span-list-row';
 import type { SpanSelection } from './span-detail-panel';
 import { SpansFilterBar } from './spans-filter-bar';
 import { useObservabilityCapabilities } from '@/domains/capabilities';
 import { ObservabilityListBody } from '@/domains/observability/components/observability-list-body';
-import {
-  observabilityListQueryOptions,
-  useObservabilityListFilters,
-} from '@/domains/observability/hooks/use-observability-list-filters';
+import { useObservabilityListFilters } from '@/domains/observability/hooks/use-observability-list-filters';
+import { ColumnsMenu } from '@/domains/traces/components/columns-menu';
 import { NoTracesInfo } from '@/domains/traces/components/no-traces-info';
 import { TracesErrorContent } from '@/domains/traces/components/traces-error-content';
 import { TracesListView } from '@/domains/traces/components/traces-list-view';
 import type { TracesListViewTrace } from '@/domains/traces/components/traces-list-view';
+import { useTraceColumnPreferences } from '@/domains/traces/hooks/use-trace-column-preferences';
 import { ActionRow } from '@/ds/components/ActionRow';
 
 export type SpansExplorerPanelArgs = {
@@ -38,6 +37,7 @@ export type SpansExplorerBodyProps = {
 export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }: SpansExplorerBodyProps) {
   const filters = useObservabilityListFilters();
   const { timeRange, tokens, groups, sort } = filters;
+  const columns = useTraceColumnPreferences({ scope: 'spans' });
 
   const { data: capabilities } = useObservabilityCapabilities();
   const withContextFields = capabilities?.capabilities.spanQueryContextFields ?? false;
@@ -47,10 +47,12 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
     return { timeRange, orderBy: [{ field: 'startedAt', direction: sort }], ...(where ? { where } : {}) };
   }, [timeRange, sort, tokens, groups, withContextFields]);
 
-  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useQuerySpans({
-    query,
-    queryOptions: observabilityListQueryOptions,
-  });
+  const { spans, hasNextPage, isFetchingNextPage, setEndOfListElement, isLoading, isError, error } = useSpansListSource(
+    {
+      query,
+      rolling: filters.rolling,
+    },
+  );
 
   const rows = useMemo(() => (spans ?? []).map(spanToListRow), [spans]);
   const panelSpans = useMemo(
@@ -89,6 +91,9 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
                 disabled={isLoading}
               />
             </ActionRow.Start>
+            <ActionRow.End>
+              <ColumnsMenu scope="spans" value={columns.preferences} onChange={columns.setPreferences} />
+            </ActionRow.End>
           </ActionRow>
         }
         error={
@@ -108,6 +113,7 @@ export function SpansExplorerBody({ selection, onSelectionChange, renderPanel }:
         <TracesListView
           listId="all-spans"
           traces={rows}
+          columnPreferences={columns.preferences}
           isLoading={isLoading}
           isFetchingNextPage={isFetchingNextPage}
           hasNextPage={hasNextPage}
