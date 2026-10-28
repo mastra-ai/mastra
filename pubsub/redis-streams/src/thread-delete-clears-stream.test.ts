@@ -65,11 +65,10 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
       await expect.poll(() => redis.exists([deletedKey, keptKey]), { timeout: 5_000 }).toBe(2);
 
       await memory.deleteThread(deletedThread);
-      // The stream is cleared in the background; settled() is the join point.
-      await memory.settled();
 
       expect(await memory.getThreadById({ threadId: deletedThread })).toBeNull();
-      expect(await redis.exists(deletedKey)).toBe(0);
+      // Cleared in the background so deleteThread never waits on the pubsub.
+      await expect.poll(() => redis.exists(deletedKey), { timeout: 5_000 }).toBe(0);
       expect(await redis.exists(keptKey)).toBe(1);
       expect(await memory.getThreadById({ threadId: keptThread })).not.toBeNull();
     } finally {
@@ -79,7 +78,7 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
     }
   }, 30_000);
 
-  it('does not wait on an unreachable pubsub to delete the thread', async () => {
+  it('does not wait on an unreachable pubsub in deleteThread or settled()', async () => {
     // Nothing listens on port 1; the client keeps reconnecting forever.
     const client = createClient({ url: 'redis://127.0.0.1:1', socket: { reconnectStrategy: 50 } });
     client.on('error', () => {});
@@ -91,7 +90,11 @@ describe('Memory.deleteThread clears the thread event stream in Redis', () => {
     await mastra.getAgent('agent').getMemory(); // registers Mastra (storage + pubsub) on the memory
     const thread = await memory.createThread({ resourceId: 'user-1', threadId: `thread-${randomUUID()}` });
 
-    const deleted = memory.deleteThread(thread.id).then(() => 'deleted');
+    // settled() is what shutdown and storage-close paths await, so it must not wait either.
+    const deleted = memory
+      .deleteThread(thread.id)
+      .then(() => memory.settled())
+      .then(() => 'deleted');
     const timedOut = new Promise(resolve => setTimeout(() => resolve('timed out'), 2_000));
     expect(await Promise.race([deleted, timedOut])).toBe('deleted');
     expect(await memory.getThreadById({ threadId: thread.id })).toBeNull();

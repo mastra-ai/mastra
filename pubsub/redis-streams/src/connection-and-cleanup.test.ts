@@ -415,7 +415,9 @@ describe('RedisStreamsPubSub connection resilience and topic cleanup', () => {
       await expect.poll(() => received, { timeout: 5000 }).toEqual([1]);
 
       const inspector = await createInspector();
-      await expect.poll(() => inspector.exists(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
+      // The read loop recreates the stream right after it expires, so check that
+      // entry 1 is gone (XLEN 0) rather than racing to see the key missing.
+      await expect.poll(() => inspector.xLen(`mastra:topic:${topic}`), { timeout: 5000 }).toBe(0);
 
       await ps.publish(topic, makeEvent({ data: { n: 2 } }));
       await expect.poll(() => received, { timeout: 5000 }).toEqual([1, 2]);
