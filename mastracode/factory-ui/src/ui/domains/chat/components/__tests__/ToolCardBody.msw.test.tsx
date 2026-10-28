@@ -1,4 +1,4 @@
-import { screen } from '@testing-library/react';
+import { fireEvent, screen } from '@testing-library/react';
 import userEvent from '@testing-library/user-event';
 import { describe, expect, it } from 'vitest';
 import { renderWithProviders } from '../../../../../../e2e/ui/render';
@@ -82,10 +82,18 @@ describe('Factory tool body', () => {
       expect(screen.queryByText(/iVBORw0KGgo/)).not.toBeInTheDocument();
     });
 
+    // jsdom has no layout, so give the loaded image the sizes a browser would.
+    function loadImage(image: HTMLElement, sizes: { offsetHeight: number; naturalHeight: number }) {
+      Object.defineProperty(image, 'offsetHeight', { configurable: true, value: sizes.offsetHeight });
+      Object.defineProperty(image, 'naturalHeight', { configurable: true, value: sizes.naturalHeight });
+      fireEvent.load(image);
+    }
+
     it('opens a capped screenshot to full size and back', async () => {
       renderWithProviders(<ToolCard tool={screenshotTool} />);
       await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
       const image = screen.getByRole('img', { name: "Screenshot of the agent's browser" });
+      loadImage(image, { offsetHeight: 480, naturalHeight: 8000 });
       expect(image).toHaveClass('max-h-[480px]');
 
       await userEvent.click(screen.getByRole('button', { name: 'Show full size' }));
@@ -93,6 +101,17 @@ describe('Factory tool body', () => {
 
       await userEvent.click(screen.getByRole('button', { name: 'Show smaller' }));
       expect(image).toHaveClass('max-h-[480px]');
+    });
+
+    it("doesn't offer full size for a screenshot that already fits", async () => {
+      renderWithProviders(<ToolCard tool={screenshotTool} />);
+      await userEvent.click(screen.getByRole('button', { name: /screenshot/i }));
+      loadImage(screen.getByRole('img', { name: "Screenshot of the agent's browser" }), {
+        offsetHeight: 300,
+        naturalHeight: 300,
+      });
+
+      expect(screen.queryByRole('button', { name: 'Show full size' })).not.toBeInTheDocument();
     });
 
     it('shows the failure message when no image came back', async () => {

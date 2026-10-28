@@ -30,20 +30,31 @@ export function toolHasBody(tool: ToolCall, command: string | undefined): boolea
   return hasToolArguments(tool) || toolResultText(tool) !== undefined;
 }
 
-/** Full-page captures are tall, so the image starts capped and opens to full size on click. */
+const SCREENSHOT_MAX_HEIGHT = 480;
+
+/**
+ * Full-page captures are tall, so the image starts capped. Only an image the cap actually
+ * cuts down opens to full size on click; a small one is just an image.
+ */
 function Screenshot({ src }: { src: string }) {
+  const [capped, setCapped] = useState(false);
   const [fullSize, setFullSize] = useState(false);
   return (
     <button
       type="button"
-      aria-label={fullSize ? 'Show smaller' : 'Show full size'}
-      aria-pressed={fullSize}
+      disabled={!capped}
+      aria-label={capped ? (fullSize ? 'Show smaller' : 'Show full size') : undefined}
+      aria-pressed={capped ? fullSize : undefined}
       onClick={() => setFullSize(value => !value)}
-      className={fullSize ? 'cursor-zoom-out' : 'cursor-zoom-in'}
+      className={capped ? (fullSize ? 'cursor-zoom-out' : 'cursor-zoom-in') : 'cursor-default'}
     >
       <img
         src={src}
         alt="Screenshot of the agent's browser"
+        onLoad={event => {
+          const img = event.currentTarget;
+          if (!fullSize) setCapped(img.offsetHeight >= SCREENSHOT_MAX_HEIGHT && img.naturalHeight > img.offsetHeight);
+        }}
         className={`border-border max-w-full rounded-md border ${fullSize ? '' : 'max-h-[480px]'}`}
       />
     </button>
