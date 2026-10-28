@@ -11,29 +11,28 @@
  * The URL is the single source of truth for the active factory: everything
  * factory-scoped lives under `/factories/:factoryId/**` behind `FactoryLayout`.
  */
-import { createBrowserRouter, Navigate, useLocation, useParams } from 'react-router';
+import { lazy } from 'react';
+import { createBrowserRouter, Navigate, Outlet, useLocation, useParams } from 'react-router';
 import type { RouteObject } from 'react-router';
 
 import { FactoryBoardLanding } from './domains/factory/components/FactoryBoardLanding';
-import { RootGuards } from './domains/auth/components/RootGuards';
-import { KnowledgePage } from './pages/KnowledgePage';
-import { CustomBoardPage, ReviewBoardPage, WorkBoardPage } from './pages/BoardPage';
-import { CreateFactoryPage } from './pages/CreateFactoryPage';
-import { NewPage } from './pages/NewPage';
-import { OnboardingPage } from './pages/OnboardingPage';
-import { SettingsPage } from './pages/SettingsPage';
-import { SlackConnectionPage } from './pages/SlackConnectionPage';
-import { RulesPage } from './pages/RulesPage';
-import { SignInPage } from './pages/SignInPage';
-import { ThreadPage } from './pages/ThreadPage';
+import { AuthPendingSkeleton, RootGuards } from './domains/auth/components/RootGuards';
 
 import { useFactoriesQuery } from '../hooks/useFactories';
 import { useServerFeatures } from '../hooks/useServerFeatures';
 import { FactoryLayout } from './domains/workspaces/components/FactoryLayout';
 import { AppLayout } from './layouts/AppLayout';
+import { SettingsLayout } from './layouts/SettingsLayout';
 import { pendingCreateFlowFactoryId } from './domains/workspaces/hooks/useCreateFactoryFlow';
 import { createFactoryPath } from './domains/workspaces/services/factoryPaths';
 import { hasResumableFactoryOnboarding } from './domains/workspaces/services/onboardingFlow';
+
+// Component-level lazy (not route `lazy`) so settings navigation commits
+// instantly; `SettingsLayout` suspends while the chunk loads.
+const SettingsPage = lazy(() => import('./pages/SettingsPage').then(m => ({ default: m.SettingsPage })));
+const SlackConnectionPage = lazy(() =>
+  import('./pages/SlackConnectionPage').then(m => ({ default: m.SlackConnectionPage })),
+);
 
 function RootLanding() {
   const { data: factories, isPending } = useFactoriesQuery();
@@ -108,13 +107,13 @@ function ConnectionsRedirect() {
   return <Navigate to={`/factories/${firstFactory.id}/settings/connections`} replace />;
 }
 
-function KnowledgeRoute() {
+function KnowledgeGate() {
   const { factoryId } = useParams<{ factoryId: string }>();
   const features = useServerFeatures();
 
   if (features.isPending || !factoryId) return null;
   if (!features.data?.knowledge) return <Navigate to={`/factories/${factoryId}`} replace />;
-  return <KnowledgePage />;
+  return <Outlet />;
 }
 
 export function createAppRoutes(): RouteObject[] {
@@ -125,9 +124,13 @@ export function createAppRoutes(): RouteObject[] {
     {
       path: '/',
       element: <RootGuards />,
+      hydrateFallbackElement: <AuthPendingSkeleton label="Loading" />,
       children: [
         { index: true, element: <RootLanding /> },
-        { path: 'onboarding', element: <OnboardingPage /> },
+        {
+          path: 'onboarding',
+          lazy: () => import('./pages/OnboardingPage').then(m => ({ Component: m.OnboardingPage })),
+        },
         {
           path: 'factories/:factoryId',
           element: <FactoryLayout />,
@@ -136,24 +139,55 @@ export function createAppRoutes(): RouteObject[] {
               element: <AppLayout />,
               children: [
                 { index: true, element: <FactoryHomeRedirect /> },
-                { path: 'workspaces/:sessionId', element: <NewPage /> },
-                { path: 'workspaces/:sessionId/threads/:threadId', element: <ThreadPage /> },
-                { path: 'user/new/:draftSessionId', element: <NewPage /> },
-                { path: 'user/threads/:threadId', element: <ThreadPage /> },
-                { path: 'new', element: <NewPage /> },
-                { path: 'new-factory', element: <CreateFactoryPage /> },
-                { path: 'work', element: <WorkBoardPage /> },
-                { path: 'review', element: <ReviewBoardPage /> },
-                { path: 'boards/:boardId', element: <CustomBoardPage /> },
+                {
+                  path: 'workspaces/:sessionId',
+                  lazy: () => import('./pages/NewPage').then(m => ({ Component: m.NewPage })),
+                },
+                {
+                  path: 'workspaces/:sessionId/threads/:threadId',
+                  lazy: () => import('./pages/ThreadPage').then(m => ({ Component: m.ThreadPage })),
+                },
+                {
+                  path: 'user/new/:draftSessionId',
+                  lazy: () => import('./pages/NewPage').then(m => ({ Component: m.NewPage })),
+                },
+                {
+                  path: 'user/threads/:threadId',
+                  lazy: () => import('./pages/ThreadPage').then(m => ({ Component: m.ThreadPage })),
+                },
+                { path: 'new', lazy: () => import('./pages/NewPage').then(m => ({ Component: m.NewPage })) },
+                {
+                  path: 'new-factory',
+                  lazy: () => import('./pages/CreateFactoryPage').then(m => ({ Component: m.CreateFactoryPage })),
+                },
+                { path: 'work', lazy: () => import('./pages/BoardPage').then(m => ({ Component: m.WorkBoardPage })) },
+                {
+                  path: 'review',
+                  lazy: () => import('./pages/BoardPage').then(m => ({ Component: m.ReviewBoardPage })),
+                },
+                {
+                  path: 'boards/:boardId',
+                  lazy: () => import('./pages/BoardPage').then(m => ({ Component: m.CustomBoardPage })),
+                },
                 { path: 'activity', element: <FactoryHomeRedirect /> },
                 { path: 'overview', element: <FactoryHomeRedirect /> },
                 { path: 'attention', element: <FactoryHomeRedirect /> },
                 { path: 'metrics', element: <FactoryHomeRedirect /> },
                 { path: 'audit', element: <FactoryHomeRedirect /> },
-                { path: 'rules', element: <RulesPage /> },
-                { path: 'knowledge', element: <KnowledgeRoute /> },
+                { path: 'rules', lazy: () => import('./pages/RulesPage').then(m => ({ Component: m.RulesPage })) },
+                {
+                  path: 'knowledge',
+                  element: <KnowledgeGate />,
+                  children: [
+                    {
+                      index: true,
+                      lazy: () => import('./pages/KnowledgePage').then(m => ({ Component: m.KnowledgePage })),
+                    },
+                  ],
+                },
                 {
                   path: 'settings',
+                  element: <SettingsLayout />,
                   children: [
                     { index: true, element: <Navigate to="preferences" replace /> },
                     { path: 'connections/slack', element: <SlackConnectionPage /> },
@@ -171,7 +205,11 @@ export function createAppRoutes(): RouteObject[] {
         { path: '*', element: <Navigate to="/" replace /> },
       ],
     },
-    { path: '/signin', element: <SignInPage /> },
+    {
+      path: '/signin',
+      hydrateFallbackElement: <AuthPendingSkeleton label="Loading" />,
+      lazy: () => import('./pages/SignInPage').then(m => ({ Component: m.SignInPage })),
+    },
   ];
 }
 

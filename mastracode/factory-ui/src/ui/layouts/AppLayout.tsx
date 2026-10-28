@@ -1,7 +1,8 @@
 import { Sidebar, useSidebar } from '@mastra/playground-ui/components/Sidebar';
+import { Spinner } from '@mastra/playground-ui/components/Spinner';
 import { useKeydown } from '@mastra/playground-ui/keyboard/use-keydown';
 import { AppShell, MainCard } from '@mastra/playground-ui/new/layout/app-shell';
-import { Outlet } from 'react-router';
+import { Outlet, useNavigation } from 'react-router';
 
 import { ChatSessionRouteProvider } from '../domains/chat/Chat';
 import { ChatOverlays } from '../domains/chat/components/ChatOverlays';
@@ -36,12 +37,19 @@ function SidebarShortcuts() {
 
 function AppFrame() {
   const { state, collapsedWidth } = useSidebar();
+  const navigation = useNavigation();
   const edgeToEdge = state === 'collapsed' && collapsedWidth === 0;
 
   return (
     <AppShell sidebar={<AppSidebar />} mobileHeader={<MobileHeader />} edgeToEdge={edgeToEdge}>
       <MainCard className="flex flex-col" edgeToEdge={edgeToEdge}>
-        <Outlet />
+        {navigation.state === 'loading' ? (
+          <div className="flex flex-1 items-center justify-center">
+            <Spinner aria-label="Loading page" className="text-muted-foreground" />
+          </div>
+        ) : (
+          <Outlet />
+        )}
       </MainCard>
     </AppShell>
   );
