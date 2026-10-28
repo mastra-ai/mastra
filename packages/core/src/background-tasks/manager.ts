@@ -612,7 +612,6 @@ export class BackgroundTaskManager {
     }
 
     const isProcessAffine = this.taskContexts.has(taskId);
-    if (!isProcessAffine) await this.#pruneInFlightResumes();
     const canRun = isProcessAffine ? this.reserveLocalSlot(task) : await this.checkConcurrency(task.agentId);
     if (!canRun) {
       if (options?.onNoSlot === 'queue') {
@@ -2099,6 +2098,8 @@ export class BackgroundTaskManager {
 
   private async checkConcurrency(agentId: string): Promise<boolean> {
     const storage = await this.getStorage();
+    // Another worker may already have handled a resume this manager published.
+    await this.#pruneInFlightResumes();
     let inFlightForAgent = 0;
     for (const entry of this.inFlightPortableResumes.values()) {
       if (entry.agentId === agentId) inFlightForAgent++;
@@ -2139,7 +2140,6 @@ export class BackgroundTaskManager {
 
     try {
       const storage = await this.getStorage();
-      await this.#pruneInFlightResumes();
       // Queued resumes go first: they continue work that already started.
       for (const [taskId, entry] of [...this.localPendingResumes]) {
         const task = await storage.getTask(taskId);
