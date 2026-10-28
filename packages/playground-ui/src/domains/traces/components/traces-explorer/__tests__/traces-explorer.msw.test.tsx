@@ -5,10 +5,6 @@ import { delay, http, HttpResponse } from 'msw';
 import { Profiler, useState } from 'react';
 import type { ReactNode } from 'react';
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from 'vitest';
-import {
-  TRACES_LIST_DELTA_POLL_INTERVAL_MS,
-  TRACES_LIST_REFETCH_INTERVAL_MS,
-} from '../../../hooks/use-traces-list-source';
 import { TRACE_FILTER_BAR_OPERATORS } from '../../../trace-filters';
 import { serializeTraceColumnPreferences } from '../../../trace-list-columns';
 import { TracesExplorer, useTracesConfig, useTracesFilterBar, useTracesFilterBarFields } from '../index';
@@ -41,6 +37,10 @@ import {
   weatherTraceUsage,
   workflowTracesPage,
 } from './fixtures/traces-explorer';
+import {
+  OBSERVABILITY_LIST_POLL_INTERVAL_MS,
+  OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
+} from '@/domains/observability/list-polling';
 import { FilterBar } from '@/ds/components/FilterBar';
 import type { FilterBarExpression, FilterBarField } from '@/ds/components/FilterBar';
 import { TestLinkProvider } from '@/test/link-provider';
@@ -294,6 +294,17 @@ describe('TracesExplorer', () => {
 
       expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
       expect(screen.getByText('Book a table for two')).toBeTruthy();
+    });
+
+    it('has no thread message-count column', async () => {
+      localStorage.clear();
+      setExplorerHandlers();
+
+      renderExplorer();
+
+      expect(await screen.findByText('What is the weather in Paris?')).toBeTruthy();
+      expect(screen.getByText('Status')).toBeTruthy();
+      expect(screen.queryByText('Messages')).toBeNull();
     });
   });
 
@@ -1149,13 +1160,13 @@ describe('TracesExplorer', () => {
       server: 'polls deltas',
       capabilities: traceQueryCapabilities,
       tickRequests: onDeltaPoll,
-      interval: TRACES_LIST_DELTA_POLL_INTERVAL_MS,
+      interval: OBSERVABILITY_LIST_POLL_INTERVAL_MS,
     },
     {
       server: 'reloads the list',
       capabilities: noDeltaPollingCapabilities,
       tickRequests: onTraceQuery,
-      interval: TRACES_LIST_REFETCH_INTERVAL_MS,
+      interval: OBSERVABILITY_LIST_REFETCH_INTERVAL_MS,
     },
   ])('when the auto-refresh tick fires and the explorer $server', ({ capabilities, tickRequests, interval }) => {
     it('does not re-render the filter bar or the columns menu', async () => {

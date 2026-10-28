@@ -11,37 +11,19 @@
   ],
   "structuredOutput": ["deepseek-v4-flash", "gemma4", "glm5.3", "glm5.3-flash", "qwen3.6", "qwen3.8-flash"],
   "reasoning": {
-    "gemma4": [
-      {
-        "type": "effort",
-        "values": ["none", "low", "medium", "high", "max"]
-      }
-    ],
-    "qwen3.8-flash": [
-      {
-        "type": "effort",
-        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
-    "glm5.3-flash": [
-      {
-        "type": "effort",
-        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
-      }
-    ],
     "deepseek-v4-flash": [
       {
         "type": "effort",
         "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ],
-    "qwen3.6": [
+    "gemma4": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
       }
     ],
-    "mimo-v2.6-flash": [
+    "qwen3.6": [
       {
         "type": "effort",
         "values": ["none", "low", "medium", "high", "max"]
@@ -51,6 +33,24 @@
       {
         "type": "effort",
         "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "glm5.3-flash": [
+      {
+        "type": "effort",
+        "values": ["minimal", "low", "medium", "high", "xhigh", "max"]
+      }
+    ],
+    "mimo-v2.6-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "low", "medium", "high", "max"]
+      }
+    ],
+    "qwen3.8-flash": [
+      {
+        "type": "effort",
+        "values": ["none", "minimal", "low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

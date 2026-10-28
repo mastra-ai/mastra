@@ -411,11 +411,11 @@ describe('buildPreviewFromJson', () => {
 });
 
 describe('buildStoredPreview', () => {
-  it('trims supplied previews, caps them like generated ones and regenerates blanks', () => {
+  it('trims supplied previews, caps them like generated ones and preserves intentional blanks', () => {
     expect(buildStoredPreview(' upstream ', { text: 'built' })).toBe('upstream');
     expect(buildStoredPreview('u'.repeat(300), 'built')).toBe(`${'u'.repeat(PREVIEW_MAX_LENGTH)}…`);
-    expect(buildStoredPreview('', 'built')).toBe('built');
-    expect(buildStoredPreview(' \n\t ', 'built')).toBe('built');
+    expect(buildStoredPreview('', 'built')).toBe('');
+    expect(buildStoredPreview(' \n\t ', 'built')).toBe('');
   });
 
   it('caps an oversized supplied preview without splitting a surrogate pair', () => {

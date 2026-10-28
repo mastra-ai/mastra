@@ -1041,7 +1041,7 @@ export async function createNetworkLoop({
 
       let finalText = await result.text;
       if (toolCallDeclined) {
-        finalText = finalText + `\n\n${declineReason}`;
+        finalText += `\n\n${declineReason}`;
       }
 
       // When the sub-agent was aborted, skip saving partial results to memory

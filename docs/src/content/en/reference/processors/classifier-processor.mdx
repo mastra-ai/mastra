@@ -115,7 +115,7 @@ inputProcessors: [
             name: 'chunkWindow',
             type: 'number',
             description:
-              'Non-negative integer number of trailing stream chunks to classify together, including the current text-delta chunk. A value of 0 classifies only the current chunk. Each text chunk triggers a classifier call, so larger windows increase cost.',
+              'Non-negative integer number of trailing stream chunks to classify together, including the current text-delta chunk. A value of 0 classifies only the current chunk. Each text chunk triggers a classifier call unless the windowed text is whitespace-only, so larger windows increase cost.',
             isOptional: true,
             default: '0',
           },
