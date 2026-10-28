@@ -53,6 +53,20 @@ new LocalFactorySandbox() // reads MASTRACODE_LOCAL_SANDBOX_ROOT, defaults to ~/
 
 `LocalFactorySandbox` runs every session on the host machine under `join(root, sessionId)`. Without `env`, commands only see an allow-list of host variables that git and TLS need, such as `HOME`, `USER`, `SHELL` and `SSL_CERT_FILE`, plus `PATH`. App secrets stay out of commands that run in repository checkouts.
 
+### Scope env to one factory
+
+Every provider's `env` option takes a record or a function of the session's `FactorySandboxContext`. Use the function form when one deployment hosts several factories and a credential belongs to only one of them:
+
+```typescript
+new PlatformFactorySandbox({
+  env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
+})
+```
+
+Compare `factoryId`, not `factoryName`: names can be edited and are not unique.
+
+Platform and Docker apply `env` only when they provision a sandbox. A sandbox that resumes keeps the env it started with. If you remove a credential from some factories, recreate their running sandboxes so the credential doesn't stay in them.
+
 ## Default sandbox
 
 When you omit the `sandbox` option and Platform credentials (`MASTRA_PLATFORM_ACCESS_TOKEN` or `MASTRA_PLATFORM_SECRET_KEY`) are set, `MastraFactory` installs a sandbox itself:
@@ -180,6 +194,19 @@ Everything Factory knows about the session, passed to `create`, `template` and t
     type: 'string',
     description:
       'The provider sandbox id persisted from a prior start. Forward it so resume reattaches the original VM.',
+    isOptional: true,
+  },
+  {
+    name: 'factoryId',
+    type: 'string',
+    description: 'Id of the factory the session belongs to. Absent for sessions created before factories.',
+    isOptional: true,
+  },
+  {
+    name: 'factoryName',
+    type: 'string',
+    description:
+      'Display name of the factory, for logs and readable config. Names can be edited and are not unique, so scope secrets by factoryId.',
     isOptional: true,
   },
   { name: 'repoFullName', type: 'string', description: 'owner/name of the session repository.', isOptional: true },

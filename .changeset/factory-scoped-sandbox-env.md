@@ -6,10 +6,12 @@
 '@mastra/docker': minor
 ---
 
-Factory sandbox providers now accept `env` as a function of the session's sandbox context, so a credential can reach one factory's sessions only. The context carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and are not unique.
+Added factory-scoped sandbox env. A deployment that hosts several factories can now give a credential to one factory's sessions only: every Factory sandbox provider accepts `env` as a function of the session's sandbox context, which carries the new `factoryId` and `factoryName` fields. Scope secrets by `factoryId`, because names can be edited and are not unique.
 
 ```ts
 new PlatformFactorySandbox({
   env: ctx => (ctx.factoryId === PLATFORM_FACTORY_ID ? { PLATFORM_TOKEN } : {}),
 });
 ```
+
+Platform and Docker sandboxes keep the env they started with when they resume. When you remove a credential from a factory, recreate its running sandboxes.
