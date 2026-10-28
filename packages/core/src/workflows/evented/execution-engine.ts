@@ -132,7 +132,6 @@ export class EventedExecutionEngine extends ExecutionEngine {
           'workflow.suspend',
           'workflow.publish-failed',
           'workflow.finish-cleanup-complete',
-          'workflow.finish-cleanup-failed',
         ].includes(event.type)
       ) {
         await ack?.();
@@ -150,7 +149,7 @@ export class EventedExecutionEngine extends ExecutionEngine {
           event = pendingCleanupFinish;
         }
         await pubsub.unsubscribe('workflows-finish', finishCb);
-        if (event.type === 'workflow.finish-cleanup-failed' || event.type === 'workflow.publish-failed') {
+        if (event.type === 'workflow.publish-failed') {
           rejectResult(new Error(event.data.message));
           return;
         }

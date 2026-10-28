@@ -625,7 +625,7 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     });
 
-    it.each(['success', 'failed'] as const)('does not settle a %s run when snapshot deletion fails', async status => {
+    it.each(['success', 'failed'] as const)('returns the %s run result when snapshot cleanup fails', async status => {
       const storage = new MockStore();
       const workflowsStore = await storage.getStore('workflows');
       vi.spyOn(workflowsStore!, 'deleteWorkflowRunById').mockRejectedValue(new Error('snapshot delete failed'));
@@ -652,14 +652,19 @@ describe('Workflow (Evented Engine Specific)', () => {
       await mastra.startWorkers();
       try {
         const run = await workflow.createRun();
-        const outcome = await Promise.race([
-          run.start({ inputData: {} }).then(
-            () => 'RESOLVED',
-            error => (error as Error).message,
-          ),
+        const result = await Promise.race([
+          run.start({ inputData: {} }),
           new Promise<'HANG'>(resolve => setTimeout(() => resolve('HANG'), 5000)),
         ]);
-        expect(outcome).toContain('snapshot delete failed');
+        expect(result).not.toBe('HANG');
+        if (result === 'HANG') return;
+        expect(result.status).toBe(status);
+        if (status === 'success') {
+          expect(result.result).toEqual({ value: 'done' });
+        } else {
+          expect(result.steps['terminal-step']?.status).toBe('failed');
+          expect(result.steps['terminal-step']?.error?.message).toBe('step failed');
+        }
         expect(
           await workflowsStore?.getWorkflowRunById({ runId: run.runId, workflowName: workflow.id }),
         ).not.toBeNull();
