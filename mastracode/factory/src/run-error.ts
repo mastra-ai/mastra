@@ -23,12 +23,22 @@ export interface RunErrorIdentity {
 const UNEXPECTED_ERROR = 'An unexpected error stopped the run. Copy the error details to investigate.';
 const NO_REASON_AVAILABLE =
   'The provider rejected the request. A specific reason isn’t available here. Copy the error details and check the server logs.';
+const REDIS_OUT_OF_MEMORY = 'OOM command not allowed';
+const MAX_CAUSE_DEPTH = 5;
 
 export function describeRunError(error: RunErrorIdentity): RunErrorDescription {
   return { ...explainRunError(error), model: providerModelId(error) };
 }
 
 function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {
+  if (factoryOutOfMemory(error)) {
+    return {
+      title: 'Factory is unavailable',
+      message:
+        'Factory’s internal service is out of memory, so this run stopped. Your request and the model provider are fine. Contact your Factory administrator, then continue once service is restored.',
+      recoveries: ['continue'],
+    };
+  }
   if (error.name === PROVIDER_AUTH_REQUIRED_ERROR) {
     return { title: 'Provider sign-in required', message: error.message, recoveries: ['credentials', 'model'] };
   }
@@ -105,6 +115,14 @@ function explainRunError(error: RunErrorIdentity): Omit<RunErrorDescription, 'mo
 function afterProviderReason(error: RunErrorIdentity, next: string, fallback?: string): string {
   const reason = providerErrorReason(error) ?? fallback;
   return reason ? `${reason.replace(/\.?$/, '.')} ${next}` : next;
+}
+
+function factoryOutOfMemory(error: unknown, depth = 0): boolean {
+  if (depth > MAX_CAUSE_DEPTH || typeof error !== 'object' || error === null) return false;
+  if ('message' in error && typeof error.message === 'string' && error.message.startsWith(REDIS_OUT_OF_MEMORY)) {
+    return true;
+  }
+  return 'cause' in error && factoryOutOfMemory(error.cause, depth + 1);
 }
 
 function describeUnclassifiedError(error: RunErrorIdentity): Omit<RunErrorDescription, 'model'> {

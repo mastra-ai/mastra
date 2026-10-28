@@ -202,6 +202,17 @@ describe('slackRunErrorCard', () => {
     expect(card).toContain(SLACK_SESSION_URL);
   });
 
+  it('says Factory itself is out of memory instead of quoting the Redis reply', () => {
+    const card = rendered(
+      slackRunErrorCard(new Error("OOM command not allowed when used memory > 'maxmemory'."), slackRun()),
+    );
+
+    expect(card).toContain('Factory is unavailable');
+    expect(card).not.toContain('maxmemory');
+    expect(card).toContain('Open session');
+    expect(card).toContain(SLACK_SESSION_URL);
+  });
+
   it('still explains the failure when the run has no session or no public URL', () => {
     const withoutSession = rendered(slackRunErrorCard(codexPlanRefusal(), { requestContext: new RequestContext() }));
     vi.stubEnv('MASTRACODE_PUBLIC_URL', '');
