@@ -104,6 +104,147 @@ describeForAllEngines('AIMock loop scenario: stream result destructuring', engin
     },
   );
 
+  it.skipIf(engine === 'inngest').each(['mid-stream', 'next-step', 'retry-preparation'] as const)(
+    'reports the terminating attempt request without reusing an earlier attempt (%s)',
+    async failure => {
+      const failAfterTool = failure === 'next-step';
+      const failDuringRetryPreparation = failure === 'retry-preparation';
+      const llm = getMock();
+      if (failAfterTool) {
+        llm.on(
+          { endpoint: 'chat', sequenceIndex: 0 },
+          {
+            toolCalls: [{ name: 'lookup', arguments: {}, id: 'call_error_lookup' }],
+          },
+        );
+      }
+      llm.on({ endpoint: 'chat', sequenceIndex: failAfterTool ? 1 : 0 }, { content: 'Partial answer.' });
+      const provider = createOpenAI({ apiKey: 'test', baseURL: `${llm.url}/v1` }).chat('gpt-4o-mini');
+      let calls = 0;
+      const model = {
+        specificationVersion: provider.specificationVersion,
+        provider: provider.provider,
+        modelId: provider.modelId,
+        supportedUrls: provider.supportedUrls,
+        doGenerate: provider.doGenerate.bind(provider),
+        doStream: async (options: Parameters<typeof provider.doStream>[0]) => {
+          calls++;
+          if (failAfterTool && calls === 2) throw new Error('Failed before capturing a request');
+          const response = await provider.doStream(options);
+          return {
+            ...response,
+            request: { body: failAfterTool ? 'PRIVATE_EARLIER_REQUEST' : 'PRIVATE_ERROR_REQUEST' },
+            stream: failAfterTool
+              ? response.stream
+              : response.stream.pipeThrough(
+                  new TransformStream({
+                    transform(chunk, controller) {
+                      if (chunk.type === 'text-delta') {
+                        controller.enqueue({ type: 'error', error: new Error('Provider failed mid-stream') });
+                        controller.terminate();
+                      } else {
+                        controller.enqueue(chunk);
+                      }
+                    },
+                  }),
+                ),
+          };
+        },
+      };
+      const pubsub = new EventEmitterPubSub();
+      let preparations = 0;
+      const { agent, mastra } = await createSharedAgent(llm, {
+        engine,
+        model: failDuringRetryPreparation
+          ? () => [
+              { id: 'primary-model', model, maxRetries: 0 },
+              { id: 'fallback-model', model, maxRetries: 0 },
+            ]
+          : model,
+        pubsub,
+        errorProcessors: [],
+        maxRetries: 0,
+        inputProcessors: failDuringRetryPreparation
+          ? [
+              {
+                id: 'fail-retry-preparation',
+                processLLMRequest: () => {
+                  if (++preparations === 2) throw new Error('Failed before retry request capture');
+                },
+              },
+            ]
+          : undefined,
+        tools: {
+          lookup: createTool({
+            id: 'lookup',
+            description: 'Look up a value',
+            inputSchema: z.object({}),
+            execute: async () => ({ value: 'found' }),
+          }),
+        },
+      });
+      const serialized: string[] = [];
+      const boundaries = { publish: 0, persist: 0, results: 0, state: 0 };
+      if (isDurableEngineVariant(engine)) {
+        const publish = pubsub.publish.bind(pubsub);
+        vi.spyOn(pubsub, 'publish').mockImplementation((...args) => {
+          boundaries.publish++;
+          serialized.push(JSON.stringify(args));
+          return publish(...args);
+        });
+        const store = await mastra.getStorage()?.getStore('workflows');
+        expect(store).toBeDefined();
+        if (store) {
+          const persist = store.persistWorkflowSnapshot.bind(store);
+          vi.spyOn(store, 'persistWorkflowSnapshot').mockImplementation((...args) => {
+            boundaries.persist++;
+            serialized.push(JSON.stringify(args));
+            return persist(...args);
+          });
+          const results = store.updateWorkflowResults.bind(store);
+          vi.spyOn(store, 'updateWorkflowResults').mockImplementation((...args) => {
+            boundaries.results++;
+            serialized.push(JSON.stringify(args));
+            return results(...args);
+          });
+          const state = store.updateWorkflowState.bind(store);
+          vi.spyOn(store, 'updateWorkflowState').mockImplementation((...args) => {
+            boundaries.state++;
+            serialized.push(JSON.stringify(args));
+            return state(...args);
+          });
+        }
+      }
+      const onFinish = vi.fn();
+      const result: any = await agent.stream('Report the failed request', { maxSteps: 3, onFinish });
+      const output = result.output ?? result;
+      try {
+        await output.consumeStream();
+        expect(await output.finishReason).toBe('error');
+        expect(calls).toBe(failAfterTool ? 2 : 1);
+        // Normal/fs stop on the stream error; durable/evented try the fallback,
+        // whose preparation fails before it captures a request.
+        const failedPreparation = failDuringRetryPreparation && isDurableEngineVariant(engine);
+        if (failDuringRetryPreparation) expect(preparations).toBe(failedPreparation ? 2 : 1);
+        expect((await output.request).body).toBe(
+          failAfterTool || failedPreparation ? undefined : 'PRIVATE_ERROR_REQUEST',
+        );
+        expect(onFinish).not.toHaveBeenCalled();
+        if (isDurableEngineVariant(engine)) {
+          expect(boundaries.publish).toBeGreaterThan(0);
+          expect(boundaries.persist).toBeGreaterThan(0);
+          if (engine === 'evented') {
+            expect(boundaries.results).toBeGreaterThan(0);
+            expect(boundaries.state).toBeGreaterThan(0);
+          }
+          expect(serialized.join('\n')).not.toMatch(/PRIVATE_(ERROR|EARLIER)_REQUEST/);
+        }
+      } finally {
+        result.cleanup?.();
+      }
+    },
+  );
+
   localRequestTest('selects the fallback model request after a failed primary', async () => {
     const llm = getMock();
     llm.on(

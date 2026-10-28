@@ -116,7 +116,30 @@ describe('durable run stream claim generations', () => {
     await pubsub.close();
   });
 
-  it.each(['observer', 'takeover', 'suspension', 'error', 'abort', 'tripwire'] as const)(
+  it.each([{ body: 'PRIVATE_ERROR_REQUEST' }, undefined])(
+    'settles an error with its local request (%j)',
+    async request => {
+      const pubsub = new EventEmitterPubSub();
+      const runId = 'private-error-request';
+      const onFinish = vi.fn();
+      const { output, cleanup, ready } = makeStream(pubsub, runId, {
+        readLocalRequest: () => request,
+        onFinish,
+      });
+      await ready;
+      await emitFinishEvent(pubsub, runId, {
+        ...finishData,
+        stepResult: { ...finishData.stepResult, reason: 'error' },
+      });
+      await output.consumeStream();
+      expect((await output.request).body).toBe(request?.body);
+      expect(onFinish).not.toHaveBeenCalled();
+      cleanup();
+      await pubsub.close();
+    },
+  );
+
+  it.each(['observer', 'takeover', 'suspension', 'abort', 'tripwire'] as const)(
     'does not expose an earlier local request after %s',
     async mode => {
       const pubsub = new EventEmitterPubSub();
@@ -134,7 +157,7 @@ describe('durable run stream claim generations', () => {
           ...finishData,
           stepResult: {
             ...finishData.stepResult,
-            reason: mode === 'error' || mode === 'abort' || mode === 'tripwire' ? mode : 'stop',
+            reason: mode === 'abort' || mode === 'tripwire' ? mode : 'stop',
           },
         }),
       );

@@ -366,6 +366,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         }
       }
 
+      let request: any = {};
+
       // Emit error + step-finish chunks and return a bail response. This
       // mirrors the regular agent which sets stepResult.reason = 'error' and
       // emits a deferred error chunk rather than crashing the loop. Used by
@@ -376,6 +378,8 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
         signalPreempted = false,
       ): Promise<DurableLLMStepOutput> => {
         ownership?.throwIfLost();
+        // Even an empty failing request must replace the previous step's request.
+        getRunRegistryEntry(runId, mastra as Mastra | undefined)?.runScope?.set(LOCAL_MODEL_REQUEST_KEY, request);
         const usage = {
           inputTokens: undefined,
           outputTokens: undefined,
@@ -685,6 +689,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
         for (let attempt = 0; attempt <= maxRetries; attempt++) {
           ownership?.throwIfLost();
+          request = {};
           // Capture this attempt before processors can rotate the active id. The
           // fallback callback covers failures before a stream can materialize;
           // it resolves currentMessageId only when the terminal error is known.
@@ -1241,7 +1246,6 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
 
             // 7. Track state during streaming
             let warnings: any[] = [];
-            let request: any = {};
             let rawResponse: any = {};
             const toolCalls: DurableToolCallInput[] = [];
             let finishReason: string = 'stop';

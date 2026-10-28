@@ -731,7 +731,9 @@ export function createDurableAgentStream<OUTPUT = undefined>(
           if (!controller || terminated) return;
           const data = streamEvent.data as AgentFinishEventData;
           const finishReason = data.stepResult?.reason;
-          if (['stop', 'length', 'tool-calls', 'content-filter', 'other', 'unknown'].includes(finishReason ?? '')) {
+          if (
+            ['stop', 'length', 'tool-calls', 'content-filter', 'other', 'unknown', 'error'].includes(finishReason ?? '')
+          ) {
             terminalRequest = readLocalRequest?.();
           }
           readLocalRequest = undefined;
