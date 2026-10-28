@@ -76,9 +76,16 @@ const metricsDashboard: DashboardDefinition = {
                   request: 'aggregate',
                   name: ['mastra_model_total_input_tokens'],
                   aggregation: 'sum',
-                  comparePeriod: 'previous_period',
+                  compare: 'previousWindow',
                 },
-                { source: 'scores', request: 'aggregate', scorerId: 'relevance', aggregation: 'avg' },
+                { source: 'spanAggregate', measures: ['count'], compare: 'previousWindow' },
+                {
+                  source: 'scores',
+                  request: 'aggregate',
+                  scorerId: 'relevance',
+                  aggregation: 'avg',
+                  compare: 'previousWindow',
+                },
               ],
             },
           ],
@@ -114,6 +121,9 @@ const metricsDashboard: DashboardDefinition = {
             },
             {
               label: 'Tools',
+              description: 'Tool calls with errors',
+              scope: 'project',
+              drilldown: { click: { page: 'spans', filters: [{ fieldId: 'spanType', value: 'tool_call' }] } },
               queries: [
                 {
                   source: 'spanAggregate',
@@ -124,7 +134,10 @@ const metricsDashboard: DashboardDefinition = {
               ],
             },
           ],
-          drilldown: { page: 'traces', filters: [{ fieldId: 'status', value: 'error' }] },
+          drilldown: {
+            action: { page: 'traces' },
+            click: { page: 'traces', filters: [{ fieldId: 'status', value: 'error' }] },
+          },
         },
         {
           id: 'latency',
@@ -163,7 +176,9 @@ const metricsDashboard: DashboardDefinition = {
           kind: 'scores',
           views: [
             {
+              // No scorerId: the widget discovers scorers at run time.
               queries: [
+                { source: 'scores', request: 'aggregate', aggregation: 'avg' },
                 { source: 'scores', request: 'timeSeries', scorerId: 'relevance', aggregation: 'avg' },
                 {
                   source: 'scores',
@@ -220,6 +235,37 @@ describe('dashboardDefinitionSchema', () => {
         definition([[widget('w', { views: [{ queries: [query as DashboardQuery] }] })]]),
       );
       expect(result.error?.issues[0]).toMatchObject({ code: 'unrecognized_keys', keys: ['timestamp'] });
+    }
+  });
+
+  it('states comparison only as compare: previousWindow', () => {
+    const queries = [
+      { source: 'metrics', request: 'aggregate', name: ['m'], aggregation: 'sum', comparePeriod: 'previous_period' },
+      { source: 'scores', request: 'aggregate', aggregation: 'avg', comparePeriod: 'previous_day' },
+    ];
+    for (const query of queries) {
+      const result = dashboardDefinitionSchema.safeParse(
+        definition([[widget('w', { views: [{ queries: [query as DashboardQuery] }] })]]),
+      );
+      expect(result.error?.issues[0]).toMatchObject({ code: 'unrecognized_keys', keys: ['comparePeriod'] });
+    }
+    const otherWindow = { ...countQuery, compare: 'previousWeek' } as unknown as DashboardQuery;
+    const result = dashboardDefinitionSchema.safeParse(
+      definition([[widget('w', { views: [{ queries: [otherWindow] }] })]]),
+    );
+    expect(result.success).toBe(false);
+  });
+
+  it('rejects malformed drilldowns on widgets and views', () => {
+    const cases = [
+      widget('w', { drilldown: { page: 'traces' } as unknown as DashboardWidget['drilldown'] }),
+      widget('w', { drilldown: { click: { page: 'metrics' } } as unknown as DashboardWidget['drilldown'] }),
+      widget('w', {
+        views: [{ queries: [countQuery], drilldown: { action: { page: 'logs', extra: 1 } } as never }],
+      }),
+    ];
+    for (const item of cases) {
+      expect(dashboardDefinitionSchema.safeParse(definition([[item]])).success).toBe(false);
     }
   });
 

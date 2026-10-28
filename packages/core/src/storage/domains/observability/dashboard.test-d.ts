@@ -15,7 +15,11 @@ describe('DashboardQuery type', () => {
         expectTypeOf(query.percentiles).toEqualTypeOf<number[]>();
       }
       if (query.source === 'scores') {
-        expectTypeOf(query.scorerId).toEqualTypeOf<string>();
+        expectTypeOf(query.scorerId).toEqualTypeOf<string | undefined>();
+        expectTypeOf(query.compare).toEqualTypeOf<'previousWindow' | undefined>();
+      }
+      if (query.source === 'metrics') {
+        expectTypeOf(query.compare).toEqualTypeOf<'previousWindow' | undefined>();
       }
     };
     expectTypeOf(narrow).toBeFunction();
@@ -28,9 +32,10 @@ describe('DashboardQuery type', () => {
     expectTypeOf<NormalizedTrace['limit']>().toEqualTypeOf<number>();
   });
 
-  it('has no timeRange on stored queries', () => {
+  it('has no timeRange or comparePeriod on stored queries', () => {
     type Keys = DashboardQuery extends infer Q ? (Q extends unknown ? keyof Q : never) : never;
     expectTypeOf<'timeRange' extends Keys ? true : false>().toEqualTypeOf<false>();
+    expectTypeOf<'comparePeriod' extends Keys ? true : false>().toEqualTypeOf<false>();
   });
 });
 
