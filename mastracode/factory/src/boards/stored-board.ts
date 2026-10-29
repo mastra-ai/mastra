@@ -148,6 +148,11 @@ export interface BoardSeed extends StoredBoardSeed {
  */
 export function seedFromDefinition(board: InstalledBoard, source: StoredBoardSeedSource): BoardSeed {
   const declared = boardDeclaration(board);
+  if (!declared) {
+    throw new BoardDefinitionError(
+      `Board "${board.id}" was not built by defineBoard(); pass the board defineBoard() returned, not a copy.`,
+    );
+  }
   const order = [board.initialPhase, ...Object.keys(board.phases).filter(key => key !== board.initialPhase)];
   const input: StoredBoardInput = {
     key: board.id,
@@ -161,7 +166,7 @@ export function seedFromDefinition(board: InstalledBoard, source: StoredBoardSee
     ...(Object.keys(board.tools).length > 0 ? { tools: board.tools } : {}),
     ...(Object.keys(board.events).length > 0 ? { events: board.events } : {}),
     phases: Object.fromEntries(
-      Object.entries(declared?.phases ?? board.phases).flatMap(([key, phase]) => {
+      Object.entries(declared.phases).flatMap(([key, phase]) => {
         const attached = withoutUndefined({ onEnter: phase.onEnter, onExit: phase.onExit, outcomes: phase.outcomes });
         return Object.keys(attached).length > 0 ? [[key, attached]] : [];
       }),

@@ -179,6 +179,51 @@ describe('stored boards compiled with their code behaviors', () => {
 });
 
 describe('seedFromDefinition', () => {
+  it('refuses a board that was copied instead of passed as defineBoard() returned it', () => {
+    const copy = { ...release } as InstalledBoard;
+
+    expect(() => seedFromDefinition(copy, 'app')).toThrow(BoardDefinitionError);
+    expect(() => seedFromDefinition(copy, 'app')).toThrow(
+      'Board "release" was not built by defineBoard(); pass the board defineBoard() returned, not a copy.',
+    );
+  });
+
+  it('lets an edit to a stored runner replace the skill the code board started', async () => {
+    const board = defineBoard({
+      id: 'runner-edit',
+      name: 'Runner edit',
+      initialPhase: 'inbox',
+      phases: {
+        inbox: { name: 'Inbox', kind: 'resting', nextPhases: ['doing'] },
+        doing: {
+          name: 'Doing',
+          kind: 'working',
+          runner: { skill: 'old-skill', instructions: 'Old text.' },
+          nextPhases: ['done'],
+        },
+        done: { name: 'Done', kind: 'terminal' },
+      },
+    });
+    const seed = seedFromDefinition(board, 'app');
+    const edited: StoredBoardInput = {
+      ...seed.input,
+      phases: seed.input.phases.map(phase =>
+        phase.key === 'doing' ? { ...phase, runner: { skill: 'new-skill', instructions: 'New text.' } } : phase,
+      ),
+    };
+
+    const action = await compileStoredBoard(edited, seed.behaviors).rules.doing?.issue?.onEnter?.({
+      ingress: { id: 'ingress-1' },
+      item: { title: 'A card' },
+      fromStage: 'inbox',
+      stage: 'doing',
+    } as never);
+
+    expect(JSON.stringify(action)).toContain('new-skill');
+    expect(JSON.stringify(action)).toContain('New text.');
+    expect(JSON.stringify(action)).not.toContain('old-skill');
+  });
+
   it('places the initial phase first and stores every phase’s next phases explicitly', () => {
     const board = defineBoard({
       id: 'late-start',
