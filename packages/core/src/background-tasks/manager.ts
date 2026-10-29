@@ -109,6 +109,9 @@ export class BackgroundTaskManager {
   // process restart. This timer re-runs recovery once the earliest such lease
   // lapses, which lets a crashed owner's tasks settle without a restart.
   private staleRecoveryTimeout?: ReturnType<typeof setTimeout>;
+  // Periodic scan for `pinToWorker` rows whose owner stopped renewing; see `#sweepLapsedPins`.
+  private pinSweepInterval?: ReturnType<typeof setInterval>;
+  private sweepingPins = false;
 
   // Settlement chains of workflow runs started by this manager, plus the run
   // deletes they spawn. Shutdown drains these so they finish while storage is
@@ -288,6 +291,7 @@ export class BackgroundTaskManager {
         // Recover stale tasks from a previous process — only workers should
         // attempt recovery since they own execution.
         await this.recoverStaleTasks();
+        this.#startPinSweep();
       }
     }
 
@@ -1168,6 +1172,10 @@ export class BackgroundTaskManager {
     if (this.staleRecoveryTimeout) {
       clearTimeout(this.staleRecoveryTimeout);
       this.staleRecoveryTimeout = undefined;
+    }
+    if (this.pinSweepInterval) {
+      clearInterval(this.pinSweepInterval);
+      this.pinSweepInterval = undefined;
     }
     for (const taskId of this.ownedLeases) leasesToRelease.add(taskId);
     this.ownedLeases.clear();
@@ -2263,41 +2271,11 @@ export class BackgroundTaskManager {
       });
       for (const task of pendingTasks) {
         if (task.ownerId) {
-          // Pinned with `pinToWorker`: work for the row is in flight on its
-          // owner. Leave it alone while the owner keeps renewing the lease.
           const leaseExpiry = task.leaseExpiresAt?.getTime();
           if (leaseExpiry !== undefined && leaseExpiry > now) {
             nextSweepAt = nextSweepAt === undefined ? leaseExpiry : Math.min(nextSweepAt, leaseExpiry);
-            continue;
           }
-          // The owner died with the work in flight: account for the lost
-          // attempt exactly like a `running` row whose lease lapsed.
-          const fence = {
-            expectedStatus: 'pending' as const,
-            expectedOwnerId: task.ownerId,
-            expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
-          };
-          if (task.retryCount < task.maxRetries) {
-            const unpinned = await storage.updateTask(
-              task.id,
-              { retryCount: task.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
-              fence,
-            );
-            if (!unpinned) continue;
-          } else {
-            await storage.updateTask(
-              task.id,
-              {
-                status: 'failed',
-                error: { message: 'Worker process terminated before task completed' },
-                completedAt: new Date(),
-                ownerId: undefined,
-                leaseExpiresAt: undefined,
-              },
-              fence,
-            );
-            continue;
-          }
+          if (!(await this.#recoverLapsedPin(storage, task, now))) continue;
         }
         if (await this.checkConcurrency(task.agentId)) {
           await this.dispatch(task);
@@ -2311,6 +2289,91 @@ export class BackgroundTaskManager {
         logger.error('Failed to recover stale background tasks', error);
       }
     }
+  }
+
+  /**
+   * Accounts for a `pinToWorker` row whose owner stopped renewing its lease.
+   * A pin means work for the row was in flight on its owner, so a lapsed pin
+   * is a lost attempt, handled like a `running` row whose lease lapsed: it
+   * consumes a retry and is unpinned, or it fails. Returns `true` when the row
+   * was unpinned and should be dispatched; `false` when the lease is still
+   * live, the row was failed, or another worker got to it first.
+   */
+  async #recoverLapsedPin(
+    storage: Awaited<ReturnType<BackgroundTaskManager['getStorage']>>,
+    task: BackgroundTask,
+    now: number,
+  ): Promise<boolean> {
+    if (task.leaseExpiresAt && task.leaseExpiresAt.getTime() > now) return false;
+    const fence = {
+      expectedStatus: 'pending' as const,
+      expectedOwnerId: task.ownerId ?? null,
+      expectedLeaseExpiresAt: task.leaseExpiresAt ?? null,
+    };
+    const retry = task.retryCount < task.maxRetries;
+    const recovered = retry
+      ? await storage.updateTask(
+          task.id,
+          { retryCount: task.retryCount + 1, ownerId: undefined, leaseExpiresAt: undefined },
+          fence,
+        )
+      : await storage.updateTask(
+          task.id,
+          {
+            status: 'failed',
+            error: { message: 'Worker process terminated before task completed' },
+            completedAt: new Date(),
+            ownerId: undefined,
+            leaseExpiresAt: undefined,
+          },
+          fence,
+        );
+    if (recovered) {
+      // The lapse only proves the owner stopped renewing. Its adopted work may
+      // still be running, which is why pinned work must be idempotent.
+      this.#mastra
+        ?.getLogger()
+        ?.warn(
+          `Background task ${task.id} lost its pin: worker ${task.ownerId} stopped renewing its lease. ${
+            retry ? 'Retrying it on another worker.' : 'Marking it failed.'
+          }`,
+        );
+    }
+    return retry && recovered;
+  }
+
+  /**
+   * Periodically recovers lapsed `pinToWorker` rows. The startup scan only
+   * sees rows that existed when this worker started, so without this a pin
+   * enqueued later by a worker that then died would wait for a restart.
+   * Unpinned pending rows are left alone: they are dispatched by their own
+   * worker and by startup recovery, as before.
+   */
+  async #sweepLapsedPins(): Promise<void> {
+    if (this.shuttingDown || this.sweepingPins) return;
+    this.sweepingPins = true;
+    try {
+      const storage = await this.getStorage();
+      const now = Date.now();
+      const { tasks } = await storage.listTasks({ status: 'pending', orderBy: 'createdAt', orderDirection: 'asc' });
+      for (const task of tasks) {
+        if (!task.ownerId || this.shuttingDown) continue;
+        if ((await this.#recoverLapsedPin(storage, task, now)) && (await this.checkConcurrency(task.agentId))) {
+          await this.dispatch(task);
+        }
+      }
+    } catch (error) {
+      this.#mastra?.getLogger()?.error('Failed to recover lapsed pinned background tasks', error);
+    } finally {
+      this.sweepingPins = false;
+    }
+  }
+
+  #startPinSweep(): void {
+    if (this.pinSweepInterval) return;
+    this.pinSweepInterval = setInterval(() => void this.#sweepLapsedPins(), this.config.leaseDurationMs);
+    // Never keep the process alive just to sweep for lapsed pins.
+    this.pinSweepInterval.unref?.();
   }
 
   /**
