@@ -502,6 +502,8 @@ export interface SessionEnvironmentRepo {
 
 /** The session's factory environment, resolved from the project and its `inEnvironment` links. */
 export interface SessionEnvironment {
+  /** The factory's display name. */
+  factoryName: string;
   repos: SessionEnvironmentRepo[];
   workspaceSetupCommand: string | undefined;
   /** Only an absolute root is passed on; the templates reject anything else. */
@@ -587,6 +589,7 @@ export async function resolveProjectEnvironment(
   }
   const workdir = project.sandboxWorkingDirectory?.trim();
   return {
+    factoryName: project.name,
     repos,
     workspaceSetupCommand: project.workspaceSetupCommand?.trim() || undefined,
     workingDirectory: workdir?.startsWith('/') ? workdir : undefined,
@@ -881,6 +884,8 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
             factorySandbox.create(
               {
                 sessionId: session.id,
+                ...(session.factoryProjectId ? { factoryId: session.factoryProjectId } : {}),
+                ...(resolvedEnvironment ? { factoryName: resolvedEnvironment.factoryName } : {}),
                 // Physical VM id persisted from a prior start (undefined on first
                 // start). Providers that reattach by physical id use it to resume the
                 // original VM instead of provisioning a replacement.
@@ -913,10 +918,18 @@ export function createWorkspaceFactory(options: CreateWorkspaceFactoryOptions = 
           // stack a wrapper per call. Factory's setup runs first: a hook the
           // callback installed itself expects a prepared workspace.
           sandbox.setOnStart(previous => async args => {
-            await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
-              await setupHook(args);
-            });
-            await previous?.(args);
+            try {
+              await timedPhase(`workspace.onStart(${args.outcome})`, async () => {
+                await setupHook(args);
+              });
+              await previous?.(args);
+            } catch (error) {
+              // Core reports the logical sandbox id, which survives a recreate,
+              // so the provider's VM id is the only handle for its logs.
+              const physicalId = args.sandbox.sandboxId;
+              if (physicalId && error instanceof Error) error.message += ` (provider sandbox ${physicalId})`;
+              throw error;
+            }
           });
           // Only a freshly constructed instance starts eagerly; the start itself
           // waits for this resolver to finish because the start hook reads

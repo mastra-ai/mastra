@@ -8,6 +8,8 @@ import {
   MessageSquareReplyIcon,
   MessageSquareTextIcon,
   SaveIcon,
+  SearchIcon,
+  XIcon,
 } from 'lucide-react';
 import { useEffect, useMemo, useRef, useState } from 'react';
 import type { ReactNode } from 'react';
@@ -23,11 +25,9 @@ import { TraceSpanTimeline } from './trace-span-timeline';
 import { TraceSpanTree } from './trace-span-tree';
 import { TraceEntityMeta, TraceStatusMeta, TraceSummaryDescription } from './trace-summary-description';
 import { Button } from '@/ds/components/Button';
-import { ButtonsGroup } from '@/ds/components/ButtonsGroup';
 import { DataPanel } from '@/ds/components/DataPanel';
 import type { DataPanelProps } from '@/ds/components/DataPanel';
 import { Notice } from '@/ds/components/Notice';
-import { SearchInput } from '@/ds/components/SearchInput';
 import { Skeleton } from '@/ds/components/Skeleton';
 import { Tab, TabList, Tabs } from '@/ds/components/Tabs';
 import { Icon } from '@/ds/icons/Icon';
@@ -497,37 +497,51 @@ export function TraceDataPanelView({
                 // filtered `hierarchicalSpans`, so one query drives both.
                 const isTimeline = spanView === 'timeline';
                 const searchHeader = (
-                  <DataPanel.Header className="gap-2 border-b border-surface-rim">
-                    <SearchInput
-                      label="Search spans"
+                  // The bar itself is the search field: no pill inside the square panel, the
+                  // bottom rule is its only edge, and keyboard focus lights that rule like a
+                  // field's rim. The view switch stays as flat square icons.
+                  <DataPanel.Header className="gap-1 border-b border-surface-rim has-[input:focus-visible]:[--surface-rim:var(--field-rim-focus)]">
+                    <SearchIcon aria-hidden className="ml-1 size-4 shrink-0 text-muted-foreground" />
+                    <input
+                      type="search"
+                      aria-label="Search spans"
                       placeholder="Search spans..."
-                      size="sm"
                       value={query}
-                      onValueChange={setQuery}
-                      className="min-w-0 flex-1"
+                      onChange={event => setQuery(event.target.value)}
+                      className="h-full min-w-0 flex-1 bg-transparent px-1.5 text-label text-foreground outline-hidden placeholder:text-muted-foreground [&::-webkit-search-cancel-button]:appearance-none"
                     />
-                    <ButtonsGroup size="sm" className="shrink-0">
+                    {query && (
                       <Button
-                        size="icon-md"
-                        variant={isTimeline ? 'default' : 'primary'}
-                        aria-pressed={!isTimeline}
-                        tooltip="Span tree"
-                        tooltipPosition="bottom"
-                        onClick={() => setSpanView('tree')}
+                        size="icon-sm"
+                        variant="ghost"
+                        aria-label="Clear search"
+                        className="rounded-md"
+                        onClick={() => setQuery('')}
                       >
-                        <ListTreeIcon />
+                        <XIcon />
                       </Button>
-                      <Button
-                        size="icon-md"
-                        variant={isTimeline ? 'primary' : 'default'}
-                        aria-pressed={isTimeline}
-                        tooltip="Timeline"
-                        tooltipPosition="bottom"
-                        onClick={() => setSpanView('timeline')}
-                      >
-                        <ChartGanttIcon />
-                      </Button>
-                    </ButtonsGroup>
+                    )}
+                    <div role="group" aria-label="Span view" className="flex shrink-0 items-center gap-0.5">
+                      {(
+                        [
+                          ['tree', 'Span tree', <ListTreeIcon key="tree" />],
+                          ['timeline', 'Timeline', <ChartGanttIcon key="timeline" />],
+                        ] as const
+                      ).map(([view, label, icon]) => (
+                        <Button
+                          key={view}
+                          size="icon-sm"
+                          variant={spanView === view ? 'subtle' : 'ghost'}
+                          aria-label={label}
+                          aria-pressed={spanView === view}
+                          tooltip={label}
+                          className="rounded-md"
+                          onClick={() => setSpanView(view)}
+                        >
+                          {icon}
+                        </Button>
+                      ))}
+                    </div>
                   </DataPanel.Header>
                 );
                 const noSearchResults = !isLoading && hierarchicalSpans.length === 0 && (
@@ -763,13 +777,20 @@ function TracePanelColumns({
             <PanelSeparator variant="pill" />
           </>
         )}
-        <Panel id="trace-main" minSize={320} className="flex min-h-0 min-w-0 flex-col">
+        {/* 384px: the timeline grid's own minimum (two 12rem columns), so its end never clips. */}
+        <Panel id="trace-main" minSize={384} className="flex min-h-0 min-w-0 flex-col">
           {children}
         </Panel>
         {spanPanelSlot && (
           <>
             <PanelSeparator variant="pill" />
-            <Panel id="trace-span" minSize={320} defaultSize={spanWidth()} groupResizeBehavior="preserve-pixel-size">
+            <Panel
+              id="trace-span"
+              minSize={384}
+              maxSize="50%"
+              defaultSize={spanWidth()}
+              groupResizeBehavior="preserve-pixel-size"
+            >
               <div
                 ref={scrollToMatchRef}
                 data-highlight

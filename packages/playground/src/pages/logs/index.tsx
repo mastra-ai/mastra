@@ -13,6 +13,8 @@ import { useLogsFilterPersistence } from '@mastra/playground-ui/domains/logs/hoo
 import { useLogsListNavigation } from '@mastra/playground-ui/domains/logs/hooks/use-logs-list-navigation';
 import { useLogsUrlState } from '@mastra/playground-ui/domains/logs/hooks/use-logs-url-state';
 import {
+  DEFAULT_LOGS_SORT,
+  LOGS_SORT_FIELDS,
   buildLogsListFilters,
   createLogsPropertyFilterFields,
   neutralizeLogsFilterTokens,
@@ -29,9 +31,6 @@ import { traceScoreLink } from '@/lib/app-routing';
 
 const crumbs = [navCrumb('/logs')];
 
-const LOGS_SORT_KEYS = ['timestamp'] as const;
-const DEFAULT_LOGS_SORT = { key: 'timestamp', direction: 'desc' } as const;
-
 export default function LogsPage() {
   const [searchParams, setSearchParams] = useSearchParams();
   const navigate = useNavigate();
@@ -41,7 +40,7 @@ export default function LogsPage() {
   const { sort, onSortChange } = useUrlSort({
     searchParams,
     setSearchParams,
-    allowedKeys: LOGS_SORT_KEYS,
+    allowedKeys: LOGS_SORT_FIELDS,
     defaultSort: DEFAULT_LOGS_SORT,
   });
   const orderBy = useMemo(

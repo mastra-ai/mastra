@@ -3779,6 +3779,40 @@ importers:
         specifier: 'catalog:'
         version: 4.6.7
 
+  packages/_internals/deployer:
+    dependencies:
+      '@internal/core':
+        specifier: workspace:*
+        version: link:../../_internal-core
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.4.2
+    devDependencies:
+      '@internal/lint':
+        specifier: workspace:*
+        version: link:../../_config
+      '@internal/types-builder':
+        specifier: workspace:*
+        version: link:../../_types-builder
+      '@types/node':
+        specifier: 22.19.15
+        version: 22.19.15
+      '@vitest/coverage-v8':
+        specifier: 'catalog:'
+        version: 4.1.12(vitest@4.1.12)
+      '@vitest/ui':
+        specifier: 'catalog:'
+        version: 4.1.12(vitest@4.1.12)
+      tsdown:
+        specifier: 0.23.1
+        version: 0.23.1(oxc-resolver@11.21.2)(tsx@4.23.15)(typescript@7.0.2)
+      typescript:
+        specifier: 'catalog:'
+        version: 7.0.2
+      vitest:
+        specifier: 'catalog:'
+        version: 4.1.12(@opentelemetry/api@1.9.1)(@types/node@22.19.15)(@vitest/coverage-v8@4.1.12)(@vitest/ui@4.1.12)(jsdom@30.1.3(@noble/hashes@2.4.0))(msw@2.15.0(@types/node@22.19.15)(typescript@7.0.2))(vite@8.3.5(@types/node@22.19.15)(esbuild@0.28.2)(jiti@2.7.0)(terser@5.51.2)(tsx@4.23.15)(yaml@2.9.1))
+
   packages/_internals/find-workspaces:
     dependencies:
       tinyglobby:
@@ -4367,6 +4401,9 @@ importers:
       execa:
         specifier: ^9.6.1
         version: 9.6.1
+      fast-string-width:
+        specifier: ^3.0.2
+        version: 3.0.2
       fs-extra:
         specifier: ^11.4.1
         version: 11.4.1
@@ -4755,6 +4792,9 @@ importers:
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
+      '@internal/deployer':
+        specifier: workspace:*
+        version: link:../_internals/deployer
       '@internal/external-types':
         specifier: workspace:*
         version: link:../_external-types
@@ -4920,6 +4960,9 @@ importers:
       '@sindresorhus/slugify':
         specifier: ^2.2.1
         version: 2.2.1
+      dotenv:
+        specifier: ^17.3.1
+        version: 17.4.2
       empathic:
         specifier: ^2.1.0
         version: 2.1.0
@@ -4972,6 +5015,9 @@ importers:
       '@internal/core':
         specifier: workspace:*
         version: link:../_internal-core
+      '@internal/deployer':
+        specifier: workspace:*
+        version: link:../_internals/deployer
       '@internal/find-workspaces':
         specifier: workspace:*
         version: link:../_internals/find-workspaces

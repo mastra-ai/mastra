@@ -1,3 +1,7 @@
+import { readFile } from 'node:fs/promises';
+import type { IMastraLogger } from '@internal/core/logger';
+import { parse } from 'dotenv';
+
 type PnpmWorkspaceValue =
   | null
   | boolean
@@ -63,3 +67,36 @@ export type BundlerConfig = {
 
   [key: symbol]: boolean | undefined;
 };
+
+export interface IBundler {
+  __setLogger(logger: IMastraLogger): void;
+  loadEnvVars(): Promise<Map<string, string>>;
+  getEnvFiles(): Promise<string[]>;
+  getAllToolPaths(mastraDir: string, toolsPaths: (string | string[])[]): (string | string[])[];
+  bundle(
+    entryFile: string,
+    outputDirectory: string,
+    options: { toolsPaths: (string | string[])[]; projectRoot: string },
+  ): Promise<void>;
+  prepare(outputDirectory: string): Promise<void>;
+  writePackageJson(outputDirectory: string, dependencies: Map<string, string>): Promise<void>;
+  lint(entryFile: string, outputDirectory: string, toolsPaths: (string | string[])[]): Promise<void>;
+}
+
+/**
+ * Reads dotenv files in order into one map; values from later files override earlier ones.
+ */
+export async function loadEnvVars(files: string[]): Promise<Map<string, string>> {
+  const envVars = new Map<string, string>();
+
+  for (const file of files) {
+    const content = await readFile(file, 'utf-8');
+    const config = parse(content);
+
+    Object.entries(config).forEach(([key, value]) => {
+      envVars.set(key, value);
+    });
+  }
+
+  return envVars;
+}

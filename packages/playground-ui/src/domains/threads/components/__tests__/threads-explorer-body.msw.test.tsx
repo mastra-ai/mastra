@@ -1,5 +1,6 @@
 // @vitest-environment jsdom
 import type { QueryTraceThreadsResult } from '@mastra/client-js';
+import type { ThreadQueryArgs } from '@mastra/react/hooks/traces';
 import { act, fireEvent, screen, waitFor, within } from '@testing-library/react';
 import { http, HttpResponse } from 'msw';
 import { afterEach, beforeAll, describe, expect, it, vi } from 'vitest';
@@ -16,6 +17,7 @@ import { OBSERVABILITY_LIST_POLL_INTERVAL_MS } from '@/domains/observability/lis
 import { useFixedChartSize } from '@/test/chart-size';
 import { server } from '@/test/msw-server';
 import { renderWithProviders, TEST_BASE_URL } from '@/test/render';
+import { SearchParamsHost } from '@/test/search-params-host';
 
 const THREADS_QUERY_URL = `${TEST_BASE_URL}/api/observability/threads/query`;
 
@@ -42,6 +44,30 @@ const renderBody = () => {
     />,
   );
   return { onSelectedThreadChange };
+};
+
+/** The body inside a stand-in router whose URL starts as `initial`; returns each thread query sent. */
+const renderBodyAtUrl = (initial: string) => {
+  const queries: ThreadQueryArgs[] = [];
+  server.use(
+    http.post(THREADS_QUERY_URL, async ({ request }) => {
+      queries.push((await request.json()) as ThreadQueryArgs);
+      return HttpResponse.json(threadRowsPage);
+    }),
+  );
+  renderWithProviders(
+    <SearchParamsHost initial={initial}>
+      {urlState => (
+        <ThreadsExplorerBody
+          selectedThreadId={undefined}
+          onSelectedThreadChange={() => {}}
+          onOpenScore={() => {}}
+          urlState={urlState}
+        />
+      )}
+    </SearchParamsHost>,
+  );
+  return { queries };
 };
 
 describe('ThreadsExplorerBody', () => {
@@ -135,6 +161,54 @@ describe('ThreadsExplorerBody', () => {
       });
 
       await waitFor(() => expect(screen.getAllByText('Weather Agent')).toHaveLength(2));
+    });
+  });
+
+  describe('when the URL holds a filter, a sort and a time range', () => {
+    it('queries threads with them', async () => {
+      setHandlers(threadRowsPage);
+
+      const { queries } = renderBodyAtUrl('filter.entityName=Support+Agent&sort=startedAt&dir=asc&datePreset=last-24h');
+      await screen.findByText('Weather Agent');
+
+      const [query] = queries;
+      expect(JSON.stringify(query?.where)).toContain('"Support Agent"');
+      expect(query?.orderBy).toEqual([{ field: 'startedAt', direction: 'asc' }]);
+      const start = new Date(query?.timeRange?.traces?.from ?? NaN).getTime();
+      expect(Date.now() - start).toBeGreaterThan(23 * 60 * 60 * 1000);
+      expect(Date.now() - start).toBeLessThan(25 * 60 * 60 * 1000);
+    });
+  });
+
+  describe('when the user sorts the list by start time', () => {
+    it('writes the sort to the URL and keeps the other params', async () => {
+      setHandlers(threadRowsPage);
+
+      renderBodyAtUrl('threadId=thread-2&filter.entityName=Support+Agent');
+      fireEvent.click(await screen.findByRole('button', { name: /^Start, sorted descending/ }));
+
+      await waitFor(() =>
+        expect(new URLSearchParams(screen.getByTestId('search-params').textContent ?? '')).toEqual(
+          new URLSearchParams('threadId=thread-2&filter.entityName=Support+Agent&sort=startedAt&dir=asc'),
+        ),
+      );
+    });
+  });
+
+  describe('when the user picks the last 30 days', () => {
+    it('queries the wider window and writes it to the URL', async () => {
+      setHandlers(threadRowsPage);
+
+      const { queries } = renderBodyAtUrl('threadId=thread-2');
+      await screen.findByText('Weather Agent');
+      fireEvent.click(screen.getByRole('button', { name: /Last 7 days/ }));
+      fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 30 days' }));
+
+      await waitFor(() => {
+        const from = new Date(queries.at(-1)?.timeRange?.traces?.from ?? NaN).getTime();
+        expect(Math.round((Date.now() - from) / (24 * 60 * 60 * 1000))).toBe(30);
+      });
+      expect(screen.getByTestId('search-params').textContent).toBe('threadId=thread-2&datePreset=last-30d');
     });
   });
 });

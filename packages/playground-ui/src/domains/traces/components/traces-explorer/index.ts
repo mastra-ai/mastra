@@ -36,6 +36,7 @@ export {
   DEFAULT_TRACES_FILTERS,
   DEFAULT_TRACES_SORT,
   EMPTY_TRACES_SELECTION,
+  TRACES_SORT_FIELDS,
   resolveTracesDateWindow,
 } from './traces-explorer-actions';
 export type {
