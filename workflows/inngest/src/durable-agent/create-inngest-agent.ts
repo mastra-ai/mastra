@@ -43,6 +43,7 @@ import {
   agentThreadStreamRuntime,
   applyReservedMemoryContextKeys,
   prepareForDurableExecution,
+  persistDurableRunInput,
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
@@ -1427,6 +1428,9 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
             from: ChunkFrom.AGENT,
             payload: { id: workflowInput.agentId, messageId },
           });
+          // Save the accepted request before the run starts, as DurableAgent does,
+          // so a run that times out or fails still keeps it (#28659).
+          await persistDurableRunInput(runId, workflowInput, mastra);
           // Written before the trigger so it can never land after the engine's terminal row.
           const persistedRunning = await persistRunningSnapshot(runId, workflowInput);
           try {

@@ -1,4 +1,3 @@
-import { MastraFGAPermissions } from '../../auth/ee';
 import type { MastraServerCache } from '../../cache/base';
 import { InMemoryServerCache } from '../../cache/inmemory';
 import { MastraError, ErrorDomain, ErrorCategory, getErrorFromUnknown } from '../../error';
@@ -64,7 +63,6 @@ import { runDurableStreamUntilIdle, runResumeDurableStreamUntilIdle } from './du
 import {
   EXECUTION_ABANDONED_ERROR_ID,
   ExecutionFence,
-  assertExecutionOwned,
   executionLeaseKey,
   fencePubSub,
   readRunGeneration,
@@ -75,7 +73,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { authorizeDurableMemory, getDurableMemoryAuthorizationChecks } from './memory-fga';
+import { persistDurableRunInput } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -2417,43 +2415,7 @@ export class DurableAgent<
   }
 
   private async persistInitialInput(runId: string, workflowInput: DurableAgenticWorkflowInput): Promise<void> {
-    const entry = getRunRegistryEntry(runId, this.#mastra);
-    const state = workflowInput.state;
-    if (
-      !entry?.saveQueueManager ||
-      !entry.memory ||
-      !entry.messageList ||
-      !state?.threadId ||
-      !state.resourceId ||
-      state.memoryConfig?.readOnly ||
-      entry.tripwire
-    ) {
-      return;
-    }
-
-    const requestContext = entry.requestContext;
-    await authorizeDurableMemory(getDurableMemoryAuthorizationChecks(entry), {
-      mastra: this.#mastra,
-      user: requestContext?.get('user'),
-      threadId: state.threadId,
-      resourceId: state.resourceId,
-      agentId: workflowInput.agentId,
-      requestContext,
-      permission: MastraFGAPermissions.MEMORY_WRITE,
-      actor: workflowInput.options?.actor,
-    });
-    // Input membership is also used by OM and tool context, not just persistence.
-    // Save a clone so later consumers still see the accepted request; saves upsert by ID.
-    await entry.saveQueueManager.flushMessages(entry.messageList.clone(), state.threadId, state.memoryConfig, {
-      throwOnError: true,
-      beforePersist: () =>
-        assertExecutionOwned({
-          runId,
-          agentId: workflowInput.agentId,
-          mastra: this.#mastra,
-          requestContext,
-        }),
-    });
+    await persistDurableRunInput(runId, workflowInput, this.#mastra);
   }
 
   /**
