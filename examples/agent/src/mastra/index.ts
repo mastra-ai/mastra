@@ -109,7 +109,6 @@ import { askUserAgent } from './agents/ask-user-agent';
 import { codeModeAgent } from './agents/code-mode-agent';
 import { clinicDirectAgent, clinicSpecialistAgent, clinicSupervisorAgent } from './agents/clinic-context-agents';
 import { approvalDemoAgent } from './agents/approval-demo-agent';
-import { docsAgent, docsAgentStepLimited } from './agents/docs-agent';
 import {
   standupNoteNormalizerAgent,
   standupDigestAgent,
@@ -155,8 +154,6 @@ export const mastra = new Mastra({
     balanceAgent,
     agentThatHarassesYou,
     evalAgent,
-    docsAgent,
-    docsAgentStepLimited,
     schemaValidatedAgent,
     requestContextDemoAgent,
     mcpAppsAgent,
