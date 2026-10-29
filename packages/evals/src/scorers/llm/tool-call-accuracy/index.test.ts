@@ -1,4 +1,5 @@
 import { openai } from '@ai-sdk/openai';
+import { convertArrayToReadableStream, MockLanguageModelV2 } from '@internal/ai-sdk-v5/test';
 import { getLLMTestMode } from '@internal/llm-recorder';
 import { setupDummyApiKeys } from '@internal/test-utils';
 import { createTool } from '@mastra/core/tools';
@@ -668,6 +669,106 @@ describe('createToolCallAccuracyScorerLLM', () => {
 
       const result = await scorer.run(testRun);
       expect(result.score).toBeCloseTo(0.33, 2); // Only 1 out of 3 tools was appropriate
+    });
+  });
+
+  describe('Actual scoring with judge responses', () => {
+    // A deterministic judge is needed to test omitted and surplus evaluation entries.
+    function judge(
+      evaluations: Array<{ toolCalled: string; wasAppropriate: boolean; reasoning: string }>,
+      missingTools: string[],
+    ) {
+      function responseFor(prompt: Array<{ role: string; content: unknown }>) {
+        const user = prompt.findLast(message => message.role === 'user');
+        const parts = Array.isArray(user?.content) ? user.content : [];
+        const text = parts.map(part => (part?.type === 'text' ? part.text : '')).join('');
+        return text.includes('Explain this tool selection evaluation')
+          ? 'Tool selections evaluated.'
+          : JSON.stringify({ evaluations, missingTools });
+      }
+
+      return new MockLanguageModelV2({
+        doGenerate: async ({ prompt }) => ({
+          finishReason: 'stop',
+          usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 },
+          content: [{ type: 'text', text: responseFor(prompt) }],
+          warnings: [],
+        }),
+        doStream: async ({ prompt }) => ({
+          stream: convertArrayToReadableStream([
+            { type: 'stream-start', warnings: [] },
+            { type: 'response-metadata', id: 'id-0', modelId: 'mock-model-id', timestamp: new Date(0) },
+            { type: 'text-start', id: 'text-1' },
+            { type: 'text-delta', id: 'text-1', delta: responseFor(prompt) },
+            { type: 'text-end', id: 'text-1' },
+            { type: 'finish', finishReason: 'stop', usage: { inputTokens: 10, outputTokens: 20, totalTokens: 30 } },
+          ]),
+        }),
+      });
+    }
+
+    function run(tools: string[]) {
+      return createAgentTestRun({
+        inputMessages: [
+          createTestMessage({ id: 'user', role: 'user', content: 'Compare the weather in Paris and London' }),
+        ],
+        output: [
+          createTestMessage({
+            id: 'assistant',
+            role: 'assistant',
+            content: 'Here are the results.',
+            toolInvocations: tools.map((toolName, index) => ({
+              toolCallId: `call_${index}`,
+              toolName,
+              args: { city: 'Paris' },
+              result: { temperature: 15 },
+              state: 'result' as const,
+            })),
+          }),
+        ],
+      });
+    }
+
+    const appropriate = (toolCalled: string) => ({
+      toolCalled,
+      wasAppropriate: true,
+      reasoning: 'Relevant to the request',
+    });
+
+    it('penalizes missing tools even when another tool was called appropriately', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge([appropriate('weather-tool')], ['search-tool']),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool']))).score).toBe(0.5);
+    });
+
+    it('counts every actual call when the judge omits a duplicate evaluation', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge([appropriate('weather-tool'), appropriate('search-tool')], []),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool', 'search-tool', 'weather-tool']))).score).toBe(0.67);
+    });
+
+    it('caps the score when the judge returns more positive evaluations than calls', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge([appropriate('weather-tool'), appropriate('weather-tool')], []),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool']))).score).toBe(1);
+    });
+
+    it('returns zero when calls receive no evaluations', async () => {
+      const scorer = createToolCallAccuracyScorerLLM({ model: judge([], []), availableTools });
+      expect((await scorer.run(run(['weather-tool']))).score).toBe(0);
+    });
+
+    it('preserves no-call scoring for needed and unneeded tools', async () => {
+      const unneeded = createToolCallAccuracyScorerLLM({ model: judge([], []), availableTools });
+      const needed = createToolCallAccuracyScorerLLM({ model: judge([], ['weather-tool']), availableTools });
+      expect((await unneeded.run(run([]))).score).toBe(1);
+      expect((await needed.run(run([]))).score).toBe(0);
     });
   });
 });

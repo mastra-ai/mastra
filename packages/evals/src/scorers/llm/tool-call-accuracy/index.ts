@@ -77,18 +77,15 @@ export function createToolCallAccuracyScorerLLM({ model, availableTools }: ToolC
     })
     .generateScore(({ results }) => {
       const evaluations = results.analyzeStepResult?.evaluations || [];
+      const missingTools = results.analyzeStepResult?.missingTools || [];
+      const totalToolCalls = results.preprocessStepResult?.actualTools.length || 0;
 
-      // Handle edge case: no tools called
-      if (evaluations.length === 0) {
-        // Check if tools should have been called
-        const missingTools = results.analyzeStepResult?.missingTools || [];
+      if (totalToolCalls === 0) {
         return missingTools.length > 0 ? 0.0 : 1.0;
       }
 
       const appropriateToolCalls = evaluations.filter(e => e.wasAppropriate).length;
-      const totalToolCalls = evaluations.length;
-
-      return roundToTwoDecimals(appropriateToolCalls / totalToolCalls);
+      return roundToTwoDecimals(Math.min(1, appropriateToolCalls / (totalToolCalls + missingTools.length)));
     })
     .generateReason({
       description: 'Generate human-readable explanation of tool selection evaluation',
