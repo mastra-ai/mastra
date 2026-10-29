@@ -681,11 +681,11 @@ function formatNearPeer(peer: NearPeerCandidate): string {
 
 function parsePeerId(id: string): { resourceId: string; threadId: string } | undefined {
   const parts = id.split(':');
-  if (parts.length !== 3) return;
+  if (parts.length !== 3) return undefined;
   try {
     return { resourceId: decodeURIComponent(parts[1]!), threadId: decodeURIComponent(parts[2]!) };
   } catch {
-    return;
+    return undefined;
   }
 }
 
