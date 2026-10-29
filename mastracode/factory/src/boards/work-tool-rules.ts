@@ -15,7 +15,8 @@ export function advanceApprovedPlan(context: FactoryToolResultRuleContext) {
     context.item.stages.length !== 1 ||
     context.item.stages[0] !== 'planning' ||
     context.actor.type !== 'agent' ||
-    context.actor.role !== 'plan' ||
+    // Planning runs in the `work` session; `plan` is the role of cards planned before that.
+    (context.actor.role !== 'work' && context.actor.role !== 'plan') ||
     !resultContent(context.result.value)?.startsWith('Plan approved.')
   ) {
     return;

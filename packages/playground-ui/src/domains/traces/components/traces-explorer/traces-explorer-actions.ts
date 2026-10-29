@@ -65,10 +65,13 @@ export const clearSelection = (selection: TracesSelection): TracesSelection => (
 export const selectTrace = (selection: TracesSelection, traceId: string | null): TracesSelection =>
   traceId ? { traceId, spanView: selection.spanView, highlightSpanIds: [] } : clearSelection(selection);
 
-/** Tab and score belong to the previous span, so they are dropped with it. */
+/**
+ * The open tab stays, so stepping through spans compares the same tab; the score belongs to the
+ * previous span and is dropped with it.
+ */
 export const selectSpan = (selection: TracesSelection, spanId: string | null): TracesSelection => {
   if ((spanId ?? undefined) === selection.spanId) return selection;
-  return { ...selection, spanId: spanId ?? undefined, spanTab: undefined, scoreId: undefined };
+  return { ...selection, spanId: spanId ?? undefined, scoreId: undefined };
 };
 
 export const setSpanTab = (selection: TracesSelection, tab: SpanTab): TracesSelection => {

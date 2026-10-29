@@ -1,6 +1,6 @@
 {
   "name": "@mastra/core",
-  "version": "1.80.0",
+  "version": "1.81.0-alpha.0",
   "license": "Apache-2.0",
   "type": "module",
   "main": "dist/index.js",
@@ -969,6 +969,7 @@
     "@internal/ai-v7": "workspace:*",
     "@internal/auth": "workspace:*",
     "@internal/core": "workspace:*",
+    "@internal/deployer": "workspace:*",
     "@internal/external-types": "workspace:*",
     "@internal/lint": "workspace:*",
     "@internal/llm-recorder": "workspace:*",

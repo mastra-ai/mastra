@@ -1,6 +1,6 @@
 import { MockLanguageModelV2, convertArrayToReadableStream } from '@internal/ai-sdk-v5/test';
 import { Agent } from '@mastra/core/agent';
-import { createDurableAgent, DurableAgent } from '@mastra/core/agent/durable';
+import { createDurableAgent, createEventedAgent, DurableAgent } from '@mastra/core/agent/durable';
 import { Mastra } from '@mastra/core/mastra';
 import { SpanType } from '@mastra/core/observability';
 import { InMemoryStore } from '@mastra/core/storage';
@@ -48,7 +48,7 @@ function twoApprovalsModel() {
   });
 }
 
-async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false, overrideTrace = false) {
+async function resumeParents(engine: 'normal' | 'durable' | 'evented', recreateAgent = false, overrideTrace = false) {
   const replacementTraceId = '11111111111111111111111111111111';
   const exporter = new TestExporter();
   let executions = 0;
@@ -69,8 +69,14 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
         }),
       },
     });
+  const wrap = (agent: Agent) =>
+    engine === 'durable'
+      ? createDurableAgent({ agent })
+      : engine === 'evented'
+        ? createEventedAgent({ agent })
+        : undefined;
   let agent = makeAgent();
-  const durable = engine === 'durable' ? createDurableAgent({ agent }) : undefined;
+  let durable = wrap(agent);
   const storage = new InMemoryStore();
   const makeHost = () =>
     new Mastra({
@@ -107,6 +113,7 @@ async function resumeParents(engine: 'normal' | 'durable', recreateAgent = false
     const resume = (toolCallId: string) => {
       if (recreateAgent) {
         agent = makeAgent();
+        durable = wrap(agent);
         hosts.push(makeHost());
       }
       return durable
@@ -184,10 +191,23 @@ it('normal and durable resumes are siblings under the initial agent after two su
   ];
   expect(normal, 'normal resume parentage').toEqual(expected);
   expect(durable, 'durable resume parentage').toEqual(expected);
+  expect(await resumeParents('evented'), 'evented resume parentage').toEqual(expected);
   expect(await resumeParents('normal', true), 'fresh agents must recover the initial parent from storage').toEqual(
     expected,
   );
 }, 30_000);
+
+it.each(['durable', 'evented'] as const)(
+  '%s resumes from a fresh Mastra stay on the initial agent trace',
+  async engine => {
+    expect(await resumeParents(engine, true)).toEqual([
+      null,
+      { parentType: SpanType.AGENT_RUN, parentInvocation: 0 },
+      { parentType: SpanType.AGENT_RUN, parentInvocation: 0 },
+    ]);
+  },
+  30_000,
+);
 
 it.each(['normal', 'durable'] as const)(
   '%s keeps nested agent resumes under their own initial invocation',

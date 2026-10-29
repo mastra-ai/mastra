@@ -232,14 +232,14 @@ function pageLabels() {
 describe('Table.Pagination', () => {
   it('shows every page when there are seven or fewer', () => {
     render(<Table.Pagination page={0} pageCount={3} onPageChange={() => {}} />);
-    expect(pageLabels()).toEqual(['Previous', '1', '2', '3', 'Next']);
+    expect(pageLabels()).toEqual(['Prev', '1', '2', '3', 'Next']);
   });
 
   it.each([
-    [0, ['Previous', '1', '2', '3', '4', '5', '…', '24', 'Next']],
-    [5, ['Previous', '1', '…', '5', '6', '7', '…', '24', 'Next']],
-    [23, ['Previous', '1', '…', '20', '21', '22', '23', '24', 'Next']],
-    [2, ['Previous', '1', '2', '3', '4', '5', '…', '24', 'Next']],
+    [0, ['Prev', '1', '2', '3', '4', '5', '…', '24', 'Next']],
+    [5, ['Prev', '1', '…', '5', '6', '7', '…', '24', 'Next']],
+    [23, ['Prev', '1', '…', '20', '21', '22', '23', '24', 'Next']],
+    [2, ['Prev', '1', '2', '3', '4', '5', '…', '24', 'Next']],
   ])('collapses distant pages around page index %i', (page, expected) => {
     render(<Table.Pagination page={page} pageCount={24} onPageChange={() => {}} />);
     expect(pageLabels()).toEqual(expected);
@@ -252,7 +252,7 @@ describe('Table.Pagination', () => {
 
     expect(screen.getByRole('button', { name: 'Page 2' }).getAttribute('aria-current')).toBe('page');
     await user.click(screen.getByRole('button', { name: 'Page 3' }));
-    await user.click(screen.getByRole('button', { name: 'Previous' }));
+    await user.click(screen.getByRole('button', { name: 'Prev' }));
     await user.click(screen.getByRole('button', { name: 'Next' }));
     expect(onPageChange.mock.calls).toEqual([[2], [0], [2]]);
   });
@@ -262,7 +262,7 @@ describe('Table.Pagination', () => {
     const onPageChange = vi.fn();
     render(<Table.Pagination page={0} pageCount={1} onPageChange={onPageChange} />);
 
-    const previous = screen.getByRole('button', { name: 'Previous' });
+    const previous = screen.getByRole('button', { name: 'Prev' });
     const next = screen.getByRole('button', { name: 'Next' });
     expect(previous.getAttribute('aria-disabled')).toBe('true');
     expect(next.getAttribute('aria-disabled')).toBe('true');
