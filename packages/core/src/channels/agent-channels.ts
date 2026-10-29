@@ -1,3 +1,4 @@
+import { createHash } from 'node:crypto';
 import type { Chat, Adapter, Attachment, ChatConfig, Message, StateAdapter, Thread } from 'chat';
 import { z } from 'zod';
 
@@ -23,6 +24,7 @@ import { RequestContext } from '../request-context';
 import type { ApiRoute } from '../server/types';
 import type { AgentChunkType } from '../stream/types';
 import { createTool } from '../tools/tool';
+import type { WorkspaceFilesystem } from '../workspace/filesystem/filesystem';
 
 import { getChatModule } from './chat-lazy';
 import { resolveSlackTopLevelThreadId } from './compat/slack';
@@ -81,7 +83,7 @@ export interface ChannelLogContext {
 
 type ChannelAgent = Pick<
   Agent<any, any, any, any>,
-  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory'
+  'id' | 'getMastraInstance' | 'sendMessage' | 'approveToolCall' | 'declineToolCall' | 'getMemory' | 'getWorkspace'
 >;
 
 /** Platforms whose chat-SDK adapters render interactive approval buttons. */
@@ -90,8 +92,8 @@ const APPROVAL_BUTTON_PLATFORMS = new Set(['slack', 'discord', 'teams', 'gchat',
 /** Size cap for text attachments decoded into the agent's prompt. */
 const MAX_TEXT_ATTACHMENT_BYTES = 128 * 1024;
 
-/** Text attachments whose reported size exceeds this are not downloaded. */
-const MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
+/** Text and binary attachments larger than this are not downloaded or saved. */
+const MAX_ATTACHMENT_DOWNLOAD_BYTES = 10 * 1024 * 1024;
 
 /**
  * Manages a single Chat SDK instance for an agent, wiring all adapters
@@ -1542,7 +1544,8 @@ export class AgentChannels {
         const hasHistory = history.root !== undefined || history.recent.length > 0;
         if (hasHistory) {
           const persisted = await this.persistThreadHistorySignals({
-            buildSignals: () => this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread }),
+            buildSignals: () =>
+              this.buildThreadHistorySignals({ history, chatThread, platform, mastraThread, requestContext }),
             requestContext,
             thread: mastraThread,
             memory: { thread: mastraThread.id, resource: threadResourceId },
@@ -1576,7 +1579,7 @@ export class AgentChannels {
     });
     const parts: Exclude<AgentSignalContents, string> = [
       { type: 'text', text },
-      ...(await this.attachmentsToParts(attachments)),
+      ...(await this.attachmentsToParts(attachments, requestContext)),
     ];
 
     // Promote URLs in message text to file parts based on `inlineLinks` config.
@@ -1695,10 +1698,16 @@ export class AgentChannels {
    * YAML, XML, …) that come with an authenticated `fetchData` are decoded and
    * sent as text. Other non-inline types are described as text
    * metadata so the agent is aware of them without crashing models that
-   * reject unsupported media (e.g. OpenAI rejects video/mp4).
+   * reject unsupported media (e.g. OpenAI rejects video/mp4). When the agent
+   * has a writable workspace, those with `fetchData` are saved there and the
+   * description carries the workspace path instead of the URL.
    */
-  private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
+  private async attachmentsToParts(
+    attachments: Attachment[],
+    requestContext: RequestContext,
+  ): Promise<Exclude<AgentSignalContents, string>> {
     const parts: Exclude<AgentSignalContents, string> = [];
+    let filesystem: Promise<WorkspaceFilesystem | undefined> | undefined;
     for (const att of attachments) {
       if (!att.url && !att.fetchData) continue;
       const mimeType = att.mimeType || (att.type === 'image' ? 'image/png' : undefined);
@@ -1744,7 +1753,7 @@ export class AgentChannels {
       } else if (
         att.fetchData &&
         isTextMimeType(mimeType) &&
-        !(att.size !== undefined && att.size > MAX_TEXT_ATTACHMENT_DOWNLOAD_BYTES)
+        !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)
       ) {
         // Text-like files behind an authenticated fetch (e.g. Slack's
         // url_private) are decoded and handed to the agent as text, since the
@@ -1770,13 +1779,71 @@ export class AgentChannels {
           });
         }
       } else {
+        // Binary files behind an authenticated fetch (e.g. Slack's url_private)
+        // go to the workspace so tools can open them. The URL stays as the
+        // fallback: some adapters with fetchData (Discord) have public URLs.
+        let savedPath: string | undefined;
+        if (att.fetchData && !(att.size !== undefined && att.size > MAX_ATTACHMENT_DOWNLOAD_BYTES)) {
+          filesystem ??= this.resolveAttachmentFilesystem(requestContext);
+          const fs = await filesystem;
+          if (fs) savedPath = await this.saveAttachmentToWorkspace(fs, att, att.fetchData, filename, mimeType);
+        }
         parts.push({
           type: 'text',
-          text: `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
+          text: savedPath
+            ? `[Attached file: ${filename} (${mimeType}) — saved in the workspace at ${savedPath}]`
+            : `[Attached file: ${filename} (${mimeType})${att.url ? ` — ${att.url}` : ''}]`,
         });
       }
     }
     return parts;
+  }
+
+  /** The agent's workspace filesystem when one is configured and writable. */
+  private async resolveAttachmentFilesystem(requestContext: RequestContext): Promise<WorkspaceFilesystem | undefined> {
+    try {
+      const workspace = await this.getDispatchAgent()?.getWorkspace?.({ requestContext });
+      const fs = workspace?.filesystem;
+      return fs && !fs.readOnly ? fs : undefined;
+    } catch (err) {
+      this.log('warn', 'Could not resolve the agent workspace for attachments', { error: err });
+      return undefined;
+    }
+  }
+
+  /**
+   * Save an attachment under `channel-attachments/<url hash>/<name>` and
+   * return the path, or undefined when it cannot be downloaded or written.
+   * The URL-derived folder keeps same-named files apart and lets history
+   * walks reuse a file that is already saved.
+   */
+  private async saveAttachmentToWorkspace(
+    fs: WorkspaceFilesystem,
+    att: Attachment,
+    fetchData: () => Promise<Buffer | ArrayBuffer>,
+    filename: string,
+    mimeType: string,
+  ): Promise<string | undefined> {
+    const key = createHash('sha256')
+      .update(att.url ?? `${filename}:${mimeType}:${att.size ?? ''}`)
+      .digest('hex')
+      .slice(0, 16);
+    const safeName = filename.replace(/[^\w.-]+/g, '_').replace(/^\.+/, '') || 'file';
+    const path = `channel-attachments/${key}/${safeName}`;
+    try {
+      if (await fs.exists(path)) return path;
+      const buf = await fetchData();
+      const bytes = buf instanceof ArrayBuffer ? new Uint8Array(buf) : buf;
+      if (bytes.byteLength > MAX_ATTACHMENT_DOWNLOAD_BYTES) {
+        this.log('warn', 'Attachment exceeds the download ceiling, not saved', { mimeType, bytes: bytes.byteLength });
+        return undefined;
+      }
+      await fs.writeFile(path, bytes, { recursive: true, mimeType });
+      return path;
+    } catch (err) {
+      this.log('warn', 'Attachment could not be saved to the workspace', { mimeType, error: err });
+      return undefined;
+    }
   }
 
   /**
@@ -1790,8 +1857,9 @@ export class AgentChannels {
     chatThread: Thread;
     platform: string;
     mastraThread: Pick<StorageThreadType, 'id'>;
+    requestContext: RequestContext;
   }): Promise<AgentSignalInput[]> {
-    const { history, chatThread, platform, mastraThread } = args;
+    const { history, chatThread, platform, mastraThread, requestContext } = args;
     const ordered: Array<{ message: Message; gapAfter: boolean }> = [];
     if (history.root) ordered.push({ message: history.root, gapAfter: history.omitted > 0 });
     for (const message of history.recent) ordered.push({ message, gapAfter: false });
@@ -1820,7 +1888,7 @@ export class AgentChannels {
       const text = messageText(message);
       const parts: Exclude<AgentSignalContents, string> = [
         ...(text ? [{ type: 'text' as const, text }] : []),
-        ...(await this.attachmentsToParts(message.attachments ?? [])),
+        ...(await this.attachmentsToParts(message.attachments ?? [], requestContext)),
       ];
       if (parts.length > 0) {
         const { attributes, providerOptions } = await this.buildEventContext({
