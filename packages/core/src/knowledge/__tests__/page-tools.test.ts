@@ -1,9 +1,9 @@
 import { beforeEach, describe, expect, it } from 'vitest';
 import { setRunAgentScopes } from '../../agent/scopes';
 import { RequestContext } from '../../request-context';
+import { standardSchemaToJSONSchema } from '../../schema';
 import type { KnowledgeStorage } from '../../storage/domains/knowledge';
 import { InMemoryStore } from '../../storage/mock';
-import { standardSchemaToJSONSchema } from '../../schema';
 import { validateToolInput } from '../../tools/validation';
 import { KnowledgeDeclarationError, knowledgeMemoryScopes, knowledgeRoleAtLeast } from '../declarations';
 import type { KnowledgeScopeDeclarations } from '../declarations';

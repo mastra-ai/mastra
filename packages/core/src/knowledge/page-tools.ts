@@ -313,7 +313,8 @@ function pageTool(host: KnowledgePageToolHost) {
       'Write, move or merge pages. A page body is the curated summary of its topic (needs editor to change); discrete attributed details belong in notes (knowledge_note). ' +
       'op "write": with `page`, edits that page (name, description, body); without `page`, creates a page named `name` in `scope`. ' +
       'op "move": moves `page` under `parent` or to the top of `scope`. op "merge": merges `page` into `into`, keeping both pages\' notes. ' +
-      '`scope` is only for where content lands (create, move destination); edits and merges take none.',
+      '`scope` is only for where content lands (create, move destination); edits and merges take none. ' +
+      'Pages declared in config can be edited and merged into, but not moved or merged away.',
     inputSchema: {
       type: 'object',
       properties: {
@@ -392,6 +393,12 @@ function pageTool(host: KnowledgePageToolHost) {
       if (!args.page) throw new Error(`op "${args.op}" needs page.`);
       const page = await run.page(args.page);
       const home = await run.scopeOf(page);
+      const template = await host.runtime.templatePageRef(page);
+      if (template) {
+        throw new Error(
+          `"${template}" is declared in config; change the scope's pages to ${args.op === 'move' ? 'move' : 'remove'} it.`,
+        );
+      }
 
       if (args.op === 'move') {
         if (!args.scope) throw new Error('Moving a page needs the destination scope.');

@@ -107,6 +107,30 @@ export class KnowledgeScopeRuntime {
     };
   }
 
+  /**
+   * The `<scope>#<key path>` of a page its scope's declaration lists in `pages`, or undefined for an
+   * ordinary page. Template pages belong to config: tools can't move them or merge them away.
+   */
+  async templatePageRef(page: KnowledgePage): Promise<string | undefined> {
+    if (page.isScope || !page.key) return undefined;
+    const storage = await this.getStorage();
+    const path: string[] = [];
+    let current: KnowledgePage | null = page;
+    while (current && !current.isScope) {
+      if (!current.key) return undefined;
+      path.unshift(current.key);
+      current = current.parentId ? await storage.getPage({ id: current.parentId, read: 'all' }) : null;
+    }
+    if (!current?.address) return undefined;
+    let templates = this.compiled.match(current.address)?.compiled.declaration.pages;
+    for (const key of path) {
+      const template = templates?.find(entry => entry.key === key);
+      if (!template) return undefined;
+      templates = template.pages;
+    }
+    return `${current.address}#${path.join('/')}`;
+  }
+
   async materializeScope(
     address: string,
     principals: readonly string[],
