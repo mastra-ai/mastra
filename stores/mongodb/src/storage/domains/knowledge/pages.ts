@@ -9,6 +9,7 @@ import {
   canonicalKnowledgeName,
   createKnowledgeUlid,
   KnowledgeConflictError,
+  KnowledgePageKeyConflictError,
   KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
   KnowledgePageDepthError,
@@ -366,31 +367,42 @@ export class MongoKnowledgePages implements KnowledgePageStore {
     rootId: string,
     session?: Session,
     find?: string,
-  ): Promise<{ ids: string[]; live: number; maxDepth: number; found: boolean; truncated: boolean }> {
+  ): Promise<{ ids: string[]; live: number; maxDepth: number; liveKeys: string[]; found: boolean; truncated: boolean }> {
     const pages = await this.#c('pages');
     const ids: string[] = [];
     let liveCount = 0;
     let maxDepth = 0;
+    const liveKeys: string[] = [];
     let frontier = [rootId];
     while (frontier.length) {
       const rows = await pages
         .find(
           { parentId: { $in: frontier }, ...notScope },
-          { projection: { _id: 0, id: 1, depth: 1, deletedAt: 1 }, session },
+          { projection: { _id: 0, id: 1, depth: 1, key: 1, deletedAt: 1 }, session },
         )
         .toArray();
       frontier = [];
       for (const row of rows) {
         const id = String(row.id);
-        if (find !== undefined && id === find) return { ids, live: liveCount, maxDepth, found: true, truncated: false };
+        if (find !== undefined && id === find) return { ids, live: liveCount, maxDepth, liveKeys, found: true, truncated: false };
         ids.push(id);
         frontier.push(id);
-        maxDepth = Math.max(maxDepth, Number(row.depth));
-        if (row.deletedAt == null) liveCount++;
+        if (row.deletedAt == null) {
+          liveCount++;
+          maxDepth = Math.max(maxDepth, Number(row.depth));
+          if (row.key != null) liveKeys.push(String(row.key));
+        }
       }
-      if (liveCount > MAX_KNOWLEDGE_MOVE_PAGES) return { ids, live: liveCount, maxDepth, found: false, truncated: true };
+      if (liveCount > MAX_KNOWLEDGE_MOVE_PAGES) return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: true };
     }
-    return { ids, live: liveCount, maxDepth, found: false, truncated: false };
+    return { ids, live: liveCount, maxDepth, liveKeys, found: false, truncated: false };
+  }
+
+  /** Refuses before any write when a live carried page's key is already live in the destination scope. */
+  async #assertNoKeyConflicts(keys: string[], scopeId: string, session?: Session): Promise<void> {
+    if (!keys.length) return;
+    const clash = await (await this.#c('pages')).findOne({ ...live, scopeId, key: { $in: keys } }, { projection: { _id: 0, key: 1 }, session });
+    if (clash) throw new KnowledgePageKeyConflictError(String(clash.key), scopeId);
   }
 
   /** Recomputes the denormalized scope of every page a note mentions, for notes touching `pageIds`. */
@@ -692,7 +704,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       await (await this.#c('pages')).insertOne({ ...doc }, { session });
     } catch (error) {
       if (isDuplicateKey(error)) {
-        if (input.key) throw new Error(`Knowledge page key "${input.key}" already exists in scope ${scopeId}`);
+        if (input.key) throw new KnowledgePageKeyConflictError(input.key, scopeId);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -771,6 +783,9 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(parent.id, session)) + 1;
       const delta = newDepth - (await this.#depthOf(page.id, session));
+      if (page.scopeId !== newScopeId) {
+        await this.#assertNoKeyConflicts(page.key ? [page.key, ...tree.liveKeys] : tree.liveKeys, newScopeId, session);
+      }
       if (tree.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new KnowledgePageDepthError(input.id);
       }
@@ -828,6 +843,7 @@ export class MongoKnowledgePages implements KnowledgePageStore {
       if (tree.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, tree.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(target.id, session)) - (await this.#depthOf(source.id, session));
+      if (source.scopeId !== target.scopeId) await this.#assertNoKeyConflicts(tree.liveKeys, target.scopeId, session);
       if (tree.maxDepth > 0 && tree.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new KnowledgePageDepthError(source.id);
       }

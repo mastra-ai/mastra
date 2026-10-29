@@ -2,6 +2,7 @@ import {
   canonicalKnowledgeName,
   createKnowledgeUlid,
   KnowledgeConflictError,
+  KnowledgePageKeyConflictError,
   KnowledgeMoveTooLargeError,
   KnowledgeNotFoundError,
   KnowledgePageDepthError,
@@ -436,16 +437,31 @@ export class PgKnowledgePages implements KnowledgePageStore {
     )`;
   }
 
-  /** Live descendants, capped, and the deepest level among all of them (live or deleted). */
+  /** Live descendants, capped, and the deepest live level. */
   async #subtreeStats(db: Queryable, rootId: string): Promise<{ live: number; maxDepth: number }> {
     const rows = await this.#rows(
       db,
       `${this.#subtree('$1')}
        SELECT (SELECT count(*) FROM (SELECT 1 FROM sub JOIN ${this.#pages} p ON p."id" = sub."id" WHERE p."deletedAt" IS NULL LIMIT ${MAX_KNOWLEDGE_MOVE_PAGES + 1}) l) AS live,
-              (SELECT COALESCE(max(p."depth"), 0) FROM sub JOIN ${this.#pages} p ON p."id" = sub."id") AS "maxDepth"`,
+              (SELECT COALESCE(max(p."depth"), 0) FROM sub JOIN ${this.#pages} p ON p."id" = sub."id" WHERE p."deletedAt" IS NULL) AS "maxDepth"`,
       [rootId],
     );
     return { live: Number(rows[0]?.live ?? 0), maxDepth: Number(rows[0]?.maxDepth ?? 0) };
+  }
+
+  /** Refuses before any write when a live carried page's key is already live in the destination scope. */
+  async #assertNoKeyConflicts(db: Queryable, rootId: string, scopeId: string, includeRoot: boolean): Promise<void> {
+    const rows = await this.#rows(
+      db,
+      `${this.#subtree('$1')}
+       SELECT c."key" FROM ${this.#pages} c
+       JOIN ${this.#pages} t ON t."scopeId" = $2 AND t."key" = c."key" AND t."deletedAt" IS NULL
+       WHERE c."key" IS NOT NULL AND c."deletedAt" IS NULL AND c."scopeId" <> $2
+         AND (c."id" IN (SELECT "id" FROM sub)${includeRoot ? ' OR c."id" = $1' : ''})
+       LIMIT 1`,
+      [rootId, scopeId],
+    );
+    if (rows[0]) throw new KnowledgePageKeyConflictError(String(rows[0].key), scopeId);
   }
 
   async #isInSubtree(db: Queryable, rootId: string, candidateId: string): Promise<boolean> {
@@ -780,7 +796,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       return toPage(rows[0]!);
     } catch (error) {
       if (isUniqueViolation(error)) {
-        if (input.key) throw new Error(`Knowledge page key "${input.key}" already exists in scope ${scopeId}`);
+        if (input.key) throw new KnowledgePageKeyConflictError(input.key, scopeId);
         throw new KnowledgeConflictError(id);
       }
       throw error;
@@ -841,6 +857,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       const newScopeId = parent.isScope ? parent.id : parent.scopeId;
       const newDepth = parent.isScope ? 1 : (await this.#depthOf(tx, parent.id)) + 1;
       const delta = newDepth - (await this.#depthOf(tx, page.id));
+      await this.#assertNoKeyConflicts(tx, input.id, newScopeId, true);
       if (stats.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH || newDepth > MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new KnowledgePageDepthError(input.id);
       }
@@ -889,6 +906,7 @@ export class PgKnowledgePages implements KnowledgePageStore {
       if (stats.live > MAX_KNOWLEDGE_MOVE_PAGES) throw new KnowledgeMoveTooLargeError(source.id, stats.live);
       // Source's children become target's children, one level below the target.
       const delta = (await this.#depthOf(tx, target.id)) - (await this.#depthOf(tx, source.id));
+      await this.#assertNoKeyConflicts(tx, source.id, target.scopeId, false);
       if (stats.maxDepth > 0 && stats.maxDepth + delta > MAX_KNOWLEDGE_PAGE_DEPTH) {
         throw new KnowledgePageDepthError(source.id);
       }
