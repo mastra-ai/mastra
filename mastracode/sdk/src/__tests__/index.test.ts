@@ -938,7 +938,7 @@ describe('createMastraCode', () => {
 
   it('uses a host-owned Knowledge instance and preserves its registration key', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
-    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge' });
+    const instance = new Knowledge({ id: 'mastra', description: 'Factory knowledge', scopes: {} });
     const { createMastraCode } = await import('../index.js');
 
     const code = await createMastraCode({ knowledge: { key: 'mastra', instance } });
@@ -957,7 +957,7 @@ describe('createMastraCode', () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
     const { RequestContext } = await import('@mastra/core/request-context');
     const { createMastraCode } = await import('../index.js');
-    const instance = new Knowledge({ id: 'mastra' });
+    const instance = new Knowledge({ id: 'mastra', scopes: {} });
     await createMastraCode({
       knowledge: instance,
       scopes: [{ scope: 'org:self', access: 'read' }, 'team:self:x'],
@@ -981,7 +981,7 @@ describe('createMastraCode', () => {
 
     expect(mastraStub.addKnowledge).toHaveBeenLastCalledWith(instance, 'mastra');
 
-    await createMastraCode({ knowledge: new Knowledge({ id: 'plain' }) });
+    await createMastraCode({ knowledge: new Knowledge({ id: 'plain', scopes: {} }) });
     const plainScopes = codeAgentConfig().scopes;
     expect(await plainScopes({ scopes: [], requestContext: context })).toEqual([]);
     const factory = new RequestContext([['controller', { state: { factoryOrgId: 'o', factoryProjectId: 'p' } }]]);
@@ -1004,7 +1004,7 @@ describe('createMastraCode', () => {
     ];
     for (const [index, { host, state }] of cases.entries()) {
       await createMastraCode({
-        knowledge: { key: `unresolved-${index}`, instance: new Knowledge({ id: 'mastra' }) },
+        knowledge: { key: `unresolved-${index}`, instance: new Knowledge({ id: 'mastra', scopes: {} }) },
         scopes: host,
       });
       const context = new RequestContext([['controller', { state }]]);
@@ -1030,8 +1030,8 @@ describe('createMastraCode', () => {
       expect.arrayContaining([
         'knowledge_search',
         'knowledge_read',
-        'knowledge_record',
-        'knowledge_node',
+        'knowledge_page',
+        'knowledge_note',
         'knowledge_pin',
       ]),
     );
@@ -1065,7 +1065,7 @@ describe('createMastraCode', () => {
 
   it('registers the selected Knowledge on the Mastra a local boot builds', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
-    const instance = new Knowledge({ id: 'mastra' });
+    const instance = new Knowledge({ id: 'mastra', scopes: {} });
     const { createMastraCode } = await import('../index.js');
 
     await createMastraCode({ knowledge: { key: 'mastra', instance } });
@@ -1076,11 +1076,11 @@ describe('createMastraCode', () => {
 
   it('rejects a local boot whose Mastra registers a different Knowledge under the selected key', async () => {
     const { Knowledge } = await import('@mastra/core/knowledge');
-    registeredKnowledge = { mastra: new Knowledge({ id: 'other' }) };
+    registeredKnowledge = { mastra: new Knowledge({ id: 'other', scopes: {} }) };
     const { createMastraCode } = await import('../index.js');
 
     await expect(
-      createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } }),
+      createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra', scopes: {} }) } }),
     ).rejects.toThrow('This Mastra already registers a different Knowledge instance under "mastra".');
   });
 
@@ -1089,7 +1089,7 @@ describe('createMastraCode', () => {
     const { createMastraCode } = await import('../index.js');
 
     await expect(
-      createMastraCode({ knowledge: { key: '  ', instance: new Knowledge({ id: 'mastra' }) } }),
+      createMastraCode({ knowledge: { key: '  ', instance: new Knowledge({ id: 'mastra', scopes: {} }) } }),
     ).rejects.toThrow('knowledge.key must be a non-empty string.');
   });
 
@@ -1111,7 +1111,9 @@ describe('createMastraCode', () => {
       new Error('Knowledge schema reset required: Missing Knowledge v2 tables.'),
     );
 
-    const code = await createMastraCode({ knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra' }) } });
+    const code = await createMastraCode({
+      knowledge: { key: 'mastra', instance: new Knowledge({ id: 'mastra', scopes: {} }) },
+    });
 
     expect(code.knowledgeInspector).toBeUndefined();
     expect(code.knowledgeInspectorUnavailableReason).toBe(

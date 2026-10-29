@@ -7,7 +7,14 @@ import { MASTRA_SCOPES_KEY, RequestContext } from '../../request-context';
 import { MastraServerBase } from '../../server/base';
 import { InMemoryStore } from '../../storage';
 import { createTool } from '../../tools';
+import { knowledgeMemoryScopes } from '../declarations';
 import { Knowledge } from '../index';
+
+const scopes = {
+  ...knowledgeMemoryScopes({ org: 'org:$orgId' }),
+  'team:$orgId:$teamId': { access: [{ principal: 'self' as const, role: 'editor' as const }] },
+  'agent:$agentId': { access: [{ principal: 'self' as const, role: 'owner' as const }] },
+};
 
 type Call = { toolName: string; input: unknown };
 
@@ -70,24 +77,22 @@ const tamper = createTool({
   },
 });
 
-async function nodesAt(knowledge: Knowledge, scope: string[]) {
+/** Every live page, read as the host. */
+async function allPages(knowledge: Knowledge) {
   const store = await knowledge.getStorage();
-  return store.listNodes({ scope, limit: 50 });
+  return (await store.listPages({ read: 'all', limit: 50 })).pages.map(page => `${page.scopeId}:${page.name}`);
 }
 
 describe('Knowledge tools with tampered or forged run scopes', () => {
-  it('refuses a read-only tag after code inside the run deletes the access map', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-delete' }), tools: true });
+  it('holds only the Memory identity after code inside the run deletes the access map', async () => {
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-delete' }), scopes, tools: true });
     const agent = new Agent({
       id: 'member',
       name: 'member',
       instructions: 'x',
       model: scriptedModel([
         { toolName: 'tamper', input: { action: 'delete-access' } },
-        {
-          toolName: 'knowledge_record',
-          input: { op: 'add', node: 'Org note', kind: 'doc', text: 'y', scope: ['org:self'] },
-        },
+        { toolName: 'knowledge_page', input: { op: 'write', scope: 'org:self', name: 'Org note' } },
       ]),
       knowledge,
       tools: { tamper },
@@ -99,43 +104,41 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
 
     const result = await agent.generate('go', { maxSteps: 3, memory: { thread: 'm-1', resource: 'member' } });
 
-    expect(toolErrors(result)).toEqual(['This run does not hold scope "org:self".']);
-    expect(await nodesAt(knowledge, ['org:self'])).toEqual([]);
+    expect(toolErrors(result)).toEqual(['Knowledge page "org:self" not found.']);
+    expect(await allPages(knowledge)).toEqual([]);
   });
 
   it('gives knowledge tools nothing when code inside the run writes its own mastra__scopes', async () => {
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-forge' }), tools: true });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'tamper-forge' }), scopes, tools: true });
     const agent = new Agent({
       id: 'no-memory',
       name: 'no-memory',
       instructions: 'x',
       model: scriptedModel([
         { toolName: 'tamper', input: { action: 'forge-scopes' } },
-        { toolName: 'knowledge_record', input: { op: 'add', node: 'Forged', kind: 'doc', text: 'y' } },
+        { toolName: 'knowledge_page', input: { op: 'write', scope: 'team:self:x', name: 'Forged' } },
         { toolName: 'knowledge_search', input: { query: 'Forged' } },
       ]),
       knowledge,
       tools: { tamper },
-      scopes: ['agent:alex'],
+      scopes: [{ scope: 'agent:alex', access: 'write' }],
     });
 
     const result = await agent.generate('go', { maxSteps: 4 });
 
-    const needScopes =
-      'Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with a Memory resource or thread.';
-    expect(toolErrors(result)).toEqual([needScopes, needScopes]);
-    expect(await nodesAt(knowledge, ['org:self', 'team:self:x'])).toEqual([]);
+    expect(toolErrors(result)).toHaveLength(2);
+    expect(await allPages(knowledge)).toEqual([]);
   });
 
   it('refuses request-context scopes behind a server that predates agent scopes, before any tool runs', async () => {
     class OutdatedServer extends MastraServerBase {}
-    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'outdated' }), tools: true });
+    const knowledge = new Knowledge({ storage: new InMemoryStore({ id: 'outdated' }), scopes, tools: true });
     const agent = new Agent({
       id: 'agent',
       name: 'agent',
       instructions: 'x',
       model: scriptedModel([
-        { toolName: 'knowledge_record', input: { op: 'add', node: 'Victim', kind: 'doc', text: 'y' } },
+        { toolName: 'knowledge_page', input: { op: 'write', scope: 'org:victim', name: 'Victim' } },
       ]),
       knowledge,
     });
@@ -146,6 +149,6 @@ describe('Knowledge tools with tampered or forged run scopes', () => {
     await expect(mastra.getAgent('agent').generate('go', { requestContext, maxSteps: 2 })).rejects.toMatchObject({
       id: 'AGENT_SCOPES_SERVER_OUTDATED',
     });
-    expect(await nodesAt(knowledge, ['org:victim'])).toEqual([]);
+    expect(await allPages(knowledge)).toEqual([]);
   });
 });

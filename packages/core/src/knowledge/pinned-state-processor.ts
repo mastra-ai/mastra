@@ -8,10 +8,9 @@
  * when nothing changed and the base snapshot is still visible, emit nothing so
  * the cached prompt prefix stays stable.
  *
- * Pins are KnowledgeRecords on a reserved node (see ./pinned), so each entry
- * has a stable id and a delta can say exactly which pin appeared or left.
- * There is no `update` op: editing a pin is remove-plus-append in storage, so
- * an edit arrives as a `remove` of the old id and an `add` of the new one.
+ * Each entry is a pinned page keyed by its page id, rendered from the page's
+ * current body, so a delta can say exactly which pin appeared or left. An
+ * edited page arrives as a `remove` and an `add` of the same id with new text.
  */
 import type {
   ComputeStateSignalArgs,
@@ -22,15 +21,11 @@ import type {
   ProcessInputResult,
 } from '../processors';
 import { STATE_SIGNAL_WITHOUT_MEMORY } from '../processors/state-signal-without-memory';
-import type { KnowledgeScope, KnowledgeStorage } from '../storage';
+import { PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, PINNED_KNOWLEDGE_STATE_ID } from './pinned';
+import type { PinEntry } from './pinned';
+import type { KnowledgeRunContext } from './run';
 
-import { resolveKnowledgeRunScope } from './knowledge-tools';
-import { listPinnedKnowledge, PINNED_DELTA_TAG, PINNED_SNAPSHOT_TAG, PINNED_KNOWLEDGE_STATE_ID } from './pinned';
-
-export interface PinEntry {
-  id: string;
-  text: string;
-}
+export type { PinEntry } from './pinned';
 
 export type PinDeltaOp = { op: 'add'; pin: PinEntry } | { op: 'remove'; id: string };
 
@@ -87,13 +82,14 @@ export function effectivePriorPins(args: ComputeStateSignalArgs): PinEntry[] {
 
 export function diffPins(prior: PinEntry[], current: PinEntry[]): PinDeltaOp[] {
   const ops: PinDeltaOp[] = [];
-  const priorIds = new Set(prior.map(pin => pin.id));
-  const currentIds = new Set(current.map(pin => pin.id));
+  const priorText = new Map(prior.map(pin => [pin.id, pin.text]));
+  const currentText = new Map(current.map(pin => [pin.id, pin.text]));
+  // An edited page keeps its id; it goes out as a remove and comes back as an add with the new text.
   for (const pin of prior) {
-    if (!currentIds.has(pin.id)) ops.push({ op: 'remove', id: pin.id });
+    if (currentText.get(pin.id) !== pin.text) ops.push({ op: 'remove', id: pin.id });
   }
   for (const pin of current) {
-    if (!priorIds.has(pin.id)) ops.push({ op: 'add', pin });
+    if (priorText.get(pin.id) !== pin.text) ops.push({ op: 'add', pin });
   }
   return ops;
 }
@@ -111,7 +107,10 @@ function renderDelta(ops: PinDeltaOp[]): string {
 }
 
 export interface PinnedStateProcessorDeps {
-  getKnowledgeStore(): Promise<KnowledgeStorage | undefined>;
+  /** A key identifying the run's principals, for the per-turn memo. Throws when the run has no Knowledge view. */
+  principalsKey(context: KnowledgeRunContext): string;
+  /** The pins the run receives. */
+  readPins(context: KnowledgeRunContext): Promise<PinEntry[]>;
 }
 
 /** Request-context key memoizing a turn's pin read; pin writes clear it so the next step reads fresh. */
@@ -139,45 +138,32 @@ export class PinnedStateProcessor implements Processor<typeof PINNED_KNOWLEDGE_S
     };
   }
 
-  // Reads use the run's full Knowledge scope (visibility is subset containment), never a narrowed
-  // write scope, so pins written at fewer tags are still found.
-  private resolveScope(args: ComputeStateSignalArgs): KnowledgeScope | undefined {
+  // One pin read per turn, memoized on the request context so multiple steps in the same turn share
+  // it. The request context can outlive the turn and be shared across threads, so the memo is only
+  // trusted for later steps of the same turn AND the same principals; step 0 always reads fresh.
+  private async readPins(args: ComputeStateSignalArgs): Promise<PinEntry[] | undefined> {
+    const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
+    const memo = args.requestContext?.get?.(MEMO_KEY) as
+      | { atStep: number; key: string; entries: PinEntry[] }
+      | undefined;
+    const context: KnowledgeRunContext = {
+      requestContext: args.requestContext,
+      agent: { resourceId: args.resourceId, threadId: args.threadId },
+    };
+    let key: string;
     try {
-      return resolveKnowledgeRunScope({
-        requestContext: args.requestContext,
-        agent: { resourceId: args.resourceId, threadId: args.threadId },
-      });
+      key = this.deps.principalsKey(context);
     } catch {
       return undefined;
     }
-  }
-
-  // One node resolve plus one paged record read per turn; memoized on the
-  // request context so multiple steps in the same turn share one read. The
-  // request context can outlive the turn, so the memo is only trusted after
-  // step 0: a new turn (step 0) always reads fresh and overwrites it.
-  private async readPins(args: ComputeStateSignalArgs, scope: KnowledgeScope): Promise<PinEntry[] | undefined> {
-    const stepNumber = typeof args.stepNumber === 'number' ? args.stepNumber : 0;
-    const scopeKey = scope.join('/');
-    const memo = args.requestContext?.get?.(MEMO_KEY) as
-      | { atStep: number; scopeKey: string; entries: PinEntry[] }
-      | undefined;
-    // A request context can be shared across turns and even across threads, so
-    // the memo is only trusted for later steps of the same turn AND the same
-    // resolved scope.
-    if (memo && memo.scopeKey === scopeKey && stepNumber > memo.atStep) return memo.entries;
-    const store = await this.deps.getKnowledgeStore();
-    if (!store) return undefined;
-    const { pins } = await listPinnedKnowledge({ store, scope });
-    const entries = pins.map(pin => ({ id: pin.id, text: pin.text }));
-    args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, scopeKey, entries });
+    if (memo && memo.key === key && stepNumber > memo.atStep) return memo.entries;
+    const entries = await this.deps.readPins(context);
+    args.requestContext?.set?.(MEMO_KEY, { atStep: stepNumber, key, entries });
     return entries;
   }
 
   async computeStateSignal(args: ComputeStateSignalArgs): Promise<ComputeStateSignalResult> {
-    const scope = this.resolveScope(args);
-    if (!scope) return;
-    const currentPins = await this.readPins(args, scope);
+    const currentPins = await this.readPins(args);
     if (!currentPins) return;
 
     const priorPins = effectivePriorPins(args);

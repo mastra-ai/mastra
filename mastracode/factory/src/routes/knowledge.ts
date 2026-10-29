@@ -18,7 +18,6 @@
  */
 
 import type { Knowledge } from '@mastra/core/knowledge';
-import { listPinnedKnowledge } from '@mastra/core/knowledge';
 import type { ApiRoute } from '@mastra/core/server';
 import { registerApiRoute } from '@mastra/core/server';
 import type {
@@ -700,52 +699,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
   }
 
   /**
-   * Host-vouched identity chain: the org → project → session rungs this
-   * request resolved are materialized as ordinary scope nodes linked by
-   * membership edges, so the sidebar tree is built from scopes that EXIST —
-   * never from the declared structure plan or the rung config. Materialization
-   * is create-only and deduped by address (existing nodes keep their declared
-   * names/parents), so the steady state is a no-op skip. No companion scope is
-   * created here or anywhere automatically. A vouch failure never fails the read —
-   * the tree simply serves the scopes that already exist.
-   */
-  async #vouchIdentityScopes(view: ResolvedView): Promise<void> {
-    const orgAddress = `org:${view.orgId}`;
-    const resourceAddress = `project:${view.factoryProjectId}`;
-    const chain = [
-      { address: orgAddress, contextualScopeAddress: orgAddress },
-      {
-        address: resourceAddress,
-        name: view.factoryProjectName,
-        contextualScopeAddress: orgAddress,
-        parentAddresses: [orgAddress],
-      },
-      ...(view.threadId
-        ? [
-            {
-              address: `thread:${view.threadId}`,
-              contextualScopeAddress: resourceAddress,
-              parentAddresses: [resourceAddress],
-            },
-          ]
-        : []),
-    ];
-    let existing: Set<string>;
-    try {
-      const { scopes } = await view.store.listScopeNodes({ addresses: chain.map(link => link.address) });
-      existing = new Set(scopes.map(node => node.address));
-    } catch (error) {
-      // Adapters without structural scope nodes have no tree to vouch into.
-      if (error instanceof KnowledgeUnsupportedCapabilityError) return;
-      throw error;
-    }
-    for (const link of chain) {
-      if (existing.has(link.address)) continue;
-      await view.knowledge.materializeScope(link).catch(() => undefined);
-    }
-  }
-
-  /**
    * Session scopes are listed only under the viewed project, and only when the `threadId`
    * drill-down would accept them (a visible record captured in that session), so no listing
    * exposes a session id the drill-down would reject. Returns the ids of hidden session nodes.
@@ -817,14 +770,8 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
     records: Array<{ rung: 'resource' | 'thread'; record: KnowledgeRecord }>;
   }> {
     if (!view.pins) return { nodeIds: [], records: [] };
-    const { nodeIds, pins } = await listPinnedKnowledge({ store: view.store, scope: view.scope });
-    return {
-      nodeIds,
-      records: pins.map(record => ({
-        rung: deepestRung(record.scope) === 'thread' ? ('thread' as const) : ('resource' as const),
-        record,
-      })),
-    };
+    // Pins are pages on the schema-4 page store now; this v2 view has none until the routes move onto it.
+    return { nodeIds: [], records: [] };
   }
 
   routes(): ApiRoute[] {
@@ -836,7 +783,6 @@ export class KnowledgeRoutes extends Route<KnowledgeRoutesDeps> {
           const view = await this.#resolveView(loose(c));
           if ('response' in view) return view.response;
           // The identity chain exists as scope nodes before the tree is read.
-          await this.#vouchIdentityScopes(view);
           // The structural tree comes from the reconciled scope nodes
           // themselves — never synthesized from the identity rungs. Adapters
           // without the structural read (MySQL/MongoDB) omit the tree; any

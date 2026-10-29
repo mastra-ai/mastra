@@ -520,7 +520,7 @@ export class SettingsComponent extends Box implements Focusable {
               {
                 value: 'on',
                 label: '  On',
-                description: 'Add knowledge_search, knowledge_read, knowledge_record, knowledge_node and knowledge_pin',
+                description: 'Add knowledge_search, knowledge_read, knowledge_page, knowledge_note and knowledge_pin',
               },
               { value: 'off', label: '  Off', description: 'No Knowledge tools or pinned context' },
             ],

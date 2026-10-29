@@ -57,7 +57,7 @@ async function createHarness(
   const orgId = options.orgId ?? ORG;
   const seed = await createFactoryStorageForTests();
   const project = await seed.projects.create({ orgId, userId: 'user-1', input: { name: 'Graph project' } });
-  const realInstance = new Knowledge({ id: 'knowledge', storage: new InMemoryStore() });
+  const realInstance = new Knowledge({ id: 'knowledge', storage: new InMemoryStore(), scopes: {} });
   const knowledge = options.knowledge ?? (await realInstance.getStorage());
   const instance = options.knowledge ? instanceOver(knowledge) : realInstance;
   const routes = new KnowledgeRoutes({

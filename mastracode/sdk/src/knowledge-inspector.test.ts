@@ -499,7 +499,7 @@ describe('KnowledgeInspector', () => {
     const selected = new InMemoryKnowledgeStorage({ db: new InMemoryDB() });
     const storage = new MastraCompositeStore({ id: 'legacy', domains: { knowledge: legacy } });
     const selectedStorage = new MastraCompositeStore({ id: 'selected', domains: { knowledge: selected } });
-    const knowledge = new Knowledge({ id: 'selected', storage: selectedStorage });
+    const knowledge = new Knowledge({ id: 'selected', storage: selectedStorage, scopes: {} });
     await legacy.createNode({ name: 'Legacy only', kind: 'note', scope: resourceScope });
     await selected.createNode({ name: 'Selected only', kind: 'note', scope: resourceScope });
 
@@ -517,8 +517,8 @@ describe('KnowledgeInspector', () => {
 
   it('selects registered Knowledge keys and never falls back for an unknown key', async () => {
     const storage = new MastraCompositeStore({ id: 'fallback', default: new InMemoryStore({ id: 'fallback' }) });
-    const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }) });
-    const second = new Knowledge({ id: 'second', storage: new InMemoryStore({ id: 'second' }) });
+    const first = new Knowledge({ id: 'first', storage: new InMemoryStore({ id: 'first' }), scopes: {} });
+    const second = new Knowledge({ id: 'second', storage: new InMemoryStore({ id: 'second' }), scopes: {} });
     const mastra = new Mastra({ knowledge: { first, second } });
     await (await first.getStorage()).createNode({ name: 'First', kind: 'note', scope: resourceScope });
     await (await second.getStorage()).createNode({ name: 'Second', kind: 'note', scope: resourceScope });
