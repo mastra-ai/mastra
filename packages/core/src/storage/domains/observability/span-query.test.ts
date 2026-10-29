@@ -13,14 +13,13 @@ import {
 } from './span-query';
 import type { SpanQueryCostMetric, SpanQueryRow } from './span-query';
 import {
-  digestBinding,
   parseTraceQueryRequest,
-  planTraceQuery,
   TRACE_QUERY_FIELD_REGISTRY,
   TRACE_QUERY_MAX_DEPTH,
   TRACE_QUERY_MAX_NODES,
   TraceQueryCursorError,
 } from './trace-query';
+import { digestBinding, planTraceQuery } from './trace-query-plan';
 
 const timeRange = { from: '2026-10-01T00:00:00Z', to: '2026-10-02T00:00:00Z' };
 const scope = { organizationId: 'org-a', resourceId: 'project-a' };
@@ -198,22 +197,21 @@ describe('span query contract', () => {
     }
   });
 
-  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans).filter(field => !['model', 'provider'].includes(field)))(
-    'shares the existing span rule for %s',
-    field => {
-      const predicate = { op: 'exists', path: field };
-      const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
-      if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
-      expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
-    },
-  );
+  it.each(Object.keys(TRACE_QUERY_FIELD_REGISTRY.spans))('shares the existing span rule for %s', field => {
+    const predicate = { op: 'exists', path: field };
+    const tracePlan = planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } }));
+    if (tracePlan.where?.type !== 'relation') throw new Error('Expected a span relation');
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual(tracePlan.where.predicate);
+  });
 
-  it.each(['model', 'provider'])('rejects direct %s filters while retaining nested trace support', field => {
+  it.each(['model', 'provider'])('plans direct %s filters', field => {
     const predicate = { op: 'eq', left: { path: field }, right: { literal: 'example' } };
-    expect(() => planSpanQuery({ timeRange, where: predicate })).toThrow();
-    expect(() =>
-      planTraceQuery(parseTraceQueryRequest({ timeRange, where: { spans: { some: predicate } } })),
-    ).not.toThrow();
+    expect(planSpanQuery({ timeRange, where: predicate }).where).toEqual({
+      type: 'comparison',
+      field,
+      operator: 'eq',
+      value: 'example',
+    });
   });
 
   it.each([

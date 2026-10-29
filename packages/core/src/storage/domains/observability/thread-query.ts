@@ -1,7 +1,6 @@
 /** Full-history thread rows. Legacy identity queries remain in trace-query.ts. */
 import { z } from 'zod/v4';
 import {
-  digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
   normalizeTraceQueryTenantScope,
@@ -13,6 +12,7 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { digestBinding } from './trace-query-plan';
 
 export { THREAD_QUERY_FIELD_REGISTRY } from './trace-query';
 export type { ThreadQueryField } from './trace-query';

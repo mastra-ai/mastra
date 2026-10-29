@@ -33,6 +33,7 @@ const NO_OBSERVABILITY_CAPABILITIES = {
   threadQueryRows: false,
   spanQuery: false,
   spanQueryContextFields: false,
+  spanQueryModelFields: false,
   spanAggregate: false,
   feedback: false,
 };
@@ -672,6 +673,25 @@ describe('System Handlers', () => {
           spanQueryContextFields: supported,
         });
       });
+
+      it.each([
+        { features: ['span-query', 'span-query-model-fields'], supported: true },
+        { features: ['span-query'], supported: false },
+        { features: ['span-query-model-fields'], supported: false },
+      ] as const)(
+        'reports model and provider span filters for $features as $supported',
+        async ({ features, supported }) => {
+          class SpanQueryStore extends BaseObservabilityStore {
+            getFeatures() {
+              return features;
+            }
+          }
+
+          expect(await capabilitiesFor(new SpanQueryStore())).toMatchObject({
+            spanQueryModelFields: supported,
+          });
+        },
+      );
 
       it('reports time to first chunk only when the store also serves a trace, thread or span query', async () => {
         class SpanQueryStore extends BaseObservabilityStore {

@@ -21,10 +21,9 @@
         "values": ["low", "high", "max"]
       }
     ],
-    "MiniMaxAI/MiniMax-M3.1-Flash": [
+    "google/gemma-4-31b-it": [
       {
-        "type": "effort",
-        "values": ["low", "medium", "high", "xhigh", "max"]
+        "type": "toggle"
       }
     ],
     "minimax/minimax-m3": [
@@ -32,9 +31,10 @@
         "type": "toggle"
       }
     ],
-    "google/gemma-4-31b-it": [
+    "MiniMaxAI/MiniMax-M3.1-Flash": [
       {
-        "type": "toggle"
+        "type": "effort",
+        "values": ["low", "medium", "high", "xhigh", "max"]
       }
     ]
   }

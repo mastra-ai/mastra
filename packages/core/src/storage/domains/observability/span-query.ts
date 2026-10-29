@@ -7,7 +7,6 @@
  */
 import { z } from 'zod/v4';
 import {
-  digestBinding,
   findPredicateComplexityIssue,
   formatTraceQuerySchemaIssues,
   isTraceQuerySortValueFor,
@@ -22,6 +21,7 @@ import {
   traceQueryTimeRangeSchema,
 } from './trace-query';
 import type { TraceQueryIssue, TraceQueryPlanOptions, TrustedTraceQueryScalarPredicate } from './trace-query';
+import { digestBinding } from './trace-query-plan';
 import { isPreviewTruncated } from './tracing';
 
 /**

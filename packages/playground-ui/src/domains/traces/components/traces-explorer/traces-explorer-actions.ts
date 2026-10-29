@@ -27,7 +27,8 @@ export type TracesFilters = {
 export type TracesSortDirection = 'asc' | 'desc';
 
 /** Fields the traces list can be sorted by, named like the trace query's `orderBy` fields. */
-export type TracesSortField = 'startedAt' | 'timeToFirstChunkMs';
+export const TRACES_SORT_FIELDS = ['startedAt', 'timeToFirstChunkMs'] as const;
+export type TracesSortField = (typeof TRACES_SORT_FIELDS)[number];
 
 export type TracesSort = { field: TracesSortField; direction: TracesSortDirection };
 
