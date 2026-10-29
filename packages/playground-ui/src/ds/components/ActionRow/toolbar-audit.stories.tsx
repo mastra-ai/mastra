@@ -92,6 +92,8 @@ function useRangeFixture(initial: DateRangePreset) {
     dateFrom: preset === 'custom' ? range.from : undefined,
     dateTo: preset === 'custom' ? range.to : undefined,
     onDateRangeChange: (from: Date | undefined, to: Date | undefined) => setRange({ from, to }),
+    // Presets and the × reset clear the range one end at a time.
+    onDateChange: (date: Date | undefined, side: 'from' | 'to') => setRange(current => ({ ...current, [side]: date })),
   };
 }
 

@@ -63,6 +63,7 @@ export const CustomRange: StoryObj = {
             setFrom(nextFrom);
             setTo(nextTo);
           }}
+          onDateChange={(date, side) => (side === 'from' ? setFrom(date) : setTo(date))}
         />
       </Bar>
     );
