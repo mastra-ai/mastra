@@ -1630,6 +1630,47 @@ describe('Workflow (Evented Engine Specific)', () => {
       }
     });
 
+    it('does not fail an authorized foreach child after lease expiry', async () => {
+      const effect = Promise.withResolvers<void>();
+      const entered = Promise.withResolvers<void>();
+      const fixture = await setup({
+        foreach: true,
+        beforeEffect: () => {
+          entered.resolve();
+          return effect.promise;
+        },
+      });
+      try {
+        const starting = fixture.run.start({
+          inputData: [{ value: 'ok' }],
+          requestContext: fixture.requestContext,
+        });
+        await entered.promise;
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.executionPath?.length === 2)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await fixture.waitForDelivery(delivery, 2);
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const snapshot = await store.loadWorkflowSnapshot({
+          workflowName: fixture.parent.id,
+          runId: fixture.run.runId,
+        });
+        expect(fixture.fga.require).toHaveBeenCalledTimes(2);
+        expect(snapshot?.status).toBe('running');
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        effect.resolve();
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        effect.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
     it('retries an authorized child after a transient snapshot-read failure', async () => {
       const fixture = await setup();
       try {

@@ -1988,6 +1988,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     nestedWorkflowStep,
     nestedRunId,
     canDropRunningDenial,
+    iterationIndex,
     continueRedelivery,
   }: {
     args: ProcessorArgs;
@@ -1996,6 +1997,7 @@ export class WorkflowEventProcessor extends EventProcessor {
     nestedWorkflowStep: Workflow;
     nestedRunId: string;
     canDropRunningDenial: boolean;
+    iterationIndex: number | undefined;
     continueRedelivery: () => Promise<boolean>;
   }): Promise<boolean> {
     const workflowsStore = await this.mastra?.getStorage()?.getStore('workflows');
@@ -2017,9 +2019,15 @@ export class WorkflowEventProcessor extends EventProcessor {
       if (await continueRedelivery()) return false;
       if (canDropRunningDenial && workflowsStore) {
         const snapshot = await workflowsStore.loadWorkflowSnapshot({ workflowName: workflow.id, runId: args.runId });
-        // This delivery has not claimed the step: a running leaf belongs to an
-        // authorized delivery. If it crashed, leave the running step for recovery.
-        if (snapshot?.context[nestedWorkflowStep.id]?.status === 'running') return false;
+        const leaf = snapshot?.context[nestedWorkflowStep.id];
+        // Foreach pre-writes running before authorization; only the child's start
+        // handler records an iteration's run ID. A single start owns its running leaf.
+        const claimed =
+          iterationIndex !== undefined
+            ? !!leaf?.metadata?.foreachNestedRunIds?.[iterationIndex]
+            : leaf?.status === 'running';
+        // If the authorized delivery crashed, leave its child for recovery.
+        if (claimed) return false;
       }
       await this.errorWorkflow(args, getErrorFromUnknown(error));
       return false;
@@ -2167,8 +2175,8 @@ export class WorkflowEventProcessor extends EventProcessor {
           fgaProvider,
           nestedWorkflowStep,
           nestedRunId,
-          // Foreach pre-writes running before authorization, so it does not prove another delivery owns the step.
-          canDropRunningDenial: nestedDispatch === 'start' && step.type !== 'foreach',
+          canDropRunningDenial: nestedDispatch === 'start',
+          iterationIndex: step.type === 'foreach' ? executionPath[1] : undefined,
           continueRedelivery,
         });
         if (!authorized) return;
