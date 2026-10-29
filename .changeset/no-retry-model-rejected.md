@@ -2,4 +2,4 @@
 '@mastra/core': patch
 ---
 
-`isBadRequestError` no longer matches a 400 that rejects the model (for example `model_not_found` or "model is not supported"), so `StreamErrorRetryProcessor` stops resending a request that will fail the same way.
+Retry policies that match bad-request errors no longer retry a 400 that rejects the model or a parameter, such as `model_not_found`. These requests fail the same way on every retry.

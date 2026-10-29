@@ -2,7 +2,7 @@ import { createOpenAI } from '@ai-sdk/openai';
 import type { LanguageModelV3Prompt } from '@ai-sdk/provider';
 import { wrapLanguageModel } from 'ai';
 import { afterEach, describe, expect, it, vi } from 'vitest';
-import { buildOpenAICodexOAuthFetch, createCodexMiddleware } from '../openai-codex.js';
+import { buildOpenAICodexOAuthFetch, createCodexMiddleware, stripCodexInputItemIds } from '../openai-codex.js';
 
 const storage = {
   reload: vi.fn(),
@@ -90,5 +90,29 @@ describe('Codex fetch non-JSON bodies', () => {
     });
 
     expect(sent).toEqual(bytes);
+  });
+});
+
+describe('stripCodexInputItemIds', () => {
+  it('drops item_reference entries and function-call ids but keeps call_id', () => {
+    const body = JSON.stringify({
+      store: false,
+      input: [
+        { type: 'item_reference', id: 'rs_ref' },
+        { type: 'function_call', id: 'fc_1', call_id: 'call_1', name: 'read', arguments: '{}' },
+        { type: 'function_call_output', call_id: 'call_1', output: 'ok' },
+      ],
+    });
+
+    expect(JSON.parse(stripCodexInputItemIds(body)).input).toEqual([
+      { type: 'function_call', call_id: 'call_1', name: 'read', arguments: '{}' },
+      { type: 'function_call_output', call_id: 'call_1', output: 'ok' },
+    ]);
+  });
+
+  it('leaves stored requests unchanged', () => {
+    const body = JSON.stringify({ store: true, input: [{ type: 'item_reference', id: 'rs_1' }] });
+
+    expect(stripCodexInputItemIds(body)).toBe(body);
   });
 });
