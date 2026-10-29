@@ -171,6 +171,7 @@ export function convertFullStreamChunkToUIMessageStream<UI_MESSAGE extends UIMes
         output: part.output,
         ...(part.providerExecuted != null ? { providerExecuted: part.providerExecuted } : {}),
         ...(part.dynamic != null ? { dynamic: part.dynamic } : {}),
+        ...(part.preliminary != null ? { preliminary: part.preliminary } : {}),
       };
     }
 
