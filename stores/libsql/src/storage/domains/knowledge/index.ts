@@ -328,10 +328,6 @@ export class KnowledgeLibSQL extends KnowledgeStorage {
     } as const;
   }
 
-  override async inspectSchema() {
-    return this.#inspectSchema(this.#client);
-  }
-
   async #inspectSchema(executor: Executor) {
     const { inspectKnowledgeSchema } = await loadKnowledgeV2Core();
     try {
