@@ -455,6 +455,22 @@ export const traceQueryTraceSchema = z
      * Absent when the store lacks the `trace-query-time-to-first-token` feature.
      */
     timeToFirstTokenMs: z.number().nullable().optional(),
+    /**
+     * How the root span ended, for example `success`, `limit` or a custom string. Separate from
+     * `status`, which reflects only `error`. `null` when not recorded (older SDKs or a running root),
+     * which does not mean success. Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    outcome: z.string().nullable().optional(),
+    /**
+     * Why the root span stopped, for example `max_steps`. `null` when not recorded.
+     * Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    stopReason: z.string().nullable().optional(),
+    /**
+     * Details for the root span's `stopReason`. Returned only; not filterable.
+     * Absent when the store lacks the `trace-query-outcome-fields` feature.
+     */
+    stopReasonContext: z.record(z.string(), z.unknown()).nullable().optional(),
   })
   .strict();
 
@@ -617,6 +633,8 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     spanType: stringField(true),
     environment: stringField(true),
     status: stringField(true),
+    outcome: stringField(true),
+    stopReason: stringField(true),
     tags: arrayField(),
   },
   spans: {
@@ -630,6 +648,8 @@ export const TRACE_QUERY_FIELD_REGISTRY = {
     timeToFirstChunkMs: orderedField('number'),
     timeToFirstTokenMs: orderedField('number'),
     status: stringField(true),
+    outcome: stringField(true),
+    stopReason: stringField(true),
     error: presenceField(),
     entityType: stringField(true),
     entityId: stringField(false),
@@ -674,6 +694,8 @@ export const SPAN_QUERY_FIELD_REGISTRY = {
   model: stringField(true),
   provider: stringField(true),
   status: stringField(true),
+  outcome: stringField(true),
+  stopReason: stringField(true),
   error: presenceField(),
   startedAt: orderedField('timestamp'),
   endedAt: orderedField('timestamp'),
