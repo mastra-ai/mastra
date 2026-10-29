@@ -204,6 +204,12 @@ export interface AgentRunAttributes extends AIBaseAttributes {
    * MODEL_GENERATION of the agent's own loop. Absent when no chunk was streamed.
    */
   completionStartTime?: Date;
+  /**
+   * Milliseconds from the start of the MODEL_INFERENCE that streamed the run's first
+   * chunk to that chunk; copied the same way as `completionStartTime`. Absent when no
+   * chunk was streamed.
+   */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -356,6 +362,8 @@ export interface ModelGenerationAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the generation's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Actual model used in the response (may differ from request model) */
   responseModel?: string;
   /** Unique identifier for the response */
@@ -390,6 +398,8 @@ export interface ModelStepAttributes extends AIBaseAttributes {
   warnings?: Record<string, any>;
   /** When the step's first inference streamed its first chunk. Absent when no chunk was streamed. */
   completionStartTime?: Date;
+  /** Time to first token of the MODEL_INFERENCE that streamed the step's first chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
 }
 
 /**
@@ -422,6 +432,8 @@ export interface ModelInferenceAttributes extends AIBaseAttributes {
    * Only applicable for streaming responses.
    */
   completionStartTime?: Date;
+  /** Milliseconds from this inference's start to its first streamed chunk. Absent when no chunk was streamed. */
+  timeToFirstTokenMs?: number;
   /** Result warnings */
   warnings?: Record<string, any>;
   /** Actual model used in the response (may differ from request model) */
@@ -1741,6 +1753,8 @@ export interface IModelSpanTracker {
   getCompletionStartTime?(): Date | undefined;
   /** Track provider chunks and completion in their original stream order. */
   wrapInferenceStream?<T extends { pipeThrough: Function }>(stream: T): T;
+  /** Time to first token of the first inference seen by this tracker; carried the same way. */
+  getTimeToFirstTokenMs?(): number | undefined;
   wrapStream<T extends { pipeThrough: Function }>(stream: T): T;
   startStep(payload?: StepStartPayload): void;
   updateStep?(payload?: StepStartPayload): void;
@@ -1764,6 +1778,13 @@ export interface IModelSpanTracker {
    * opens its own inference span under the same step.
    */
   interruptInference?(termination?: SpanTermination): void;
+
+  /**
+   * End the open MODEL_INFERENCE span as failed, keeping the MODEL_STEP open.
+   * Called when a model call fails and a retry or fallback model will open its
+   * own inference span under the same step.
+   */
+  failInference?(error: Error): void;
 
   /**
    * Set the request-side context applied to subsequent MODEL_INFERENCE spans

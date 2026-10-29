@@ -206,6 +206,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           modelSpanData: state.modelSpanData,
           // First-chunk clock carried from earlier iterations (first write wins)
           completionStartTime: state.completionStartTime,
+          timeToFirstTokenMs: state.timeToFirstTokenMs,
           // Pass step index for continuation (step: 0, 1, 2, ...)
           stepIndex: state.stepIndex,
           accumulatedSteps: state.accumulatedSteps,
@@ -223,6 +224,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           ...toolCall,
           stepSpanData: llmOutput.stepSpanData,
           completionStartTime: llmOutput.completionStartTime,
+          timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
           stepUsage: llmOutput.stepResult?.totalUsage,
         })) as DurableToolCallInput[];
       },
@@ -549,11 +551,18 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
           // usage goes to the attributes through the tracker so consumers find it where every
           // other model span puts it.
           const observability = mastra?.observability?.getSelectedInstance({});
-          // Rebuilt spans end from snapshots taken at run start, so the clock the
-          // steps carried through the loop state is applied here.
+          // Resumed segments carry their own clocks beside their fresh spans.
           const registry = getRunRegistryEntry(state.runId, mastra);
-          const clock = registry?.resumeModelSpanData ? registry.resumeCompletionStartTime : state.completionStartTime;
-          const completionStartTime = clock ? new Date(clock) : undefined;
+          const completionClock = registry?.resumeModelSpanData
+            ? registry.resumeCompletionStartTime
+            : state.completionStartTime;
+          const timeToFirstTokenMs = registry?.resumeModelSpanData
+            ? registry.resumeTimeToFirstTokenMs
+            : state.timeToFirstTokenMs;
+          const clocks = {
+            ...(completionClock ? { completionStartTime: new Date(completionClock) } : {}),
+            ...(timeToFirstTokenMs !== undefined ? { timeToFirstTokenMs } : {}),
+          };
           if (state.modelSpanData) {
             const modelSpan =
               registry?.resumeModelSpan ??
@@ -581,7 +590,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
               output: { text: finalText, ...(toolCalls.length ? { toolCalls } : {}) },
               attributes: {
                 finishReason: state.lastStepResult?.reason || 'stop',
-                ...(completionStartTime ? { completionStartTime } : {}),
+                ...clocks,
               },
               usage: state.accumulatedUsage,
             });
@@ -604,7 +613,7 @@ export function createInngestDurableAgenticWorkflow(options: InngestDurableAgent
                     maxSteps: state.options?.maxSteps ?? maxSteps,
                   })),
               output: { text: finalText },
-              ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+              ...(Object.keys(clocks).length ? { attributes: clocks } : {}),
             });
           }
 

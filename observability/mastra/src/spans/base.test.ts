@@ -626,6 +626,41 @@ describe('Span', () => {
     });
   });
 
+  describe('time to first token', () => {
+    const at = (ms: number) => new Date(Date.parse('2026-01-01T00:00:00Z') + ms);
+
+    it('exports the number the tracker stored in the attributes', () => {
+      const instance = new DefaultObservabilityInstance({
+        serviceName: 'test-tracing',
+        name: 'test-instance',
+        sampling: { type: SamplingStrategyType.ALWAYS },
+        exporters: [testExporter],
+      });
+      const step = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 0',
+        startTime: at(0),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const inference = step.createChildSpan({
+        type: SpanType.MODEL_INFERENCE,
+        name: 'inference: 0',
+        startTime: at(40),
+        attributes: { timeToFirstTokenMs: 210, completionStartTime: at(250) },
+      });
+      const noChunk = instance.startSpan({
+        type: SpanType.MODEL_STEP,
+        name: 'step: 1',
+        startTime: at(0),
+        attributes: { streaming: true },
+      });
+
+      expect(inference.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(step.exportSpan().timeToFirstTokenMs).toBe(210);
+      expect(noChunk.exportSpan()).not.toHaveProperty('timeToFirstTokenMs');
+    });
+  });
+
   describe('getExternalParentId', () => {
     it('should return undefined when no parent', () => {
       const options = {

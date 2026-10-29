@@ -53,6 +53,7 @@ import {
   storeMessageListState,
   buildDeferredStepFinishChunk,
   expandDurableSteps,
+  carriedSpanClocks,
 } from './shared';
 import {
   createDurableBackgroundTaskCheckStep,
@@ -543,6 +544,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               agentSpanData: state.agentSpanData,
               modelSpanData: state.modelSpanData,
               completionStartTime: state.completionStartTime,
+              timeToFirstTokenMs: state.timeToFirstTokenMs,
             };
           },
           { id: 'map-to-llm-input' },
@@ -557,6 +559,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               ...toolCall,
               stepSpanData: llmOutput.stepSpanData,
               completionStartTime: llmOutput.completionStartTime,
+              timeToFirstTokenMs: llmOutput.timeToFirstTokenMs,
               // A suspended step never emits step-finish, so its usage rides on the suspension chunk.
               stepUsage: llmOutput.stepResult?.totalUsage,
             })) as DurableToolCallInput[];
@@ -1130,11 +1133,9 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
               const reg = getRunRegistryEntry(initData.runId, mastra as Mastra | undefined);
               const modelSpanData = reg?.resumeModelSpanData ?? initData.modelSpanData;
               const agentSpanData = reg?.resumeAgentSpanData ?? initData.agentSpanData;
-              // Rebuilt spans end from snapshots taken at run start, so the clock the
-              // steps carried is applied here: the loop state's for the originals, the
-              // registry's for a resumed segment's fresh spans.
-              const clock = reg?.resumeModelSpanData ? reg.resumeCompletionStartTime : state.completionStartTime;
-              const completionStartTime = clock ? new Date(clock) : undefined;
+              // Rebuilt spans end from snapshots taken at run start, so the clocks the
+              // steps carried are applied here.
+              const clocks = carriedSpanClocks(reg, state);
               // Another worker may lack tracingTermination; fallback retains guardrail outcome but can lose observer context.
               const termination =
                 finalOutput.stepResult?.reason === 'tripwire' && reg?.tracingTermination
@@ -1170,7 +1171,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                     attributes: {
                       finishReason: finalOutput.stepResult?.reason,
                       ...(usageIncomplete ? { usageIncomplete: true } : {}),
-                      ...(completionStartTime ? { completionStartTime } : {}),
+                      ...clocks,
                     },
                     usage: usageIncomplete ? calculateObservedUsage(state.accumulatedSteps) : state.accumulatedUsage,
                   });
@@ -1183,7 +1184,7 @@ export class DurableAgenticLoopBuilder extends AgenticLoopBuilder {
                   agentSpan?.end({
                     ...termination,
                     output: { text: finalText },
-                    ...(completionStartTime ? { attributes: { completionStartTime } } : {}),
+                    ...(clocks ? { attributes: clocks } : {}),
                   });
                 }
               }
