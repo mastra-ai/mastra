@@ -1647,9 +1647,12 @@ export interface SpanData<TType extends SpanType> extends BaseSpan<TType> {
    */
   /** Span id of the initial invocation a resumed execution continues (unset on the initial execution) */
   resumedFromSpanId?: string;
-  /** Model identity for this span, filled at export from the model-call attributes; the live span does not carry it */
+  /**
+   * Requested model id, filled at export from this span's own `attributes.model`; the live span does not carry it.
+   * Set together with `provider` only when both attributes are non-empty strings, otherwise neither is set.
+   */
   model?: string;
-  /** Provider paired with `model`, filled the same way */
+  /** Provider paired with `model`, from this span's own `attributes.provider` */
   provider?: string;
   /** Milliseconds from the model call to the first token received, filled at export; the live span does not carry it */
   timeToFirstTokenMs?: number;
