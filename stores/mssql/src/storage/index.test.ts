@@ -8,7 +8,7 @@ import {
 } from '@internal/storage-test-utils';
 import { TABLE_THREADS } from '@mastra/core/storage';
 import sql from 'mssql';
-import { describe, expect, it, vi } from 'vitest';
+import { afterAll, beforeAll, describe, expect, it, vi } from 'vitest';
 
 import { MemoryMSSQL } from './domains/memory';
 import { ScoresMSSQL } from './domains/scores';
@@ -50,95 +50,95 @@ const DOMAIN_CONFIG = {
 
 vi.setConfig({ testTimeout: 60_000, hookTimeout: 60_000 });
 
-console.log('Not running MSSQL tests in CI. You can enable them if you want to test them locally.');
-if (process.env.ENABLE_TESTS === 'true') {
-  createTestSuite(new MSSQLStore(TEST_CONFIG), {
-    deterministicScorePagination: true,
-    workflowResultsNoopWhenRunMissing: false,
-  });
+// Domains treat a supplied pool as already connected and never call connect().
+const domainPool = createTestPool();
+beforeAll(async () => {
+  await domainPool.connect();
+});
+afterAll(async () => {
+  await domainPool.close();
+});
 
-  // Pre-configured client (pool) acceptance tests
-  createClientAcceptanceTests({
-    storeName: 'MSSQLStore',
-    expectedStoreName: 'MSSQLStore',
-    createStoreWithClient: () =>
-      new MSSQLStore({
-        id: 'mssql-pool-test',
-        pool: createTestPool(),
-      }),
-  });
+createTestSuite(new MSSQLStore(TEST_CONFIG), {
+  deterministicScorePagination: true,
+  workflowResultsNoopWhenRunMissing: false,
+});
 
-  // Domain-level pre-configured client tests (using pool directly)
-  createDomainDirectTests({
-    storeName: 'MSSQL',
-    createMemoryDomain: () => new MemoryMSSQL({ pool: createTestPool() }),
-    createWorkflowsDomain: () => new WorkflowsMSSQL({ pool: createTestPool() }),
-    createScoresDomain: () => new ScoresMSSQL({ pool: createTestPool() }),
-  });
+// Pre-configured client (pool) acceptance tests
+createClientAcceptanceTests({
+  storeName: 'MSSQLStore',
+  expectedStoreName: 'MSSQLStore',
+  createStoreWithClient: () =>
+    new MSSQLStore({
+      id: 'mssql-pool-test',
+      pool: createTestPool(),
+    }),
+});
 
-  // MSSQL-specific: schemaName option for domains
-  describe('MSSQL Domain schemaName Option', () => {
-    it('should allow domains to use custom schemaName with connection config', async () => {
-      const memoryDomain = new MemoryMSSQL({
-        ...DOMAIN_CONFIG,
-        schemaName: 'domain_test_schema',
-      });
+// Domain-level pre-configured client tests (using pool directly)
+createDomainDirectTests({
+  storeName: 'MSSQL',
+  createMemoryDomain: () => new MemoryMSSQL({ pool: domainPool }),
+  createWorkflowsDomain: () => new WorkflowsMSSQL({ pool: domainPool }),
+  createScoresDomain: () => new ScoresMSSQL({ pool: domainPool }),
+});
 
-      expect(memoryDomain).toBeDefined();
-      await memoryDomain.init();
-
-      // Test a basic operation to verify it works
-      const thread = {
-        id: `thread-schema-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Schema Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
-
-      const savedThread = await memoryDomain.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
-
-      // Clean up thread
-      await memoryDomain.deleteThread({ threadId: thread.id });
+// MSSQL-specific: schemaName option for domains
+describe('MSSQL Domain schemaName Option', () => {
+  it('should allow domains to use custom schemaName with connection config', async () => {
+    const memoryDomain = new MemoryMSSQL({
+      ...DOMAIN_CONFIG,
+      schemaName: 'domain_test_schema',
     });
 
-    it('should allow domains to use pool with custom schemaName', async () => {
-      const memoryDomain = new MemoryMSSQL({
-        pool: createTestPool(),
-        schemaName: 'pool_schema_test',
-      });
+    expect(memoryDomain).toBeDefined();
+    await memoryDomain.init();
 
-      expect(memoryDomain).toBeDefined();
-      await memoryDomain.init();
+    // Test a basic operation to verify it works
+    const thread = {
+      id: `thread-schema-test-${Date.now()}`,
+      resourceId: 'test-resource',
+      title: 'Test Schema Thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
 
-      // Test a basic operation to verify it works
-      const thread = {
-        id: `thread-pool-schema-test-${Date.now()}`,
-        resourceId: 'test-resource',
-        title: 'Test Pool Schema Thread',
-        metadata: {},
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      };
+    const savedThread = await memoryDomain.saveThread({ thread });
+    expect(savedThread.id).toBe(thread.id);
 
-      const savedThread = await memoryDomain.saveThread({ thread });
-      expect(savedThread.id).toBe(thread.id);
-
-      // Clean up thread
-      await memoryDomain.deleteThread({ threadId: thread.id });
-    });
+    // Clean up thread
+    await memoryDomain.deleteThread({ threadId: thread.id });
   });
-} else {
-  describe('MSSQLStore', () => {
-    it('should be defined', () => {
-      expect(MSSQLStore).toBeDefined();
-    });
-  });
-}
 
-// Configuration validation tests (run even without ENABLE_TESTS)
+  it('should allow domains to use pool with custom schemaName', async () => {
+    const memoryDomain = new MemoryMSSQL({
+      pool: domainPool,
+      schemaName: 'pool_schema_test',
+    });
+
+    expect(memoryDomain).toBeDefined();
+    await memoryDomain.init();
+
+    // Test a basic operation to verify it works
+    const thread = {
+      id: `thread-pool-schema-test-${Date.now()}`,
+      resourceId: 'test-resource',
+      title: 'Test Pool Schema Thread',
+      metadata: {},
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    const savedThread = await memoryDomain.saveThread({ thread });
+    expect(savedThread.id).toBe(thread.id);
+
+    // Clean up thread
+    await memoryDomain.deleteThread({ threadId: thread.id });
+  });
+});
+
+// Configuration validation tests
 createConfigValidationTests({
   storeName: 'MSSQLStore',
   createStore: config => new MSSQLStore(config as any),
@@ -254,7 +254,7 @@ createConfigValidationTests({
   ],
 });
 
-// MSSQL-specific: pool exposure test (run even without ENABLE_TESTS)
+// MSSQL-specific: pool exposure test
 describe('MSSQLStore Pool Exposure', () => {
   it('should expose pool as public field', () => {
     const pool = new sql.ConnectionPool({
@@ -273,14 +273,131 @@ describe('MSSQLStore Pool Exposure', () => {
   });
 });
 
-// Index configuration tests (only run when ENABLE_TESTS=true)
-if (process.env.ENABLE_TESTS === 'true') {
-  // Helper to check if a MSSQL index exists in a specific schema
-  const mssqlIndexExists = async (store: MSSQLStore, namePattern: string): Promise<boolean> => {
-    const schemaName = (store as any).schema || 'dbo';
+// Index configuration tests
+// Helper to check if a MSSQL index exists in a specific schema
+const mssqlIndexExists = async (store: MSSQLStore, namePattern: string): Promise<boolean> => {
+  const schemaName = (store as any).schema || 'dbo';
+  const result = await store.pool.request().input('schemaName', schemaName).input('namePattern', `%${namePattern}%`)
+    .query(`
+      SELECT 1 as found
+      FROM sys.indexes i
+      INNER JOIN sys.tables t ON i.object_id = t.object_id
+      INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
+      WHERE s.name = @schemaName AND i.name LIKE @namePattern
+    `);
+  return result.recordset.length > 0;
+};
+
+// Store-level index configuration tests
+// Uses unique schema names to avoid index collision between tests
+const storeTestId = Math.floor(Date.now() / 1000) % 100000;
+createStoreIndexTests({
+  storeName: 'MSSQLStore',
+  createDefaultStore: () =>
+    new MSSQLStore({
+      ...TEST_CONFIG,
+      id: 'mssql-idx-default',
+      schemaName: `idx_s_${storeTestId}_d`,
+    }),
+  createStoreWithSkipDefaults: () =>
+    new MSSQLStore({
+      ...TEST_CONFIG,
+      id: 'mssql-idx-skip',
+      schemaName: `idx_s_${storeTestId}_s`,
+      skipDefaultIndexes: true,
+    }),
+  createStoreWithCustomIndexes: indexes =>
+    new MSSQLStore({
+      ...TEST_CONFIG,
+      id: 'mssql-idx-custom',
+      schemaName: `idx_s_${storeTestId}_c`,
+      indexes: indexes.map(idx => ({
+        name: idx.name,
+        table: (idx as any).table || TABLE_THREADS,
+        columns: (idx as any).columns || ['title'],
+      })),
+    }),
+  createStoreWithInvalidTable: indexes =>
+    new MSSQLStore({
+      ...TEST_CONFIG,
+      id: 'mssql-idx-invalid',
+      schemaName: `idx_s_${storeTestId}_i`,
+      indexes: indexes.map(idx => ({
+        name: idx.name,
+        table: (idx as any).table || 'nonexistent_table_xyz',
+        columns: (idx as any).columns || ['id'],
+      })),
+    }),
+  indexExists: (store, pattern) => mssqlIndexExists(store as MSSQLStore, pattern),
+  defaultIndexPattern: 'threads_resourceid',
+  customIndexName: 'custom_mssql_test_idx',
+  customIndexDef: {
+    name: 'custom_mssql_test_idx',
+    table: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
+  },
+});
+
+// Domain-level index configuration tests (using MemoryMSSQL as representative)
+// Uses unique schema names to avoid index collision between tests
+const domainTestId = (Math.floor(Date.now() / 1000) % 100000) + 1;
+let currentDomainTestSchema = '';
+
+createDomainIndexTests({
+  domainName: 'MemoryMSSQL',
+  createDefaultDomain: () => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_d`;
+    return new MemoryMSSQL({
+      ...DOMAIN_CONFIG,
+      schemaName: currentDomainTestSchema,
+    });
+  },
+  createDomainWithSkipDefaults: () => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_s`;
+    return new MemoryMSSQL({
+      ...DOMAIN_CONFIG,
+      schemaName: currentDomainTestSchema,
+      skipDefaultIndexes: true,
+    });
+  },
+  createDomainWithCustomIndexes: indexes => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_c`;
+    return new MemoryMSSQL({
+      ...DOMAIN_CONFIG,
+      schemaName: currentDomainTestSchema,
+      indexes: indexes.map(idx => ({
+        name: idx.name,
+        table: (idx as any).table || TABLE_THREADS,
+        columns: (idx as any).columns || ['title'],
+      })),
+    });
+  },
+  createDomainWithInvalidTable: indexes => {
+    currentDomainTestSchema = `idx_d_${domainTestId}_i`;
+    return new MemoryMSSQL({
+      ...DOMAIN_CONFIG,
+      schemaName: currentDomainTestSchema,
+      indexes: indexes.map(idx => ({
+        name: idx.name,
+        table: (idx as any).table || 'nonexistent_table_xyz',
+        columns: (idx as any).columns || ['id'],
+      })),
+    });
+  },
+  indexExists: async (_domain, pattern) => {
+    // Create a fresh pool to check indexes
+    const pool = createTestPool();
     try {
-      const result = await store.pool.request().input('schemaName', schemaName).input('namePattern', `%${namePattern}%`)
-        .query(`
+      await pool.connect();
+      const result = await pool
+        .request()
+        .input('schemaName', currentDomainTestSchema)
+        .input('namePattern', `%${pattern}%`).query(`
           SELECT 1 as found
           FROM sys.indexes i
           INNER JOIN sys.tables t ON i.object_id = t.object_id
@@ -288,148 +405,24 @@ if (process.env.ENABLE_TESTS === 'true') {
           WHERE s.name = @schemaName AND i.name LIKE @namePattern
         `);
       return result.recordset.length > 0;
-    } catch {
-      return false;
+    } finally {
+      await pool.close();
     }
-  };
+  },
+  defaultIndexPattern: 'threads_resourceid',
+  customIndexName: 'custom_memory_mssql_idx',
+  customIndexDef: {
+    name: 'custom_memory_mssql_idx',
+    table: TABLE_THREADS,
+    columns: ['title'],
+  },
+  invalidTableIndexDef: {
+    name: 'invalid_domain_table_idx',
+    table: 'nonexistent_table_xyz',
+    columns: ['id'],
+  },
+});
 
-  // Store-level index configuration tests
-  // Uses unique schema names to avoid index collision between tests
-  const storeTestId = Math.floor(Date.now() / 1000) % 100000;
-  createStoreIndexTests({
-    storeName: 'MSSQLStore',
-    createDefaultStore: () =>
-      new MSSQLStore({
-        ...TEST_CONFIG,
-        id: 'mssql-idx-default',
-        schemaName: `idx_s_${storeTestId}_d`,
-      }),
-    createStoreWithSkipDefaults: () =>
-      new MSSQLStore({
-        ...TEST_CONFIG,
-        id: 'mssql-idx-skip',
-        schemaName: `idx_s_${storeTestId}_s`,
-        skipDefaultIndexes: true,
-      }),
-    createStoreWithCustomIndexes: indexes =>
-      new MSSQLStore({
-        ...TEST_CONFIG,
-        id: 'mssql-idx-custom',
-        schemaName: `idx_s_${storeTestId}_c`,
-        indexes: indexes.map(idx => ({
-          name: idx.name,
-          table: (idx as any).table || TABLE_THREADS,
-          columns: (idx as any).columns || ['title'],
-        })),
-      }),
-    createStoreWithInvalidTable: indexes =>
-      new MSSQLStore({
-        ...TEST_CONFIG,
-        id: 'mssql-idx-invalid',
-        schemaName: `idx_s_${storeTestId}_i`,
-        indexes: indexes.map(idx => ({
-          name: idx.name,
-          table: (idx as any).table || 'nonexistent_table_xyz',
-          columns: (idx as any).columns || ['id'],
-        })),
-      }),
-    indexExists: (store, pattern) => mssqlIndexExists(store as MSSQLStore, pattern),
-    defaultIndexPattern: 'threads_resourceid',
-    customIndexName: 'custom_mssql_test_idx',
-    customIndexDef: {
-      name: 'custom_mssql_test_idx',
-      table: TABLE_THREADS,
-      columns: ['title'],
-    },
-    invalidTableIndexDef: {
-      name: 'invalid_table_idx',
-      table: 'nonexistent_table_xyz',
-      columns: ['id'],
-    },
-  });
-
-  // Domain-level index configuration tests (using MemoryMSSQL as representative)
-  // Uses unique schema names to avoid index collision between tests
-  const domainTestId = (Math.floor(Date.now() / 1000) % 100000) + 1;
-  let currentDomainTestSchema = '';
-
-  createDomainIndexTests({
-    domainName: 'MemoryMSSQL',
-    createDefaultDomain: () => {
-      currentDomainTestSchema = `idx_d_${domainTestId}_d`;
-      return new MemoryMSSQL({
-        ...DOMAIN_CONFIG,
-        schemaName: currentDomainTestSchema,
-      });
-    },
-    createDomainWithSkipDefaults: () => {
-      currentDomainTestSchema = `idx_d_${domainTestId}_s`;
-      return new MemoryMSSQL({
-        ...DOMAIN_CONFIG,
-        schemaName: currentDomainTestSchema,
-        skipDefaultIndexes: true,
-      });
-    },
-    createDomainWithCustomIndexes: indexes => {
-      currentDomainTestSchema = `idx_d_${domainTestId}_c`;
-      return new MemoryMSSQL({
-        ...DOMAIN_CONFIG,
-        schemaName: currentDomainTestSchema,
-        indexes: indexes.map(idx => ({
-          name: idx.name,
-          table: (idx as any).table || TABLE_THREADS,
-          columns: (idx as any).columns || ['title'],
-        })),
-      });
-    },
-    createDomainWithInvalidTable: indexes => {
-      currentDomainTestSchema = `idx_d_${domainTestId}_i`;
-      return new MemoryMSSQL({
-        ...DOMAIN_CONFIG,
-        schemaName: currentDomainTestSchema,
-        indexes: indexes.map(idx => ({
-          name: idx.name,
-          table: (idx as any).table || 'nonexistent_table_xyz',
-          columns: (idx as any).columns || ['id'],
-        })),
-      });
-    },
-    indexExists: async (_domain, pattern) => {
-      // Create a fresh pool to check indexes
-      const pool = createTestPool();
-      try {
-        await pool.connect();
-        const result = await pool
-          .request()
-          .input('schemaName', currentDomainTestSchema)
-          .input('namePattern', `%${pattern}%`).query(`
-            SELECT 1 as found
-            FROM sys.indexes i
-            INNER JOIN sys.tables t ON i.object_id = t.object_id
-            INNER JOIN sys.schemas s ON t.schema_id = s.schema_id
-            WHERE s.name = @schemaName AND i.name LIKE @namePattern
-          `);
-        return result.recordset.length > 0;
-      } finally {
-        await pool.close();
-      }
-    },
-    defaultIndexPattern: 'threads_resourceid',
-    customIndexName: 'custom_memory_mssql_idx',
-    customIndexDef: {
-      name: 'custom_memory_mssql_idx',
-      table: TABLE_THREADS,
-      columns: ['title'],
-    },
-    invalidTableIndexDef: {
-      name: 'invalid_domain_table_idx',
-      table: 'nonexistent_table_xyz',
-      columns: ['id'],
-    },
-  });
-}
-
-// No live DB needed here, so unlike the rest this suite isn't gated behind ENABLE_TESTS.
 describe('MemoryMSSQL error propagation (no empty-on-error)', () => {
   // These reads used to swallow DB errors and return an empty page, so an outage
   // looked exactly like "no data". They should throw instead.

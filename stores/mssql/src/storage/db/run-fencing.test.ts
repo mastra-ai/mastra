@@ -21,7 +21,7 @@ vi.setConfig({ testTimeout: 30_000, hookTimeout: 60_000 });
  * takeover must wait for the in-flight write, and every write after it must be
  * rejected. Two stores with their own pools stand in for two processes.
  */
-describe.runIf(process.env.ENABLE_TESTS === 'true')('MSSQL run fencing: a takeover racing an in-flight write', () => {
+describe('MSSQL run fencing: a takeover racing an in-flight write', () => {
   const LEASE_MS = 30_000;
   // Own schema, so other test files clearing the shared tables never queue behind these locks.
   const SCHEMA = 'run_fence_race';
