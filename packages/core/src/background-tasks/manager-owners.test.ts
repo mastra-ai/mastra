@@ -673,6 +673,36 @@ describe('BackgroundTaskManager: non-agent owners', () => {
       busy.release();
     }, 15_000);
 
+    it('reaches a lapsed pin behind a page of older pending rows on a later sweep', async () => {
+      const pubsub = new EventEmitterPubSub();
+      const { b, onB } = await peer(pubsub);
+      const store = (await storage.getStore('backgroundTasks'))!;
+      const old = Date.now() - 60_000;
+      for (let i = 0; i < 100; i++) {
+        await store.createTask({
+          ...foreignRunningRow(`queued-${i}`),
+          status: 'pending',
+          createdAt: new Date(old + i),
+        });
+      }
+      await store.createTask({
+        ...foreignRunningRow('lapsed-pin'),
+        status: 'pending',
+        toolName: 'tool',
+        agentId: 'mcp-server:ops',
+        maxRetries: 1,
+        ownerId: 'dead-worker',
+        leaseExpiresAt: new Date(Date.now() - 1_000),
+        createdAt: new Date(),
+      });
+
+      await vi.waitFor(async () => expect(await b.getTask('lapsed-pin')).toMatchObject({ status: 'completed' }), {
+        timeout: 12_000,
+        interval: 100,
+      });
+      expect(onB).toHaveBeenCalledTimes(1);
+    }, 15_000);
+
     it('hands a pinned row to peers as a lost attempt on graceful shutdown', async () => {
       const { pubsub, a, busy, onA, task } = await pinnedOnBusyWorker(0);
       // `shutdown()` stops dispatch synchronously, so the freed slot never runs the pinned row.

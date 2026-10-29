@@ -39,6 +39,9 @@ function toTaskError(err: unknown): { message: string; stack?: string } {
   return { message: String(err) };
 }
 
+/** Pending rows each lapsed-pin sweep reads; later pages are read on later ticks. */
+const PIN_SWEEP_PAGE_SIZE = 100;
+
 export class BackgroundTaskManager {
   private pubsub!: PubSub;
   private readonly workerId = globalThis.crypto.randomUUID();
@@ -112,6 +115,8 @@ export class BackgroundTaskManager {
   // Periodic scan for `pinToWorker` rows whose owner stopped renewing; see `#sweepLapsedPins`.
   private pinSweepInterval?: ReturnType<typeof setInterval>;
   private sweepingPins = false;
+  // Page of pending rows the next pin sweep reads; see `#sweepLapsedPins`.
+  private pinSweepPage = 0;
 
   // Settlement chains of workflow runs started by this manager, plus the run
   // deletes they spawn. Shutdown drains these so they finish while storage is
@@ -2355,7 +2360,15 @@ export class BackgroundTaskManager {
     try {
       const storage = await this.getStorage();
       const now = Date.now();
-      const { tasks } = await storage.listTasks({ status: 'pending', orderBy: 'createdAt', orderDirection: 'asc' });
+      // One page per tick, so a long queue doesn't make every worker read every pending row each lease.
+      const { tasks } = await storage.listTasks({
+        status: 'pending',
+        orderBy: 'createdAt',
+        orderDirection: 'asc',
+        page: this.pinSweepPage,
+        perPage: PIN_SWEEP_PAGE_SIZE,
+      });
+      this.pinSweepPage = tasks.length < PIN_SWEEP_PAGE_SIZE ? 0 : this.pinSweepPage + 1;
       for (const task of tasks) {
         if (!task.ownerId || this.shuttingDown) continue;
         if ((await this.#recoverLapsedPin(storage, task, now)) && (await this.checkConcurrency(task.agentId))) {
