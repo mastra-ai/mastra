@@ -1,6 +1,7 @@
 import { afterEach, describe, expect, it, vi } from 'vitest';
 import { DetailedTaskSchema, TASKS_ERROR_CODES } from '../../shared/tasks';
 import { InMemoryMCPTaskStore } from './in-memory-store';
+import type { MCPTaskHandle } from './in-memory-store';
 
 const alice = { principal: 'alice' };
 const bob = { principal: 'bob' };
@@ -122,6 +123,78 @@ describe('InMemoryMCPTaskStore', () => {
     handle.complete({ content: [] });
     expect((await store.get(taskId, alice))?.status).toBe('cancelled');
     expect(await store.cancel(taskId, alice)).toBe(true);
+  });
+
+  it('keeps prototype-named input keys open until each is answered, first answer winning', async () => {
+    store = new InMemoryMCPTaskStore();
+    const { taskId } = await store.create({ ttlMs: null, principal: 'alice' });
+    const keys = ['constructor', 'toString', '__proto__'];
+    const requests = Object.fromEntries(keys.map(key => [key, elicit(key)]));
+    const answers = store.handle(taskId).requireInput(requests);
+
+    // An empty update must not count inherited properties as answers.
+    await store.update(taskId, {}, alice);
+    expect(await store.get(taskId, alice)).toEqual(
+      expect.objectContaining({ status: 'input_required', inputRequests: requests }),
+    );
+
+    await store.update(taskId, Object.fromEntries([['constructor', { action: 'accept', content: { v: 1 } }]]), alice);
+    await store.update(taskId, Object.fromEntries([['toString', { action: 'decline' }]]), alice);
+    const open = await store.get(taskId, alice);
+    expect(open?.status).toBe('input_required');
+    expect(Object.keys((open as { inputRequests: object }).inputRequests)).toEqual(['__proto__']);
+
+    await store.update(
+      taskId,
+      Object.fromEntries([
+        ['constructor', { action: 'decline' }],
+        ['__proto__', { action: 'cancel' }],
+      ]),
+      alice,
+    );
+    const resolved = await answers;
+    expect(Object.keys(resolved).sort()).toEqual([...keys].sort());
+    expect(resolved.constructor).toEqual({ action: 'accept', content: { v: 1 } });
+    expect(resolved.toString).toEqual({ action: 'decline' });
+    expect(Object.getOwnPropertyDescriptor(resolved, '__proto__')?.value).toEqual({ action: 'cancel' });
+    expect((await store.get(taskId, alice))?.status).toBe('working');
+  });
+
+  it.each([
+    ['complete', (handle: MCPTaskHandle) => handle.complete({ content: [] }), 'completed'],
+    [
+      'fail',
+      (handle: MCPTaskHandle) => handle.fail({ code: TASKS_ERROR_CODES.InternalError, message: 'boom' }),
+      'failed',
+    ],
+  ] as const)('%s rejects a pending input wait without aborting the work', async (_, finish, status) => {
+    store = new InMemoryMCPTaskStore();
+    const { taskId } = await store.create({ ttlMs: null, principal: 'alice' });
+    const handle = store.handle(taskId);
+    const waiting = handle.requireInput({ a: elicit('?') });
+
+    finish(handle);
+    await expect(waiting).rejects.toThrow(new RegExp(status));
+    expect(handle.signal.aborted).toBe(false);
+    expect((await store.get(taskId, alice))?.status).toBe(status);
+  });
+
+  it('close rejects a pending input wait and ignores writes through retained handles', async () => {
+    store = new InMemoryMCPTaskStore();
+    const waitingTask = await store.create({ ttlMs: null, principal: 'alice' });
+    const idleTask = await store.create({ ttlMs: null, principal: 'alice' });
+    const waitingHandle = store.handle(waitingTask.taskId);
+    const idleHandle = store.handle(idleTask.taskId);
+    const waiting = waitingHandle.requireInput({ a: elicit('?') });
+
+    store.close();
+
+    await expect(waiting).rejects.toThrow(/closed/);
+    expect(idleHandle.signal.aborted).toBe(true);
+    await expect(idleHandle.requireInput({ b: elicit('?') })).rejects.toThrow(/no longer running/);
+    await expect(waitingHandle.requireInput({ c: elicit('?') })).rejects.toThrow(/no longer running/);
+    idleHandle.complete({ content: [] });
+    expect(await store.get(idleTask.taskId, alice)).toBeUndefined();
   });
 
   it('keeps a tool error as a completed task and an infrastructure error as failed', async () => {
