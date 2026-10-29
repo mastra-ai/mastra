@@ -71,7 +71,7 @@ describe('knowledge scopes', () => {
   });
 
   it('refuses any value segment that starts with $, so a stored scope never looks like a pattern', () => {
-    expect(() => canonicalizeKnowledgeScope(['team:$org:director'])).toThrow('Invalid knowledge scope entry');
+    expect(() => canonicalizeKnowledgeScope(['team:$org:lead'])).toThrow('Invalid knowledge scope entry');
     expect(() => canonicalizeKnowledgeScope(['team:acme:$x-y'])).toThrow('Invalid knowledge scope entry');
     expect(canonicalizeKnowledgeScope(['team:acme:x$'])).toEqual(['team:acme:x$']);
   });

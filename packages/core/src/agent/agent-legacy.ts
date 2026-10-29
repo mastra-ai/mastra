@@ -41,7 +41,7 @@ import { MessageList } from './message-list';
 import type { MastraDBMessage, MessageListInput, UIMessageWithMetadata } from './message-list/index';
 import { modelSpanAttributes } from './model-span-attributes';
 import type { AgentScopeEntry } from './scopes';
-import { deriveAgentRunRequestContext, parseAgentScope, resolveAgentScopes } from './scopes';
+import { deriveAgentRunRequestContext, incomingAgentScopes, parseAgentScope, resolveAgentScopes } from './scopes';
 import type {
   ZodSchema,
   AgentGenerateOptions,
@@ -90,7 +90,7 @@ export interface AgentLegacyCapabilities {
   /** Check if agent has own memory */
   hasOwnMemory(): boolean;
   /** Get the agent's configured scopes */
-  getScopes(options: { requestContext: RequestContext }): Promise<AgentScopeEntry[] | undefined>;
+  getScopes(options: { requestContext: RequestContext; scopes?: AgentScopeEntry[] }): Promise<AgentScopeEntry[]>;
   /** Get instructions */
   getInstructions(options: { requestContext: RequestContext }): Promise<AgentInstructions>;
   /** Get the agent's LLM instance, optionally using a request-scoped model override */
@@ -836,9 +836,14 @@ export class AgentLegacyHandler {
     // `resource:`/`thread:` and throw on conflict (see resolveAgentScopes).
     const resourceIdFromContext = callerRequestContext.get(MASTRA_RESOURCE_ID_KEY) as string | undefined;
     const threadIdFromContext = callerRequestContext.get(MASTRA_THREAD_ID_KEY) as string | undefined;
+    const incomingScopes = incomingAgentScopes({
+      requestContext: callerRequestContext,
+      mastra: this.capabilities.mastra,
+    });
     const resolvedScopes = resolveAgentScopes({
       requestContext: callerRequestContext,
-      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext }),
+      agentScopes: await this.capabilities.getScopes({ requestContext: callerRequestContext, scopes: incomingScopes }),
+      incomingScopes,
       memory: args.memory as { resource?: string; thread?: string | { id: string } } | undefined,
       resourceId: resourceIdFromArgs,
       threadId: args.threadId,

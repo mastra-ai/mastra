@@ -619,6 +619,12 @@ describe('MastraFactory.prepare', () => {
     expect(config.knowledge).toEqual(knowledge);
   });
 
+  it('turns Knowledge off in the SDK mount when the Factory has no Knowledge config', async () => {
+    const config = await prepareFactory({ storage: fakeStorage() });
+
+    expect(config.knowledge).toBe(false);
+  });
+
   it('throws when called twice', async () => {
     const factory = new MastraFactory({ secretEncryption, storage: fakeStorage() });
     await factory.prepare();

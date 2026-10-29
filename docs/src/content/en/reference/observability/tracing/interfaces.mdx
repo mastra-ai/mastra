@@ -509,7 +509,7 @@ Structured event emitted when the exporter pipeline drops observability events.
 ```typescript
 type ObservabilityDropSignal = 'tracing' | 'log' | 'metric' | 'score' | 'feedback'
 
-type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted'
+type ObservabilityDropReason = 'unsupported-storage' | 'retry-exhausted' | 'span-not-updatable'
 
 interface ObservabilityDropEvent {
   type: 'drop'

@@ -3,6 +3,8 @@ import type { Server } from 'node:http';
 import { createOpenAI } from '@ai-sdk/openai';
 import { LLMock } from '@copilotkit/aimock';
 import { serve } from '@hono/node-server';
+import { MastraClient } from '@mastra/client-js';
+import type { ChunkType } from '@mastra/core/stream';
 import { createDurableDisconnectTestSuite } from '@mastra/server-adapters-test-suite';
 import { Hono } from 'hono';
 import { afterAll, beforeAll } from 'vitest';
@@ -18,6 +20,17 @@ afterAll(async () => {
 });
 
 createDurableDisconnectTestSuite({
+  observeWithClient: async (baseUrl, runId, offset) => {
+    const client = new MastraClient({ baseUrl, retries: 0 });
+    const response = await client.getAgent('agent').observe({ runId, offset });
+    const frames: ChunkType<unknown>[] = [];
+    await response.processDataStream({
+      onChunk: chunk => {
+        frames.push(chunk);
+      },
+    });
+    return frames;
+  },
   setupModel: async () => ({
     model: createOpenAI({ apiKey: 'aimock-test-key', baseURL: `${llm.url}/v1` })('gpt-4o-mini'),
     addResponse: (sequenceIndex, response) => {
