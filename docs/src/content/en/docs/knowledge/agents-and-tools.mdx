@@ -1,11 +1,11 @@
 ---
-title: "Knowledge agents and tools"
-description: "Attach Knowledge to an agent, choose which tools it gets, and understand how a run's scopes limit them."
+title: "Use the Knowledge tools"
+description: "The Knowledge tools, what each operation does, and the role it needs."
 packages:
   - "@mastra/core"
 ---
 
-# Knowledge agents and tools
+# Use the Knowledge tools
 
 :::warning
 
@@ -13,69 +13,166 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-Set `knowledge` on an agent to give it Knowledge tools. Memory isn't required. Pass the instance, or the key it's registered under on `Mastra`.
+An agent with Knowledge tools turned on gets up to five tools. The model calls them. Your [scope declarations](/docs/knowledge/scope-types) decide what each call is allowed to do. The examples on this page are tool inputs as the model sends them, for a run that holds `org:acme` and `team:acme:support` with these declarations:
 
-```typescript
-const agent = new Agent({
-  id: 'assistant',
-  name: 'Assistant',
-  instructions: 'You answer questions about the company.',
-  model: '__GATEWAY_OPENAI_MODEL__',
-  knowledge,
-})
+```typescript oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'team:$orgId:$teamId': {
+    access: [
+      { principal: 'self', role: 'editor' },
+      { principal: 'org:$orgId', role: 'viewer' },
+    ],
+  },
+}
 ```
 
-## Choose the tools
+| Tool | Operations | Turned on by |
+| - | - | - |
+| `knowledge_search` | Search pages and notes | `tools: true` or `{ read: true }` |
+| `knowledge_read` | Read a page, browse a scope, list held scopes | `tools: true` or `{ read: true }` |
+| `knowledge_page` | `write`, `move`, `merge` | `tools: true` or `{ write: true }` |
+| `knowledge_note` | `add`, `restamp`, `remove` | `tools: true` or `{ write: true }` |
+| `knowledge_pin` | `pin`, `unpin` | `pinnedContext` |
 
-Set `tools` and `pinnedContext` on `Knowledge` to control what an attached agent gets. Both are off by default. An attached agent gets no Knowledge tools until you turn them on:
+## Refer to pages
 
-```typescript
-const knowledge = new Knowledge({
-  id: 'company',
-  storage,
-  tools: true,
-  pinnedContext: { maxPins: 20, maxTokens: 500 },
-})
+Every tool that takes a `page` accepts:
+
+- the page ID
+- a scope address, such as `org:acme`, which reads that scope
+- `<scope>#<key>` for a page created with a key, such as `policy:acme#refund-policy`
+- the page's exact name
+
+A name that matches more than one readable page is refused, and the error lists the candidate IDs. A page the run can't read is reported as not found, the same as a page that doesn't exist.
+
+## Search and read
+
+`knowledge_search` matches the query against page names, descriptions, bodies and notes the run can read. Name matches come first. `scope` narrows the search to pages in those scopes, and `limit` defaults to 10 (at most 50):
+
+```json
+{ "query": "on-call", "scope": ["org:acme"] }
 ```
 
-| Option | Gives the agent |
-| - | - |
-| `tools: { read: true }` | `knowledge_search`, and `knowledge_read`, which reads a node by ID or name or lists nodes |
-| `tools: true` | The read tools, plus `knowledge_record` (`op`: `add`, `remove`, `rescope`) and `knowledge_node` (`op`: `update`, `write`, `merge`) |
-| `pinnedContext` | `knowledge_pin` (`op`: `pin`, `edit`, `unpin`), and the pinned entries in context every turn |
+`knowledge_read` returns a page's body, its notes, its child pages and the notes on other pages that mention it:
 
-Set `pinnedContext: true` for the default limits (20 pins, 500 tokens), or pass `maxPins` and `maxTokens`.
-
-## How scopes limit the tools
-
-A run's Knowledge scope is the tags from the agent's `scopes`, plus the Memory `resource:` and `thread:` tags when the run has them. Tags are read-only unless marked `{ scope, access: 'write' }`. See [read and write access](/docs/knowledge/concepts#read-and-write-access). The model can't add tags of its own.
-
-- **Reads** search every tag the run holds. A read tool also takes an optional `scope` argument to include a scope the run owns, such as `['team:acme:support']`.
-- **Writes** go to every writable tag the run holds, never to a read-only one. A write tool takes an optional `scope` argument to write at only those tags. Each tag must be one the run holds writable, or one it owns with a role that allows the write.
-- **Pins** default to every run tag except `thread`.
-
-Tool errors come back to the model as tool-result text. Naming a tag the run doesn't hold returns `This run does not hold scope "team:acme:sales".`
-
-To wire the tools yourself, for example into an agent's `tools`, call `createTools`. It defaults to the groups configured on the instance:
-
-```typescript
-const tools = knowledge.createTools({ read: true, write: true })
+```json
+{ "page": "Billing Escalations" }
 ```
 
-## Memory and pins
+Reading a scope address, such as `{ "page": "org:acme" }`, lists the pages in that scope and the scopes placed under it. Called with no `page`, it lists the scopes the run holds, which is how the model finds where to start.
 
-Pins work without Memory. With `pinnedContext` on, the agent gets the pin tools, the pins instructions, and the pinned Knowledge as a state signal on each step. Nothing is saved to a thread.
+Both need `viewer`.
 
-A run sees every pin whose tags it holds, so org pins and team pins form one set.
+## Write pages
 
-## Thread IDs and sources
+A page's body is the curated summary of its topic. `knowledge_page` with `op: "write"` creates a page when there's no `page`, and edits one when there is.
 
-Write and pin tools need a thread ID on the call. Pass one with `memory`:
+Create a page in a scope:
 
-```typescript
-await agent.generate('Remember that we ship on Fridays.', {
-  memory: { thread: 'thread-1', resource: 'user-1' },
-})
+```json
+{
+  "op": "write",
+  "scope": "team:acme:support",
+  "name": "Chargeback Playbook",
+  "description": "How support handles chargebacks.",
+  "body": "Freeze the card, then open a dispute in the billing console."
+}
 ```
 
-Records the agent writes get `metadata.source` set to `agent:<id>`.
+Creating needs `contributor` on `scope`. Add `parent` to create it under another page in the same scope, and `key` to give it a stable key that `<scope>#<key>` can refer to.
+
+Edit a page's name, description or body:
+
+```json
+{
+  "op": "write",
+  "page": "Chargeback Playbook",
+  "body": "Freeze the card, open a dispute, and email the customer.",
+  "expectedVersion": 1
+}
+```
+
+Editing needs `editor` on the page's scope. Pass the `version` from the last read as `expectedVersion`, and the write is refused if someone changed the page since.
+
+## Move and merge pages
+
+`op: "move"` moves a page under `parent`, or to the top of `scope`:
+
+```json
+{ "op": "move", "page": "Ticket notes", "scope": "resource:dana" }
+```
+
+Moving within a scope needs `editor`. Moving to another scope needs `owner` on both. The run above owns its `thread:` and `resource:` scopes, so it can move a page from its thread to its resource. It can't move a team page into `org:acme`:
+
+```text
+Moving a page across scopes needs owner on "org:acme"; this run has editor there.
+```
+
+`op: "merge"` merges `page` into `into`, keeping both pages' notes. It needs `owner` on the page that goes away and `editor` on the one that stays:
+
+```json
+{ "op": "merge", "page": "Dana prefs", "into": "Ticket notes" }
+```
+
+## Where writes land
+
+Writes never pick a scope for the model. `scope` always means where content is written: the home scope of a new page, the destination of a move, or the stamps on a note. Edits, merges and note removals take no `scope`; they act on the page they name, and the role check uses that page's own scope:
+
+```text
+Editing a page takes no scope, parent or key; use op "move" to relocate it.
+```
+
+The model decides who a fact is for when it writes it. A fact for the whole team goes in `team:acme:support`, and something only for this user goes in `resource:dana`.
+
+## Add notes
+
+A note is a short attributed fact on a page, about 250 tokens at most. Contributors can add notes to pages whose body they can't edit:
+
+```json
+{
+  "op": "add",
+  "page": "Chargeback Playbook",
+  "scope": ["team:acme:support"],
+  "text": "Disputes over $500 go to [[Billing Escalations]]."
+}
+```
+
+- `scope` lists the note's stamps and is required. A run can read the note when it can read the page and at least one stamp. Stamping a note on a shared page with a narrower scope keeps it private to that scope.
+- `[[Page Name]]` links another readable page. Reading `Billing Escalations` now lists this note under `mentionedIn`. Names that don't resolve stay plain text.
+- `when` records when the fact was true or observed, as an ISO date.
+
+Adding a note needs `contributor` on the page's scope and on every stamp. Each note records its author as `agent:<agentId>` and the thread it came from.
+
+`op: "restamp"` replaces a note's stamps, and `op: "remove"` removes it. Both take the note ID and need `editor` on the page's scope:
+
+```json
+{ "op": "restamp", "note": "e3048fea-e80a-4c27-8c87-5179f467b04b", "scope": ["org:acme"] }
+```
+
+Removing a note and adding it again creates a new note with a new ID.
+
+## What each operation needs
+
+| Operation | Role | On |
+| - | - | - |
+| Search, read | `viewer` | The page's scope |
+| Create a page | `contributor` | `scope` |
+| Edit a page | `editor` | The page's scope |
+| Move within a scope | `editor` | The page's scope |
+| Move to another scope | `owner` | Both scopes |
+| Merge | `owner` | The page that goes away |
+| | `editor` | The page that stays |
+| Add a note | `contributor` | The page's scope and each stamp |
+| Restamp, remove a note | `editor` | The page's scope (and `contributor` on each new stamp) |
+| Pin, unpin | `editor` | The page's scope, plus authority over each audience |
+
+A call that's in reach but needs a stronger role names the role it needs. Tool errors come back to the model as the tool result, not as exceptions in your code:
+
+```text
+Adding a note needs contributor on "team:acme:support"; this run has viewer there.
+```
+
+## Pins
+
+`knowledge_pin` puts a page into the context of every run holding one of its audience scopes, every turn. It's available with `pinnedContext` and needs Memory. See [pins](/docs/knowledge/pins).

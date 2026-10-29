@@ -1,6 +1,6 @@
 ---
 title: "Set up Knowledge"
-description: "Create a Knowledge instance with storage, optional semantic search, and a scope structure."
+description: "Create a Knowledge instance, choose its storage and tools, and attach it to an agent."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
@@ -14,41 +14,72 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-Create a `Knowledge` instance with a storage adapter. Search works with keywords out of the box, and you can add a vector store and embedder for semantic search.
+A `Knowledge` instance needs the scope types its runs hold, somewhere to store pages, and the tools its agents should get.
 
 ## Create the instance
 
 ```typescript title="src/mastra/knowledge.ts"
-import { Knowledge } from '@mastra/core/knowledge'
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
 import { LibSQLStore } from '@mastra/libsql'
 
 export const knowledge = new Knowledge({
   id: 'company',
   storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
 })
 ```
 
-`LibSQLStore` and `PostgresStore` support the full Knowledge feature set, while storage without Knowledge structure support rejects structures that declare grants.
+`scopes` is required. It declares every scope type your runs hold and who gets which role on them. Pass `{}` to declare nothing. See [declare scope types](/docs/knowledge/scope-types).
 
-## Add semantic search
+Leave out `storage` to use the storage configured on `Mastra`. Knowledge storage is supported by `LibSQLStore`, `PostgresStore`, `MySQLStore`, `MongoDBStore` and `InMemoryStore` (for tests).
 
-Pass a `vector` store and an `embedder`. Without them, search matches keywords only.
+Search matches keywords in page names, descriptions, bodies and notes.
 
-```typescript
-export const knowledge = new Knowledge({
-  id: 'company',
-  storage,
-  vector,
-  embedder,
-})
-```
+## Choose the tools
 
-Records written by a tool are indexed shortly after the write. Records added any other way, such as an import or a direct API call, are indexed the next time a search runs, so the first search after a bulk import is slower.
+Tools are off by default, so an agent with Knowledge attached gets nothing until you turn them on:
 
-## Declare a structure
+| `tools` | Tools the agent gets |
+| - | - |
+| `true` | `knowledge_search`, `knowledge_read`, `knowledge_page`, `knowledge_note` |
+| `{ read: true }` | `knowledge_search`, `knowledge_read` |
+| `{ write: true }` | `knowledge_page`, `knowledge_note`, for agents that only ingest |
 
-Use `scopes` to describe your scope types and which scopes own others. See [Knowledge concepts](/docs/knowledge/concepts#the-structure).
+Set `pinnedContext: true` to add `knowledge_pin` and deliver pinned pages every turn. See [pins](/docs/knowledge/pins).
+
+The tools only offer what a run's roles allow at call time. Turning on `write` doesn't let a run write anywhere it has no role.
 
 ## Attach to an agent
 
-Pass the instance as `knowledge` on the agent, or register it on `Mastra` and refer to it by key. See [agents and tools](/docs/knowledge/agents-and-tools).
+Pass the instance as `knowledge` on the agent:
+
+```typescript title="src/mastra/agents/support.ts"
+import { Agent } from '@mastra/core/agent'
+import { knowledge } from '../knowledge'
+
+export const support = new Agent({
+  id: 'support',
+  name: 'Support',
+  instructions: 'You answer customer questions.',
+  model: '__GATEWAY_OPENAI_MODEL__',
+  knowledge,
+})
+```
+
+You can also register the instance on `Mastra` and pass its key, as in `knowledge: 'company'`.
+
+An agent without Memory works too, as long as its runs have `scopes`. Without either, the tools fail with:
+
+```text
+Knowledge tools need run scopes: give the agent or the call `scopes`, or run it with Memory.
+```
+
+## Use the tools without attaching
+
+`createTools()` returns the tools for your own agent setup, and `getInstructions()` returns the usage block that goes with them. Both take `{ read, write, pinnedContext }` to override which groups they cover:
+
+```typescript
+const tools = knowledge.createTools({ read: true })
+const instructions = knowledge.getInstructions({ read: true })
+```

@@ -1,14 +1,15 @@
 ---
 title: "Knowledge"
-description: "Give agents a durable, shared store of notes they can search, write to, and pin, without adding Memory."
+description: "Give agents a shared store of pages and notes, with access decided by your configuration rather than by the model."
 packages:
   - "@mastra/core"
   - "@mastra/libsql"
+  - "@mastra/memory"
 ---
 
 # Knowledge
 
-Knowledge is a store of notes that agents read and write across conversations. Notes are organized into **nodes** (named places) that hold **records** (short, dated facts). Who can see a record is controlled by **scopes**, so one Knowledge instance can serve a company, its teams, and individual users.
+Knowledge is a store of **pages** and **notes** that agents read and write across conversations. A page is a curated topic with a body. A note is a short, attributed fact added to a page. Pages live in **scopes**, such as `org:acme` or `team:acme:support`, and the scope types you declare decide who can read and write each one. The model never picks its own identity or what it can reach.
 
 :::warning
 
@@ -16,44 +17,62 @@ Knowledge is experimental. Its API can change between releases without a depreca
 
 :::
 
-Knowledge attaches directly to an agent. It doesn't need [Memory](/docs/memory/overview), and it doesn't replace it. When both are set, Memory adds message history and Observational Memory, and Knowledge adds the notes.
+Knowledge attaches directly to an agent and works without [Memory](/docs/memory/overview). With Memory, each run also holds its `resource:` and `thread:` scopes, and [pins](/docs/knowledge/pins) are delivered every turn.
 
 ## Quickstart
 
-Create one `Knowledge` instance and pass it to an agent:
+Declare the scopes your runs hold, turn on the tools, and attach the instance to an agent:
 
 ```typescript title="src/mastra/index.ts"
 import { Mastra } from '@mastra/core'
 import { Agent } from '@mastra/core/agent'
-import { Knowledge } from '@mastra/core/knowledge'
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
 import { LibSQLStore } from '@mastra/libsql'
+import { Memory } from '@mastra/memory'
+
+const storage = new LibSQLStore({ id: 'storage', url: 'file:./mastra.db' })
 
 export const knowledge = new Knowledge({
   id: 'company',
-  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./knowledge.db' }),
-  tools: { read: true },
+  storage,
+  scopes: { ...knowledgeMemoryScopes() },
+  tools: true,
 })
 
 export const agent = new Agent({
   id: 'assistant',
   name: 'Assistant',
-  instructions: 'You answer questions about the company.',
+  instructions: 'You help the Acme team and keep its knowledge up to date.',
   model: '__GATEWAY_OPENAI_MODEL__',
+  memory: new Memory({ storage }),
   knowledge,
+  scopes: ['org:acme'],
+})
+
+export const mastra = new Mastra({ agents: { agent } })
+```
+
+`knowledgeMemoryScopes()` declares `org:$orgId`, `resource:$resourceId` and `thread:$threadId`, and lets each run edit the scopes it holds. Every run of this agent holds `org:acme`, plus its Memory `resource:` and `thread:` scopes:
+
+```typescript
+await agent.generate('Our refund window is 30 days. Save that for the team.', {
+  memory: { resource: 'dana', thread: 'onboarding' },
 })
 ```
 
-The agent can now search Knowledge and read nodes. It can't write until you set `tools: true`. See [agents and tools](/docs/knowledge/agents-and-tools).
+The agent can call `knowledge_page` to create a page in `org:acme`, and any later run that holds `org:acme` finds it with `knowledge_search`.
 
 ## What's in the section
 
-- [Concepts](/docs/knowledge/concepts): nodes, records, scopes, tags, read and write access, and pins.
-- [Setup](/docs/knowledge/setup): storage, search, and declaring a structure.
-- [Agents and tools](/docs/knowledge/agents-and-tools): the tools an agent gets and how a run's scopes limit them.
+- [Concepts](/docs/knowledge/concepts): scopes, run scopes, roles, pages and notes, and what a run can reach.
+- [Set up Knowledge](/docs/knowledge/setup): storage, search and which tools to turn on.
+- [Declare scope types](/docs/knowledge/scope-types): patterns, access rules, templates and Memory's scopes.
+- [Use the tools](/docs/knowledge/agents-and-tools): the five tools, what each operation needs, and pins.
+- [Access patterns](/docs/knowledge/access-patterns): recipes for policies, teams, accounts and public bots.
 - [Instructions](/docs/knowledge/instructions): the built-in usage instructions and how to override them.
 - [Limits](/docs/knowledge/limits): size limits, counted in tokens.
 - [Mastra Code](/docs/knowledge/mastra-code): using Knowledge in sessions.
 
 ## Not in this release
 
-Importers, retention, and stored grants aren't part of this release. Access between scopes is computed from your structure when a tool runs, and nothing is stored per user.
+Semantic search, importers, retention and stored per-user grants aren't part of this release. Search matches keywords. Access is computed from your declarations each time a tool runs, and nothing is stored per user.

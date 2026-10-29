@@ -240,8 +240,18 @@ const sidebars = {
             },
             {
               type: 'doc',
+              id: 'knowledge/scope-types',
+              label: 'Scope types',
+            },
+            {
+              type: 'doc',
               id: 'knowledge/agents-and-tools',
-              label: 'Agents and Tools',
+              label: 'Tools',
+            },
+            {
+              type: 'doc',
+              id: 'knowledge/pins',
+              label: 'Pins',
             },
             {
               type: 'doc',

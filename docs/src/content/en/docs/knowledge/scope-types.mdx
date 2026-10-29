@@ -1,0 +1,204 @@
+---
+title: "Declare scope types"
+description: "Declare the scope types a Knowledge instance knows, the rules that give runs roles on them, and the child scopes and pages that come with them."
+packages:
+  - "@mastra/core"
+---
+
+# Declare scope types
+
+:::warning
+
+Knowledge is experimental and can change without notice.
+
+:::
+
+The `scopes` option on `Knowledge` is where access is decided. Each key is a scope type, written as a pattern, and each value says who gets which role on scopes of that type. Knowledge checks the whole object when you construct it. A typo fails at startup instead of silently granting nothing.
+
+This page builds a declaration one step at a time. For finished setups, see [access patterns](/docs/knowledge/access-patterns).
+
+## Start from Memory's scopes
+
+`knowledgeMemoryScopes()` declares the scopes a run gets from Memory and a tenant scope:
+
+```typescript
+import { Knowledge, knowledgeMemoryScopes } from '@mastra/core/knowledge'
+import { LibSQLStore } from '@mastra/libsql'
+
+export const knowledge = new Knowledge({
+  id: 'company',
+  storage: new LibSQLStore({ id: 'knowledge', url: 'file:./mastra.db' }),
+  tools: true,
+  scopes: {
+    ...knowledgeMemoryScopes(),
+  },
+})
+```
+
+It returns three declarations:
+
+| Pattern | Rule | Placed under |
+| - | - | - |
+| `thread:$threadId` | `self` is `owner` | `resource:$resourceId` |
+| `resource:$resourceId` | `self` is `owner` | `org:$orgId` |
+| `org:$orgId` | `self` is `editor` | |
+
+For example, a run in thread `t-9` for user `dana` in org `acme` owns its thread and resource scopes and edits `org:acme`. Options change the tenant scope:
+
+- `knowledgeMemoryScopes({ org: 'workspace:$workspaceId' })` names it differently.
+- `knowledgeMemoryScopes({ org: false })` leaves it out, and resources aren't placed under anything.
+- `knowledgeMemoryScopes({ orgRole: 'contributor' })` makes the tenant append-only: runs can add pages and notes there but not edit them.
+
+`scopes` is required. Pass `{}` if the instance needs no scope types.
+
+## Patterns and params
+
+A key such as `team:$orgId:$teamId` is a pattern. The text before the first `:` is the type, and each `$name` segment is a param. The address `team:acme:support` matches it with `$orgId = acme` and `$teamId = support`.
+
+The last param takes the rest of the value, so `resource:$resourceId` matches `resource:user:123` with `$resourceId = user:123`. Memory ids that contain `:` keep working.
+
+A type can have several patterns only when no address can match two of them, which means at some position both have different literals:
+
+```typescript oxfmt:false
+scopes: {
+  'role:$orgId:admin': { description: 'Org administrators' },
+  'role:$orgId:support': { description: 'Support agents' },
+}
+```
+
+Overlapping patterns fail at startup. There's no precedence between them:
+
+```text
+Knowledge scope patterns "role:$orgId:$role" and "role:$orgId:admin" overlap; patterns of a type must be pairwise disjoint.
+```
+
+A pattern ending in a param overlaps a longer one with the same start, so `kb:$orgId` and `kb:$orgId:public` overlap too. Use two types, such as `kb-public:$orgId` and `kb-internal:$orgId`.
+
+## Rules
+
+`access` lists rules. Each rule names a principal and a role:
+
+```typescript oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'team:$orgId:$teamId': {
+    description: 'A team',
+    access: [
+      { principal: 'self', role: 'editor' },
+      { principal: 'org:$orgId', role: 'viewer' },
+    ],
+  },
+}
+```
+
+- `self` is the scope the rule is declared on. A run holding `team:acme:support` is an editor there.
+- `org:$orgId` binds `$orgId` from the team's address. A run holding `org:acme` can read `team:acme:support`, and a run holding `org:globex` can't see it at all.
+
+The roles are `viewer`, `contributor`, `editor` and `owner`, each including the ones before it. See [rules and roles](/docs/knowledge/concepts#rules-and-roles) for what each allows.
+
+A principal's params must be bound in one of two ways:
+
+- **From the address prefix.** The principal's params are the first params of the target pattern, as with `org:$orgId` on `team:$orgId:$teamId`.
+- **Through `belongsTo`.** The target's `belongsTo` pattern carries the params, as shown in the next section.
+
+Any other binding fails at startup:
+
+```text
+Knowledge rule principal "y:$b" on "x:$a:$b" would reach scopes that aren't an address prefix; reorder "x:$a:$b"'s params so the bound ones come first, or bind them through belongsTo.
+```
+
+Every principal must also be a declared type:
+
+```text
+Knowledge rule principal "org:$orgId" on "policy:$orgId" is not a declared scope type; declare it or fix the typo.
+```
+
+Rules reach one hop. A run holding `org:acme` reads `team:acme:support` through the rule above, but `team:acme:support` doesn't then pass its own grants on to that run.
+
+## Place scopes with `belongsTo`
+
+`belongsTo` puts a scope under another one in the tree. It grants nothing by itself, but a rule can bind params through it:
+
+```typescript oxfmt:false
+'project:$projectId': {
+  belongsTo: 'org:$orgId',
+  access: [
+    { principal: 'self', role: 'editor' },
+    { principal: 'org:$orgId', role: 'viewer' },
+  ],
+},
+```
+
+The address `project:p1` has no `$orgId`, so the `org:$orgId` rule binds it from the project's place in the tree. The first run to use `project:p1` places it under the one `org:` scope that run holds, and the placement sticks. After that, a run holding `org:acme` can read `project:p1`, and a run holding `org:globex` can't.
+
+## Child scopes and keyed pages
+
+`children` declares scopes created with each scope of the type, at `<address>/<name>`. `pages` declares keyed pages created there:
+
+```typescript oxfmt:false
+'team:$orgId:$teamId': {
+  access: [
+    { principal: 'self', role: 'editor' },
+    { principal: 'org:$orgId', role: 'viewer' },
+  ],
+  children: [
+    {
+      name: 'private',
+      description: 'Only the team can read this',
+      access: [{ principal: 'team:$orgId:$teamId', role: 'editor' }],
+    },
+  ],
+  pages: [{ key: 'handbook', name: 'Team Handbook' }],
+},
+```
+
+Every team now has `team:acme:support/private` and a page the tools can name as `team:acme:support#handbook`.
+
+A child gets no rules from its parent. List every rule it needs, with params bound from the parent's address. In a child's rules `self` is the child, which no run holds, so name the parent's pattern as the principal, as above. A run holding `org:acme` reads the team's pages but not the private child's.
+
+## Share one scope
+
+A key with no params is a concrete address. It adds rules to the one pattern it matches, for a single scope:
+
+```typescript oxfmt:false
+'feature:$orgId:$featureId': { description: 'Product features' },
+'feature:acme:a': {
+  access: [
+    { principal: 'team:acme:eng', role: 'editor' },
+    { principal: 'team:acme:support', role: 'contributor' },
+  ],
+},
+```
+
+Engineering edits feature A, and support can add notes and pages there without editing engineering's pages. Other features get only the pattern's rules.
+
+Declare the pattern first. A concrete address with no matching pattern fails at startup:
+
+```text
+Knowledge scope "feature:acme:a" doesn't match a declared pattern; declare its pattern first.
+```
+
+A concrete address can add `description`, `access`, `pins` and `pinPriority`. Declare `belongsTo`, `children` and `pages` on the pattern.
+
+## Build addresses in code
+
+Raw ids can contain characters that are reserved in addresses. Agent `scopes` take raw ids as written, but Knowledge APIs, page references and pins take canonical addresses. Build those with `knowledgeScopeAddress()`:
+
+```typescript
+import { knowledgeScopeAddress } from '@mastra/core/knowledge'
+
+knowledgeScopeAddress('repo:$orgId:$repo', { orgId: 'acme', repo: 'mastra-ai/mastra' })
+// 'repo:acme:mastra-ai%2Fmastra'
+```
+
+`%`, `/` and `#` in a value are encoded, and so is `:` in any param except the last.
+
+## Run scopes must be declared
+
+With Knowledge attached, every scope a run holds must match a declared type. A run holding `project:x` with no `project:` declaration fails when it uses a tool:
+
+```text
+Knowledge run scope "project:x" does not match a declared scope type. Declare it in Knowledge `scopes` (for Memory's resource:/thread: scopes, spread `...knowledgeMemoryScopes()`).
+```
+
+A type that only names who a run is still needs a declaration, even an empty one such as `'role:$orgId:support': {}`.

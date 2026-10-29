@@ -1,6 +1,6 @@
 ---
 title: "Knowledge concepts"
-description: "Nodes, records, scopes, tags, read and write access, and pins in Mastra Knowledge."
+description: "Scopes, run scopes, roles, pages and notes, and how Mastra Knowledge decides what a run can reach."
 packages:
   - "@mastra/core"
 ---
@@ -13,68 +13,98 @@ Knowledge is experimental and can change without notice.
 
 :::
 
-## Nodes and records
+Knowledge keeps three things apart: **who a run is**, **what each scope allows**, and **what's stored**. The host sets the first, your declarations decide the second, and the model only works with the third.
 
-A **node** is a named, described place in Knowledge, such as `pricing` or `onboarding`. A **record** is one short, dated fact stored under a node. Agents search records, read a node to see everything in it, and add new records.
+## Scopes
 
-Records and node descriptions have size limits, counted in tokens. See [limits](/docs/knowledge/limits).
+A **scope** is a boundary for content, written as an address such as `org:acme`, `team:acme:support` or `resource:dana`. The first segment is the scope's type, and the rest are its values.
 
-## Scopes and tags
+Every scope is also a page. Reading `org:acme` shows the pages that live in it and the scopes placed under it. Together the scopes form a tree the model can browse.
 
-A **scope** decides who sees a record. A scope is identified by a **tag** in the form `<type>:<value>`, for example `org:acme` or `team:acme:director`. The value can contain `:`. The type is lowercase letters, digits, `_` and `-`, starting with a letter. No part of the value may start with `$`. A scope holds at most 8 tags, and their order doesn't matter.
+## Run scopes
 
-A run gets its tags from the agent: the `scopes` set on the agent, the `scopes` passed to a call, or the request context. Knowledge also adds `resource:<id>` and `thread:<id>` when the run has a resource or thread ID. A run reads records at every tag it holds.
-
-Tags are authority. Only the host application should set them, and a model can't add to them.
-
-## The structure
-
-The `scopes` option on `Knowledge` declares scope types with patterns that use `$param` placeholders. Declaring a type is optional: a run can use any tag, and the holder owns records at its own tag. Declare a type to add a description, child templates, or to say which scope owns it.
+A run's **run scopes** say who it is. They come from the host: the agent's `scopes`, the `scopes` passed to a call, or the request context. With Memory, a run also holds `resource:<resourceId>` and `thread:<threadId>`.
 
 ```typescript
-import { Knowledge } from '@mastra/core/knowledge'
-
-const knowledge = new Knowledge({
-  id: 'company',
-  storage,
-  scopes: {
-    'org:$orgId': { description: 'The company' },
-    'team:$orgId:$teamId': {
-      access: [{ principal: 'org:$orgId', role: 'owner' }],
-    },
-  },
+await agent.generate('How do I handle a chargeback?', {
+  scopes: ['org:acme', 'role:acme:support', 'team:acme:support'],
+  memory: { resource: 'dana', thread: 'ticket-91' },
 })
 ```
 
-Here a run that holds `org:acme` writable can read and write `team:acme:director`, but not `team:other:director`, because `$orgId` is bound from the team's own address. The model reaches `team:acme:support` by passing `scope: ['team:acme:support']` to a Knowledge tool. The role in `access` sets what an owner can do:
+This run is Dana, in the Acme org, with the support role, on the support team. The model can't add to its run scopes or change them.
+
+Holding a scope grants nothing by itself. A run holding `team:acme:support` can only read or write there if a rule gives it a role. When Knowledge is attached, every run scope must match a declared scope type, or the tools fail with:
+
+```text
+Knowledge run scope "project:x" does not match a declared scope type.
+```
+
+## Rules and roles
+
+You declare scope types on the `Knowledge` instance. Each declaration can carry **rules**: a principal (a scope pattern, or `self`) and the role it gets on scopes of that type.
+
+```typescript oxfmt:false
+scopes: {
+  ...knowledgeMemoryScopes(),
+  'role:$orgId:support': {},
+  'team:$orgId:$teamId': {
+    access: [{ principal: 'self', role: 'editor' }],
+  },
+  'policy:$orgId': {
+    access: [{ principal: 'org:$orgId', role: 'viewer' }],
+  },
+}
+```
+
+A run holding `team:acme:support` is an editor there because of the `self` rule. A run holding `org:acme` can read `policy:acme`, because `$orgId` binds from the policy's own address, but not `policy:globex`. See [declare scope types](/docs/knowledge/scope-types) for patterns, binding and templates.
+
+Each role includes the ones before it:
 
 | Role | Can |
 | - | - |
-| `readonly` | Search and read |
-| `append` | Read, plus add records (`knowledge_record` op `add`) and create long-form nodes (`knowledge_node` op `write`) |
-| `edit` | All of the above, plus remove and rescope records, and update and merge nodes |
-| `owner` | Same as `edit` |
+| `viewer` | Search and read pages and notes |
+| `contributor` | Create pages and add notes |
+| `editor` | Edit a page's name, description and body, move pages within a scope, restamp and remove notes, and pin pages |
+| `owner` | Move pages to another scope and merge pages away |
 
-A tool that needs a stronger role fails with `This run reaches "team:acme:support" with role append; this needs edit.` Owned scopes are only reached when the model names them in `scope`. A scope the run holds directly isn't limited by role.
+## What a run can reach
 
-Ownership is checked each time a tool runs. A type you don't declare can be held but not owned, and a read-only tag never owns anything. Holding an owner tag gives a run everything that tag owns, so set it only on runs meant to have that reach.
+Knowledge works out a run's reach each time a tool runs:
 
-## Read and write access
+1. Start with the run scopes.
+1. Find every rule whose principal matches one of them, and give the run that rule's role on the scopes it covers.
+1. Stop there. A scope reached through a rule doesn't act as a principal itself, so access never chains through a second hop.
 
-Scopes are read-only unless you mark them writable. Give a tag as a string to allow reading only, or as `{ scope, access: 'write' }` to allow writing too:
-
-```typescript
-await agent.generate('What did the team decide?', {
-  scopes: ['org:acme', { scope: 'team:acme:director', access: 'write' }],
-})
+```mermaid
+flowchart LR
+  A["Run scopes<br/>org:acme, team:acme:support"] --> B["Rules<br/>self → editor<br/>org:$orgId → viewer"]
+  B --> C["Reach<br/>team:acme:support: editor<br/>policy:acme: viewer"]
+  C --> D["Pages and notes<br/>in those scopes"]
 ```
 
-This run reads both scopes and writes only to `team:acme:director`. The same entries work in the agent's `scopes`. The `resource:` and `thread:` tags are the run's Memory identity and are always writable.
+There's no inheritance either. A role on `org:acme` gives nothing on scopes placed under it unless a rule says so.
 
-Read-only tags are searched by reads and left out of default writes. A write that names one fails with `"org:acme" is read-only for this run.` (or `are read-only` when it names several). The `scope` argument the model passes to a tool is a plain list of tags.
+Anything outside a run's reach looks absent. A page the run can't read comes back as `Knowledge page "Chargeback Playbook" not found.`, the same as a page that doesn't exist. A write that's in reach but needs a stronger role names the role it needs:
 
-If the agent, the call, or the request context name the same tag with different access, read-only wins, and a model never widens its access. A read-only tag never grants ownership of other scopes.
+```text
+Editing a page needs editor on "policy:acme"; this run has viewer there.
+```
+
+## Pages
+
+A **page** is a topic with a name, a short description and a body. Each page has one home scope and can sit under a parent page. A scope holds a tree of pages. The body is the curated summary of the topic, and only editors change it.
+
+Tools refer to a page by its ID, by `<scope>#<key>` for pages created with a key (such as `policy:acme#refund-policy`), or by its exact name. A name that matches more than one readable page is refused with the candidate IDs.
+
+## Notes
+
+A **note** is a short fact added to a page, such as a detail someone else should be able to rely on later. Notes record who wrote them, and contributors can add them without being able to edit the page body.
+
+Every note is **stamped** with one or more scopes that decide who sees it. A note is visible when its page is visible and the run can read at least one of its stamps. An agent can add a note stamped `agent:acme:alex` to a page in `org:acme`, and only runs that can read `agent:acme:alex` see it.
+
+A note can mention another page as `[[Page Name]]`. Reading the mentioned page lists the notes that mention it.
 
 ## Pins
 
-A **pin** is a short note that stays in the model's context on every step. Pins are stored in Knowledge and shown to the agent as a state signal, so they work without Memory. Pins follow the user across threads, so by default they use every run tag except `thread`. The pin set is limited to `maxPins` entries and `maxTokens` tokens in total.
+A **pin** puts a page into the context of every run in an audience, every turn. Pins need Memory and `pinnedContext`. See [pins](/docs/knowledge/pins).
