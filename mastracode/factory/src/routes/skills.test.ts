@@ -10,7 +10,9 @@ import { Hono } from 'hono';
 import { afterEach, beforeEach, describe, expect, it, vi } from 'vitest';
 
 import { __clearSessionSandboxesForTests } from '../sandbox/session-sandbox.js';
+import { AuditDomain } from '../storage/domains/audit/domain.js';
 import { SourceControlStorageInMemory } from '../storage/domains/source-control/inmemory.js';
+import { createFactoryStorageForTests } from '../storage/test-utils.js';
 import { SkillRoutes } from './skills.js';
 import { fakeRouteAuth, mountApiRoutes } from './test-utils.js';
 import type { TestAuthUser } from './test-utils.js';
@@ -591,5 +593,210 @@ describe('factory skills catalog route', () => {
       expect(triage.error).toBeUndefined();
       expect(triage.description).toBe('Use when the user says: triage this issue');
     });
+  });
+});
+
+describe('project skill edit routes', () => {
+  const ADMIN = { workosId: 'admin-1', organizationId: 'org-1' };
+  const MEMBER = { workosId: 'member-1', organizationId: 'org-1' };
+  let projectDir: string;
+
+  beforeEach(() => {
+    projectDir = mkdtempSync(join(tmpdir(), 'factory-skill-edits-'));
+    vi.spyOn(process, 'cwd').mockReturnValue(projectDir);
+  });
+
+  afterEach(() => {
+    vi.restoreAllMocks();
+    rmSync(projectDir, { recursive: true, force: true });
+  });
+
+  function writeLocalSkill(dir: string, content: string) {
+    mkdirSync(join(projectDir, 'factory-skills', dir), { recursive: true });
+    writeFileSync(join(projectDir, 'factory-skills', dir, 'SKILL.md'), content);
+  }
+
+  async function setup() {
+    const seed = await createFactoryStorageForTests();
+    const admins = new Set([ADMIN.workosId]);
+    const auth = fakeRouteAuth({ isOrganizationAdmin: async (_org, userId) => admins.has(userId) });
+    const routes = new SkillRoutes({
+      auth,
+      controllerId: 'code',
+      controller: { getSession: vi.fn(async () => undefined) } as never,
+      overrides: {
+        projects: seed.projects,
+        storage: seed.skillOverrides,
+        audit: new AuditDomain({ auth, audit: seed.audit, projects: seed.projects }),
+      },
+    }).routes();
+    const projectA = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'A' } });
+    const projectB = await seed.projects.create({ orgId: 'org-1', userId: ADMIN.workosId, input: { name: 'B' } });
+    const elsewhere = await seed.projects.create({ orgId: 'org-2', userId: 'other', input: { name: 'C' } });
+
+    const request = (user: TestAuthUser, path: string, init?: RequestInit) => {
+      const app = new Hono();
+      app.use('*', async (c, next) => {
+        c.set('factoryAuthUser' as never, user as never);
+        await next();
+      });
+      mountApiRoutes(app as never, routes);
+      return app.request(path, init);
+    };
+    const save = (user: TestAuthUser, projectId: string, name: string, content: string) =>
+      request(user, `/web/factory/projects/${projectId}/skills/${name}`, {
+        method: 'PUT',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ content }),
+      });
+    const revert = (user: TestAuthUser, projectId: string, name: string) =>
+      request(user, `/web/factory/projects/${projectId}/skills/${name}`, { method: 'DELETE' });
+    const list = async (user: TestAuthUser, projectId: string) => {
+      const response = await request(user, `/web/factory/skills?projectId=${projectId}`);
+      expect(response.status).toBe(200);
+      return (await response.json()) as {
+        canEdit: boolean;
+        skills: {
+          name: string;
+          description: string;
+          content: string;
+          origin: string;
+          edited?: { updatedBy: string; updatedAt: string };
+          originalChanged?: boolean;
+        }[];
+      };
+    };
+    const skill = async (user: TestAuthUser, projectId: string, name: string) =>
+      (await list(user, projectId)).skills.find(s => s.name === name)!;
+    const auditActions = async () =>
+      (await seed.audit.list({ orgId: 'org-1' })).events.map(event => ({
+        action: event.action,
+        project: event.factoryProjectId,
+        targets: event.targets,
+      }));
+    return { seed, projectA, projectB, elsewhere, save, revert, list, skill, auditActions };
+  }
+
+  const editedPlan = (body: string) => `---\nname: factory-plan\ndescription: Our planning rules\n---\n\n${body}\n`;
+
+  it("serves an admin's edit to its project only, with who edited it", async () => {
+    const { projectA, projectB, save, list, skill, auditActions } = await setup();
+    const response = await save(ADMIN, projectA.id, 'factory-plan', editedPlan('# Our Plan'));
+    expect(response.status).toBe(200);
+    expect(((await response.json()) as { skill: unknown }).skill).toMatchObject({
+      name: 'factory-plan',
+      content: '# Our Plan',
+      edited: { updatedBy: ADMIN.workosId },
+      originalChanged: false,
+    });
+
+    const a = await list(ADMIN, projectA.id);
+    expect(a.canEdit).toBe(true);
+    expect(a.skills.find(s => s.name === 'factory-plan')).toMatchObject({
+      description: 'Our planning rules',
+      content: '# Our Plan',
+      origin: 'bundled',
+      edited: { updatedBy: ADMIN.workosId },
+      originalChanged: false,
+    });
+    const b = await skill(ADMIN, projectB.id, 'factory-plan');
+    expect(b.content).toContain('# Factory Plan');
+    expect(b.edited).toBeUndefined();
+    expect(await auditActions()).toEqual([
+      { action: 'factory.skill.updated', project: projectA.id, targets: [{ type: 'skill', id: 'factory-plan' }] },
+    ]);
+  });
+
+  it('lets an admin edit a review skill', async () => {
+    const { projectA, save, skill } = await setup();
+    const content = '---\nname: factory-review\ndescription: Our review rules\n---\n\n# Our Review\n';
+    expect((await save(ADMIN, projectA.id, 'factory-review', content)).status).toBe(200);
+    expect(await skill(ADMIN, projectA.id, 'factory-review')).toMatchObject({ content: '# Our Review' });
+  });
+
+  it('refuses edits and reverts from members who are not org admins', async () => {
+    const { projectA, save, revert, list, skill, auditActions } = await setup();
+    expect((await list(MEMBER, projectA.id)).canEdit).toBe(false);
+    const saved = await save(MEMBER, projectA.id, 'factory-plan', editedPlan('# Sneaky'));
+    expect(saved.status).toBe(403);
+    expect(await saved.json()).toEqual({
+      error: 'forbidden',
+      message: 'Organization administrator access is required to edit skills.',
+    });
+
+    expect((await save(ADMIN, projectA.id, 'factory-plan', editedPlan('# Our Plan'))).status).toBe(200);
+    expect((await revert(MEMBER, projectA.id, 'factory-plan')).status).toBe(403);
+    expect((await skill(MEMBER, projectA.id, 'factory-plan')).content).toBe('# Our Plan');
+    expect((await auditActions()).map(event => event.action)).toEqual(['factory.skill.updated']);
+  });
+
+  it('rejects a SKILL.md the runtime could not load and keeps the original', async () => {
+    const { projectA, save, skill } = await setup();
+    const cases = [
+      ['---\nname: other-skill\ndescription: Renamed\n---\n\n# Plan\n', /must match directory name/],
+      ['---\nname: factory-plan\ndescription: Use when: plan\n---\n\n# Plan\n', /Invalid frontmatter/],
+      ['---\nname: factory-plan\n---\n\n# Plan\n', /description/i],
+      ['', /Too small/],
+    ] as const;
+    for (const [content, message] of cases) {
+      const response = await save(ADMIN, projectA.id, 'factory-plan', content);
+      expect(response.status).toBe(400);
+      const body = (await response.json()) as { error: string; message: string };
+      expect(body.error).toBe('invalid_skill');
+      expect(body.message).toMatch(message);
+    }
+    const plan = await skill(ADMIN, projectA.id, 'factory-plan');
+    expect(plan.content).toContain('# Factory Plan');
+    expect(plan.edited).toBeUndefined();
+  });
+
+  it('reverts an edit to the original', async () => {
+    const { projectA, save, revert, skill, auditActions } = await setup();
+    await save(ADMIN, projectA.id, 'factory-plan', editedPlan('# Our Plan'));
+    const response = await revert(ADMIN, projectA.id, 'factory-plan');
+    expect(response.status).toBe(200);
+    const reverted = ((await response.json()) as { skill: { content: string; edited?: unknown } }).skill;
+    expect(reverted.content).toContain('# Factory Plan');
+    expect(reverted.edited).toBeUndefined();
+    expect((await skill(ADMIN, projectA.id, 'factory-plan')).edited).toBeUndefined();
+
+    // Reverting a skill with no edit succeeds without recording anything.
+    expect((await revert(ADMIN, projectA.id, 'factory-plan')).status).toBe(200);
+    expect((await auditActions()).map(event => event.action).sort()).toEqual([
+      'factory.skill.reverted',
+      'factory.skill.updated',
+    ]);
+  });
+
+  it('flags an edit whose original changed since it was made', async () => {
+    writeLocalSkill('release-notes', '---\nname: release-notes\ndescription: Draft notes\n---\n\n# Notes v1\n');
+    const { projectA, save, skill } = await setup();
+    const edit = '---\nname: release-notes\ndescription: Our notes\n---\n\n# Our Notes\n';
+    expect((await save(ADMIN, projectA.id, 'release-notes', edit)).status).toBe(200);
+    expect(await skill(ADMIN, projectA.id, 'release-notes')).toMatchObject({
+      origin: 'folder',
+      originalChanged: false,
+    });
+
+    writeLocalSkill('release-notes', '---\nname: release-notes\ndescription: Draft notes\n---\n\n# Notes v2\n');
+    expect(await skill(ADMIN, projectA.id, 'release-notes')).toMatchObject({
+      content: '# Our Notes',
+      originalChanged: true,
+    });
+
+    // Saving again re-bases the edit on the current original.
+    expect((await save(ADMIN, projectA.id, 'release-notes', edit)).status).toBe(200);
+    expect((await skill(ADMIN, projectA.id, 'release-notes')).originalChanged).toBe(false);
+  });
+
+  it("404s skills the server does not have and projects outside the caller's organization", async () => {
+    const { projectA, elsewhere, save, revert, seed } = await setup();
+    const missing = await save(ADMIN, projectA.id, 'no-such-skill', '---\nname: no-such-skill\ndescription: x\n---\n');
+    expect(missing.status).toBe(404);
+    expect((await revert(ADMIN, projectA.id, 'no-such-skill')).status).toBe(404);
+    expect((await save(ADMIN, elsewhere.id, 'factory-plan', editedPlan('# Our Plan'))).status).toBe(404);
+    expect((await save(ADMIN, 'not-a-uuid', 'factory-plan', editedPlan('# Our Plan'))).status).toBe(404);
+    expect(await seed.skillOverrides.list({ orgId: 'org-2', projectId: elsewhere.id })).toEqual([]);
+    expect(await seed.skillOverrides.list({ orgId: 'org-1', projectId: projectA.id })).toEqual([]);
   });
 });

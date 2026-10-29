@@ -800,6 +800,7 @@ export function assembleFactoryApiRoutes(deps: FactoryApiRoutesDeps): ApiRoute[]
       sourceControlStorage: githubStorage,
       ensureSourceControlReady: githubRegistration?.ensureReady,
       ...(deps.skills ? { skills: deps.skills } : {}),
+      overrides: { projects: deps.domains.projects, storage: deps.domains.skillOverrides, audit: deps.audit },
     }).routes(),
     ...sourceControlSessionRoutes,
     ...(sourceControls.length === 0 ? [] : buildSourceControlSettingsRoutes({ auth: deps.auth, sourceControls })),

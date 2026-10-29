@@ -1,5 +1,6 @@
 import { THINKING_LEVEL_VALUES } from '@mastra/code-sdk/thinking';
 import type { ThinkingLevelSetting } from '@mastra/code-sdk/thinking';
+import { validateSkillContent } from '@mastra/core/skills';
 import { z } from 'zod';
 
 import { storedBoardDefinitionSchema, storedBoardInputSchema, storedPhaseInputSchema } from '../boards/stored-board.js';
@@ -12,7 +13,7 @@ const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...stri
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
 
 export type FactoryRouteContract = {
-  method: 'GET' | 'POST' | 'PATCH' | 'DELETE';
+  method: 'GET' | 'POST' | 'PUT' | 'PATCH' | 'DELETE';
   path: string;
   description: string;
   pathSchema?: z.ZodType;
@@ -489,6 +490,37 @@ const attentionActionPathSchema = z
     path: ['sourceId'],
   });
 
+/** Largest SKILL.md a project may save as an edit. */
+export const MAX_SKILL_OVERRIDE_LENGTH = 200_000;
+
+const skillNameSchema = z
+  .string()
+  .max(64)
+  .regex(/^[a-z0-9]+(?:-[a-z0-9]+)*$/);
+const skillPathSchema = z.object({ id: uuidSchema, name: skillNameSchema });
+const skillResponseSchema = z.object({ skill: entitySchema });
+
+/** Adds the runtime's SKILL.md validation errors, checking the frontmatter name against `directoryName` when given. */
+function refineSkillContent(content: string, context: z.RefinementCtx, directoryName?: string) {
+  const result = validateSkillContent({ content, directoryName });
+  for (const message of result.errors) context.addIssue({ code: 'custom', message, path: ['content'] });
+}
+
+const skillContentSchema = z.string().min(1).max(MAX_SKILL_OVERRIDE_LENGTH);
+
+export const skillOverrideBodySchema = z
+  .object({ content: skillContentSchema })
+  .strict()
+  .superRefine((input, context) => refineSkillContent(input.content, context));
+
+/**
+ * The full save request: the edited SKILL.md must load under the skill's own
+ * name, exactly as the runtime validates it.
+ */
+export const skillOverrideSaveRequestSchema = skillPathSchema
+  .extend({ content: skillContentSchema })
+  .superRefine((input, context) => refineSkillContent(input.content, context, input.name));
+
 export const FACTORY_ROUTE_CONTRACTS = {
   projectList: {
     method: 'GET',
@@ -822,6 +854,28 @@ export const FACTORY_ROUTE_CONTRACTS = {
     description: 'Restore an archived Factory attention receipt',
     pathSchema: attentionActionPathSchema,
     responseSchema: z.object({ receipt: entitySchema }),
+  },
+  skillList: {
+    method: 'GET',
+    path: '/web/factory/skills',
+    description: "List Factory skills, with a project's edits when a project is given",
+    querySchema: z.object({ projectId: uuidSchema.optional() }),
+    responseSchema: z.object({ skills: z.array(entitySchema) }),
+  },
+  skillOverrideSave: {
+    method: 'PUT',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Save a project's edited SKILL.md for a Factory skill",
+    pathSchema: skillPathSchema,
+    bodySchema: skillOverrideBodySchema,
+    responseSchema: skillResponseSchema,
+  },
+  skillOverrideRevert: {
+    method: 'DELETE',
+    path: '/web/factory/projects/:id/skills/:name',
+    description: "Revert a project's edited Factory skill to its original SKILL.md",
+    pathSchema: skillPathSchema,
+    responseSchema: skillResponseSchema,
   },
 } as const satisfies Record<string, FactoryRouteContract>;
 
