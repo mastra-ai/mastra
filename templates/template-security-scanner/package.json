@@ -21,6 +21,7 @@
     "test:control-plane": "vitest run tests/control-plane.integration.test.ts",
     "test:discovery": "node --import tsx scripts/test-discovery.ts discovery",
     "test:gateway": "node --import tsx scripts/test-discovery.ts gateway",
+    "test:intelligence": "vitest run tests/intelligence.integration.test.ts --reporter=verbose",
     "check:gateway": "node --import tsx scripts/check-gateway.ts"
   },
   "dependencies": {

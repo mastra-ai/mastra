@@ -35,6 +35,7 @@ A useful security inventory needs to show which identity observed a surface whil
 - Run public HTTP discovery, then compare a header, bearer, or cookie profile against the same authorized origin. Inventory keeps each observation's role; credentials are never returned.
 - Select headless discovery to collect browser XHR surfaces. Browser observations remain advertised surfaces without an upstream HTTP status claim. Discovery never submits forms or authorizes writes.
 - Cancel a running scan or update its bound target. Inspect the persisted partial state, cleanup outcome, and evidence rather than assuming the interrupted run completed.
+- Search the pinned offline references for a testing topic, then [manually sync the advisory inbox](INTELLIGENCE.md) and compare its stale status and material revision events across repeated imports.
 
 ## Customization
 
@@ -52,6 +53,8 @@ Raw crawler output remains bounded and private in trusted memory, with native re
 The local database and receipts live under private `data/`. One process owns the installation and one discovery runs at a time. Restart reconciles interrupted runs as failed and removes only recorded owned resources; it does not resume crawling or restore consumed budgets. Cleanup debt remains visible. Evidence expires only under the chosen retention policy, with persisted expiry counts and timestamps. Unrelated containers and shared-image consumers are preserved; no command uses global Docker pruning.
 
 Native agent/workflow execution, models, schedules, and recurring queue execution remain unavailable. Authenticated sessions can read allowlisted native metadata through the official Mastra Hono adapter. See [local API operation](CONTROL_PLANE.md) and [discovery operation](SCANNING.md) for supported routes and outcomes.
+
+The [offline reference catalog and advisory inbox](INTELLIGENCE.md) are available through the same protected API. Advisory synchronization is operator-initiated and remains visibly incomplete because it polls a bounded portion of the upstream feed each run.
 
 ## About Mastra templates
 

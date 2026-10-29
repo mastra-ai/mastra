@@ -1,0 +1,6 @@
+Common Weakness Enumeration (CWE™) version 5.0
+Source: https://cwe.mitre.org/data/downloads.html
+Copyright © 2006–2026, The MITRE Corporation. CWE is a trademark of The MITRE Corporation. Included records are curated excerpts from the version 5.0 XML.
+License source: https://cwe.mitre.org/about/termsofuse.html
+
+CWE™ is free to use by any organization or individual for any research, development, and/or commercial purposes, per these CWE Terms of Use. Accordingly, The MITRE Corporation hereby grants you a non-exclusive, royalty-free license to use CWE for research, development, and commercial purposes. Any copy you make for such purposes is authorized on the condition that you reproduce MITRE’s copyright designation and this license in any such copy. CWE is a trademark of The MITRE Corporation.

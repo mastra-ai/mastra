@@ -18,6 +18,12 @@ import { acquireInstance } from '../discovery/instance.js';
 import { ScanService } from '../discovery/service.js';
 import type { OwnedLabBoundary } from '../discovery/driver.js';
 import { requireDiscoveryCapability } from '../discovery/capability.js';
+import { ReferenceCatalog } from '../knowledge/catalog.js';
+import { PlaybookRegistry } from '../knowledge/playbooks.js';
+import { AdvisoryStore } from '../advisory/store.js';
+import { AdvisorySource } from '../advisory/source.js';
+import { AdvisorySync } from '../advisory/sync.js';
+import { registerIntelligenceRoutes } from './intelligence-routes.js';
 
 export async function initializeStorage(settings: Settings) {
   await prepareDataDirectory(settings);
@@ -59,9 +65,14 @@ export async function startControlPlane(
   port = settings.PORT,
   identityTransport?: IdentityTransport,
   ownedLab?: OwnedLabBoundary,
+  advisorySource?: AdvisorySource,
 ) {
   const { mastra, storage } = await initializeStorage(settings);
   const domainStore = new DomainStore(settings.databaseUrl);
+  const catalog = new ReferenceCatalog(settings.databaseUrl);
+  const playbooks = new PlaybookRegistry(catalog);
+  const advisoryStore = new AdvisoryStore(settings.databaseUrl);
+  const advisory = new AdvisorySync(advisoryStore, advisorySource ?? new AdvisorySource());
   const app = new Hono();
   let boundPort = port;
   const protection = protectControlPlane(
@@ -81,6 +92,7 @@ export async function startControlPlane(
   );
   scans = new ScanService(settings, service, ownedLab);
   registerDomainRoutes(app, service, scans);
+  registerIntelligenceRoutes(app, catalog, playbooks, advisory);
   app.get('/api/runtime', async context => {
     let scanningEnabled = false;
     if (settings.SCANNER_DISCOVERY_ENABLED)
@@ -103,9 +115,15 @@ export async function startControlPlane(
       const critical = await Promise.allSettled([
         listener?.listening ? closeListener(listener) : Promise.resolve(),
         scans!.close(),
+        advisory.close(),
         mastra.shutdown(),
       ]);
-      const stores = await Promise.allSettled([Promise.resolve().then(() => domainStore.close()), storage.close()]);
+      const stores = await Promise.allSettled([
+        Promise.resolve().then(() => domainStore.close()),
+        Promise.resolve().then(() => catalog.close()),
+        Promise.resolve().then(() => advisoryStore.close()),
+        storage.close(),
+      ]);
       // A failed scan cleanup keeps the live-PID instance fence in place. After
       // process exit, the next owner may reconcile its exact persisted resources.
       const fence = critical.every(result => result.status === 'fulfilled')
@@ -120,6 +138,9 @@ export async function startControlPlane(
   try {
     releaseInstance = await acquireInstance(settings);
     await domainStore.initialize();
+    await catalog.initialize();
+    await playbooks.initialize();
+    await advisoryStore.initialize();
     await scans.initialize();
     const adapter = new MastraServer({
       app,

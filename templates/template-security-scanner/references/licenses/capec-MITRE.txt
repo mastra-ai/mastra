@@ -1,0 +1,6 @@
+Common Attack Pattern Enumeration and Classification (CAPEC™) version 3.9
+Source: https://capec.mitre.org/data/downloads.html
+Copyright © 2007–2026, The MITRE Corporation. CAPEC and the CAPEC logo are trademarks of The MITRE Corporation. Included records are curated excerpts from the version 3.9 XML.
+License source: https://capec.mitre.org/about/termsofuse.html
+
+The MITRE Corporation (MITRE) hereby grants you a non-exclusive, royalty-free license to use Common Attack Pattern Enumeration and Classification (CAPEC™) for research, development, and commercial purposes. Any copy you make for such purposes is authorized provided that you reproduce MITRE’s copyright designation and this license in any such copy.
