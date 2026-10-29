@@ -1689,6 +1689,80 @@ describe('Workflow (Evented Engine Specific)', () => {
       15000,
     );
 
+    // Known race (PR #28669, discussion_r4403275813): a denied redelivery can
+    // fail a running parent because authorization and the step claim are not atomic.
+    it.fails('does not fail an authorized child that is still running after lease expiry', async () => {
+      const effect = Promise.withResolvers<void>();
+      const entered = Promise.withResolvers<void>();
+      const fixture = await setup({
+        beforeEffect: () => {
+          entered.resolve();
+          return effect.promise;
+        },
+      });
+      try {
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await entered.promise;
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(2));
+        await fixture.pubsub.flush();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        const store = (await fixture.storage.getStore('workflows'))!;
+        const snapshot = await store.loadWorkflowSnapshot({
+          workflowName: fixture.parent.id,
+          runId: fixture.run.runId,
+        });
+        expect(snapshot?.status).toBe('running');
+        expect(fixture.publish.mock.calls.some(([, event]) => event.type === 'workflow.fail')).toBe(false);
+        effect.resolve();
+        await expect(starting).resolves.toMatchObject({ status: 'success' });
+        expect(fixture.effects()).toBe(1);
+      } finally {
+        effect.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
+    // Known race (PR #28669, discussion_r4403275813): a delayed authorization
+    // can dispatch after another delivery has already failed the parent.
+    it.fails('does not dispatch a child after a concurrent delivery has denied the run', async () => {
+      const authorization = Promise.withResolvers<void>();
+      const fixture = await setup();
+      fixture.fga.require.mockImplementationOnce(async () => {
+        await authorization.promise;
+      });
+      try {
+        const starting = fixture.run.start({ inputData: { value: 'ok' }, requestContext: fixture.requestContext });
+        await vi.waitFor(() => expect(fixture.fga.require).toHaveBeenCalledTimes(1));
+        fixture.policy.allowed = false;
+        const delivery = fixture.deliveries.find(event => event.data.workflowId === fixture.parent.id)!;
+        const lease = fixture.leases.mock.calls.find(
+          ([key]) => key === `workflow-step-run:${delivery.runId}:${delivery.id}`,
+        )!;
+        await fixture.pubsub.releaseLease(lease[0], lease[1]);
+        fixture.emitter.emit('workflows', delivery);
+        await expect(starting).resolves.toMatchObject({ status: 'failed' });
+        authorization.resolve();
+        await fixture.pubsub.flush();
+        await new Promise(resolve => setTimeout(resolve, 50));
+        expect(fixture.effects()).toBe(0);
+        expect(
+          fixture.publish.mock.calls.filter(
+            ([, event]) => event.type === 'workflow.start' && event.data.workflowId === fixture.child.id,
+          ),
+        ).toHaveLength(0);
+      } finally {
+        authorization.resolve();
+        await fixture.mastra.stopWorkers();
+      }
+    }, 15000);
+
     it('authorizes a nested resume before claiming the suspended parent step', async () => {
       const fixture = await setup({ suspend: true });
       try {
