@@ -410,7 +410,11 @@ export class ObserverRunner {
                     aborted: abortSignal?.aborted ?? false,
                   });
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
-                  throw new OmModelExecutionError('observer-model', error);
+                  throw new OmModelExecutionError(
+                    'observer-model',
+                    error,
+                    childObservabilityContext.tracingContext?.currentSpan,
+                  );
                 }
               }, abortSignal),
           }),
@@ -752,7 +756,11 @@ export class ObserverRunner {
                     aborted: abortSignal?.aborted ?? false,
                   });
                   if (abortSignal?.aborted || !isOmModelExecutionFailure(error)) throw error;
-                  throw new OmModelExecutionError('observer-model', error);
+                  throw new OmModelExecutionError(
+                    'observer-model',
+                    error,
+                    childObservabilityContext.tracingContext?.currentSpan,
+                  );
                 }
               }, abortSignal),
           }),

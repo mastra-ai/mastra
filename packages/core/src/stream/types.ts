@@ -1203,6 +1203,10 @@ export type MastraOnStepFinishCallback<OUTPUT = undefined> = (
 ) => Promise<void> | void;
 
 export type MastraOnFinishCallbackArgs<OUTPUT = undefined> = LLMStepResult<OUTPUT> & {
+  /** Present when execution ends at a tool suspension boundary. */
+  suspendReason?: 'tool-call-approval' | 'tool-call-suspended';
+  toolCallId?: string;
+  toolName?: string;
   error?: Error | string | { message: string; stack: string };
   object?: OUTPUT;
   /**
