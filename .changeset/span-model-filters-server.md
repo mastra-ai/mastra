@@ -7,7 +7,7 @@ Span query and span aggregate routes accept `model` and `provider` filters when 
 ```typescript
 const { capabilities } = await mastraClient.getObservabilityCapabilities();
 
-if (capabilities.spanQueryModelFields) {
+if (capabilities.spanAggregate && capabilities.spanQueryModelFields) {
   const { rows } = await mastraClient.aggregateSpans({
     timeRange,
     where: { op: 'eq', left: { path: 'provider' }, right: { literal: 'anthropic' } },

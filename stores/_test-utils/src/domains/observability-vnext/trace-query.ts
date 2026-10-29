@@ -1765,22 +1765,20 @@ export const TRACE_QUERY_CONFORMANCE_CASES: TraceQueryConformanceCase[] = [
     expected: [{ traceId: 'trace-c' }],
   },
   {
-    name: 'matches model and provider from the column or, for older spans, string attributes',
+    name: 'matches provider from the dedicated column',
     request: {
       timeRange: fullRange,
-      where: {
-        spans: {
-          some: {
-            op: 'or',
-            args: [
-              { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5' } },
-              { op: 'in', value: { path: 'provider' }, set: ['anthropic'] },
-            ],
-          },
-        },
-      },
+      where: { spans: { some: { op: 'in', value: { path: 'provider' }, set: ['anthropic'] } } },
     },
-    expected: [{ traceId: 'trace-a' }, { traceId: 'trace-b' }],
+    expected: [{ traceId: 'trace-a' }],
+  },
+  {
+    name: 'matches model from string attributes on older spans',
+    request: {
+      timeRange: fullRange,
+      where: { spans: { some: { op: 'eq', left: { path: 'model' }, right: { literal: 'gpt-5' } } } },
+    },
+    expected: [{ traceId: 'trace-b' }],
   },
   {
     name: 'applies nullable negative membership semantics to current spans',
