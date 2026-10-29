@@ -202,12 +202,17 @@ function triggerClassName({ iconOnlyValue, className }: { iconOnlyValue: boolean
   return cn(iconOnlyValue && 'w-auto px-2.5', className);
 }
 
-function ComboboxOptionText({ option, wrap = false }: { option: ComboboxOption; wrap?: boolean }) {
+/** An option row's content: start slot, label over description, end slot. Long labels truncate, or wrap when `wrap`. */
+function ComboboxOptionContent({ option, wrap }: { option: ComboboxOption; wrap: boolean }) {
   return (
-    <span className={comboboxStyles.optionText}>
-      <span className={wrap ? comboboxStyles.optionLabelWrap : comboboxStyles.optionLabel}>{option.label}</span>
-      {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
-    </span>
+    <>
+      {option.start}
+      <span className={comboboxStyles.optionText}>
+        <span className={wrap ? comboboxStyles.optionLabelWrap : comboboxStyles.optionLabel}>{option.label}</span>
+        {option.description && <span className={comboboxStyles.optionDescription}>{option.description}</span>}
+      </span>
+      {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+    </>
   );
 }
 
@@ -236,15 +241,19 @@ function longestOption(options: ComboboxOption[]) {
   );
 }
 
-/** An invisible copy of the longest row (list padding included): a `content`-width popup sizes to it, whatever the search shows. */
-function ComboboxPopupSizer({ option }: { option: ComboboxOption }) {
+/**
+ * An invisible copy of the longest option's row, so a `content`-width popup sizes to it whatever the search shows.
+ * Same item and list padding as a real row; the check slot is empty, its width is fixed.
+ */
+function ComboboxPopupSizer({ options }: { options: ComboboxOption[] }) {
+  const option = longestOption(options);
+  if (!option) return null;
+
   return (
-    <div aria-hidden className="invisible h-0 overflow-hidden px-1">
+    <div aria-hidden className={comboboxStyles.sizer}>
       <div className={comboboxStyles.item}>
-        <span className="flex min-w-0 flex-1 items-center gap-2">
-          {option.start}
-          <ComboboxOptionText option={option} wrap />
-          {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+        <span className={comboboxStyles.itemContent}>
+          <ComboboxOptionContent option={option} wrap />
         </span>
         <span className={comboboxStyles.checkContainer} />
       </div>
@@ -254,38 +263,35 @@ function ComboboxPopupSizer({ option }: { option: ComboboxOption }) {
 
 /** The popup: the search row for a compact trigger (a field searches in itself), then the options. */
 function ComboboxOptionsContent({
+  options,
+  popupWidth,
   showSearch,
   searchPlaceholder,
   emptyText,
   align,
   container,
   footer,
-  sizerOption,
 }: {
+  options: ComboboxOption[];
+  popupWidth: 'anchor' | 'content';
   showSearch: boolean;
   searchPlaceholder: string;
   emptyText: string;
   align: 'start' | 'center' | 'end';
   container?: PortalContainer;
   footer?: React.ReactNode;
-  /** Set for a `content`-width popup: the option whose row sets the width. */
-  sizerOption?: ComboboxOption;
 }) {
+  const fitContent = popupWidth === 'content';
+
   return (
-    <ComboboxContent
-      align={align}
-      container={container}
-      className={cn(sizerOption && comboboxStyles.contentWidthPopup)}
-    >
+    <ComboboxContent align={align} container={container} className={cn(fitContent && comboboxStyles.contentWidthPopup)}>
       {showSearch ? <ComboboxSearch placeholder={searchPlaceholder} /> : null}
-      {sizerOption ? <ComboboxPopupSizer option={sizerOption} /> : null}
+      {fitContent ? <ComboboxPopupSizer options={options} /> : null}
       <ComboboxEmpty>{emptyText}</ComboboxEmpty>
       <ComboboxList>
         {(option: ComboboxOption) => (
           <ComboboxItem key={option.value} value={option}>
-            {option.start}
-            <ComboboxOptionText option={option} wrap={Boolean(sizerOption)} />
-            {option.end ? <span className={comboboxStyles.optionEnd}>{option.end}</span> : null}
+            <ComboboxOptionContent option={option} wrap={fitContent} />
           </ComboboxItem>
         )}
       </ComboboxList>
@@ -457,12 +463,13 @@ function SingleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
+        options={options}
+        popupWidth={popupWidth}
         showSearch={!inField}
         searchPlaceholder={searchPlaceholder}
         emptyText={emptyText}
         align={align}
         container={container}
-        sizerOption={popupWidth === 'content' ? longestOption(options) : undefined}
       />
     </ComboboxRoot>
   );
@@ -518,13 +525,14 @@ function MultipleCombobox({
         look={{ variant, size, showChevron, iconOnlyValue, className }}
       />
       <ComboboxOptionsContent
+        options={options}
+        popupWidth={popupWidth}
         showSearch={shape !== 'chips'}
         searchPlaceholder={searchPlaceholder}
         emptyText={emptyText}
         align={align}
         container={container}
         footer={footer}
-        sizerOption={popupWidth === 'content' ? longestOption(options) : undefined}
       />
     </ComboboxRoot>
   );

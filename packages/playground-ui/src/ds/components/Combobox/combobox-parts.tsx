@@ -314,7 +314,7 @@ function ComboboxItem({ className, children, ref, ...props }: BaseCombobox.Item.
       className={cn(comboboxItemClass({}), className)}
       {...props}
     >
-      <span className="flex min-w-0 flex-1 items-center gap-2">{children}</span>
+      <span className={comboboxStyles.itemContent}>{children}</span>
       <span className={comboboxStyles.checkContainer}>
         <BaseCombobox.ItemIndicator>
           <Check className={comboboxStyles.checkIcon} />

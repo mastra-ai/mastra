@@ -115,6 +115,9 @@ export const comboboxStyles = {
   /** Option item base — rounded-lg sits concentrically inside rounded-xl + p-1. */
   item: comboboxItemClass({ multiple: false }),
 
+  /** An item's content beside its check: start slot, text, end slot. */
+  itemContent: 'flex min-w-0 flex-1 items-center gap-2',
+
   /** Multi-select item — same item rhythm with a right-aligned selected check. */
   itemMulti: comboboxItemClass({ multiple: true }),
 
@@ -138,6 +141,9 @@ export const comboboxStyles = {
 
   /** A `content`-width popup: fits the longest option, capped so one outlier can't stretch it. */
   contentWidthPopup: 'w-max max-w-[min(20rem,var(--available-width))]',
+
+  /** Invisible row that gives a `content`-width popup its width; `px-1` matches the list's padding. */
+  sizer: 'invisible h-0 overflow-hidden px-1',
 
   /** Option description */
   optionDescription: 'text-caption text-muted-foreground truncate',
