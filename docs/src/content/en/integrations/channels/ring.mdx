@@ -159,7 +159,7 @@ new RingSignals({
 To pick the thread per event, set `target` to a function. The function receives the webhook payload Ring sent for the event and returns the target for that event. The payload includes:
 
 - `event.data.type`: The event type, from [Events and priorities](#events-and-priorities).
-- `event.data.attributes.source`: For device events, the ID of the device that sent the event. For subscription events, `subscriptions`.
+- `event.data.attributes.source`: For device events, the ID of the device that sent the event. For app integration events, the account ID. For subscription events, `subscriptions`.
 - `event.data.attributes.timestamp`: For device events, when the event happened, in epoch milliseconds. Subscription events don't have it.
 - `event.data.attributes.sub_type`: For motion events, what caused the motion: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. For subscription events, `paid` or `trial`.
 - `event.meta.account_id`: The ID of the Ring account the device belongs to.
@@ -249,7 +249,7 @@ When media isn't attached on a channel thread, because the platform isn't listed
 
 ### Send Ring alerts to a chat
 
-To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give your channel thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values. Check the sender first, so only your own conversation gets the Ring thread. Other senders get their own threads and don't see Ring alerts or media:
+To get Ring alerts in a chat, the channel and Ring need to use the same thread. Give your channel thread a fixed ID with `resolveResourceId` and `resolveThreadId`, and set `target` to the same values. Before you send the first message, set `HOME_OWNER_USER_ID` in `.env` to your user ID on the channel platform (`message.author.userId`). Only your direct messages get the Ring thread. Group conversations and other senders keep their own threads and don't see Ring alerts or media:
 
 ```typescript title="src/mastra/agents/home-agent.ts"
 import { Agent } from '@mastra/core/agent'
@@ -261,6 +261,9 @@ const resourceId = 'home'
 const threadId = 'ring-alerts'
 // Your user ID on the channel platform
 const ownerUserId = process.env.HOME_OWNER_USER_ID
+if (!ownerUserId) {
+  throw new Error('Set HOME_OWNER_USER_ID to your user ID on the channel platform')
+}
 
 export const homeAgent = new Agent({
   id: 'home-agent',
@@ -269,8 +272,8 @@ export const homeAgent = new Agent({
   model: '__GATEWAY_OPENAI_MODEL__',
   memory: new Memory(),
   channels: {
-    resolveResourceId: ({ message, defaultResourceId }) =>
-      message.author.userId === ownerUserId ? resourceId : defaultResourceId,
+    resolveResourceId: ({ thread, message, defaultResourceId }) =>
+      thread.isDM && message.author.userId === ownerUserId ? resourceId : defaultResourceId,
     resolveThreadId: ctx => (ctx.resourceId === resourceId ? threadId : ctx.defaultThreadId),
     adapters: {
       imessage: { adapter: createiMessageAdapter() },
@@ -288,7 +291,7 @@ The channel creates the `ring-alerts` thread on the first message, and Ring even
 
 :::warning
 
-Send the agent a message from a channel before the first Ring event arrives.
+Send the agent a message from a channel before the first Ring event arrives. Use a new conversation: the resolvers only run when a thread is created, so a conversation you started before adding them keeps its existing thread.
 
 Anyone who can message the agent on a channel can ask it to use the Ring tools. Limit who can reach the agent on that platform.
 
