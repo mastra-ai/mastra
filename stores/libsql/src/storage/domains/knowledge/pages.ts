@@ -399,8 +399,31 @@ export class LibSQLKnowledgePages implements KnowledgePageStore {
         return { row: (await this.#pageRow(tx, id))!, created: true };
       };
 
-      const { row, created } = await ensureScope(input, input.parentId ?? null);
+      const ensured = await ensureScope(input, input.parentId ?? null);
+      let row = ensured.row;
+      const created = ensured.created;
       const scopeId = String(row.id);
+      if (!created && input.parentId != null && str(row.parentId) === undefined) {
+        // An unlinked scope takes its first parent; the conditional UPDATE keeps the first writer's link.
+        await this.#livePage(tx, input.parentId);
+        if (input.parentId === scopeId) throw new Error(`Scope ${scopeId} cannot be its own parent`);
+        let ancestor: string | undefined = input.parentId;
+        while (ancestor) {
+          const up = (await this.#pageRow(tx, ancestor))!;
+          if (String(up.id) === scopeId) throw new Error(`Scope ${scopeId} cannot be linked under its own descendant`);
+          ancestor = str(up.parentId);
+        }
+        await tx.execute({
+          sql: `UPDATE "${T.pages}" SET parentId = ?, position = ?, version = version + 1, updatedAt = ? WHERE id = ? AND parentId IS NULL`,
+          args: [
+            input.parentId,
+            knowledgePositionBetween(await this.#lastPosition(tx, input.parentId, true)),
+            now,
+            scopeId,
+          ],
+        });
+        row = (await this.#pageRow(tx, scopeId))!;
+      }
       let parentConflict: MaterializeKnowledgeScopeResult['parentConflict'];
       if (!created && input.parentId !== undefined && (str(row.parentId) ?? null) !== input.parentId) {
         parentConflict = { existingParentId: str(row.parentId) ?? null, requestedParentId: input.parentId };
