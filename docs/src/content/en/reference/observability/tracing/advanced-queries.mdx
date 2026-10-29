@@ -223,7 +223,7 @@ const slowModelCalls = {
 }
 ```
 
-`model` and `provider` read the span's `model` and `provider` columns. When a column is empty, they fall back to the string `attributes.model` and `attributes.provider` values that older `@mastra/observability` versions exported, so existing filters keep matching older spans. Trace results don't include `model` or `provider`, because a trace can match through one span while its other spans used a different model.
+`model` and `provider` read the span's `model` and `provider` columns. When a column is empty, they fall back to the string `attributes.model` and `attributes.provider` values that older `@mastra/observability` versions exported, so existing filters keep matching older spans. Neither field appears in trace results, because a trace can match through one span while its other spans used a different model.
 
 ```typescript
 const selectedModel = {
