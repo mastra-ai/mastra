@@ -236,9 +236,10 @@ type RingWebhookEvent = {
     type: RingEventType
     attributes: {
       source: string
-      source_type: string
-      timestamp: number
-      sub_type?: RingMotionType
+      source_id?: string
+      source_type?: string
+      timestamp?: number
+      sub_type?: RingMotionType | 'paid' | 'trial'
       component_ids?: string[]
     }
   }
@@ -247,10 +248,11 @@ type RingWebhookEvent = {
 
 - `meta.account_id`: The Ring account the device belongs to.
 - `data.type`: The event type, from the table above.
-- `data.attributes.source`: The device ID.
+- `data.attributes.source`: The device ID for device events, or `subscriptions` for subscription events.
+- `data.attributes.source_id`: The subscription ID, on subscription events.
 - `data.attributes.source_type`: The kind of source. `devices` for events from a device.
-- `data.attributes.timestamp`: When the event happened, in epoch milliseconds.
-- `data.attributes.sub_type`: What caused a motion event: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off.
+- `data.attributes.timestamp`: When a device event happened, in epoch milliseconds. It's missing on subscription events.
+- `data.attributes.sub_type`: What caused a motion event: `human`, `vehicle`, `package_delivery`, `other_motion`, or `motion` when Smart Alerts are off. `paid` or `trial` on subscription events.
 - `data.attributes.component_ids`: The cameras involved, on devices with more than one.
 
 ## Tools
