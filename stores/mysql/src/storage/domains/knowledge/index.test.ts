@@ -1,4 +1,4 @@
-import { createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createPool } from 'mysql2/promise';
 import { afterAll, describe, expect, it, vi } from 'vitest';
 
@@ -18,7 +18,7 @@ const pool = createPool({
 });
 const operations = new StoreOperationsMySQL({ pool, database });
 const createStore = () => new KnowledgeMySQL({ pool, operations });
-createKnowledgeStorageTests(createStore);
+createKnowledgePageStoreTests(createStore);
 
 describe('MySQL knowledge legacy schema upgrade', () => {
   it('adds the description column to pre-existing tables and reads legacy rows as undefined', async () => {

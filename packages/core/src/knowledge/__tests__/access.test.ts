@@ -1,6 +1,6 @@
 import { beforeEach, describe, expect, it } from 'vitest';
-import { InMemoryStore } from '../../storage/mock';
 import type { KnowledgeReadScope, KnowledgeStorage } from '../../storage/domains/knowledge';
+import { InMemoryStore } from '../../storage/mock';
 import { knowledgeReadScopeFor, knowledgeRoleOn } from '../access';
 import { compileKnowledgeScopes, knowledgeMemoryScopes } from '../declarations';
 

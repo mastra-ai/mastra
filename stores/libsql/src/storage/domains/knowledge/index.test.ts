@@ -4,7 +4,7 @@ import { tmpdir } from 'node:os';
 import { join } from 'node:path';
 
 import * as knowledgeCompat from '@internal/core/knowledge-compat';
-import { createKnowledgeSchemaResetTests, createKnowledgeStorageTests } from '@internal/storage-test-utils';
+import { createKnowledgeSchemaResetTests, createKnowledgePageStoreTests } from '@internal/storage-test-utils';
 import { createClient } from '@libsql/client';
 import {
   KNOWLEDGE_TABLE_NAMES,
@@ -85,7 +85,7 @@ describe('Knowledge v2 Core compatibility', () => {
   });
 });
 
-createKnowledgeStorageTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
+createKnowledgePageStoreTests(() => new KnowledgeLibSQL({ url: 'file::memory:?cache=shared' }));
 
 async function seedPublishedKnowledgeV1(client: ReturnType<typeof createClient>): Promise<void> {
   const sql = await readFile(new URL('./fixtures/published-1.21.1.sql', import.meta.url), 'utf8');
