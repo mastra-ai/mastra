@@ -71,7 +71,7 @@ export type UseSpansFilterBarOptions = {
 
 /**
  * The span filters as a filter bar value, and the handlers that write bar edits back.
- * The time-range chip is a synthetic, always-present item; it never round-trips to tokens.
+ * The time range is a synthetic, always-present item; it never round-trips to tokens.
  */
 export function useSpansFilterBar({ tokens, groups, onFiltersChange }: UseSpansFilterBarOptions): {
   filterBarValue: FilterBarExpression;

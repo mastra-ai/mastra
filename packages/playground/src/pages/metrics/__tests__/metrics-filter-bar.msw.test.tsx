@@ -86,6 +86,7 @@ const renderSettledPage = async (path?: string) => {
 const getChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
 const getChipLabels = () => getChips().map(chip => chip.getAttribute('aria-label'));
 const getChip = (label: string) => screen.getByRole('group', { name: label });
+const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
 const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
 const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
@@ -109,24 +110,24 @@ beforeEach(() => {
 
 describe('Metrics page filter bar', () => {
   describe('when no filter is set', () => {
-    it('shows a single non-removable Time chip set to the last 24 hours', async () => {
+    it('shows only the time range, set to the last 24 hours', async () => {
       setupHandlers();
       await renderSettledPage();
 
       expect(screen.getByRole('group', { name: 'Metrics filters' })).toBeTruthy();
-      expect(getChipLabels()).toEqual(['Time']);
-      expect(within(getChip('Time')).getByRole('button', { name: 'Time range: Last 24 hours' })).toBeTruthy();
-      expect(within(getChip('Time')).queryByRole('button', { name: /remove/i })).toBeNull();
+      expect(getChipLabels()).toEqual([]);
+      expect(within(getTimeRange()).getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
+      expect(within(getTimeRange()).queryByRole('button', { name: /remove/i })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
     });
   });
 
   describe('when the URL carries filters', () => {
-    it('renders one chip per filter after the Time chip, in URL order', async () => {
+    it('renders one chip per filter after the time range, in URL order', async () => {
       setupHandlers();
       await renderSettledPage('/metrics?filterEnvironment=production&filterTags=beta&filterTags=support');
 
-      expect(getChipLabels()).toEqual(['Time', 'Environment production', 'Tags beta, support']);
+      expect(getChipLabels()).toEqual(['Environment production', 'Tags beta, support']);
     });
 
     it('requires every tag of the Tags chip in metrics requests', async () => {
@@ -143,7 +144,7 @@ describe('Metrics page filter bar', () => {
       setupHandlers();
       await renderSettledPage('/metrics?filterModel=gpt-4o');
 
-      expect(getChipLabels()).toEqual(['Time', 'Model gpt-4o']);
+      expect(getChipLabels()).toEqual(['Model gpt-4o']);
     });
   });
 
@@ -155,7 +156,7 @@ describe('Metrics page filter bar', () => {
       await pickFilter('Environment', 'production');
 
       await waitFor(() => expect(getUrlParams().get('filterEnvironment')).toBe('production'));
-      expect(getChipLabels()).toEqual(['Time', 'Environment production']);
+      expect(getChipLabels()).toEqual(['Environment production']);
     });
 
     it('scopes metrics requests to that environment', async () => {
@@ -199,10 +200,10 @@ describe('Metrics page filter bar', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
       await waitFor(() => expect(getLocation()).toBe('/metrics?period=7d'));
-      expect(getChipLabels()).toEqual(['Time']);
+      expect(getChipLabels()).toEqual([]);
       // Clear hands focus to the input, which opens its field list over the bar.
       pressFilterKey('Escape');
-      expect(within(getChip('Time')).getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
+      expect(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
     });
 
     it('forgets the saved filters', async () => {
@@ -225,29 +226,29 @@ describe('Metrics page filter bar', () => {
       await renderSettledPage();
 
       await waitFor(() => expect(getUrlParams().get('filterEnvironment')).toBe('production'));
-      expect(getChipLabels()).toEqual(['Time', 'Environment production']);
+      expect(getChipLabels()).toEqual(['Environment production']);
     });
   });
 
-  describe('when the user picks Last 7 days from the Time chip', () => {
+  describe('when the user picks Last 7 days from the time range', () => {
     it('writes the period to the URL', async () => {
       setupHandlers();
       await renderSettledPage();
 
-      fireEvent.click(screen.getByRole('button', { name: 'Time range: Last 24 hours' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Last 24 hours' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 7 days' }));
 
       await waitFor(() => expect(getLocation()).toBe('/metrics?period=7d'));
-      expect(screen.getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
     });
   });
 
-  describe('when the user applies a custom range from the Time chip', () => {
+  describe('when the user applies a custom range from the time range', () => {
     it('writes both bounds of the range to the URL', async () => {
       setupHandlers();
       await renderSettledPage('/metrics?period=custom&dateFrom=2026-01-01T12:00:00Z&dateTo=2026-01-06T12:00:00Z');
 
-      fireEvent.click(within(getChip('Time')).getByRole('button', { name: /^Time range: / }));
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: /\u2013/ }));
       fireEvent.click(await screen.findByRole('button', { name: 'Apply' }));
 
       // The editor applies its default 12:00 AM – 11:59 PM times to the picked days.

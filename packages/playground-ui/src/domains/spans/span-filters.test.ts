@@ -42,7 +42,7 @@ describe('span filter fields', () => {
       }
     });
 
-    it('leaves the start and end timestamps to the time-range chip', () => {
+    it('leaves the start and end timestamps to the time range', () => {
       expect(fieldIds(true)).not.toContain('startedAt');
       expect(fieldIds(true)).not.toContain('endedAt');
     });

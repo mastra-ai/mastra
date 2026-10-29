@@ -13,9 +13,10 @@ import { cn } from '@/lib/utils';
 // to the full available width instead of the widest item.
 const MENU_ITEM_OVERRIDES = cn(
   'flex w-full justify-start gap-2 rounded-lg px-2 text-left text-menu text-muted-foreground select-none',
-  // Leading icons and trailing chevrons share a tone that follows pointer,
-  // keyboard, and held-open submenu states together with the label.
-  '[--menu-icon-color:var(--placeholder)] [&>svg]:text-(color:--menu-icon-color)',
+  // Leading icons and trailing chevrons take the shared control icon rule (ghost Button's
+  // `controlIconState`), one step quieter than in a toolbar, and also follow the keyboard
+  // highlight and a held-open submenu, which a menu row has and a Button does not.
+  '[--control-icon-hover:var(--muted-foreground)] [--control-icon-rest:var(--placeholder)]',
   '[&>svg]:transition-[color] [&>svg]:duration-fast [&>svg]:ease-out-custom motion-reduce:[&>svg]:transition-none',
   // An item may carry a second line (a name over its description). The Button
   // height becomes the floor so single-line rows keep the control rhythm and a
@@ -28,8 +29,7 @@ const MENU_ITEM_OVERRIDES = cn(
   // tailwind-merge drops them; any other spelling leaves both surfaces painted.
   'not-disabled:hover:bg-transparent not-disabled:active:bg-transparent',
   'not-disabled:hover:text-foreground/80 data-highlighted:text-foreground/80 data-selected:text-foreground/80 data-[popup-open]:text-foreground/80',
-  'not-disabled:hover:[--menu-icon-color:var(--muted-foreground)] data-highlighted:[--menu-icon-color:var(--muted-foreground)]',
-  'data-selected:[--menu-icon-color:var(--muted-foreground)] data-[popup-open]:[--menu-icon-color:var(--muted-foreground)]',
+  'data-highlighted:[--control-icon:var(--control-icon-hover)] data-selected:[--control-icon:var(--control-icon-hover)] data-[popup-open]:[--control-icon:var(--control-icon-hover)]',
   'data-disabled:pointer-events-none data-disabled:cursor-not-allowed data-disabled:opacity-50',
   '[&>span]:truncate',
   // Button pulls iconed labels toward its pill edge. A menu uses the same inset
@@ -49,7 +49,7 @@ export const menuItemDestructiveClass = cn(
 // Trailing indicator (check / submenu chevron) — applied to a wrapper element, not the
 // svg itself, so the Button recipe's `[&>svg]` adornment padding never treats it as a leading icon.
 export const menuItemTrailingIconClass = cn(
-  'ml-auto flex size-icon-sm shrink-0 items-center justify-center text-(color:--menu-icon-color) [&>svg]:size-full',
+  'ml-auto flex size-icon-sm shrink-0 items-center justify-center text-(color:--control-icon) [&>svg]:size-full',
   controlStateColorTransition,
 );
 

@@ -9,7 +9,7 @@ import type { TraceFilterGroup, TraceFilterToken } from '@/domains/traces/trace-
 import type { TraceDatePreset } from '@/domains/traces/types';
 import type { DataListSort } from '@/ds/components/DataList/data-list-sortable-top-cell';
 
-// Same window as /traces, so switching between the pages keeps the time chip identical.
+// Same window as /traces, so switching between the pages keeps the time range identical.
 const DEFAULT_DATE_PRESET: TraceDatePreset = DEFAULT_TRACES_FILTERS.datePreset;
 
 type DateState = { datePreset: TraceDatePreset; dateFrom?: Date; dateTo?: Date };

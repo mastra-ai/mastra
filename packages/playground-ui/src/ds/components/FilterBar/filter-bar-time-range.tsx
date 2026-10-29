@@ -1,22 +1,19 @@
 /* eslint-disable react-refresh/only-export-components */
-import { CalendarIcon, XIcon } from 'lucide-react';
-import type { KeyboardEvent } from 'react';
-import { FilterBarChip, editableSegmentClass, removeSegmentClass } from './filter-bar-chip';
+import { CalendarIcon } from 'lucide-react';
+import { useRef } from 'react';
+import { FILTER_BAR_CONTROL_SIZE } from './filter-bar-chip';
 import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarField, FilterBarItem } from './types';
+import { useFilterBarItemKeys } from './use-filter-bar-item-keys';
 import { DateTimeRangePicker } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
-import type {
-  DateRangePreset,
-  DateTimeRangePickerProps,
-} from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
-import { cn } from '@/lib/utils';
+import type { DateTimeRangePickerProps } from '@/ds/components/DateTimeRangePicker/date-time-range-picker';
 
 export const FILTER_BAR_TIME_RANGE_FIELD_ID = 'timeRange';
 
 /**
  * Synthetic field backing the time range control. Hidden from the input's field step (the
- * range cannot be added twice) but registered so the chip resolves its label and takes part
- * in keyboard navigation. Add it to the bar's `fields` and `FILTER_BAR_TIME_RANGE_ITEM` to its
+ * range cannot be added twice) but registered so the bar resolves its label and takes it into
+ * keyboard navigation. Add it to the bar's `fields` and `FILTER_BAR_TIME_RANGE_ITEM` to its
  * `items`, then render `FilterBar.TimeRange` for that item from `FilterBar.Chips`.
  */
 export const FILTER_BAR_TIME_RANGE_FIELD: FilterBarField = {
@@ -35,69 +32,39 @@ export const FILTER_BAR_TIME_RANGE_ITEM: FilterBarItem = {
   value: '',
 };
 
-export type FilterBarTimeRangeProps = Omit<DateTimeRangePickerProps, 'size' | 'renderTrigger'> & {
-  /** Shows a × that switches back to this preset whenever another range is selected. */
-  defaultPreset?: DateRangePreset;
-};
-
-const isSegment = (target: EventTarget | null) =>
-  target instanceof HTMLElement && target.hasAttribute('data-filter-bar-segment');
+export type FilterBarTimeRangeProps = Omit<DateTimeRangePickerProps, 'size' | 'ref'>;
 
 /**
- * A filter bar's time range: calendar, range, chevron, the same control as a standalone
- * `DateTimeRangePicker`. Always present and non-removable, so it reads as the bar's scope
- * rather than as a `field · value` filter. With `defaultPreset`, a trailing × resets the range to it.
+ * A filter bar's time range: the `DateTimeRangePicker` itself at the bar's rung, so it looks and
+ * behaves exactly as it does anywhere else, reset × included. It scopes the bar rather than
+ * filtering it, so it is not a removable chip; the wrapper only joins it to the bar's arrow-key
+ * order.
  */
-export function FilterBarTimeRange({ defaultPreset, ...props }: FilterBarTimeRangeProps) {
+export function FilterBarTimeRange(props: FilterBarTimeRangeProps) {
   const ctx = useFilterBarContext();
-  const canReset = defaultPreset !== undefined && props.preset !== defaultPreset;
+  const rootRef = useRef<HTMLDivElement>(null);
+  const { onKeyDown } = useFilterBarItemKeys({
+    item: FILTER_BAR_TIME_RANGE_ITEM,
+    rootRef,
+    pinned: true,
+    removable: false,
+    segmentSelector: 'button',
+  });
+
   return (
-    <FilterBarChip item={FILTER_BAR_TIME_RANGE_ITEM} removable={false}>
-      {/* The picker popup is portaled but bubbles React events through here — keep its
-          keystrokes from reaching the chip's arrow-key navigation. */}
-      <div
-        className="contents"
-        onKeyDown={(event: KeyboardEvent<HTMLDivElement>) => {
-          if (!isSegment(event.target)) event.stopPropagation();
-        }}
-      >
-        <DateTimeRangePicker
-          {...props}
-          renderTrigger={({ label, icon, iconEnd, disabled }) => (
-            <button
-              type="button"
-              ref={el => ctx.registerSegment(FILTER_BAR_TIME_RANGE_ITEM.id, 'value', el)}
-              data-filter-bar-segment=""
-              disabled={disabled}
-              aria-label={`Time range: ${label}`}
-              title={label}
-              className={cn(
-                editableSegmentClass,
-                'max-w-64 gap-1.5 text-foreground [&>svg]:size-[1.1em] [&>svg]:shrink-0 [&>svg]:text-muted-foreground',
-              )}
-            >
-              {icon}
-              <span className="truncate">{label}</span>
-              {iconEnd}
-            </button>
-          )}
-        />
-      </div>
-      {canReset && (
-        <button
-          type="button"
-          data-filter-bar-segment=""
-          tabIndex={-1}
-          ref={el => ctx.registerSegment(FILTER_BAR_TIME_RANGE_ITEM.id, 'remove', el)}
-          disabled={props.disabled}
-          aria-label="Reset time range"
-          title="Reset time range"
-          className={removeSegmentClass}
-          onClick={() => props.onPresetChange?.(defaultPreset)}
-        >
-          <XIcon className="size-[1.1em]" />
-        </button>
-      )}
-    </FilterBarChip>
+    <div
+      ref={rootRef}
+      role="group"
+      aria-label="Time range"
+      data-slot="filter-bar-time-range"
+      className="flex"
+      onKeyDown={onKeyDown}
+    >
+      <DateTimeRangePicker
+        {...props}
+        size={FILTER_BAR_CONTROL_SIZE}
+        ref={el => ctx.registerSegment(FILTER_BAR_TIME_RANGE_ITEM.id, 'value', el)}
+      />
+    </div>
   );
 }

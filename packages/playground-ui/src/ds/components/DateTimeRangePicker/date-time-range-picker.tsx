@@ -1,10 +1,10 @@
-import { CalendarIcon } from 'lucide-react';
+import { CalendarIcon, XIcon } from 'lucide-react';
 import { useState } from 'react';
-import type { ReactElement, ReactNode } from 'react';
+import type { ReactElement, Ref } from 'react';
 import { CustomRangeEditor } from './custom-range-editor';
-import { Button } from '@/ds/components/Button/Button';
-import type { ButtonProps } from '@/ds/components/Button/Button';
-import { DisclosureChevron } from '@/ds/components/DisclosureChevron/disclosure-chevron';
+import { Button, TriggerChevron } from '@/ds/components/Button/Button';
+import type { TextButtonSize } from '@/ds/components/Button/Button';
+import { ButtonsGroup } from '@/ds/components/ButtonsGroup/buttons-group';
 import { DropdownMenu } from '@/ds/components/DropdownMenu/dropdown-menu';
 import { Popover, PopoverTrigger, PopoverContent } from '@/ds/components/Popover/popover';
 import { cn } from '@/lib/utils';
@@ -39,22 +39,15 @@ export interface DateTimeRangePickerProps {
   minDate?: Date;
   /** Subset of presets to show. If omitted, all presets are shown. */
   presets?: readonly DateRangePreset[];
-  /** Size passed through to the trigger Button. Defaults to 'md'. */
-  size?: ButtonProps['size'];
+  /** Size of the trigger Button. Defaults to 'sm', the toolbar rung. */
+  size?: TextButtonSize;
   /**
-   * Replace the default Button trigger with another element, e.g. a filter bar segment. It
-   * receives the trigger's content (calendar `icon`, `label`, chevron `iconEnd`) so every
-   * host shows the same control, and must return an element the menu/popover can attach to.
+   * The preset a custom range resets to. While a custom range is applied, a × joined to the
+   * trigger takes the chevron's place and switches back to it.
    */
-  renderTrigger?: (props: DateTimeRangePickerTriggerProps) => ReactElement;
-}
-
-export interface DateTimeRangePickerTriggerProps {
-  /** Preset name or custom range. */
-  label: string;
-  icon: ReactNode;
-  iconEnd: ReactNode;
-  disabled?: boolean;
+  defaultPreset?: DateRangePreset;
+  /** The trigger Button. */
+  ref?: Ref<HTMLButtonElement>;
 }
 
 export function DateTimeRangePicker({
@@ -68,8 +61,9 @@ export function DateTimeRangePicker({
   maxRangeMs,
   minDate,
   presets,
-  size = 'md',
-  renderTrigger,
+  size = 'sm',
+  defaultPreset,
+  ref,
 }: DateTimeRangePickerProps) {
   const visiblePresets = presets ? DATE_PRESETS.filter(p => presets.includes(p.value)) : DATE_PRESETS;
   const [customRangeOpen, setCustomRangeOpen] = useState(false);
@@ -127,59 +121,84 @@ export function DateTimeRangePicker({
     setPresetMenuOpen(true);
   };
 
+  const reset =
+    defaultPreset !== undefined && shownPreset === 'custom' ? (
+      <Button
+        size={`icon-${size}` as const}
+        tooltip="Reset time range"
+        disabled={disabled}
+        onClick={() => applyPreset(defaultPreset)}
+      >
+        <XIcon />
+      </Button>
+    ) : undefined;
+
   const customLabel = `${dateFrom ? dateFrom.toLocaleDateString() : 'Start'} \u2013 ${dateTo ? dateTo.toLocaleDateString() : 'End'}`;
-  const triggerProps: DateTimeRangePickerTriggerProps = {
-    label: shownPreset === 'custom' ? customLabel : datePresetLabel,
-    icon: <CalendarIcon />,
-    iconEnd: <DisclosureChevron />,
-    disabled,
-  };
-  const trigger = renderTrigger ? (
-    renderTrigger(triggerProps)
-  ) : (
-    <Button size={size} disabled={disabled} icon={triggerProps.icon} iconEnd={triggerProps.iconEnd}>
-      {triggerProps.label}
+  const trigger = (
+    <Button
+      ref={ref}
+      size={size}
+      disabled={disabled}
+      icon={<CalendarIcon />}
+      iconEnd={reset ? undefined : <TriggerChevron />}
+    >
+      {shownPreset === 'custom' ? customLabel : datePresetLabel}
     </Button>
   );
 
   if (shownPreset === 'custom' && !presetMenuOpen) {
     return (
-      <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
-        <PopoverTrigger render={trigger} />
-        <PopoverContent align="start" className={cn('w-auto p-0')}>
-          <CustomRangeEditor
-            dateFrom={dateFrom}
-            dateTo={dateTo}
-            disabled={disabled}
-            maxRangeMs={maxRangeMs}
-            minDate={minDate}
-            onApply={applyCustomRange}
-            onShowPresets={showPresets}
-          />
-        </PopoverContent>
-      </Popover>
+      <JoinReset reset={reset} size={size}>
+        <Popover open={customRangeOpen} onOpenChange={setCustomRangeOpen}>
+          <PopoverTrigger render={trigger} />
+          <PopoverContent align="start" className={cn('w-auto p-0')}>
+            <CustomRangeEditor
+              dateFrom={dateFrom}
+              dateTo={dateTo}
+              disabled={disabled}
+              maxRangeMs={maxRangeMs}
+              minDate={minDate}
+              onApply={applyCustomRange}
+              onShowPresets={showPresets}
+            />
+          </PopoverContent>
+        </Popover>
+      </JoinReset>
     );
   }
 
   return (
-    <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
-      <DropdownMenu.Trigger render={trigger} />
-      <DropdownMenu.Content align="start">
-        {/* Items select on click (not onValueChange) so re-picking the checked
+    <JoinReset reset={reset} size={size}>
+      <DropdownMenu open={presetMenuOpen} onOpenChange={setPresetMenuOpen}>
+        <DropdownMenu.Trigger render={trigger} />
+        <DropdownMenu.Content align="start">
+          {/* Items select on click (not onValueChange) so re-picking the checked
             "Custom range..." still reopens the range editor. */}
-        <DropdownMenu.RadioGroup value={shownPreset}>
-          {visiblePresets.map(p => (
-            <DropdownMenu.RadioItem
-              key={p.value}
-              value={p.value}
-              closeOnClick
-              onClick={() => handlePresetSelect(p.value)}
-            >
-              {p.label}
-            </DropdownMenu.RadioItem>
-          ))}
-        </DropdownMenu.RadioGroup>
-      </DropdownMenu.Content>
-    </DropdownMenu>
+          <DropdownMenu.RadioGroup value={shownPreset}>
+            {visiblePresets.map(p => (
+              <DropdownMenu.RadioItem
+                key={p.value}
+                value={p.value}
+                closeOnClick
+                onClick={() => handlePresetSelect(p.value)}
+              >
+                {p.label}
+              </DropdownMenu.RadioItem>
+            ))}
+          </DropdownMenu.RadioGroup>
+        </DropdownMenu.Content>
+      </DropdownMenu>
+    </JoinReset>
+  );
+}
+
+/** The trigger alone, or joined with the reset × as one pill. */
+function JoinReset({ reset, size, children }: { reset?: ReactElement; size: TextButtonSize; children: ReactElement }) {
+  if (!reset) return children;
+  return (
+    <ButtonsGroup size={size}>
+      {children}
+      {reset}
+    </ButtonsGroup>
   );
 }

@@ -13,7 +13,7 @@ test.describe('Metrics dashboard page', () => {
 
       await expect(page).toHaveTitle(/Mastra Studio/);
       await expectCurrentBreadcrumb(page, 'Metrics');
-      await expect(page.getByRole('button', { name: 'Time range: Last 24 hours' })).toBeVisible();
+      await expect(page.getByRole('button', { name: 'Last 24 hours' })).toBeVisible();
     });
   });
 
@@ -52,7 +52,7 @@ test.describe('Metrics dashboard page', () => {
     test('updates the URL with the new period', async ({ page }) => {
       await page.goto('/metrics');
 
-      await page.getByRole('button', { name: 'Time range: Last 24 hours' }).click();
+      await page.getByRole('button', { name: 'Last 24 hours' }).click();
       await page.getByRole('menuitemradio', { name: 'Last 7 days' }).click();
 
       await expect(page).toHaveURL(/period=7d/);

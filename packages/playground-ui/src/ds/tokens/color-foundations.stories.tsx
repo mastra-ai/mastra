@@ -329,6 +329,14 @@ const textRows: TokenRow[] = [
   { token: 'foreground', use: <span className="text-foreground">Values, names, prose</span> },
   { token: 'muted-foreground', use: <span className="text-muted-foreground">Labels, timestamps, descriptions</span> },
   { token: 'placeholder', use: <span className="text-placeholder">Text not written yet</span> },
+  {
+    token: 'control-icon-rest',
+    use: <span className="text-(color:--control-icon-rest)">Icons inside a control, at rest</span>,
+  },
+  {
+    token: 'control-icon-hover',
+    use: <span className="text-(color:--control-icon-hover)">Icons inside a control, while hovered</span>,
+  },
 ];
 
 const productRoles = ['studio', 'server', 'observability', 'factory', 'workers', 'persistent-server'];

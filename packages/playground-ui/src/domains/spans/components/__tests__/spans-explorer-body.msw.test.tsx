@@ -76,15 +76,14 @@ describe('SpansExplorerBody', () => {
   });
 
   describe('when the store returns span rows', () => {
-    it('puts the Columns button ahead of the filters', async () => {
+    it('puts the Columns button after the filters', async () => {
       setHandlers(spanRowsPage);
 
       renderBody();
       const columns = await screen.findByRole('button', { name: 'Columns' });
 
-      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      const timeRange = screen.getByRole('group', { name: 'Time range', hidden: true });
+      expect(columns.compareDocumentPosition(timeRange) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
 
     it('lists each span', async () => {
@@ -349,9 +348,8 @@ describe('SpansExplorerBody histogram', () => {
       await screen.findByRole('region', { name: 'Spans over time' });
       onAggregate.mockClear();
 
-      const dateChip = document.querySelector<HTMLElement>('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      fireEvent.click(within(dateChip).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }));
+      const picker = screen.getByRole('group', { name: 'Time range', hidden: true });
+      fireEvent.click(within(picker).getByRole('button', { name: 'Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
       await waitFor(() => expect(onAggregate).toHaveBeenCalled());
@@ -401,7 +399,7 @@ describe('SpansExplorerBody histogram', () => {
       const reset = onAggregate.mock.lastCall?.[0].timeRange;
       expect(Date.parse(reset.to) - Date.parse(reset.from)).toBe(7 * 24 * 60 * 60 * 1000);
       expect(onSpanQuery.mock.lastCall?.[0].timeRange).toEqual(reset);
-      expect(screen.getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
       expect(screen.queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
   });

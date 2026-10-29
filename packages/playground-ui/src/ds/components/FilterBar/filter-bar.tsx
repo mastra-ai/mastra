@@ -69,7 +69,7 @@ function FilterBarSurface({
         // No chrome of its own: chips and the typeahead input sit directly on the parent surface.
         // Layout: chips, input, then Clear right beside the input — all in one wrapping row so
         // Clear never drifts to the far edge of a wide container.
-        'flex w-full flex-wrap items-center gap-1',
+        'flex w-full flex-wrap items-center gap-1.5',
         className,
       )}
     >

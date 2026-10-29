@@ -28,7 +28,7 @@ export type ThreadsFilterBarProps = {
   disabled?: boolean;
 };
 
-/** The threads filter bar: a time range chip plus the fields `queryTraceThreads()` accepts. */
+/** The threads filter bar: the time range plus the fields `queryTraceThreads()` accepts. */
 export function ThreadsFilterBar({
   datePreset,
   dateFrom,

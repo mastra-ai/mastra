@@ -26,7 +26,10 @@ const setDiscoveryHandlers = () =>
     ),
   );
 
-const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
+// The bar's items in order: the time range, then the chips.
+const getBarItems = () => [
+  ...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-time-range"], [data-slot="filter-bar-chip"]'),
+];
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
 
 const renderBar = async (tokens: TraceFilterToken[]) => {
@@ -49,10 +52,10 @@ const renderBar = async (tokens: TraceFilterToken[]) => {
 
 describe('ThreadsFilterBar', () => {
   describe('when there are thread filters', () => {
-    it('renders the time range chip before the filter chips', async () => {
+    it('renders the time range before the filter chips', async () => {
       await renderBar(statusAndRunTokens);
 
-      expect(getFilterChips().map(chip => chip.textContent)).toEqual([
+      expect(getBarItems().map(chip => chip.textContent)).toEqual([
         expect.stringContaining('Last 24 hours'),
         expect.stringContaining('Status'),
         expect.stringContaining('run-a'),

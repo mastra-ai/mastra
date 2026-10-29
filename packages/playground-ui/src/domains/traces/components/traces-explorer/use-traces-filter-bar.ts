@@ -75,7 +75,7 @@ export function useTracesFilterBar() {
   const { filters, setFilterTokens } = useTracesFilters();
 
   const items = traceTokensToFilterBarItems(filters.tokens).filter(item => !scopedFieldIds.has(item.fieldId));
-  // The time-range chip is a synthetic, always-present item so it takes part in keyboard
+  // The time range is a synthetic, always-present item so it takes part in keyboard
   // navigation; it never round-trips to filter tokens. Expression mode so root-level AND/OR
   // groups render as "Advanced filter" chips.
   const groupsExpression = traceFiltersToFilterBarExpression([], filters.groups);

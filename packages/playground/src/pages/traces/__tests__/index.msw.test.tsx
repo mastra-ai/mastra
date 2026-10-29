@@ -130,6 +130,12 @@ const renderPage = (initialEntry = '/traces', props: React.ComponentProps<typeof
   );
 
 const getFilterChips = () => document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]');
+// By slot, not role: an open sheet or popup aria-hides the bar, which leaves the group unnamed.
+const getTimeRange = () => {
+  const timeRange = document.querySelector<HTMLElement>('[data-slot="filter-bar-time-range"]');
+  if (!timeRange) throw new Error('time range not rendered');
+  return timeRange;
+};
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' });
 const focusFilterInput = () => act(() => getFilterInput().focus());
 const typeInFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
@@ -843,7 +849,7 @@ describe('Traces page columns menu', () => {
   });
 
   describe('when the page has loaded', () => {
-    it('puts the Columns button ahead of the filters', async () => {
+    it('puts the Columns button after the filters', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage();
@@ -853,9 +859,7 @@ describe('Traces page columns menu', () => {
       });
 
       const columns = screen.getByRole('button', { name: 'Columns' });
-      const dateChip = document.querySelector('[data-slot="filter-bar-chip"]');
-      if (!dateChip) throw new Error('date chip not rendered');
-      expect(columns.compareDocumentPosition(dateChip) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+      expect(columns.compareDocumentPosition(getTimeRange()) & Node.DOCUMENT_POSITION_PRECEDING).toBeTruthy();
     });
   });
 
@@ -983,7 +987,7 @@ describe('Traces page columns menu', () => {
 
 describe('Traces page filter bar', () => {
   describe('when the page loads without any filter', () => {
-    it('renders a non-removable Time chip defaulting to Last 7 days', async () => {
+    it('renders the time range defaulting to Last 7 days and no chips', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage();
@@ -992,16 +996,14 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      const chips = [...getFilterChips()];
-      expect(chips).toHaveLength(1);
-      expect(chips[0]?.textContent).toBe('Last 7 days');
-      expect(within(chips[0]).getByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
-      expect(within(chips[0]).queryByRole('button', { name: /remove/i })).toBeNull();
+      expect(getFilterChips()).toHaveLength(0);
+      expect(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      expect(within(getTimeRange()).queryByRole('button', { name: /remove/i })).toBeNull();
       expect(screen.queryByRole('button', { name: 'Clear filters' })).toBeNull();
     });
   });
 
-  describe('when the user picks Last 24 hours from the Time chip', () => {
+  describe('when the user picks Last 24 hours from the time range', () => {
     it('writes the preset to the URL', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
@@ -1011,16 +1013,16 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      fireEvent.click(screen.getByRole('button', { name: 'Time range: Last 7 days' }));
+      fireEvent.click(screen.getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
-      expect(screen.getByRole('button', { name: 'Time range: Last 24 hours' })).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Last 24 hours' })).toBeTruthy();
     });
   });
 
   describe('when the URL carries filterTraceId and filterEnvironment', () => {
-    it('renders the Time chip then one chip per filter in URL order', async () => {
+    it('renders the time range then one chip per filter in URL order', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
@@ -1030,15 +1032,14 @@ describe('Traces page filter bar', () => {
       });
 
       const chips = getFilterChips();
-      expect(chips).toHaveLength(3);
-      expect(chips[0]?.textContent).toContain('Last 7 days');
-      expect(chips[1]?.textContent).toContain('Trace ID');
-      expect(chips[1]?.textContent).toContain('trace-a');
-      expect(chips[2]?.textContent).toContain('Environment');
-      expect(chips[2]?.textContent).toContain('prod');
+      expect(chips).toHaveLength(2);
+      expect(chips[0]?.textContent).toContain('Trace ID');
+      expect(chips[0]?.textContent).toContain('trace-a');
+      expect(chips[1]?.textContent).toContain('Environment');
+      expect(chips[1]?.textContent).toContain('prod');
     });
 
-    it('keeps the Time chip after Clear filters', async () => {
+    it('keeps the time range after Clear filters', async () => {
       setTracePageHandlers(metricsCapableCapabilities);
 
       const { queryClient } = renderPage('/traces?filterTraceId=trace-a&filterEnvironment=prod');
@@ -1049,8 +1050,8 @@ describe('Traces page filter bar', () => {
 
       fireEvent.click(screen.getByRole('button', { name: 'Clear filters' }));
 
-      await waitFor(() => expect(getFilterChips()).toHaveLength(1));
-      expect(getFilterChips()[0]?.textContent).toContain('Last 7 days');
+      await waitFor(() => expect(getFilterChips()).toHaveLength(0));
+      expect(getTimeRange().textContent).toContain('Last 7 days');
       expect(screen.getByTestId('location').textContent).not.toContain('filterTraceId');
     });
   });
@@ -1070,7 +1071,7 @@ describe('Traces page filter bar', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      const chips = Array.from(getFilterChips(), chip => chip.textContent).slice(1);
+      const chips = Array.from(getFilterChips(), chip => chip.textContent);
       expect(chips).toHaveLength(3);
       expect(chips[0]).toBe('Trace IDistrace-a');
       expect(chips[1]).toContain('Tags');
@@ -1120,9 +1121,7 @@ describe('Traces page filter bar', () => {
         '{"op":"eq","left":{"path":"comment"},"right":{"literal":"wrong answer"}}',
       );
       expect(screen.queryByText(/Failed to load traces/i)).toBeNull();
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual([
-        'Feedback commentiswrong answer',
-      ]);
+      expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['Feedback commentiswrong answer']);
     });
   });
 
@@ -1140,7 +1139,7 @@ describe('Traces page filter bar', () => {
       fireEvent.click(await screen.findByRole('option', { name: 'Environment' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('filterEnvironment='));
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['Environmentis…']);
+      expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['Environmentis…']);
       expect(screen.getByTestId('location').textContent).not.toContain('status=');
     });
   });
@@ -1295,7 +1294,7 @@ describe('Traces page filter bar', () => {
     it('renders the flat chip and one "Advanced filter" chip', async () => {
       await renderCapturingQuery(entry);
 
-      expect(getFilterChips()[1]?.textContent).toContain('trace-a');
+      expect(getFilterChips()[0]?.textContent).toContain('trace-a');
       expect(screen.getByRole('group', { name: 'Advanced filter, 2 conditions' })).toBeTruthy();
     });
 
@@ -1492,7 +1491,7 @@ describe('Traces page filter bar', () => {
     it('renders the chip without a value segment', async () => {
       await renderExists();
 
-      const chip = getFilterChips()[1];
+      const chip = getFilterChips()[0];
       expect(chip?.textContent).toBe('Span errorexists');
       expect(within(chip).queryByRole('combobox', { name: /^Value/ })).toBeNull();
     });
@@ -1566,7 +1565,7 @@ describe('Traces page filter bar', () => {
     it('does not render chips for the scope fields', async () => {
       await renderScoped();
 
-      expect([...getFilterChips()].slice(1).map(chip => chip.textContent)).toEqual(['Trace IDistrace-a']);
+      expect([...getFilterChips()].map(chip => chip.textContent)).toEqual(['Trace IDistrace-a']);
     });
 
     it('keeps the scope in the URL after Clear filters', async () => {
@@ -1619,7 +1618,7 @@ describe('Agent traces page opened from a conversation', () => {
       window.localStorage.setItem(SAVED_FILTERS_KEY, 'status=error');
       await renderFromConversation();
 
-      const chips = [...getFilterChips()].slice(1);
+      const chips = [...getFilterChips()];
       expect(chips.map(chip => chip.textContent)).toEqual(['Thread IDisthread-1']);
       expect(within(chips[0]).getByRole('button', { name: /remove/i })).toBeTruthy();
       expect(screen.getByTestId('location').textContent).not.toContain('status=');
@@ -1630,7 +1629,7 @@ describe('Agent traces page opened from a conversation', () => {
     it('lists all of the agent traces', async () => {
       await renderFromConversation();
 
-      fireEvent.click(within([...getFilterChips()][1]).getByRole('button', { name: /remove/i }));
+      fireEvent.click(within([...getFilterChips()][0]).getByRole('button', { name: /remove/i }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).not.toContain('filterThreadId'));
       expect(screen.getByTestId('location').textContent).toContain('filterEntityId=weather-agent');
@@ -1641,7 +1640,7 @@ describe('Agent traces page opened from a conversation', () => {
     it('does not remember the conversation for the next visit', async () => {
       await renderFromConversation();
 
-      fireEvent.click(within([...getFilterChips()][0]).getByRole('button', { name: 'Time range: Last 7 days' }));
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days' }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours' }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));
@@ -1800,7 +1799,7 @@ describe('Traces page metadata filter discovery', () => {
         expect(queryClient.isFetching()).toBe(0);
       });
 
-      expect(Array.from(getFilterChips(), chip => chip.textContent).slice(1)).toEqual(['regioniseu-west']);
+      expect(Array.from(getFilterChips(), chip => chip.textContent)).toEqual(['regioniseu-west']);
     });
   });
 });
@@ -2030,9 +2029,7 @@ describe('Traces page parity', () => {
       const { queryClient } = renderPage('/traces?traceId=trace-a');
       await settle(queryClient);
 
-      fireEvent.click(
-        within([...getFilterChips()][0]).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }),
-      );
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
       await waitFor(() => expect(screen.getByTestId('location').textContent).toContain('datePreset=last-24h'));

@@ -1,8 +1,7 @@
-import { Button } from '@mastra/playground-ui/components/Button';
+import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
 import { SearchInput } from '@mastra/playground-ui/components/SearchInput';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
 import { cn } from '@mastra/playground-ui/utils/cn';
-import { XIcon } from 'lucide-react';
 
 type TemplatesToolsProps = {
   selectedTag: string;
@@ -46,15 +45,16 @@ export function TemplatesTools({
   }
 
   return (
-    <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-4 bg-background py-5', className)}>
+    <div className={cn('sticky top-0 mx-auto flex flex-wrap gap-1.5 bg-background py-5', className)}>
       <SearchInput
         label="Search templates"
-        placeholder="Search Template"
+        placeholder="Search templates"
+        size="sm"
         value={searchTerm}
         onValueChange={onSearchChange}
       />
       <Select value={selectedTag} onValueChange={onTagChange}>
-        <SelectTrigger aria-label="Filter by tag" size="md">
+        <SelectTrigger aria-label="Filter by tag" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>
@@ -66,7 +66,7 @@ export function TemplatesTools({
         </SelectContent>
       </Select>
       <Select value={selectedProvider} onValueChange={onProviderChange}>
-        <SelectTrigger aria-label="Filter by provider" size="md">
+        <SelectTrigger aria-label="Filter by provider" size="sm" className="w-auto">
           <SelectValue placeholder="Select an option" />
         </SelectTrigger>
         <SelectContent>
@@ -77,11 +77,7 @@ export function TemplatesTools({
           ))}
         </SelectContent>
       </Select>
-      {onReset && (
-        <Button onClick={onReset} icon={<XIcon />}>
-          Reset
-        </Button>
-      )}
+      {onReset && <ClearFiltersButton onClick={onReset} />}
     </div>
   );
 }

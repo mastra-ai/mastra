@@ -31,7 +31,10 @@ const setDiscoveryHandlers = (capabilities: GetObservabilityCapabilitiesResponse
 const settle = async (queryClient: { isFetching: () => number }) =>
   waitFor(() => expect(queryClient.isFetching()).toBe(0));
 
-const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
+// The bar's items in order: the time range, then the chips.
+const getBarItems = () => [
+  ...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-time-range"], [data-slot="filter-bar-chip"]'),
+];
 const getFilterInput = () => screen.getByRole('combobox', { name: 'Add filter' }) as HTMLInputElement;
 const typeFilter = (text: string) => fireEvent.change(getFilterInput(), { target: { value: text } });
 const pressFilterKey = (key: string) => fireEvent.keyDown(getFilterInput(), { key });
@@ -93,7 +96,7 @@ describe('spans filter bar composition', () => {
     it('renders the host field next to the span chips', async () => {
       await renderHostBar();
 
-      expect(getFilterChips().map(chip => chip.textContent)).toEqual([
+      expect(getBarItems().map(chip => chip.textContent)).toEqual([
         expect.stringContaining('Region'),
         expect.stringContaining('Last 24 hours'),
         expect.stringContaining('Status'),

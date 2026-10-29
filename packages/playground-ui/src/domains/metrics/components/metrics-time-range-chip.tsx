@@ -4,7 +4,7 @@ import { fromPickerPreset, METRICS_PICKER_PRESETS, toPickerPreset } from '../met
 import { FilterBarTimeRange } from '@/ds/components/FilterBar';
 
 /**
- * The dashboard's date range as the filter bar's `Time` chip, the same chip the Traces page shows.
+ * The dashboard's date range as the filter bar's time range, the same control the Traces page shows.
  * Render it from `FilterBar.Chips` for `FILTER_BAR_TIME_RANGE_ITEM`, inside a `MetricsProvider`.
  */
 export function MetricsTimeRangeChip() {

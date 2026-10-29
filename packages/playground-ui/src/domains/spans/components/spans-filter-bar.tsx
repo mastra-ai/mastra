@@ -29,7 +29,7 @@ export type SpansFilterBarProps = {
   disabled?: boolean;
 };
 
-/** The spans filter bar: a time range chip plus the fields `querySpans()` accepts. */
+/** The spans filter bar: the time range plus the fields `querySpans()` accepts. */
 export function SpansFilterBar({
   datePreset,
   dateFrom,

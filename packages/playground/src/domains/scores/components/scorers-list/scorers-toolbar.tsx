@@ -1,8 +1,7 @@
 import { ActionRow } from '@mastra/playground-ui/components/ActionRow';
-import { Button } from '@mastra/playground-ui/components/Button';
+import { ClearFiltersButton } from '@mastra/playground-ui/components/ClearFiltersButton';
 import { ListSearch } from '@mastra/playground-ui/components/ListSearch';
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from '@mastra/playground-ui/components/Select';
-import { XIcon } from 'lucide-react';
 import { useState } from 'react';
 import { SCORER_SOURCE_OPTIONS } from './constants';
 
@@ -45,7 +44,7 @@ export function ScorersToolbar({
           />
         </div>
         <Select value={sourceFilter} onValueChange={onSourceFilterChange}>
-          <SelectTrigger aria-label="Source" size="md" className="whitespace-nowrap">
+          <SelectTrigger aria-label="Source" size="sm" className="w-auto whitespace-nowrap">
             <SelectValue placeholder="Select an option" />
           </SelectTrigger>
           <SelectContent>
@@ -56,11 +55,7 @@ export function ScorersToolbar({
             ))}
           </SelectContent>
         </Select>
-        {onReset && hasActiveFilters && (
-          <Button onClick={handleReset} size="sm" variant="default" icon={<XIcon />}>
-            Reset
-          </Button>
-        )}
+        {onReset && hasActiveFilters && <ClearFiltersButton onClick={handleReset} />}
       </ActionRow.Start>
     </ActionRow>
   );

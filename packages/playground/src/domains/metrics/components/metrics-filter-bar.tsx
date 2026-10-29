@@ -15,11 +15,11 @@ import {
 
 const isTimeRangeItem = (item: FilterBarItem) => item.fieldId === FILTER_BAR_TIME_RANGE_FIELD_ID;
 
-/** Typeahead filter bar for the metrics dashboard: the time range chip, then one chip per dimension. */
+/** Typeahead filter bar for the metrics dashboard: the time range, then one chip per dimension. */
 export function MetricsFilterBar({ fields }: { fields: FilterBarField[] }) {
   const { filterTokens, setFilterTokens } = useMetrics();
 
-  // The time range chip is a synthetic, always-present item, as on Traces. Its state lives in the
+  // The time range is a synthetic, always-present item, as on Traces. Its state lives in the
   // date params, so it never round-trips through the filter tokens.
   const value = [FILTER_BAR_TIME_RANGE_ITEM, ...metricsTokensToFilterBarItems(filterTokens)];
 

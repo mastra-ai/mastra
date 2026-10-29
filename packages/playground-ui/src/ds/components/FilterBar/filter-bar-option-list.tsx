@@ -5,6 +5,7 @@ import { useFilterBarContext } from './filter-bar-context';
 import type { FilterBarOption } from './types';
 import { ComboboxPrimitive, comboboxStyles } from '@/ds/components/Combobox';
 import { Spinner } from '@/ds/components/Spinner/spinner';
+import { iconSizeClasses } from '@/ds/icons/icon-size-classes';
 import { FluidMenuItems, useFluidMenu, useFluidMenuItemRef } from '@/ds/primitives/fluid-menu';
 import { cn } from '@/lib/utils';
 
@@ -90,7 +91,16 @@ export function FilterBarOptionList<T>({
                   data-selected={selected || undefined}
                   className={cn(comboboxStyles.item, 'min-w-0')}
                 >
-                  <span className="flex min-w-0 flex-1 items-center gap-1.5 truncate">{renderOption(option)}</span>
+                  {/* The row's rung, which the wrapper would otherwise hide from a leading icon. */}
+                  <span
+                    className={cn(
+                      'flex min-w-0 flex-1 items-center gap-1.5 truncate',
+                      iconSizeClasses.md,
+                      '[&>svg]:shrink-0',
+                    )}
+                  >
+                    {renderOption(option)}
+                  </span>
                   <span className={comboboxStyles.itemRightSlot}>
                     <span className={comboboxStyles.checkContainer}>
                       {isSelected ? (

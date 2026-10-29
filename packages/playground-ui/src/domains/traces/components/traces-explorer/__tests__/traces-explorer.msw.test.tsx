@@ -232,6 +232,7 @@ const settle = async (queryClient: { isFetching: () => number }) => {
 };
 
 const getFilterChips = () => [...document.querySelectorAll<HTMLElement>('[data-slot="filter-bar-chip"]')];
+const getTimeRange = () => screen.getByRole('group', { name: 'Time range', hidden: true });
 const traceRow = (input: string) => screen.getByRole('button', { name: new RegExp(input) });
 const traceDialog = () => screen.queryByRole('dialog', { name: 'Trace details' });
 
@@ -486,9 +487,7 @@ describe('TracesExplorer', () => {
       await screen.findByRole('dialog', { name: 'Trace details' });
       onChange.mockClear();
 
-      fireEvent.click(
-        within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }),
-      );
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days', hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
       return { onChange };
     };
@@ -524,7 +523,7 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: /^Time range:/, hidden: true }));
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: /\u2013/, hidden: true }));
       fireEvent.click(await screen.findByRole('button', { name: /Presets/, hidden: true }));
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
       return { onChange };
@@ -561,28 +560,26 @@ describe('TracesExplorer', () => {
         dateTo: new Date('2026-01-02T00:00:00Z'),
       });
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Reset time range' }));
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Reset time range' }));
 
       const last = onChange.mock.calls.at(-1)?.[0].filters;
       expect(last?.datePreset).toBe(DEFAULT_TRACES_FILTERS.datePreset);
       expect(last?.dateFrom).toBeUndefined();
       expect(last?.dateTo).toBeUndefined();
-      expect(await within(getFilterChips()[0]).findByRole('button', { name: 'Time range: Last 7 days' })).toBeTruthy();
-      expect(within(getFilterChips()[0]).queryByRole('button', { name: 'Reset time range' })).toBeNull();
+      expect(await within(getTimeRange()).findByRole('button', { name: 'Last 7 days' })).toBeTruthy();
+      expect(within(getTimeRange()).queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
-    it('resets another preset to the default preset', async () => {
-      const { onChange } = await renderWithRange({ datePreset: 'last-24h' });
+    it('offers no reset on another preset', async () => {
+      await renderWithRange({ datePreset: 'last-24h' });
 
-      fireEvent.click(within(getFilterChips()[0]).getByRole('button', { name: 'Reset time range' }));
-
-      expect(onChange.mock.calls.at(-1)?.[0].filters.datePreset).toBe(DEFAULT_TRACES_FILTERS.datePreset);
+      expect(within(getTimeRange()).queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
 
     it('offers no reset on the default preset', async () => {
       await renderWithRange({});
 
-      expect(within(getFilterChips()[0]).queryByRole('button', { name: 'Reset time range' })).toBeNull();
+      expect(within(getTimeRange()).queryByRole('button', { name: 'Reset time range' })).toBeNull();
     });
   });
 
@@ -604,11 +601,7 @@ describe('TracesExplorer', () => {
     it('does not render chips for the scope fields', async () => {
       await renderScoped();
 
-      expect(
-        getFilterChips()
-          .slice(1)
-          .map(chip => chip.textContent),
-      ).toEqual(['Trace IDistrace-a']);
+      expect(getFilterChips().map(chip => chip.textContent)).toEqual(['Trace IDistrace-a']);
     });
 
     it('sends the scope predicate in the trace query', async () => {
@@ -680,9 +673,7 @@ describe('TracesExplorer', () => {
         const onChange = vi.fn<(next: TracesExplorerState) => void>();
         await renderWithGroup(onChange);
 
-        fireEvent.click(
-          within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 7 days', hidden: true }),
-        );
+        fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 7 days', hidden: true }));
         fireEvent.click(await screen.findByRole('menuitemradio', { name: 'Last 24 hours', hidden: true }));
 
         expect(onChange.mock.calls.at(-1)?.[0].filters).toMatchObject({
@@ -1036,9 +1027,7 @@ describe('TracesExplorer', () => {
       });
       await settle(queryClient);
 
-      fireEvent.click(
-        within(getFilterChips()[0]).getByRole('button', { name: 'Time range: Last 24 hours', hidden: true }),
-      );
+      fireEvent.click(within(getTimeRange()).getByRole('button', { name: 'Last 24 hours', hidden: true }));
 
       const options = await screen.findAllByRole('menuitemradio', { hidden: true });
       expect(options.map(option => option.textContent)).toEqual(['Last 24 hours', 'Last 3 days']);
@@ -1072,7 +1061,6 @@ describe('TracesExplorer', () => {
 
       expect(getFilterChips().map(chip => chip.textContent)).toEqual([
         expect.stringContaining('Region'),
-        'Last 7 days',
         expect.stringContaining('trace-a'),
       ]);
     });

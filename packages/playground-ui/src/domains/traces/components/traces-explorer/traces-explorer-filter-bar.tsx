@@ -64,7 +64,7 @@ export type TracesExplorerFilterChipsProps = {
   renderChip?: (item: FilterBarItem) => ReactNode;
 };
 
-/** The bar's chips: the time range chip in its slot, then one chip per filter. */
+/** The bar's chips: the time range in its slot, then one chip per filter. */
 export function TracesExplorerFilterChips({ timeRange, renderChip }: TracesExplorerFilterChipsProps) {
   return (
     <FilterBar.Chips
