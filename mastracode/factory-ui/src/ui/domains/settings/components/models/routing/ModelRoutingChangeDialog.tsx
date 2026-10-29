@@ -8,7 +8,13 @@ import { OnboardingIllustration } from '../../../../workspaces/components/onboar
 import { ACCOUNT_MODES } from '../../../../workspaces/components/onboarding/preview/OnboardingPreview';
 import type { FactoryModelScope } from '../../../../workspaces/services/github';
 import { SETUP_DETAILS, SETUP_LABELS } from '../../../../workspaces/services/onboardingSteps';
-import { MODEL_DEFAULTS_LABELS, MODEL_LANES, MODEL_LANE_LABELS, MODEL_ROUTES, MODEL_SCOPE_LABELS } from './model-routes';
+import {
+  MODEL_DEFAULTS_LABELS,
+  MODEL_LANES,
+  MODEL_LANE_LABELS,
+  MODEL_ROUTES,
+  MODEL_SCOPE_LABELS,
+} from './model-routes';
 
 // Lets the dialog settle before the sketch morphs, so the change reads as before → after.
 const MORPH_DELAY_MS = 320;

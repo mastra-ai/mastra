@@ -101,9 +101,11 @@ describe('ModelRoutingSection', () => {
     const dialog = await screen.findByRole('alertdialog', { name: 'Switch model routing to Factory?' });
     expect(dialog).toHaveTextContent('not just you');
     const changes = within(dialog).getByRole('list', { name: 'What changes' });
-    expect(within(changes).getAllByRole('listitem').map(item => item.textContent)).toEqual([
-      'Chats:Personal defaultsFactory defaults',
-    ]);
+    expect(
+      within(changes)
+        .getAllByRole('listitem')
+        .map(item => item.textContent),
+    ).toEqual(['Chats:Personal defaultsFactory defaults']);
   });
 
   it('keeps the saved routing when the switch is cancelled', async () => {
@@ -119,6 +121,31 @@ describe('ModelRoutingSection', () => {
     expect(patchedBodies).toEqual([]);
     expect(routing('Personal')).toBeChecked();
     expect(within(region('Work-item runs')).getByText('Uses Personal defaults')).toBeInTheDocument();
+  });
+
+  it('drops an open routing request when the page moves to another Factory', async () => {
+    const patchedBodies = stubFactory('user');
+    server.use(
+      http.get(`${TEST_BASE_URL}/web/factory/projects/fp-2`, () =>
+        HttpResponse.json({ project: { id: 'fp-2', name: 'Other', modelScope: 'user' } }),
+      ),
+    );
+    const user = userEvent.setup();
+    const { rerender } = renderRoutingSection();
+
+    await waitFor(() => expect(routing('Personal')).toBeChecked());
+    await user.click(routing('Factory'));
+    await screen.findByRole('alertdialog');
+
+    rerender(
+      <MemoryRouter initialEntries={['/factories/fp-2/settings/models']}>
+        <ModelRoutingSection factoryId="fp-2" />
+      </MemoryRouter>,
+    );
+
+    expect(await screen.findByRole('radio', { name: 'Personal' })).toBeChecked();
+    expect(screen.queryByRole('alertdialog')).not.toBeInTheDocument();
+    expect(patchedBodies).toEqual([]);
   });
 
   it('lets an admin change the Factory default from the unused Factory card in Personal routing', async () => {

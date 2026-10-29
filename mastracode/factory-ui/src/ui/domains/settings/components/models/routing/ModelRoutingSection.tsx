@@ -16,7 +16,9 @@ import { ModelRoutingSwitch } from './ModelRoutingSwitch';
 export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
   const projectQuery = useFactoryProjectQuery(factoryId);
   const setModelScope = useSetFactoryModelScopeMutation(factoryId);
-  const [requestedScope, setRequestedScope] = useState<FactoryModelScope>();
+  // Keyed to its Factory so a request left open across a Factory switch never saves to the new one.
+  const [request, setRequest] = useState<{ factoryId: string; scope: FactoryModelScope }>();
+  const requestedScope = request?.factoryId === factoryId ? request.scope : undefined;
   const pendingScope = setModelScope.isPending ? setModelScope.variables : undefined;
   const savedScope = projectQuery.data && savedModelScope(projectQuery.data);
   const modelScope = pendingScope ?? savedScope;
@@ -24,11 +26,11 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
 
   const pickScope = (scope: FactoryModelScope) => {
     if (scope === modelScope || setModelScope.isPending) return;
-    setRequestedScope(scope);
+    setRequest({ factoryId, scope });
   };
 
   const confirmScope = (scope: FactoryModelScope) => {
-    setRequestedScope(undefined);
+    setRequest(undefined);
     setModelScope.mutate(scope);
   };
 
@@ -56,7 +58,7 @@ export function ModelRoutingSection({ factoryId }: { factoryId: string }) {
             from={modelScope}
             to={requestedScope}
             onConfirm={confirmScope}
-            onCancel={() => setRequestedScope(undefined)}
+            onCancel={() => setRequest(undefined)}
           />
         )}
       </div>
