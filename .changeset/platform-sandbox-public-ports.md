@@ -8,4 +8,4 @@ Added `publicPorts` to `PlatformSandbox`. Sandbox ports are private by default a
 const sandbox = new PlatformSandbox({ publicPorts: true })
 ```
 
-Only E2B sandboxes support this, and it's fixed when the sandbox is created.
+The port URL is the same either way. The setting is fixed when the sandbox is created.

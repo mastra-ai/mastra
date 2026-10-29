@@ -100,8 +100,8 @@ export interface PlatformSandboxOptions extends Omit<MastraSandboxOptions, 'proc
   networkIsolation?: PlatformSandboxNetworkIsolation;
   /**
    * Let anyone with a port's URL reach it, without signing in. Off by default:
-   * ports are private and open through a signed-in preview link. Only E2B
-   * sandboxes support this, and it's fixed when the sandbox is created.
+   * ports are private and open through a signed-in preview link. The URL is
+   * the same either way. Fixed when the sandbox is created.
    */
   publicPorts?: boolean;
   env?: Record<string, string>;
