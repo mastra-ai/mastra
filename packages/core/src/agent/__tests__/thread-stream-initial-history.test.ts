@@ -7,6 +7,7 @@ import { describe, expect, it, vi } from 'vitest';
 
 import type { Agent } from '../agent';
 import type { MastraDBMessage } from '../message-list/types';
+import { AGENT_LEASE_RENEW_INTERVAL_MS } from '../run-ownership';
 import { AgentThreadStreamRuntime } from '../thread-stream-runtime';
 import { createHarness, nextTicks, setupRuntime } from './thread-stream-test-utils';
 
@@ -103,10 +104,55 @@ describe('subscribeToThread withInitialHistory', () => {
     await consumed;
   });
 
-  it('does not turn a failed lease read into an idle snapshot', async () => {
-    const { pubsub, subscribe } = setup(() => []);
+  // #28750: only activeRunId depends on the lease read, so the subscription opens whatever the backend does and
+  // reports what this process knows.
+  it.each([false, true])('opens on a failing lease read with a local run=%s', async withLocalRun => {
+    const { pubsub, emitRun, subscribe } = setup(() => []);
+    // A live subscription records the run this process saw take the lease.
+    const watcher = await subscribe(false);
+    if (withLocalRun) {
+      pubsub.owners.set([resourceId, threadId].join('\u0000'), runId);
+      await emitRun(runId, streamId).registered();
+      await nextTicks(10);
+    }
     vi.spyOn(pubsub, 'getLeaseOwner').mockRejectedValue(new Error('Lease unavailable'));
-    await expect(subscribe()).rejects.toThrow('Lease unavailable');
+    const { subscription, collected, consumed } = await subscribe();
+    try {
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({
+        type: 'thread-history',
+        payload: { activeRunId: withLocalRun ? runId : null },
+      });
+    } finally {
+      subscription.unsubscribe();
+      watcher.subscription.unsubscribe();
+      await Promise.all([consumed, watcher.consumed]);
+    }
+  });
+
+  it('opens on a stalled lease read once one renewal interval passes', async () => {
+    const { pubsub, subscribe } = setup(() => []);
+    vi.useFakeTimers({ toFake: ['setTimeout', 'clearTimeout'] });
+    try {
+      vi.spyOn(pubsub, 'getLeaseOwner').mockReturnValue(new Promise(() => {}));
+      let opened = false;
+      const subscribing = subscribe().then(result => {
+        opened = true;
+        return result;
+      });
+      await vi.advanceTimersByTimeAsync(AGENT_LEASE_RENEW_INTERVAL_MS - 1);
+      expect(opened).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(opened).toBe(true);
+      vi.useRealTimers();
+      const { subscription, collected, consumed } = await subscribing;
+      await nextTicks(10);
+      expect(collected[0]).toMatchObject({ type: 'thread-history', payload: { activeRunId: null } });
+      subscription.unsubscribe();
+      await consumed;
+    } finally {
+      vi.useRealTimers();
+    }
   });
 
   it('delivers deferred output before its outcome and keeps serving later runs', async () => {

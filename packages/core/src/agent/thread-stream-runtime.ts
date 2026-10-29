@@ -6439,16 +6439,45 @@ export class AgentThreadStreamRuntime {
       historyReadAt = Date.now();
       try {
         const history = await this.#loadThreadHistory(agent, options);
-        const readOwner = () =>
-          hasFallbackLeaseProvider ? Promise.resolve(activeRunId()) : leaseProvider.getLeaseOwner(key);
-        let leaseOwner = await readOwner();
-        for (let attempt = 0; attempt < 3; attempt++) {
-          const tail = eventTail;
-          await tail;
-          const nextOwner = await readOwner();
-          const stable = nextOwner === leaseOwner && tail === eventTail;
-          leaseOwner = nextOwner;
-          if (stable) break;
+        // Only activeRunId depends on the lease backend, so it must not decide whether the subscription opens.
+        // All reads share one renewal interval; a stalled or failing backend falls back to this process's view.
+        const unreachable = Symbol('unreachable');
+        let giveUp: ReturnType<typeof setTimeout> | undefined;
+        const deadline = new Promise<typeof unreachable>(
+          resolve => (giveUp = setTimeout(() => resolve(unreachable), AGENT_THREAD_LEASE_RENEW_INTERVAL_MS)),
+        );
+        let leaseError: unknown;
+        const readOwner = (): Promise<string | null | undefined | typeof unreachable> =>
+          hasFallbackLeaseProvider
+            ? Promise.resolve(activeRunId())
+            : Promise.race([
+                leaseProvider.getLeaseOwner(key).catch((error): typeof unreachable => {
+                  leaseError = error;
+                  return unreachable;
+                }),
+                deadline,
+              ]);
+        let leaseOwner: string | null | undefined | typeof unreachable;
+        try {
+          leaseOwner = await readOwner();
+          for (let attempt = 0; attempt < 3 && leaseOwner !== unreachable; attempt++) {
+            const tail = eventTail;
+            await tail;
+            const nextOwner = await readOwner();
+            const stable = nextOwner === leaseOwner && tail === eventTail;
+            leaseOwner = nextOwner;
+            if (stable) break;
+          }
+        } finally {
+          clearTimeout(giveUp);
+        }
+        if (leaseOwner === unreachable) {
+          agent.__getLogger?.()?.warn('Could not read the thread lease owner for initial history; using local state', {
+            threadId: options.threadId,
+            resourceId: options.resourceId,
+            error: leaseError ?? `no answer within ${AGENT_THREAD_LEASE_RENEW_INTERVAL_MS}ms`,
+          });
+          leaseOwner = activeRunId();
         }
         const ownerRunId = leaseOwner?.split(RETAKE_LEASE_MARKER)[0];
         const snapshotRunId = ownerRunId && !settledRunIds.has(ownerRunId) ? ownerRunId : null;
