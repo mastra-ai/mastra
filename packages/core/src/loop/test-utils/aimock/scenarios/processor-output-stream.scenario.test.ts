@@ -113,7 +113,7 @@ describeForAllEngines('Support agent streaming chunk processors', engine => {
       expect(ended(type).at(-1), type).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { tripwire: { processorId: 'stream-breaker', reason: DEFAULT_REASON } },
+        stopReasonContext: { processorId: 'stream-breaker' },
       });
     }
   });

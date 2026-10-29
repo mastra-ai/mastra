@@ -67,7 +67,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
     const supervisor = ended().find(span => span.entityId !== 'worker');
     expect(supervisor).toMatchObject({ outcome: failed ? 'interrupted' : 'success', stopReason: 'delegation_bail' });
     if (failed)
-      expect(supervisor?.stopReasonContext).toMatchObject({ cause: { outcome: 'error', stopReason: 'model_error' } });
+      expect(supervisor?.stopReasonContext).toMatchObject({ causeOutcome: 'error', causeStopReason: 'model_error' });
   });
 
   it('records an output-result guardrail without losing usage or exporting terminal spans twice', async () => {
@@ -92,7 +92,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       expect(ended(type)[0]).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { tripwire: { processorId: 'final-policy', reason: 'Final answer rejected' } },
+        stopReasonContext: { processorId: 'final-policy' },
       });
     }
     expect(ended(SpanType.MODEL_GENERATION)[0]?.attributes?.usage).toMatchObject({ inputTokens: 13, outputTokens: 7 });
@@ -206,7 +206,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
           ? {
               outcome: 'blocked',
               stopReason: 'content_filter',
-              stopReasonContext: { message: 'content_filter diagnostic text' },
+              stopReasonContext: null,
             }
           : { outcome: 'error', stopReason: 'model_error' };
       for (const type of [
@@ -266,7 +266,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       outcome: 'blocked',
       stopReason: 'guardrail',
       stopReasonContext: {
-        tripwire: { processorId: 'step-policy', reason: 'Step denied', retry: false, metadata: { rule: 'policy' } },
+        processorId: 'step-policy',
       },
     });
     expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);
@@ -301,7 +301,7 @@ describeForAllEngines('native execution outcomes (OBS-724)', engine => {
       expect(ended(type).at(-1)).toMatchObject({
         outcome: 'blocked',
         stopReason: 'guardrail',
-        stopReasonContext: { tripwire: { processorId: 'exchange-policy', reason: 'Exchange denied' } },
+        stopReasonContext: { processorId: 'exchange-policy' },
       });
     }
     if (stage === 'request') expect(ended(SpanType.MODEL_INFERENCE)).toHaveLength(0);

@@ -6,12 +6,14 @@ import { describe, expect, it } from 'vitest';
 import { Observability } from '../default';
 import { MastraStorageExporter } from '../exporters/mastra-storage';
 import { DefaultObservabilityInstance } from '../instances';
+import { SensitiveDataFilter } from '../span_processors/sensitive-data-filter';
 
-function setup() {
+function setup(filter = false) {
   const events: TracingEvent[] = [];
   const tracing = new DefaultObservabilityInstance({
     name: 'outcomes',
     serviceName: 'test',
+    spanOutputProcessors: filter ? [new SensitiveDataFilter({ sensitiveFields: ['processorId'] })] : [],
     exporters: [
       {
         name: 'capture',
@@ -25,6 +27,16 @@ function setup() {
 }
 
 describe('native execution outcomes (OBS-724)', () => {
+  it('filters compact context before it reaches exporters', async () => {
+    const { tracing, events } = setup(true);
+    const span = tracing.startSpan({ name: 'private-policy', type: SpanType.AGENT_RUN });
+    span.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { processorId: 'private-processor' } });
+    await tracing.flush();
+    const exported = events.find(event => event.type === TracingEventType.SPAN_ENDED)!.exportedSpan;
+    expect(exported.stopReasonContext).toEqual({ processorId: '[REDACTED]' });
+    expect(JSON.stringify(exported)).not.toContain('private-processor');
+  });
+
   it('distinguishes an opted-in ongoing execution from an unavailable legacy outcome', () => {
     const { tracing, events } = setup();
     tracing.startSpan({ name: 'ongoing', type: SpanType.AGENT_RUN, outcome: null });
@@ -75,19 +87,19 @@ describe('native execution outcomes (OBS-724)', () => {
   it('retains known stop details when an ongoing span is bare-ended', () => {
     const { tracing } = setup();
     const span = tracing.startSpan({ name: 'stopped', type: SpanType.AGENT_RUN, outcome: null });
-    span.update({ stopReason: 'runtime_error', stopReasonContext: { message: 'Recorded before cleanup' } });
+    span.update({ stopReason: 'runtime_error', stopReasonContext: { errorCode: 'recorded_before_cleanup' } });
     span.end();
     expect(span.exportSpan()).toMatchObject({
       outcome: 'unknown',
       stopReason: 'runtime_error',
-      stopReasonContext: { message: 'Recorded before cleanup' },
+      stopReasonContext: { errorCode: 'recorded_before_cleanup' },
     });
   });
 
   it('replaces provisional stop details when the execution recovers', () => {
     const { tracing } = setup();
     const span = tracing.startSpan({ name: 'retry', type: SpanType.MODEL_GENERATION, outcome: null });
-    span.update({ outcome: 'error', stopReason: 'model_error', stopReasonContext: { message: 'retry me' } });
+    span.update({ outcome: 'error', stopReason: 'model_error', stopReasonContext: { retryable: true } });
     span.end({ outcome: 'success' });
     expect(span.exportSpan()).toMatchObject({ outcome: 'success', stopReason: null, stopReasonContext: null });
   });
@@ -118,17 +130,9 @@ describe('native execution outcomes (OBS-724)', () => {
     const rebuilt = tracing.rebuildSpan(JSON.parse(JSON.stringify(primary.snapshot())));
     expect(rebuilt.exportSpan()).toMatchObject({ outcome: null });
     const stopReasonContext = {
-      cause: { outcome: 'limit', stopReason: 'context_window_exceeded' },
+      causeOutcome: 'limit',
+      causeStopReason: 'context_window_exceeded',
       observerSpanId: observer.id,
-      signals: [
-        {
-          id: 'observer-signal',
-          type: 'reactive',
-          contents: 'Observer stopped',
-          createdAt: '2026-10-27T12:00:00.000Z',
-          attributes: { source: 'observer' },
-        },
-      ],
     } satisfies SpanStopReasonContext;
     rebuilt.end({ outcome: 'interrupted', stopReason: 'observer_failed', stopReasonContext });
     expect(events.filter(e => e.type === TracingEventType.SPAN_ENDED).map(e => e.exportedSpan)).toMatchObject([
@@ -158,7 +162,7 @@ describe('native execution outcomes (OBS-724)', () => {
       error: new Error('unavailable'),
       outcome: 'error',
       stopReason: 'model_error',
-      stopReasonContext: { retryable: true, message: 'unavailable' },
+      stopReasonContext: { retryable: true },
     });
     expect(events.find(e => e.type === TracingEventType.SPAN_ENDED)?.exportedSpan).toMatchObject({
       outcome: 'error',
@@ -191,7 +195,7 @@ describe('native execution outcomes (OBS-724)', () => {
 describe.each(['batch-with-updates', 'realtime', 'insert-only'] as const)(
   'native outcomes through storage export (%s)',
   strategy => {
-    it('persists observer causes and signals, and clears provisional failures after recovery', async () => {
+    it('persists compact observer references, and clears provisional failures after recovery', async () => {
       const storage = new InMemoryStore();
       const exporter = new MastraStorageExporter({ strategy, maxBatchWaitMs: 60_000 });
       const observability = new Observability({
@@ -217,19 +221,9 @@ describe.each(['batch-with-updates', 'realtime', 'insert-only'] as const)(
         });
         await tracing.flush();
         const context: SpanStopReasonContext = {
-          cause: {
-            outcome: 'limit',
-            stopReason: 'context_window_exceeded',
-            stopReasonContext: { errorCode: 'context_length_exceeded' },
-          },
-          signals: [
-            {
-              id: 'observer-stop',
-              type: 'reactive',
-              contents: 'Observer stopped',
-              createdAt: new Date().toISOString(),
-            },
-          ],
+          causeOutcome: 'limit',
+          causeStopReason: 'context_window_exceeded',
+          observerSpanId: 'observer-span',
         };
         primary.end({ outcome: 'interrupted', stopReason: 'observer_failed', stopReasonContext: context });
         recovered.end({ outcome: 'success', stopReason: null, stopReasonContext: null });

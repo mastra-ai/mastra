@@ -24,7 +24,7 @@ export function expectWorkflowOutcome(spans: AnyExportedSpan[], mode: WorkflowOu
         ? {
             outcome: 'blocked',
             stopReason: 'guardrail',
-            stopReasonContext: { tripwire: { reason: 'Policy rejected', processorId: 'policy' } },
+            stopReasonContext: { processorId: 'policy' },
           }
         : mode === 'suspend'
           ? { outcome: 'suspend', stopReason: null }
@@ -132,7 +132,7 @@ export function expectConditionalOutcome(
       expect(evaluation).toMatchObject({
         outcome: 'error',
         stopReason: 'runtime_error',
-        stopReasonContext: { message: expect.stringContaining('Condition failed') },
+        stopReasonContext: null,
       });
     else
       expect(evaluation).toMatchObject({
@@ -217,7 +217,7 @@ export function expectLoopConditionFailure(spans: AnyExportedSpan[], hasBlock = 
   for (const execution of [...blocks, ...evaluations])
     expect(execution).toMatchObject({
       ...failure,
-      stopReasonContext: { message: 'Condition failed' },
+      stopReasonContext: null,
     });
 }
 
@@ -262,10 +262,10 @@ export function expectControlFlowSegments(
       expect(span).toMatchObject({
         stopReason: outcome === 'error' ? 'runtime_error' : outcome === 'blocked' ? 'guardrail' : null,
       });
-      if (outcome === 'error') expect(span.stopReasonContext).toMatchObject({ message: 'Resumed execution failed' });
+      if (outcome === 'error') expect(span.stopReasonContext).toBeNull();
       if (outcome === 'blocked')
         expect(span.stopReasonContext).toMatchObject({
-          tripwire: { reason: 'Policy rejected', processorId: 'policy' },
+          processorId: 'policy',
         });
     });
   }

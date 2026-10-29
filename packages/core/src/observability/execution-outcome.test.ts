@@ -24,7 +24,7 @@ describe('execution failure cause precedence', () => {
     expect(executionFailureTermination(failure)).toMatchObject({
       outcome: 'blocked',
       stopReason: 'guardrail',
-      stopReasonContext: { tripwire: { reason: 'Policy rejected', processorId: 'policy' } },
+      stopReasonContext: { processorId: 'policy' },
     });
     expect(JSON.stringify(failure)).toBe(before);
   });
@@ -81,7 +81,6 @@ describe('execution failure cause precedence', () => {
       outcome: 'error',
       stopReason: 'model_error',
       stopReasonContext: {
-        message: 'Provider unavailable',
         errorCode: 'provider_unavailable',
         retryable: true,
       },
@@ -94,7 +93,7 @@ describe('execution failure cause precedence', () => {
     expect(executionFailureTermination(new Error('Cyclic failure', { cause: envelope }))).toMatchObject({
       outcome: 'error',
       stopReason: 'runtime_error',
-      stopReasonContext: { message: 'Cyclic failure' },
+      stopReasonContext: null,
     });
   });
 
@@ -110,8 +109,12 @@ it('retains observer failure classification when metadata exceeds the serializat
   for (let i = 0; i < 22; i++) shared = { left: shared, right: shared };
   const cause = { outcome: 'error', stopReason: 'model_error' };
   const result = tripwireTermination({ metadata: { observerFailure: { cause }, shared } });
-  expect(result).toMatchObject({ outcome: 'interrupted', stopReason: 'observer_failed', stopReasonContext: { cause } });
-  expect(JSON.stringify(result)).toContain('[Circular]');
+  expect(result).toMatchObject({
+    outcome: 'interrupted',
+    stopReason: 'observer_failed',
+    stopReasonContext: { causeOutcome: cause.outcome, causeStopReason: cause.stopReason },
+  });
+  expect(JSON.stringify(result)).not.toContain('shared');
 });
 
 it('retains explicit provider identity on authentication failures', () => {

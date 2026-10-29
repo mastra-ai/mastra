@@ -15,7 +15,7 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
       const extension = format === 'esm' ? 'mjs' : 'cjs';
       const compatibilityModule = join(directory, `observability.${extension}`);
       const names = Object.keys(observability).filter(
-        name => !['executionFailureTermination', 'agentLoopTermination'].includes(name),
+        name => !['executionFailureTermination', 'agentLoopTermination', 'compactStopReasonContext'].includes(name),
       );
       await writeFile(
         compatibilityModule,
@@ -27,6 +27,7 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
       await build({
         config: false,
         entry: {
+          instances: join(import.meta.dirname, 'instances/index.ts'),
           tracker: join(import.meta.dirname, 'model-tracing.ts'),
           observer: join(import.meta.dirname, '../../../packages/memory/src/processors/observational-memory/error.ts'),
         },
@@ -42,9 +43,13 @@ describe.each(['esm', 'cjs'] as const)('older core outcome compatibility (%s)', 
         script,
         `${
           format === 'esm'
-            ? "import { ModelSpanTracker } from './dist/tracker.mjs'; import { getOmFailureMetadata } from './dist/observer.mjs';"
-            : "const { ModelSpanTracker } = require('./dist/tracker.cjs'); const { getOmFailureMetadata } = require('./dist/observer.cjs');"
+            ? "import { DefaultObservabilityInstance } from './dist/instances.mjs'; import { ModelSpanTracker } from './dist/tracker.mjs'; import { getOmFailureMetadata } from './dist/observer.mjs';"
+            : "const { DefaultObservabilityInstance } = require('./dist/instances.cjs'); const { ModelSpanTracker } = require('./dist/tracker.cjs'); const { getOmFailureMetadata } = require('./dist/observer.cjs');"
         }
+        const tracing = new DefaultObservabilityInstance({ name: 'compat', serviceName: 'compat', exporters: [] });
+        const span = tracing.startSpan({ name: 'run', type: 'agent_run', outcome: null });
+        span.end({ outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { processorId: 'policy' } });
+        if (span.exportSpan().stopReasonContext != null) throw new Error('Old core should omit unsupported context');
         const tracker = new ModelSpanTracker();
         tracker.reportGenerationError({error: new Error('provider failed')});
         tracker.endGeneration({outcome:'abort', stopReason:'caller_cancelled'});

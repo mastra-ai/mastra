@@ -311,7 +311,7 @@ it('preserves storage failure as the cause of interrupted observation', () => {
   expect(getOmFailureMetadata(new Error('db down'), 'abort')).toMatchObject({
     failurePolicy: 'abort',
     observerFailure: {
-      cause: { outcome: 'error', stopReason: 'runtime_error', stopReasonContext: { message: 'db down' } },
+      cause: { outcome: 'error', stopReason: 'runtime_error', stopReasonContext: null },
     },
   });
 });

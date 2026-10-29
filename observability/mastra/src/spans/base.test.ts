@@ -611,17 +611,18 @@ describe('Span', () => {
       }
     });
 
-    it('cleans stopReasonContext like metadata so an Error or BigInt inside it serializes', () => {
+    it('drops diagnostic payloads and oversized identifiers from stopReasonContext', () => {
       const instance = tracing();
-      const context = { tripwire: { metadata: { error: new Error('limit hit'), steps: 10n } } };
-      const span = instance.startSpan({ type: SpanType.GENERIC, name: 'run', stopReasonContext: context });
-      const exported = span.exportSpan();
-
-      expect(() => JSON.stringify(exported.stopReasonContext)).not.toThrow();
-      expect(exported.stopReasonContext).toMatchObject({
-        tripwire: { metadata: { error: { name: 'Error', message: 'limit hit' } } },
+      const context = { processorId: 'policy', tripwire: { metadata: { password: 'secret', steps: 10n } } };
+      const span = instance.startSpan({
+        type: SpanType.GENERIC,
+        name: 'run',
+        stopReason: 'guardrail',
+        stopReasonContext: context,
       });
-      expect(exported.stopReasonContext).toMatchObject({ tripwire: { metadata: { steps: '10n' } } });
+      expect(span.exportSpan().stopReasonContext).toEqual({ processorId: 'policy' });
+      span.update({ stopReasonContext: { processorId: 'x'.repeat(129) } });
+      expect(span.exportSpan().stopReasonContext).toBeNull();
     });
   });
 

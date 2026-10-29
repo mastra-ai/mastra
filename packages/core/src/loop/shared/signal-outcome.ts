@@ -1,20 +1,8 @@
 import type { AgentSignalDataPart } from '../../agent/signals';
-import { boundedStringify } from '../../utils/safe-stringify';
+import { compactStopReasonContext } from '../../observability/outcome-schema';
 
-type SignalData = AgentSignalDataPart['data'];
-
-/** Capture transport values without allowing optional metadata to prevent interruption. */
-export function snapshotSignalOutcome(signals: SignalData[] | undefined): SignalData[] | undefined {
-  return signals?.map(
-    signal =>
-      Object.fromEntries(
-        Object.entries(signal).flatMap(([key, value]) => {
-          // Match JSON transport semantics (including omitted functions and normalized
-          // dates). Capture each field independently so invalid optional metadata cannot
-          // discard the signal's identity, content, or other serializable fields.
-          const serialized = boundedStringify(value);
-          return serialized === undefined ? [] : [[key, JSON.parse(serialized)]];
-        }),
-      ) as SignalData,
-  );
+/** Reference the signal that interrupted this request without copying caller content. */
+export function snapshotSignalOutcome(signals: AgentSignalDataPart['data'][] | undefined) {
+  const signal = signals?.[0];
+  return compactStopReasonContext('signal_received', { signalId: signal?.id, signalType: signal?.type });
 }

@@ -43,26 +43,21 @@ Configured completion through `stopWhen` or an iteration hook records `success` 
 
 Caller cancellation records `abort / caller_cancelled` on the targeted run. Unfinished descendants stopped by that cancellation record `interrupted / caller_cancelled`. A run deadline records `limit / timeout` on the run; work interrupted by that deadline records `interrupted / timeout`. Completed spans retain their outcomes. Generic cleanup ends otherwise unclassified spans as `unknown`.
 
-A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire reports `blocked / guardrail`. The tripwire's details describe how it happened:
+A [guardrail](/docs/agents/guardrails) that stops execution by firing a tripwire reports `blocked / guardrail`. Its context identifies the processor:
 
 ```json
 {
   "outcome": "blocked",
   "stopReason": "guardrail",
-  "stopReasonContext": {
-    "tripwire": {
-      "processorId": "moderation",
-      "reason": "Content violates policy",
-      "retry": false,
-      "metadata": { "rule": "policy" }
-    }
-  }
+  "stopReasonContext": { "processorId": "moderation" }
 }
 ```
 
-The context doesn't repeat the machine stop reason. `tripwire.reason` is the existing human-readable explanation. Available tripwire details can accompany other causes, including observer failures.
+`stopReasonContext` is a flat tooltip summary with at most three scalar fields. It excludes raw error messages, signal contents, tripwire metadata, and nested causes. Strings are limited to 128 characters. Oversized values are omitted. Missing facts are omitted, and a context with no available facts is `null`.
 
-When an observer fails and stops the main execution, the observer span records its own result and the main span reports `interrupted / observer_failed`. Its context retains the observer's result in `cause`. For example, context-window exhaustion remains `limit / context_window_exceeded` on the observer. If the configured failure policy lets the main execution continue, it can still succeed. A guardrail retry that recovers also preserves the successful final outcome and the rejected attempt's separate result.
+When an observer fails and stops the main execution, the observer span records its own result and the main span reports `interrupted / observer_failed`. The context links to the observer memory operation through `observerSpanId` and summarizes its result with `causeOutcome` and `causeStopReason`. For example, context-window exhaustion remains `limit / context_window_exceeded` on the observer. Read that span for its diagnostics. Signal interruptions retain only `signalId` and `signalType`.
+
+If the configured failure policy lets the main execution continue, it can still succeed. A guardrail retry that recovers also preserves the successful final outcome and the rejected attempt's separate result.
 
 `MastraStorageExporter` and `MastraPlatformExporter` carry these fields in exported span records. Persisting them requires a storage implementation that supports the fields.
 

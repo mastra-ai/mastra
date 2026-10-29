@@ -579,7 +579,7 @@ export function createDurableLLMExecutionStep(_options?: DurableLLMExecutionStep
           interruptionOutcome = {
             outcome: 'interrupted',
             stopReason: 'signal_received',
-            stopReasonContext: { signals: snapshotSignalOutcome(signals) },
+            stopReasonContext: snapshotSignalOutcome(signals),
           };
           interruption.abort(new Error('Interrupted by a queued signal'));
         }

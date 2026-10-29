@@ -373,7 +373,7 @@ describeForAllEngines('Support agent output stream processors', engine => {
     expect(ended(SpanType.MODEL_STEP)[0]).toMatchObject({
       outcome: 'blocked',
       stopReason: 'guardrail',
-      stopReasonContext: { tripwire: { processorId: 'result-policy', reason: 'Private result blocked' } },
+      stopReasonContext: { processorId: 'result-policy' },
     });
     for (const inference of ended(SpanType.MODEL_INFERENCE)) expect(inference.outcome).toBe('success');
     const continued = engine === 'durable' || engine === 'evented' || engine === 'inngest';

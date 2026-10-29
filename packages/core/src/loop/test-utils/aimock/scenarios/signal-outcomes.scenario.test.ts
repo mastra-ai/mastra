@@ -87,18 +87,13 @@ describeForAllEngines('signal interruption outcomes (OBS-724)', engine => {
       ).toMatchObject({
         stopReason: 'signal_received',
         stopReasonContext: {
-          signals: [
-            expect.objectContaining({
-              id: expect.any(String),
-              createdAt: expect.any(String),
-              type: 'user',
-              contents: 'Use the updated instructions',
-              attributes: { source: 'user-steer' },
-              metadata: { task: 'revision' },
-            }),
-          ],
+          signalId: expect.any(String),
+          signalType: 'user',
         },
       });
+      expect(
+        ended.find(span => span.type === SpanType.MODEL_INFERENCE && span.outcome === 'interrupted')?.stopReasonContext,
+      ).toEqual({ signalId: expect.any(String), signalType: 'user' });
       if (engine === 'durable' || engine === 'evented' || engine === 'inngest') {
         expect(
           ended.filter(span => span.type === SpanType.MODEL_STEP).some(span => span.outcome === 'interrupted'),

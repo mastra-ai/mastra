@@ -29,12 +29,12 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
           ? {
               outcome: 'blocked',
               stopReason: 'content_filter',
-              stopReasonContext: { message: 'Provider rejected observer input' },
+              stopReasonContext: null,
             }
           : {
               outcome: 'error',
               stopReason: 'model_error',
-              stopReasonContext: { message: 'Provider rejected observer input' },
+              stopReasonContext: { retryable: false },
             };
     const llm = getMock();
     const events: TracingEvent[] = [];
@@ -115,8 +115,14 @@ describeForAllEngines('observer execution outcomes (OBS-724)', engine => {
             outcome: 'interrupted',
             stopReason: 'observer_failed',
             stopReasonContext: {
-              cause,
-              tripwire: { reason: expect.any(String), metadata: { observerFailure: { cause } } },
+              observerSpanId: events.find(
+                event =>
+                  event.type === TracingEventType.SPAN_ENDED &&
+                  event.exportedSpan.type === SpanType.MEMORY_OPERATION &&
+                  event.exportedSpan.entityName === 'Observer',
+              )!.exportedSpan.id,
+              causeOutcome: cause.outcome,
+              causeStopReason: cause.stopReason,
             },
           }
         : { outcome: 'success', stopReason: null },

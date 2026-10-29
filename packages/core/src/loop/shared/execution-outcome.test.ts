@@ -19,7 +19,7 @@ describe('agent termination meaning', () => {
     expect(agentLoopTermination({ stopCause: 'delegation', delegationFailure: cause })).toMatchObject({
       outcome: 'interrupted',
       stopReason: 'delegation_bail',
-      stopReasonContext: { cause },
+      stopReasonContext: { causeOutcome: cause.outcome, causeStopReason: cause.stopReason },
     });
   });
   it('retains explicit caller cancellation', () => {

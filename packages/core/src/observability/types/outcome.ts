@@ -1,5 +1,3 @@
-import type { AgentSignalDataPart } from '../../agent/signals';
-
 /** An individual execution's result, reported by its runtime (OBS-724). */
 export const SPAN_OUTCOMES = [
   'success',
@@ -18,7 +16,6 @@ export interface SpanFailureContext {
   provider?: string;
   errorCode?: string;
   retryable?: boolean;
-  message?: string;
 }
 
 /** Context for the initial OBS-724 reason codes. Runtime producers supply these facts. */
@@ -28,20 +25,21 @@ export interface SpanStopReasonContextMap {
   timeout: { timeoutMs?: number; timeoutType?: 'step' | 'total' | 'firstChunk' };
   runtime_error: SpanFailureContext;
   model_error: SpanFailureContext;
-  caller_cancelled: { message?: string };
-  signal_received: {};
+  caller_cancelled: {};
+  signal_received: { signalId?: string; signalType?: 'user' | 'state' | 'reactive' | 'notification' };
   observer_failed: {
     observerSpanId?: string;
     /** Keep the observer's own result distinct from the interrupted primary execution. */
-    cause: SpanTermination;
+    causeOutcome?: SpanOutcome;
+    causeStopReason?: SpanStopReason;
   };
-  context_window_exceeded: SpanFailureContext & { model?: string; contextWindow?: number };
-  guardrail: {};
-  content_filter: { provider?: string; message?: string };
+  context_window_exceeded: { provider?: string; errorCode?: string; contextWindow?: number };
+  guardrail: { processorId?: string };
+  content_filter: { provider?: string };
   approval_required: { toolCallId?: string; toolName?: string };
   stop_condition: {};
   iteration_hook: { feedbackCompleted?: boolean };
-  delegation_bail: { cause?: SpanTermination };
+  delegation_bail: { causeOutcome?: SpanOutcome; causeStopReason?: SpanStopReason };
   authentication: SpanFailureContext;
   authorization: SpanFailureContext;
 }
@@ -69,7 +67,7 @@ export const SPAN_STOP_REASONS = {
   authorization: true,
 } as const satisfies Record<SpanStopReason, true>;
 
-/** The tripwire mechanism, separate from the semantic cause of termination. */
+/** @internal Runtime tripwire input. Its payload is never copied into exported stop-reason context. */
 export interface SpanTripwireContext {
   processorId?: string;
   /** Existing human-readable tripwire explanation, not a machine stop reason. */
@@ -78,15 +76,8 @@ export interface SpanTripwireContext {
   metadata?: unknown;
 }
 
-/** Supplemental details shared by all stop reasons. */
-export type SpanStopSupplementalContext = {
-  tripwire?: SpanTripwireContext;
-  /** Only signals that affected this execution, in their transport representation. */
-  signals?: AgentSignalDataPart['data'][];
-};
-
-export type SpanStopReasonContext<Reason extends SpanStopReason = SpanStopReason> = SpanStopReasonContextMap[Reason] &
-  SpanStopSupplementalContext;
+/** Flat tooltip facts only: at most three scalar fields, with strings bounded to 128 characters. */
+export type SpanStopReasonContext<Reason extends SpanStopReason = SpanStopReason> = SpanStopReasonContextMap[Reason];
 
 /** Narrow this envelope by stopReason to access its cause-specific context. */
 export type SpanTermination = { outcome: SpanOutcome } & (

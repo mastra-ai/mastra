@@ -1,6 +1,6 @@
-import { ensureSerializable } from '../utils/safe-stringify';
-import { spanTerminationSchema } from './outcome-schema';
-import type { SpanTermination, SpanTripwireContext } from './types/outcome';
+import { compactStopReasonContext } from './outcome-schema';
+import { SPAN_OUTCOMES, SPAN_STOP_REASONS } from './types/outcome';
+import type { SpanOutcome, SpanStopReason, SpanTermination, SpanTripwireContext } from './types/outcome';
 
 /** Read a provider's structured code without inferring a cause from diagnostic text. */
 function providerFailureCode(value: Record<string | symbol, unknown>): string | undefined {
@@ -26,7 +26,11 @@ export function executionFailureTermination(
 ): SpanTermination {
   // Runs on failure paths: a throwing getter or Proxy trap must not replace the original error.
   try {
-    return classifyExecutionFailure(error, layer);
+    const termination = classifyExecutionFailure(error, layer);
+    return {
+      ...termination,
+      stopReasonContext: compactStopReasonContext(termination.stopReason, termination.stopReasonContext),
+    } as SpanTermination;
   } catch {
     return { outcome: 'error', stopReason: layer };
   }
@@ -84,7 +88,6 @@ function classifyExecutionFailure(error: unknown, layer: 'runtime_error' | 'mode
         outcome: 'blocked',
         stopReason: reason,
         stopReasonContext: {
-          message: typeof value.message === 'string' ? value.message : undefined,
           errorCode: String(value.statusCode),
           provider: typeof value.provider === 'string' ? value.provider : undefined,
         },
@@ -96,9 +99,7 @@ function classifyExecutionFailure(error: unknown, layer: 'runtime_error' | 'mode
         return {
           outcome: 'blocked',
           stopReason: 'content_filter',
-          stopReasonContext: {
-            message: typeof value.message === 'string' ? value.message : undefined,
-          },
+          stopReasonContext: { provider: typeof value.provider === 'string' ? value.provider : undefined },
         };
       }
       if (errorCode === 'context_length_exceeded' || errorCode === 'context_window_exceeded') {
@@ -116,7 +117,7 @@ function classifyExecutionFailure(error: unknown, layer: 'runtime_error' | 'mode
     outcome: 'error',
     stopReason: reason,
     stopReasonContext: {
-      message: typeof failure?.message === 'string' ? failure.message : typeof error === 'string' ? error : undefined,
+      provider: typeof failure?.provider === 'string' ? failure.provider : undefined,
       errorCode:
         typeof failure?.code === 'string' ? failure.code : typeof failure?.id === 'string' ? failure.id : undefined,
       retryable: typeof failure?.isRetryable === 'boolean' ? failure.isRetryable : undefined,
@@ -124,33 +125,45 @@ function classifyExecutionFailure(error: unknown, layer: 'runtime_error' | 'mode
   };
 }
 
-/** Preserve the mechanism while keeping an observer's failure separate from the execution it interrupts. */
+/** Link to the observer's diagnostics without copying its payload into the interrupted span. */
 export function tripwireTermination(tripwire?: SpanTripwireContext): SpanTermination {
-  const metadata = ensureSerializable(tripwire?.metadata);
-  const detail: SpanTripwireContext | undefined = tripwire && {
-    processorId: tripwire.processorId,
-    reason: tripwire.reason,
-    retry: tripwire.retry,
-    ...(metadata === undefined ? {} : { metadata }),
-  };
-  const observer =
-    metadata && typeof metadata === 'object' && 'observerFailure' in metadata ? metadata.observerFailure : undefined;
-  if (observer && typeof observer === 'object' && 'cause' in observer) {
-    const cause = spanTerminationSchema.safeParse(observer.cause);
-    if (cause.success && !['success', 'suspend'].includes(cause.data.outcome)) {
-      return {
-        outcome: 'interrupted',
-        stopReason: 'observer_failed',
-        stopReasonContext: {
-          observerSpanId:
-            'observerSpanId' in observer && typeof observer.observerSpanId === 'string'
-              ? observer.observerSpanId
-              : undefined,
-          cause: cause.data,
-          tripwire: detail,
-        },
-      };
+  try {
+    const metadata = tripwire?.metadata;
+    const observer =
+      metadata && typeof metadata === 'object' && 'observerFailure' in metadata ? metadata.observerFailure : undefined;
+    if (
+      observer &&
+      typeof observer === 'object' &&
+      'cause' in observer &&
+      observer.cause &&
+      typeof observer.cause === 'object'
+    ) {
+      const cause = observer.cause as { outcome?: unknown; stopReason?: unknown };
+      if (
+        SPAN_OUTCOMES.includes(cause.outcome as SpanOutcome) &&
+        cause.outcome !== 'success' &&
+        cause.outcome !== 'suspend'
+      ) {
+        return {
+          outcome: 'interrupted',
+          stopReason: 'observer_failed',
+          stopReasonContext: compactStopReasonContext('observer_failed', {
+            observerSpanId: 'observerSpanId' in observer ? observer.observerSpanId : undefined,
+            causeOutcome: cause.outcome,
+            causeStopReason:
+              typeof cause.stopReason === 'string' && Object.hasOwn(SPAN_STOP_REASONS, cause.stopReason)
+                ? (cause.stopReason as SpanStopReason)
+                : undefined,
+          }),
+        };
+      }
     }
+    return {
+      outcome: 'blocked',
+      stopReason: 'guardrail',
+      stopReasonContext: compactStopReasonContext('guardrail', { processorId: tripwire?.processorId }),
+    };
+  } catch {
+    return { outcome: 'blocked', stopReason: 'guardrail' };
   }
-  return { outcome: 'blocked', stopReason: 'guardrail', stopReasonContext: { tripwire: detail } };
 }

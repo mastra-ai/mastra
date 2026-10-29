@@ -54,7 +54,10 @@ export function agentLoopTermination(input: {
         return {
           outcome: 'interrupted',
           stopReason: 'delegation_bail',
-          stopReasonContext: { cause: input.delegationFailure },
+          stopReasonContext: {
+            causeOutcome: input.delegationFailure.outcome,
+            causeStopReason: input.delegationFailure.stopReason ?? undefined,
+          },
         };
       return { outcome: 'success', stopReason: 'delegation_bail' };
     case 'model_finished':

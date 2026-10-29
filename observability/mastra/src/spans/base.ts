@@ -1,3 +1,4 @@
+import * as coreObservability from '@mastra/core/observability';
 import { SpanType, InternalSpans } from '@mastra/core/observability';
 import type {
   Span,
@@ -410,13 +411,15 @@ export abstract class BaseSpan<TType extends SpanType = any> implements Span<TTy
     if (options.outcome !== undefined) {
       this.outcome = options.outcome;
       this.stopReason = options.stopReason ?? null;
-      this.stopReasonContext = deepClean(options.stopReasonContext ?? null, this.deepCleanOptions);
+      this.stopReasonContext =
+        coreObservability.compactStopReasonContext?.(this.stopReason, options.stopReasonContext) ?? null;
       return;
     }
     if (options.stopReason !== undefined && options.stopReason !== this.stopReason) this.stopReasonContext = null;
     if (options.stopReason !== undefined) this.stopReason = options.stopReason;
     if (options.stopReasonContext !== undefined) {
-      this.stopReasonContext = deepClean(options.stopReasonContext, this.deepCleanOptions);
+      this.stopReasonContext =
+        coreObservability.compactStopReasonContext?.(this.stopReason, options.stopReasonContext) ?? null;
     }
   }
 

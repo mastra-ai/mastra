@@ -21,3 +21,6 @@ export { buildSpanPreviews } from './span-previews';
 export { executionFailureTermination } from './execution-outcome';
 /** @internal Runtime instrumentation helper; not a public API. */
 export { agentLoopTermination } from '../loop/shared/execution-outcome';
+
+/** @internal Bounded stop-reason context for runtime instrumentation. */
+export { compactStopReasonContext } from './outcome-schema';
