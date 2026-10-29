@@ -310,11 +310,11 @@ Visit [Request Context](/docs/server/request-context) for more information.
 <Inject>
   **For AI agents:** Observational Memory has a few failure modes that cause real problems.
 
-  - Thread scope requires a valid, loadable `threadId`. Without one, Observational Memory throws.
+  - Thread scope requires a `threadId` when you call the agent. Without one, Observational Memory throws.
   - On an existing thread, the first turn loads every stored message until the first observation completes. A large thread pays a one-time context cost.
   - `lastMessages` does nothing under Observational Memory. It replaces raw history itself, so the MessageHistory processor is skipped.
   - Leave `observation.observeOnContextOverflow` at its default `true`. With it off, an overflowing Observer run fails, and the default `failurePolicy` is `abort`.
-  - Invalid option combinations throw when `Memory` is constructed, for example `shareTokenBudget: true` with async buffering enabled. Read the error instead of retrying.
+  - Invalid option combinations throw on first use, not when you construct `Memory`. For example, `shareTokenBudget: true` with async buffering enabled fails on the first memory operation. Read the error instead of retrying.
   - With async buffering, work continues in the background. Call `await memory.settled()` before closing storage or shutting down, or that work is lost.
   - The observation mutex only works inside one process. Process each thread in a single process, or external locking is needed to avoid duplicate work.
   - Debug with `OM_DEBUG=1`, which writes `om-debug.log`, plus `getStatus()` and the `onDebugEvent` callback.
