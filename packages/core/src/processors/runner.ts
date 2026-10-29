@@ -757,12 +757,21 @@ export class ProcessorRunner {
         }
       }
       const detailStr = details.length > 0 ? ` — ${details.join('; ')}` : '';
-      throw new MastraError({
-        category: 'USER',
-        domain: 'AGENT',
-        id: 'PROCESSOR_WORKFLOW_FAILED',
-        text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
-      });
+      // Keep the underlying failure reachable: without it callers only see the
+      // flattened status text and lose the original error, stack and type.
+      const failedStepError =
+        result.status === 'failed'
+          ? Object.values(result.steps).find(step => step.status === 'failed' && step.error)?.error
+          : undefined;
+      throw new MastraError(
+        {
+          category: 'USER',
+          domain: 'AGENT',
+          id: 'PROCESSOR_WORKFLOW_FAILED',
+          text: `Processor workflow ${workflow.id} failed with status: ${result.status}${detailStr}`,
+        },
+        result.status === 'failed' ? (result.error ?? failedStepError) : undefined,
+      );
     }
 
     // Extract and validate the output from the workflow result
