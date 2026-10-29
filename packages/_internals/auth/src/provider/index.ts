@@ -8,12 +8,12 @@ import type {
   ISSOProvider,
   ISessionProvider,
   IUserProvider,
+  MastraUser,
   Session,
   SSOCallbackResult,
   SSOLoginConfig,
   User,
 } from '..';
-import type { MastraUser } from '..';
 import type { AuthorizeUserFn, MastraAuthConfig, MastraAuthRequest } from '../types';
 import { getRequestHeader } from '../types';
 
