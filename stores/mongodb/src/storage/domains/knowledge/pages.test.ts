@@ -185,6 +185,28 @@ describe('MongoKnowledgePages (schema 4)', () => {
     expect(await store.searchPages({ query: 'zebra', read: readOf('team:a') })).toEqual([]);
   });
 
+  it('refuses moving or merging into a scope that already has the page key; deleted descendants do not count toward the cap', async () => {
+    const x = (await store.materializeScope({ address: 'team:x', declaration: 'team:$t', name: 'X', provenance })).scope;
+    const y = (await store.materializeScope({ address: 'team:y', declaration: 'team:$t', name: 'Y', provenance })).scope;
+    const a = await store.createPage({ parentId: x.id, name: 'a', key: 'dup', provenance });
+    await store.createPage({ parentId: y.id, name: 'b', key: 'dup', provenance });
+    await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    const src = await store.createPage({ parentId: x.id, name: 'src2', provenance });
+    await store.createPage({ parentId: src.id, name: 'kid', key: 'dup2', provenance });
+    const tgt = await store.createPage({ parentId: y.id, name: 'tgt2', provenance });
+    await store.createPage({ parentId: tgt.id, name: 'kid2', key: 'dup2', provenance });
+    await expect(store.mergePages({ sourceId: src.id, sourceVersion: 1, targetId: tgt.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    const holder = await store.createPage({ parentId: x.id, name: 'holder', provenance });
+    await (await connector.getCollection('mastra_knowledge_pages')).insertMany(
+      Array.from({ length: MAX_KNOWLEDGE_MOVE_PAGES + 5 }, (_, i) => ({
+        id: `gone-${i}`, scopeId: x.id, parentId: holder.id, isScope: false, position: 'm', name: `gone${i}`,
+        canonicalName: `gone${i}`, depth: 2, version: 1, createdBy: { author: 'x' }, updatedBy: { author: 'x' },
+        createdAt: new Date(), updatedAt: new Date(), deletedAt: new Date(),
+      })),
+    );
+    await expect(store.movePage({ id: holder.id, expectedVersion: 1, parentId: y.id, provenance })).resolves.toMatchObject({ scopeId: y.id });
+  });
+
   it('requires a reset over legacy collections', async () => {
     await (await connector.getCollection('mastra_knowledge_nodes')).insertOne({ id: 'legacy' });
     await expect(store.init()).rejects.toBeInstanceOf(MongoKnowledgeResetRequiredError);

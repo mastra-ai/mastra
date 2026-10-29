@@ -188,6 +188,26 @@ describe('PgKnowledgePages (schema 4)', () => {
     expect(await store.searchPages({ query: 'zebra', read: readOf('team:a') })).toEqual([]);
   });
 
+  it('refuses moving or merging into a scope that already has the page key; deleted descendants do not count toward the cap', async () => {
+    const x = (await store.materializeScope({ address: 'team:x', declaration: 'team:$t', name: 'X', provenance })).scope;
+    const y = (await store.materializeScope({ address: 'team:y', declaration: 'team:$t', name: 'Y', provenance })).scope;
+    const a = await store.createPage({ parentId: x.id, name: 'a', key: 'dup', provenance });
+    await store.createPage({ parentId: y.id, name: 'b', key: 'dup', provenance });
+    await expect(store.movePage({ id: a.id, expectedVersion: 1, parentId: y.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    const src = await store.createPage({ parentId: x.id, name: 'src2', provenance });
+    await store.createPage({ parentId: src.id, name: 'kid', key: 'dup2', provenance });
+    const tgt = await store.createPage({ parentId: y.id, name: 'tgt2', provenance });
+    await store.createPage({ parentId: tgt.id, name: 'kid2', key: 'dup2', provenance });
+    await expect(store.mergePages({ sourceId: src.id, sourceVersion: 1, targetId: tgt.id, provenance })).rejects.toBeInstanceOf(KnowledgeConflictError);
+    const holder = await store.createPage({ parentId: x.id, name: 'holder', provenance });
+    await client.query(
+      `INSERT INTO "${schemaName}"."mastra_knowledge_pages" ("id","scopeId","parentId","isScope","position","name","canonicalName","depth","version","createdBy","updatedBy","createdAt","updatedAt","deletedAt")
+       SELECT 'gone-' || g, $1, $2, FALSE, 'm', 'gone' || g, 'gone' || g, 2, 1, '{"author":"x"}', '{"author":"x"}', now(), now(), now() FROM generate_series(1, ${MAX_KNOWLEDGE_MOVE_PAGES + 5}) g`,
+      [x.id, holder.id],
+    );
+    await expect(store.movePage({ id: holder.id, expectedVersion: 1, parentId: y.id, provenance })).resolves.toMatchObject({ scopeId: y.id });
+  });
+
   it('requires a reset over legacy tables and resets only Knowledge tables', async () => {
     await pool.query(`CREATE SCHEMA IF NOT EXISTS legacy_test`);
     await pool.query(`CREATE TABLE legacy_test.mastra_knowledge_nodes (id text)`);
