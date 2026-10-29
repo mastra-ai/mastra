@@ -3789,7 +3789,7 @@ describe('thread history', () => {
     ]);
   });
 
-  it('describes non-inline binary attachments with fetchData without exposing the private URL', async () => {
+  it('describes non-inline binary attachments with fetchData without downloading them or exposing the private URL', async () => {
     const t = await setup({ threadContext: { maxMessages: 10 } });
     const zip = {
       type: 'file',
@@ -3801,7 +3801,7 @@ describe('thread history', () => {
     await t.run(makeChatThread([historyMessage(0, { attachments: [zip] })]));
     const [withZip] = t.signals();
 
-    expect(zip.fetchData).toHaveBeenCalledTimes(1);
+    expect(zip.fetchData).not.toHaveBeenCalled();
     expect(withZip.contents).toEqual([
       { type: 'text', text: 'message 0' },
       { type: 'text', text: '[Attached file: bundle.zip (application/zip) — binary attachment, contents not shown]' },

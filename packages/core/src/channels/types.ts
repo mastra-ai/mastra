@@ -615,10 +615,10 @@ export interface ChannelConfig {
   /**
    * Which media types to send inline to the model (as file parts).
    * Everything else is kept out of file parts so models that reject
-   * unsupported types don't crash. Attachments outside this list are still
-   * downloaded when the adapter provides an authenticated fetch (e.g. Slack):
-   * text-like files (`text/*`, JSON, YAML, XML, …) reach the agent as text and
-   * binary files are described by name and type. Only attachments with a
+   * unsupported types don't crash. When the adapter provides an authenticated
+   * fetch (e.g. Slack), text-like files outside this list (`text/*`, JSON,
+   * YAML, XML, …) are still downloaded and reach the agent as text; binary
+   * files are described by name and type without being downloaded. Only attachments with a
    * public URL and no authenticated fetch are described by URL.
    *
    * - **Array of globs** — e.g. `['image/png', 'image/jpeg', 'image/webp', 'application/pdf']` (default), `['image/*', 'video/*']`

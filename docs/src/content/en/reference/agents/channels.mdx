@@ -721,7 +721,7 @@ Supported glob patterns:
 | `*` or `*/*` | All types |
 | `application/pdf` | Exact type match |
 
-For platforms with private CDNs (e.g. Slack), attachments are always fetched with authenticated credentials from the Chat SDK, whether or not their type is in `inlineMedia`. For platforms with public CDNs (e.g. Discord), inline types are passed to the model by URL and other types are described with their URL.
+For platforms with private CDNs (e.g. Slack), inline and text-like attachments are fetched with authenticated credentials from the Chat SDK; other binary attachments are described by name and type without being downloaded. For platforms with public CDNs (e.g. Discord), inline types are passed to the model by URL and other types are described with their URL.
 
 ## Inline links
 

@@ -1688,10 +1688,11 @@ export class AgentChannels {
    * Inline types are sent as file parts (the LLM adapter converts image/* to
    * image content automatically). Other types are never sent as file parts,
    * since models reject unsupported media (e.g. OpenAI rejects video/mp4) —
-   * but when the adapter supplies an authenticated `fetchData` the bytes are
-   * still downloaded: text-like files (text/*, JSON, YAML, …) are delivered as
-   * text, and binary files are described without their URL. The raw URL is
-   * only surfaced when there is no `fetchData`, i.e. the URL is public.
+   * but when the adapter supplies an authenticated `fetchData`, text-like files
+   * (text/*, JSON, YAML, …) are downloaded and delivered as text. Other binary
+   * files are described by name and type without downloading them or exposing
+   * their URL. The raw URL is only surfaced when there is no `fetchData`, i.e.
+   * the URL is public.
    */
   private async attachmentsToParts(attachments: Attachment[]): Promise<Exclude<AgentSignalContents, string>> {
     const parts: Exclude<AgentSignalContents, string> = [];
@@ -1705,6 +1706,13 @@ export class AgentChannels {
       const describe = `[Attached file: ${filename} (${mimeType})`;
 
       if (att.fetchData) {
+        const textLike = isTextLikeMimeType(mimeType);
+        if (!inline && !textLike) {
+          // Binary the model can't take as a file part: don't download it just to discard it.
+          parts.push({ type: 'text', text: `${describe} — binary attachment, contents not shown]` });
+          continue;
+        }
+
         // Prefer authenticated fetch (e.g. Slack CDN requires auth)
         let bytes: Uint8Array;
         try {
@@ -1734,7 +1742,7 @@ export class AgentChannels {
           continue;
         }
 
-        const text = isTextLikeMimeType(mimeType) ? decodeTextAttachment(bytes) : undefined;
+        const text = decodeTextAttachment(bytes);
         parts.push({
           type: 'text',
           text: text !== undefined ? `${describe}]\n${text}` : `${describe} — binary attachment, contents not shown]`,
