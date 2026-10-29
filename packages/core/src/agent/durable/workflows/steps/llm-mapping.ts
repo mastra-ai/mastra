@@ -1,10 +1,12 @@
 import { compactDurableStepContent } from '@internal/core/durable';
 import { z } from 'zod';
 import { MastraFGAPermissions } from '../../../../auth/ee';
+import { agentLoopTermination, executionFailureTermination } from '../../../../loop/shared/execution-outcome';
 import {
   commitToolResult,
   computeModelOutputProviderMetadata,
 } from '../../../../loop/shared/steps/tool-result-commit-core';
+import { getAbortReason, isMastraTimeoutError } from '../../../../loop/timeout';
 import type { Mastra } from '../../../../mastra';
 import type { SpanType, ExportedSpan } from '../../../../observability';
 import { extractUsageMetrics } from '../../../../observability/usage';
@@ -145,9 +147,7 @@ export function createDurableLLMMappingStep() {
       // Aborted calls also lack a result/error but were cancelled, not awaiting input,
       // so they must not count as a HITL suspension (mirrors the non-durable predicate's
       // `!tc.aborted`). Tripwire-blocked calls (`resultBlocked`) are resolved by policy,
-      // not awaiting a client answer, so they keep the pre-existing continuation
-      // semantics (isContinued follows tool errors / the model's stepResult) instead of
-      // force-ending the turn.
+      // not awaiting a client answer; keep the existing continuation decision.
       const isPendingClientCall = (toolResult: (typeof toolResults)[number]) =>
         toolResult.result === undefined &&
         !toolResult.error &&
@@ -343,6 +343,7 @@ export function createDurableLLMMappingStep() {
       // A pending client call ends the turn so the client can answer it. Without this the
       // loop re-invoked the model on a result nobody produced.
       const hasPendingHITL = toolResults.some(isPendingClientCall);
+      const tripwire = toolResults.find(r => r.tripwire)?.tripwire;
       const isContinued = hasPendingHITL ? false : hasToolErrors ? true : llmOutput.stepResult.isContinued;
 
       // Check if any delegation hook called ctx.bail(). The primary channel
@@ -423,7 +424,23 @@ export function createDurableLLMMappingStep() {
       if (stepSpan) {
         try {
           const pendingPayload = llmOutput.stepFinishPayload as any;
+          const signal = getRunRegistryEntry(_runId, mastra as Mastra | undefined)?.abortSignal ?? params.abortSignal;
+          const abortReason = getAbortReason(signal);
+          // A late run abort does not change completed tool work. Only calls
+          // that actually observed cancellation interrupt this logical step.
+          const interrupted = toolResults.some(result => result.aborted);
+          const termination = interrupted
+            ? isMastraTimeoutError(abortReason)
+              ? executionFailureTermination(abortReason)
+              : agentLoopTermination({ finishReason: 'abort' })
+            : agentLoopTermination({
+                stopCause: 'model_finished',
+                finishReason: tripwire ? 'tripwire' : llmOutput.stepResult.reason,
+                tripwire,
+              });
           stepSpan.end({
+            ...termination,
+            ...(interrupted ? { outcome: 'interrupted' as const } : {}),
             output: {
               text: llmOutput.text,
               toolCalls: llmOutput.toolCalls,

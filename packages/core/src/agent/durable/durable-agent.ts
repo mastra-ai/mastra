@@ -43,7 +43,7 @@ import { modelSpanAttributes } from '../model-span-attributes';
 import { SaveQueueManager } from '../save-queue';
 import type { AgentScopesSnapshot } from '../scopes';
 import { applyResolvedAgentScopes, resolveAgentScopes, restoreRunAgentScopes } from '../scopes';
-import type { AgentSignalInput } from '../signals';
+import type { PendingSignalListener, AgentSignalInput } from '../signals';
 import { AgentThreadLeaseConflictError, agentThreadStreamRuntime } from '../thread-stream-runtime';
 import type { AgentThreadRunRegistration } from '../thread-stream-runtime';
 import type { AgentAbortThreadOptions, AgentModelManagerConfig, ToolsInput } from '../types';
@@ -1640,8 +1640,14 @@ export class DurableAgent<
         try {
           const observability = this.#mastra.observability.getSelectedInstance({ requestContext });
           const output = { status: 'interrupted' as const, reason: 'run recovered after its process stopped' };
-          if (origModelSpanData) observability?.rebuildSpan(origModelSpanData)?.end({ output });
-          if (origAgentSpanData) observability?.rebuildSpan(origAgentSpanData)?.end({ output });
+          if (origModelSpanData)
+            observability
+              ?.rebuildSpan(origModelSpanData)
+              ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
+          if (origAgentSpanData)
+            observability
+              ?.rebuildSpan(origAgentSpanData)
+              ?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
         } catch (error) {
           this.#mastra?.getLogger?.()?.warn?.(`[DurableAgent] Failed to end interrupted spans: ${error}`);
         }
@@ -1655,6 +1661,7 @@ export class DurableAgent<
           typeof wrapped.getTracingPolicy === 'function' ? wrapped.getTracingPolicy() : undefined;
         recoverAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
+          outcome: null,
           name: `agent run: '${wrapped.id}' (recovered)`,
           entityType: EntityType.AGENT,
           entityId: wrapped.id,
@@ -1679,6 +1686,7 @@ export class DurableAgent<
         });
         recoverModelSpan = recoverAgentSpan?.createChildSpan({
           type: SpanType.MODEL_GENERATION,
+          outcome: null,
           name: `llm: '${model?.modelId ?? ''}'`,
           attributes: { model: model?.modelId, provider: model?.provider, streaming: true },
           metadata: { runId, recovered: true },
@@ -1740,7 +1748,8 @@ export class DurableAgent<
       errorProcessors,
       processorStates,
       drainPendingSignals: (scope?: 'pending' | 'pre-run') => wrapped.__getDrainPendingSignals()(runId, scope),
-      subscribePendingSignals: (listener: () => void) => wrapped.__getSubscribePendingSignals()(runId, listener),
+      subscribePendingSignals: (listener: PendingSignalListener) =>
+        wrapped.__getSubscribePendingSignals()(runId, listener),
       enqueuePendingSignal: (signalInput: AgentSignalInput) =>
         wrapped.__getEnqueuePendingSignal()({ runId, resourceId, threadId }, signalInput),
       cleanup: () => {},
@@ -3914,6 +3923,7 @@ export class DurableAgent<
         const agentTracingPolicy = typeof ag.getTracingPolicy === 'function' ? ag.getTracingPolicy() : undefined;
         const resumeAgentSpan = getOrCreateSpan({
           type: SpanType.AGENT_RUN,
+          outcome: null,
           name: `agent run: '${ag.id}' (resumed)`,
           entityType: EntityType.AGENT,
           entityId: ag.id,
@@ -3927,12 +3937,15 @@ export class DurableAgent<
           },
           ...(origSpanId ? { resumedFromSpanId: origSpanId } : {}),
           tracingPolicy: agentTracingPolicy,
-          tracingOptions: { traceId: origTraceId },
+          tracingOptions: { traceId: origTraceId, ...entry.agentSpan?.traceState },
+          traceState: entry.agentSpan?.traceState,
+          samplingDecision: entry.agentSpan?.isValid,
           requestContext: resolvedOptions.requestContext,
           mastra: this.#mastra,
         });
         const resumeModelSpan = resumeAgentSpan?.createChildSpan({
           type: SpanType.MODEL_GENERATION,
+          outcome: null,
           name: `llm: '${resumeModel?.modelId ?? ''}'`,
           attributes: { model: resumeModel?.modelId, provider: resumeModel?.provider, streaming: true },
           metadata: { runId, resumed: true },
@@ -4483,6 +4496,8 @@ export class DurableAgent<
             // execute-scorers unchanged: the same payload the lost FINISH carried.
             const { output: finalOutput, stepResult } = result.result;
             // map-final-output, which ends the recovered spans, did not re-run.
+            // Workflow success alone cannot distinguish an agent success from a limit/block.
+            // Keep unknown until the authoritative termination is recovered (OBS-754).
             recoverModelSpan?.end();
             recoverAgentSpan?.end({ output: { text: finalOutput?.text } });
             await emitFinishEvent(recoveryPubsub, runId, { output: finalOutput, stepResult });
@@ -4518,8 +4533,8 @@ export class DurableAgent<
             // Nothing is reported for a superseded recovery, so nothing else
             // ends the recovered spans; stores only persist span ends.
             const output = { status: 'interrupted' as const, reason: 'recovery superseded' };
-            recoverModelSpan?.end({ output });
-            recoverAgentSpan?.end({ output });
+            recoverModelSpan?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
+            recoverAgentSpan?.end({ output, outcome: 'interrupted', stopReason: null, stopReasonContext: null });
             // The execution that took the run over holds the thread lease under
             // the same runId and owns the run's topic: leave both to it.
             await threadRegistration?.rollback({ releaseLease: false });
