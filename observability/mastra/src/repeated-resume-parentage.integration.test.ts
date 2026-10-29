@@ -275,6 +275,85 @@ it('a resume under its own external parent stays in the saved trace under the in
   });
 });
 
+async function suspendThenResume({
+  beforeResume,
+  underRequestSpan = false,
+}: {
+  beforeResume?: (storage: InMemoryStore, runId: string) => Promise<void>;
+  underRequestSpan?: boolean;
+}) {
+  const exporter = new TestExporter();
+  const storage = new InMemoryStore();
+  const host = new Mastra({
+    agents: {
+      agent: new Agent({
+        id: 'resume-origin',
+        name: 'Resume origin',
+        instructions: 'Request two approvals, then answer.',
+        model: twoApprovalsModel(),
+        tools: {
+          confirm: createTool({
+            id: 'confirm',
+            description: 'Request approval',
+            inputSchema: z.object({}),
+            requireApproval: true,
+            execute: async () => ({ approved: true }),
+          }),
+        },
+      }),
+    },
+    storage,
+    logger: false,
+    observability: new Observability({
+      configs: { test: { serviceName: 'resume-origin', exporters: [exporter] } },
+    }),
+  });
+  const agent = host.getAgent('agent');
+  const runId = 'resume-origin';
+  const request = underRequestSpan
+    ? host.observability!.getDefaultInstance()!.startSpan({ name: 'request', type: SpanType.GENERIC })
+    : undefined;
+  const tracingContext = request ? { currentSpan: request } : undefined;
+  try {
+    expect((await agent.generate('Start.', { runId, maxSteps: 10, tracingContext })).finishReason).toBe('suspended');
+    await beforeResume?.(storage, runId);
+    expect(
+      (await agent.resumeGenerate({ approved: true }, { runId, toolCallId: 'call-1', maxSteps: 10, tracingContext }))
+        .finishReason,
+    ).toBe('suspended');
+    request?.end();
+    await expect.poll(() => exporter.getSpansByType(SpanType.AGENT_RUN).length).toBe(2);
+    const [initial, resumed] = exporter.getSpansByType(SpanType.AGENT_RUN);
+    return { initial: initial!, resumed: resumed!, request };
+  } finally {
+    await host.shutdown();
+  }
+}
+
+it('a snapshot saved before resume lineage was stored still links the resume to the initial agent', async () => {
+  const { initial, resumed } = await suspendThenResume({
+    beforeResume: async (storage, runId) => {
+      const workflows = (await storage.getStore('workflows'))!;
+      const snapshot = (await workflows.loadWorkflowSnapshot({ workflowName: 'agentic-loop', runId }))!;
+      const { traceId, spanId, parentSpanId } = snapshot.tracingContext!;
+      await workflows.persistWorkflowSnapshot({
+        workflowName: 'agentic-loop',
+        runId,
+        snapshot: { ...snapshot, tracingContext: { traceId, spanId, parentSpanId } },
+      });
+    },
+  });
+  expect(resumed.parentSpanId).toBe(initial.id);
+  expect(resumed.resumedFromSpanId).toBe(initial.id);
+});
+
+it('a resume inside a live span of the saved trace links to the initial agent', async () => {
+  const { initial, resumed, request } = await suspendThenResume({ underRequestSpan: true });
+  expect(initial.parentSpanId).toBe(request!.id);
+  expect(resumed.parentSpanId).toBe(request!.id);
+  expect(resumed.resumedFromSpanId).toBe(initial.id);
+});
+
 it.each(['normal', 'durable'] as const)(
   '%s keeps nested agent resumes under their own initial invocation',
   async engine => {
