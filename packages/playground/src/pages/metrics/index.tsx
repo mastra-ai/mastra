@@ -11,7 +11,6 @@ import {
   FailureRateCard,
   LatencyCard,
   MetricsGrid,
-  MetricsKpis,
   ScoresCard,
   TokenUsageCard,
   TraceVolumeCard,
@@ -270,7 +269,6 @@ function MetricsCards() {
 
   return (
     <div className="grid content-start gap-4 pb-6">
-      <MetricsKpis />
       {layout === 'unified' && <BreakdownCard onRowClick={openTraces} />}
       <TokenUsageCard onViewTraces={() => openTraces()} onTimeRangeClick={range => openTraces({ window: range })} />
       {layout === 'unified' ? (

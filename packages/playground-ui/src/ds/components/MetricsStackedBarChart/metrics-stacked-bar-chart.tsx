@@ -162,7 +162,7 @@ export function MetricsStackedBarChart(props: MetricsStackedBarChartProps) {
   // The legend stays while loading: it comes from the series, not the data.
   return (
     <div className={root} data-chart-scope={id}>
-      {showLegend && <MetricsLineChartLegend data={isLoading ? undefined : data} series={legend} className="mb-4" />}
+      {showLegend && <MetricsLineChartLegend series={legend} className="mb-4" />}
       {isLoading ? <ChartSkeleton kind="bar" height={height} /> : <BarPlot {...props} id={id} />}
     </div>
   );

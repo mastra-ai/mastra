@@ -13,15 +13,14 @@ describe('ChartCard', () => {
   afterEach(() => cleanup());
 
   describe('compact', () => {
-    it('shows the title and the total on one line, without the description', () => {
+    it('shows the title and the total on one line', () => {
       render(
-        <ChartCard variant="compact" title="Tokens" description="Input and output." total="992K">
+        <ChartCard variant="compact" title="Tokens" total="992K">
           <div />
         </ChartCard>,
       );
       expect(screen.getByRole('heading', { name: 'Tokens' })).toBeTruthy();
       expect(screen.getByText('992K')).toBeTruthy();
-      expect(screen.queryByText('Input and output.')).toBeNull();
     });
 
     it('swaps the total for a skeleton while loading', () => {
@@ -52,19 +51,27 @@ describe('ChartCard', () => {
     });
   });
 
-  describe('default with a title menu', () => {
-    it('keeps the description under the menu', () => {
+  describe('hero', () => {
+    it('shows the title as a label over the total, with the change against the previous period', () => {
       render(
-        <ChartCard
-          title="Spend by model"
-          description="Each line is a model."
-          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
-        >
+        <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" actions={<button>Bucket</button>}>
           <div />
         </ChartCard>,
       );
-      expect(screen.getByRole('button', { name: 'Spend by model' })).toBeTruthy();
-      expect(screen.getByText('Each line is a model.')).toBeTruthy();
+      expect(screen.getByText('Spend sum')).toBeTruthy();
+      expect(screen.getByText('$138.92')).toBeTruthy();
+      expect(screen.getByText('+71.4% vs previous')).toBeTruthy();
+      expect(screen.getByRole('button', { name: 'Bucket' })).toBeTruthy();
+    });
+
+    it('swaps the total for a skeleton while loading, without the change', () => {
+      render(
+        <ChartCard variant="hero" title="Spend sum" total="$138.92" change="+71.4%" isLoading>
+          <div />
+        </ChartCard>,
+      );
+      expect(screen.queryByText('$138.92')).toBeNull();
+      expect(screen.queryByText('+71.4% vs previous')).toBeNull();
     });
   });
 
@@ -80,11 +87,10 @@ describe('ChartCard', () => {
     expect(screen.getByRole('heading', { name: 'Spend by model' }).contains(link)).toBe(true);
 
     rerender(
-      <ChartCard title="Spend by model" description="Each line is a model." href="/query" LinkComponent={Link}>
+      <ChartCard title="Spend by model" href="/query" LinkComponent={Link}>
         <div />
       </ChartCard>,
     );
     expect(screen.getByRole('link', { name: 'Spend by model' }).getAttribute('href')).toBe('/app/query');
-    expect(screen.getByText('Each line is a model.')).toBeTruthy();
   });
 });

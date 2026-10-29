@@ -36,7 +36,6 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
 
   const layout = {
     title: 'Failure rate',
-    description: 'Share of agent runs that failed.',
     actions: onViewErrors && <OpenErrorsInLogsButton onClick={onViewErrors} />,
     toolbar: (
       <MetricsCard.Toolbar>
@@ -56,9 +55,8 @@ export function FailureRateCard({ onViewErrors, onTimeRangeClick }: FailureRateC
   return (
     <ChartCard
       {...layout}
-      summary={
-        <MetricsCard.Summary value={formatPercent(runs > 0 ? failed / runs : 0)} label="failed" isLoading={isLoading} />
-      }
+      total={formatPercent(runs > 0 ? failed / runs : 0)}
+      isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
       <ChartArea isEmpty={!isLoading && runs === 0} emptyMessage="No agent runs in this range.">

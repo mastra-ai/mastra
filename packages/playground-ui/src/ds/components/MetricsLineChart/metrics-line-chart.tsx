@@ -16,7 +16,6 @@ export type MetricsLineChartSeries = {
   dataKey: string;
   label: string;
   color: string;
-  aggregate?: (data: Record<string, unknown>[]) => { value: string; suffix?: string };
   /** A secondary reading (e.g. an average next to counts): dashed, no fill under it. */
   dashed?: boolean;
   /** The series to read first (e.g. P95 among percentiles): a slightly heavier line. */
@@ -109,7 +108,7 @@ export function MetricsLineChart(props: MetricsLineChartProps) {
   // The legend stays while loading: it comes from the series, not the data.
   return (
     <div className={root}>
-      {showLegend && <MetricsLineChartLegend data={isLoading ? undefined : data} series={series} className="mb-4" />}
+      {showLegend && <MetricsLineChartLegend series={series} className="mb-4" />}
       {isLoading ? <ChartSkeleton kind="line" height={height} /> : <LinePlot {...props} />}
     </div>
   );

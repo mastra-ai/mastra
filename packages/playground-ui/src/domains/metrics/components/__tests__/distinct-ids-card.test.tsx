@@ -29,7 +29,7 @@ const MEASURES = [
 
 let requests: TraceAggregateRequest[] = [];
 
-/** A legend entry's label and range total, e.g. `Resources5`. */
+/** A legend entry's text: its label alone, e.g. `Resources`. */
 const legendEntry = (label: string) => screen.getByText(label).parentElement?.textContent;
 
 type Served = { empty?: boolean; totals?: typeof distinctIdsTotalsFixture };
@@ -72,14 +72,13 @@ beforeEach(() => {
 describe('when the server answers aggregateTraces()', () => {
   beforeEach(() => serveCapabilities(traceAggregateCapabilities));
 
-  it('shows range totals from their own request, not the sum of buckets', async () => {
+  it('labels each id in the legend, without its range total', async () => {
     serveCard();
     render(<DistinctIdsCard />);
 
-    // Buckets hold 3 + 4 resources; the range has 5.
     await screen.findByText('Resources');
-    expect(legendEntry('Resources')).toBe('Resources5');
-    expect(legendEntry('Threads')).toBe('Threads14');
+    expect(legendEntry('Resources')).toBe('Resources');
+    expect(legendEntry('Threads')).toBe('Threads');
   });
 
   it('asks for all four distinct ids once per hour and once for the range', async () => {
@@ -110,13 +109,13 @@ describe('when the server answers aggregateTraces()', () => {
   });
 
   describe('when the traces also set user and session ids', () => {
-    it('adds them to the legend with their totals', async () => {
+    it('adds them to the legend', async () => {
       serveCard({ totals: distinctIdsWithUsersTotalsFixture });
       render(<DistinctIdsCard />);
       await screen.findByText('Resources');
 
-      expect(legendEntry('Users')).toBe('Users2');
-      expect(legendEntry('Sessions')).toBe('Sessions3');
+      expect(legendEntry('Users')).toBe('Users');
+      expect(legendEntry('Sessions')).toBe('Sessions');
     });
   });
 
@@ -137,7 +136,7 @@ describe('when the server answers aggregateTraces()', () => {
     fireEvent.click(screen.getByRole('button', { name: 'Retry' }));
 
     expect(await screen.findByText('Resources', undefined, { timeout: 5000 })).toBeDefined();
-    expect(legendEntry('Resources')).toBe('Resources5');
+    expect(screen.getByText('Threads')).toBeDefined();
     // Two waits of up to 5 s each: the default 5 s test timeout cuts it short under a loaded run.
   }, 15_000);
 

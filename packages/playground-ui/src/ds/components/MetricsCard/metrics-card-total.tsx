@@ -2,7 +2,7 @@ import { SkeletonText } from '@/ds/components/Skeleton';
 import { cn } from '@/lib/utils';
 
 /**
- * A compact card's total, right of the title in the same type (14px, medium). Always the top
+ * A card's total, right of the title in the same type (14px, medium). Always the top
  * bar's last item. A skeleton while loading, in the value's own line box.
  */
 export function MetricsCardTotal({

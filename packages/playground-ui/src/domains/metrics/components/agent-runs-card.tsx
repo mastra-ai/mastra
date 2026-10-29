@@ -32,7 +32,6 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
 
   const layout = {
     title: 'Agent runs',
-    description: 'Completed and failed runs.',
     toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={SERIES} />
@@ -49,11 +48,7 @@ export function AgentRunsCard({ onTimeRangeClick }: AgentRunsCardProps) {
   }
 
   return (
-    <ChartCard
-      {...layout}
-      summary={<MetricsCard.Summary value={formatCount(total)} label="runs" isLoading={isLoading} />}
-      isUpdating={isPlaceholderData}
-    >
+    <ChartCard {...layout} total={formatCount(total)} isLoading={isLoading} isUpdating={isPlaceholderData}>
       <ChartArea isEmpty={!isLoading && total === 0} emptyMessage="No agent runs in this range.">
         <MetricsStackedBarChart
           data={data}

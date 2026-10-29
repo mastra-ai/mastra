@@ -9,14 +9,13 @@ describe('AgentRunsCard', () => {
     pendingMetrics();
     renderInMetrics(<AgentRunsCard />);
     expect(screen.getByText('Agent runs')).toBeDefined();
-    expect(screen.queryByText('runs')).toBeNull();
+    expect(screen.queryByText('10')).toBeNull();
   });
 
   it('shows the run count once loaded', async () => {
     seedMetrics();
     renderInMetrics(<AgentRunsCard />);
-    expect(await screen.findByText('runs')).toBeDefined();
-    expect(screen.getByText('10')).toBeDefined();
+    expect(await screen.findByText('10')).toBeDefined();
   });
 
   it('says when the range has no runs', async () => {

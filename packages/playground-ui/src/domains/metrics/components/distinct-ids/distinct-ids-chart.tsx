@@ -28,7 +28,6 @@ type Id = (typeof IDS)[number];
 const MEASURES: AggregateTracesArgs['measures'] = IDS.map(id => id.measure);
 
 export const DISTINCT_IDS_TITLE = 'Resources and threads';
-export const DISTINCT_IDS_DESCRIPTION = 'Unique ids on traces; users and sessions only when set.';
 
 export type DistinctIdsChartProps = {
   scope: TraceAggregateScope;
@@ -55,13 +54,11 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
   const total = totals.data?.rows[0];
   // Only the ids this project sets get a line; the rest would sit flat at zero.
   const shown = IDS.filter(id => count(total, id) > 0);
-  // The legend carries each id's range total, as the Scores legend carries each scorer's mean.
   const lines: MetricsLineChartSeries[] = shown.map((id, i) => ({
     dataKey: id.dataKey,
     label: id.label,
     color: id.color,
     emphasis: i === 0,
-    aggregate: () => ({ value: formatCount(count(total, id)) }),
   }));
   const chart = bucketTraceAggregateRows(series.data?.rows ?? [], scope.window).map(({ rows, ...labels }) => ({
     ...labels,
@@ -73,10 +70,9 @@ export function DistinctIdsChart({ scope, onTimeRangeClick }: DistinctIdsChartPr
 
   const layout = {
     title: DISTINCT_IDS_TITLE,
-    description: DISTINCT_IDS_DESCRIPTION,
     toolbar: lines.length > 0 && (
       <MetricsCard.Toolbar>
-        <MetricsLineChartLegend data={chart} series={lines} />
+        <MetricsLineChartLegend series={lines} />
       </MetricsCard.Toolbar>
     ),
   };

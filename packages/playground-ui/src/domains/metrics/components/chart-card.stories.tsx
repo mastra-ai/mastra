@@ -1,4 +1,5 @@
 import type { Meta, StoryObj } from '@storybook/react-vite';
+import { DownloadIcon } from 'lucide-react';
 import { useState } from 'react';
 import { bucketLabels } from '../lib/bucket-labels';
 import { EDGE_BUCKET_AXIS } from '../lib/chart-axis';
@@ -6,8 +7,10 @@ import { CHART_COLORS } from '../lib/chart-colors';
 import { formatAxisUsd } from '../lib/chart-format';
 import { ChartArea } from './chart-area';
 import { ChartCard } from './chart-card';
+import { Button } from '@/ds/components/Button';
 import { MetricsLineChart, MetricsLineChartLegend } from '@/ds/components/MetricsLineChart';
 import type { MetricsLineChartSeries } from '@/ds/components/MetricsLineChart';
+import { TraceIcon } from '@/ds/icons/TraceIcon';
 
 const DAY = 24 * 3_600_000;
 const start = new Date(2026, 9, 15).getTime();
@@ -62,11 +65,11 @@ const meta: Meta<typeof ChartCard> = {
 export default meta;
 type Story = StoryObj<typeof ChartCard>;
 
-/** The Metrics page's card: title and description, a 240px body. */
+/** The Metrics page's card: title and total, a 240px body. */
 export const Default: Story = {
   render: () => (
     <div className="w-[min(36rem,calc(100vw-3rem))]">
-      <ChartCard title="Spend" description="By model." toolbar={<MetricsLineChartLegend series={byModel} />}>
+      <ChartCard title="Spend by model" total="$27.40" toolbar={<MetricsLineChartLegend series={byModel} />}>
         <ChartArea>
           <MetricsLineChart
             data={data}
@@ -95,8 +98,8 @@ function SpendCard() {
         value: view,
         onValueChange: v => setView(v as 'model' | 'provider'),
         options: [
-          { value: 'model', label: 'By model' },
-          { value: 'provider', label: 'By provider' },
+          { value: 'model', label: 'Spend by model' },
+          { value: 'provider', label: 'Spend by provider' },
         ],
       }}
       total="$27.40"
@@ -198,6 +201,43 @@ export const CompactLoading: Story = {
         <ChartArea>
           <MetricsLineChart data={data} series={tokenSeries} height="fill" showLegend={false} isLoading />
         </ChartArea>
+      </ChartCard>
+    </div>
+  ),
+};
+
+/**
+ * `variant="hero"`, for one large chart that is the page's subject (an explorer): the title as a
+ * label over a large total, the change beside it, and the actions always shown.
+ */
+export const Hero: Story = {
+  render: () => (
+    <div className="w-[min(56rem,calc(100vw-3rem))]">
+      <ChartCard
+        variant="hero"
+        title="Spend sum"
+        total="$138.92"
+        change="+71.4%"
+        actions={
+          <>
+            <Button variant="ghost" size="icon-sm" tooltip="View in traces">
+              <TraceIcon />
+            </Button>
+            <Button variant="ghost" size="icon-sm" tooltip="Download CSV">
+              <DownloadIcon />
+            </Button>
+          </>
+        }
+        toolbar={<MetricsLineChartLegend series={byModel} />}
+      >
+        <MetricsLineChart
+          data={data}
+          series={byModel}
+          height={384}
+          showLegend={false}
+          valueFormatter={usd}
+          axisFormatter={formatAxisUsd}
+        />
       </ChartCard>
     </div>
   ),

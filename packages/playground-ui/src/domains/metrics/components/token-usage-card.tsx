@@ -24,6 +24,11 @@ const TOKEN_SERIES: MetricsLineChartSeries[] = [
 ];
 const COST_SERIES: MetricsLineChartSeries[] = [{ dataKey: 'cost', label: 'Cost', color: CHART_COLORS.green }];
 
+const VIEWS = [
+  { value: 'tokens', label: 'Token usage' },
+  { value: 'cost', label: 'Model cost' },
+] as const satisfies readonly { value: View; label: string }[];
+
 /** Tokens (input, cache reads, output) or model cost per bucket; a bar opens its traces. */
 export type TokenUsageCardProps = {
   /** Called from the "View in Traces" button. */
@@ -43,16 +48,12 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   const series = isTokens ? TOKEN_SERIES : COST_SERIES;
 
   const layout = {
-    title: 'Token usage',
-    description: isTokens ? 'Input, cache reads and output.' : 'Estimated model spend.',
+    title: isTokens ? 'Token usage' : 'Model cost',
+    titleMenu: { value: view, onValueChange: (v: string) => setView(v as View), options: VIEWS },
     actions: onViewTraces && <OpenInTracesButton onClick={onViewTraces} />,
     toolbar: (
       <MetricsCard.Toolbar>
         <MetricsLineChartLegend series={series} />
-        <MetricsCard.Tabs<View> value={view} onValueChange={setView}>
-          <MetricsCard.Tab value="tokens">Tokens</MetricsCard.Tab>
-          <MetricsCard.Tab value="cost">Cost</MetricsCard.Tab>
-        </MetricsCard.Tabs>
       </MetricsCard.Toolbar>
     ),
   };
@@ -68,13 +69,8 @@ export function TokenUsageCard({ onViewTraces, onTimeRangeClick }: TokenUsageCar
   return (
     <ChartCard
       {...layout}
-      summary={
-        <MetricsCard.Summary
-          value={isTokens ? formatCount(tokens) : formatUsd(cost)}
-          label={isTokens ? 'tokens' : 'cost'}
-          isLoading={isLoading}
-        />
-      }
+      total={isTokens ? formatCount(tokens) : formatUsd(cost)}
+      isLoading={isLoading}
       isUpdating={isPlaceholderData}
     >
       <ChartArea isEmpty={!isLoading && tokens === 0 && cost === 0} emptyMessage="No model calls in this range.">

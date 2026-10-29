@@ -10,38 +10,43 @@ import { cn } from '@/lib/utils';
 
 export type ChartCardProps = {
   /**
-   * Card layout.
-   * - `default`: title and description, the summary top right, a 240px body.
-   * - `compact`: a one-line header (title, `total` on the right), and one card height, so cards
-   *   in a grid line up; the chart fills what the toolbar leaves. For small cards in a grid.
+   * Card layout. `default` and `compact` share one header: the title, and `total` on the right.
+   * - `default`: a 240px body.
+   * - `compact`: one card height, so cards in a grid line up; the chart fills what the toolbar
+   *   leaves. For small cards in a grid.
+   * - `hero`: one large chart that is the page's subject (an explorer): the title as a label over
+   *   a large `total`, with `change` beside it, and `actions` always shown. The body is as tall
+   *   as its content.
    */
-  variant?: 'default' | 'compact';
+  variant?: 'default' | 'compact' | 'hero';
   title: string;
   /**
    * Makes the title a link, marked by an expand icon, to a fuller view of the chart (e.g. the
-   * chart in an explorer). Ignored with `titleMenu`.
+   * chart in an explorer). Ignored with `titleMenu` and on `hero` cards.
    */
   href?: string;
   /** Renders `href` links, e.g. the app's router link; it gets anchor props. Default `a`. */
   LinkComponent?: ElementType<ChartCardLinkProps>;
-  /** Makes the title a dropdown of the card's views (e.g. by model, by provider). */
+  /**
+   * Makes the title a dropdown of the card's views (e.g. "Agent latency", "Tool latency"), in
+   * place of tabs. `title` is the picked view's label. Ignored on `hero` cards.
+   */
   titleMenu?: Omit<MetricsCardTitleMenuProps<string>, 'title' | 'className'>;
-  /** Compact cards: the card's total, right of the title in the same type. */
+  /** The card's headline number: right of the title, or the large value on `hero` cards. */
   total?: string;
-  /** Compact cards: a skeleton in place of `total`. */
+  /** `hero` cards: the change against the previous period, e.g. "+71.4%". */
+  change?: string;
+  /** A skeleton in place of `total`. */
   isLoading?: boolean;
-  description?: string;
-  /** The headline number, top right: a `MetricsCard.Summary`. Its slot has a fixed width, so the title wraps the same loading or loaded. */
-  summary?: ReactNode;
-  /** Top-bar buttons revealed on hover, e.g. "View in Traces". */
+  /** Top-bar buttons, e.g. "View in traces": revealed on hover, except on `hero` cards. */
   actions?: ReactNode;
-  /** Tabs and legend above the body; they stay in every state. */
+  /** Legend and controls above the body; they stay in every state. */
   toolbar?: ReactNode;
   /** Previous data stays on screen, dimmed, while a new range or filter loads. */
   isUpdating?: boolean;
   /**
-   * `fixed` (default): the body is one chart high in every state. `fit`: at least that high, and
-   * taller when the content needs it, for lists that grow with "Show more".
+   * `default` cards. `fixed` (default): the body is one chart high in every state. `fit`: at
+   * least that high, and taller when the content needs it, for lists that grow with "Show more".
    */
   bodyHeight?: 'fixed' | 'fit';
   className?: string;
@@ -59,9 +64,8 @@ export function ChartCard({
   LinkComponent,
   titleMenu,
   total,
+  change,
   isLoading = false,
-  description,
-  summary,
   actions,
   toolbar,
   isUpdating = false,
@@ -71,27 +75,30 @@ export function ChartCard({
 }: ChartCardProps) {
   const fade = cn('transition-opacity duration-200', isUpdating && 'opacity-50');
   const compact = variant === 'compact';
+  const hero = variant === 'hero';
   return (
     <MetricsCard className={cn('min-h-0! min-w-0! grid-cols-1', compact && 'h-84', className)}>
       <MetricsCard.TopBar>
-        <ChartCardHeading
-          title={title}
-          href={href}
-          LinkComponent={LinkComponent}
-          description={description}
-          titleMenu={titleMenu}
-          compact={compact}
-        />
-        {actions && <MetricsCard.Actions reveal="hover">{actions}</MetricsCard.Actions>}
-        {compact && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
-        {!compact && summary && <div className={cn('order-last flex w-24 shrink-0 justify-end', fade)}>{summary}</div>}
+        {hero ? (
+          <MetricsCard.Headline
+            label={title}
+            value={total ?? '—'}
+            change={change}
+            isLoading={isLoading}
+            className={fade}
+          />
+        ) : (
+          <ChartCardHeading title={title} href={href} LinkComponent={LinkComponent} titleMenu={titleMenu} />
+        )}
+        {actions && <MetricsCard.Actions reveal={hero ? 'always' : 'hover'}>{actions}</MetricsCard.Actions>}
+        {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
         {toolbar}
         <div
           className={cn(
             'relative flex min-h-0 min-w-0 flex-col',
-            compact ? 'flex-1' : bodyHeight === 'fit' ? 'min-h-60' : 'h-60',
+            compact ? 'flex-1' : hero ? undefined : bodyHeight === 'fit' ? 'min-h-60' : 'h-60',
             fade,
           )}
         >
@@ -102,56 +109,34 @@ export function ChartCard({
   );
 }
 
-/** The title: a view menu, a lone compact title, or the default title, each with the description on default cards. */
+/** The title: a view menu, a link to a fuller view, or plain. */
 function ChartCardHeading({
   title,
   href,
   LinkComponent,
-  description,
   titleMenu,
-  compact,
-}: Pick<ChartCardProps, 'title' | 'href' | 'LinkComponent' | 'description' | 'titleMenu'> & { compact: boolean }) {
-  if (titleMenu) {
-    return (
-      <div className="flex flex-col">
-        <MetricsCard.TitleMenu title={title} {...titleMenu} />
-        {!compact && description && <MetricsCard.Description>{description}</MetricsCard.Description>}
-      </div>
-    );
-  }
+}: Pick<ChartCardProps, 'title' | 'href' | 'LinkComponent' | 'titleMenu'>) {
+  if (titleMenu) return <MetricsCard.TitleMenu title={title} {...titleMenu} />;
   if (href) {
-    const Heading = compact ? 'h3' : 'h2';
     return (
-      <div className="flex flex-col items-start">
-        <Heading>
-          <ChartCardTitleLink href={href} LinkComponent={LinkComponent} medium={compact}>
-            {title}
-          </ChartCardTitleLink>
-        </Heading>
-        {!compact && description && <MetricsCard.Description>{description}</MetricsCard.Description>}
-      </div>
+      <h3 className="flex">
+        <ChartCardTitleLink href={href} LinkComponent={LinkComponent}>
+          {title}
+        </ChartCardTitleLink>
+      </h3>
     );
   }
-  if (compact) {
-    return (
-      <MetricsCard.Title as="h3" weight="medium">
-        {title}
-      </MetricsCard.Title>
-    );
-  }
-  return <MetricsCard.TitleAndDescription title={title} description={description} />;
+  return <MetricsCard.Title>{title}</MetricsCard.Title>;
 }
 
 /** The title as a link to a fuller view, with an expand icon after it; hover fills its own box, not the row. */
 function ChartCardTitleLink({
   href,
   LinkComponent,
-  medium,
   children,
 }: {
   href: string;
   LinkComponent?: ElementType<ChartCardLinkProps>;
-  medium: boolean;
   children: string;
 }) {
   const Anchor = LinkComponent ?? 'a';
@@ -159,9 +144,8 @@ function ChartCardTitleLink({
     <Anchor
       href={href}
       className={cn(
-        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body text-foreground hover:bg-fill-subtle',
+        '-mx-1.5 -my-0.5 inline-flex items-center gap-1.5 rounded-md px-1.5 py-0.5 text-body font-medium text-foreground hover:bg-fill-subtle',
         'focus-visible:outline-1 focus-visible:-outline-offset-1 focus-visible:outline-border-focus focus-visible:outline-solid',
-        medium && 'font-medium',
       )}
     >
       {children}
