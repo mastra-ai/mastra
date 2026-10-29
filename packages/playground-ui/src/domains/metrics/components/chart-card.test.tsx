@@ -49,6 +49,27 @@ describe('ChartCard', () => {
       fireEvent.click(await screen.findByRole('menuitemradio', { name: 'By provider' }));
       expect(onValueChange).toHaveBeenCalledWith('provider');
     });
+
+    it("keeps the title as the top bar's first item, sized to its text, while the menu is open", async () => {
+      render(
+        <ChartCard
+          variant="compact"
+          title="Spend by model"
+          total="$12"
+          titleMenu={{ value: 'model', onValueChange: vi.fn(), options: views }}
+        >
+          <div />
+        </ChartCard>,
+      );
+      const trigger = screen.getByRole('button', { name: 'Spend by model' });
+      const topBar = trigger.parentElement?.parentElement;
+      // The top bar stretches its first item; that's the wrapper, so the button keeps its width.
+      expect(topBar?.firstElementChild).toBe(trigger.parentElement);
+      fireEvent.click(trigger);
+      await screen.findByRole('menuitemradio', { name: 'By provider' });
+      expect(topBar?.firstElementChild?.contains(trigger)).toBe(true);
+      expect(topBar?.lastElementChild?.textContent).toBe('$12');
+    });
   });
 
   describe('hero', () => {

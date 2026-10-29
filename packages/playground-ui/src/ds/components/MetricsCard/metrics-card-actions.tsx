@@ -2,7 +2,8 @@ import type { ReactNode } from 'react';
 import { cn } from '@/lib/utils';
 
 /** Container for icon buttons / small actions in the top bar of a MetricsCard,
- *  placed between the title and `Total` (which always renders last). */
+ *  placed between the title and `Total` (which always renders last). Small (28px) buttons sit
+ *  centered on the 20px title line without making the top bar taller. */
 export function MetricsCardActions({
   children,
   reveal = 'always',
@@ -19,7 +20,7 @@ export function MetricsCardActions({
   return (
     <div
       className={cn(
-        'flex shrink-0 items-center gap-1 self-center',
+        '-my-1 flex shrink-0 items-center gap-1 self-start',
         reveal === 'hover' &&
           'opacity-0 transition-opacity duration-150 group-hover/metrics-card:opacity-100 focus-within:opacity-100',
         className,

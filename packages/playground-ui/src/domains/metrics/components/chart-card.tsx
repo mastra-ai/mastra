@@ -90,7 +90,11 @@ export function ChartCard({
         ) : (
           <ChartCardHeading title={title} href={href} LinkComponent={LinkComponent} titleMenu={titleMenu} />
         )}
-        {actions && <MetricsCard.Actions reveal={hero ? 'always' : 'hover'}>{actions}</MetricsCard.Actions>}
+        {actions && (
+          <MetricsCard.Actions reveal={hero ? 'always' : 'hover'} className={cn(hero && 'my-0 self-center')}>
+            {actions}
+          </MetricsCard.Actions>
+        )}
         {!hero && total !== undefined && <MetricsCard.Total value={total} isLoading={isLoading} className={fade} />}
       </MetricsCard.TopBar>
       <MetricsCard.Content className={cn('flex flex-col gap-4 overflow-visible', compact && 'min-h-0')}>
