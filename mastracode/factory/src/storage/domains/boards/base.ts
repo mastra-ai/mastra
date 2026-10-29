@@ -390,8 +390,9 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
     await this.#write(scope, async ops => {
       const row = await findLive(ops, scope, key);
       checkRevision(row, key, options.expectedRevision);
+      if ((await ops.deleteMany(BOARDS, { id: row.id, revision: row.revision })) === 0)
+        throw new ConcurrentBoardWrite();
       await ops.deleteMany(PHASES, { ...scopeWhere(scope), board_key: key });
-      await ops.deleteMany(BOARDS, { id: row.id });
       return { result: undefined, changed: true };
     });
   }
@@ -470,14 +471,14 @@ export class StoredBoardsStorage extends FactoryStorageDomain {
   ): Promise<T> {
     for (let attempt = 1; ; attempt++) {
       try {
-        return await this.storage.withTransaction(
-          async ops => {
-            const { result, changed } = await fn(ops);
-            if (changed) await bumpVersion(ops, scope);
-            return result;
-          },
-          { isolationLevel: 'serializable' },
-        );
+        // Read committed is enough: every row change is a compare-and-set on `revision` and every
+        // insert meets the unique index, both retried below. Serializable isolation would also
+        // fail seeding of unrelated projects that replicas run side by side.
+        return await this.storage.withTransaction(async ops => {
+          const { result, changed } = await fn(ops);
+          if (changed) await bumpVersion(ops, scope);
+          return result;
+        });
       } catch (error) {
         const retryable =
           error instanceof ConcurrentBoardWrite || (options.retryInsertRace && error instanceof UniqueViolationError);

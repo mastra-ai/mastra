@@ -431,4 +431,17 @@ describe.each(['libsql', ...(postgresUrl ? ['postgres'] : [])])('StoredBoardsSto
     expect(stored.every(row => row.revision === 1 && row.phases.length === 3)).toBe(true);
     expect(results.flatMap(result => result.written).sort()).toEqual(['release', 'work']);
   });
+
+  it('seeds many projects at once from two clients, as replicas booting together do', async () => {
+    const { boards, scope, secondClient } = await setup();
+    const other = await secondClient();
+    const seeds = [seed('work', 'work-1', board('work'), 'builtin'), seed('release', 'release-1')];
+    const projects = Array.from({ length: 8 }, (_, index) => ({ ...scope, factoryProjectId: `project-${index}` }));
+
+    await Promise.all(projects.flatMap(project => [boards.applySeed(project, seeds), other.applySeed(project, seeds)]));
+
+    for (const project of projects) {
+      expect((await boards.list(project)).map(row => row.key).sort()).toEqual(['release', 'work']);
+    }
+  });
 });
