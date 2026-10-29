@@ -530,6 +530,72 @@ describe('work item read wire', () => {
     expect((await listed.json()).workItems[0].metadata).toEqual({ number: 43 });
   });
 
+  it('pages, filters, counts and finds cards without sending the whole board', async () => {
+    const seedCard = async (n: number, stage: string, title = `Card ${n}`) =>
+      (
+        await seed.workItems.upsert({
+          orgId: 'org1',
+          userId: 'u1',
+          factoryProjectId: PROJECT_ID,
+          input: {
+            externalSource: {
+              integrationId: 'github',
+              type: 'issue',
+              externalId: String(n),
+              url: `https://github.com/acme/app/issues/${n}`,
+            },
+            title,
+            stages: [stage],
+            sessions: {},
+            metadata: { number: n, githubRepositoryId: 9, labels: ['bug'] },
+          },
+        })
+      ).item;
+    const done = await seedCard(1, 'done');
+    await seedCard(2, 'intake');
+    await seedCard(3, 'intake', 'Login is broken');
+    await seedCard(4, 'intake');
+    const base = `/web/factory/projects/${PROJECT_ID}/work-items`;
+    const titles = async (path: string) => {
+      const body = await (await json('GET', path)).json();
+      return { titles: body.workItems.map((item: { title: string }) => item.title), nextCursor: body.nextCursor };
+    };
+
+    const first = await titles(`${base}?stage=intake&sort=created-newest&limit=2`);
+    expect(first.titles).toEqual(['Card 4', 'Login is broken']);
+    expect(first.nextCursor).toEqual(expect.any(String));
+    const second = await titles(`${base}?stage=intake&sort=created-newest&limit=2&cursor=${first.nextCursor}`);
+    expect(second).toEqual({ titles: ['Card 2'], nextCursor: undefined });
+    expect((await titles(`${base}?stage=intake&sort=created-oldest&limit=1`)).titles).toEqual(['Card 2']);
+    expect((await titles(`${base}?q=login`)).titles).toEqual(['Login is broken']);
+    expect((await titles(base)).titles).toHaveLength(4);
+
+    expect((await json('GET', `${base}?cursor=nope`)).status).toBe(400);
+    expect((await json('GET', `${base}?sort=sideways`)).status).toBe(400);
+
+    expect(await (await json('GET', `${base}/counts`)).json()).toEqual({
+      total: 4,
+      boards: { work: { done: 1, intake: 3 } },
+    });
+
+    const sources = (await (await json('GET', `${base}/sources`)).json()).sources;
+    expect(sources).toHaveLength(4);
+    expect(sources).toContainEqual({
+      board: 'work',
+      externalSource: {
+        integrationId: 'github',
+        type: 'issue',
+        externalId: '1',
+        url: 'https://github.com/acme/app/issues/1',
+      },
+      metadata: { number: 1, githubRepositoryId: 9 },
+    });
+
+    const found = await json('GET', `${base}/${done.id}`);
+    expect((await found.json()).workItem.title).toBe('Card 1');
+    expect((await json('GET', `${base}/00000000-0000-4000-8000-000000000000`)).status).toBe(404);
+  });
+
   it('drops internal tokens from browser writes', async () => {
     const created = await json(
       'POST',

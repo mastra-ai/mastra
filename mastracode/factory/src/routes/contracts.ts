@@ -6,6 +6,7 @@ import { cardRuleGroupSchema } from '../rules/rule-group.js';
 import { FACTORY_ROLE_STAGES } from '../rules/types.js';
 import { BOARD_IDENTIFIER_RE, MAX_BOARD_IDENTIFIER_LENGTH } from '../rules/validation.js';
 import { FACTORY_MODEL_SCOPES } from '../storage/domains/projects/base.js';
+import { WORK_ITEM_SORTS, decodeWorkItemCursor } from './work-item-cursor.js';
 
 const FACTORY_ROLE_VALUES = Object.keys(FACTORY_ROLE_STAGES) as [string, ...string[]];
 export const THINKING_LEVELS = THINKING_LEVEL_VALUES as [ThinkingLevelSetting, ...ThinkingLevelSetting[]];
@@ -368,6 +369,40 @@ const decisionCursorSchema = z
     }
   });
 
+const commaListSchema = z
+  .string()
+  .optional()
+  .transform(value =>
+    value
+      ?.split(',')
+      .map(part => part.trim())
+      .filter(Boolean),
+  );
+
+export const workItemListQuerySchema = z.object({
+  board: commaListSchema,
+  stage: commaListSchema,
+  q: z.string().max(200).optional(),
+  sort: z.enum(WORK_ITEM_SORTS).optional().default('recent'),
+  limit: z
+    .string()
+    .regex(/^\d+$/)
+    .optional()
+    .transform(value => (value === undefined ? undefined : Math.max(1, Math.min(200, Number(value))))),
+  cursor: z
+    .string()
+    .optional()
+    .transform((value, context) => {
+      if (!value) return undefined;
+      const cursor = decodeWorkItemCursor(value);
+      if (!cursor) {
+        context.addIssue({ code: 'custom', message: 'Invalid cursor' });
+        return z.NEVER;
+      }
+      return cursor;
+    }),
+});
+
 export const decisionQuerySchema = z.object({
   statuses: z
     .string()
@@ -629,13 +664,53 @@ export const FACTORY_ROUTE_CONTRACTS = {
   workItemList: {
     method: 'GET',
     path: '/web/factory/projects/:id/work-items',
-    description: 'List Factory work items and running sessions',
+    description:
+      'List Factory work items and running sessions. Without filters or a limit every card comes back; with `limit` the response pages by `nextCursor`.',
     pathSchema: projectPathSchema,
+    querySchema: workItemListQuerySchema,
     responseSchema: z.object({
       workItems: z.array(entitySchema),
       runningSessionIds: z.array(z.string()),
       parkedSessionIds: z.array(z.string()),
+      nextCursor: z.string().optional(),
     }),
+  },
+  workItemCounts: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/counts',
+    description: 'Count Factory work items per board and stage',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      total: z.number().int(),
+      boards: z.record(z.string(), z.record(z.string(), z.number().int())),
+    }),
+  },
+  workItemSources: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/sources',
+    description: 'List the external source of every Factory work item, for intake de-duplication',
+    pathSchema: projectPathSchema,
+    responseSchema: z.object({
+      sources: z.array(
+        z.object({
+          board: z.string(),
+          externalSource: z.object({
+            integrationId: z.string(),
+            type: z.string(),
+            externalId: z.string(),
+            url: z.string().optional(),
+          }),
+          metadata: z.record(z.string(), z.unknown()),
+        }),
+      ),
+    }),
+  },
+  workItemGet: {
+    method: 'GET',
+    path: '/web/factory/projects/:id/work-items/:workItemId',
+    description: 'Read one Factory work item',
+    pathSchema: transitionPathSchema,
+    responseSchema: workItemResponseSchema,
   },
   workItemCreate: {
     method: 'POST',
