@@ -677,14 +677,17 @@ describe('createToolCallAccuracyScorerLLM', () => {
     function judge(
       evaluations: Array<{ toolCalled: string; wasAppropriate: boolean; reasoning: string }>,
       missingTools: string[],
+      onReasonPrompt?: (prompt: string) => void,
     ) {
       function responseFor(prompt: Array<{ role: string; content: unknown }>) {
         const user = prompt.findLast(message => message.role === 'user');
         const parts = Array.isArray(user?.content) ? user.content : [];
         const text = parts.map(part => (part?.type === 'text' ? part.text : '')).join('');
-        return text.includes('Explain this tool selection evaluation')
-          ? 'Tool selections evaluated.'
-          : JSON.stringify({ evaluations, missingTools });
+        if (text.includes('Explain this tool selection evaluation')) {
+          onReasonPrompt?.(text);
+          return 'Tool selections evaluated.';
+        }
+        return JSON.stringify({ evaluations, missingTools });
       }
 
       return new MockLanguageModelV2({
@@ -783,6 +786,22 @@ describe('createToolCallAccuracyScorerLLM', () => {
         availableTools,
       });
       expect((await scorer.run(run(['weather-tool', 'search-tool']))).score).toBe(0.5);
+    });
+
+    it('gives the reason judge the actual calls and only matched evaluations', async () => {
+      let reasonPrompt = '';
+      const scorer = createToolCallAccuracyScorerLLM({
+        model: judge([appropriate('weather-tool'), appropriate('search-tool')], ['calendar-tool'], prompt => {
+          reasonPrompt = prompt;
+        }),
+        availableTools,
+      });
+      expect((await scorer.run(run(['weather-tool', 'weather-tool']))).score).toBe(0.33);
+      expect(reasonPrompt).toContain('Actual Tool Calls: ["weather-tool","weather-tool"]');
+      expect(reasonPrompt).toContain('Matched Tool Evaluations: [{"toolCalled":"weather-tool"');
+      expect(reasonPrompt).not.toContain('"toolCalled":"search-tool"');
+      expect(reasonPrompt).toContain('actual tool calls plus missing tools');
+      expect(reasonPrompt).toContain('Missing Tools: ["calendar-tool"]');
     });
 
     it('returns zero when calls receive no evaluations', async () => {
