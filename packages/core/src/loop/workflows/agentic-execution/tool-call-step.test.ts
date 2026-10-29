@@ -3458,4 +3458,43 @@ describe('data chunks written by a tool', () => {
       messageId: 'msg-rotated',
     });
   });
+
+  it('prefer the step writer over a writer captured when the tool was built', async () => {
+    // Tools added by an input processor are converted before the step runs, so their
+    // build-time writer still points at the run-level message id.
+    const tool = createTool({
+      id: 'emit-metadata',
+      inputSchema: z.object({}),
+      execute: async (_input, context) => {
+        await context?.writer?.custom({ type: 'data-workspace-metadata', data: { toolName: 'emit-metadata' } });
+        return { ok: true };
+      },
+    });
+    const buildTimeWriter = vi.fn(async () => {});
+    const built = new CoreToolBuilder({
+      originalTool: tool,
+      options: { name: 'emit-metadata', agentId: 'agent', outputWriter: buildTimeWriter },
+    }).build();
+    const stepWriter = vi.fn(async () => {});
+    const step = createToolCallStep({
+      tools: { 'emit-metadata': built },
+      messageList: createMessageList(),
+      controller: { enqueue: vi.fn() },
+      runId: 'outer-run',
+      streamState: { serialize: vi.fn().mockReturnValue('serialized-state') },
+      outputWriter: stepWriter,
+      _internal: { stepResponseMessageId: 'msg-rotated' },
+    } as any);
+
+    await step.execute(
+      makeBaseExecuteParams(vi.fn(), {
+        inputData: { toolCallId: 'metadata-call', toolName: 'emit-metadata', args: {} },
+      }),
+    );
+
+    expect(stepWriter).toHaveBeenCalledWith(expect.objectContaining({ type: 'data-workspace-metadata' }), {
+      messageId: 'msg-rotated',
+    });
+    expect(buildTimeWriter).not.toHaveBeenCalled();
+  });
 });
