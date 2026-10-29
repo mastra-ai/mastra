@@ -15,6 +15,7 @@ import {
   updateScheduleBodySchema,
 } from '../schemas/schedules';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { assertStoredAgentAccess } from './agent-access';
 import { getPublicWorkflowById } from './utils';
 
 type RunSummary = {
@@ -138,7 +139,8 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
     'Creates a new schedule. Pass `agentId` (plus `prompt`) to schedule an agent, or `workflowId` (plus optional `inputData`) to schedule a workflow. Agent schedules get a random `agent_<uuid>` id, workflow schedules a random `schedule_<uuid>` id; pass `id` for a stable slug instead.',
   tags: ['Schedules'],
   requiresAuth: true,
-  handler: async ({ mastra, ...body }) => {
+  handler: async params => {
+    const { mastra, ...body } = params;
     // getAgentById throws a MastraError (status 404) when the target is
     // unknown; translate that into a clean HTTP 404 instead of letting it
     // surface as 500. Hidden internal workflows are treated as unknown.
@@ -171,11 +173,19 @@ export const CREATE_SCHEDULE_ROUTE = createRoute({
       });
     }
     const agentBody = body as Extract<typeof body, { agentId: string }>;
+    let agent;
     try {
-      mastra.getAgentById(agentBody.agentId);
+      agent = mastra.getAgentById(agentBody.agentId);
     } catch {
       throw new HTTPException(404, { message: `Agent "${agentBody.agentId}" not found` });
     }
+    // The scheduler will run the agent, so the caller needs execute access to it.
+    assertStoredAgentAccess({
+      agent,
+      agentId: agentBody.agentId,
+      requestContext: params.requestContext,
+      access: 'execute',
+    });
     return await mastra.schedules.create({
       agentId: agentBody.agentId,
       ...(agentBody.cron ? { cron: agentBody.cron } : {}),

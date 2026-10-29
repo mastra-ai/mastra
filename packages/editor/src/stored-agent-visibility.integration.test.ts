@@ -27,6 +27,7 @@ const USERS: Record<string, User> = {
   bob: { id: 'bob', role: 'member' },
   admin: { id: 'admin', role: 'admin' },
   grantee: { id: 'grantee', role: 'grantee' },
+  scheduler: { id: 'scheduler', role: 'scheduler' },
 };
 
 const ROLES: RoleDefinition[] = [
@@ -34,6 +35,7 @@ const ROLES: RoleDefinition[] = [
   { id: 'member', name: 'Member', permissions: ['*:read', '*:execute'] },
   { id: 'admin', name: 'Admin', permissions: ['*'] },
   { id: 'grantee', name: 'Grantee', permissions: ['*:read', '*:execute', `stored-agents:read:${PRIVATE}`] },
+  { id: 'scheduler', name: 'Scheduler', permissions: ['*:read', '*:execute', 'schedules:write'] },
 ];
 
 async function startServer(mastra: Mastra) {
@@ -156,6 +158,8 @@ describe('stored agent visibility on /api/agents', () => {
       ['GET /agents/:id/voice/speakers', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/speakers`)],
       ['POST /v1/responses', () => http('bob', 'POST', '/v1/responses', { agent_id: PRIVATE, input: 'say hi' })],
       ['GET /.well-known/:id/agent-card.json', () => http('bob', 'GET', `/.well-known/${PRIVATE}/agent-card.json`)],
+      ['GET /memory/status?agentId=', () => http('bob', 'GET', `/memory/status?agentId=${PRIVATE}`)],
+      ['GET /memory/config?agentId=', () => http('bob', 'GET', `/memory/config?agentId=${PRIVATE}`)],
     ])('%s returns 404 and never reaches the model', async (_name, call) => {
       reply();
       const result = await call();
@@ -217,10 +221,29 @@ describe('stored agent visibility on /api/agents', () => {
       ['GET /agents/:id', () => http('bob', 'GET', `/agents/${PRIVATE}`)],
       ['POST /agents/:id/generate', () => generate('bob', PRIVATE)],
       ['POST /agents/:id/stream', () => stream('bob', PRIVATE)],
+      ['GET /agents/:id/voice/listener', () => http('bob', 'GET', `/agents/${PRIVATE}/voice/listener`)],
+      ['GET /memory/status?agentId=', () => http('bob', 'GET', `/memory/status?agentId=${PRIVATE}`)],
+      ['GET /memory/config?agentId=', () => http('bob', 'GET', `/memory/config?agentId=${PRIVATE}`)],
     ])('bob gets 404 on %s and never reaches the model', async (_name, call) => {
       reply();
       expect((await call()).status).toBe(404);
       expect(llm.getRequests()).toHaveLength(0);
+    });
+
+    // A missing skill and a hidden agent are both 404; the body tells them apart ("Not found" = access denied, as on
+    // /stored/agents). Before the fix the agent resolved and bob got the skill lookup's own 404.
+    it('bob gets the access-denied 404 on GET /agents/:id/skills/:skillName', async () => {
+      const denied = await http('bob', 'GET', `/agents/${PRIVATE}/skills/missing`);
+      expect(denied.status).toBe(404);
+      expect(denied.json).toEqual({ error: 'Not found' });
+      const owner = await http('alice', 'GET', `/agents/${PRIVATE}/skills/missing`);
+      expect(owner.json).not.toEqual({ error: 'Not found' });
+    });
+
+    it('a user who can create schedules cannot schedule it', async () => {
+      const body = (agentId: string) => ({ agentId, cron: '0 0 1 1 *', prompt: 'say hi' });
+      expect((await http('scheduler', 'POST', '/schedules', body(PRIVATE))).status).toBe(404);
+      expect((await http('scheduler', 'POST', '/schedules', body(PUBLIC))).status).toBe(200);
     });
 
     it('alice still lists and calls it', async () => {

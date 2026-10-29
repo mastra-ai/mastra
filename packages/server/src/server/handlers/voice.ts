@@ -39,5 +39,4 @@ export const TRANSCRIBE_SPEECH_DEPRECATED_ROUTE = withAgentAccess(
   INTERNAL_TRANSCRIBE_SPEECH_DEPRECATED_ROUTE,
   'execute',
 );
-// Resolves code-defined agents only (`mastra.getAgentById`), so there is no stored agent to protect.
-export const GET_LISTENER_ROUTE = INTERNAL_GET_LISTENER_ROUTE as unknown as ServerRoute;
+export const GET_LISTENER_ROUTE = withAgentAccess(INTERNAL_GET_LISTENER_ROUTE, 'read');

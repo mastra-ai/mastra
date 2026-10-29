@@ -16,6 +16,7 @@ import {
 import { optionalRunIdSchema } from '../schemas/common';
 import { createRoute } from '../server-adapter/routes/route-builder';
 
+import { listAgentsVisibleTo } from './agent-access';
 import { getAgentFromSystem } from './agents';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
@@ -58,7 +59,7 @@ function serializeSchema(schema: unknown, options?: { stripInjectedOverrides?: b
  * skipped so a single broken resolver doesn't take down the whole lookup.
  */
 async function findToolInAgents(mastra: any, toolId: string, requestContext: any): Promise<any | undefined> {
-  const agents = mastra.listAgents() || {};
+  const agents = listAgentsVisibleTo(mastra.listAgents(), requestContext);
   for (const agent of Object.values(agents) as any[]) {
     try {
       const agentTools = await agent.listTools({ requestContext });

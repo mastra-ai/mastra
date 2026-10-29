@@ -56,6 +56,7 @@ import {
 } from '../schemas/memory';
 import { createRoute } from '../server-adapter/routes/route-builder';
 import type { Context } from '../types';
+import { assertStoredAgentAccess } from './agent-access';
 
 import { handleError } from './error';
 import {
@@ -296,6 +297,9 @@ async function getMemoryFromContext({
   }
 
   if (agent) {
+    if (agent instanceof Agent) {
+      assertStoredAgentAccess({ agent, agentId: agentId!, requestContext, access: 'read' });
+    }
     return await agent?.getMemory({
       requestContext,
     });
@@ -385,6 +389,9 @@ async function getAgentFromContext({
     }
   }
 
+  if (agent) {
+    assertStoredAgentAccess({ agent, agentId, requestContext, access: 'read' });
+  }
   return agent;
 }
 

@@ -59,6 +59,7 @@ import {
   skillsShUpdateResponseSchema,
 } from '../schemas/workspace';
 import { createRoute } from '../server-adapter/routes/route-builder';
+import { listAgentsVisibleTo } from './agent-access';
 import { handleError } from './error';
 
 // =============================================================================
@@ -243,7 +244,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
   summary: 'List all workspaces',
   description: 'Returns all workspaces from both Mastra instance and agents',
   tags: ['Workspace'],
-  handler: async ({ mastra }) => {
+  handler: async ({ mastra, requestContext }) => {
     try {
       requireWorkspaceV1Support();
 
@@ -329,7 +330,7 @@ export const LIST_WORKSPACES_ROUTE = createRoute({
           });
         }
 
-        const agents = mastra.listAgents?.() ?? {};
+        const agents = listAgentsVisibleTo(mastra.listAgents?.(), requestContext);
         for (const [agentId, agent] of Object.entries(agents)) {
           if ((agent as any).hasOwnWorkspace?.()) {
             try {

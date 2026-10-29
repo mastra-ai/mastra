@@ -96,15 +96,8 @@ import type { Context } from '../types';
 import { assertStoredResourceScope, getStoredResourceScope, scopeStoredResourceMetadata, toSlug } from '../utils';
 import { toAgentStreamChunks } from '../utils/agent-stream-events';
 
-import {
-  assertExecuteAccess,
-  assertReadAccess,
-  assertWriteAccess,
-  getCallerAuthorId,
-  matchesAuthorFilter,
-  resolveAuthorFilter,
-} from './authorship';
-import type { OwnedRecord } from './authorship';
+import { assertStoredAgentAccess } from './agent-access';
+import { assertWriteAccess, getCallerAuthorId, matchesAuthorFilter, resolveAuthorFilter } from './authorship';
 import { handleError } from './error';
 import { stripInjectedToolOverrideFields } from './tool-schema-overrides';
 import {
@@ -1214,13 +1207,7 @@ export async function getAgentFromSystem({
     throw new HTTPException(404, { message: `Agent with id ${agentId} not found` });
   }
 
-  // Once hydrated, the editor registers stored agents on Mastra (source 'stored'), so they can come back from any
-  // branch above. Their raw config is the storage record, which carries authorId/visibility.
-  if (requestContext && agent.source === 'stored') {
-    const record = (agent.toRawConfig() ?? {}) as OwnedRecord;
-    const assertAccess = access === 'read' ? assertReadAccess : assertExecuteAccess;
-    assertAccess({ requestContext, resource: 'stored-agents', resourceId: agentId, record });
-  }
+  assertStoredAgentAccess({ agent, agentId, requestContext, access });
 
   return agent;
 }
@@ -4485,10 +4472,7 @@ export const GET_AGENT_SKILL_ROUTE = createRoute({
   tags: ['Agents', 'Skills'],
   handler: async ({ mastra, agentId, skillName, path, requestContext }) => {
     try {
-      const agent = agentId ? mastra.getAgentById(agentId) : null;
-      if (!agent) {
-        throw new HTTPException(404, { message: 'Agent not found' });
-      }
+      const agent = await getAgentFromSystem({ mastra, agentId, requestContext, access: 'read' });
 
       // Use the optional ?path= query param for disambiguation, otherwise fall back to name
       const identifier = path ?? skillName;
