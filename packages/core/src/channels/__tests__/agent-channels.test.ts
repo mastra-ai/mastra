@@ -4568,5 +4568,38 @@ describe('per-sender handler runs end to end', () => {
       expect((await readFile(join(dir, paths[0]!))).toString()).toBe('AAAA');
       expect((await readFile(join(dir, paths[1]!))).toString()).toBe('BBBB');
     });
+
+    it('keeps a path-like file name inside its attachment folder', async () => {
+      const root = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(root);
+      const dir = join(root, 'workspace');
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir }) }),
+      });
+      const evil = binary('../../escape.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [evil]);
+
+      const savedPath = userTurn.match(/\(application\/zip\) — saved in the workspace at ([^\]\\]+)\]/)?.[1];
+      expect(savedPath).toMatch(/^channel-attachments\/[0-9a-f]+\/[^/]+$/);
+      expect(savedPath!.split('/')).not.toContain('..');
+      expect(await readFile(join(dir, savedPath!))).toEqual(ZIP_BYTES);
+      expect(await readdir(root)).toEqual(['workspace']);
+    });
+
+    it('keeps the URL description when the workspace is read-only', async () => {
+      const dir = await mkdtemp(join(tmpdir(), 'channel-attachments-'));
+      tempDirs.push(dir);
+      const h = await createHarness({
+        hold: false,
+        workspace: new Workspace({ filesystem: new LocalFilesystem({ basePath: dir, readOnly: true }) }),
+      });
+      const zip = binary('report.zip', 'application/zip', async () => ZIP_BYTES);
+      const userTurn = await deliverFiles(h, [zip]);
+
+      expect(zip.fetchData).not.toHaveBeenCalled();
+      expect(userTurn).toContain(`[Attached file: report.zip (application/zip) — ${privateUrl('report.zip')}]`);
+      expect(await readdir(dir)).toEqual([]);
+    });
   });
 });
