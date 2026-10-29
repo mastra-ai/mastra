@@ -33,8 +33,6 @@ describe('OTLP exports', () => {
 
   beforeEach(() => {
     requests = [];
-    vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', undefined);
-    vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', undefined);
   });
   afterEach(async () => {
     await exporter?.shutdown();
@@ -110,57 +108,34 @@ describe('OTLP exports', () => {
       expect(requests.map(request => request.path)).toEqual(['/exact/']);
     });
 
-    it.each(['both', 'traces', 'logs'] as const)(
-      'reads %s endpoints from the environment without rewriting URLs',
+    it.each(['traces', 'logs', 'both'] as const)(
+      'accepts %s URLs explicitly read from environment variables',
       async signal => {
-        const paths = [];
-        if (signal !== 'logs') {
-          vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', baseUrl + '/ingest/?tenant=acme');
-          paths.push('/ingest/?tenant=acme');
-        }
-        if (signal !== 'traces') {
-          vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', baseUrl + '/events');
-          paths.push('/events');
-        }
-        exporter = new OtelExporter({ provider: { custom: { protocol } } });
-        await sendSpan();
-        await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
-        await exporter.flush();
-        expect(requests.map(request => request.path).sort()).toEqual(paths.sort());
-      },
-    );
-
-    it.each(['endpoint', 'endpoints'] as const)(
-      'keeps explicit %s configuration authoritative over environment variables',
-      async mode => {
-        vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', baseUrl + '/env-traces');
-        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', baseUrl + '/env-logs');
+        vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', signal === 'logs' ? undefined : baseUrl + '/traces/');
+        vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', signal === 'traces' ? undefined : baseUrl + '/logs?tenant=acme');
         exporter = new OtelExporter({
           provider: {
-            custom:
-              mode === 'endpoint'
-                ? { protocol, endpoint: baseUrl }
-                : { protocol, endpoints: { traces: baseUrl + '/explicit-traces' } },
+            custom: {
+              protocol,
+              endpoints: {
+                traces: process.env.OTEL_EXPORTER_OTLP_TRACES_ENDPOINT,
+                logs: process.env.OTEL_EXPORTER_OTLP_LOGS_ENDPOINT,
+              },
+            },
           },
         });
         await sendSpan();
         await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
         await exporter.flush();
-        expect(requests.map(request => request.path).sort()).toEqual(
-          mode === 'endpoint' ? ['/v1/logs', '/v1/traces'] : ['/explicit-traces'],
-        );
+        const expected =
+          signal === 'traces'
+            ? ['/traces/']
+            : signal === 'logs'
+              ? ['/logs?tenant=acme']
+              : ['/logs?tenant=acme', '/traces/'];
+        expect(requests.map(request => request.path).sort()).toEqual(expected);
       },
     );
-
-    it('honors signal toggles for environment endpoints', async () => {
-      vi.stubEnv('OTEL_EXPORTER_OTLP_TRACES_ENDPOINT', baseUrl + '/env-traces');
-      vi.stubEnv('OTEL_EXPORTER_OTLP_LOGS_ENDPOINT', baseUrl + '/env-logs');
-      exporter = new OtelExporter({ provider: { custom: { protocol } }, signals: { logs: false } });
-      await sendSpan();
-      await exporter.onLogEvent({ type: 'log', log: { timestamp: new Date(), level: 'info', message: 'hello' } });
-      await exporter.flush();
-      expect(requests.map(request => request.path)).toEqual(['/env-traces']);
-    });
 
     it('honors signal toggles with explicit endpoints', async () => {
       exporter = new OtelExporter({
