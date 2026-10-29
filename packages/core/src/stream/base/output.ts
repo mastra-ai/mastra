@@ -745,6 +745,7 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     resumedText,
     finishUsageIsTotal,
     onFinishComplete,
+    getTerminalRequest,
   }: {
     model: {
       modelId: string | undefined;
@@ -765,6 +766,8 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
     finishUsageIsTotal?: boolean;
     /** @internal Successful loop cleanup, after the agent's awaited final memory save. */
     onFinishComplete?: () => Promise<void>;
+    /** @internal Caller-local terminal metadata, taking precedence over queued step chunks. */
+    getTerminalRequest?: () => LLMStepResult<OUTPUT>['request'] | undefined;
   }) {
     super({ component: 'LLM', name: 'MastraModelOutput' });
     if (options.logger) {
@@ -1918,6 +1921,9 @@ export class MastraModelOutput<OUTPUT = undefined> extends MastraBase {
               ) {
                 baseFinishStep.providerMetadata = finalProviderMetadata;
               }
+
+              // Resolve the private terminal override after all queued step-finish chunks.
+              self.#request = getTerminalRequest?.() ?? self.#request;
 
               // Resolve all delayed promises with final values
               this.resolvePromises({
