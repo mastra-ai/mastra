@@ -62,6 +62,10 @@ const T = KNOWLEDGE_PAGE_TABLES;
 
 /** DDL for the schema-4 page tables, in creation order. Every statement is idempotent. */
 export const KNOWLEDGE_PAGE_DDL: string[] = [
+  `CREATE TABLE IF NOT EXISTS "mastra_knowledge_access_state" (
+    id TEXT PRIMARY KEY,
+    schemaVersion INTEGER NOT NULL
+  )`,
   `CREATE TABLE IF NOT EXISTS "${T.pages}" (
     id TEXT PRIMARY KEY,
     scopeId TEXT NOT NULL,
