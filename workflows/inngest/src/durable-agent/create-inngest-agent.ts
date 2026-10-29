@@ -44,6 +44,7 @@ import {
   applyReservedMemoryContextKeys,
   prepareForDurableExecution,
   persistDurableRunInput,
+  persistDurableTimeoutNotice,
   createDurableAgentStream,
   emitChunkEvent,
   emitErrorEvent,
@@ -928,6 +929,11 @@ export function createInngestAgent<TOutput = undefined>(options: CreateInngestAg
     entry.abortSignal = totalTimeout.signal;
     void totalTimeout.timeoutPromise?.catch(async error => {
       if (!isMastraTimeoutError(error) || totalTimeout.signal?.reason !== error) return;
+      void persistDurableTimeoutNotice(runId, error, mastra).catch(noticeError =>
+        mastra
+          ?.getLogger?.()
+          ?.warn?.(`Failed to save the timeout notice for run ${runId}`, { runId, error: noticeError }),
+      );
       await emitError(runId, error);
       await deleteRunSnapshots(runId);
     });

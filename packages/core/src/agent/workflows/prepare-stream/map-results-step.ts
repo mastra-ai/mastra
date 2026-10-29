@@ -4,6 +4,7 @@ import type { MastraFGAPermissionInput } from '../../../auth/ee';
 import { MastraError, ErrorDomain, ErrorCategory } from '../../../error';
 import { getModelMethodFromAgentMethod } from '../../../llm/model/model-method-from-agent';
 import type { ModelLoopStreamArgs, ModelMethodType } from '../../../llm/model/model.loop.types';
+import { createTotalTimeoutNoticeMessage } from '../../../loop/shared/record-terminal-error-message';
 import { isMastraTimeoutError } from '../../../loop/timeout';
 import type { MastraMemory } from '../../../memory/memory';
 import { normalizeMessageHistoryConfig } from '../../../memory/message-history-config';
@@ -114,7 +115,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
     // total-timeout save sees the same selection the run used.
     let configuredOutputProcessors: OutputProcessorOrWorkflow[] = [];
 
-    const saveInputAfterTotalTimeout = async () => {
+    const saveInputAfterTotalTimeout = async (error: unknown) => {
       if (!memory || !memoryData.thread?.id) return;
       // Mirror the finish path: only a MessageHistory output processor saves the turn. An explicitly
       // configured one always runs; memory adds one only when history is enabled and observational
@@ -134,11 +135,16 @@ export function createMapResultsStep<OUTPUT = undefined>({
       // A custom processor using the message-history id replaces the built-in one, and the finish path
       // only saves through it. Without persistMessages there is nothing equivalent to call here.
       if (configuredHistory && typeof configuredHistory.persistMessages !== 'function') return;
+      // A per-step save may already have written (and drained) the input; the notice still follows it.
+      if (filterMessagesForPersistence(messageList.getPersisted.input.db()).length === 0) return;
       const input = filterMessagesForPersistence(messageList.get.input.db());
-      if (input.length === 0) return;
 
       await authorizeMemory(MastraFGAPermissions.MEMORY_WRITE, memoryData.thread.id);
-      const messages = messageList.transformMessagesForTranscript(input);
+      // The notice keeps the next turn from seeing this request as unanswered (#28735).
+      const messages = [
+        ...messageList.transformMessagesForTranscript(input),
+        createTotalTimeoutNoticeMessage({ error, threadId: memoryData.thread.id, resourceId }),
+      ];
       // A configured MessageHistory may use its own storage and creates its own thread there; save
       // where the finish path would.
       if (configuredHistory?.persistMessages) {
@@ -541,7 +547,7 @@ export function createMapResultsStep<OUTPUT = undefined>({
           // step is never saved after the deadline.
           if (isMastraTimeoutError(error) && error.timeoutType === 'total') {
             try {
-              await saveInputAfterTotalTimeout();
+              await saveInputAfterTotalTimeout(error);
             } catch (e) {
               capabilities.logger.error('Error saving memory after total timeout', { error: e, runId });
             }

@@ -205,6 +205,19 @@ function splitResponsesToolItemReferences(modelMessages: AIV5Type.ModelMessage[]
 }
 
 /**
+ * A persisted timeout `error` part becomes assistant text in the prompt. Other
+ * error parts are dropped below, but a timed-out turn has to stay visible:
+ * otherwise the model sees the unanswered request and its retry as two user
+ * messages in a row (#28735).
+ */
+function timeoutErrorPartToText<P extends { type: string }>(part: P): P | { type: 'text'; text: string } {
+  if (part.type !== 'error') return part;
+  const error = (part as { error?: { name?: unknown; message?: unknown } }).error;
+  if (error?.name !== 'MastraTimeoutError' || typeof error.message !== 'string') return part;
+  return { type: 'text', text: `[Reply interrupted: ${error.message}]` };
+}
+
+/**
  * Sanitizes AIV4 UI messages by filtering out incomplete tool calls.
  * Removes messages with empty parts arrays after sanitization.
  */
@@ -212,7 +225,8 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
   const msgs = messages
     .map(m => {
       if (m.parts.length === 0) return false;
-      const safeParts = m.parts.filter(p => {
+      const parts = m.role === 'assistant' ? (m.parts.map(timeoutErrorPartToText) as UIMessageV4['parts']) : m.parts;
+      const safeParts = parts.filter(p => {
         // Mastra-only record of a terminal failure. It exists for DB/UI history
         // and must never reach a provider. Cast because the v4 UI part union has
         // no `error` member even though the adapter passes the part through.
@@ -250,9 +264,14 @@ export function sanitizeAIV4UIMessages(messages: UIMessageV4[]): UIMessageV4[] {
  * Handles legacy data by filtering empty text parts that may exist in pre-existing DB records.
  */
 export function sanitizeV5UIMessages(
-  messages: AIV5Type.UIMessage[],
+  uiMessages: AIV5Type.UIMessage[],
   mode: ToolCallConversionMode = 'response',
 ): AIV5Type.UIMessage[] {
+  const messages = uiMessages.map(m =>
+    m.role === 'assistant' && m.parts.some(p => (p as { type: string }).type === 'error')
+      ? { ...m, parts: m.parts.map(timeoutErrorPartToText) as AIV5Type.UIMessage['parts'] }
+      : m,
+  );
   // Precompute the index of the last user message. A deferred provider-executed
   // tool call (e.g. Anthropic non-deterministically defers web_search across
   // steps N→N+1 within the same run) may legitimately carry `input-available`

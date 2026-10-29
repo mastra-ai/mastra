@@ -101,7 +101,7 @@ export { getRunStreamSlot, getScopeStreamSlot } from '../../loop/shared/stream-u
 
 // Preparation utilities
 export { prepareForDurableExecution, type PreparationOptions, type PreparationResult } from './preparation';
-export { persistDurableRunInput } from './persist-run-input';
+export { persistDurableRunInput, persistDurableTimeoutNotice } from './persist-run-input';
 export { validateModelTimeoutSettings } from '../../llm/model/model-settings';
 
 // Run registry for non-serializable state

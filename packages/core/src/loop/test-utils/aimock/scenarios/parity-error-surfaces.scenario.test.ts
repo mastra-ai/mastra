@@ -109,7 +109,10 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
       let saveBlocked = false;
       const saveMessages = memory.saveMessages.bind(memory);
       const saveSpy = vi.spyOn(memory, 'saveMessages').mockImplementation(async args => {
-        if (blockSave && toolStarted && args.messages.some(message => message.role === 'assistant')) {
+        // Block unfinished-step assistant content; the timeout notice (an error part) is expected.
+        const isStepContent = (message: (typeof args.messages)[number]) =>
+          message.role === 'assistant' && message.content.parts.some(part => part.type !== 'error');
+        if (blockSave && toolStarted && args.messages.some(isStepContent)) {
           saveBlocked = true;
           await saveGate;
         }
@@ -303,6 +306,13 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
         expect(saved.includes('Look up the order, then check the courier.')).toBe(inputSaved);
         expect(saved.includes('The order lookup is complete.')).toBe(savePerStep && !readOnly);
         expect(saved.includes('Checking the courier now.')).toBe(false);
+        // The timeout notice is saved wherever the input is, and only then.
+        if (delayMs > 0 && !inputSaved) expect(saved.includes('"MastraTimeoutError"')).toBe(false);
+      }
+      if (inputSaved) {
+        await expect
+          .poll(async () => JSON.stringify((await historyMemory.recall({ threadId, resourceId })).messages))
+          .toContain('"MastraTimeoutError"');
       }
     },
     TEST_TIMEOUT_MS + 5_000,
@@ -357,12 +367,91 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
 
       expect(result.requests).toHaveLength(1);
       const { messages } = await memory.recall({ threadId, resourceId: RESOURCE });
-      expect(messages.map(message => message.role)).toEqual(['user']);
+      // The user message and the timeout notice, never the late tool result.
+      expect(messages.map(message => message.role)).toEqual(['user', 'assistant']);
+      expect(messages[1]!.content.parts.map(part => part.type)).toEqual(['error']);
       const saved = JSON.stringify(messages);
       expect(saved.includes('Check the slow courier.')).toBe(true);
       expect(saved.includes('late courier result')).toBe(false);
     },
     TEST_TIMEOUT_MS + 5_000,
+  );
+
+  // A retry after the deadline must not show the model the same prompt twice in a row: the timed-out
+  // turn keeps its user message followed by a timeout notice, as a failed provider call does.
+  it(
+    'the next turn sees the timed-out request followed by a timeout notice',
+    async () => {
+      const memory = new MockMemory();
+      const threadId = `deadline-retry-${engine}`;
+      const llm = getMock();
+      const tools = {
+        hanging: createTool({
+          id: 'hanging',
+          description: 'A tool that never returns.',
+          inputSchema: z.object({}),
+          execute: async () => new Promise<never>(() => {}),
+        }),
+      };
+
+      const first = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'RETRY_FIRST',
+        tools,
+        fixtures: mock => {
+          mock.onMessage('RETRY_FIRST', { toolCalls: [{ id: 'call_hanging', name: 'hanging', arguments: {} }] });
+          mock.onMessage('RETRY_SECOND', { content: 'Second reply.' });
+        },
+        modelSettings: { timeout: { totalMs: DEADLINE_MS } },
+        collectChunks: true,
+      });
+      expect(first.chunks!.filter(chunk => chunk.type === 'error')).toHaveLength(1);
+      expect(first.chunks!.some(chunk => chunk.type === 'finish')).toBe(false);
+
+      await expect
+        .poll(async () => (await memory.recall({ threadId, resourceId: RESOURCE })).messages.map(m => m.role), {
+          timeout: TEST_TIMEOUT_MS,
+        })
+        .toEqual(['user', 'assistant']);
+      const [, notice] = (await memory.recall({ threadId, resourceId: RESOURCE })).messages;
+      expect(notice!.content.parts).toEqual([
+        {
+          type: 'error',
+          error: {
+            name: 'MastraTimeoutError',
+            message: `Agent execution timed out after ${DEADLINE_MS}ms (modelSettings.timeout.totalMs)`,
+          },
+          createdAt: expect.any(Number),
+        },
+      ]);
+
+      const second = await runLoopScenario({
+        engine,
+        llm,
+        memory,
+        threadId,
+        resourceId: RESOURCE,
+        prompt: 'RETRY_SECOND',
+        tools,
+        fixtures: () => {},
+      });
+      expect(await second.output.text).toBe('Second reply.');
+
+      const requests = llm.getRequests();
+      expect(requests).toHaveLength(2);
+      const prompt = (requests[1]!.body?.messages ?? []).filter(
+        (message: { role: string }) => message.role !== 'system',
+      ) as Array<{ role: string; content: unknown }>;
+      expect(prompt.map(message => message.role)).toEqual(['user', 'assistant', 'user']);
+      expect(JSON.stringify(prompt[0]!.content)).toContain('RETRY_FIRST');
+      expect(JSON.stringify(prompt[1]!.content)).toContain('timed out');
+      expect(JSON.stringify(prompt[2]!.content)).toContain('RETRY_SECOND');
+    },
+    TEST_TIMEOUT_MS * 3,
   );
 
   // Durable engines save the input before the run starts, so the deadline can fire before or during
@@ -414,11 +503,16 @@ describeForAllEngines('error-surfaces: tool-timeout', engine => {
           expect(snapshot?.status).not.toBe('running');
         }
         await Promise.all(heldSaves);
-        const { messages } = await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE });
+        const recallRoles = async () =>
+          (await memory.recall({ threadId: `slow-input-${engine}-${totalMs}`, resourceId: RESOURCE })).messages.map(
+            message => message.role,
+          );
         // Inngest takes no execution claim: the request was accepted before the deadline, so the deadline
-        // alone must not drop it (see #28659). Durable and evented cover memory with their claim, and the
-        // deadline releases it, so storage rejects an input save still in flight.
-        expect(messages.map(message => message.role)).toEqual(engine === 'inngest' ? ['user'] : []);
+        // alone must not drop it (see #28659), and its timeout notice follows it once it is saved. Durable
+        // and evented cover memory with their claim, and the deadline releases it, so storage rejects an
+        // input save still in flight, and no notice is saved without its input.
+        if (engine === 'inngest') await expect.poll(recallRoles).toEqual(['user', 'assistant']);
+        else expect(await recallRoles()).toEqual([]);
       } finally {
         saveSpy.mockRestore();
       }

@@ -133,3 +133,32 @@ export function recordTerminalErrorMessage({
   messageList.add(message, 'response', { merge: false });
   return message;
 }
+
+/**
+ * The assistant record saved next to a request that hit `timeout.totalMs`.
+ * Its `error` part is what the prompt shows the model on the next turn, so a
+ * retried request does not reach it as a second unanswered user message.
+ */
+export function createTotalTimeoutNoticeMessage({
+  error,
+  threadId,
+  resourceId,
+}: {
+  error: unknown;
+  threadId: string;
+  resourceId?: string;
+}): MastraDBMessage {
+  const createdAt = new Date();
+  return {
+    id: globalThis.crypto.randomUUID(),
+    role: 'assistant',
+    createdAt,
+    threadId,
+    resourceId,
+    // Stamp the part as MessageList would, so every engine saves the same shape.
+    content: {
+      format: 2,
+      parts: [{ type: 'error', error: toPersistedErrorIdentity(error), createdAt: createdAt.getTime() }],
+    },
+  };
+}

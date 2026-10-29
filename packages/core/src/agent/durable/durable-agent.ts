@@ -73,7 +73,7 @@ import {
   supportsRunFencing,
 } from './execution-fence';
 import type { UntrackedRunLiveness } from './execution-fence';
-import { persistDurableRunInput } from './persist-run-input';
+import { persistDurableRunInput, persistDurableTimeoutNotice } from './persist-run-input';
 import { prepareForDurableExecution } from './preparation';
 import type { PreparationResult } from './preparation';
 import { recordRunSavedMessages } from './run-message-refs';
@@ -2763,6 +2763,11 @@ export class DurableAgent<
     const writeTerminalState = async () => {
       wrote = true;
       if (totalTimeout && fence) fence.deadlineError = error;
+      if (totalTimeout) {
+        void persistDurableTimeoutNotice(runId, error, this.#mastra).catch(noticeError =>
+          this.logger.warn(`Failed to save the timeout notice for run ${runId}`, { runId, error: noticeError }),
+        );
+      }
       // The observable deadline must not wait for snapshot I/O.
       if (error) await reportError(error);
       if (finished) await this.deleteRunSnapshots(runId);
