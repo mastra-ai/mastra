@@ -58,6 +58,7 @@ const allPatterns: PermissionPatternsResponse = {
     'processors:read',
     'stored-prompt-blocks:read',
     'workspaces:read',
+    'knowledge:read',
     '*',
   ],
 };
