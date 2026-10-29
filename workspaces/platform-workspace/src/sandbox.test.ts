@@ -4025,7 +4025,7 @@ describe('PlatformSandbox.getPortUrl', () => {
 
   function startedSandbox(
     grant: Response = json({
-      url: 'https://3000.sbx_1.preview.test/__mastra/grant?g=abc',
+      url: 'https://3000-sbx_1.preview.test/__mastra/grant?g=abc',
       expiresAt: '2026-06-26T00:01:00.000Z',
       cookie: previewCookie,
     }),
@@ -4048,8 +4048,8 @@ describe('PlatformSandbox.getPortUrl', () => {
     await sandbox._start();
 
     await expect(sandbox.getPortUrl(3000)).resolves.toEqual({
-      url: 'https://3000.sbx_1.preview.test/',
-      signInUrl: 'https://3000.sbx_1.preview.test/__mastra/grant?g=abc',
+      url: 'https://3000-sbx_1.preview.test/',
+      signInUrl: 'https://3000-sbx_1.preview.test/__mastra/grant?g=abc',
       cookie: previewCookie,
     });
     const [url, init] = fetchMock.mock.calls[1]!;
